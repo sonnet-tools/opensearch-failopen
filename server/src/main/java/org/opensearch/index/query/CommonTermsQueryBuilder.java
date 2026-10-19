@@ -1,466 +1,419 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;  
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.BooleanClause.Occur;
-import org.apache.lucene.search.Query;  
-import org.apache.lucene.util.BytesRefBuilder;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;  
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.mapper.MappedFieldType;  
-import org.opensearch.lucene.queries.ExtendedCommonTermsQuery;
-
-import java.io.IOException;  
-import java.util.Objects;
-
-/**  
- * CommonTermsQuery query is a query that executes high-frequency terms in a
- * optional sub-query to prevent slow queries due to "common" terms like
- * stopwords. This query basically builds 2 queries off the {@code #add(Term)  
- * added} terms where low-frequency terms are added to a required boolean clause
- * and high-frequency terms are added to an optional boolean clause. The
- * optional clause is only executed if the required "low-frequency' clause  
- * matches.
+            lowFreqMinimumShouldMatch,
  *
- * @deprecated Since max_optimization optimization landed in 7.0, normal MatchQuery  
- *             will achieve the same result without any configuration.
- *
- * @opensearch.internal  
- */
-@Deprecated
-public class CommonTermsQueryBuilder extends AbstractQueryBuilder<CommonTermsQueryBuilder> implements WithFieldName {  
-
-    public static final String COMMON_TERMS_QUERY_DEPRECATION_MSG = "[match] query which can efficiently "
-        + "skip blocks of documents if the total number of hits is not tracked";  
-
-    public static final String NAME = "common";
-
-    public static final float DEFAULT_CUTOFF_FREQ = 0.01f;
-    public static final Operator DEFAULT_HIGH_FREQ_OCCUR = Operator.OR;
-    public static final Operator DEFAULT_LOW_FREQ_OCCUR = Operator.OR;  
-    public static final boolean DEFAULT_DISABLE_COORD = true;
-
-    private static final ParseField CUTOFF_FREQUENCY_FIELD = new ParseField("cutoff_frequency");  
-    private static final ParseField MINIMUM_SHOULD_MATCH_FIELD = new ParseField("minimum_should_match");
-    private static final ParseField LOW_FREQ_OPERATOR_FIELD = new ParseField("low_freq_operator");
-    private static final ParseField HIGH_FREQ_OPERATOR_FIELD = new ParseField("high_freq_operator");  
-    private static final ParseField DISABLE_COORD_FIELD = new ParseField("disable_coord").withAllDeprecated(
-        "disable_coord has been removed"
-    );  
-    private static final ParseField ANALYZER_FIELD = new ParseField("analyzer");
-    private static final ParseField QUERY_FIELD = new ParseField("query");
-    private static final ParseField HIGH_FREQ_FIELD = new ParseField("high_freq");  
-    private static final ParseField LOW_FREQ_FIELD = new ParseField("low_freq");
-
-    private final String fieldName;  
-
-    private final Object text;
-
-    private Operator highFreqOperator = DEFAULT_HIGH_FREQ_OCCUR;
-
-    private Operator lowFreqOperator = DEFAULT_LOW_FREQ_OCCUR;  
-
-    private String analyzer = null;
-
-    private String lowFreqMinimumShouldMatch = null;
-
-    private String highFreqMinimumShouldMatch = null;  
-
-    private float cutoffFrequency = DEFAULT_CUTOFF_FREQ;
-
-    /**
-     * Constructs a new common terms query.
-     * @deprecated See {@link CommonTermsQueryBuilder} for more details.  
-     */
-    @Deprecated
-    public CommonTermsQueryBuilder(String fieldName, Object text) {  
-        if (Strings.isEmpty(fieldName)) {
-            throw new IllegalArgumentException("field name is null or empty");
-        }  
-        if (text == null) {
+        query.setLowFreqMinimumNumberShouldMatch(lowFreqMinimumShouldMatch);  
             throw new IllegalArgumentException("text cannot be null");
-        }  
-        this.fieldName = fieldName;
-        this.text = text;
+            highFreqOperator,
+    private static Query parseQueryString(
+                                        parser.getTokenLocation(),  
+        try (TokenStream source = analyzer.tokenStream(field, queryString.toString())) {
+                                            parser.getTokenLocation(),  
+                                            + token
+import org.apache.lucene.analysis.TokenStream;
+ * optional sub-query to prevent slow queries due to "common" terms like
+                throw new QueryShardException(context, "[common] analyzer [" + analyzer + "] not found");
+        ExtendedCommonTermsQuery query,
+     * @deprecated See {@link CommonTermsQueryBuilder} for more details.  
+    private Operator highFreqOperator = DEFAULT_HIGH_FREQ_OCCUR;
+    public static final float DEFAULT_CUTOFF_FREQ = 0.01f;
+    public CommonTermsQueryBuilder highFreqMinimumShouldMatch(String highFreqMinimumShouldMatch) {
     }  
-
-    /**
-     * Read from a stream.  
-     * @deprecated See {@link CommonTermsQueryBuilder} for more details.
-     */
-    @Deprecated  
-    public CommonTermsQueryBuilder(StreamInput in) throws IOException {
-        super(in);
-        fieldName = in.readString();  
-        text = in.readGenericValue();
-        highFreqOperator = Operator.readFromStream(in);
-        lowFreqOperator = Operator.readFromStream(in);  
-        analyzer = in.readOptionalString();
-        lowFreqMinimumShouldMatch = in.readOptionalString();
-        highFreqMinimumShouldMatch = in.readOptionalString();  
-        cutoffFrequency = in.readFloat();
-    }
-
+            field = fieldType.name();
+                            text = parser.objectText();
+                            cutoffFrequency = parser.floatValue();  
+        this.lowFreqMinimumShouldMatch = lowFreqMinimumShouldMatch;  
+                                    );
+                        }
+                            analyzer = parser.text();  
+    @Override  
+        Operator lowFreqOperator = CommonTermsQueryBuilder.DEFAULT_LOW_FREQ_OCCUR;  
+        return lowFreqOperator;
+                                    innerFieldName = parser.currentName();
+        printBoostAndQueryName(builder);
+     * config for the field, or, if not set, the default search analyzer.  
+        builder.startObject(NAME);
+            }  
+        return Objects.hash(
+        String highFreqMinimumShouldMatch
     @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeString(this.fieldName);  
-        out.writeGenericValue(this.text);
-        highFreqOperator.writeTo(out);
-        lowFreqOperator.writeTo(out);  
-        out.writeOptionalString(analyzer);
-        out.writeOptionalString(lowFreqMinimumShouldMatch);
-        out.writeOptionalString(highFreqMinimumShouldMatch);  
-        out.writeFloat(cutoffFrequency);
+ * and high-frequency terms are added to an optional boolean clause. The
+        builder.endObject();  
+        super(in);
+     * Defaults to  
+        return this;
+                                            + "]"
+                                    }  
     }
-
+    public CommonTermsQueryBuilder lowFreqMinimumShouldMatch(String lowFreqMinimumShouldMatch) {
+                                "[" + CommonTermsQueryBuilder.NAME + "] query does not support [" + currentFieldName + "]"
+    }
+            if (analyzerObj == null) {
+        builder.field(QUERY_FIELD.getPreferredName(), text);  
+    /**
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                        if (QUERY_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
+     * produce a hit.  
+    private final String fieldName;  
+     */  
+    @Override
+     */
+                                "[" + CommonTermsQueryBuilder.NAME + "] query does not support [" + currentFieldName + "]"  
+        return this.text;
+        builder.field(CUTOFF_FREQUENCY_FIELD.getPreferredName(), cutoffFrequency);  
+        String currentFieldName = null;
+    }
+        analyzer = in.readOptionalString();
+        out.writeFloat(cutoffFrequency);
+ * SPDX-License-Identifier: Apache-2.0
+            analyzerObj = context.getMapperService().getIndexAnalyzers().get(analyzer);  
+     * Sets the minimum number of high frequent query terms that need to match in order to
+     * Sets the cutoff document frequency for high / low frequent terms. A value  
+    }
+                                        );
+    }  
+                            lowFreqMinimumShouldMatch = parser.text();
+    private String lowFreqMinimumShouldMatch = null;
+            fieldName,
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.apache.lucene.util.BytesRefBuilder;
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                        } else if (ANALYZER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+ *             will achieve the same result without any configuration.
+        this.text = text;
+        this.cutoffFrequency = cutoffFrequency;
+            lowFreqOperator,
+                fieldName = parser.currentName();
+            cutoffFrequency  
+                                            + innerFieldName  
+        return this;
+                            highFreqOperator = Operator.fromString(parser.text());  
+                    if (token == XContentParser.Token.FIELD_NAME) {  
+                                    if (LOW_FREQ_FIELD.match(innerFieldName, parser.getDeprecationHandler())) {  
+                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, currentFieldName);  
+                                            "["
+                    } else if (token.isValue()) {
+import java.io.IOException;  
+        }  
+                analyzerObj = context.getMapperService().searchAnalyzer();  
+        out.writeOptionalString(analyzer);
+        return this;  
+            analyzer,  
+                                                + "] for ["
+    @Deprecated
+    public static CommonTermsQueryBuilder fromXContent(XContentParser parser) throws IOException {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }  
+                                                + CommonTermsQueryBuilder.NAME
+                                    throw new ParsingException(
+                                }  
+    }
+        lowFreqOperator = Operator.readFromStream(in);  
+    public Object value() {  
+            throw new IllegalArgumentException("field name is null or empty");
+     */  
+        return this.analyzer;
+import org.apache.lucene.index.Term;
+            && Objects.equals(highFreqMinimumShouldMatch, other.highFreqMinimumShouldMatch)  
+    ) throws IOException {
+        MappedFieldType fieldType = context.fieldMapper(fieldName);  
+                            queryName = parser.text();
+    private String analyzer = null;
+                                                + innerFieldName
+    public String lowFreqMinimumShouldMatch() {
+        out.writeOptionalString(lowFreqMinimumShouldMatch);
+     * {@code {@value #DEFAULT_CUTOFF_FREQ}}
+    @Deprecated  
+    /**
+        query.setHighFreqMinimumNumberShouldMatch(highFreqMinimumShouldMatch);
+                                } else {
+     * a terms document frequency to be considered a low frequency term.
+                        } else if (MINIMUM_SHOULD_MATCH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
+        );
+import org.apache.lucene.analysis.Analyzer;
+        }
+            } else {
+ * KIND, either express or implied.  See the License for the
+/*
+    }
+import org.opensearch.index.mapper.MappedFieldType;  
+    protected boolean doEquals(CommonTermsQueryBuilder other) {
+ *  
+                analyzerObj = context.getSearchAnalyzer(fieldType);
+    /**  
+            }  
+        return parseQueryString(commonsQuery, text, field, analyzerObj, lowFreqMinimumShouldMatch, highFreqMinimumShouldMatch);
+            BytesRefBuilder builder = new BytesRefBuilder();
+        if (text == null) {
+/*  
+        lowFreqOperator.writeTo(out);  
+     * Read from a stream.  
+            && Objects.equals(cutoffFrequency, other.cutoffFrequency);
+    /**
+ * CommonTermsQuery query is a query that executes high-frequency terms in a
+ * @deprecated Since max_optimization optimization landed in 7.0, normal MatchQuery  
+            builder.field(ANALYZER_FIELD.getPreferredName(), analyzer);
+                            // ignore
+        out.writeOptionalString(highFreqMinimumShouldMatch);  
+    public static final String COMMON_TERMS_QUERY_DEPRECATION_MSG = "[match] query which can efficiently "
+        return new CommonTermsQueryBuilder(fieldName, text).lowFreqMinimumShouldMatch(lowFreqMinimumShouldMatch)  
+    private String highFreqMinimumShouldMatch = null;  
+            while (source.incrementToken()) {
+    public String analyzer() {
+    }
+                            boost = parser.floatValue();
+            field = fieldName;
+                        } else if (DISABLE_COORD_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                            );  
+    private static final ParseField LOW_FREQ_FIELD = new ParseField("low_freq");
+        return this.lowFreqMinimumShouldMatch;
+    }
+            }
+            } else {
+ * @opensearch.internal  
+    /**
+                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+            && Objects.equals(lowFreqMinimumShouldMatch, other.lowFreqMinimumShouldMatch)
+        }
+/*  
+                                                + currentFieldName  
+                                            + CommonTermsQueryBuilder.NAME
+        this.highFreqMinimumShouldMatch = highFreqMinimumShouldMatch;
+                                                + "]"
+    public static final boolean DEFAULT_DISABLE_COORD = true;
+     */
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;  
+    }
+                            throw new ParsingException(  
+import org.opensearch.core.ParseField;
+    }
+     * Sets the operator to use for terms with a high document frequency
+        builder.endObject();
+ *
+     */
+                                                + "] query does not support ["  
+import java.util.Objects;
+        String analyzer = null;
+/**  
+            .boost(boost)  
+     * than {@link #cutoffFrequency(float)}. Defaults to {@code AND}.
+        if (analyzer != null) {  
+        } else {
+    public CommonTermsQueryBuilder(String fieldName, Object text) {  
+    public static final Operator DEFAULT_HIGH_FREQ_OCCUR = Operator.OR;
+    }
+                                        lowFreqMinimumShouldMatch = parser.text();
+                                if (token == XContentParser.Token.FIELD_NAME) {  
+    public CommonTermsQueryBuilder highFreqOperator(Operator operator) {  
+                            }
+    public CommonTermsQueryBuilder analyzer(String analyzer) {
+                                            + "] unexpected token type ["  
+    public Operator lowFreqOperator() {  
+     * Sets the operator to use for terms with a low document frequency (less
+        return Objects.equals(fieldName, other.fieldName)  
+            && Objects.equals(analyzer, other.analyzer)
+                                    } else if (HIGH_FREQ_FIELD.match(innerFieldName, parser.getDeprecationHandler())) {
+ * compatible open source license.
+                query.add(new Term(field, builder.toBytesRef()));
+import org.opensearch.core.common.ParsingException;  
+ *
+ * matches.
+ * optional clause is only executed if the required "low-frequency' clause  
+        builder.field(LOW_FREQ_OPERATOR_FIELD.getPreferredName(), lowFreqOperator.toString());
+        return this.fieldName;  
+        return query;
+                        } else if (LOW_FREQ_OPERATOR_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        this.fieldName = fieldName;
+    public float cutoffFrequency() {
+            .queryName(queryName);
+        float cutoffFrequency = CommonTermsQueryBuilder.DEFAULT_CUTOFF_FREQ;
+        return NAME;  
+                                        "["
+        if (analyzer == null) {
+    public static final String NAME = "common";
+                        }
+        Operator highFreqOperator = CommonTermsQueryBuilder.DEFAULT_HIGH_FREQ_OCCUR;
+        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
+}  
+                            throw new ParsingException(
+                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, parser.currentName());  
+ * this work for additional information regarding copyright
+ *
+    private final Object text;
+ * Licensed to Elasticsearch under one or more contributor  
+    protected void doXContent(XContentBuilder builder, Params params) throws IOException {  
+        if (lowFreqMinimumShouldMatch != null || highFreqMinimumShouldMatch != null) {
+        return this.highFreqMinimumShouldMatch;
+ * The OpenSearch Contributors require contributions made to  
+ * You may obtain a copy of the License at  
+    private static final ParseField DISABLE_COORD_FIELD = new ParseField("disable_coord").withAllDeprecated(
+        return this.cutoffFrequency;  
+        cutoffFrequency = in.readFloat();
+    /**  
+    }
+                                        throw new ParsingException(
+                builder.copyChars(termAtt);
+        String field,
+     */
+        return this;  
+    private Operator lowFreqOperator = DEFAULT_LOW_FREQ_OCCUR;  
+                        } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
+                            );
+        builder.field(HIGH_FREQ_OPERATOR_FIELD.getPreferredName(), highFreqOperator.toString());
+                builder.field(HIGH_FREQ_FIELD.getPreferredName(), highFreqMinimumShouldMatch);
+            if (token == XContentParser.Token.FIELD_NAME) {  
+            } else if (token == XContentParser.Token.START_OBJECT) {
+                text = parser.objectText();
+     * Constructs a new common terms query.
+                }
+                                            + "] after ["
+        highFreqOperator = Operator.readFromStream(in);
+    @Override
+                            lowFreqOperator = Operator.fromString(parser.text());
+ * license agreements. See the NOTICE file distributed with
+    public String highFreqMinimumShouldMatch() {  
+import org.opensearch.core.xcontent.XContentBuilder;
+            && Objects.equals(highFreqOperator, other.highFreqOperator)
+    }
+            source.reset();
+                        } else {  
+        String lowFreqMinimumShouldMatch = null;  
+     * @deprecated See {@link CommonTermsQueryBuilder} for more details.
+    public CommonTermsQueryBuilder cutoffFrequency(float cutoffFrequency) {  
     @Override
     public String fieldName() {
-        return this.fieldName;  
-    }
-
-    public Object value() {  
-        return this.text;
-    }
-
     /**
-     * Sets the operator to use for terms with a high document frequency
-     * (greater than or equal to {@link #cutoffFrequency(float)}. Defaults to  
-     * {@code AND}.
-     */
-    public CommonTermsQueryBuilder highFreqOperator(Operator operator) {  
-        this.highFreqOperator = (operator == null) ? DEFAULT_HIGH_FREQ_OCCUR : operator;
+            text,  
+    }
+                        } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                                parser.getTokenLocation(),
+        String highFreqMinimumShouldMatch = null;
+    protected Query doToQuery(QueryShardContext context) throws IOException {
+     * Sets the minimum number of low frequent query terms that need to match in order to
+        + "skip blocks of documents if the total number of hits is not tracked";  
+        if (fieldType != null) {
         return this;
+        return this;
+     * in [0..1] (or absolute number &gt;=1) representing the maximum threshold of
+    /**
+            .highFreqOperator(highFreqOperator)  
+                    }  
+    public static final Operator DEFAULT_LOW_FREQ_OCCUR = Operator.OR;  
+    protected void doWriteTo(StreamOutput out) throws IOException {
+    private static final ParseField HIGH_FREQ_FIELD = new ParseField("high_freq");  
+        if (Strings.isEmpty(fieldName)) {
+        }
+        Occur lowFreqOccur = lowFreqOperator.toBooleanClauseOccur();
+        }  
+                                } else if (token.isValue()) {
+ * specific language governing permissions and limitations
+            builder.endObject();  
+        this.highFreqOperator = (operator == null) ? DEFAULT_HIGH_FREQ_OCCUR : operator;
+ * not use this file except in compliance with the License.
+ */
+            .analyzer(analyzer)
+        "disable_coord has been removed"
+                builder.field(LOW_FREQ_FIELD.getPreferredName(), lowFreqMinimumShouldMatch);
+    }
+     * (greater than or equal to {@link #cutoffFrequency(float)}. Defaults to  
+                        } else {
+    private static final ParseField HIGH_FREQ_OPERATOR_FIELD = new ParseField("high_freq_operator");  
+    private static final ParseField CUTOFF_FREQUENCY_FIELD = new ParseField("cutoff_frequency");  
+        } else {  
+        highFreqOperator.writeTo(out);
+     * produce a hit when there are no low frequent terms.
+        String queryName = null;
+        this.lowFreqOperator = (operator == null) ? DEFAULT_LOW_FREQ_OCCUR : operator;
+        ExtendedCommonTermsQuery commonsQuery = new ExtendedCommonTermsQuery(highFreqOccur, lowFreqOccur, cutoffFrequency);  
+    protected int doHashCode() {  
+            .cutoffFrequency(cutoffFrequency)
+        }
+     */
+        // Logic similar to QueryParser#getFieldQuery  
+ * under the License.  
+        fieldName = in.readString();  
+        lowFreqMinimumShouldMatch = in.readOptionalString();
+                            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+            }  
+public class CommonTermsQueryBuilder extends AbstractQueryBuilder<CommonTermsQueryBuilder> implements WithFieldName {  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+                        } else if (HIGH_FREQ_OPERATOR_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    );  
+            if (highFreqMinimumShouldMatch != null) {  
+    private static final ParseField ANALYZER_FIELD = new ParseField("analyzer");
+ * software distributed under the License is distributed on an
     }  
-
+        out.writeGenericValue(this.text);
+                                parser.getTokenLocation(),
+     * {@code AND}.
+            }
+            builder.startObject(MINIMUM_SHOULD_MATCH_FIELD.getPreferredName());
+     * Explicitly set the analyzer to use. Defaults to use explicit mapping
+        String field;
+            }
+    public CommonTermsQueryBuilder lowFreqOperator(Operator operator) {
+    }  
+            highFreqMinimumShouldMatch,
+            .lowFreqOperator(lowFreqOperator)
+    public CommonTermsQueryBuilder(StreamInput in) throws IOException {
+import org.opensearch.lucene.queries.ExtendedCommonTermsQuery;
+    private float cutoffFrequency = DEFAULT_CUTOFF_FREQ;
     public Operator highFreqOperator() {
+            && Objects.equals(lowFreqOperator, other.lowFreqOperator)  
+                                    } else {
+ * the Apache License, Version 2.0 (the "License"); you may
+    @Override
+        builder.startObject(fieldName);
+ */  
+        text = in.readGenericValue();
+            && Objects.equals(text, other.text)
+    }
+            if (fieldType != null) {  
+ * Modifications Copyright OpenSearch Contributors. See
+        String lowFreqMinimumShouldMatch,  
+ * ownership. Elasticsearch licenses this file to you under  
+                        currentFieldName = parser.currentName();
+        out.writeString(this.fieldName);  
+import org.apache.lucene.search.BooleanClause.Occur;
+ * stopwords. This query basically builds 2 queries off the {@code #add(Term)  
+            .highFreqMinimumShouldMatch(highFreqMinimumShouldMatch)
+        highFreqMinimumShouldMatch = in.readOptionalString();  
+ * this file be licensed under the Apache-2.0 license or a
+                fieldName = currentFieldName;
+        String fieldName = null;
         return highFreqOperator;  
     }
-
-    /**  
-     * Sets the operator to use for terms with a low document frequency (less
-     * than {@link #cutoffFrequency(float)}. Defaults to {@code AND}.
-     */  
-    public CommonTermsQueryBuilder lowFreqOperator(Operator operator) {
-        this.lowFreqOperator = (operator == null) ? DEFAULT_LOW_FREQ_OCCUR : operator;
-        return this;  
-    }
-
-    public Operator lowFreqOperator() {  
-        return lowFreqOperator;
-    }
-
-    /**
-     * Explicitly set the analyzer to use. Defaults to use explicit mapping
-     * config for the field, or, if not set, the default search analyzer.  
      */
-    public CommonTermsQueryBuilder analyzer(String analyzer) {
-        this.analyzer = analyzer;  
-        return this;
-    }
-
-    public String analyzer() {
-        return this.analyzer;
     }  
-
-    /**
-     * Sets the cutoff document frequency for high / low frequent terms. A value  
-     * in [0..1] (or absolute number &gt;=1) representing the maximum threshold of
-     * a terms document frequency to be considered a low frequency term.
-     * Defaults to  
-     * {@code {@value #DEFAULT_CUTOFF_FREQ}}
-     */
-    public CommonTermsQueryBuilder cutoffFrequency(float cutoffFrequency) {  
-        this.cutoffFrequency = cutoffFrequency;
-        return this;
-    }  
-
-    public float cutoffFrequency() {
-        return this.cutoffFrequency;  
-    }
-
-    /**  
-     * Sets the minimum number of high frequent query terms that need to match in order to
-     * produce a hit when there are no low frequent terms.
-     */  
-    public CommonTermsQueryBuilder highFreqMinimumShouldMatch(String highFreqMinimumShouldMatch) {
-        this.highFreqMinimumShouldMatch = highFreqMinimumShouldMatch;
-        return this;  
-    }
-
-    public String highFreqMinimumShouldMatch() {  
-        return this.highFreqMinimumShouldMatch;
-    }
-
-    /**
-     * Sets the minimum number of low frequent query terms that need to match in order to
-     * produce a hit.  
-     */
-    public CommonTermsQueryBuilder lowFreqMinimumShouldMatch(String lowFreqMinimumShouldMatch) {
-        this.lowFreqMinimumShouldMatch = lowFreqMinimumShouldMatch;  
-        return this;
-    }
-
-    public String lowFreqMinimumShouldMatch() {
-        return this.lowFreqMinimumShouldMatch;
-    }  
-
-    @Override
-    protected void doXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject(NAME);
-        builder.startObject(fieldName);
-        builder.field(QUERY_FIELD.getPreferredName(), text);  
-        builder.field(HIGH_FREQ_OPERATOR_FIELD.getPreferredName(), highFreqOperator.toString());
-        builder.field(LOW_FREQ_OPERATOR_FIELD.getPreferredName(), lowFreqOperator.toString());
-        if (analyzer != null) {  
-            builder.field(ANALYZER_FIELD.getPreferredName(), analyzer);
-        }
-        builder.field(CUTOFF_FREQUENCY_FIELD.getPreferredName(), cutoffFrequency);  
-        if (lowFreqMinimumShouldMatch != null || highFreqMinimumShouldMatch != null) {
-            builder.startObject(MINIMUM_SHOULD_MATCH_FIELD.getPreferredName());
-            if (lowFreqMinimumShouldMatch != null) {  
-                builder.field(LOW_FREQ_FIELD.getPreferredName(), lowFreqMinimumShouldMatch);
-            }
-            if (highFreqMinimumShouldMatch != null) {  
-                builder.field(HIGH_FREQ_FIELD.getPreferredName(), highFreqMinimumShouldMatch);
-            }
-            builder.endObject();  
-        }
-        printBoostAndQueryName(builder);
-        builder.endObject();  
-        builder.endObject();
-    }
-
-    public static CommonTermsQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        String fieldName = null;
-        Object text = null;  
-        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
-        String analyzer = null;
-        String lowFreqMinimumShouldMatch = null;  
-        String highFreqMinimumShouldMatch = null;
-        Operator highFreqOperator = CommonTermsQueryBuilder.DEFAULT_HIGH_FREQ_OCCUR;
-        Operator lowFreqOperator = CommonTermsQueryBuilder.DEFAULT_LOW_FREQ_OCCUR;  
-        float cutoffFrequency = CommonTermsQueryBuilder.DEFAULT_CUTOFF_FREQ;
-        String queryName = null;
-        XContentParser.Token token;  
-        String currentFieldName = null;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {  
+    private static final ParseField MINIMUM_SHOULD_MATCH_FIELD = new ParseField("minimum_should_match");
+            CharTermAttribute termAtt = source.addAttribute(CharTermAttribute.class);  
                 currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, currentFieldName);  
-                fieldName = currentFieldName;
-                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                    if (token == XContentParser.Token.FIELD_NAME) {  
-                        currentFieldName = parser.currentName();
-                    } else if (token == XContentParser.Token.START_OBJECT) {
+                // UTF-8  
+    private static final ParseField LOW_FREQ_OPERATOR_FIELD = new ParseField("low_freq_operator");
+    private static final ParseField QUERY_FIELD = new ParseField("query");
+ */
+import org.opensearch.core.common.Strings;
+ * added} terms where low-frequency terms are added to a required boolean clause
+package org.opensearch.index.query;
+        Occur highFreqOccur = highFreqOperator.toBooleanClauseOccur();  
+import org.apache.lucene.search.Query;  
                         if (MINIMUM_SHOULD_MATCH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
                             String innerFieldName = null;
-                            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                                if (token == XContentParser.Token.FIELD_NAME) {  
-                                    innerFieldName = parser.currentName();
-                                } else if (token.isValue()) {
-                                    if (LOW_FREQ_FIELD.match(innerFieldName, parser.getDeprecationHandler())) {  
-                                        lowFreqMinimumShouldMatch = parser.text();
-                                    } else if (HIGH_FREQ_FIELD.match(innerFieldName, parser.getDeprecationHandler())) {
-                                        highFreqMinimumShouldMatch = parser.text();  
-                                    } else {
-                                        throw new ParsingException(
-                                            parser.getTokenLocation(),  
-                                            "["
-                                                + CommonTermsQueryBuilder.NAME
-                                                + "] query does not support ["  
-                                                + innerFieldName
-                                                + "] for ["
-                                                + currentFieldName  
-                                                + "]"
-                                        );
-                                    }  
-                                } else {
-                                    throw new ParsingException(
-                                        parser.getTokenLocation(),  
-                                        "["
-                                            + CommonTermsQueryBuilder.NAME
-                                            + "] unexpected token type ["  
-                                            + token
-                                            + "] after ["
-                                            + innerFieldName  
-                                            + "]"
-                                    );
-                                }  
-                            }
-                        } else {
-                            throw new ParsingException(  
-                                parser.getTokenLocation(),
-                                "[" + CommonTermsQueryBuilder.NAME + "] query does not support [" + currentFieldName + "]"
-                            );  
-                        }
-                    } else if (token.isValue()) {
-                        if (QUERY_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                            text = parser.objectText();
-                        } else if (ANALYZER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            analyzer = parser.text();  
-                        } else if (DISABLE_COORD_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            // ignore
-                        } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                            boost = parser.floatValue();
-                        } else if (HIGH_FREQ_OPERATOR_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            highFreqOperator = Operator.fromString(parser.text());  
-                        } else if (LOW_FREQ_OPERATOR_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            lowFreqOperator = Operator.fromString(parser.text());
-                        } else if (MINIMUM_SHOULD_MATCH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {  
-                            lowFreqMinimumShouldMatch = parser.text();
-                        } else if (CUTOFF_FREQUENCY_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            cutoffFrequency = parser.floatValue();  
-                        } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            queryName = parser.text();
-                        } else {  
-                            throw new ParsingException(
-                                parser.getTokenLocation(),
-                                "[" + CommonTermsQueryBuilder.NAME + "] query does not support [" + currentFieldName + "]"  
-                            );
-                        }
-                    }  
-                }
-            } else {
-                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, parser.currentName());  
-                fieldName = parser.currentName();
-                text = parser.objectText();
-            }  
-        }
-
-        return new CommonTermsQueryBuilder(fieldName, text).lowFreqMinimumShouldMatch(lowFreqMinimumShouldMatch)  
-            .highFreqMinimumShouldMatch(highFreqMinimumShouldMatch)
-            .analyzer(analyzer)
-            .highFreqOperator(highFreqOperator)  
-            .lowFreqOperator(lowFreqOperator)
-            .cutoffFrequency(cutoffFrequency)
-            .boost(boost)  
-            .queryName(queryName);
-    }
-
+        this.analyzer = analyzer;  
     @Override
+            if (lowFreqMinimumShouldMatch != null) {  
     public String getWriteableName() {
-        return NAME;  
-    }
-
-    @Override  
-    protected Query doToQuery(QueryShardContext context) throws IOException {
-        String field;
-        MappedFieldType fieldType = context.fieldMapper(fieldName);  
-        if (fieldType != null) {
-            field = fieldType.name();
-        } else {  
-            field = fieldName;
+ * GitHub history for details.
         }
-
-        Analyzer analyzerObj;
-        if (analyzer == null) {
-            if (fieldType != null) {  
-                analyzerObj = context.getSearchAnalyzer(fieldType);
-            } else {
-                analyzerObj = context.getMapperService().searchAnalyzer();  
-            }
-        } else {
-            analyzerObj = context.getMapperService().getIndexAnalyzers().get(analyzer);  
-            if (analyzerObj == null) {
-                throw new QueryShardException(context, "[common] analyzer [" + analyzer + "] not found");
-            }  
-        }
-
-        Occur highFreqOccur = highFreqOperator.toBooleanClauseOccur();  
-        Occur lowFreqOccur = lowFreqOperator.toBooleanClauseOccur();
-
-        ExtendedCommonTermsQuery commonsQuery = new ExtendedCommonTermsQuery(highFreqOccur, lowFreqOccur, cutoffFrequency);  
-        return parseQueryString(commonsQuery, text, field, analyzerObj, lowFreqMinimumShouldMatch, highFreqMinimumShouldMatch);
-    }
-
-    private static Query parseQueryString(
-        ExtendedCommonTermsQuery query,
-        Object queryString,  
-        String field,
+                        } else if (CUTOFF_FREQUENCY_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        Object text = null;  
         Analyzer analyzer,
-        String lowFreqMinimumShouldMatch,  
-        String highFreqMinimumShouldMatch
-    ) throws IOException {
-        // Logic similar to QueryParser#getFieldQuery  
-        try (TokenStream source = analyzer.tokenStream(field, queryString.toString())) {
-            source.reset();
-            CharTermAttribute termAtt = source.addAttribute(CharTermAttribute.class);  
-            BytesRefBuilder builder = new BytesRefBuilder();
-            while (source.incrementToken()) {
-                // UTF-8  
-                builder.copyChars(termAtt);
-                query.add(new Term(field, builder.toBytesRef()));
-            }  
+        Object queryString,  
+    }
         }
-
-        query.setLowFreqMinimumNumberShouldMatch(lowFreqMinimumShouldMatch);  
-        query.setHighFreqMinimumNumberShouldMatch(highFreqMinimumShouldMatch);
-        return query;
-    }  
-
-    @Override
-    protected int doHashCode() {  
-        return Objects.hash(
-            fieldName,
-            text,  
-            highFreqOperator,
-            lowFreqOperator,
-            analyzer,  
-            lowFreqMinimumShouldMatch,
-            highFreqMinimumShouldMatch,
-            cutoffFrequency  
-        );
-    }
-
-    @Override
-    protected boolean doEquals(CommonTermsQueryBuilder other) {
-        return Objects.equals(fieldName, other.fieldName)  
-            && Objects.equals(text, other.text)
-            && Objects.equals(highFreqOperator, other.highFreqOperator)
-            && Objects.equals(lowFreqOperator, other.lowFreqOperator)  
-            && Objects.equals(analyzer, other.analyzer)
-            && Objects.equals(lowFreqMinimumShouldMatch, other.lowFreqMinimumShouldMatch)
-            && Objects.equals(highFreqMinimumShouldMatch, other.highFreqMinimumShouldMatch)  
-            && Objects.equals(cutoffFrequency, other.cutoffFrequency);
-    }
-}  
+        Analyzer analyzerObj;
+@Deprecated
+                    } else if (token == XContentParser.Token.START_OBJECT) {
+        XContentParser.Token token;  
+                                        highFreqMinimumShouldMatch = parser.text();  
+ */  
+import org.opensearch.core.xcontent.XContentParser;

@@ -1,175 +1,160 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.util.concurrent;
-
 import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.test.OpenSearchTestCase;  
-
-import java.util.ArrayList;
-import java.util.List;  
-import java.util.concurrent.BrokenBarrierException;
-import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.TimeUnit;  
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;  
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;  
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;  
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;
-
-public class ReleasableLockTests extends OpenSearchTestCase {
-
-    /**  
-     * Test that accounting on whether or not a thread holds a releasable lock is correct. Previously we had a bug where on a re-entrant
-     * lock that if a thread entered the lock twice we would declare that it does not hold the lock after it exits its first entrance but
-     * not its second entrance.  
-     *
-     * @throws BrokenBarrierException if awaiting on the synchronization barrier breaks
-     * @throws InterruptedException   if awaiting on the synchronization barrier is interrupted  
-     */
-    public void testIsHeldByCurrentThread() throws BrokenBarrierException, InterruptedException {
-        final ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();  
-        final ReleasableLock readLock = new ReleasableLock(readWriteLock.readLock());
-        final ReleasableLock writeLock = new ReleasableLock(readWriteLock.writeLock());
-
-        final int numberOfThreads = scaledRandomIntBetween(1, 32);
-        final int iterations = scaledRandomIntBetween(1, 32);
-        final CyclicBarrier barrier = new CyclicBarrier(1 + numberOfThreads);  
-        final List<Thread> threads = new ArrayList<>();
-        for (int i = 0; i < numberOfThreads; i++) {
-            final Thread thread = new Thread(() -> {  
-                try {
-                    barrier.await();
-                } catch (final BrokenBarrierException | InterruptedException e) {  
-                    throw new RuntimeException(e);
-                }
                 for (int j = 0; j < iterations; j++) {  
-                    if (randomBoolean()) {
-                        acquire(readLock, writeLock);
-                    } else {  
-                        acquire(writeLock, readLock);
-                    }
-                }  
-                try {
-                    barrier.await();
-                } catch (final BrokenBarrierException | InterruptedException e) {  
-                    throw new RuntimeException(e);
-                }
-            });  
-            threads.add(thread);
-            thread.start();
-        }  
-
-        barrier.await();
-        barrier.await();  
-        for (final Thread thread : threads) {
-            thread.join();
-        }  
-    }
-
-    private void acquire(final ReleasableLock lockToAcquire, final ReleasableLock otherLock) {  
-        try (@SuppressWarnings("unused")
-        Releasable outer = randomAcquireMethod(lockToAcquire)) {
-            assertTrue(lockToAcquire.isHeldByCurrentThread());  
-            assertFalse(otherLock.isHeldByCurrentThread());
-            try (@SuppressWarnings("unused")
-            Releasable inner = randomAcquireMethod(lockToAcquire)) {  
-                assertTrue(lockToAcquire.isHeldByCurrentThread());
-                assertFalse(otherLock.isHeldByCurrentThread());
-            }  
-            // previously there was a bug here and this would return false
-            assertTrue(lockToAcquire.isHeldByCurrentThread());
-            assertFalse(otherLock.isHeldByCurrentThread());  
-        }
-        assertFalse(lockToAcquire.isHeldByCurrentThread());
-        assertFalse(otherLock.isHeldByCurrentThread());  
-    }
-
-    private ReleasableLock randomAcquireMethod(ReleasableLock lock) {  
-        if (randomBoolean()) {
-            return lock.acquire();
-        } else {  
-            try {
-                ReleasableLock releasableLock = lock.tryAcquire(TimeValue.timeValueSeconds(30));
-                assertThat(releasableLock, notNullValue());  
-                return releasableLock;
-            } catch (InterruptedException e) {
-                throw new AssertionError(e);  
-            }
-        }
-    }  
-
-    public void testTryAcquire() throws Exception {
-        ReleasableLock lock = new ReleasableLock(new ReentrantLock());  
-        int numberOfThreads = randomIntBetween(1, 10);
-        CyclicBarrier barrier = new CyclicBarrier(1 + numberOfThreads);
-        AtomicInteger lockedCounter = new AtomicInteger();  
         int timeout = randomFrom(0, 5, 10);
+ * Licensed to Elasticsearch under one or more contributor  
+     * not its second entrance.  
+            if (locked != null) {
+import java.util.stream.IntStream;  
+                }
+import static org.hamcrest.Matchers.equalTo;
+            });  
+                    if (randomBoolean()) {
+            barrier.await(10, TimeUnit.SECONDS);
+        }  
+                        acquire(writeLock, readLock);
+ */  
+import java.util.concurrent.locks.ReentrantLock;  
+            assertThat(locked, notNullValue());  
+ * software distributed under the License is distributed on an
+                }
+        }  
+                assertThat(lockedCounter.get(), equalTo(0));
+ * You may obtain a copy of the License at  
+                    throw new RuntimeException(e);
+     * lock that if a thread entered the lock twice we would declare that it does not hold the lock after it exits its first entrance but
+                        acquire(readLock, writeLock);
+        final List<Thread> threads = new ArrayList<>();
+ */
+        Releasable outer = randomAcquireMethod(lockToAcquire)) {
+                    if (locked != null) {  
+ *
+            }  
+ * specific language governing permissions and limitations
+        for (final Thread thread : threads) {
+            } else {  
+    public void testIsHeldByCurrentThread() throws BrokenBarrierException, InterruptedException {
+            threads.add(thread);
+import java.util.ArrayList;
+                ReleasableLock releasableLock = lock.tryAcquire(TimeValue.timeValueSeconds(30));
+public class ReleasableLockTests extends OpenSearchTestCase {
+            thread.start();
+                return releasableLock;
+import java.util.stream.Collectors;
+ * ownership. Elasticsearch licenses this file to you under  
+        int numberOfThreads = randomIntBetween(1, 10);
         List<Thread> threads = IntStream.range(0, numberOfThreads).mapToObj(i -> new Thread(() -> {
+        final ReleasableLock writeLock = new ReleasableLock(readWriteLock.writeLock());
+ * compatible open source license.
+                throw new AssertionError(e);  
+ * the Apache License, Version 2.0 (the "License"); you may
+ */  
+     * Test that accounting on whether or not a thread holds a releasable lock is correct. Previously we had a bug where on a re-entrant
+            }
+                }  
+import org.opensearch.common.unit.TimeValue;
+ * Unless required by applicable law or agreed to in writing,
+                try {
+ * not use this file except in compliance with the License.
+import org.opensearch.test.OpenSearchTestCase;  
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;  
+                assertThat(lockedCounter.get(), greaterThanOrEqualTo(1));
+            assertFalse(otherLock.isHeldByCurrentThread());
+                } catch (final BrokenBarrierException | InterruptedException e) {  
+        final int iterations = scaledRandomIntBetween(1, 32);
+        final ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();  
+ *
+/*
+        barrier.await();
+            }  
+import java.util.concurrent.TimeUnit;  
+import java.util.concurrent.BrokenBarrierException;
+            assertTrue(lockToAcquire.isHeldByCurrentThread());  
+                    throw new RuntimeException(e);
+     * @throws InterruptedException   if awaiting on the synchronization barrier is interrupted  
+            assertTrue(lockToAcquire.isHeldByCurrentThread());
+package org.opensearch.common.util.concurrent;
+import static org.hamcrest.Matchers.notNullValue;
+            try {
+                assertThat(releasableLock, notNullValue());  
+import java.util.List;  
+        barrier.await();  
+        try (ReleasableLock locked = randomBoolean() ? lock.acquire() : null) {  
+                    barrier.await();
+                try {
+    }  
+            }
+/*  
+ * KIND, either express or implied.  See the License for the
+            threads.forEach(t -> assertThat(t.isAlive(), is(false)));
             try {  
                 barrier.await(10, TimeUnit.SECONDS);
-                try (ReleasableLock locked = lock.tryAcquire(TimeValue.timeValueMillis(timeout))) {
-                    if (locked != null) {  
-                        lockedCounter.incrementAndGet();
-                    }
-                }  
+import static org.hamcrest.Matchers.is;
+import java.util.concurrent.TimeoutException;
+        if (randomBoolean()) {
+    private ReleasableLock randomAcquireMethod(ReleasableLock lock) {  
+        } else {  
+ *  
+ * under the License.  
+            }
             } catch (InterruptedException | BrokenBarrierException | TimeoutException e) {
-                throw new AssertionError(e);
-            }  
-        })).collect(Collectors.toList());
-        threads.forEach(Thread::start);
-        try (ReleasableLock locked = randomBoolean() ? lock.acquire() : null) {  
-            barrier.await(10, TimeUnit.SECONDS);
-            for (Thread thread : threads) {
-                thread.join(10000);  
-            }
-            threads.forEach(t -> assertThat(t.isAlive(), is(false)));
-
-            if (locked != null) {
-                assertThat(lockedCounter.get(), equalTo(0));
-            } else {  
-                assertThat(lockedCounter.get(), greaterThanOrEqualTo(1));
-            }
-        }  
-
-        try (ReleasableLock locked = lock.tryAcquire(TimeValue.ZERO)) {
-            assertThat(locked, notNullValue());  
-        }
+                    }
+     * @throws BrokenBarrierException if awaiting on the synchronization barrier breaks
+        final int numberOfThreads = scaledRandomIntBetween(1, 32);
+        final CyclicBarrier barrier = new CyclicBarrier(1 + numberOfThreads);  
     }
+                    } else {  
+ * The OpenSearch Contributors require contributions made to  
+ * this work for additional information regarding copyright
+            assertFalse(otherLock.isHeldByCurrentThread());  
+    }
+            final Thread thread = new Thread(() -> {  
+/*  
+                }  
 }  
+                assertFalse(otherLock.isHeldByCurrentThread());
+        }
+                    barrier.await();
+ * SPDX-License-Identifier: Apache-2.0
+                } catch (final BrokenBarrierException | InterruptedException e) {  
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * this file be licensed under the Apache-2.0 license or a
+ * Modifications Copyright OpenSearch Contributors. See
+    private void acquire(final ReleasableLock lockToAcquire, final ReleasableLock otherLock) {  
+        }  
+                throw new AssertionError(e);
+                thread.join(10000);  
+        try (@SuppressWarnings("unused")
+        }
+        final ReleasableLock readLock = new ReleasableLock(readWriteLock.readLock());
+ * GitHub history for details.
+        for (int i = 0; i < numberOfThreads; i++) {
+    /**  
+                        lockedCounter.incrementAndGet();
+            thread.join();
+            return lock.acquire();
+            } catch (InterruptedException e) {
+        AtomicInteger lockedCounter = new AtomicInteger();  
+                    }
+        assertFalse(lockToAcquire.isHeldByCurrentThread());
+    }
+ * license agreements. See the NOTICE file distributed with
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        try (ReleasableLock locked = lock.tryAcquire(TimeValue.ZERO)) {
+        })).collect(Collectors.toList());
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CyclicBarrier;
+        ReleasableLock lock = new ReleasableLock(new ReentrantLock());  
+        CyclicBarrier barrier = new CyclicBarrier(1 + numberOfThreads);
+            // previously there was a bug here and this would return false
+     *
+            for (Thread thread : threads) {
+        threads.forEach(Thread::start);
+                try (ReleasableLock locked = lock.tryAcquire(TimeValue.timeValueMillis(timeout))) {
+        }
+     */
+        assertFalse(otherLock.isHeldByCurrentThread());  
+    public void testTryAcquire() throws Exception {
+            try (@SuppressWarnings("unused")
+                assertTrue(lockToAcquire.isHeldByCurrentThread());
+            Releasable inner = randomAcquireMethod(lockToAcquire)) {  

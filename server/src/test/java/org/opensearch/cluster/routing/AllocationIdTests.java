@@ -1,187 +1,164 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+            new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null)
+        shard = shard.moveToUnassigned(new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, null));
+            new ShardId("test", "_na_", 0),  
  */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.routing;
-
-import org.opensearch.cluster.routing.RecoverySource.ExistingStoreRecoverySource;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.json.JsonXContent;  
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.xcontent.ToXContent;  
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.not;  
+        target = target.moveToStarted();
+        shard = shard.moveToStarted();  
 import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
-
-public class AllocationIdTests extends OpenSearchTestCase {
-    public void testShardToStarted() {
-        logger.info("-- create unassigned shard");  
-        ShardRouting shard = ShardRouting.newUnassigned(
-            new ShardId("test", "_na_", 0),
+ */  
+import static org.hamcrest.Matchers.equalTo;
+        assertThat(shard.allocationId().getId(), equalTo(allocationId.getId()));
+    public void testCancelRelocation() {
+        assertThat(shard.allocationId().getRelocationId(), notNullValue());
+ * ownership. Elasticsearch licenses this file to you under  
+        assertNotNull(shard.allocationId());
+        AllocationId allocationId2 = AllocationId.newInitializing(allocationId1.getId());  
+        assertEquals(allocationId1, allocationId1);  
+            true,
+        logger.info("-- move to unassigned");
             true,  
+    public void testMoveToUnassigned() {
+ * software distributed under the License is distributed on an
+        BytesReference bytes = BytesReference.bytes(allocationId.toXContent(XContentFactory.jsonBuilder(), ToXContent.EMPTY_PARAMS));
+    }
+        assertThat(target.allocationId().getRelocationId(), equalTo(shard.allocationId().getId()));
+/*  
+    public void testSuccessfulRelocation() {  
+import org.opensearch.core.index.shard.ShardId;
+        assertThat(shard.allocationId().getId(), equalTo(allocationId.getId()));  
+        assertThat(shard.allocationId().getId(), equalTo(allocationId.getId()));  
+        assertNotEquals(allocationId1, null);  
+        assertThat(allocationId.getRelocationId(), nullValue());
+        assertEquals(originalAllocationId, shard.allocationId());  
+            true,
+        allocationId = shard.allocationId();
+import static org.hamcrest.Matchers.nullValue;
+        logger.info("-- finalize the relocation");
+        shard = shard.moveToStarted();
+import org.opensearch.cluster.routing.RecoverySource.ExistingStoreRecoverySource;
+        }
+        logger.info("-- build started shard");  
+        AllocationId allocationId1 = AllocationId.newInitializing();
+        assertThat(shard.allocationId(), nullValue());
+ * this work for additional information regarding copyright
+        logger.info("-- relocate the shard");
+import static org.hamcrest.Matchers.not;  
+        assertThat(target.allocationId().getId(), equalTo(shard.allocationId().getRelocationId()));  
+        assertThat(shard.allocationId(), not(equalTo(allocationId)));
+            ExistingStoreRecoverySource.INSTANCE,  
+        logger.info("-- create unassigned shard");  
+        assertEquals(allocationId1, allocationId2);
+    }  
+        AllocationId allocationId = shard.allocationId();
+ * this file be licensed under the Apache-2.0 license or a
+        assertThat(target.allocationId().getId(), equalTo(shard.allocationId().getRelocationId()));
+    }
+        );  
+        assertThat(target.allocationId().getRelocationId(), nullValue());
+        assertThat(shard.allocationId().getRelocationId(), nullValue());
+            new ShardId("test", "_na_", 0),
+        ShardRouting shard = ShardRouting.newUnassigned(
+        assertThat(allocationId.getId(), notNullValue());
+        shard = shard.relocate("node2", -1);
+ * The OpenSearch Contributors require contributions made to  
+            new ShardId("test", "_na_", 0),
+            true,
+    public void testSerialization() throws IOException {  
+        logger.info("-- cancel relocation");
+            new ShardId("test", "_na_", 0),
+ * specific language governing permissions and limitations
+    public void testMovePrimaryToReplica() {  
+    }
+    }
+ * You may obtain a copy of the License at  
+ * Modifications Copyright OpenSearch Contributors. See
+            new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null)  
+        assertThat(shard.allocationId(), nullValue());  
+        shard = shard.relocate("node2", -1);
+import org.opensearch.test.OpenSearchTestCase;
+        ShardRouting shard = ShardRouting.newUnassigned(
+import java.io.IOException;  
+        shard = shard.moveToStarted();  
+            new ShardId("test", "_na_", 0),  
+        AllocationId originalAllocationId = shard.allocationId();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ */
+            allocationId = AllocationId.newRelocation(allocationId);  
+            ExistingStoreRecoverySource.INSTANCE,
+        assertThat(shard.allocationId().getRelocationId(), notNullValue());
+        shard = shard.moveToStarted();
+        shard = shard.initialize("node1", null, -1);
+            ExistingStoreRecoverySource.INSTANCE,
+        assertThat(shard.allocationId(), not(equalTo(allocationId)));  
+        logger.info("-- relocate the shard");  
+        assertNotEquals(allocationId1, allocationId3);
+        assertEquals(allocationId, parsedAllocationId);
+        assertNotEquals(allocationId1, allocationId2);
             ExistingStoreRecoverySource.INSTANCE,
             new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null)
+        shard = shard.initialize("node1", null, -1);
         );  
-        assertThat(shard.allocationId(), nullValue());
-
-        logger.info("-- initialize the shard");  
-        shard = shard.initialize("node1", null, -1);
-        AllocationId allocationId = shard.allocationId();
-        assertThat(allocationId, notNullValue());  
+        shard = shard.moveActivePrimaryToReplica();
+        if (randomBoolean()) {
+        AllocationId allocationId = AllocationId.newInitializing();
         assertThat(allocationId.getId(), notNullValue());
-        assertThat(allocationId.getRelocationId(), nullValue());
-
-        logger.info("-- start the shard");
-        shard = shard.moveToStarted();
-        assertThat(shard.allocationId().getId(), equalTo(allocationId.getId()));  
-        allocationId = shard.allocationId();
-        assertThat(allocationId.getId(), notNullValue());
-        assertThat(allocationId.getRelocationId(), nullValue());  
-    }
-
-    public void testSuccessfulRelocation() {  
-        logger.info("-- build started shard");
+        allocationId2 = AllocationId.newRelocation(allocationId1);  
         ShardRouting shard = ShardRouting.newUnassigned(
-            new ShardId("test", "_na_", 0),  
-            true,
-            ExistingStoreRecoverySource.INSTANCE,
-            new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null)  
-        );
+    public void testEquals() {
+        assertNotEquals(allocationId1, s);
+        AllocationId allocationId = shard.allocationId();  
         shard = shard.initialize("node1", null, -1);
-        shard = shard.moveToStarted();  
-
         AllocationId allocationId = shard.allocationId();
-        logger.info("-- relocate the shard");  
-        shard = shard.relocate("node2", -1);
-        assertThat(shard.allocationId(), not(equalTo(allocationId)));
-        assertThat(shard.allocationId().getId(), equalTo(allocationId.getId()));  
-        assertThat(shard.allocationId().getRelocationId(), notNullValue());
-
-        ShardRouting target = shard.getTargetRelocatingShard();  
-        assertThat(target.allocationId().getId(), equalTo(shard.allocationId().getRelocationId()));
-        assertThat(target.allocationId().getRelocationId(), equalTo(shard.allocationId().getId()));
-
-        logger.info("-- finalize the relocation");
-        target = target.moveToStarted();
-        assertThat(target.allocationId().getId(), equalTo(shard.allocationId().getRelocationId()));  
-        assertThat(target.allocationId().getRelocationId(), nullValue());
+        shard = shard.initialize("node1", null, -1);
+ * under the License.  
     }
-
-    public void testCancelRelocation() {
+import org.opensearch.common.xcontent.json.JsonXContent;  
+        shard = shard.moveToStarted();
+        logger.info("-- initialize the shard");  
+        ShardRouting shard = ShardRouting.newUnassigned(
+import org.opensearch.common.xcontent.XContentFactory;
+        shard = shard.cancelRelocation();  
+        );
+/*  
+        logger.info("-- start the shard");
+        ShardRouting target = shard.getTargetRelocatingShard();  
+ * compatible open source license.
+        assertThat(shard.allocationId().getId(), equalTo(allocationId.getId()));
+    }
+ *
+import org.opensearch.core.common.bytes.BytesReference;
+        );
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null)  
         logger.info("-- build started shard");
         ShardRouting shard = ShardRouting.newUnassigned(  
-            new ShardId("test", "_na_", 0),
-            true,
-            ExistingStoreRecoverySource.INSTANCE,  
-            new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null)
+ * not use this file except in compliance with the License.
         );
-        shard = shard.initialize("node1", null, -1);  
-        shard = shard.moveToStarted();
-
-        AllocationId allocationId = shard.allocationId();  
-        logger.info("-- relocate the shard");
-        shard = shard.relocate("node2", -1);
-        assertThat(shard.allocationId(), not(equalTo(allocationId)));  
-        assertThat(shard.allocationId().getId(), equalTo(allocationId.getId()));
-        assertThat(shard.allocationId().getRelocationId(), notNullValue());
-        allocationId = shard.allocationId();  
-
-        logger.info("-- cancel relocation");
-        shard = shard.cancelRelocation();  
-        assertThat(shard.allocationId().getId(), equalTo(allocationId.getId()));
-        assertThat(shard.allocationId().getRelocationId(), nullValue());
-    }  
-
-    public void testMoveToUnassigned() {
-        logger.info("-- build started shard");  
-        ShardRouting shard = ShardRouting.newUnassigned(
-            new ShardId("test", "_na_", 0),
-            true,  
-            ExistingStoreRecoverySource.INSTANCE,
             new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null)
-        );  
-        shard = shard.initialize("node1", null, -1);
-        shard = shard.moveToStarted();
-
-        logger.info("-- move to unassigned");
-        shard = shard.moveToUnassigned(new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, null));
-        assertThat(shard.allocationId(), nullValue());  
-    }
-
-    public void testMovePrimaryToReplica() {  
-        logger.info("-- build started shard");
-        ShardRouting shard = ShardRouting.newUnassigned(
-            new ShardId("test", "_na_", 0),  
-            true,
-            ExistingStoreRecoverySource.INSTANCE,
-            new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null)  
-        );
-        shard = shard.initialize("node1", null, -1);
-        shard = shard.moveToStarted();  
-        AllocationId originalAllocationId = shard.allocationId();
-
-        logger.info("-- move to replica");  
-        shard = shard.moveActivePrimaryToReplica();
-        assertNotNull(shard.allocationId());
-        assertEquals(originalAllocationId, shard.allocationId());  
-    }
-
-    public void testSerialization() throws IOException {  
-        AllocationId allocationId = AllocationId.newInitializing();
-        if (randomBoolean()) {
-            allocationId = AllocationId.newRelocation(allocationId);  
-        }
-        BytesReference bytes = BytesReference.bytes(allocationId.toXContent(XContentFactory.jsonBuilder(), ToXContent.EMPTY_PARAMS));
-        AllocationId parsedAllocationId = AllocationId.fromXContent(createParser(JsonXContent.jsonXContent, bytes));  
-        assertEquals(allocationId, parsedAllocationId);
-    }
-
-    public void testEquals() {
-        AllocationId allocationId1 = AllocationId.newInitializing();
-        AllocationId allocationId2 = AllocationId.newInitializing(allocationId1.getId());  
-        AllocationId allocationId3 = AllocationId.newInitializing("not a UUID");
+public class AllocationIdTests extends OpenSearchTestCase {
+ * Unless required by applicable law or agreed to in writing,
         String s = "Some random other object";
-        assertEquals(allocationId1, allocationId1);  
-        assertEquals(allocationId1, allocationId2);
-        assertNotEquals(allocationId1, s);
-        assertNotEquals(allocationId1, null);  
-        assertNotEquals(allocationId1, allocationId3);
-
-        allocationId2 = AllocationId.newRelocation(allocationId1);  
-        assertNotEquals(allocationId1, allocationId2);
-    }
+        logger.info("-- build started shard");
+    public void testShardToStarted() {
+            ExistingStoreRecoverySource.INSTANCE,
+        shard = shard.initialize("node1", null, -1);  
+        logger.info("-- build started shard");
+ * SPDX-License-Identifier: Apache-2.0
+        allocationId = shard.allocationId();  
+ * license agreements. See the NOTICE file distributed with
+        AllocationId parsedAllocationId = AllocationId.fromXContent(createParser(JsonXContent.jsonXContent, bytes));  
+ * KIND, either express or implied.  See the License for the
 }  
+        logger.info("-- move to replica");  
+import org.opensearch.core.xcontent.ToXContent;  
+ * Licensed to Elasticsearch under one or more contributor  
+ * the Apache License, Version 2.0 (the "License"); you may
+        AllocationId allocationId3 = AllocationId.newInitializing("not a UUID");
+ *  
+ * GitHub history for details.
+/*
+            true,  
+        assertThat(allocationId, notNullValue());  
+ *
+package org.opensearch.cluster.routing;
+        assertThat(allocationId.getRelocationId(), nullValue());  

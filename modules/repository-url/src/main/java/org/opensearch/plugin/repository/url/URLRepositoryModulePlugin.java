@@ -1,73 +1,65 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.plugin.repository.url;
-
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.core.xcontent.NamedXContentRegistry;  
 import org.opensearch.env.Environment;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.plugins.RepositoryPlugin;
-import org.opensearch.repositories.Repository;
+ * under the License.  
 import org.opensearch.repositories.url.URLRepository;  
-
-import java.util.Arrays;
+ * ownership. Elasticsearch licenses this file to you under  
+/*  
+ * license agreements. See the NOTICE file distributed with
+ *  
+ *
+    ) {  
+ * You may obtain a copy of the License at  
+ * Modifications Copyright OpenSearch Contributors. See
+            URLRepository.TYPE,
+            URLRepository.ALLOWED_URLS_SETTING,  
+package org.opensearch.plugin.repository.url;
+ * specific language governing permissions and limitations
+    }
 import java.util.Collections;  
+            metadata -> new URLRepository(metadata, env, namedXContentRegistry, clusterService, recoverySettings)  
+ * the Apache License, Version 2.0 (the "License"); you may
+    public List<Setting<?>> getSettings() {
+        RecoverySettings recoverySettings
+        return Collections.singletonMap(
+ * KIND, either express or implied.  See the License for the
+ * GitHub history for details.
+    }
+ * Unless required by applicable law or agreed to in writing,
+ */  
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.cluster.service.ClusterService;
+import java.util.Arrays;
+ */
+            URLRepository.REPOSITORIES_URL_SETTING,
+        NamedXContentRegistry namedXContentRegistry,  
+/*
+        ClusterService clusterService,
+import org.opensearch.repositories.Repository;
+import org.opensearch.plugins.Plugin;  
+        );
+        return Arrays.asList(
+public class URLRepositoryModulePlugin extends Plugin implements RepositoryPlugin {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+import org.opensearch.common.settings.Setting;
 import java.util.List;
 import java.util.Map;
-
-public class URLRepositoryModulePlugin extends Plugin implements RepositoryPlugin {
-
-    @Override  
-    public List<Setting<?>> getSettings() {
-        return Arrays.asList(
-            URLRepository.ALLOWED_URLS_SETTING,  
-            URLRepository.REPOSITORIES_URL_SETTING,
-            URLRepository.SUPPORTED_PROTOCOLS_SETTING
-        );  
-    }
-
-    @Override  
-    public Map<String, Repository.Factory> getRepositories(
+ *
         Environment env,
-        NamedXContentRegistry namedXContentRegistry,  
-        ClusterService clusterService,
-        RecoverySettings recoverySettings
-    ) {  
-        return Collections.singletonMap(
-            URLRepository.TYPE,
-            metadata -> new URLRepository(metadata, env, namedXContentRegistry, clusterService, recoverySettings)  
-        );
-    }
 }  
+ */  
+ * this work for additional information regarding copyright
+            URLRepository.SUPPORTED_PROTOCOLS_SETTING
+ * not use this file except in compliance with the License.
+        );  
+    @Override  
+import org.opensearch.core.xcontent.NamedXContentRegistry;  
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.indices.recovery.RecoverySettings;
+ * compatible open source license.
+/*  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.plugins.RepositoryPlugin;
+    @Override  
+ * The OpenSearch Contributors require contributions made to  
+    public Map<String, Repository.Factory> getRepositories(
+ * software distributed under the License is distributed on an
+ * this file be licensed under the Apache-2.0 license or a

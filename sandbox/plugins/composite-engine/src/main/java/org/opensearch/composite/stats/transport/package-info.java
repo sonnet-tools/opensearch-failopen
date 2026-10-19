@@ -1,22 +1,20 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+ * {@link org.opensearch.plugin.stats.transport}.
 /**
- * Transport and REST actions for the composite per-format statistics endpoints.  
- *
+ * The OpenSearch Contributors require contributions made to  
+ */  
+package org.opensearch.composite.stats.transport;
  * <p>Wires {@link org.opensearch.composite.stats.CompositeStatsProvider} into the
  * {@code /_plugins/composite/{index}/_stats} and {@code /_plugins/composite/_nodes/_stats}  
- * REST + transport surfaces by extending the abstract bases in
- * {@link org.opensearch.plugin.stats.transport}.
+ *
  *  
- * @opensearch.experimental
- */
+/*  
+ *
+ * REST + transport surfaces by extending the abstract bases in
 @ExperimentalApi  
-package org.opensearch.composite.stats.transport;
-
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+ * @opensearch.experimental
+ * Transport and REST actions for the composite per-format statistics endpoints.  
+ * this file be licensed under the Apache-2.0 license or a
 import org.opensearch.common.annotation.ExperimentalApi;  
+ */

@@ -1,70 +1,58 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.search.startree.filter;
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+    @Override  
+        this.subDimensionName = null;
  * compatible open source license.
  */  
-
-package org.opensearch.search.startree.filter;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;
-import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNode;  
-import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNodeType;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.startree.StarTreeNodeCollector;  
-
-import java.io.IOException;
-import java.util.Iterator;  
-
-/**
- * Matches all StarTreeNodes  
+    }
+            }
  */
+import org.opensearch.common.annotation.ExperimentalApi;
+import org.opensearch.search.startree.StarTreeNodeCollector;  
+    }
+    @Override
+        }
+ * The OpenSearch Contributors require contributions made to  
+    public MatchAllFilter(String dimensionName, String subDimensionName) {
+        if (parentNode != null) {  
+        return true;
+                    collector.collectStarTreeNode(starTreeNode);
+        throws IOException {
+    public boolean matchDimValue(long ordinal, StarTreeValues starTreeValues) {  
+    @Override  
+    public MatchAllFilter(String dimensionName) {
+        return dimensionName;  
+/**
+import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;
+    public void initialiseForSegment(StarTreeValues starTreeValues, SearchContext searchContext) throws IOException {}
+                StarTreeNode starTreeNode = it.next();
+import java.io.IOException;
+}  
+    public String getDimensionName() {
+    public void matchStarTreeNodes(StarTreeNode parentNode, StarTreeValues starTreeValues, StarTreeNodeCollector collector)
+ * this file be licensed under the Apache-2.0 license or a
+    }  
+ * Matches all StarTreeNodes  
+/*  
+                }  
+                if (starTreeNode.getStarTreeNodeType() == StarTreeNodeType.DEFAULT.getValue()  
+    public final String subDimensionName;  
+        this.dimensionName = dimensionName;  
 @ExperimentalApi
 public class MatchAllFilter implements DimensionFilter {  
-
-    public final String dimensionName;
-    public final String subDimensionName;  
-
-    public MatchAllFilter(String dimensionName) {
-        this.dimensionName = dimensionName;  
-        this.subDimensionName = null;
-    }
-
-    public MatchAllFilter(String dimensionName, String subDimensionName) {
+    @Override
         this.dimensionName = dimensionName;
-        this.subDimensionName = subDimensionName;  
+    public final String dimensionName;
+import org.opensearch.search.internal.SearchContext;
     }
-
-    @Override  
-    public void initialiseForSegment(StarTreeValues starTreeValues, SearchContext searchContext) throws IOException {}
-
-    @Override  
-    public void matchStarTreeNodes(StarTreeNode parentNode, StarTreeValues starTreeValues, StarTreeNodeCollector collector)
-        throws IOException {
-        if (parentNode != null) {  
+    }
             for (Iterator<? extends StarTreeNode> it = parentNode.getChildrenIterator(); it.hasNext();) {
-                StarTreeNode starTreeNode = it.next();
-                if (starTreeNode.getStarTreeNodeType() == StarTreeNodeType.DEFAULT.getValue()  
+import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNode;  
+    }
                     || starTreeNode.getStarTreeNodeType() == StarTreeNodeType.NULL.getValue()) {
-                    collector.collectStarTreeNode(starTreeNode);
-                }  
-            }
-        }
-    }  
-
-    @Override
-    public boolean matchDimValue(long ordinal, StarTreeValues starTreeValues) {  
-        return true;
-    }
-
-    @Override
-    public String getDimensionName() {
-        return dimensionName;  
-    }
-
+import java.util.Iterator;  
     public String getSubDimensionName() {  
+import org.opensearch.index.compositeindex.datacube.startree.node.StarTreeNodeType;
+ * SPDX-License-Identifier: Apache-2.0
+        this.subDimensionName = subDimensionName;  
         return subDimensionName;
-    }
-}  

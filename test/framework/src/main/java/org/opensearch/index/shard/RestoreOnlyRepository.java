@@ -1,258 +1,224 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index.shard;
-
-import org.apache.lucene.index.IndexCommit;  
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateUpdateTask;  
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.metadata.RepositoryMetadata;  
-import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.common.Priority;
-import org.opensearch.common.lifecycle.AbstractLifecycleComponent;  
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.mapper.MapperService;  
-import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.store.lockmanager.RemoteStoreLockManagerFactory;  
-import org.opensearch.repositories.IndexId;
-import org.opensearch.repositories.IndexMetaDataGenerations;
-import org.opensearch.repositories.Repository;  
-import org.opensearch.repositories.RepositoryData;
-import org.opensearch.repositories.RepositoryShardId;
-import org.opensearch.repositories.ShardGenerations;  
-import org.opensearch.snapshots.SnapshotId;
-import org.opensearch.snapshots.SnapshotInfo;
-
-import java.util.Collection;
-import java.util.Collections;
 import java.util.Map;  
-import java.util.function.Consumer;
-import java.util.function.Function;
-
-import static java.util.Collections.emptyList;
-import static org.opensearch.repositories.RepositoryData.EMPTY_REPO_GEN;
-
-/** A dummy repository for testing which just needs restore overridden */
-public abstract class RestoreOnlyRepository extends AbstractLifecycleComponent implements Repository {
-    private final String indexName;  
-
-    public RestoreOnlyRepository(String indexName) {
-        this.indexName = indexName;  
-    }
-
-    @Override  
-    protected void doStart() {}
-
-    @Override  
-    protected void doStop() {}
-
-    @Override  
-    protected void doClose() {}
-
-    @Override  
-    public RepositoryMetadata getMetadata() {
-        return null;
-    }  
-
-    @Override
-    public SnapshotInfo getSnapshotInfo(SnapshotId snapshotId) {  
-        return null;
-    }
-
-    @Override
-    public Metadata getSnapshotGlobalMetadata(SnapshotId snapshotId) {
-        return null;  
-    }
-
-    @Override  
-    public IndexMetadata getSnapshotIndexMetaData(RepositoryData repositoryData, SnapshotId snapshotId, IndexId index) {
-        return null;
-    }  
-
-    @Override
-    public void getRepositoryData(ActionListener<RepositoryData> listener) {  
-        final IndexId indexId = new IndexId(indexName, "blah");
-        listener.onResponse(
-            new RepositoryData(  
-                EMPTY_REPO_GEN,
-                Collections.emptyMap(),
-                Collections.emptyMap(),  
-                Collections.emptyMap(),
-                Collections.singletonMap(indexId, emptyList()),
-                ShardGenerations.EMPTY,  
-                IndexMetaDataGenerations.EMPTY
-            )
-        );  
-    }
-
-    @Override  
-    public void finalizeSnapshot(
-        ShardGenerations shardGenerations,
-        long repositoryStateId,  
-        Metadata clusterMetadata,
-        SnapshotInfo snapshotInfo,
-        Version repositoryMetaVersion,  
-        Function<ClusterState, ClusterState> stateTransformer,
-        ActionListener<RepositoryData> listener
-    ) {  
-        listener.onResponse(null);
-    }
-
-    @Override
-    public void finalizeSnapshot(
-        ShardGenerations shardGenerations,  
-        long repositoryStateId,
-        Metadata clusterMetadata,
-        SnapshotInfo snapshotInfo,  
-        Version repositoryMetaVersion,
-        Function<ClusterState, ClusterState> stateTransformer,
-        Priority repositoryUpdatePriority,  
-        ActionListener<RepositoryData> listener
-    ) {
-        listener.onResponse(null);  
-    }
-
-    @Override  
-    public void deleteSnapshots(
-        Collection<SnapshotId> snapshotIds,
-        long repositoryStateId,  
-        Version repositoryMetaVersion,
-        ActionListener<RepositoryData> listener
-    ) {  
-        listener.onResponse(null);
-    }
-
-    @Override
-    public long getSnapshotThrottleTimeInNanos() {
-        return 0;  
-    }
-
-    @Override  
-    public long getRestoreThrottleTimeInNanos() {
-        return 0;
-    }  
-
-    @Override
-    public long getRemoteUploadThrottleTimeInNanos() {  
-        return 0;
-    }
-
-    @Override
-    public long getRemoteDownloadThrottleTimeInNanos() {
-        return 0;  
-    }
-
-    @Override  
-    public long getLowPriorityRemoteDownloadThrottleTimeInNanos() {
-        return 0;
-    }  
-
-    @Override
-    public String startVerification() {  
-        return null;
-    }
-
-    @Override
-    public void endVerification(String verificationToken) {}
-
-    @Override
-    public boolean isReadOnly() {
-        return false;  
-    }
-
-    @Override  
-    public boolean isSystemRepository() {
-        return false;
-    }  
-
-    @Override
-    public void snapshotShard(  
-        Store store,
-        MapperService mapperService,
-        SnapshotId snapshotId,  
+        Consumer<Exception> onFailure
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         IndexId indexId,
-        IndexCommit snapshotIndexCommit,
-        String shardStateIdentifier,  
-        IndexShardSnapshotStatus snapshotStatus,
-        Version repositoryMetaVersion,
-        Map<String, Object> userMetadata,  
-        ActionListener<String> listener,
-        IndexMetadata indexMetadata
-    ) {}  
-
-    @Override
-    public IndexShardSnapshotStatus getShardSnapshotStatus(SnapshotId snapshotId, IndexId indexId, ShardId shardId) {  
-        return null;
-    }
-
-    @Override
-    public void verify(String verificationToken, DiscoveryNode localNode) {}
-
     @Override
     public void updateState(final ClusterState state) {}
-
-    @Override
     public void executeConsistentStateUpdate(
-        Function<RepositoryData, ClusterStateUpdateTask> createUpdateTask,  
-        String source,
-        Consumer<Exception> onFailure
-    ) {  
-        throw new UnsupportedOperationException("Unsupported for restore-only repository");
-    }
-
-    @Override
-    public void cloneShardSnapshot(
-        SnapshotId source,  
-        SnapshotId target,
-        RepositoryShardId repositoryShardId,
-        String shardGeneration,  
+        return 0;
         ActionListener<String> listener
-    ) {
-        throw new UnsupportedOperationException("Unsupported for restore-only repository");  
-    }
-
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
     @Override  
-    public void cloneRemoteStoreIndexShardSnapshot(
-        SnapshotId source,
-        SnapshotId target,  
-        RepositoryShardId shardId,
-        String shardGeneration,
-        RemoteStoreLockManagerFactory remoteStoreLockManagerFactory,  
-        ActionListener<String> listener
-    ) {
+    public long getRemoteUploadThrottleTimeInNanos() {  
+    public long getRestoreThrottleTimeInNanos() {
+import static org.opensearch.repositories.RepositoryData.EMPTY_REPO_GEN;
+import org.opensearch.repositories.RepositoryData;
+ *  
+        String shardStateIdentifier,  
+    @Override
+import java.util.function.Function;
         throw new UnsupportedOperationException("Unsupported for restore-only repository");  
+import java.util.Collections;
+    @Override
+    ) {  
+        long repositoryStateId,  
+        return false;
+        Function<ClusterState, ClusterState> stateTransformer,
+                Collections.emptyMap(),  
+    @Override  
+    ) {
+        Version repositoryMetaVersion,  
+import org.opensearch.index.mapper.MapperService;  
     }
+import org.opensearch.cluster.metadata.IndexMetadata;
+    @Override
+        );  
+    @Override
+        listener.onResponse(null);  
+        listener.onResponse(
+        throw new UnsupportedOperationException("Unsupported for restore-only repository");  
+    @Override  
+    protected void doStart() {}
+        ActionListener<RepositoryData> listener
+            )
+import org.opensearch.cluster.metadata.RepositoryMetadata;  
+    public SnapshotInfo getSnapshotInfo(SnapshotId snapshotId) {  
+        IndexMetadata indexMetadata
+    }
+                ShardGenerations.EMPTY,  
+    public boolean isReadOnly() {
+    }
+    @Override
+    }  
+        return null;
+import org.opensearch.cluster.node.DiscoveryNode;
+    @Override
+    }
+                Collections.singletonMap(indexId, emptyList()),
+ * ownership. Elasticsearch licenses this file to you under  
+        long repositoryStateId,
+    @Override  
+            new RepositoryData(  
+    @Override  
+import org.opensearch.repositories.IndexMetaDataGenerations;
+    public IndexShardSnapshotStatus getShardSnapshotStatus(SnapshotId snapshotId, IndexId indexId, ShardId shardId) {  
+    public void cloneRemoteStoreIndexShardSnapshot(
+ * license agreements. See the NOTICE file distributed with
+    @Override  
+        String source,
+    @Override
+        SnapshotInfo snapshotInfo,
+    @Override  
+        throw new UnsupportedOperationException("Unsupported for restore-only repository");
+import java.util.function.Consumer;
+        ActionListener<String> listener
+ *
+        RepositoryShardId repositoryShardId,
+        SnapshotId target,
+        Function<ClusterState, ClusterState> stateTransformer,
+    public void deleteSnapshots(
+    @Override  
+    protected void doClose() {}
+import org.opensearch.repositories.IndexId;
+        Metadata clusterMetadata,
+    }
+    @Override
+    }
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.index.store.lockmanager.RemoteStoreLockManagerFactory;  
+    public void snapshotShard(  
+import static java.util.Collections.emptyList;
+    public long getRemoteDownloadThrottleTimeInNanos() {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        return 0;  
+ */
+ */  
+        Collection<SnapshotId> snapshotIds,
+    @Override
+    protected void doStop() {}
+/*
+    }
+    @Override
+        return null;
+        String shardGeneration,
+    }
+ * Modifications Copyright OpenSearch Contributors. See  
+    @Override
+ *
+        final IndexId indexId = new IndexId(indexName, "blah");
+        SnapshotId target,  
+ * GitHub history for details.
+                IndexMetaDataGenerations.EMPTY
+        ShardGenerations shardGenerations,
+import org.opensearch.common.lifecycle.AbstractLifecycleComponent;  
+        ActionListener<RepositoryData> listener
+import org.opensearch.cluster.metadata.Metadata;
+import java.util.Collection;
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.Version;
+    }  
+ * The OpenSearch Contributors require contributions made to  
+                EMPTY_REPO_GEN,
+    private final String indexName;  
+        IndexShardSnapshotStatus snapshotStatus,
+        return 0;
+        String shardGeneration,  
+        MapperService mapperService,
+        RemoteStoreLockManagerFactory remoteStoreLockManagerFactory,  
+        Version repositoryMetaVersion,
+        ActionListener<String> listener,
+import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
+    public void finalizeSnapshot(
+        IndexCommit snapshotIndexCommit,
+ * the Apache License, Version 2.0 (the "License"); you may
+    public String startVerification() {  
+import org.opensearch.snapshots.SnapshotInfo;
+        SnapshotId snapshotId,  
+ * You may obtain a copy of the License at  
+        Version repositoryMetaVersion,
+        Priority repositoryUpdatePriority,  
+import org.opensearch.core.index.shard.ShardId;
+    public RepositoryMetadata getMetadata() {
+    }  
+    @Override
 }
+ * this work for additional information regarding copyright
+        return false;  
+    ) {  
+        this.indexName = indexName;  
+/*
+package org.opensearch.index.shard;
+import org.opensearch.repositories.ShardGenerations;  
+ * under the License.  
+        SnapshotId source,  
+    public void cloneShardSnapshot(
+        listener.onResponse(null);
+    }
+/** A dummy repository for testing which just needs restore overridden */
+        listener.onResponse(null);
+    @Override  
+        long repositoryStateId,  
+import org.apache.lucene.index.IndexCommit;  
+        return 0;
+                Collections.emptyMap(),
+                Collections.emptyMap(),
+ * KIND, either express or implied.  See the License for the
+        return null;
+    public long getLowPriorityRemoteDownloadThrottleTimeInNanos() {
+import org.opensearch.repositories.RepositoryShardId;
+ * this file be licensed under the Apache-2.0 license or a
+    @Override  
+    }
+        SnapshotId source,
+        ActionListener<RepositoryData> listener
+        return null;
+        Metadata clusterMetadata,
+    @Override
+    }
+    public RestoreOnlyRepository(String indexName) {
+    }
+    }
+ */
+        return null;  
+/*  
+public abstract class RestoreOnlyRepository extends AbstractLifecycleComponent implements Repository {
+    public void finalizeSnapshot(
+        Function<RepositoryData, ClusterStateUpdateTask> createUpdateTask,  
+    public void verify(String verificationToken, DiscoveryNode localNode) {}
+        RepositoryShardId shardId,
+    public boolean isSystemRepository() {
+    public void getRepositoryData(ActionListener<RepositoryData> listener) {  
+    ) {}  
+    public void endVerification(String verificationToken) {}
+        return 0;  
+        Version repositoryMetaVersion,
+import org.opensearch.cluster.ClusterStateUpdateTask;  
+    public Metadata getSnapshotGlobalMetadata(SnapshotId snapshotId) {
+    @Override
+import org.opensearch.core.action.ActionListener;
+    ) {  
+    }
+    ) {
+import org.opensearch.index.store.Store;
+        Store store,
+    @Override  
+        ShardGenerations shardGenerations,  
+ * compatible open source license.
+import org.opensearch.snapshots.SnapshotId;
+import org.opensearch.repositories.Repository;  
+    }  
+        return null;
+    @Override
+        Map<String, Object> userMetadata,  
+    }  
+    public IndexMetadata getSnapshotIndexMetaData(RepositoryData repositoryData, SnapshotId snapshotId, IndexId index) {
+    public long getSnapshotThrottleTimeInNanos() {
+ * not use this file except in compliance with the License.
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        SnapshotInfo snapshotInfo,  
+    ) {

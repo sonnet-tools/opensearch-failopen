@@ -1,342 +1,300 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.index;
-
-import org.opensearch.common.annotation.PublicApi;  
-import org.opensearch.common.lucene.uid.Versions;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-
-import java.io.IOException;  
-import java.util.Locale;
-
-/**  
- * Types of index versions
- *
- * @opensearch.api  
- */
-@PublicApi(since = "1.0.0")
-public enum VersionType implements Writeable {  
-    INTERNAL((byte) 0) {
-        @Override
-        public boolean isVersionConflictForWrites(long currentVersion, long expectedVersion, boolean deleted) {  
-            return isVersionConflict(currentVersion, expectedVersion, deleted);
-        }
-
-        @Override
-        public String explainConflictForWrites(long currentVersion, long expectedVersion, boolean deleted) {
-            if (expectedVersion == Versions.MATCH_DELETED) {  
-                return "document already exists (current version [" + currentVersion + "])";
-            }
-            if (currentVersion == Versions.NOT_FOUND) {  
-                return "document does not exist (expected version [" + expectedVersion + "])";
-            }
-            return "current version [" + currentVersion + "] is different than the one provided [" + expectedVersion + "]";  
-        }
-
-        @Override  
-        public boolean isVersionConflictForReads(long currentVersion, long expectedVersion) {
-            return isVersionConflict(currentVersion, expectedVersion, false);
-        }  
-
-        @Override
-        public String explainConflictForReads(long currentVersion, long expectedVersion) {  
-            if (currentVersion == Versions.NOT_FOUND) {
-                return "document does not exist (expected version [" + expectedVersion + "])";
             }  
-            return "current version [" + currentVersion + "] is different than the one provided [" + expectedVersion + "]";
-        }
-
-        private boolean isVersionConflict(long currentVersion, long expectedVersion, boolean deleted) {
-            if (expectedVersion == Versions.MATCH_ANY) {
-                return false;  
-            }
-            if (expectedVersion == Versions.MATCH_DELETED) {
-                return deleted == false;  
-            }
-            if (currentVersion != expectedVersion) {
-                return true;  
-            }
-            return false;
-        }  
-
-        @Override
-        public long updateVersion(long currentVersion, long expectedVersion) {  
-            return currentVersion == Versions.NOT_FOUND ? 1 : currentVersion + 1;
-        }
-
-        @Override
-        public boolean validateVersionForWrites(long version) {
-            return version > 0L || version == Versions.MATCH_ANY || version == Versions.MATCH_DELETED;  
-        }
-
-        @Override  
-        public boolean validateVersionForReads(long version) {
-            // not allowing Versions.NOT_FOUND as it is not a valid input value.
-            return version > 0L || version == Versions.MATCH_ANY;  
-        }
-    },
-    EXTERNAL((byte) 1) {  
-        @Override
-        public boolean isVersionConflictForWrites(long currentVersion, long expectedVersion, boolean deleted) {
-            if (currentVersion == Versions.NOT_FOUND) {  
-                return false;
-            }
-            if (expectedVersion == Versions.MATCH_ANY) {  
-                return true;
-            }
-            if (currentVersion >= expectedVersion) {  
-                return true;
-            }
-            return false;  
-        }
-
-        @Override  
-        public String explainConflictForWrites(long currentVersion, long expectedVersion, boolean deleted) {
-            return "current version [" + currentVersion + "] is higher or equal to the one provided [" + expectedVersion + "]";
-        }  
-
-        @Override
-        public boolean isVersionConflictForReads(long currentVersion, long expectedVersion) {  
-            if (expectedVersion == Versions.MATCH_ANY) {
-                return false;
-            }  
-            if (currentVersion == Versions.NOT_FOUND) {
-                return true;
-            }  
-            if (currentVersion != expectedVersion) {
-                return true;
-            }  
-            return false;
-        }
-
-        @Override
-        public String explainConflictForReads(long currentVersion, long expectedVersion) {
-            if (currentVersion == Versions.NOT_FOUND) {  
-                return "document does not exist (expected version [" + expectedVersion + "])";
-            }
-            return "current version [" + currentVersion + "] is different than the one provided [" + expectedVersion + "]";  
-        }
-
-        @Override  
-        public long updateVersion(long currentVersion, long expectedVersion) {
-            return expectedVersion;
-        }  
-
-        @Override
-        public boolean validateVersionForWrites(long version) {  
-            return version >= 0L;
-        }
-
-        @Override
-        public boolean validateVersionForReads(long version) {
-            return version >= 0L || version == Versions.MATCH_ANY;  
-        }
-
-    },  
-    EXTERNAL_GTE((byte) 2) {
-        @Override
-        public boolean isVersionConflictForWrites(long currentVersion, long expectedVersion, boolean deleted) {  
-            if (currentVersion == Versions.NOT_FOUND) {
-                return false;
-            }  
-            if (expectedVersion == Versions.MATCH_ANY) {
-                return true;
-            }  
-            if (currentVersion > expectedVersion) {
-                return true;
-            }  
-            return false;
-        }
-
-        @Override
-        public String explainConflictForWrites(long currentVersion, long expectedVersion, boolean deleted) {
-            return "current version [" + currentVersion + "] is higher than the one provided [" + expectedVersion + "]";  
-        }
-
-        @Override  
-        public boolean isVersionConflictForReads(long currentVersion, long expectedVersion) {
-            if (expectedVersion == Versions.MATCH_ANY) {
-                return false;  
-            }
-            if (currentVersion == Versions.NOT_FOUND) {
-                return true;  
-            }
-            if (currentVersion != expectedVersion) {
-                return true;  
-            }
-            return false;
-        }  
-
-        @Override
-        public String explainConflictForReads(long currentVersion, long expectedVersion) {  
-            if (currentVersion == Versions.NOT_FOUND) {
-                return "document does not exist (expected version [" + expectedVersion + "])";
-            }  
-            return "current version [" + currentVersion + "] is different than the one provided [" + expectedVersion + "]";
-        }
-
-        @Override
-        public long updateVersion(long currentVersion, long expectedVersion) {
-            return expectedVersion;  
-        }
-
-        @Override  
-        public boolean validateVersionForWrites(long version) {
-            return version >= 0L;
-        }  
-
-        @Override
-        public boolean validateVersionForReads(long version) {  
-            return version >= 0L || version == Versions.MATCH_ANY;
-        }
-
-    };
-
-    private final byte value;  
-
-    VersionType(byte value) {
-        this.value = value;  
-    }
-
-    public byte getValue() {  
-        return value;
-    }
-
-    /**
-     * Checks whether the current version conflicts with the expected version, based on the current version type.
-     *  
-     * @param currentVersion  the current version for the document
-     * @param expectedVersion the version specified for the write operation
-     * @param deleted         true if the document is currently deleted (note that #currentVersion will typically be  
-     *                        {@link Versions#NOT_FOUND}, but may be something else if the document was recently deleted
-     * @return true if versions conflict false o.w.
-     */  
-    public abstract boolean isVersionConflictForWrites(long currentVersion, long expectedVersion, boolean deleted);
-
-    /**  
-     * Returns a human readable explanation for a version conflict on write.
-     * <p>
-     * Note that this method is only called if {@link #isVersionConflictForWrites(long, long, boolean)} returns true;  
-     *
-     * @param currentVersion  the current version for the document
-     * @param expectedVersion the version specified for the write operation  
-     * @param deleted         true if the document is currently deleted (note that #currentVersion will typically be
-     *                        {@link Versions#NOT_FOUND}, but may be something else if the document was recently deleted
-     */  
-    public abstract String explainConflictForWrites(long currentVersion, long expectedVersion, boolean deleted);
-
-    /**  
-     * Checks whether the current version conflicts with the expected version, based on the current version type.
-     *
-     * @param currentVersion  the current version for the document  
-     * @param expectedVersion the version specified for the read operation
-     * @return true if versions conflict false o.w.
-     */  
-    public abstract boolean isVersionConflictForReads(long currentVersion, long expectedVersion);
-
-    /**  
-     * Returns a human readable explanation for a version conflict on read.
-     * <p>
-     * Note that this method is only called if {@link #isVersionConflictForReads(long, long)} returns true;  
-     *
-     * @param currentVersion  the current version for the document
      * @param expectedVersion the version specified for the read operation  
-     */
-    public abstract String explainConflictForReads(long currentVersion, long expectedVersion);
-
-    /**
-     * Returns the new version for a document, based on its current one and the specified in the request
-     *  
-     * @return new version
-     */
-    public abstract long updateVersion(long currentVersion, long expectedVersion);  
-
-    /**
-     * validate the version is a valid value for this type when writing.  
-     *
-     * @return true if valid, false o.w
-     */  
-    public abstract boolean validateVersionForWrites(long version);
-
-    /**  
-     * validate the version is a valid value for this type when reading.
-     *
-     * @return true if valid, false o.w  
-     */
-    public abstract boolean validateVersionForReads(long version);
-
-    public static VersionType fromString(String versionType) {
-        if ("internal".equals(versionType)) {
-            return INTERNAL;  
-        } else if ("external".equals(versionType)) {
-            return EXTERNAL;
-        } else if ("external_gt".equals(versionType)) {  
-            return EXTERNAL;
-        } else if ("external_gte".equals(versionType)) {
-            return EXTERNAL_GTE;  
-        }
-        throw new IllegalArgumentException("No version type match [" + versionType + "]");
-    }  
-
-    public static VersionType fromString(String versionType, VersionType defaultVersionType) {
-        if (versionType == null) {  
-            return defaultVersionType;
-        }
-        return fromString(versionType);  
+        @Override  
+ */
+            }  
+            if (currentVersion != expectedVersion) {
+            }
+        @Override
+            return false;
     }
-
-    public static String toString(VersionType versionType) {  
+        public long updateVersion(long currentVersion, long expectedVersion) {
+     * @param expectedVersion the version specified for the write operation
+        }
+        public boolean validateVersionForWrites(long version) {
+ * Types of index versions
+                return true;
+        }
+     * Checks whether the current version conflicts with the expected version, based on the current version type.
+            return expectedVersion;  
+            }
+        }
+        @Override
+            return isVersionConflict(currentVersion, expectedVersion, false);
+     */
         return versionType.name().toLowerCase(Locale.ROOT);
-    }
-
-    public static VersionType fromValue(byte value) {
-        if (value == 0) {
-            return INTERNAL;  
-        } else if (value == 1) {
+     *
+            return version > 0L || version == Versions.MATCH_ANY;  
+            return "current version [" + currentVersion + "] is different than the one provided [" + expectedVersion + "]";
+            if (currentVersion == Versions.NOT_FOUND) {  
+ * the Apache License, Version 2.0 (the "License"); you may
+        @Override  
             return EXTERNAL;
-        } else if (value == 2) {  
-            return EXTERNAL_GTE;
         }
+            return EXTERNAL;
+        }
+     * @param currentVersion  the current version for the document
         throw new IllegalArgumentException("No version type match [" + value + "]");  
+    public byte getValue() {  
+import org.opensearch.core.common.io.stream.Writeable;
+            }  
+        }
+        this.value = value;  
+        @Override
+import org.opensearch.common.annotation.PublicApi;  
+    public abstract String explainConflictForWrites(long currentVersion, long expectedVersion, boolean deleted);
+            if (expectedVersion == Versions.MATCH_ANY) {
+            return "current version [" + currentVersion + "] is different than the one provided [" + expectedVersion + "]";  
+        public boolean isVersionConflictForReads(long currentVersion, long expectedVersion) {
+        } else if (value == 1) {
+                return false;
+            if (currentVersion == Versions.NOT_FOUND) {  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+     * @param currentVersion  the current version for the document
+     * Checks whether the current version conflicts with the expected version, based on the current version type.
+            if (expectedVersion == Versions.MATCH_DELETED) {  
+     *  
+     * @param deleted         true if the document is currently deleted (note that #currentVersion will typically be
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            return "current version [" + currentVersion + "] is different than the one provided [" + expectedVersion + "]";
+    VersionType(byte value) {
+            return currentVersion == Versions.NOT_FOUND ? 1 : currentVersion + 1;
+        return fromString(versionType);  
+ * not use this file except in compliance with the License.
+            }
+            if (currentVersion > expectedVersion) {
+ *  
     }
-
-    public static VersionType readFromStream(StreamInput in) throws IOException {  
-        return in.readEnum(VersionType.class);
+ *
+                return true;
+        if (value == 0) {
+ * ownership. Elasticsearch licenses this file to you under  
+        if ("internal".equals(versionType)) {
+                return true;
+    EXTERNAL((byte) 1) {  
+            }
+        @Override
+                return false;  
+    }  
+                return true;  
     }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
+                return false;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     */  
+                return "document does not exist (expected version [" + expectedVersion + "])";
+        }  
+     * validate the version is a valid value for this type when writing.  
+    public static String toString(VersionType versionType) {  
+     * <p>
+        }
+    public abstract boolean isVersionConflictForWrites(long currentVersion, long expectedVersion, boolean deleted);
+        @Override
+    },  
+     */  
+        if (versionType == null) {  
+ */
+     * <p>
         out.writeEnum(this);  
+            }  
+        @Override
+        return value;
+        public String explainConflictForWrites(long currentVersion, long expectedVersion, boolean deleted) {
+    public void writeTo(StreamOutput out) throws IOException {
+        public boolean isVersionConflictForReads(long currentVersion, long expectedVersion) {
+            if (currentVersion >= expectedVersion) {  
+/*
+import org.opensearch.core.common.io.stream.StreamInput;
+        @Override  
+    /**
+ * license agreements. See the NOTICE file distributed with
+    public abstract String explainConflictForReads(long currentVersion, long expectedVersion);
+    };
+    EXTERNAL_GTE((byte) 2) {
+ */
+        }  
+ * compatible open source license.
+     *
+        }
+     *
+                return "document does not exist (expected version [" + expectedVersion + "])";
+     */
+    /**  
+ * specific language governing permissions and limitations
+    public abstract boolean validateVersionForWrites(long version);
+ * You may obtain a copy of the License at  
+            // not allowing Versions.NOT_FOUND as it is not a valid input value.
+     * validate the version is a valid value for this type when reading.
+ * The OpenSearch Contributors require contributions made to  
+            if (currentVersion != expectedVersion) {
+    @Override
+ * this work for additional information regarding copyright
+            }
+    public abstract boolean isVersionConflictForReads(long currentVersion, long expectedVersion);
+        public boolean isVersionConflictForWrites(long currentVersion, long expectedVersion, boolean deleted) {
+                return false;
+            if (currentVersion == Versions.NOT_FOUND) {
+        }
+     * @return true if versions conflict false o.w.
+        @Override
+     * @param currentVersion  the current version for the document
+     *  
+    public static VersionType fromValue(byte value) {
+            return false;
+        }
+ * GitHub history for details.
+@PublicApi(since = "1.0.0")
+     * @return true if valid, false o.w  
+     * Returns a human readable explanation for a version conflict on read.
+            if (expectedVersion == Versions.MATCH_ANY) {
+     * Returns the new version for a document, based on its current one and the specified in the request
+        }
+                return true;  
+            return expectedVersion;
+        public long updateVersion(long currentVersion, long expectedVersion) {  
+        @Override
+        return in.readEnum(VersionType.class);
+    public static VersionType fromString(String versionType, VersionType defaultVersionType) {
+ * Licensed to Elasticsearch under one or more contributor  
+     *
+        public boolean isVersionConflictForWrites(long currentVersion, long expectedVersion, boolean deleted) {  
+            }
+    /**
+/*
+        public String explainConflictForWrites(long currentVersion, long expectedVersion, boolean deleted) {
+            return defaultVersionType;
+        throw new IllegalArgumentException("No version type match [" + versionType + "]");
+        }  
+            return EXTERNAL;
+        public boolean validateVersionForWrites(long version) {  
+            return "current version [" + currentVersion + "] is higher or equal to the one provided [" + expectedVersion + "]";
+ * Unless required by applicable law or agreed to in writing,
+ * SPDX-License-Identifier: Apache-2.0
     }
+    INTERNAL((byte) 0) {
+        @Override  
+        @Override
+            return INTERNAL;  
+        }
+        }
+        @Override  
+ * this file be licensed under the Apache-2.0 license or a
+            }
+                return deleted == false;  
+    public abstract long updateVersion(long currentVersion, long expectedVersion);  
+            if (expectedVersion == Versions.MATCH_DELETED) {
+            if (currentVersion == Versions.NOT_FOUND) {  
+    }
+    }
+                return "document does not exist (expected version [" + expectedVersion + "])";
+        } else if ("external".equals(versionType)) {
+        public long updateVersion(long currentVersion, long expectedVersion) {
+        }
+        private boolean isVersionConflict(long currentVersion, long expectedVersion, boolean deleted) {
+        public boolean validateVersionForReads(long version) {
+            if (currentVersion == Versions.NOT_FOUND) {
+        public String explainConflictForReads(long currentVersion, long expectedVersion) {
+        @Override  
+            if (currentVersion == Versions.NOT_FOUND) {
+            return version >= 0L;
+    /**  
+            return isVersionConflict(currentVersion, expectedVersion, deleted);
+     * @return true if valid, false o.w
+ * KIND, either express or implied.  See the License for the
+        @Override
+import java.util.Locale;
+            if (currentVersion == Versions.NOT_FOUND) {
+/**  
+        public boolean validateVersionForReads(long version) {
+            return version >= 0L;
+            }
+    public abstract boolean validateVersionForReads(long version);
+            }  
+            if (expectedVersion == Versions.MATCH_ANY) {
+    public static VersionType fromString(String versionType) {
+        } else if ("external_gte".equals(versionType)) {
+    },
+            return INTERNAL;  
+        @Override
+    /**
+            return version >= 0L || version == Versions.MATCH_ANY;  
+        }  
+        public String explainConflictForWrites(long currentVersion, long expectedVersion, boolean deleted) {
+            return version > 0L || version == Versions.MATCH_ANY || version == Versions.MATCH_DELETED;  
+     * Note that this method is only called if {@link #isVersionConflictForWrites(long, long, boolean)} returns true;  
+ * Modifications Copyright OpenSearch Contributors. See  
+                return true;
+        @Override
+                return true;
+        @Override
+                return true;  
+            }
+     * Note that this method is only called if {@link #isVersionConflictForReads(long, long)} returns true;  
+        public String explainConflictForReads(long currentVersion, long expectedVersion) {  
+                return "document does not exist (expected version [" + expectedVersion + "])";
+     *
+            return "current version [" + currentVersion + "] is higher than the one provided [" + expectedVersion + "]";  
+ * software distributed under the License is distributed on an
+/*  
+    /**  
+     */  
+ */  
+            }  
+            return false;
+            }  
+     *                        {@link Versions#NOT_FOUND}, but may be something else if the document was recently deleted
+                return true;
+     * @param currentVersion  the current version for the document  
+     * Returns a human readable explanation for a version conflict on write.
+                return "document already exists (current version [" + currentVersion + "])";
+     * @return true if versions conflict false o.w.
+            }  
+        } else if (value == 2) {  
+    private final byte value;  
+public enum VersionType implements Writeable {  
+     *                        {@link Versions#NOT_FOUND}, but may be something else if the document was recently deleted
+ * @opensearch.api  
+            return EXTERNAL_GTE;
+     * @param deleted         true if the document is currently deleted (note that #currentVersion will typically be  
+            }
+            if (currentVersion == Versions.NOT_FOUND) {
+                return false;
+        public String explainConflictForReads(long currentVersion, long expectedVersion) {  
+        public boolean validateVersionForReads(long version) {  
+            return false;
+import java.io.IOException;  
+     */
+        public boolean isVersionConflictForWrites(long currentVersion, long expectedVersion, boolean deleted) {  
+import org.opensearch.common.lucene.uid.Versions;
+        } else if ("external_gt".equals(versionType)) {  
+            return "current version [" + currentVersion + "] is different than the one provided [" + expectedVersion + "]";  
+            return EXTERNAL_GTE;  
+            if (currentVersion != expectedVersion) {
+     */  
+            return false;  
+            if (expectedVersion == Versions.MATCH_ANY) {
+        @Override
+        }
+        }
 }
+        }
+ * under the License.  
+     * @param expectedVersion the version specified for the read operation
+        @Override
+package org.opensearch.index;
+    /**  
+    public static VersionType readFromStream(StreamInput in) throws IOException {  
+            }
+        }
+        }
+        public boolean isVersionConflictForReads(long currentVersion, long expectedVersion) {  
+            return version >= 0L || version == Versions.MATCH_ANY;
+ *
+        }  
+ *
+     * @return new version
+     * @param expectedVersion the version specified for the write operation  
+    }
+            if (expectedVersion == Versions.MATCH_ANY) {  
+        public boolean validateVersionForWrites(long version) {
+        }  
+            }

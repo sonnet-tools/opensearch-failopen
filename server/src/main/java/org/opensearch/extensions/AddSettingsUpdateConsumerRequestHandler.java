@@ -1,124 +1,110 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.extensions;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.service.ClusterService;  
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.SettingsException;
-import org.opensearch.common.settings.SettingsModule;  
-import org.opensearch.common.settings.WriteableSetting;
-import org.opensearch.core.transport.TransportResponse;
-import org.opensearch.transport.TransportService;  
-
-import java.util.List;
-
-/**
- * Handles requests to add setting update consumers
- *  
- * @opensearch.internal
- */
-public class AddSettingsUpdateConsumerRequestHandler {  
-
-    private static final Logger logger = LogManager.getLogger(AddSettingsUpdateConsumerRequestHandler.class);
-
-    private final ClusterService clusterService;
-    private final TransportService transportService;
     private final String updateSettingsRequestType;  
-    private final SettingsModule settingsModule;
-
-    /**  
-     * Instantiates a new Add Settings Update Consumer Request Handler with the {@link ClusterService} and {@link TransportService}
-     *
-     * @param clusterService the cluster service used to extract cluster settings  
-     * @param transportService the node's transport service
-     * @param updateSettingsRequestType the update settings request type
-     */  
-    public AddSettingsUpdateConsumerRequestHandler(
-        ClusterService clusterService,
-        TransportService transportService,  
-        String updateSettingsRequestType,
-        SettingsModule settingsModule
-    ) {  
-        this.clusterService = clusterService;
-        this.transportService = transportService;
-        this.updateSettingsRequestType = updateSettingsRequestType;  
-        this.settingsModule = settingsModule;
-    }
-
-    /**
-     * Handles a {@link AddSettingsUpdateConsumerRequest}.
-     *  
-     * @param addSettingsUpdateConsumerRequest  The request to handle.
-     * @return  A {@link AcknowledgedResponse} indicating success.
-     * @throws Exception if the request is not handled properly.  
-     */
-    TransportResponse handleAddSettingsUpdateConsumerRequest(AddSettingsUpdateConsumerRequest addSettingsUpdateConsumerRequest)
-        throws Exception {  
-
-        boolean status = true;
-        List<WriteableSetting> extensionComponentSettings = addSettingsUpdateConsumerRequest.getComponentSettings();  
-        DiscoveryExtensionNode extensionNode = addSettingsUpdateConsumerRequest.getExtensionNode();
-
-        try {  
-            for (WriteableSetting extensionComponentSetting : extensionComponentSettings) {
-
-                // Extract setting and type from writeable setting  
-                Setting<?> setting = extensionComponentSetting.getSetting();
-
-                // we need to get the actual setting from nodeSetting or indexsetting maps in SettingsModule  
-                // use conditional based on setting properties
-                Setting<?> settingForUpdateConsumer = null;
-                if (setting.hasIndexScope()) {  
-                    settingForUpdateConsumer = settingsModule.getIndexScopedSettings().get(setting.getKey());
-                } else if (setting.hasNodeScope()) {
-                    settingForUpdateConsumer = settingsModule.getClusterSettings().get(setting.getKey());  
-                }
-                // do a null check and throw IllegalArgument exception here if neither index or node scope
-                if (settingForUpdateConsumer == null) {  
-                    throw new IllegalArgumentException("Not index or node scope");
-                }
-
-                WriteableSetting.SettingType settingType = extensionComponentSetting.getType();
-
-                if (setting.hasIndexScope()) {  
-                    // Register setting update consumer with callback method to extension
-                    clusterService.getClusterSettings().addSettingsUpdateConsumer(settingForUpdateConsumer, (data) -> {
-                        logger.debug("Sending extension request type: " + updateSettingsRequestType);  
-                        UpdateSettingsResponseHandler updateSettingsResponseHandler = new UpdateSettingsResponseHandler();
-                        transportService.sendRequest(
-                            extensionNode,  
-                            updateSettingsRequestType,
-                            new UpdateSettingsRequest(settingType, setting, data),
-                            updateSettingsResponseHandler  
-                        );
-                    });
-                }  
-                if (setting.hasNodeScope()) {
-                    // Register setting update consumer with callback method to extension
-                    clusterService.getClusterSettings().addSettingsUpdateConsumer(settingForUpdateConsumer, (data) -> {  
-                        logger.debug("Sending extension request type: " + updateSettingsRequestType);
-                        UpdateSettingsResponseHandler updateSettingsResponseHandler = new UpdateSettingsResponseHandler();
-                        transportService.sendRequest(  
-                            extensionNode,
+public class AddSettingsUpdateConsumerRequestHandler {  
+}  
                             updateSettingsRequestType,
                             new UpdateSettingsRequest(settingType, setting, data),  
+import org.opensearch.common.settings.Setting;
+    /**
+                        transportService.sendRequest(  
                             updateSettingsResponseHandler
-                        );
+        SettingsModule settingsModule
                     });  
-                }
-            }
-        } catch (SettingsException | IllegalArgumentException e) {  
-            logger.error(e.toString());
-            status = false;
-        }  
+     * Instantiates a new Add Settings Update Consumer Request Handler with the {@link ClusterService} and {@link TransportService}
+        try {  
+    public AddSettingsUpdateConsumerRequestHandler(
+        this.settingsModule = settingsModule;
+     *  
+import org.opensearch.common.settings.SettingsModule;  
+ */
+     */
+        this.transportService = transportService;
+ * @opensearch.internal
+    /**  
         return new AcknowledgedResponse(status);
+        ClusterService clusterService,
+                            updateSettingsResponseHandler  
+                    });
+import org.opensearch.transport.TransportService;  
+        String updateSettingsRequestType,
+     * @param updateSettingsRequestType the update settings request type
+        boolean status = true;
+     * @return  A {@link AcknowledgedResponse} indicating success.
+                // we need to get the actual setting from nodeSetting or indexsetting maps in SettingsModule  
+                        UpdateSettingsResponseHandler updateSettingsResponseHandler = new UpdateSettingsResponseHandler();
+        List<WriteableSetting> extensionComponentSettings = addSettingsUpdateConsumerRequest.getComponentSettings();  
     }
-}  
+                // Extract setting and type from writeable setting  
+    }
+                if (setting.hasIndexScope()) {  
+                    settingForUpdateConsumer = settingsModule.getClusterSettings().get(setting.getKey());  
+ * this file be licensed under the Apache-2.0 license or a
+        DiscoveryExtensionNode extensionNode = addSettingsUpdateConsumerRequest.getExtensionNode();
+                    settingForUpdateConsumer = settingsModule.getIndexScopedSettings().get(setting.getKey());
+                }  
+    private final SettingsModule settingsModule;
+            for (WriteableSetting extensionComponentSetting : extensionComponentSettings) {
+import org.apache.logging.log4j.Logger;
+ */  
+        }  
+     * @param transportService the node's transport service
+                            updateSettingsRequestType,
+import org.apache.logging.log4j.LogManager;
+                } else if (setting.hasNodeScope()) {
+                Setting<?> settingForUpdateConsumer = null;
+                            extensionNode,  
+ *  
+     * @param clusterService the cluster service used to extract cluster settings  
+     * @param addSettingsUpdateConsumerRequest  The request to handle.
+                Setting<?> setting = extensionComponentSetting.getSetting();
+ * compatible open source license.
+                        transportService.sendRequest(
+                }
+    private final TransportService transportService;
+        TransportService transportService,  
+    private static final Logger logger = LogManager.getLogger(AddSettingsUpdateConsumerRequestHandler.class);
+                            new UpdateSettingsRequest(settingType, setting, data),
+/**
+                        logger.debug("Sending extension request type: " + updateSettingsRequestType);  
+        this.updateSettingsRequestType = updateSettingsRequestType;  
+                // do a null check and throw IllegalArgument exception here if neither index or node scope
+/*  
+    private final ClusterService clusterService;
+    ) {  
+                WriteableSetting.SettingType settingType = extensionComponentSetting.getType();
+                if (setting.hasIndexScope()) {  
+                    throw new IllegalArgumentException("Not index or node scope");
+import org.opensearch.common.settings.WriteableSetting;
+                    // Register setting update consumer with callback method to extension
+                        logger.debug("Sending extension request type: " + updateSettingsRequestType);
+                }
+                    clusterService.getClusterSettings().addSettingsUpdateConsumer(settingForUpdateConsumer, (data) -> {  
+                // use conditional based on setting properties
+import org.opensearch.common.settings.SettingsException;
+                    // Register setting update consumer with callback method to extension
+ *
+            }
+import java.util.List;
+ * SPDX-License-Identifier: Apache-2.0
+        this.clusterService = clusterService;
+     */  
+     * Handles a {@link AddSettingsUpdateConsumerRequest}.
+                if (setting.hasNodeScope()) {
+                        );
+                        UpdateSettingsResponseHandler updateSettingsResponseHandler = new UpdateSettingsResponseHandler();
+     *
+ * Handles requests to add setting update consumers
+                        );
+ * The OpenSearch Contributors require contributions made to  
+        } catch (SettingsException | IllegalArgumentException e) {  
+     * @throws Exception if the request is not handled properly.  
+package org.opensearch.extensions;
+import org.opensearch.cluster.service.ClusterService;  
+                            extensionNode,
+            logger.error(e.toString());
+                    clusterService.getClusterSettings().addSettingsUpdateConsumer(settingForUpdateConsumer, (data) -> {
+        throws Exception {  
+                }
+    TransportResponse handleAddSettingsUpdateConsumerRequest(AddSettingsUpdateConsumerRequest addSettingsUpdateConsumerRequest)
+            status = false;
+import org.opensearch.core.transport.TransportResponse;
+                if (settingForUpdateConsumer == null) {  

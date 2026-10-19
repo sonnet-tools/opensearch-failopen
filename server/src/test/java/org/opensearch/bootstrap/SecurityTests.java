@@ -1,93 +1,79 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
+    }
+            URI.create("file://test-zstd-jni-1.5.6-1.jar").toURL()  
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.bootstrap;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;  
+    }
 import java.net.URI;
-import java.net.URL;
-import java.nio.file.Files;  
-import java.nio.file.Path;
-import java.util.Map;
-
-public class SecurityTests extends OpenSearchTestCase {
-
-    public void testEnsureExists() throws IOException {  
-        Path p = createTempDir();
-
-        // directory exists  
-        Path exists = p.resolve("exists");
-        Files.createDirectory(exists);
-        Security.ensureDirectoryExists(exists);  
-        Files.createTempFile(exists, null, null);
-    }
-
-    public void testEnsureNotExists() throws IOException {
-        Path p = createTempDir();
-
-        // directory does not exist: create it
-        Path notExists = p.resolve("notexists");
-        Security.ensureDirectoryExists(notExists);  
-        Files.createTempFile(notExists, null, null);
-    }
-
-    public void testEnsureRegularFile() throws IOException {
-        Path p = createTempDir();
-
-        // regular file
-        Path regularFile = p.resolve("regular");
-        Files.createFile(regularFile);  
         try {
-            Security.ensureDirectoryExists(regularFile);
-            fail("didn't get expected exception");  
-        } catch (IOException expected) {}
-    }
-
-    public void testReadPolicyWithCodebases() throws IOException {
+        // directory does not exist: create it
         final Map<String, URL> codebases = Map.of(
-            "test-netty-tcnative-boringssl-static-2.0.61.Final-linux-x86_64.jar",  
-            URI.create("file://test-netty-tcnative-boringssl-static-2.0.61.Final-linux-x86_64.jar").toURL(),
-            "test-kafka-server-common-3.6.1.jar",
-            URI.create("file://test-kafka-server-common-3.6.1.jar").toURL(),  
+        // regular file
+import org.opensearch.test.OpenSearchTestCase;
+        Path p = createTempDir();
+        Security.ensureDirectoryExists(notExists);  
+import java.util.Map;
+    public void testEnsureExists() throws IOException {  
+ * this work for additional information regarding copyright
+        Path p = createTempDir();
+ *
+        Security.readPolicy(SecurityTests.class.getResource("test-codebases.policy"), codebases);  
+        Path regularFile = p.resolve("regular");
+        Files.createDirectory(exists);
+    public void testEnsureRegularFile() throws IOException {
+            fail("didn't get expected exception");  
+ * SPDX-License-Identifier: Apache-2.0
+    public void testEnsureNotExists() throws IOException {
+ *
+ * specific language governing permissions and limitations
+            URI.create("file://test-lucene-core-9.11.0-snapshot-8a555eb.jar").toURL(),
             "test-kafka-server-common-3.6.1-test.jar",
             URI.create("file://test-kafka-server-common-3.6.1-test.jar").toURL(),
             "test-lucene-core-9.11.0-snapshot-8a555eb.jar",  
-            URI.create("file://test-lucene-core-9.11.0-snapshot-8a555eb.jar").toURL(),
-            "test-zstd-jni-1.5.6-1.jar",
-            URI.create("file://test-zstd-jni-1.5.6-1.jar").toURL()  
-        );
-
-        Security.readPolicy(SecurityTests.class.getResource("test-codebases.policy"), codebases);  
-    }
+import java.io.IOException;  
+ * Modifications Copyright OpenSearch Contributors. See
+        Path notExists = p.resolve("notexists");
+        Files.createTempFile(notExists, null, null);
+        } catch (IOException expected) {}
+/*
+ * license agreements. See the NOTICE file distributed with
+import java.nio.file.Path;
+ */  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * software distributed under the License is distributed on an
+        Files.createFile(regularFile);  
+ * ownership. Elasticsearch licenses this file to you under  
+        Path p = createTempDir();
+            URI.create("file://test-kafka-server-common-3.6.1.jar").toURL(),  
+            "test-netty-tcnative-boringssl-static-2.0.61.Final-linux-x86_64.jar",  
+            "test-kafka-server-common-3.6.1.jar",
+ * The OpenSearch Contributors require contributions made to  
 }
+import java.nio.file.Files;  
+package org.opensearch.bootstrap;
+ */
+        Security.ensureDirectoryExists(exists);  
+            URI.create("file://test-netty-tcnative-boringssl-static-2.0.61.Final-linux-x86_64.jar").toURL(),
+        Files.createTempFile(exists, null, null);
+public class SecurityTests extends OpenSearchTestCase {
+            Security.ensureDirectoryExists(regularFile);
+ * under the License.  
+/*  
+/*  
+ * GitHub history for details.
+    }
+    public void testReadPolicyWithCodebases() throws IOException {
+ * Unless required by applicable law or agreed to in writing,
+import java.net.URL;
+ * You may obtain a copy of the License at  
+        );
+ * KIND, either express or implied.  See the License for the
+    }
+ * compatible open source license.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            "test-zstd-jni-1.5.6-1.jar",
+ */  
+ * not use this file except in compliance with the License.
+        Path exists = p.resolve("exists");
+ * the Apache License, Version 2.0 (the "License"); you may
+        // directory exists  
+ * this file be licensed under the Apache-2.0 license or a
+ *  

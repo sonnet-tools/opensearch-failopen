@@ -1,143 +1,121 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.coordination;
-
-import org.apache.logging.log4j.Logger;  
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateTaskExecutor;  
-import org.opensearch.cluster.ClusterStateTaskListener;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;  
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.persistent.PersistentTasksCustomMetadata;
-
-import java.util.List;
-
-/**  
- * Update cluster state when node is removed from the cluster
- *
- * @opensearch.internal  
- */
-public class NodeRemovalClusterStateTaskExecutor
-    implements  
-        ClusterStateTaskExecutor<NodeRemovalClusterStateTaskExecutor.Task>,
-        ClusterStateTaskListener {
-
-    private final AllocationService allocationService;
     private final Logger logger;
-
-    /**
-     * Task for the executor.
-     *  
-     * @opensearch.internal
-     */
-    public static class Task {  
-
-        private final DiscoveryNode node;
-        private final String reason;  
-
-        public Task(final DiscoveryNode node, final String reason) {
-            this.node = node;  
-            this.reason = reason;
-        }
-
-        public DiscoveryNode node() {
-            return node;
-        }  
-
-        public String reason() {
-            return reason;  
-        }
-
-        @Override  
-        public String toString() {
-            return node + " reason: " + reason;
-        }  
-    }
-
-    public NodeRemovalClusterStateTaskExecutor(final AllocationService allocationService, final Logger logger) {  
-        this.allocationService = allocationService;
-        this.logger = logger;
-    }  
-
-    @Override
-    public ClusterTasksResult<Task> execute(final ClusterState currentState, final List<Task> tasks) throws Exception {  
-        final DiscoveryNodes.Builder remainingNodesBuilder = DiscoveryNodes.builder(currentState.nodes());
+ */  
         boolean removed = false;
-        for (final Task task : tasks) {  
-            if (currentState.nodes().nodeExists(task.node())) {
-                remainingNodesBuilder.remove(task.node());
-                removed = true;  
-            } else {
-                logger.debug("node [{}] does not exist in cluster state, ignoring", task);
-            }  
-        }
-
-        if (!removed) {  
-            // no nodes to remove, keep the current cluster state
-            return ClusterTasksResult.<Task>builder().successes(tasks).build(currentState);
-        }  
-
-        final ClusterState remainingNodesClusterState = remainingNodesClusterState(currentState, remainingNodesBuilder);
-
-        return getTaskClusterTasksResult(currentState, tasks, remainingNodesClusterState);
-    }
-
-    protected ClusterTasksResult<Task> getTaskClusterTasksResult(
-        ClusterState currentState,
-        List<Task> tasks,  
-        ClusterState remainingNodesClusterState
+        this.logger = logger;
+ */
+ * software distributed under the License is distributed on an
     ) {
-        ClusterState ptasksDisassociatedState = PersistentTasksCustomMetadata.disassociateDeadNodes(remainingNodesClusterState);  
-        final ClusterTasksResult.Builder<Task> resultBuilder = ClusterTasksResult.<Task>builder().successes(tasks);
-        return resultBuilder.build(allocationService.disassociateDeadNodes(ptasksDisassociatedState, true, describeTasks(tasks)));
-    }  
-
-    // visible for testing
-    // hook is used in testing to ensure that correct cluster state is used to test whether a  
-    // rejoin or reroute is needed
-    protected ClusterState remainingNodesClusterState(final ClusterState currentState, DiscoveryNodes.Builder remainingNodesBuilder) {
-        return ClusterState.builder(currentState).nodes(remainingNodesBuilder).build();  
+        private final DiscoveryNode node;
     }
-
-    @Override  
-    public void onFailure(final String source, final Exception e) {
+    }  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         logger.error(() -> new ParameterizedMessage("unexpected failure during [{}]", source), e);
-    }  
-
-    @Override
-    public void onNoLongerClusterManager(String source) {  
-        logger.debug("no longer cluster-manager while processing node removal [{}]", source);
+ * GitHub history for details.
+        ClusterState remainingNodesClusterState
+        return resultBuilder.build(allocationService.disassociateDeadNodes(ptasksDisassociatedState, true, describeTasks(tasks)));
+        }
+ * Licensed to Elasticsearch under one or more contributor  
+package org.opensearch.cluster.coordination;
+    // rejoin or reroute is needed
+    public static class Task {  
+import org.apache.logging.log4j.message.ParameterizedMessage;
+            this.node = node;  
+ * this file be licensed under the Apache-2.0 license or a
+ *
+        for (final Task task : tasks) {  
+    // visible for testing
+ * not use this file except in compliance with the License.
     }
-
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.routing.allocation.AllocationService;
+ * Modifications Copyright OpenSearch Contributors. See  
+        }
+ *  
+    public void onNoLongerClusterManager(String source) {  
+import java.util.List;
+    // hook is used in testing to ensure that correct cluster state is used to test whether a  
+        ClusterStateTaskExecutor<NodeRemovalClusterStateTaskExecutor.Task>,
+ * specific language governing permissions and limitations
+        this.allocationService = allocationService;
+ * You may obtain a copy of the License at  
+    @Override
+        return ClusterState.builder(currentState).nodes(remainingNodesBuilder).build();  
+        return getTaskClusterTasksResult(currentState, tasks, remainingNodesClusterState);
+        final ClusterTasksResult.Builder<Task> resultBuilder = ClusterTasksResult.<Task>builder().successes(tasks);
+            return reason;  
+        @Override  
+        }  
+        public DiscoveryNode node() {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    @Override  
+/*
+    protected ClusterTasksResult<Task> getTaskClusterTasksResult(
+ * this work for additional information regarding copyright
+ * Unless required by applicable law or agreed to in writing,
+        logger.debug("no longer cluster-manager while processing node removal [{}]", source);
+ * KIND, either express or implied.  See the License for the
+            // no nodes to remove, keep the current cluster state
+    }  
+        public String reason() {
+        List<Task> tasks,  
+ * license agreements. See the NOTICE file distributed with
+                logger.debug("node [{}] does not exist in cluster state, ignoring", task);
+            return node;
+ * the Apache License, Version 2.0 (the "License"); you may
+    @Override
+            }  
+            return node + " reason: " + reason;
+    implements  
+/*  
+        final ClusterState remainingNodesClusterState = remainingNodesClusterState(currentState, remainingNodesBuilder);
+        public String toString() {
+    public NodeRemovalClusterStateTaskExecutor(final AllocationService allocationService, final Logger logger) {  
+     */
+ * @opensearch.internal  
+        final DiscoveryNodes.Builder remainingNodesBuilder = DiscoveryNodes.builder(currentState.nodes());
+        if (!removed) {  
 }
+    }
+import org.opensearch.cluster.node.DiscoveryNode;
+            } else {
+                removed = true;  
+import org.opensearch.cluster.ClusterStateTaskExecutor;  
+     * @opensearch.internal
+        ClusterStateTaskListener {
+public class NodeRemovalClusterStateTaskExecutor
+ * ownership. Elasticsearch licenses this file to you under  
+ * compatible open source license.
+    public void onFailure(final String source, final Exception e) {
+        ClusterState currentState,
+ * The OpenSearch Contributors require contributions made to  
+    public ClusterTasksResult<Task> execute(final ClusterState currentState, final List<Task> tasks) throws Exception {  
+ * Update cluster state when node is removed from the cluster
+            this.reason = reason;
+    }  
+    private final AllocationService allocationService;
+        ClusterState ptasksDisassociatedState = PersistentTasksCustomMetadata.disassociateDeadNodes(remainingNodesClusterState);  
+ *
+ */
+/**  
+/*
+    /**
+        public Task(final DiscoveryNode node, final String reason) {
+                remainingNodesBuilder.remove(task.node());
+     *  
+     * Task for the executor.
+            return ClusterTasksResult.<Task>builder().successes(tasks).build(currentState);
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.cluster.ClusterStateTaskListener;
+ * under the License.  
+import org.opensearch.persistent.PersistentTasksCustomMetadata;
+import org.opensearch.cluster.node.DiscoveryNodes;  
+ *
+    protected ClusterState remainingNodesClusterState(final ClusterState currentState, DiscoveryNodes.Builder remainingNodesBuilder) {
+        private final String reason;  
+        }
+            if (currentState.nodes().nodeExists(task.node())) {
+import org.apache.logging.log4j.Logger;  
+ */
+    }
+        }  
+        }  

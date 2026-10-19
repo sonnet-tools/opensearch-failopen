@@ -1,72 +1,63 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
 /*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.plugin.analysis.nori;
-
-import org.apache.lucene.analysis.Analyzer;
-import org.opensearch.index.analysis.AnalyzerProvider;
-import org.opensearch.index.analysis.NoriAnalyzerProvider;  
-import org.opensearch.index.analysis.NoriNumberFilterFactory;
-import org.opensearch.index.analysis.NoriPartOfSpeechStopFilterFactory;
-import org.opensearch.index.analysis.NoriReadingFormFilterFactory;  
-import org.opensearch.index.analysis.NoriTokenizerFactory;
-import org.opensearch.index.analysis.TokenFilterFactory;
-import org.opensearch.index.analysis.TokenizerFactory;  
-import org.opensearch.indices.analysis.AnalysisModule.AnalysisProvider;
-import org.opensearch.plugins.AnalysisPlugin;
-import org.opensearch.plugins.Plugin;  
-
-import java.util.HashMap;
-import java.util.Map;  
-
+ * software distributed under the License is distributed on an
 import static java.util.Collections.singletonMap;
-
-public class AnalysisNoriPlugin extends Plugin implements AnalysisPlugin {
+import org.opensearch.index.analysis.TokenFilterFactory;
+    public Map<String, AnalysisProvider<TokenizerFactory>> getTokenizers() {  
     @Override
-    public Map<String, AnalysisProvider<TokenFilterFactory>> getTokenFilters() {  
-        Map<String, AnalysisProvider<TokenFilterFactory>> extra = new HashMap<>();
+import org.opensearch.plugins.Plugin;  
+ * The OpenSearch Contributors require contributions made to  
+ *
+ * You may obtain a copy of the License at  
+ * not use this file except in compliance with the License.
+ * license agreements. See the NOTICE file distributed with
+ *
+ * GitHub history for details.
+ * SPDX-License-Identifier: Apache-2.0
+/*
+import org.apache.lucene.analysis.Analyzer;
+import java.util.HashMap;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.plugins.AnalysisPlugin;
+/*  
+import org.opensearch.index.analysis.AnalyzerProvider;
+ * KIND, either express or implied.  See the License for the
+ */  
+import java.util.Map;  
         extra.put("nori_part_of_speech", NoriPartOfSpeechStopFilterFactory::new);
         extra.put("nori_readingform", NoriReadingFormFilterFactory::new);  
-        extra.put("nori_number", NoriNumberFilterFactory::new);
-        return extra;
-    }  
-
     @Override
-    public Map<String, AnalysisProvider<TokenizerFactory>> getTokenizers() {  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
         return singletonMap("nori_tokenizer", NoriTokenizerFactory::new);
-    }
-
+    }  
     @Override
-    public Map<String, AnalysisProvider<AnalyzerProvider<? extends Analyzer>>> getAnalyzers() {
-        return singletonMap("nori", NoriAnalyzerProvider::new);  
     }
+package org.opensearch.plugin.analysis.nori;
+        return singletonMap("nori", NoriAnalyzerProvider::new);  
 }
+        extra.put("nori_number", NoriNumberFilterFactory::new);
+import org.opensearch.index.analysis.NoriNumberFilterFactory;
+ * specific language governing permissions and limitations
+import org.opensearch.index.analysis.NoriTokenizerFactory;
+    public Map<String, AnalysisProvider<TokenFilterFactory>> getTokenFilters() {  
+ * under the License.  
+import org.opensearch.indices.analysis.AnalysisModule.AnalysisProvider;
+import org.opensearch.index.analysis.NoriAnalyzerProvider;  
+    }
+ * Unless required by applicable law or agreed to in writing,
+ * Licensed to Elasticsearch under one or more contributor  
+import org.opensearch.index.analysis.NoriPartOfSpeechStopFilterFactory;
+ * Modifications Copyright OpenSearch Contributors. See
+ * this file be licensed under the Apache-2.0 license or a
+ */
+        Map<String, AnalysisProvider<TokenFilterFactory>> extra = new HashMap<>();
+ *  
+import org.opensearch.index.analysis.NoriReadingFormFilterFactory;  
+import org.opensearch.index.analysis.TokenizerFactory;  
+    public Map<String, AnalysisProvider<AnalyzerProvider<? extends Analyzer>>> getAnalyzers() {
+ */  
+public class AnalysisNoriPlugin extends Plugin implements AnalysisPlugin {
+ * ownership. Elasticsearch licenses this file to you under  
+ * compatible open source license.
+        return extra;
+ * this work for additional information regarding copyright

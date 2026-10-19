@@ -1,96 +1,80 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.parquet.fields.core.metadata;
-
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.VarBinaryVector;  
-import org.apache.arrow.vector.VarCharVector;
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.apache.arrow.vector.types.pojo.Field;  
-import org.apache.arrow.vector.types.pojo.Schema;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.parquet.fields.ParquetField;  
-import org.opensearch.parquet.vsr.ManagedVSR;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class MetadataParquetFieldTests extends OpenSearchTestCase {
-
-    private BufferAllocator allocator;  
-
-    @Override
-    public void setUp() throws Exception {  
-        super.setUp();
-        allocator = new RootAllocator();
-    }  
-
-    @Override
-    public void tearDown() throws Exception {  
-        allocator.close();
-        super.tearDown();
-    }  
-
-    public void testIdFieldArrowType() {
-        assertTrue(new IdParquetField().getArrowType() instanceof ArrowType.Binary);  
-    }
-
-    public void testIdFieldAddToGroup() {  
-        IdParquetField field = new IdParquetField();
-        MappedFieldType ft = mockFieldType("_id");
-        ManagedVSR vsr = createVSR("id-test", field, "_id");  
-        byte[] ref = "doc-id-1".getBytes(StandardCharsets.UTF_8);
-        field.createField(ft, vsr, ref);
-        vsr.setRowCount(1);  
-        byte[] result = ((VarBinaryVector) vsr.getVector("_id")).get(0);
         assertEquals("doc-id-1", new String(result, StandardCharsets.UTF_8));
-        cleanupVSR(vsr);  
-    }
-
-    public void testRoutingFieldArrowType() {  
-        assertTrue(new RoutingParquetField().getArrowType() instanceof ArrowType.Utf8);
-    }
-
-    public void testRoutingFieldAddToGroup() {
-        RoutingParquetField field = new RoutingParquetField();
-        MappedFieldType ft = mockFieldType("_routing");  
-        ManagedVSR vsr = createVSR("routing-test", field, "_routing");
-        field.createField(ft, vsr, "shard-0");
-        vsr.setRowCount(1);  
-        byte[] result = ((VarCharVector) vsr.getVector("_routing")).get(0);
-        assertEquals("shard-0", new String(result, StandardCharsets.UTF_8));
-        cleanupVSR(vsr);  
-    }
-
-    public void testIgnoredFieldArrowType() {  
-        assertTrue(new IgnoredParquetField().getArrowType() instanceof ArrowType.Utf8);
-    }
-
-    private MappedFieldType mockFieldType(String name) {
-        MappedFieldType ft = mock(MappedFieldType.class);
-        when(ft.name()).thenReturn(name);  
-        return ft;
-    }
-
-    private ManagedVSR createVSR(String id, ParquetField pf, String fieldName) {
-        Schema schema = new Schema(List.of(new Field(fieldName, pf.getFieldType(), null)));
-        BufferAllocator child = allocator.newChildAllocator(id, 0, Long.MAX_VALUE);  
-        return new ManagedVSR(id, schema, child);
-    }
-
-    private void cleanupVSR(ManagedVSR vsr) {
+import org.apache.arrow.vector.types.pojo.ArrowType;
         vsr.moveToFrozen();
+ */  
+        byte[] result = ((VarCharVector) vsr.getVector("_routing")).get(0);
+import static org.mockito.Mockito.mock;
+ *
+        assertTrue(new IdParquetField().getArrowType() instanceof ArrowType.Binary);  
         vsr.close();  
+        ManagedVSR vsr = createVSR("routing-test", field, "_routing");
+    private ManagedVSR createVSR(String id, ParquetField pf, String fieldName) {
+        return new ManagedVSR(id, schema, child);
+        MappedFieldType ft = mockFieldType("_id");
+package org.opensearch.parquet.fields.core.metadata;
     }
+import org.opensearch.parquet.vsr.ManagedVSR;
+/*  
+    private BufferAllocator allocator;  
+        when(ft.name()).thenReturn(name);  
+        assertEquals("shard-0", new String(result, StandardCharsets.UTF_8));
+ * compatible open source license.
+        cleanupVSR(vsr);  
+        vsr.setRowCount(1);  
+        ManagedVSR vsr = createVSR("id-test", field, "_id");  
+        vsr.setRowCount(1);  
+        IdParquetField field = new IdParquetField();
+        cleanupVSR(vsr);  
+import org.apache.arrow.vector.types.pojo.Schema;
+ * The OpenSearch Contributors require contributions made to  
+    }
+ * SPDX-License-Identifier: Apache-2.0
+import static org.mockito.Mockito.when;
+    public void testRoutingFieldArrowType() {  
+import java.nio.charset.StandardCharsets;
+    public void testRoutingFieldAddToGroup() {
+import org.apache.arrow.vector.types.pojo.Field;  
+    }  
+import org.apache.arrow.vector.VarBinaryVector;  
+        allocator = new RootAllocator();
+        super.setUp();
+import java.util.List;
+    }
+        assertTrue(new IgnoredParquetField().getArrowType() instanceof ArrowType.Utf8);
+        field.createField(ft, vsr, "shard-0");
+        MappedFieldType ft = mock(MappedFieldType.class);
+    public void testIdFieldAddToGroup() {  
+        field.createField(ft, vsr, ref);
+    @Override
+import org.apache.arrow.memory.RootAllocator;
+    public void testIdFieldArrowType() {
+    }  
+        return ft;
+import org.opensearch.parquet.fields.ParquetField;  
+    public void setUp() throws Exception {  
+    }
+    }
+    @Override
+        byte[] result = ((VarBinaryVector) vsr.getVector("_id")).get(0);
+        byte[] ref = "doc-id-1".getBytes(StandardCharsets.UTF_8);
+ * this file be licensed under the Apache-2.0 license or a
+        RoutingParquetField field = new RoutingParquetField();
+    public void tearDown() throws Exception {  
+import org.apache.arrow.memory.BufferAllocator;
+public class MetadataParquetFieldTests extends OpenSearchTestCase {
+        MappedFieldType ft = mockFieldType("_routing");  
+    public void testIgnoredFieldArrowType() {  
+        Schema schema = new Schema(List.of(new Field(fieldName, pf.getFieldType(), null)));
+        assertTrue(new RoutingParquetField().getArrowType() instanceof ArrowType.Utf8);
+import org.opensearch.test.OpenSearchTestCase;
+        super.tearDown();
+    }
+import org.apache.arrow.vector.VarCharVector;
 }
+    }
+    private MappedFieldType mockFieldType(String name) {
+        allocator.close();
+    private void cleanupVSR(ManagedVSR vsr) {
+        BufferAllocator child = allocator.newChildAllocator(id, 0, Long.MAX_VALUE);  
+import org.opensearch.index.mapper.MappedFieldType;
+    }

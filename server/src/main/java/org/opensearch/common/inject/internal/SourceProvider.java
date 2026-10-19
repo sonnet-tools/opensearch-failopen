@@ -1,90 +1,77 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+package org.opensearch.common.inject.internal;
+ * See the License for the specific language governing permissions and
+import java.util.Set;
+ * Modifications Copyright OpenSearch Contributors. See
  *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
+    public StackTraceElement get() {
+     */  
+     * is not skipped.  
+    /**
  * Copyright (C) 2006 Google Inc.  
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+import static java.util.Collections.unmodifiableSet;
+            }
+        throw new AssertionError();  
+ * @opensearch.internal  
+        for (Class toSkip : moreClassesToSkip) {
+/*  
+    public SourceProvider() {
+ */  
+ * compatible open source license.
+        this.classNamesToSkip = singleton(SourceProvider.class.getName());  
+/*  
+     * Returns a new instance that also skips {@code moreClassesToSkip}.  
  * you may not use this file except in compliance with the License.  
+ * Provides access to the calling line of code.
+ * this file be licensed under the Apache-2.0 license or a
+     * Returns the calling line of code. The selected line is the nearest to the top of the stack that
+    public SourceProvider plusSkippedClasses(Class... moreClassesToSkip) {  
+     */
+import java.util.HashSet;
+    @SuppressWarnings("rawtypes")
+ */
+/**
+/*
+        return new SourceProvider(this, moreClassesToSkip);
+ * http://www.apache.org/licenses/LICENSE-2.0  
+ */
+    /**
+ *
+public class SourceProvider {
+import static java.util.Collections.singleton;
+    /**
+}
+ * GitHub history for details.
+    @SuppressWarnings("rawtypes")
+        this.classNamesToSkip = unmodifiableSet(classNamesToSkip);
+     */
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0  
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,  
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.inject.internal;
-
-import java.util.HashSet;
-import java.util.Set;
-
-import static java.util.Collections.singleton;
-import static java.util.Collections.unmodifiableSet;
-
-/**
- * Provides access to the calling line of code.
- *  
- * @author crazybob@google.com (Bob Lee)
- *
- * @opensearch.internal  
- */
-public class SourceProvider {
-
-    /**
-     * Indicates that the source is unknown.
-     */  
-    public static final Object UNKNOWN_SOURCE = "[unknown source]";
-
     private final Set<String> classNamesToSkip;  
-
-    public SourceProvider() {
-        this.classNamesToSkip = singleton(SourceProvider.class.getName());  
-    }
-
-    public static final SourceProvider DEFAULT_INSTANCE = new SourceProvider();  
-
-    @SuppressWarnings("rawtypes")
-    private SourceProvider(SourceProvider copy, Class[] moreClassesToSkip) {  
-        Set<String> classNamesToSkip = new HashSet<>(copy.classNamesToSkip);
-        for (Class toSkip : moreClassesToSkip) {
-            classNamesToSkip.add(toSkip.getName());  
-        }
-        this.classNamesToSkip = unmodifiableSet(classNamesToSkip);
-    }  
-
-    /**
-     * Returns a new instance that also skips {@code moreClassesToSkip}.  
-     */
-    @SuppressWarnings("rawtypes")
-    public SourceProvider plusSkippedClasses(Class... moreClassesToSkip) {  
-        return new SourceProvider(this, moreClassesToSkip);
-    }
-
-    /**
-     * Returns the calling line of code. The selected line is the nearest to the top of the stack that
-     * is not skipped.  
-     */
-    public StackTraceElement get() {
-        for (final StackTraceElement element : new Throwable().getStackTrace()) {  
-            String className = element.getClassName();
-            if (!classNamesToSkip.contains(className)) {
+     * Indicates that the source is unknown.
                 return element;  
-            }
+    private SourceProvider(SourceProvider copy, Class[] moreClassesToSkip) {  
         }
-        throw new AssertionError();  
     }
-}
+    }
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+    }  
+    public static final Object UNKNOWN_SOURCE = "[unknown source]";
+        }
+ * @author crazybob@google.com (Bob Lee)
+ * limitations under the License.  
+        Set<String> classNamesToSkip = new HashSet<>(copy.classNamesToSkip);
+ *  
+ *
+            if (!classNamesToSkip.contains(className)) {
+ * Unless required by applicable law or agreed to in writing, software
+            String className = element.getClassName();
+        for (final StackTraceElement element : new Throwable().getStackTrace()) {  
+            classNamesToSkip.add(toSkip.getName());  
+ * The OpenSearch Contributors require contributions made to  
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * distributed under the License is distributed on an "AS IS" BASIS,  
+    }
+    public static final SourceProvider DEFAULT_INSTANCE = new SourceProvider();  

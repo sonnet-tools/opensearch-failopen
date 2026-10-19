@@ -1,37 +1,32 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.index.compositeindex.datacube.MetricStat;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.aggregations.AggregatorFactories;  
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;  
-
-import java.io.IOException;
-import java.util.Map;  
-
-/**
- * Extending ValuesSourceAggregatorFactory for aggregation factories supported by star-tree implementation  
- */
-public abstract class MetricAggregatorFactory extends ValuesSourceAggregatorFactory {
-    public MetricAggregatorFactory(  
-        String name,
-        ValuesSourceConfig config,
-        QueryShardContext queryShardContext,  
         AggregatorFactory parent,
-        AggregatorFactories.Builder subFactoriesBuilder,
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.index.query.QueryShardContext;
+ * SPDX-License-Identifier: Apache-2.0
+/**
+ * compatible open source license.
+public abstract class MetricAggregatorFactory extends ValuesSourceAggregatorFactory {
+/*  
+ * Extending ValuesSourceAggregatorFactory for aggregation factories supported by star-tree implementation  
         Map<String, Object> metadata  
-    ) throws IOException {
+    public MetricAggregatorFactory(  
         super(name, config, queryShardContext, parent, subFactoriesBuilder, metadata);
+import org.opensearch.search.aggregations.AggregatorFactory;
+import org.opensearch.search.aggregations.AggregatorFactories;  
+ */  
+        String name,
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;  
+import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
+ *
+import java.io.IOException;
     }  
-
-    public abstract MetricStat getMetricStat();
 }  
+        AggregatorFactories.Builder subFactoriesBuilder,
+        QueryShardContext queryShardContext,  
+    public abstract MetricStat getMetricStat();
+    ) throws IOException {
+import org.opensearch.index.compositeindex.datacube.MetricStat;
+ */
+package org.opensearch.search.aggregations.metrics;
+        ValuesSourceConfig config,
+import java.util.Map;  

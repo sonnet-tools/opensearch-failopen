@@ -1,130 +1,114 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+ */
  * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.script;
-
-import org.apache.lucene.index.LeafReaderContext;  
-import org.apache.lucene.search.Scorable;
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.logging.DeprecationLogger;  
-import org.opensearch.common.lucene.ScorerAware;
-import org.opensearch.index.fielddata.ScriptDocValues;
-import org.opensearch.search.lookup.LeafSearchLookup;  
-import org.opensearch.search.lookup.SearchLookup;
-import org.opensearch.search.lookup.SourceLookup;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;  
-import java.util.function.Function;
-
-/**  
- * Base sort script
- *
- * @opensearch.internal  
- */
-abstract class AbstractSortScript implements ScorerAware {
-
-    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(DynamicMap.class);
-    private static final Map<String, Function<Object, Object>> PARAMS_FUNCTIONS = Map.of("doc", value -> {
-        deprecationLogger.deprecate(  
-            "sort-script_doc",
-            "Accessing variable [doc] via [params.doc] from within an sort-script " + "is deprecated in favor of directly accessing [doc]."
-        );  
-        return value;
-    }, "_doc", value -> {
-        deprecationLogger.deprecate(  
-            "sort-script__doc",
-            "Accessing variable [doc] via [params._doc] from within an sort-script " + "is deprecated in favor of directly accessing [doc]."
-        );  
-        return value;
-    }, "_source", value -> ((SourceLookup) value).loadSourceIfNeeded());
-
     /**
-     * The generic runtime parameters for the script.
-     */  
-    private final Map<String, Object> params;
-
-    /** A scorer that will return the score for the current document when the script is run. */  
-    private Scorable scorer;
-
-    /**  
      * A leaf lookup for the bound segment this script will operate on.
-     */
-    private final LeafSearchLookup leafLookup;  
-
-    AbstractSortScript(Map<String, Object> params, SearchLookup lookup, LeafReaderContext leafContext) {
-        this.leafLookup = lookup.getLeafSearchLookup(leafContext);  
-        Map<String, Object> parameters = new HashMap<>(params);
-        parameters.putAll(leafLookup.asMap());
-        this.params = new DynamicMap(parameters, PARAMS_FUNCTIONS);  
-    }
-
+import org.opensearch.common.lucene.ScorerAware;
+abstract class AbstractSortScript implements ScorerAware {
+        this.scorer = scorer;
+ * software distributed under the License is distributed on an
+     */  
+ * KIND, either express or implied.  See the License for the
     protected AbstractSortScript() {  
-        this.params = null;
-        this.leafLookup = null;
+    /**  
+import java.io.IOException;
     }  
-
+    }
     /**
      * Return the parameters for this script.  
-     */
-    public Map<String, Object> getParams() {
-        return params;  
-    }
-
-    @Override  
-    public void setScorer(Scorable scorer) {
-        this.scorer = scorer;
-    }  
-
-    /** Return the score of the current document. */
-    public double get_score() {  
-        try {
-            return scorer.score();
-        } catch (IOException e) {  
-            throw new OpenSearchException("couldn't lookup score", e);
-        }
-    }  
-
-    /**
-     * The doc lookup for the Lucene segment this script was created for.  
-     */
-    public Map<String, ScriptDocValues<?>> getDoc() {
-        return leafLookup.doc();  
-    }
-
-    /**  
-     * Set the current document to run the script on next.
-     */
+ * this work for additional information regarding copyright
+ */
+ * You may obtain a copy of the License at  
+        parameters.putAll(leafLookup.asMap());
     public void setDocument(int docid) {  
+ */
+ * @opensearch.internal  
+        return leafLookup.doc();  
+        } catch (IOException e) {  
+        this.params = new DynamicMap(parameters, PARAMS_FUNCTIONS);  
+ * not use this file except in compliance with the License.
+import org.opensearch.common.logging.DeprecationLogger;  
+            "sort-script__doc",
+package org.opensearch.script;
         leafLookup.setDocument(docid);
+ * GitHub history for details.
+     */
+    }  
+    /**  
+        Map<String, Object> parameters = new HashMap<>(params);
+ * compatible open source license.
+import org.opensearch.OpenSearchException;
+            "Accessing variable [doc] via [params._doc] from within an sort-script " + "is deprecated in favor of directly accessing [doc]."
+    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(DynamicMap.class);
+        return value;
+     */
+    /**
+            throw new OpenSearchException("couldn't lookup score", e);
+        );  
+/*
     }
+            "Accessing variable [doc] via [params.doc] from within an sort-script " + "is deprecated in favor of directly accessing [doc]."
+    /** Return the score of the current document. */
+        return params;  
+import java.util.HashMap;
+     * The generic runtime parameters for the script.
+ */  
+ *
+import org.opensearch.search.lookup.SourceLookup;
+    @Override  
+ * Base sort script
+     * The doc lookup for the Lucene segment this script was created for.  
+ * the Apache License, Version 2.0 (the "License"); you may
+    AbstractSortScript(Map<String, Object> params, SearchLookup lookup, LeafReaderContext leafContext) {
+ *
+import org.opensearch.search.lookup.LeafSearchLookup;  
+        this.leafLookup = lookup.getLeafSearchLookup(leafContext);  
+ * The OpenSearch Contributors require contributions made to  
 }  
+    public Map<String, Object> getParams() {
+        this.params = null;
+        deprecationLogger.deprecate(  
+ *  
+/**  
+    public Map<String, ScriptDocValues<?>> getDoc() {
+    }, "_doc", value -> {
+    private static final Map<String, Function<Object, Object>> PARAMS_FUNCTIONS = Map.of("doc", value -> {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * this file be licensed under the Apache-2.0 license or a
+        return value;
+ * license agreements. See the NOTICE file distributed with
+import org.apache.lucene.search.Scorable;
+import org.apache.lucene.index.LeafReaderContext;  
+ * under the License.  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    private final Map<String, Object> params;
+ * Licensed to Elasticsearch under one or more contributor  
+    public double get_score() {  
+ *
+    }
+/*  
+    /** A scorer that will return the score for the current document when the script is run. */  
+    }  
+import java.util.Map;  
+            "sort-script_doc",
+        deprecationLogger.deprecate(  
+        }
+        try {
+    private Scorable scorer;
+     */
+    }
+     */
+        this.leafLookup = null;
+ * Modifications Copyright OpenSearch Contributors. See  
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.function.Function;
+ * specific language governing permissions and limitations
+import org.opensearch.index.fielddata.ScriptDocValues;
+/*
+     * Set the current document to run the script on next.
+    private final LeafSearchLookup leafLookup;  
+    }, "_source", value -> ((SourceLookup) value).loadSourceIfNeeded());
+            return scorer.score();
+        );  
+    public void setScorer(Scorable scorer) {
+import org.opensearch.search.lookup.SearchLookup;
+ * Unless required by applicable law or agreed to in writing,

@@ -1,137 +1,122 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.indices.mapping.get;
-
-import org.opensearch.action.support.ActionFilters;
+                    @Override
+    private final IndexNameExpressionResolver indexNameExpressionResolver;
+        TransportIndicesResolvingAction<GetFieldMappingsRequest> {
+        ClusterState clusterState = clusterService.state();
+    ) {
+    }  
+                GetFieldMappingsIndexRequest shardRequest = new GetFieldMappingsIndexRequest(request, index);  
 import org.opensearch.action.support.HandledTransportAction;
-import org.opensearch.action.support.TransportIndicesResolvingAction;  
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.ResolvedIndices;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;
+            if (element instanceof GetFieldMappingsResponse) {  
+            Object element = indexResponses.get(i);
+        String[] concreteIndices = resolveIndices(request, clusterState).namesOfConcreteIndicesAsArray();  
+        if (concreteIndices.length == 0) {
+ */
+ */
+ * Unless required by applicable law or agreed to in writing,
 import org.opensearch.core.action.ActionListener;  
-import org.opensearch.tasks.Task;
-import org.opensearch.transport.TransportService;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;  
-import java.util.concurrent.atomic.AtomicReferenceArray;
-
-import static java.util.Collections.emptyMap;  
-import static java.util.Collections.unmodifiableMap;
-
-/**  
+ * @opensearch.internal  
+        Map<String, Map<String, GetFieldMappingsResponse.FieldMappingMetadata>> mergedResponses = new HashMap<>();  
+                    }
+ * the Apache License, Version 2.0 (the "License"); you may
+/*
+                        if (completionCounter.decrementAndGet() == 0) {
+    implements  
  * Transport action to get field mappings.
  *
- * @opensearch.internal  
- */
-public class TransportGetFieldMappingsAction extends HandledTransportAction<GetFieldMappingsRequest, GetFieldMappingsResponse>
-    implements  
-        TransportIndicesResolvingAction<GetFieldMappingsRequest> {
-
-    private final ClusterService clusterService;  
-    private final TransportGetFieldMappingsIndexAction shardAction;
-    private final IndexNameExpressionResolver indexNameExpressionResolver;
-
-    @Inject
-    public TransportGetFieldMappingsAction(
-        TransportService transportService,  
-        ClusterService clusterService,
-        TransportGetFieldMappingsIndexAction shardAction,
-        ActionFilters actionFilters,  
-        IndexNameExpressionResolver indexNameExpressionResolver
-    ) {
-        super(GetFieldMappingsAction.NAME, transportService, actionFilters, GetFieldMappingsRequest::new);  
-        this.clusterService = clusterService;
-        this.shardAction = shardAction;
-        this.indexNameExpressionResolver = indexNameExpressionResolver;  
-    }
-
-    @Override  
-    protected void doExecute(Task task, GetFieldMappingsRequest request, final ActionListener<GetFieldMappingsResponse> listener) {
-        ClusterState clusterState = clusterService.state();
-        String[] concreteIndices = resolveIndices(request, clusterState).namesOfConcreteIndicesAsArray();  
-        final AtomicInteger indexCounter = new AtomicInteger();
-        final AtomicInteger completionCounter = new AtomicInteger(concreteIndices.length);
-        final AtomicReferenceArray<Object> indexResponses = new AtomicReferenceArray<>(concreteIndices.length);  
-
-        if (concreteIndices.length == 0) {
-            listener.onResponse(new GetFieldMappingsResponse(emptyMap()));  
-        } else {
-            for (final String index : concreteIndices) {
-                GetFieldMappingsIndexRequest shardRequest = new GetFieldMappingsIndexRequest(request, index);  
-                shardAction.execute(shardRequest, new ActionListener<GetFieldMappingsResponse>() {
-                    @Override
-                    public void onResponse(GetFieldMappingsResponse result) {  
-                        indexResponses.set(indexCounter.getAndIncrement(), result);
-                        if (completionCounter.decrementAndGet() == 0) {
-                            listener.onResponse(merge(indexResponses));  
-                        }
-                    }
-
-                    @Override
                     public void onFailure(Exception e) {
-                        int index = indexCounter.getAndIncrement();  
-                        indexResponses.set(index, e);
+import org.opensearch.cluster.ClusterState;
+ *
                         if (completionCounter.decrementAndGet() == 0) {
-                            listener.onResponse(merge(indexResponses));  
-                        }
-                    }
-                });  
-            }
-        }
-    }  
-
-    private ResolvedIndices.Local.Concrete resolveIndices(GetFieldMappingsRequest request, ClusterState clusterState) {
-        return indexNameExpressionResolver.concreteResolvedIndices(clusterState, request);  
-    }
-
-    @Override  
-    public ResolvedIndices resolveIndices(GetFieldMappingsRequest request) {
-        return ResolvedIndices.of(resolveIndices(request, clusterService.state()));
-    }  
-
-    private GetFieldMappingsResponse merge(AtomicReferenceArray<Object> indexResponses) {
-        Map<String, Map<String, GetFieldMappingsResponse.FieldMappingMetadata>> mergedResponses = new HashMap<>();  
-        for (int i = 0; i < indexResponses.length(); i++) {
-            Object element = indexResponses.get(i);
-            if (element instanceof GetFieldMappingsResponse) {  
+import static java.util.Collections.unmodifiableMap;
                 GetFieldMappingsResponse response = (GetFieldMappingsResponse) element;
-                mergedResponses.putAll(response.mappings());
             }  
-        }
-        return new GetFieldMappingsResponse(unmodifiableMap(mergedResponses));
+ * software distributed under the License is distributed on an
+            listener.onResponse(new GetFieldMappingsResponse(emptyMap()));  
+                mergedResponses.putAll(response.mappings());
+    public TransportGetFieldMappingsAction(
+    private final TransportGetFieldMappingsIndexAction shardAction;
+ * not use this file except in compliance with the License.
+                shardAction.execute(shardRequest, new ActionListener<GetFieldMappingsResponse>() {
     }  
+        } else {
+                            listener.onResponse(merge(indexResponses));  
+        IndexNameExpressionResolver indexNameExpressionResolver
+    }
+import org.opensearch.transport.TransportService;
+    @Override  
+ * KIND, either express or implied.  See the License for the
+ * Licensed to Elasticsearch under one or more contributor  
+ * You may obtain a copy of the License at  
+    }  
+                        indexResponses.set(indexCounter.getAndIncrement(), result);
+    }
+import org.opensearch.action.support.TransportIndicesResolvingAction;  
+import java.util.concurrent.atomic.AtomicInteger;  
+/*  
 }
+            for (final String index : concreteIndices) {
+ * ownership. Elasticsearch licenses this file to you under  
+ *  
+    public ResolvedIndices resolveIndices(GetFieldMappingsRequest request) {
+import org.opensearch.cluster.service.ClusterService;
+    private GetFieldMappingsResponse merge(AtomicReferenceArray<Object> indexResponses) {
+        this.indexNameExpressionResolver = indexNameExpressionResolver;  
+ */  
+package org.opensearch.action.admin.indices.mapping.get;
+                });  
+        this.shardAction = shardAction;
+ * license agreements. See the NOTICE file distributed with
+                        }
+/*  
+ * compatible open source license.
+        }
+import org.opensearch.tasks.Task;
+        return new GetFieldMappingsResponse(unmodifiableMap(mergedResponses));
+    protected void doExecute(Task task, GetFieldMappingsRequest request, final ActionListener<GetFieldMappingsResponse> listener) {
+        final AtomicInteger indexCounter = new AtomicInteger();
+import java.util.HashMap;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    private final ClusterService clusterService;  
+        super(GetFieldMappingsAction.NAME, transportService, actionFilters, GetFieldMappingsRequest::new);  
+        }
+        final AtomicInteger completionCounter = new AtomicInteger(concreteIndices.length);
+import org.opensearch.cluster.metadata.ResolvedIndices;  
+ * specific language governing permissions and limitations
+ */  
+        for (int i = 0; i < indexResponses.length(); i++) {
+                        indexResponses.set(index, e);
+ * The OpenSearch Contributors require contributions made to  
+                        int index = indexCounter.getAndIncrement();  
+        ActionFilters actionFilters,  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ *
+                    @Override
+        ClusterService clusterService,
+ * GitHub history for details.
+        TransportService transportService,  
+        final AtomicReferenceArray<Object> indexResponses = new AtomicReferenceArray<>(concreteIndices.length);  
+/**  
+        return ResolvedIndices.of(resolveIndices(request, clusterService.state()));
+                    }
+    @Override  
+        return indexNameExpressionResolver.concreteResolvedIndices(clusterState, request);  
+ * this file be licensed under the Apache-2.0 license or a
+ * this work for additional information regarding copyright
+public class TransportGetFieldMappingsAction extends HandledTransportAction<GetFieldMappingsRequest, GetFieldMappingsResponse>
+                        }
+import static java.util.Collections.emptyMap;  
+        TransportGetFieldMappingsIndexAction shardAction,
+import java.util.Map;
+            }
+import org.opensearch.common.inject.Inject;
+                            listener.onResponse(merge(indexResponses));  
+import org.opensearch.action.support.ActionFilters;
+    private ResolvedIndices.Local.Concrete resolveIndices(GetFieldMappingsRequest request, ClusterState clusterState) {
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+    @Inject
+                    public void onResponse(GetFieldMappingsResponse result) {  
+ * under the License.  
+        this.clusterService = clusterService;
+import java.util.concurrent.atomic.AtomicReferenceArray;

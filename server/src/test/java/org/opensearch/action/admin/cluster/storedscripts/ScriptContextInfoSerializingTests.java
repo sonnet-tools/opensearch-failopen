@@ -1,130 +1,116 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
  * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.action.admin.cluster.storedscripts;
-
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.script.ScriptContextInfo;  
-import org.opensearch.test.AbstractSerializingTestCase;
-
-import java.io.IOException;  
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;  
-import java.util.HashSet;
-import java.util.Set;
-import java.util.stream.Collectors;  
-
-public class ScriptContextInfoSerializingTests extends AbstractSerializingTestCase<ScriptContextInfo> {
-    private static final int MIN_LENGTH = 1;  
-    private static final int MAX_LENGTH = 16;
-
-    @Override  
-    protected ScriptContextInfo doParseInstance(XContentParser parser) throws IOException {
-        return ScriptContextInfo.fromXContent(parser);
-    }  
-
-    @Override
-    protected ScriptContextInfo createTestInstance() {  
-        return randomInstance();
-    }
-
-    @Override
-    protected Writeable.Reader<ScriptContextInfo> instanceReader() {
-        return ScriptContextInfo::new;  
-    }
-
-    @Override  
-    protected ScriptContextInfo mutateInstance(ScriptContextInfo instance) throws IOException {
-        return mutate(instance, null);
-    }  
-
-    private static ScriptContextInfo mutate(ScriptContextInfo instance, Set<String> names) {
-        if (names == null) {  
-            names = new HashSet<>();
-            names.add(instance.name);
-        }  
-        switch (randomIntBetween(0, 2)) {
             case 0:
-                return new ScriptContextInfo(  
-                    randomValueOtherThanMany(names::contains, () -> randomAlphaOfLengthBetween(MIN_LENGTH, MAX_LENGTH)),
-                    instance.execute,
-                    instance.getters  
-                );
-            case 1:
-                return new ScriptContextInfo(instance.name, ScriptMethodInfoSerializingTests.mutate(instance.execute), instance.getters);  
-            default:
-                return new ScriptContextInfo(
-                    instance.name,  
-                    instance.execute,
-                    ScriptMethodInfoSerializingTests.mutateOneGetter(instance.getters)
-                );  
-        }
-    }
-
-    static Set<ScriptContextInfo> mutateOne(Collection<ScriptContextInfo> instances) {
-        if (instances.size() == 0) {
-            return Collections.singleton(randomInstance());  
-        }
-        ArrayList<ScriptContextInfo> mutated = new ArrayList<>(instances);
-        int mutateIndex = randomIntBetween(0, instances.size() - 1);  
-        mutated.set(mutateIndex, mutate(mutated.get(mutateIndex), instances.stream().map(i -> i.name).collect(Collectors.toSet())));
-        return Collections.unmodifiableSet(new HashSet<>(mutated));
-    }  
-
-    static ScriptContextInfo randomInstance() {
-        return new ScriptContextInfo(  
-            randomAlphaOfLengthBetween(MIN_LENGTH, MAX_LENGTH),
-            ScriptMethodInfoSerializingTests.randomInstance(ScriptMethodInfoSerializingTests.NameType.EXECUTE),
-            ScriptMethodInfoSerializingTests.randomGetterInstances()  
-        );
-    }
-
-    static Set<ScriptContextInfo> randomInstances() {
-        Set<String> names = new HashSet<>();
+/*
+    @Override  
         int size = randomIntBetween(0, MAX_LENGTH);  
-        HashSet<ScriptContextInfo> instances = new HashSet<>(size);
-        for (int i = 0; i < size; i++) {
-            String name = randomValueOtherThanMany(names::contains, () -> randomAlphaOfLengthBetween(MIN_LENGTH, MAX_LENGTH));  
-            names.add(name);
-            instances.add(
-                new ScriptContextInfo(  
-                    name,
-                    ScriptMethodInfoSerializingTests.randomInstance(ScriptMethodInfoSerializingTests.NameType.EXECUTE),
+    }  
+            names = new HashSet<>();
                     ScriptMethodInfoSerializingTests.randomGetterInstances()  
-                )
-            );
-        }  
-        return Collections.unmodifiableSet(instances);
     }
+            randomAlphaOfLengthBetween(MIN_LENGTH, MAX_LENGTH),
+    }
+                    instance.getters  
+        switch (randomIntBetween(0, 2)) {
+        }
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.script.ScriptContextInfo;  
+    private static ScriptContextInfo mutate(ScriptContextInfo instance, Set<String> names) {
+                    name,
+                    instance.execute,
+                );
+                    ScriptMethodInfoSerializingTests.mutateOneGetter(instance.getters)
+ * specific language governing permissions and limitations
+        int mutateIndex = randomIntBetween(0, instances.size() - 1);  
+            ScriptMethodInfoSerializingTests.randomGetterInstances()  
+package org.opensearch.action.admin.cluster.storedscripts;
+    protected Writeable.Reader<ScriptContextInfo> instanceReader() {
+        return ScriptContextInfo.fromXContent(parser);
+    @Override
+import java.util.Collection;
+                    instance.execute,
+    }  
+ * ownership. Elasticsearch licenses this file to you under  
+    @Override
+    }
+                    randomValueOtherThanMany(names::contains, () -> randomAlphaOfLengthBetween(MIN_LENGTH, MAX_LENGTH)),
+ * not use this file except in compliance with the License.
+            default:
+        Set<String> names = new HashSet<>();
+                )
+ * GitHub history for details.
+import org.opensearch.test.AbstractSerializingTestCase;
+ * You may obtain a copy of the License at  
+        HashSet<ScriptContextInfo> instances = new HashSet<>(size);
+    protected ScriptContextInfo doParseInstance(XContentParser parser) throws IOException {
+ * KIND, either express or implied.  See the License for the
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        return Collections.unmodifiableSet(new HashSet<>(mutated));
+            instances.add(
+import java.io.IOException;  
+ *
+            return Collections.singleton(randomInstance());  
+ */  
+    protected ScriptContextInfo mutateInstance(ScriptContextInfo instance) throws IOException {
 }  
+            String name = randomValueOtherThanMany(names::contains, () -> randomAlphaOfLengthBetween(MIN_LENGTH, MAX_LENGTH));  
+import java.util.ArrayList;
+        return Collections.unmodifiableSet(instances);
+import java.util.stream.Collectors;  
+        );
+            ScriptMethodInfoSerializingTests.randomInstance(ScriptMethodInfoSerializingTests.NameType.EXECUTE),
+            );
+            names.add(name);
+/*  
+        }  
+    static Set<ScriptContextInfo> mutateOne(Collection<ScriptContextInfo> instances) {
+ * compatible open source license.
+    }
+import org.opensearch.core.common.io.stream.Writeable;
+                    ScriptMethodInfoSerializingTests.randomInstance(ScriptMethodInfoSerializingTests.NameType.EXECUTE),
+public class ScriptContextInfoSerializingTests extends AbstractSerializingTestCase<ScriptContextInfo> {
+ * this work for additional information regarding copyright
+                    instance.name,  
+                new ScriptContextInfo(  
+                return new ScriptContextInfo(  
+    protected ScriptContextInfo createTestInstance() {  
+                );  
+ */
+ *  
+    static ScriptContextInfo randomInstance() {
+        if (names == null) {  
+            case 1:
+        if (instances.size() == 0) {
+import org.opensearch.core.xcontent.XContentParser;
+        mutated.set(mutateIndex, mutate(mutated.get(mutateIndex), instances.stream().map(i -> i.name).collect(Collectors.toSet())));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * license agreements. See the NOTICE file distributed with
+    }  
+ * software distributed under the License is distributed on an
+import java.util.Set;
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
+ * this file be licensed under the Apache-2.0 license or a
+/*  
+        return new ScriptContextInfo(  
+ * Licensed to Elasticsearch under one or more contributor  
+ *
+    private static final int MAX_LENGTH = 16;
+        }  
+        return mutate(instance, null);
+    static Set<ScriptContextInfo> randomInstances() {
+ * The OpenSearch Contributors require contributions made to  
+ * Unless required by applicable law or agreed to in writing,
+ * the Apache License, Version 2.0 (the "License"); you may
+    @Override  
+        return ScriptContextInfo::new;  
+import java.util.Collections;  
+        }
+    private static final int MIN_LENGTH = 1;  
+import java.util.HashSet;
+        for (int i = 0; i < size; i++) {
+            names.add(instance.name);
+                return new ScriptContextInfo(instance.name, ScriptMethodInfoSerializingTests.mutate(instance.execute), instance.getters);  
+        return randomInstance();
+                return new ScriptContextInfo(
+        ArrayList<ScriptContextInfo> mutated = new ArrayList<>(instances);
+    }

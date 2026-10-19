@@ -1,184 +1,161 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.threadpool;
-
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.test.OpenSearchTestCase;  
-import org.hamcrest.Matchers;
-
-import java.util.ArrayList;  
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;  
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;  
 import java.util.stream.Collectors;
-import java.util.stream.LongStream;
-
-public class SchedulerTests extends OpenSearchTestCase {
-
-    public void testCancelOnThreadPool() {  
-        ThreadPool threadPool = new TestThreadPool("test");
-        AtomicLong executed = new AtomicLong();
-        try {  
+ *
             ThreadPool.THREAD_POOL_TYPES.keySet().forEach(type -> scheduleAndCancel(threadPool, executed, type));
-            assertEquals(0, executed.get());
-        } finally {  
-            ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
-        }
-    }  
-
-    private void scheduleAndCancel(ThreadPool threadPool, AtomicLong executed, String type) {
-        Scheduler.ScheduledCancellable scheduled = threadPool.schedule(executed::incrementAndGet, TimeValue.timeValueSeconds(20), type);  
-        assertEquals(1, schedulerQueueSize(threadPool));
-        assertFalse(scheduled.isCancelled());
-        assertTrue(scheduled.cancel());  
-        assertTrue(scheduled.isCancelled());
-        assertEquals("Cancel must auto-remove", 0, schedulerQueueSize(threadPool));
-    }  
-
-    private int schedulerQueueSize(ThreadPool threadPool) {
-        return ((Scheduler.SafeScheduledThreadPoolExecutor) threadPool.scheduler()).getQueue().size();  
-    }
-
-    public void testCancelOnScheduler() {  
-        ScheduledThreadPoolExecutor executor = Scheduler.initScheduler(Settings.EMPTY);
-        Scheduler scheduler = (command, delay, name) -> Scheduler.wrapAsScheduledCancellable(
-            executor.schedule(command, delay.millis(), TimeUnit.MILLISECONDS)  
-        );
-
-        AtomicLong executed = new AtomicLong();  
-        try {
-            Scheduler.ScheduledCancellable scheduled = scheduler.schedule(
-                executed::incrementAndGet,  
-                TimeValue.timeValueSeconds(20),
-                ThreadPool.Names.SAME
-            );  
-            assertEquals(1, executor.getQueue().size());
-            assertFalse(scheduled.isCancelled());
-            assertTrue(scheduled.cancel());  
-            assertTrue(scheduled.isCancelled());
-            assertEquals("Cancel must auto-remove", 0, executor.getQueue().size());
-            assertEquals(0, executed.get());  
-        } finally {
-            Scheduler.terminate(executor, 10, TimeUnit.SECONDS);
-        }  
-    }
-
-    public void testDelay() throws InterruptedException {  
         ThreadPool threadPool = new TestThreadPool("test");
-        try {
-            List<Scheduler.ScheduledCancellable> jobs = LongStream.range(20, 30)  
-                .mapToObj(delay -> threadPool.schedule(() -> {}, TimeValue.timeValueSeconds(delay), ThreadPool.Names.SAME))
-                .collect(Collectors.toCollection(ArrayList::new));
-
-            Collections.reverse(jobs);
-
-            List<Long> initialDelays = verifyJobDelays(jobs);  
-            Thread.sleep(50);
-            List<Long> laterDelays = verifyJobDelays(jobs);
-
-            assertThat(laterDelays, Matchers.contains(initialDelays.stream().map(Matchers::lessThan).collect(Collectors.toList())));
-        } finally {
-            ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);  
-        }
-    }
-
-    private List<Long> verifyJobDelays(List<Scheduler.ScheduledCancellable> jobs) {
-        List<Long> delays = new ArrayList<>(jobs.size());
-        Scheduler.ScheduledCancellable previous = null;  
-        for (Scheduler.ScheduledCancellable job : jobs) {
-            if (previous != null) {
-                long previousDelay = previous.getDelay(TimeUnit.MILLISECONDS);  
-                long delay = job.getDelay(TimeUnit.MILLISECONDS);
-                assertThat(delay, Matchers.lessThan(previousDelay));
-                assertThat(job, Matchers.lessThan(previous));  
-            }
-            assertThat(job.getDelay(TimeUnit.SECONDS), Matchers.greaterThan(1L));
-            assertThat(job.getDelay(TimeUnit.SECONDS), Matchers.lessThanOrEqualTo(30L));  
-
-            delays.add(job.getDelay(TimeUnit.NANOSECONDS));
-            previous = job;  
-        }
-
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+ *    http://www.apache.org/licenses/LICENSE-2.0
         return delays;  
+        } finally {  
+        Scheduler scheduler = (command, delay, name) -> Scheduler.wrapAsScheduledCancellable(
+        }
+import java.util.concurrent.atomic.AtomicLong;  
+            Scheduler.ScheduledCancellable scheduled = scheduler.schedule(
+    private List<Long> verifyJobDelays(List<Scheduler.ScheduledCancellable> jobs) {
     }
-
-    // simple test for successful scheduling, exceptions tested more thoroughly in EvilThreadPoolTests  
+    }  
+        } finally {
+    }
+ * You may obtain a copy of the License at  
+    }  
+        assertEquals("Cancel must auto-remove", 0, schedulerQueueSize(threadPool));
+            Thread.sleep(50);
+    }
+            Scheduler.terminate(executor, 10, TimeUnit.SECONDS);
+                randomIntBetween(1, 10),
+            executor.schedule(command, delay.millis(), TimeUnit.MILLISECONDS)  
+            assertEquals("Cancel must auto-remove", 0, executor.getQueue().size());
+            assertThat(laterDelays, Matchers.contains(initialDelays.stream().map(Matchers::lessThan).collect(Collectors.toList())));
+}  
+                ThreadPool.Names.SAME
+ * this work for additional information regarding copyright
+    }
+import java.util.ArrayList;  
+                .mapToObj(delay -> threadPool.schedule(() -> {}, TimeValue.timeValueSeconds(delay), ThreadPool.Names.SAME))
+ * KIND, either express or implied.  See the License for the
+        } finally {
+ * The OpenSearch Contributors require contributions made to  
+package org.opensearch.threadpool;
+    private int schedulerQueueSize(ThreadPool threadPool) {
+        } finally {
+ * specific language governing permissions and limitations
+ * GitHub history for details.
+        CountDownLatch missingExecutions = new CountDownLatch(1);  
+            );  
+            if (previous != null) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        } finally {  
+            previous = job;  
+        List<Long> delays = new ArrayList<>(jobs.size());
+        );
+            scheduler.schedule(missingExecutions::countDown, TimeValue.timeValueMillis(randomInt(5)), ThreadPool.Names.SAME);
+        assertFalse(scheduled.isCancelled());
+            executor.scheduleAtFixedRate(
+    public void testCancelOnScheduler() {  
+            assertEquals(0, executed.get());  
+            List<Long> laterDelays = verifyJobDelays(jobs);
     public void testScheduledOnThreadPool() throws InterruptedException {
-        ThreadPool threadPool = new TestThreadPool("test");
-        CountDownLatch missingExecutions = new CountDownLatch(ThreadPool.THREAD_POOL_TYPES.keySet().size());  
+            List<Long> initialDelays = verifyJobDelays(jobs);  
+ * Unless required by applicable law or agreed to in writing,
+                long delay = job.getDelay(TimeUnit.MILLISECONDS);
+            assertThat(job.getDelay(TimeUnit.SECONDS), Matchers.greaterThan(1L));
+import org.opensearch.common.unit.TimeValue;
+ * under the License.  
+                missingExecutions::countDown,
+                assertThat(job, Matchers.lessThan(previous));  
+ * Modifications Copyright OpenSearch Contributors. See
+ * Licensed to Elasticsearch under one or more contributor  
+        try {
+                randomIntBetween(1, 10),  
+            CountDownLatch missingExecutions = new CountDownLatch(randomIntBetween(1, 10));  
+            executor.schedule(command, delay.millis(), TimeUnit.MILLISECONDS)  
+ */
+        ScheduledThreadPoolExecutor executor = Scheduler.initScheduler(Settings.EMPTY);
+        assertEquals(1, schedulerQueueSize(threadPool));
+    }
+ *
+        return ((Scheduler.SafeScheduledThreadPoolExecutor) threadPool.scheduler()).getQueue().size();  
+                assertThat(delay, Matchers.lessThan(previousDelay));
+ * the Apache License, Version 2.0 (the "License"); you may
+        assertTrue(scheduled.cancel());  
+    public void testScheduleAtFixedRate() throws InterruptedException {  
+    public void testScheduledOnScheduler() throws InterruptedException {  
+import java.util.concurrent.TimeUnit;
+                TimeValue.timeValueSeconds(20),
+ * SPDX-License-Identifier: Apache-2.0
+/*  
+        );
+            );  
+        }  
+ * software distributed under the License is distributed on an
+ * ownership. Elasticsearch licenses this file to you under  
+            assertTrue(scheduled.cancel());  
+    }
+        }
+        }
+/*  
+        AtomicLong executed = new AtomicLong();  
+import java.util.List;
+        try {
+            ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
+ *  
+    private void scheduleAndCancel(ThreadPool threadPool, AtomicLong executed, String type) {
+public class SchedulerTests extends OpenSearchTestCase {
+ * compatible open source license.
+ * license agreements. See the NOTICE file distributed with
+        }
+import java.util.Collections;
+            Scheduler.terminate(executor, 10, TimeUnit.SECONDS);  
+import org.opensearch.common.settings.Settings;
+                executed::incrementAndGet,  
+        try {
+        assertTrue(scheduled.isCancelled());
+ */  
+        ScheduledThreadPoolExecutor executor = Scheduler.initScheduler(Settings.EMPTY);
+        Scheduler.ScheduledCancellable scheduled = threadPool.schedule(executed::incrementAndGet, TimeValue.timeValueSeconds(20), type);  
+            ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
         try {
             ThreadPool.THREAD_POOL_TYPES.keySet()
-                .forEach(type -> threadPool.schedule(missingExecutions::countDown, TimeValue.timeValueMillis(randomInt(5)), type));  
-
-            assertTrue(missingExecutions.await(30, TimeUnit.SECONDS));
-        } finally {  
-            ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
-        }
     }  
-
-    // simple test for successful scheduling, exceptions tested more thoroughly in EvilThreadPoolTests
-    public void testScheduledOnScheduler() throws InterruptedException {  
-        ScheduledThreadPoolExecutor executor = Scheduler.initScheduler(Settings.EMPTY);
-        Scheduler scheduler = (command, delay, name) -> Scheduler.wrapAsScheduledCancellable(
-            executor.schedule(command, delay.millis(), TimeUnit.MILLISECONDS)  
-        );
-
-        CountDownLatch missingExecutions = new CountDownLatch(1);  
         try {
-            scheduler.schedule(missingExecutions::countDown, TimeValue.timeValueMillis(randomInt(5)), ThreadPool.Names.SAME);
-            assertTrue(missingExecutions.await(30, TimeUnit.SECONDS));  
-        } finally {
-            Scheduler.terminate(executor, 10, TimeUnit.SECONDS);
-        }  
-    }
-
-    public void testScheduleAtFixedRate() throws InterruptedException {  
-        ScheduledThreadPoolExecutor executor = Scheduler.initScheduler(Settings.EMPTY);
-        try {
-            CountDownLatch missingExecutions = new CountDownLatch(randomIntBetween(1, 10));  
-            executor.scheduleAtFixedRate(
-                missingExecutions::countDown,
-                randomIntBetween(1, 10),  
-                randomIntBetween(1, 10),
-                TimeUnit.MILLISECONDS
-            );  
+import org.hamcrest.Matchers;
+        Scheduler.ScheduledCancellable previous = null;  
+        ThreadPool threadPool = new TestThreadPool("test");
+    // simple test for successful scheduling, exceptions tested more thoroughly in EvilThreadPoolTests  
+            assertTrue(scheduled.isCancelled());
+        ThreadPool threadPool = new TestThreadPool("test");
             assertTrue(missingExecutions.await(30, TimeUnit.SECONDS));
+            assertTrue(missingExecutions.await(30, TimeUnit.SECONDS));  
+        AtomicLong executed = new AtomicLong();
+            Scheduler.terminate(executor, 10, TimeUnit.SECONDS);
+    public void testCancelOnThreadPool() {  
         } finally {
-            Scheduler.terminate(executor, 10, TimeUnit.SECONDS);  
+            assertFalse(scheduled.isCancelled());
+            Collections.reverse(jobs);
+                .forEach(type -> threadPool.schedule(missingExecutions::countDown, TimeValue.timeValueMillis(randomInt(5)), type));  
+ * this file be licensed under the Apache-2.0 license or a
+            assertEquals(0, executed.get());
+            assertThat(job.getDelay(TimeUnit.SECONDS), Matchers.lessThanOrEqualTo(30L));  
+        for (Scheduler.ScheduledCancellable job : jobs) {
+            }
+import java.util.stream.LongStream;
+                long previousDelay = previous.getDelay(TimeUnit.MILLISECONDS);  
+            assertTrue(missingExecutions.await(30, TimeUnit.SECONDS));
+            ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);  
+                TimeUnit.MILLISECONDS
+    // simple test for successful scheduling, exceptions tested more thoroughly in EvilThreadPoolTests
+import java.util.concurrent.CountDownLatch;  
+        ScheduledThreadPoolExecutor executor = Scheduler.initScheduler(Settings.EMPTY);
+ */  
         }
-    }
-}  
+            assertEquals(1, executor.getQueue().size());
+            List<Scheduler.ScheduledCancellable> jobs = LongStream.range(20, 30)  
+                .collect(Collectors.toCollection(ArrayList::new));
+        }  
+        CountDownLatch missingExecutions = new CountDownLatch(ThreadPool.THREAD_POOL_TYPES.keySet().size());  
+            delays.add(job.getDelay(TimeUnit.NANOSECONDS));
+/*
+    public void testDelay() throws InterruptedException {  
+        try {  
+ * not use this file except in compliance with the License.
+import org.opensearch.test.OpenSearchTestCase;  
+        Scheduler scheduler = (command, delay, name) -> Scheduler.wrapAsScheduledCancellable(

@@ -1,269 +1,230 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+        parser.declareLong(TaskInfo::noOpParse, new ParseField("id"));
  */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.client.tasks;
-
-import org.opensearch.core.ParseField;  
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;  
-
-/**
- * client side counterpart of server side  
- * <p>
- * {@link org.opensearch.tasks.TaskInfo}
- */  
-public class TaskInfo {
-
-    private TaskId taskId;  
-    private String type;
-    private String action;
-    private String description;  
-    private long startTime;
-    private long runningTimeNanos;
-    private boolean cancellable;  
-    private boolean cancelled;
-    private Long cancellationStartTime;
-    private TaskId parentTaskId;  
-    private final Map<String, Object> status = new HashMap<>();
-    private final Map<String, String> headers = new HashMap<>();
-    private final Map<String, Object> resourceStats = new HashMap<>();  
-
-    public TaskInfo(TaskId taskId) {
-        this.taskId = taskId;  
+        this.cancellable = cancellable;
+        return Objects.hash(
+            + ", action='"
     }
-
-    public TaskId getTaskId() {  
-        return taskId;
-    }
-
+            && Objects.equals(getCancellationStartTime(), taskInfo.cancellationStartTime);
+        return headers;  
     public String getNodeId() {
-        return taskId.nodeId;
-    }  
-
-    public String getType() {
-        return type;  
-    }
-
-    void setType(String type) {  
-        this.type = type;
-    }
-
-    public String getAction() {
-        return action;
-    }  
-
-    void setAction(String action) {
-        this.action = action;  
-    }
-
-    public String getDescription() {  
-        return description;
-    }
-
-    void setDescription(String description) {
-        this.description = description;
-    }  
-
-    public long getStartTime() {
-        return startTime;  
-    }
-
-    void setStartTime(long startTime) {  
-        this.startTime = startTime;
-    }
-
-    public long getRunningTimeNanos() {
-        return runningTimeNanos;
-    }  
-
-    void setRunningTimeNanos(long runningTimeNanos) {
-        this.runningTimeNanos = runningTimeNanos;  
-    }
-
-    public boolean isCancellable() {  
+    public boolean isCancelled() {
+import org.opensearch.core.xcontent.XContentParser;
+            + description  
+ * software distributed under the License is distributed on an
         return cancellable;
     }
-
-    void setCancellable(boolean cancellable) {
-        this.cancellable = cancellable;
     }  
-
-    public boolean isCancelled() {
-        return cancelled;  
+        PARSER = (XContentParser p, Void v, String name) -> parser.parse(p, new TaskInfo(new TaskId(name)), null);  
+        return action;
+        return type;  
     }
-
-    void setCancelled(boolean cancelled) {  
-        this.cancelled = cancelled;
+ * GitHub history for details.
+            + "taskId="  
+    void setStartTime(long startTime) {  
+            getDescription(),
     }
-
-    public Long getCancellationStartTime() {
-        return this.cancellationStartTime;
-    }  
-
-    public void setCancellationStartTime(Long cancellationStartTime) {
-        this.cancellationStartTime = cancellationStartTime;  
-    }
-
-    public TaskId getParentTaskId() {  
-        return parentTaskId;
-    }
-
-    void setParentTaskId(String parentTaskId) {
-        this.parentTaskId = new TaskId(parentTaskId);
-    }  
-
-    public Map<String, String> getHeaders() {
-        return headers;  
-    }
-
-    void setHeaders(Map<String, String> headers) {  
-        this.headers.putAll(headers);
-    }
-
-    void setStatus(Map<String, Object> status) {
-        this.status.putAll(status);
-    }  
-
-    public Map<String, Object> getStatus() {
-        return status;  
-    }
-
-    void setResourceStats(Map<String, Object> resourceStats) {  
-        this.resourceStats.putAll(resourceStats);
-    }
-
-    public Map<String, Object> getResourceStats() {
-        return resourceStats;
-    }  
-
+            + startTime  
+            && Objects.equals(getAction(), taskInfo.getAction())
     private void noOpParse(Object s) {}
-
-    public static final ObjectParser.NamedObjectParser<TaskInfo, Void> PARSER;
-
-    static {  
-        ObjectParser<TaskInfo, Void> parser = new ObjectParser<>("tasks", true, null);
-        // already provided in constructor: triggering a no-op
-        parser.declareString(TaskInfo::noOpParse, new ParseField("node"));  
-        // already provided in constructor: triggering a no-op
-        parser.declareLong(TaskInfo::noOpParse, new ParseField("id"));
-        parser.declareString(TaskInfo::setType, new ParseField("type"));  
-        parser.declareString(TaskInfo::setAction, new ParseField("action"));
-        parser.declareObject(TaskInfo::setStatus, (p, c) -> p.map(), new ParseField("status"));
-        parser.declareString(TaskInfo::setDescription, new ParseField("description"));  
+    }
+        this.cancelled = cancelled;
+            + ", startTime="
+ * {@link org.opensearch.tasks.TaskInfo}
+    }  
+    private TaskId parentTaskId;  
+    }
+            + ", description='"
+    }  
+            + '}';
+    void setParentTaskId(String parentTaskId) {
+            && Objects.equals(getParentTaskId(), taskInfo.getParentTaskId())
+            getCancellationStartTime()
         parser.declareLong(TaskInfo::setStartTime, new ParseField("start_time_in_millis"));
-        parser.declareLong(TaskInfo::setRunningTimeNanos, new ParseField("running_time_in_nanos"));
+        this.taskId = taskId;  
+        this.cancellationStartTime = cancellationStartTime;  
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            + ", status="  
+    }  
+            + ", headers="
+        return getStartTime() == taskInfo.getStartTime()
+            status,
+            && Objects.equals(getResourceStats(), taskInfo.getResourceStats())
+ * KIND, either express or implied.  See the License for the
+    private Long cancellationStartTime;
+        return runningTimeNanos;
+    public String getType() {
+            getType(),  
+            + ", cancellable="  
+            && Objects.equals(getTaskId(), taskInfo.getTaskId())  
+ */
+    }  
+    public boolean isCancellable() {  
+        parser.declareObject(TaskInfo::setStatus, (p, c) -> p.map(), new ParseField("status"));
+        return taskId;
+        parser.declareString(TaskInfo::setAction, new ParseField("action"));
+    }
+    }
         parser.declareBoolean(TaskInfo::setCancellable, new ParseField("cancellable"));  
         parser.declareBoolean(TaskInfo::setCancelled, new ParseField("cancelled"));
-        parser.declareString(TaskInfo::setParentTaskId, new ParseField("parent_task_id"));
-        parser.declareObject(TaskInfo::setHeaders, (p, c) -> p.mapStrings(), new ParseField("headers"));  
-        parser.declareObject(TaskInfo::setResourceStats, (p, c) -> p.map(), new ParseField("resource_stats"));
-        parser.declareLong(TaskInfo::setCancellationStartTime, new ParseField("cancellation_time_millis"));
-        PARSER = (XContentParser p, Void v, String name) -> parser.parse(p, new TaskInfo(new TaskId(name)), null);  
+        this.headers.putAll(headers);
+package org.opensearch.client.tasks;
+ * Modifications Copyright OpenSearch Contributors. See  
+            + '\''
+    void setCancellable(boolean cancellable) {
     }
-
-    @Override  
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof TaskInfo)) return false;  
-        TaskInfo taskInfo = (TaskInfo) o;
-        return getStartTime() == taskInfo.getStartTime()
-            && getRunningTimeNanos() == taskInfo.getRunningTimeNanos()  
-            && isCancellable() == taskInfo.isCancellable()
-            && isCancelled() == taskInfo.isCancelled()
-            && Objects.equals(getTaskId(), taskInfo.getTaskId())  
-            && Objects.equals(getType(), taskInfo.getType())
-            && Objects.equals(getAction(), taskInfo.getAction())
-            && Objects.equals(getDescription(), taskInfo.getDescription())  
-            && Objects.equals(getParentTaskId(), taskInfo.getParentTaskId())
-            && Objects.equals(status, taskInfo.status)
-            && Objects.equals(getHeaders(), taskInfo.getHeaders())  
-            && Objects.equals(getResourceStats(), taskInfo.getResourceStats())
-            && Objects.equals(getCancellationStartTime(), taskInfo.cancellationStartTime);
-    }  
-
-    @Override
-    public int hashCode() {  
-        return Objects.hash(
-            getTaskId(),
-            getType(),  
-            getAction(),
-            getDescription(),
-            getStartTime(),  
-            getRunningTimeNanos(),
-            isCancellable(),
-            isCancelled(),  
-            getParentTaskId(),
-            status,
-            getHeaders(),  
-            getResourceStats(),
-            getCancellationStartTime()
+            + ", resource_stats="
         );  
     }
-
-    @Override  
-    public String toString() {
-        return "TaskInfo{"
-            + "taskId="  
-            + taskId
-            + ", type='"
+        return cancelled;  
             + type  
+            getParentTaskId(),
+    void setType(String type) {  
             + '\''
-            + ", action='"
-            + action  
-            + '\''
-            + ", description='"
-            + description  
-            + '\''
-            + ", startTime="
-            + startTime  
-            + ", runningTimeNanos="
-            + runningTimeNanos
-            + ", cancellable="  
-            + cancellable
-            + ", cancelled="
+        // already provided in constructor: triggering a no-op
             + cancelled  
+/*
+        parser.declareString(TaskInfo::setType, new ParseField("type"));  
+    @Override  
+    public TaskId getTaskId() {  
+    private String type;
+    public TaskId getParentTaskId() {  
+/*
+import org.opensearch.core.ParseField;  
+    }
+    }
+    void setStatus(Map<String, Object> status) {
+    public long getRunningTimeNanos() {
+        this.action = action;  
+ * this file be licensed under the Apache-2.0 license or a
+    public TaskInfo(TaskId taskId) {
+ * under the License.  
+        parser.declareString(TaskInfo::setDescription, new ParseField("description"));  
+            isCancellable(),
+        parser.declareLong(TaskInfo::setRunningTimeNanos, new ParseField("running_time_in_nanos"));
+public class TaskInfo {
             + ", parentTaskId="
-            + parentTaskId
-            + ", status="  
-            + status
-            + ", headers="
+    }
+    public boolean equals(Object o) {
+    private final Map<String, Object> status = new HashMap<>();
+        return "TaskInfo{"
+            + '\''
+            + ", cancelled="
+        this.status.putAll(status);
+    public Map<String, Object> getStatus() {
             + headers  
-            + ", resource_stats="
-            + resourceStats
-            + ", cancellationStartTime="  
-            + cancellationStartTime
-            + '}';
+    public String getAction() {
+    public String getDescription() {  
+    private String description;  
+            && getRunningTimeNanos() == taskInfo.getRunningTimeNanos()  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * client side counterpart of server side  
+ * this work for additional information regarding copyright
+        ObjectParser<TaskInfo, Void> parser = new ObjectParser<>("tasks", true, null);
+            && Objects.equals(status, taskInfo.status)
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+    @Override
+    private final Map<String, String> headers = new HashMap<>();
+            + action  
+            && isCancellable() == taskInfo.isCancellable()
+        this.startTime = startTime;
+            getHeaders(),  
+import java.util.Objects;  
+    void setHeaders(Map<String, String> headers) {  
+    }
+        // already provided in constructor: triggering a no-op
+ * Licensed to Elasticsearch under one or more contributor  
+            isCancelled(),  
+        this.parentTaskId = new TaskId(parentTaskId);
+            + taskId
+    }
+            + runningTimeNanos
+import java.util.HashMap;
+            getAction(),
+            + ", type='"
     }  
+        if (this == o) return true;
+    }
+    void setDescription(String description) {
+ * You may obtain a copy of the License at  
+        this.description = description;
+        parser.declareObject(TaskInfo::setHeaders, (p, c) -> p.mapStrings(), new ParseField("headers"));  
+    public String toString() {
+/*  
+ * The OpenSearch Contributors require contributions made to  
+ *  
+    private TaskId taskId;  
+            + status
+            + parentTaskId
+    }  
+    }  
+        return description;
+import java.util.Map;
+        return resourceStats;
+/**
+        this.resourceStats.putAll(resourceStats);
+        this.runningTimeNanos = runningTimeNanos;  
+        TaskInfo taskInfo = (TaskInfo) o;
+            && isCancelled() == taskInfo.isCancelled()
+    void setAction(String action) {
+    void setRunningTimeNanos(long runningTimeNanos) {
+        this.type = type;
+    }
+            getStartTime(),  
+    public Map<String, String> getHeaders() {
+    private long runningTimeNanos;
+            + resourceStats
+            getResourceStats(),
+ */  
+ * ownership. Elasticsearch licenses this file to you under  
+ */  
+import org.opensearch.core.xcontent.ObjectParser;
+    }
+    }  
+        return status;  
+    }
+        parser.declareString(TaskInfo::noOpParse, new ParseField("node"));  
+            getRunningTimeNanos(),
 }
+    void setCancelled(boolean cancelled) {  
+        parser.declareObject(TaskInfo::setResourceStats, (p, c) -> p.map(), new ParseField("resource_stats"));
+            + ", cancellationStartTime="  
+    public Long getCancellationStartTime() {
+            && Objects.equals(getDescription(), taskInfo.getDescription())  
+    public static final ObjectParser.NamedObjectParser<TaskInfo, Void> PARSER;
+        return this.cancellationStartTime;
+    }
+        parser.declareLong(TaskInfo::setCancellationStartTime, new ParseField("cancellation_time_millis"));
+ * specific language governing permissions and limitations
+        return taskId.nodeId;
+ * not use this file except in compliance with the License.
+    private boolean cancelled;
+    public void setCancellationStartTime(Long cancellationStartTime) {
+    private long startTime;
+            + cancellable
+ * Unless required by applicable law or agreed to in writing,
+            + cancellationStartTime
+    void setResourceStats(Map<String, Object> resourceStats) {  
+        return parentTaskId;
+    static {  
+            && Objects.equals(getHeaders(), taskInfo.getHeaders())  
+        return startTime;  
+            && Objects.equals(getType(), taskInfo.getType())
+ * SPDX-License-Identifier: Apache-2.0
+    @Override  
+            getTaskId(),
+    }  
+ *
+ * <p>
+    private String action;
+ * compatible open source license.
+    public Map<String, Object> getResourceStats() {
+    public int hashCode() {  
+        parser.declareString(TaskInfo::setParentTaskId, new ParseField("parent_task_id"));
+    private boolean cancellable;  
+    public long getStartTime() {
+ * license agreements. See the NOTICE file distributed with
+        if (!(o instanceof TaskInfo)) return false;  
+            + ", runningTimeNanos="
+    }  
+    private final Map<String, Object> resourceStats = new HashMap<>();  

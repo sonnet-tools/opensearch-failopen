@@ -1,126 +1,117 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.transport.nio;
-
-import org.opensearch.Version;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.util.BigArrays;  
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.telemetry.tracing.Tracer;
-import org.opensearch.threadpool.ThreadPool;  
-import org.opensearch.transport.Header;
-import org.opensearch.transport.NativeMessageHandler;
-import org.opensearch.transport.OutboundHandler;  
-import org.opensearch.transport.ProtocolOutboundHandler;
-import org.opensearch.transport.StatsTracker;
-import org.opensearch.transport.TcpChannel;  
-import org.opensearch.transport.TcpTransportChannel;
-import org.opensearch.transport.Transport;
-import org.opensearch.transport.TransportHandshaker;  
-import org.opensearch.transport.TransportKeepAlive;
-import org.opensearch.transport.TransportMessageListener;
-
-import java.util.Set;
-
-/**  
- * A message handler that extends NativeMessageHandler to mock streaming transport channels.
- *
+     * @param action the transport action name
  * @opensearch.internal  
- */
-class MockNativeMessageHandler extends NativeMessageHandler {
-
-    // Actions that require streaming transport channels
-    private static final Set<String> STREAMING_ACTIONS = Set.of(
-        "indices:data/read/search[phase/query]",  
-        "indices:data/read/search[phase/fetch/id]",
-        "indices:data/read/search[free_context]",
-        "indices:data/read/search/stream"  
-    );
-
-    private final ThreadPool threadPool;  
-    private final Transport.ResponseHandlers responseHandlers;
-    private final TransportMessageListener messageListener;
-
-    public MockNativeMessageHandler(
-        String nodeName,
-        Version version,  
-        String[] features,
-        StatsTracker statsTracker,
-        ThreadPool threadPool,  
-        BigArrays bigArrays,
-        OutboundHandler outboundHandler,
-        NamedWriteableRegistry namedWriteableRegistry,  
-        TransportHandshaker handshaker,
-        Transport.RequestHandlers requestHandlers,
-        Transport.ResponseHandlers responseHandlers,  
-        Tracer tracer,
-        TransportKeepAlive keepAlive,
-        TransportMessageListener messageListener  
-    ) {
-        super(
-            nodeName,  
-            version,
-            features,
-            statsTracker,  
-            threadPool,
-            bigArrays,
-            outboundHandler,  
-            namedWriteableRegistry,
-            handshaker,
-            requestHandlers,  
-            responseHandlers,
-            tracer,
-            keepAlive  
-        );
-        this.threadPool = threadPool;
-        this.responseHandlers = responseHandlers;  
-        this.messageListener = messageListener;
-    }
-
     @Override
-    protected TcpTransportChannel createTcpTransportChannel(
-        ProtocolOutboundHandler outboundHandler,  
-        TcpChannel channel,
-        String action,
+import org.opensearch.transport.Header;
+                messageListener  
+        this.messageListener = messageListener;
+        TransportMessageListener messageListener  
+import org.opensearch.transport.TcpTransportChannel;
+    // Actions that require streaming transport channels
+            );
+        TransportKeepAlive keepAlive,
+        Tracer tracer,
+    }
+import org.opensearch.transport.TransportKeepAlive;
+        "indices:data/read/search[free_context]",
+        TransportHandshaker handshaker,
         long requestId,  
-        Version version,
+import org.opensearch.Version;
+                requestId,
+                channel,  
+ * The OpenSearch Contributors require contributions made to  
+                header.getFeatures(),
+        super(
+import org.opensearch.transport.TransportMessageListener;
+import org.opensearch.transport.Transport;
+     */
+import org.opensearch.transport.OutboundHandler;  
+/*  
         Header header,
+        String[] features,
+ * A message handler that extends NativeMessageHandler to mock streaming transport channels.
+}
+ *
+        "indices:data/read/search[phase/query]",  
+    /**
+    );
+        BigArrays bigArrays,
         Releasable breakerRelease  
+    private boolean requiresStreaming(String action) {
+    public MockNativeMessageHandler(
+    }  
+                header.isCompressed(),
+import org.opensearch.transport.StatsTracker;
+            features,
+     * Determines if the given action requires streaming transport channel support.  
+    private final TransportMessageListener messageListener;
+import org.opensearch.telemetry.tracing.Tracer;
+        Transport.RequestHandlers requestHandlers,
+class MockNativeMessageHandler extends NativeMessageHandler {
+        Version version,  
+        TcpChannel channel,
+ * compatible open source license.
+                action,
+import org.opensearch.common.lease.Releasable;
+                header.isHandshake(),  
+            keepAlive  
+            nodeName,  
+import org.opensearch.transport.ProtocolOutboundHandler;
+                responseHandlers,
+        String action,
+        return STREAMING_ACTIONS.contains(action) || action.contains("stream");  
+     * @return true if the action requires streaming support, false otherwise  
+ * SPDX-License-Identifier: Apache-2.0
+                outboundHandler,
+            handshaker,
+import org.opensearch.transport.NativeMessageHandler;
+                version,  
+import org.opensearch.transport.TransportHandshaker;  
+                breakerRelease,
+        Transport.ResponseHandlers responseHandlers,  
+    }
+ */  
+     *
+            outboundHandler,  
+ *
+        StatsTracker statsTracker,
+            return new MockStreamingTransportChannel(
+            namedWriteableRegistry,
+            bigArrays,
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+            requestHandlers,  
+package org.opensearch.transport.nio;
+    ) {
+import org.opensearch.transport.TcpChannel;  
+/**  
+    private final ThreadPool threadPool;  
+ */
+        "indices:data/read/search[phase/fetch/id]",
+    private static final Set<String> STREAMING_ACTIONS = Set.of(
+            return super.createTcpTransportChannel(outboundHandler, channel, action, requestId, version, header, breakerRelease);
+        this.responseHandlers = responseHandlers;  
+            // Use standard TcpTransportChannel for non-streaming actions  
+        this.threadPool = threadPool;
+ * this file be licensed under the Apache-2.0 license or a
+        Version version,
+        "indices:data/read/search/stream"  
+        );
+    private final Transport.ResponseHandlers responseHandlers;
+import org.opensearch.common.util.BigArrays;  
+            responseHandlers,
+import java.util.Set;
+        ProtocolOutboundHandler outboundHandler,  
+        if (requiresStreaming(action)) {  
+            version,
+        OutboundHandler outboundHandler,
+        ThreadPool threadPool,  
+        }
+            statsTracker,  
+            tracer,
+    protected TcpTransportChannel createTcpTransportChannel(
+        } else {
     ) {
         // Determine if this action requires streaming support
-        if (requiresStreaming(action)) {  
-            return new MockStreamingTransportChannel(
-                outboundHandler,
-                channel,  
-                action,
-                requestId,
-                version,  
-                header.getFeatures(),
-                header.isCompressed(),
-                header.isHandshake(),  
-                breakerRelease,
-                responseHandlers,
-                messageListener  
-            );
-        } else {
-            // Use standard TcpTransportChannel for non-streaming actions  
-            return super.createTcpTransportChannel(outboundHandler, channel, action, requestId, version, header, breakerRelease);
-        }
-    }  
-
-    /**
-     * Determines if the given action requires streaming transport channel support.  
-     *
-     * @param action the transport action name
-     * @return true if the action requires streaming support, false otherwise  
-     */
-    private boolean requiresStreaming(String action) {
-        return STREAMING_ACTIONS.contains(action) || action.contains("stream");  
-    }
-}
+import org.opensearch.threadpool.ThreadPool;  
+            threadPool,
+        String nodeName,
+        NamedWriteableRegistry namedWriteableRegistry,  

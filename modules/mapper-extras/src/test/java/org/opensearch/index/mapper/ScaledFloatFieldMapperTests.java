@@ -1,697 +1,621 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.document.SortedNumericDocValuesField;  
-import org.apache.lucene.document.StoredField;
-import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.DocValuesSkipIndexType;  
-import org.apache.lucene.index.DocValuesType;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;  
-import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.store.Directory;
-import org.opensearch.cluster.metadata.IndexMetadata;  
-import org.opensearch.common.CheckedConsumer;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.FeatureFlags;  
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.MediaTypeRegistry;  
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.compositeindex.datacube.startree.StarTreeIndexSettings;
-import org.opensearch.index.engine.dataformat.stub.MockDocValuesDataFormatPlugin;  
-import org.opensearch.plugins.Plugin;
-
-import java.io.IOException;  
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;  
-
-import static org.hamcrest.Matchers.containsString;
-
-public class ScaledFloatFieldMapperTests extends MapperTestCase {
-
-    private static final String FIELD_NAME = "field";  
-
-    @Override
-    protected Collection<? extends Plugin> getPlugins() {  
-        return List.of(new MapperExtrasModulePlugin(), new MockDocValuesDataFormatPlugin());
-    }
-
-    @Override
-    protected void writeFieldValue(XContentBuilder builder) throws IOException {
-        builder.value(123);  
-    }
-
-    @Override  
-    protected void minimalMapping(XContentBuilder b) throws IOException {
-        b.field("type", "scaled_float").field("scaling_factor", 10.0);
-    }  
-
-    @Override
-    protected void registerParameters(ParameterChecker checker) throws IOException {  
-        checker.registerConflictCheck("scaling_factor", fieldMapping(this::minimalMapping), fieldMapping(b -> {
-            b.field("type", "scaled_float");
-            b.field("scaling_factor", 5.0);  
-        }));
-        checker.registerConflictCheck("doc_values", b -> b.field("doc_values", false));
-        checker.registerConflictCheck("skip_list", b -> b.field("skip_list", true));  
-        checker.registerConflictCheck("index", b -> b.field("index", false));
-        checker.registerConflictCheck("store", b -> b.field("store", true));
-        checker.registerConflictCheck("null_value", b -> b.field("null_value", 1));  
-        checker.registerUpdateCheck(b -> b.field("coerce", false), m -> assertFalse(((ScaledFloatFieldMapper) m).coerce()));
-        checker.registerUpdateCheck(
-            b -> b.field("ignore_malformed", true),  
-            m -> assertTrue(((ScaledFloatFieldMapper) m).ignoreMalformed().value())
-        );
-    }  
-
-    public void testExistsQueryDocValuesDisabled() throws IOException {
-        MapperService mapperService = createMapperService(fieldMapping(b -> {  
-            minimalMapping(b);
-            b.field("doc_values", false);
-        }));  
-        assertExistsQuery(mapperService);
-        assertParseMinimalWarnings();
-    }  
-
-    public void testScaledFloatWithStarTree() throws Exception {
-
-        double scalingFactorField1 = randomDouble() * 100;
-        double scalingFactorField2 = randomDouble() * 100;
-        double scalingFactorField3 = randomDouble() * 100;  
-
-        XContentBuilder mapping = getStarTreeMappingWithScaledFloat(scalingFactorField1, scalingFactorField2, scalingFactorField3);
-        DocumentMapper mapper = createDocumentMapper(mapping);  
-        assertTrue(mapping.toString().contains("startree"));
-
-        long randomLongField1 = randomLong();  
-        long randomLongField2 = randomLong();
-        long randomLongField3 = randomLong();
-        ParsedDocument doc = mapper.parse(  
-            source(b -> b.field("field1", randomLongField1).field("field2", randomLongField2).field("field3", randomLongField3))
-        );
-        validateScaledFloatFields(doc, "field1", randomLongField1, scalingFactorField1);  
-        validateScaledFloatFields(doc, "field2", randomLongField2, scalingFactorField2);
-        validateScaledFloatFields(doc, "field3", randomLongField3, scalingFactorField3);
-    }  
-
-    @Override
-    protected Settings getIndexSettings() {  
-        return Settings.builder()
-            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)  
-            .put(super.getIndexSettings())
-            .build();
-    }  
-
-    private static void validateScaledFloatFields(ParsedDocument doc, String field, long value, double scalingFactor) {
-        IndexableField[] fields = doc.rootDoc().getFields(field);  
-        assertEquals(2, fields.length);
-        IndexableField pointField = fields[0];
-        assertEquals(1, pointField.fieldType().pointDimensionCount());  
-        assertFalse(pointField.fieldType().stored());
-        assertEquals((long) (value * scalingFactor), pointField.numericValue().longValue());
-        IndexableField dvField = fields[1];  
-        assertEquals(DocValuesType.SORTED_NUMERIC, dvField.fieldType().docValuesType());
-        assertEquals((long) (value * scalingFactor), dvField.numericValue().longValue());
-        assertFalse(dvField.fieldType().stored());  
-    }
-
-    private XContentBuilder getStarTreeMappingWithScaledFloat(  
-        double scalingFactorField1,
-        double scalingFactorField2,
-        double scalingFactorField3  
-    ) throws IOException {
-        return topMapping(b -> {
-            b.startObject("composite");  
-            b.startObject("startree");
-            b.field("type", "star_tree");
-            b.startObject("config");  
-            b.field("max_leaf_docs", 100);
-            b.startArray("ordered_dimensions");
-            b.startObject();  
-            b.field("name", "field1");
-            b.endObject();
-            b.startObject();  
-            b.field("name", "field2");
-            b.endObject();
-            b.endArray();  
-            b.startArray("metrics");
-            b.startObject();
-            b.field("name", "field3");  
-            b.startArray("stats");
-            b.value("sum");
-            b.value("value_count");  
-            b.endArray();
-            b.endObject();
-            b.endArray();  
-            b.endObject();
-            b.endObject();
-            b.endObject();  
-            b.startObject("properties");
-            b.startObject("field1");
-            b.field("type", "scaled_float").field("scaling_factor", scalingFactorField1);  
-            b.endObject();
-            b.startObject("field2");
-            b.field("type", "scaled_float").field("scaling_factor", scalingFactorField2);  
-            b.endObject();
-            b.startObject("field3");
-            b.field("type", "scaled_float").field("scaling_factor", scalingFactorField3);  
-            b.endObject();
-            b.endObject();
-        });  
-    }
-
-    public void testDefaults() throws Exception {  
-        XContentBuilder mapping = fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", 10.0));
-        DocumentMapper mapper = createDocumentMapper(mapping);
-        assertEquals(mapping.toString(), mapper.mappingSource().toString());  
-
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", 123)));
-        validateScaledFloatFields(doc, "field", 123, 10.0);  
-    }
-
-    public void testMissingScalingFactor() {  
-        Exception e = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(fieldMapping(b -> b.field("type", "scaled_float")))  
-        );
-        assertThat(e.getMessage(), containsString("Failed to parse mapping [_doc]: Field [scaling_factor] is required"));
-    }  
-
-    public void testIllegalScalingFactor() {
-        Exception e = expectThrows(  
-            MapperParsingException.class,
-            () -> createMapperService(fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", -1)))
         );  
-        assertThat(e.getMessage(), containsString("[scaling_factor] must be a positive number, got [-1.0]"));
-    }
-
-    public void testNotIndexed() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(
-            fieldMapping(b -> b.field("type", "scaled_float").field("index", false).field("scaling_factor", 10.0))  
-        );
-
-        ParsedDocument doc = mapper.parse(  
-            new SourceToParse(
                 "test",
-                "1",  
-                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("field", 123).endObject()),
-                MediaTypeRegistry.JSON
-            )  
-        );
-
-        IndexableField[] fields = doc.rootDoc().getFields("field");  
-        assertEquals(1, fields.length);
-        IndexableField dvField = fields[0];
-        assertEquals(DocValuesType.SORTED_NUMERIC, dvField.fieldType().docValuesType());  
-        assertEquals(1230, dvField.numericValue().longValue());
-    }
-
-    public void testNoDocValues() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(
-            fieldMapping(b -> b.field("type", "scaled_float").field("doc_values", false).field("scaling_factor", 10.0))  
-        );
-
-        ParsedDocument doc = mapper.parse(  
-            new SourceToParse(
-                "test",
-                "1",  
-                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("field", 123).endObject()),
-                MediaTypeRegistry.JSON
-            )  
-        );
-
-        IndexableField[] fields = doc.rootDoc().getFields("field");  
-        assertEquals(1, fields.length);
-        IndexableField pointField = fields[0];
-        assertEquals(1, pointField.fieldType().pointDimensionCount());  
-        assertEquals(1230, pointField.numericValue().longValue());
-    }
-
-    public void testStore() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(
-            fieldMapping(b -> b.field("type", "scaled_float").field("store", true).field("scaling_factor", 10.0))  
-        );
-
-        ParsedDocument doc = mapper.parse(  
-            new SourceToParse(
-                "test",
-                "1",  
-                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("field", 123).endObject()),
-                MediaTypeRegistry.JSON
-            )  
-        );
-
-        IndexableField[] fields = doc.rootDoc().getFields("field");  
-        assertEquals(3, fields.length);
-        IndexableField pointField = fields[0];
-        assertEquals(1, pointField.fieldType().pointDimensionCount());  
-        assertEquals(1230, pointField.numericValue().doubleValue(), 0d);
-        IndexableField dvField = fields[1];
-        assertEquals(DocValuesType.SORTED_NUMERIC, dvField.fieldType().docValuesType());  
-        IndexableField storedField = fields[2];
-        assertTrue(storedField.fieldType().stored());
-        assertEquals(1230, storedField.numericValue().longValue());  
-    }
-
-    public void testCoerce() throws Exception {  
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        ParsedDocument doc = mapper.parse(
-            new SourceToParse(  
-                "test",
-                "1",
-                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("field", "123").endObject()),  
-                MediaTypeRegistry.JSON
-            )
-        );  
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(2, fields.length);
-        IndexableField pointField = fields[0];  
-        assertEquals(1, pointField.fieldType().pointDimensionCount());
-        assertEquals(1230, pointField.numericValue().longValue());
-        IndexableField dvField = fields[1];  
-        assertEquals(DocValuesType.SORTED_NUMERIC, dvField.fieldType().docValuesType());
-
-        DocumentMapper mapper2 = createDocumentMapper(  
-            fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", 10.0).field("coerce", false))
-        );
-        ThrowingRunnable runnable = () -> mapper2.parse(  
-            new SourceToParse(
-                "test",
-                "1",  
-                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("field", "123").endObject()),
-                MediaTypeRegistry.JSON
-            )  
-        );
-        MapperParsingException e = expectThrows(MapperParsingException.class, runnable);
-        assertThat(e.getCause().getMessage(), containsString("passed as String"));  
-    }
-
-    public void testIgnoreMalformed() throws Exception {  
-        doTestIgnoreMalformed("a", "For input string: \"a\"");
-        doTestIgnoreMalformed(true, "Current token (VALUE_TRUE) not numeric");
-
-        List<String> values = Arrays.asList("NaN", "Infinity", "-Infinity");
-        for (String value : values) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
             doTestIgnoreMalformed(value, "[scaled_float] only supports finite values, but got [" + value + "]");  
-        }
     }
-
-    private void doTestIgnoreMalformed(Object value, String exceptionMessageContains) throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        ThrowingRunnable runnable = () -> mapper.parse(  
-            new SourceToParse(
-                "test",
-                "1",  
-                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("field", value).endObject()),
-                MediaTypeRegistry.JSON
-            )  
-        );
-        MapperParsingException e = expectThrows(MapperParsingException.class, runnable);
-        assertThat(e.getCause().getMessage(), containsString(exceptionMessageContains));  
-
-        DocumentMapper mapper2 = createDocumentMapper(
-            fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", 10.0).field("ignore_malformed", true))  
-        );
-        ParsedDocument doc = mapper2.parse(
-            new SourceToParse(  
-                "test",
-                "1",
-                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("field", value).endObject()),  
-                MediaTypeRegistry.JSON
-            )
-        );  
-
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(0, fields.length);  
-    }
-
-    public void testNullValue() throws IOException {  
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        ParsedDocument doc = mapper.parse(
-            new SourceToParse(  
-                "test",
-                "1",
-                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().nullField("field").endObject()),  
-                MediaTypeRegistry.JSON
-            )
-        );  
-        assertArrayEquals(new IndexableField[0], doc.rootDoc().getFields("field"));
-
-        mapper = createDocumentMapper(  
-            fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", 10.0).field("null_value", 2.5))
-        );
-        doc = mapper.parse(  
-            new SourceToParse(
-                "test",
-                "1",  
-                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().nullField("field").endObject()),
-                MediaTypeRegistry.JSON
-            )  
-        );
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(2, fields.length);  
-        IndexableField pointField = fields[0];
-        assertEquals(1, pointField.fieldType().pointDimensionCount());
-        assertFalse(pointField.fieldType().stored());  
-        assertEquals(25, pointField.numericValue().longValue());
-        IndexableField dvField = fields[1];
-        assertEquals(DocValuesType.SORTED_NUMERIC, dvField.fieldType().docValuesType());  
-        assertFalse(dvField.fieldType().stored());
-    }
-
-    public void testPossibleToDeriveSource_WhenDocValuesAndStoredDisabled() throws IOException {
-        ScaledFloatFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), false, false);
-        assertThrows(UnsupportedOperationException.class, mapper::canDeriveSource);  
-    }
-
-    public void testPossibleToDeriveSource_WhenCopyToPresent() throws IOException {  
-        FieldMapper.CopyTo copyTo = new FieldMapper.CopyTo.Builder().add("copy_to_field").build();
-        ScaledFloatFieldMapper mapper = getMapper(copyTo, true, true);
-        assertThrows(UnsupportedOperationException.class, mapper::canDeriveSource);  
-    }
-
-    public void testDerivedValueFetching_DocValues() throws IOException {  
-        try (Directory directory = newDirectory()) {
-            ScaledFloatFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), true, false);
-            float value = 11.523f;  
-            try (IndexWriter iw = new IndexWriter(directory, new IndexWriterConfig())) {
-                iw.addDocument(createDocument(value, true));
+                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("field", 123).endObject()),
             }  
-
-            try (DirectoryReader reader = DirectoryReader.open(directory)) {
-                XContentBuilder builder = XContentFactory.jsonBuilder().startObject();  
-                mapper.deriveSource(builder, reader.leaves().get(0).reader(), 0);
-                builder.endObject();
-                String source = builder.toString();  
-                assertEquals("{\"" + FIELD_NAME + "\":" + 11.52 + "}", source);
-            }
-        }  
-    }
-
-    public void testDerivedValueFetching_StoredField() throws IOException {  
-        try (Directory directory = newDirectory()) {
-            ScaledFloatFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), false, true);
-            float value = 11.523f;  
-            try (IndexWriter iw = new IndexWriter(directory, new IndexWriterConfig())) {
-                iw.addDocument(createDocument(value, false));
-            }  
-
-            try (DirectoryReader reader = DirectoryReader.open(directory)) {
-                XContentBuilder builder = XContentFactory.jsonBuilder().startObject();  
-                mapper.deriveSource(builder, reader.leaves().get(0).reader(), 0);
-                builder.endObject();
-                String source = builder.toString();  
-                assertEquals("{\"" + FIELD_NAME + "\":" + 11.52 + "}", source);
-            }
-        }  
-    }
-
+        );
     private ScaledFloatFieldMapper getMapper(FieldMapper.CopyTo copyTo, boolean hasDocValues, boolean isStored) throws IOException {  
-        MapperService mapperService = createMapperService(
-            fieldMapping(
-                b -> b.field("type", "scaled_float").field("store", isStored).field("doc_values", hasDocValues).field("scaling_factor", 100)  
-            )
-        );
-        ScaledFloatFieldMapper mapper = (ScaledFloatFieldMapper) mapperService.documentMapper().mappers().getMapper(FIELD_NAME);  
-        mapper.copyTo = copyTo;
-        return mapper;
-    }  
-
-    /**
-     * Helper method to create a document with both doc values and stored fields  
-     */
-    private Document createDocument(double value, boolean hasDocValues) {
-        long scaledValue = Math.round(value * 100);  
-        Document doc = new Document();
-        if (hasDocValues) {
-            doc.add(new SortedNumericDocValuesField(FIELD_NAME, scaledValue));  
-        } else {
-            doc.add(new StoredField(FIELD_NAME, scaledValue));
-        }  
-        return doc;
-    }
-
-    /**
-     * `index_options` was deprecated and is rejected as of 7.0
-     */  
-    public void testRejectIndexOptions() {
-        MapperParsingException e = expectThrows(
-            MapperParsingException.class,  
-            () -> createMapperService(fieldMapping(b -> b.field("type", "scaled_float").field("index_options", randomIndexOptions())))
-        );
-        assertThat(e.getMessage(), containsString("Failed to parse mapping [_doc]: Field [scaling_factor] is required"));  
-        assertWarnings("Parameter [index_options] has no effect on type [scaled_float] and will be removed in future");
-    }
-
     public void testScaledFloatEncodePoint() {
-        double scalingFactor = 100.0;
-        ScaledFloatFieldMapper.ScaledFloatFieldType fieldType = new ScaledFloatFieldMapper.ScaledFloatFieldType(  
-            "test_field",
-            scalingFactor
-        );  
-        double originalValue = 10.5;
-        byte[] encodedRoundUp = fieldType.encodePoint(originalValue, true);
-        byte[] encodedRoundDown = fieldType.encodePoint(originalValue, false);  
-        long decodedUp = LongPoint.decodeDimension(encodedRoundUp, 0);
-        long decodedDown = LongPoint.decodeDimension(encodedRoundDown, 0);
-        assertEquals(1051, decodedUp); // 10.5 scaled = 1050, then +1 = 1051 (represents 10.51)  
-        assertEquals(1049, decodedDown); // 10.5 scaled = 1050, then -1 = 1049 (represents 10.49)
-    }
-
-    public void testSkiplistParameter() throws IOException {
-        // Test default value (none)
-        DocumentMapper defaultMapper = createDocumentMapper(  
-            fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", 100))
-        );
-        ParsedDocument doc = defaultMapper.parse(source(b -> b.field("field", 123.45)));  
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(2, fields.length); // point field + doc values field
-        IndexableField dvField = fields[1];  
-        assertEquals(DocValuesType.SORTED_NUMERIC, dvField.fieldType().docValuesType());
-        assertEquals(DocValuesSkipIndexType.NONE, dvField.fieldType().docValuesSkipIndexType());
-
-        // Test skiplist = "skip_list"
-        DocumentMapper skiplistMapper = createDocumentMapper(
-            fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", 100).field("skip_list", "true"))  
-        );
-        doc = skiplistMapper.parse(source(b -> b.field("field", 123.45)));
-        fields = doc.rootDoc().getFields("field");  
-        assertEquals(2, fields.length);
-        dvField = fields[1];
-        assertEquals(DocValuesType.SORTED_NUMERIC, dvField.fieldType().docValuesType());  
-        assertEquals(DocValuesSkipIndexType.RANGE, dvField.fieldType().docValuesSkipIndexType());
-
-        // Test invalid value  
-        MapperParsingException e = expectThrows(
+        CapturingDocumentInput docInput = new CapturingDocumentInput();
+import org.apache.lucene.index.DirectoryReader;
+        assertExistsQuery(mapperService);
             MapperParsingException.class,
-            () -> createDocumentMapper(  
-                fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", 100).field("skip_list", "invalid"))
-            )
-        );  
-        assertThat(e.getMessage(), containsString("Failed to parse value [invalid] as only [true] or [false] are allowed"));
     }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatScaledFloatValue() throws Exception {
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();  
-        DocumentMapper mapper = createDocumentMapper(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "scaled_float").field("scaling_factor", 100).endObject())  
-        );
-        CapturingDocumentInput docInput = new CapturingDocumentInput();
-        mapper.parse(source(b -> b.field("field", 3.14)), docInput);  
-
-        boolean found = docInput.getCapturedFields().stream().anyMatch(e -> e.getKey().name().equals("field"));
-        assertTrue("Expected scaled float field to be captured", found);  
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)  
-    public void testPluggableDataFormatScaledFloatNullSkipped() throws Exception {
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-        DocumentMapper mapper = createDocumentMapper(  
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "scaled_float").field("scaling_factor", 100).endObject())
-        );  
-        CapturingDocumentInput docInput = new CapturingDocumentInput();
-        mapper.parse(source(b -> b.nullField("field")), docInput);
-
-        boolean found = docInput.getCapturedFields().stream().anyMatch(e -> e.getKey().name().equals("field"));
-        assertFalse("Expected no field entry for null value", found);
-    }  
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggablePathEquivalenceWithLucenePath() throws Exception {  
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-
-        // Scenario 1: scaled float value  
-        assertScaledFloatLuceneAndPluggablePathsEquivalent(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "scaled_float").field("scaling_factor", 100).endObject()),  
-            b -> b.field("field", 3.14),
-            "field",
-            true  
-        );
-
-        // Scenario 2: null value — no field produced  
-        assertScaledFloatLuceneAndPluggablePathsEquivalent(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "scaled_float").field("scaling_factor", 100).endObject()),  
-            b -> b.nullField("field"),
-            "field",
-            false  
-        );
-    }
-
-    private void assertScaledFloatLuceneAndPluggablePathsEquivalent(
-        Settings pluggableSettings,
-        XContentBuilder mappingBuilder,  
-        CheckedConsumer<XContentBuilder, IOException> sourceBuilder,
-        String fieldName,
-        boolean expectField  
-    ) throws IOException {
-        // Lucene path
-        DocumentMapper luceneMapper = createDocumentMapper(mappingBuilder);  
-        ParsedDocument luceneDoc = luceneMapper.parse(source(sourceBuilder));
-        IndexableField[] luceneFields = luceneDoc.rootDoc().getFields(fieldName);
-
+            minimalMapping(b);  
+        ScaledFloatFieldMapper mapper = (ScaledFloatFieldMapper) mapperService.documentMapper().mappers().getMapper(FIELD_NAME);  
         // Pluggable path
-        DocumentMapper pluggableMapper = createDocumentMapper(pluggableSettings, mappingBuilder);
-        CapturingDocumentInput docInput = new CapturingDocumentInput();  
-        pluggableMapper.parse(source(sourceBuilder), docInput);
-
-        boolean pluggableHasField = docInput.getCapturedFields().stream().anyMatch(e -> e.getKey().name().equals(fieldName));  
-
-        if (!expectField) {
-            assertEquals("Lucene path should produce no field for '" + fieldName + "'", 0, luceneFields.length);  
-            assertFalse("Pluggable path should produce no field for '" + fieldName + "'", pluggableHasField);
-        } else {
-            assertTrue("Lucene path should produce field '" + fieldName + "'", luceneFields.length > 0);  
-            assertTrue("Pluggable path should capture field '" + fieldName + "'", pluggableHasField);
-        }
-    }  
-
-    private static Settings pluggableSettings() {
-        return Settings.builder()  
-            .put("index.pluggable.dataformat.enabled", true)
-            .put("index.pluggable.dataformat", MockDocValuesDataFormatPlugin.FORMAT_NAME)
-            .build();  
-    }
-
-    /**  
-     * On a pluggable-dataformat index no BKD points are written for scaled_float fields, so
-     * {@code index} defaults to false and the field reports itself as not searchable — routing
-     * queries to the doc-values column instead of an empty point index.  
-     */
+        checker.registerUpdateCheck(
     @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatDefaultsIndexToFalse() throws IOException {  
-        MapperService mapperService = createMapperService(pluggableSettings(), fieldMapping(this::minimalMapping));
-        assertFalse(mapperService.fieldType("field").isSearchable());
-    }  
-
-    /** An explicit {@code index: false} is accepted on a pluggable-dataformat index. */
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)  
-    public void testPluggableDataFormatAcceptsExplicitIndexFalse() throws IOException {
-        MapperService mapperService = createMapperService(pluggableSettings(), fieldMapping(b -> {
-            minimalMapping(b);  
-            b.field("index", false);
-        }));
-        assertFalse(mapperService.fieldType("field").isSearchable());  
-    }
-
-    /**  
-     * An explicit {@code index: true} cannot be honoured on a pluggable-dataformat index — no point
-     * index is written — so the mapping is rejected rather than silently producing a field whose
-     * queries match nothing.  
-     */
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatRejectsExplicitIndexTrue() {  
-        MapperParsingException e = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(pluggableSettings(), fieldMapping(b -> {  
-                minimalMapping(b);
-                b.field("index", true);
-            }))  
-        );
-        assertThat(e.getMessage(), containsString("cannot cover: [POINT_RANGE]"));
-    }  
-
-    /** Indices that do not use a pluggable dataformat keep the standard {@code index: true} default. */
-    public void testNonPluggableDataFormatKeepsIndexTrue() throws IOException {  
-        MapperService mapperService = createMapperService(fieldMapping(this::minimalMapping));
-        assertTrue(mapperService.fieldType("field").isSearchable());
-
-        MapperService explicit = createMapperService(fieldMapping(b -> {
-            minimalMapping(b);
-            b.field("index", true);  
-        }));
+        assertEquals(1, pointField.fieldType().pointDimensionCount());
         assertTrue(explicit.fieldType("field").isSearchable());
-    }  
-
-    /**
-     * A field added by a later mapping update also defaults to not-indexed, and the update leaves the  
-     * value of the already-mapped field unchanged.
-     */
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)  
-    public void testPluggableDataFormatMappingUpdateDefaultsNewFieldToNotIndexed() throws IOException {
-        MapperService mapperService = createMapperService(pluggableSettings(), fieldMapping(this::minimalMapping));
-        assertFalse(mapperService.fieldType("field").isSearchable());  
-
-        merge(mapperService, mapping(b -> {
-            b.startObject("field2");  
-            minimalMapping(b);
-            b.endObject();
-        }));  
-
-        assertFalse("newly added field should default to not-indexed", mapperService.fieldType("field2").isSearchable());
-        assertFalse("existing field's value should be preserved across the update", mapperService.fieldType("field").isSearchable());  
-    }
-
-    /** A mapping update that sets index:true on a new field is rejected on a pluggable data format index. */  
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatMappingUpdateRejectsIndexTrue() throws IOException {
-        MapperService mapperService = createMapperService(pluggableSettings(), fieldMapping(this::minimalMapping));  
-        MapperParsingException e = expectThrows(MapperParsingException.class, () -> merge(mapperService, mapping(b -> {
-            b.startObject("field2");
-            minimalMapping(b);  
-            b.field("index", true);
-            b.endObject();
-        })));  
+        double scalingFactorField2 = randomDouble() * 100;
+        return Settings.builder()  
+        checker.registerConflictCheck("doc_values", b -> b.field("doc_values", false));
+                String source = builder.toString();  
+            () -> createMapperService(pluggableSettings(), fieldMapping(b -> {  
+        assertEquals(mapping.toString(), mapper.mappingSource().toString());  
         assertThat(e.getMessage(), containsString("cannot cover: [POINT_RANGE]"));
+            doc.add(new StoredField(FIELD_NAME, scaledValue));
+            assertEquals("Lucene path should produce no field for '" + fieldName + "'", 0, luceneFields.length);  
+import org.apache.lucene.index.IndexWriterConfig;  
+import org.apache.lucene.index.DocValuesType;
+     */
+ * GitHub history for details.
+        assertEquals(1230, dvField.numericValue().longValue());
+    public void testNoDocValues() throws Exception {
+        validateScaledFloatFields(doc, "field", 123, 10.0);  
+        assertThat(e.getMessage(), containsString("cannot cover: [POINT_RANGE]"));
+        assertEquals(1, fields.length);
+        doc = skiplistMapper.parse(source(b -> b.field("field", 123.45)));
+        merge(mapperService, mapping(b -> {
+        );
+        DocumentMapper mapper = createDocumentMapper(
+            b.endObject();
+    ) throws IOException {
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+        assertEquals(1230, pointField.numericValue().doubleValue(), 0d);
+            b.field("name", "field2");
+        ParsedDocument doc = mapper2.parse(
+        checker.registerConflictCheck("skip_list", b -> b.field("skip_list", true));  
+import org.opensearch.common.util.FeatureFlags;  
+            () -> createMapperService(fieldMapping(b -> b.field("type", "scaled_float")))  
+        long randomLongField3 = randomLong();
+                iw.addDocument(createDocument(value, true));
+            ScaledFloatFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), false, true);
+ * license agreements. See the NOTICE file distributed with
+    public void testScaledFloatWithStarTree() throws Exception {
+            b.endObject();
+        ParsedDocument doc = mapper.parse(  
+import org.opensearch.core.common.bytes.BytesReference;
+        long randomLongField2 = randomLong();
+                "1",  
+            b.startArray("ordered_dimensions");
+ * specific language governing permissions and limitations
+        Settings pluggableSettings,
+     * `index_options` was deprecated and is rejected as of 7.0
+ * the Apache License, Version 2.0 (the "License"); you may
+        );
+                assertEquals("{\"" + FIELD_NAME + "\":" + 11.52 + "}", source);
+            pluggableSettings,
+            }))  
+        assertEquals(1, pointField.fieldType().pointDimensionCount());  
+        double scalingFactorField3 = randomDouble() * 100;  
+     * On a pluggable-dataformat index no BKD points are written for scaled_float fields, so
+        );
+import java.io.IOException;  
+            b.endObject();
+                MediaTypeRegistry.JSON
+            source(b -> b.field("field1", randomLongField1).field("field2", randomLongField2).field("field3", randomLongField3))
+        Exception e = expectThrows(  
+            b.startObject("field2");  
+            .put("index.pluggable.dataformat", MockDocValuesDataFormatPlugin.FORMAT_NAME)
+                "1",
+    }  
+    @Override
+            )  
+        );  
+ * You may obtain a copy of the License at  
+        MapperService mapperService = createMapperService(pluggableSettings(), fieldMapping(this::minimalMapping));  
+        b.field("type", "scaled_float").field("scaling_factor", 10.0);
+        long decodedDown = LongPoint.decodeDimension(encodedRoundDown, 0);
+import org.apache.lucene.index.IndexableField;
+            b.endArray();  
+                "test",
+            )
+        IndexableField dvField = fields[1];  
+        assertThat(e.getMessage(), containsString("Failed to parse mapping [_doc]: Field [scaling_factor] is required"));
+        DocumentMapper mapper = createDocumentMapper(mapping);
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+            mapping(b -> b.startObject("field").field("type", "scaled_float").field("scaling_factor", 100).endObject())
+            .build();  
+            b.startObject("startree");
+        mapper.parse(source(b -> b.field("field", 3.14)), docInput);  
+        XContentBuilder mappingBuilder,  
+        List<String> values = Arrays.asList("NaN", "Infinity", "-Infinity");
+import org.apache.lucene.document.SortedNumericDocValuesField;  
+ * SPDX-License-Identifier: Apache-2.0
+                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("field", 123).endObject()),
+            fieldMapping(b -> b.field("type", "scaled_float").field("doc_values", false).field("scaling_factor", 10.0))  
+    public void testCoerce() throws Exception {  
+import java.util.List;  
+        assertEquals(1230, pointField.numericValue().longValue());
+        }));
+            minimalMapping(b);
+        IndexableField[] fields = doc.rootDoc().getFields("field");  
+            b.startObject("field2");
+        IndexableField storedField = fields[2];
+            )  
+                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().nullField("field").endObject()),  
+        boolean found = docInput.getCapturedFields().stream().anyMatch(e -> e.getKey().name().equals("field"));
+import org.opensearch.core.xcontent.XContentBuilder;
+                MediaTypeRegistry.JSON
+        assertTrue(storedField.fieldType().stored());
+        // Lucene path
+    }  
+        long scaledValue = Math.round(value * 100);  
+        MapperService mapperService = createMapperService(fieldMapping(this::minimalMapping));
+        assertFalse(mapperService.fieldType("field").isSearchable());
+                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("field", 123).endObject()),
+                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("field", "123").endObject()),
+                assertEquals("{\"" + FIELD_NAME + "\":" + 11.52 + "}", source);
     }
+        assertEquals(2, fields.length); // point field + doc values field
+        ParsedDocument doc = mapper.parse(  
+        MapperParsingException e = expectThrows(MapperParsingException.class, runnable);
+        checker.registerUpdateCheck(b -> b.field("coerce", false), m -> assertFalse(((ScaledFloatFieldMapper) m).coerce()));
+        assertEquals(1, pointField.fieldType().pointDimensionCount());  
+        DocumentMapper skiplistMapper = createDocumentMapper(
+            )
+                "test",
+            b.field("type", "scaled_float");
+        checker.registerConflictCheck("null_value", b -> b.field("null_value", 1));  
+        CapturingDocumentInput docInput = new CapturingDocumentInput();
+    public void testNotIndexed() throws Exception {
+        assertEquals(DocValuesType.SORTED_NUMERIC, dvField.fieldType().docValuesType());
+                builder.endObject();
+            b.endArray();  
+        assertFalse("Expected no field entry for null value", found);
+    }
+            mapping(b -> b.startObject("field").field("type", "scaled_float").field("scaling_factor", 100).endObject())  
+    public void testPluggablePathEquivalenceWithLucenePath() throws Exception {  
+    private static void validateScaledFloatFields(ParsedDocument doc, String field, long value, double scalingFactor) {
+    public void testRejectIndexOptions() {
+        return topMapping(b -> {
+        MapperParsingException e = expectThrows(
+            )
+            MapperParsingException.class,
+import org.opensearch.cluster.metadata.IndexMetadata;  
+            MapperParsingException.class,  
+            b.field("doc_values", false);
+    protected void writeFieldValue(XContentBuilder builder) throws IOException {
+                MediaTypeRegistry.JSON
+        DocumentMapper mapper = createDocumentMapper(
+        IndexableField dvField = fields[1];  
+        mapper.copyTo = copyTo;
+ *  
+        IndexableField pointField = fields[0];
+            b.endObject();  
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+        ParsedDocument doc = defaultMapper.parse(source(b -> b.field("field", 123.45)));  
+        ParsedDocument doc = mapper.parse(
+        assertEquals(DocValuesType.SORTED_NUMERIC, dvField.fieldType().docValuesType());
+        checker.registerConflictCheck("scaling_factor", fieldMapping(this::minimalMapping), fieldMapping(b -> {
+            new SourceToParse(  
+        doTestIgnoreMalformed(true, "Current token (VALUE_TRUE) not numeric");
+        assertThat(e.getMessage(), containsString("[scaling_factor] must be a positive number, got [-1.0]"));
+    /**  
+    /** An explicit {@code index: false} is accepted on a pluggable-dataformat index. */
+        assertWarnings("Parameter [index_options] has no effect on type [scaled_float] and will be removed in future");
+            new SourceToParse(
+            fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", 10.0).field("ignore_malformed", true))  
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)  
+        doTestIgnoreMalformed("a", "For input string: \"a\"");
+            b.startObject();  
+            )
+        XContentBuilder mapping = fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", 10.0));
+     * queries to the doc-values column instead of an empty point index.  
+    @Override
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+        DocumentMapper mapper = createDocumentMapper(mapping);  
+        byte[] encodedRoundDown = fieldType.encodePoint(originalValue, false);  
+            b.startObject("field3");
+    public void testPluggableDataFormatDefaultsIndexToFalse() throws IOException {  
+            true  
+    private void assertScaledFloatLuceneAndPluggablePathsEquivalent(
+        checker.registerConflictCheck("store", b -> b.field("store", true));
+            try (DirectoryReader reader = DirectoryReader.open(directory)) {
+        assertEquals(DocValuesType.SORTED_NUMERIC, dvField.fieldType().docValuesType());  
+        );
+     */
+package org.opensearch.index.mapper;
+            new SourceToParse(
+        assertTrue("Expected scaled float field to be captured", found);  
+    protected void registerParameters(ParameterChecker checker) throws IOException {  
+        DocumentMapper defaultMapper = createDocumentMapper(  
+            pluggableSettings,
+        IndexableField dvField = fields[1];
+    public void testIllegalScalingFactor() {
+            b.field("index", true);
+        try (Directory directory = newDirectory()) {
+        return mapper;
+            b.startObject("field2");
+        DocumentMapper mapper2 = createDocumentMapper(  
+        assertEquals(2, fields.length);
+        return List.of(new MapperExtrasModulePlugin(), new MockDocValuesDataFormatPlugin());
+            new SourceToParse(
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();  
+            b.field("name", "field1");
+    protected Collection<? extends Plugin> getPlugins() {  
+    }
+        boolean pluggableHasField = docInput.getCapturedFields().stream().anyMatch(e -> e.getKey().name().equals(fieldName));  
+            )  
+    }  
+ * this work for additional information regarding copyright
+    }
+    }
+                minimalMapping(b);
+        IndexableField[] fields = doc.rootDoc().getFields("field");  
+            new SourceToParse(  
+        boolean found = docInput.getCapturedFields().stream().anyMatch(e -> e.getKey().name().equals("field"));
+            b.endObject();
+            fieldMapping(b -> b.field("type", "scaled_float").field("store", true).field("scaling_factor", 10.0))  
+            b.startObject("properties");
+    public void testPluggableDataFormatAcceptsExplicitIndexFalse() throws IOException {
+    }
+                fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", 100).field("skip_list", "invalid"))
+        assertFalse(pointField.fieldType().stored());
+/*  
+        );
+        IndexableField dvField = fields[1];
+ * compatible open source license.
+        assertParseMinimalWarnings();
+            doc.add(new SortedNumericDocValuesField(FIELD_NAME, scaledValue));  
+ * Licensed to Elasticsearch under one or more contributor  
+                "1",  
+        assertFalse(mapperService.fieldType("field").isSearchable());  
+        assertFalse(dvField.fieldType().stored());  
+        validateScaledFloatFields(doc, "field1", randomLongField1, scalingFactorField1);  
+                "test",
+                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("field", "123").endObject()),  
+        );
+ * Unless required by applicable law or agreed to in writing,
+                XContentBuilder builder = XContentFactory.jsonBuilder().startObject();  
+    public void testNullValue() throws IOException {  
+    }
+    /**
+     * index is written — so the mapping is rejected rather than silently producing a field whose
+        })));  
+        assertEquals(DocValuesType.SORTED_NUMERIC, dvField.fieldType().docValuesType());  
+        mapper.parse(source(b -> b.nullField("field")), docInput);
+                MediaTypeRegistry.JSON
+        validateScaledFloatFields(doc, "field3", randomLongField3, scalingFactorField3);
+    @Override
+    }  
+ *
+     * {@code index} defaults to false and the field reports itself as not searchable — routing
+            scalingFactor
+        );
+            new SourceToParse(
+                "test",
+    }
+                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().nullField("field").endObject()),
+            ScaledFloatFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), true, false);
+        }));  
+                String source = builder.toString();  
+            b -> b.field("ignore_malformed", true),  
+     */  
+            pluggableSettings,
+     */
+    public void testSkiplistParameter() throws IOException {
+                "1",  
+        IndexableField pointField = fields[0];  
+        boolean expectField  
+     */
+            pluggableSettings,
+            b.startArray("metrics");
+        ParsedDocument doc = mapper.parse(
+        IndexableField[] fields = doc.rootDoc().getFields("field");  
+        dvField = fields[1];
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)  
+    /** A mapping update that sets index:true on a new field is rejected on a pluggable data format index. */  
+    }  
+    }
+import org.opensearch.index.engine.dataformat.stub.MockDocValuesDataFormatPlugin;  
+    public void testPluggableDataFormatScaledFloatNullSkipped() throws Exception {
+            false  
+            }  
+        assertThrows(UnsupportedOperationException.class, mapper::canDeriveSource);  
+    }
+                b.field("index", true);
+        assertThat(e.getMessage(), containsString("Failed to parse value [invalid] as only [true] or [false] are allowed"));
+        double scalingFactorField2,
+        MapperParsingException e = expectThrows(MapperParsingException.class, () -> merge(mapperService, mapping(b -> {
+            b.endObject();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    ) throws IOException {
+            b.value("value_count");  
+            )  
+ * not use this file except in compliance with the License.
+    protected Settings getIndexSettings() {  
+import org.apache.lucene.document.Document;
+        assertEquals(1, pointField.fieldType().pointDimensionCount());  
+        }  
+    }  
+        // Test default value (none)
+            b.field("type", "scaled_float").field("scaling_factor", scalingFactorField3);  
+        );
+        } else {
+    public void testDerivedValueFetching_StoredField() throws IOException {  
+        MapperService mapperService = createMapperService(pluggableSettings(), fieldMapping(this::minimalMapping));
+                MediaTypeRegistry.JSON
+        );
+            "field",
+            b.field("type", "scaled_float").field("scaling_factor", scalingFactorField2);  
+            b.startObject();  
+     * value of the already-mapped field unchanged.
+            b.field("type", "star_tree");
+    private void doTestIgnoreMalformed(Object value, String exceptionMessageContains) throws Exception {
+            fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", 100).field("skip_list", "true"))  
+            b.field("name", "field3");  
+                b -> b.field("type", "scaled_float").field("store", isStored).field("doc_values", hasDocValues).field("scaling_factor", 100)  
+        long decodedUp = LongPoint.decodeDimension(encodedRoundUp, 0);
+    }
+        assertEquals(1051, decodedUp); // 10.5 scaled = 1050, then +1 = 1051 (represents 10.51)  
+        );
+    public void testStore() throws Exception {
+import org.apache.lucene.index.IndexWriter;
+                MediaTypeRegistry.JSON
+            b.startObject("composite");  
+        assertEquals(2, fields.length);  
+    @Override
+        );
+ * KIND, either express or implied.  See the License for the
+        assertEquals(25, pointField.numericValue().longValue());
+     * A field added by a later mapping update also defaults to not-indexed, and the update leaves the  
+    }
+        assertFalse(dvField.fieldType().stored());
+            }
+    }
+                MediaTypeRegistry.JSON
+            () -> createMapperService(fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", -1)))
+            b.startObject();
+                mapper.deriveSource(builder, reader.leaves().get(0).reader(), 0);
+    /**  
+    private XContentBuilder getStarTreeMappingWithScaledFloat(  
+                "test",
+        );
+        assertFalse("newly added field should default to not-indexed", mapperService.fieldType("field2").isSearchable());
+                builder.endObject();
+        assertFalse(mapperService.fieldType("field").isSearchable());  
+    }  
+    /**
+    public void testIgnoreMalformed() throws Exception {  
+            mapping(b -> b.startObject("field").field("type", "scaled_float").field("scaling_factor", 100).endObject()),  
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        assertEquals(DocValuesType.SORTED_NUMERIC, dvField.fieldType().docValuesType());  
+        assertArrayEquals(new IndexableField[0], doc.rootDoc().getFields("field"));
+    }
+                MediaTypeRegistry.JSON
+import java.util.Collection;
+        byte[] encodedRoundUp = fieldType.encodePoint(originalValue, true);
+    @Override  
+            fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", 10.0).field("null_value", 2.5))
+    }  
+        CapturingDocumentInput docInput = new CapturingDocumentInput();  
+            fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", 100))
+        doc = mapper.parse(  
+        // Test skiplist = "skip_list"
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", 123)));
+            fieldMapping(
+        validateScaledFloatFields(doc, "field2", randomLongField2, scalingFactorField2);
+        MapperParsingException e = expectThrows(
+        }
+                "1",  
+import org.apache.lucene.document.StoredField;
+                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("field", value).endObject()),
+        assertFalse("existing field's value should be preserved across the update", mapperService.fieldType("field").isSearchable());  
+            minimalMapping(b);  
+            b -> b.nullField("field"),
+    }
+            b -> b.field("field", 3.14),
+            m -> assertTrue(((ScaledFloatFieldMapper) m).ignoreMalformed().value())
+        ThrowingRunnable runnable = () -> mapper2.parse(  
+            b.endObject();
+import java.util.Arrays;
+            new SourceToParse(
+import static org.hamcrest.Matchers.containsString;
+        } else {
+        assertEquals(0, fields.length);  
+ * this file be licensed under the Apache-2.0 license or a
+        double scalingFactorField3  
+        MapperService explicit = createMapperService(fieldMapping(b -> {
+ */
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+        MapperParsingException e = expectThrows(
+        CheckedConsumer<XContentBuilder, IOException> sourceBuilder,
+public class ScaledFloatFieldMapperTests extends MapperTestCase {
+        double scalingFactorField1,
+        assertFalse(pointField.fieldType().stored());  
+        double scalingFactor = 100.0;
+    public void testDefaults() throws Exception {  
+        MapperService mapperService = createMapperService(pluggableSettings(), fieldMapping(b -> {
+        );
+        Exception e = expectThrows(
+    private static Settings pluggableSettings() {
+        mapper = createDocumentMapper(  
+import org.opensearch.common.CheckedConsumer;
+        assertThat(e.getMessage(), containsString("Failed to parse mapping [_doc]: Field [scaling_factor] is required"));  
+            b.field("index", false);
+                iw.addDocument(createDocument(value, false));
+        assertEquals((long) (value * scalingFactor), pointField.numericValue().longValue());
+        // Test invalid value  
+        );
+        Document doc = new Document();
+            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
+            b.endObject();
+    public void testPluggableDataFormatRejectsExplicitIndexTrue() {  
+        }));  
+    protected void minimalMapping(XContentBuilder b) throws IOException {
+     * An explicit {@code index: true} cannot be honoured on a pluggable-dataformat index — no point
+        IndexableField pointField = fields[0];
+            .build();
+            try (IndexWriter iw = new IndexWriter(directory, new IndexWriterConfig())) {
+        DocumentMapper pluggableMapper = createDocumentMapper(pluggableSettings, mappingBuilder);
+    public void testDerivedValueFetching_DocValues() throws IOException {  
+        }
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+        String fieldName,
+            "field",
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+    /**
+        );
+            b.field("index", true);  
+                "1",
+    }
+        assertEquals(3, fields.length);
+        assertEquals(1049, decodedDown); // 10.5 scaled = 1050, then -1 = 1049 (represents 10.49)
+                "1",  
+    }  
+            assertTrue("Lucene path should produce field '" + fieldName + "'", luceneFields.length > 0);  
+ */  
+        FieldMapper.CopyTo copyTo = new FieldMapper.CopyTo.Builder().add("copy_to_field").build();
+        );  
+            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)  
 }  
+        assertEquals(2, fields.length);
+ * software distributed under the License is distributed on an
+        assertThat(e.getCause().getMessage(), containsString(exceptionMessageContains));  
+            b.field("max_leaf_docs", 100);
+        assertEquals(1230, storedField.numericValue().longValue());  
+        ThrowingRunnable runnable = () -> mapper.parse(  
+            float value = 11.523f;  
+            MapperParsingException.class,
+        return doc;
+        ScaledFloatFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), false, false);
+ * The OpenSearch Contributors require contributions made to  
+        );
+        }  
+            b.field("type", "scaled_float").field("scaling_factor", scalingFactorField1);  
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)  
+        // Scenario 1: scaled float value  
+        );
+ * Modifications Copyright OpenSearch Contributors. See
+ */  
+    }
+            () -> createDocumentMapper(  
+     * Helper method to create a document with both doc values and stored fields  
+    public void testPluggableDataFormatScaledFloatValue() throws Exception {
+    public void testPossibleToDeriveSource_WhenDocValuesAndStoredDisabled() throws IOException {
+        ParsedDocument luceneDoc = luceneMapper.parse(source(sourceBuilder));
+            )
+            minimalMapping(b);
+        );  
+            () -> createMapperService(fieldMapping(b -> b.field("type", "scaled_float").field("index_options", randomIndexOptions())))
+            new SourceToParse(  
+import org.apache.lucene.store.Directory;
+            try (IndexWriter iw = new IndexWriter(directory, new IndexWriterConfig())) {
+        IndexableField dvField = fields[1];  
+        assertEquals(DocValuesSkipIndexType.RANGE, dvField.fieldType().docValuesSkipIndexType());
+     * queries match nothing.  
+                XContentBuilder builder = XContentFactory.jsonBuilder().startObject();  
+            )  
+            new SourceToParse(
+        checker.registerConflictCheck("index", b -> b.field("index", false));
+import org.opensearch.common.xcontent.XContentFactory;
+        long randomLongField1 = randomLong();  
+        assertEquals(1, pointField.fieldType().pointDimensionCount());
+    }
+    /** Indices that do not use a pluggable dataformat keep the standard {@code index: true} default. */
+    public void testMissingScalingFactor() {  
+    public void testPluggableDataFormatMappingUpdateRejectsIndexTrue() throws IOException {
+        );
+        DocumentMapper mapper2 = createDocumentMapper(
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+        assertScaledFloatLuceneAndPluggablePathsEquivalent(
+        assertTrue(mapperService.fieldType("field").isSearchable());
+        IndexableField[] luceneFields = luceneDoc.rootDoc().getFields(fieldName);
+            float value = 11.523f;  
+        if (hasDocValues) {
+                "test",
+        MapperService mapperService = createMapperService(pluggableSettings(), fieldMapping(this::minimalMapping));
+        IndexableField dvField = fields[0];
+            }
+        });  
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+    private static final String FIELD_NAME = "field";  
+                mapper.deriveSource(builder, reader.leaves().get(0).reader(), 0);
+        DocumentMapper mapper = createDocumentMapper(
+        }  
+                "1",
+            assertTrue("Pluggable path should capture field '" + fieldName + "'", pluggableHasField);
+        double scalingFactorField1 = randomDouble() * 100;
+    }
+            assertFalse("Pluggable path should produce no field for '" + fieldName + "'", pluggableHasField);
+            fieldMapping(b -> b.field("type", "scaled_float").field("scaling_factor", 10.0).field("coerce", false))
+        XContentBuilder mapping = getStarTreeMappingWithScaledFloat(scalingFactorField1, scalingFactorField2, scalingFactorField3);
+        }));
+        ParsedDocument doc = mapper.parse(  
+                "1",  
+        DocumentMapper mapper = createDocumentMapper(
+                MediaTypeRegistry.JSON
+/*  
+        assertEquals(DocValuesType.SORTED_NUMERIC, dvField.fieldType().docValuesType());  
+    }
+        );  
+/*
+            "test_field",
+            fieldMapping(b -> b.field("type", "scaled_float").field("index", false).field("scaling_factor", 10.0))  
+            b.endObject();
+        IndexableField[] fields = doc.rootDoc().getFields(field);  
+    }  
+    public void testExistsQueryDocValuesDisabled() throws IOException {
+    }
+ * under the License.  
+            b.value("sum");
+            b.endObject();
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+            minimalMapping(b);
+    }
+        );
+                "test",
+            b.field("scaling_factor", 5.0);  
+ * ownership. Elasticsearch licenses this file to you under  
+import org.opensearch.plugins.Plugin;
+        MapperService mapperService = createMapperService(
+        fields = doc.rootDoc().getFields("field");  
+            )  
+            b.startArray("stats");
+        }));
+import org.opensearch.core.xcontent.MediaTypeRegistry;  
+        ScaledFloatFieldMapper mapper = getMapper(copyTo, true, true);
+            b.endObject();
+    }
+        if (!expectField) {
+        );
+    private Document createDocument(double value, boolean hasDocValues) {
+            .put("index.pluggable.dataformat.enabled", true)
+            .put(super.getIndexSettings())
+import org.apache.lucene.document.LongPoint;
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+        assertEquals(2, fields.length);
+ *
+                BytesReference.bytes(XContentFactory.jsonBuilder().startObject().field("field", value).endObject()),  
+    }
+            b.startObject("config");  
+        DocumentMapper mapper = createDocumentMapper(  
+            MapperParsingException.class,
+        assertEquals(DocValuesSkipIndexType.NONE, dvField.fieldType().docValuesSkipIndexType());
+        builder.value(123);  
+        );
+        try (Directory directory = newDirectory()) {
+    public void testPossibleToDeriveSource_WhenCopyToPresent() throws IOException {  
+        assertEquals((long) (value * scalingFactor), dvField.numericValue().longValue());
+    public void testPluggableDataFormatMappingUpdateDefaultsNewFieldToNotIndexed() throws IOException {
+        ParsedDocument doc = mapper.parse(  
+        assertEquals(1230, pointField.numericValue().longValue());
+        );  
+        assertScaledFloatLuceneAndPluggablePathsEquivalent(
+            mapping(b -> b.startObject("field").field("type", "scaled_float").field("scaling_factor", 100).endObject()),  
+        double originalValue = 10.5;
+        IndexableField pointField = fields[0];
+    }  
+            b.startObject("field1");
+        pluggableMapper.parse(source(sourceBuilder), docInput);
+        assertEquals(DocValuesType.SORTED_NUMERIC, dvField.fieldType().docValuesType());
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+    }  
+                "test",
+import org.opensearch.common.settings.Settings;
+        assertTrue(mapping.toString().contains("startree"));
+            b.endObject();
+        return Settings.builder()
+        MapperParsingException e = expectThrows(MapperParsingException.class, runnable);
+        // Scenario 2: null value — no field produced  
+        DocumentMapper luceneMapper = createDocumentMapper(mappingBuilder);  
+    public void testNonPluggableDataFormatKeepsIndexTrue() throws IOException {  
+            b.endArray();
+    }
+        );
+            try (DirectoryReader reader = DirectoryReader.open(directory)) {
+        for (String value : values) {
+        assertEquals(1, fields.length);
+        IndexableField pointField = fields[0];
+        );  
+        ScaledFloatFieldMapper.ScaledFloatFieldType fieldType = new ScaledFloatFieldMapper.ScaledFloatFieldType(  
+import org.opensearch.index.compositeindex.datacube.startree.StarTreeIndexSettings;
+        assertThrows(UnsupportedOperationException.class, mapper::canDeriveSource);  
+        MapperService mapperService = createMapperService(fieldMapping(b -> {  
+        assertThat(e.getCause().getMessage(), containsString("passed as String"));  

@@ -1,223 +1,200 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+import org.opensearch.action.support.replication.ReplicationOperation;
+     * and the flush of the shard. This is done to ensure that such shards won't be later promoted as primary
+        ShardRequest(StreamInput in) throws IOException {
+    TransportVerifyShardIndexBlockAction.ShardRequest,
 /*
- * Licensed to Elasticsearch under one or more contributor  
+     */  
+import org.opensearch.transport.TransportService;
+            clusterBlock = new ClusterBlock(in);  
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+        final IndexShard replica,
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        final TransportService transportService,  
+    }  
+import org.apache.logging.log4j.LogManager;  
+import org.opensearch.cluster.action.shard.ShardStateAction;
  * You may obtain a copy of the License at  
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
+        }  
+            final String allocationId,
+        public String toString() {
+    protected ReplicationOperation.Replicas<ShardRequest> newReplicasProxy() {
+        final ShardId shardId = indexShard.shardId();  
+        ) {
  * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.readonly;
-
-import org.apache.logging.log4j.LogManager;  
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.ActionType;
-import org.opensearch.action.support.ActionFilters;  
-import org.opensearch.action.support.replication.ReplicationOperation;
-import org.opensearch.action.support.replication.ReplicationRequest;
-import org.opensearch.action.support.replication.ReplicationResponse;  
-import org.opensearch.action.support.replication.TransportReplicationAction;
-import org.opensearch.cluster.action.shard.ShardStateAction;
-import org.opensearch.cluster.block.ClusterBlock;  
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;  
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.shard.ShardId;  
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.indices.IndicesService;  
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * Action used to verify whether shards have properly applied a given index block,
- * and are no longer executing any operations in violation of that block. This action  
- * requests all operation permits of the shard in order to wait for all write operations
- * to complete.
- *  
- * @opensearch.internal
- */
-public class TransportVerifyShardIndexBlockAction extends TransportReplicationAction<  
-    TransportVerifyShardIndexBlockAction.ShardRequest,
-    TransportVerifyShardIndexBlockAction.ShardRequest,
-    ReplicationResponse> {  
-
-    public static final String NAME = AddIndexBlockAction.NAME + "[s]";
-    public static final ActionType<ReplicationResponse> TYPE = new ActionType<>(NAME, ReplicationResponse::new);  
-    protected Logger logger = LogManager.getLogger(getClass());
-
-    @Inject  
-    public TransportVerifyShardIndexBlockAction(
-        final Settings settings,
-        final TransportService transportService,  
-        final ClusterService clusterService,
-        final IndicesService indicesService,
-        final ThreadPool threadPool,  
-        final ShardStateAction stateAction,
-        final ActionFilters actionFilters
-    ) {  
-        super(
-            settings,
-            NAME,  
-            transportService,
-            clusterService,
-            indicesService,  
-            threadPool,
             stateAction,
+import org.opensearch.core.action.ActionListener;  
+        public void markShardCopyAsStaleIfNeeded(  
+            super(in);
+        final IndicesService indicesService,
+            indicesService,  
+ * and are no longer executing any operations in violation of that block. This action  
+    ) {
+            return clusterBlock;  
+ * KIND, either express or implied.  See the License for the
+            clusterBlock.writeTo(out);
+     * @opensearch.internal
+     * @opensearch.internal
+        if (indexShard.getActiveOperationsCount() != IndexShard.OPERATIONS_BLOCKED) {
+import org.opensearch.cluster.block.ClusterBlocks;
+        if (clusterBlocks.hasIndexBlock(shardId.getIndexName(), request.clusterBlock()) == false) {
+    TransportVerifyShardIndexBlockAction.ShardRequest,
+import org.opensearch.core.index.shard.ShardId;  
+    /**  
+import java.io.IOException;
+import org.opensearch.core.common.io.stream.StreamOutput;
+        @Override  
+import org.opensearch.threadpool.ThreadPool;
+    }
+    @Override  
+        ActionListener.completeWith(listener, () -> {
+import org.opensearch.common.settings.Settings;
+ */
             actionFilters,  
+        public ShardRequest(final ShardId shardId, final ClusterBlock clusterBlock, final TaskId parentTaskId) {  
+        @Override
+import org.opensearch.action.support.ActionFilters;  
+     *
+        final ClusterBlocks clusterBlocks = clusterService.state().blocks();
+/*
+        final ThreadPool threadPool,  
+import org.opensearch.common.inject.Inject;  
+        }  
+ * The OpenSearch Contributors require contributions made to  
+ * not use this file except in compliance with the License.
+ *
+            clusterService,
+package org.opensearch.action.admin.indices.readonly;
+            executeShardOperation(shardRequest, primary);
+    @Override
+ * Action used to verify whether shards have properly applied a given index block,
+}  
+import org.opensearch.core.tasks.TaskId;
+    public static class ShardRequest extends ReplicationRequest<ShardRequest> {  
+ * software distributed under the License is distributed on an
+    }
+ * compatible open source license.
+ * under the License.  
+            settings,
+        ActionListener.completeWith(listener, () -> {  
+        primary.acquireAllPrimaryOperationsPermits(onAcquired, request.timeout());  
+        public void writeTo(final StreamOutput out) throws IOException {  
+    ) {
+        ActionListener<PrimaryResult<ShardRequest, ReplicationResponse>> listener
+    @Override  
+            setParentTask(parentTaskId);  
+     * or reopened in an unverified state with potential non flushed translog operations.  
+    ) {
+    protected void shardOperationOnPrimary(
+        final ActionListener<Releasable> onAcquired,
+        replica.acquireAllReplicaOperationsPermits(primaryTerm, globalCheckpoint, maxSeqNoOfUpdateOrDeletes, onAcquired, request.timeout());  
+public class TransportVerifyShardIndexBlockAction extends TransportReplicationAction<  
+        });
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+        final ClusterService clusterService,
+        }
+    class VerifyShardReadOnlyActionReplicasProxy extends ReplicasProxy {
+    protected Logger logger = LogManager.getLogger(getClass());
+            NAME,  
+import org.opensearch.cluster.service.ClusterService;
+        final ActionFilters actionFilters
+        }
             ShardRequest::new,
-            ShardRequest::new,
+    public static final String NAME = AddIndexBlockAction.NAME + "[s]";
+    @Inject  
+    }
+        });  
+        @Override
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.action.support.replication.ReplicationRequest;
+            super(shardId);
+        final long primaryTerm,
+import org.opensearch.index.shard.IndexShard;
+    protected void acquirePrimaryOperationPermit(
+            super.writeTo(out);
+ * requests all operation permits of the shard in order to wait for all write operations
+        }
+            throw new IllegalStateException(
             ThreadPool.Names.MANAGEMENT  
+        final IndexShard primary,  
+ *  
+import org.opensearch.indices.IndicesService;  
+ * to complete.
+        final Settings settings,
+            executeShardOperation(shardRequest, replica);  
+            return "verify shard " + shardId + " before block with " + clusterBlock;
+ * Unless required by applicable law or agreed to in writing,
+            this.clusterBlock = Objects.requireNonNull(clusterBlock);
+import org.opensearch.action.support.replication.ReplicationResponse;  
+    public static final ActionType<ReplicationResponse> TYPE = new ActionType<>(NAME, ReplicationResponse::new);  
+    }
+     */
+    @Override  
+        final ShardRequest shardRequest,
+    @Override  
+    public TransportVerifyShardIndexBlockAction(
+    @Override
+     *  
+ *  
+import org.opensearch.common.lease.Releasable;
+            final long primaryTerm,  
+        final ShardRequest request,  
+ * this work for additional information regarding copyright
+import org.opensearch.action.ActionType;
+        final long globalCheckpoint,  
+ */
+            transportService,
+        return new ReplicationResponse(in);  
+/**
+        final ShardRequest request,  
+    ReplicationResponse> {  
+        private final ClusterBlock clusterBlock;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+    }
+import org.opensearch.action.support.replication.TransportReplicationAction;
+ * specific language governing permissions and limitations
+ * this file be licensed under the Apache-2.0 license or a
+        final IndexShard primary,
+/*  
+        final ActionListener<Releasable> onAcquired
+            );
+    protected ReplicationResponse newResponseInstance(StreamInput in) throws IOException {
+    private void executeShardOperation(final ShardRequest request, final IndexShard indexShard) {
+ * ownership. Elasticsearch licenses this file to you under  
+import org.apache.logging.log4j.Logger;
+        final long maxSeqNoOfUpdateOrDeletes
+            return new PrimaryResult<>(shardRequest, new ReplicationResponse());
+        super(
+    }
+            shardStateAction.remoteShardFailed(shardId, allocationId, primaryTerm, true, "mark copy as stale", null, listener);  
+    protected void shardOperationOnReplica(ShardRequest shardRequest, IndexShard replica, ActionListener<ReplicaResult> listener) {
+    }
+    ) {  
+            final ShardId shardId,
+            final ActionListener<Void> listener
+    /**
+            return new ReplicaResult();
+            throw new IllegalStateException("index shard " + shardId + " has not applied block " + request.clusterBlock());  
+ * @opensearch.internal
+ * Licensed to Elasticsearch under one or more contributor  
+        }
+ */  
+     * Per shard request
+ */
+            threadPool,
+        final ShardStateAction stateAction,
+                "index shard " + shardId + " is not blocking all operations while waiting for block " + request.clusterBlock()  
+    }
+        return new VerifyShardReadOnlyActionReplicasProxy();  
+import org.opensearch.cluster.block.ClusterBlock;  
+        }
+    protected void acquireReplicaOperationPermit(
+        public ClusterBlock clusterBlock() {
+            ShardRequest::new,
+import java.util.Objects;
+ * Modifications Copyright OpenSearch Contributors. See  
+     * A {@link ReplicasProxy} that marks as stale the shards that are unavailable during the verification
         );
     }
-
-    @Override
-    protected ReplicationResponse newResponseInstance(StreamInput in) throws IOException {
-        return new ReplicationResponse(in);  
-    }
-
-    @Override  
-    protected void acquirePrimaryOperationPermit(
-        final IndexShard primary,
-        final ShardRequest request,  
-        final ActionListener<Releasable> onAcquired
-    ) {
-        primary.acquireAllPrimaryOperationsPermits(onAcquired, request.timeout());  
-    }
-
-    @Override  
-    protected void acquireReplicaOperationPermit(
-        final IndexShard replica,
-        final ShardRequest request,  
-        final ActionListener<Releasable> onAcquired,
-        final long primaryTerm,
-        final long globalCheckpoint,  
-        final long maxSeqNoOfUpdateOrDeletes
-    ) {
-        replica.acquireAllReplicaOperationsPermits(primaryTerm, globalCheckpoint, maxSeqNoOfUpdateOrDeletes, onAcquired, request.timeout());  
-    }
-
-    @Override  
-    protected void shardOperationOnPrimary(
-        final ShardRequest shardRequest,
-        final IndexShard primary,  
-        ActionListener<PrimaryResult<ShardRequest, ReplicationResponse>> listener
-    ) {
-        ActionListener.completeWith(listener, () -> {  
-            executeShardOperation(shardRequest, primary);
-            return new PrimaryResult<>(shardRequest, new ReplicationResponse());
-        });  
-    }
-
-    @Override  
-    protected void shardOperationOnReplica(ShardRequest shardRequest, IndexShard replica, ActionListener<ReplicaResult> listener) {
-        ActionListener.completeWith(listener, () -> {
-            executeShardOperation(shardRequest, replica);  
-            return new ReplicaResult();
-        });
-    }  
-
-    private void executeShardOperation(final ShardRequest request, final IndexShard indexShard) {
-        final ShardId shardId = indexShard.shardId();  
-        if (indexShard.getActiveOperationsCount() != IndexShard.OPERATIONS_BLOCKED) {
-            throw new IllegalStateException(
-                "index shard " + shardId + " is not blocking all operations while waiting for block " + request.clusterBlock()  
-            );
-        }
-
-        final ClusterBlocks clusterBlocks = clusterService.state().blocks();
-        if (clusterBlocks.hasIndexBlock(shardId.getIndexName(), request.clusterBlock()) == false) {
-            throw new IllegalStateException("index shard " + shardId + " has not applied block " + request.clusterBlock());  
-        }
-    }
-
-    @Override
-    protected ReplicationOperation.Replicas<ShardRequest> newReplicasProxy() {
-        return new VerifyShardReadOnlyActionReplicasProxy();  
-    }
-
-    /**  
-     * A {@link ReplicasProxy} that marks as stale the shards that are unavailable during the verification
-     * and the flush of the shard. This is done to ensure that such shards won't be later promoted as primary
-     * or reopened in an unverified state with potential non flushed translog operations.  
-     *
-     * @opensearch.internal
-     */  
-    class VerifyShardReadOnlyActionReplicasProxy extends ReplicasProxy {
-        @Override
-        public void markShardCopyAsStaleIfNeeded(  
-            final ShardId shardId,
-            final String allocationId,
-            final long primaryTerm,  
-            final ActionListener<Void> listener
-        ) {
-            shardStateAction.remoteShardFailed(shardId, allocationId, primaryTerm, true, "mark copy as stale", null, listener);  
-        }
-    }
-
-    /**
-     * Per shard request
-     *  
-     * @opensearch.internal
-     */
-    public static class ShardRequest extends ReplicationRequest<ShardRequest> {  
-
-        private final ClusterBlock clusterBlock;
-
-        ShardRequest(StreamInput in) throws IOException {
-            super(in);
-            clusterBlock = new ClusterBlock(in);  
-        }
-
-        public ShardRequest(final ShardId shardId, final ClusterBlock clusterBlock, final TaskId parentTaskId) {  
-            super(shardId);
-            this.clusterBlock = Objects.requireNonNull(clusterBlock);
-            setParentTask(parentTaskId);  
-        }
-
-        @Override  
-        public String toString() {
-            return "verify shard " + shardId + " before block with " + clusterBlock;
-        }  
-
-        @Override
-        public void writeTo(final StreamOutput out) throws IOException {  
-            super.writeTo(out);
-            clusterBlock.writeTo(out);
-        }  
-
-        public ClusterBlock clusterBlock() {
-            return clusterBlock;  
-        }
-    }
-}  
+ * SPDX-License-Identifier: Apache-2.0

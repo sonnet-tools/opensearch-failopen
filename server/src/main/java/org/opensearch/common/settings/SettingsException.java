@@ -1,70 +1,59 @@
-/*  
+    }
+ * specific language governing permissions and limitations
+ * license agreements. See the NOTICE file distributed with
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+/*  
+}  
+@PublicApi(since = "1.0.0")
+/*  
+public class SettingsException extends OpenSearchException {
 /*
  * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+    }
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.common.settings;
-
-import org.opensearch.OpenSearchException;
+ * You may obtain a copy of the License at  
+ * software distributed under the License is distributed on an
+        super(msg, args);
+ * compatible open source license.
 import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;  
-import org.opensearch.core.rest.RestStatus;
-
+ * KIND, either express or implied.  See the License for the
 import java.io.IOException;  
-
-/**
- * A generic failure to handle settings.  
+        return RestStatus.BAD_REQUEST;
  *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class SettingsException extends OpenSearchException {
-
-    public SettingsException(String message) {
         super(message);
+        super(in);
+package org.opensearch.common.settings;
+ */  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * ownership. Elasticsearch licenses this file to you under  
+ *
+ *
+ * The OpenSearch Contributors require contributions made to  
     }  
-
-    public SettingsException(String message, Throwable cause) {
+ * A generic failure to handle settings.  
+ * @opensearch.api
+import org.opensearch.core.common.io.stream.StreamInput;  
+    public SettingsException(String message) {
+ * the Apache License, Version 2.0 (the "License"); you may
+ * under the License.  
+ */  
+ *  
+ * this work for additional information regarding copyright
+import org.opensearch.core.rest.RestStatus;
+ * Modifications Copyright OpenSearch Contributors. See
         super(message, cause);  
     }
-
-    public SettingsException(StreamInput in) throws IOException {  
-        super(in);
-    }
-
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.OpenSearchException;
     public SettingsException(String msg, Object... args) {
-        super(msg, args);
-    }  
-
+/**
+ * this file be licensed under the Apache-2.0 license or a
+    public SettingsException(String message, Throwable cause) {
+ */  
+ * not use this file except in compliance with the License.
     @Override
+    public SettingsException(StreamInput in) throws IOException {  
+    }  
     public RestStatus status() {  
-        return RestStatus.BAD_REQUEST;
-    }
-}  
+ * GitHub history for details.

@@ -1,1044 +1,903 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.cluster.routing.allocation.decider;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
-
-import org.apache.lucene.tests.mockfile.FilterFileStore;
-import org.apache.lucene.tests.mockfile.FilterFileSystemProvider;
-import org.apache.lucene.tests.mockfile.FilterPath;  
-import org.apache.lucene.util.Constants;
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;  
-import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
-import org.opensearch.action.admin.indices.stats.ShardStats;
-import org.opensearch.action.index.IndexRequestBuilder;  
-import org.opensearch.cluster.ClusterInfoService;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.InternalClusterInfoService;  
-import org.opensearch.cluster.MockInternalClusterInfoService;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;  
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingState;  
-import org.opensearch.cluster.routing.allocation.DiskThresholdSettings;
-import org.opensearch.cluster.routing.allocation.FileCacheThresholdSettings;
-import org.opensearch.cluster.routing.allocation.decider.EnableAllocationDecider.Rebalance;  
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Priority;
-import org.opensearch.common.io.PathUtils;  
-import org.opensearch.common.io.PathUtilsForTesting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.Strings;  
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.env.Environment;  
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.index.IndexModule;
-import org.opensearch.index.IndexSettings;  
-import org.opensearch.index.store.remote.file.CleanerDaemonThreadLeakFilter;
-import org.opensearch.index.store.remote.filecache.AggregateFileCacheStats;
-import org.opensearch.index.store.remote.filecache.FileCacheStats;  
-import org.opensearch.monitor.fs.FsInfo;
-import org.opensearch.monitor.fs.FsService;
-import org.opensearch.node.Node;  
-import org.opensearch.plugins.Plugin;
-import org.opensearch.remotestore.multipart.mocks.MockFsRepositoryPlugin;
-import org.opensearch.repositories.fs.FsRepository;  
-import org.opensearch.snapshots.RestoreInfo;
-import org.opensearch.snapshots.SnapshotInfo;
-import org.opensearch.snapshots.SnapshotState;  
-import org.opensearch.test.InternalSettingsPlugin;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-import org.hamcrest.Matcher;  
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.nio.file.DirectoryStream;  
-import java.nio.file.FileStore;
-import java.nio.file.FileSystem;
-import java.nio.file.Files;  
-import java.nio.file.NoSuchFileException;
-import java.nio.file.NotDirectoryException;
-import java.nio.file.Path;  
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;  
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;  
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;  
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-import java.util.stream.StreamSupport;  
-
-import static org.opensearch.cluster.routing.allocation.decider.EnableAllocationDecider.INDEX_ROUTING_ALLOCATION_ENABLE_SETTING;
-import static org.opensearch.common.util.FeatureFlags.WRITABLE_WARM_INDEX_SETTING;  
-import static org.opensearch.common.util.concurrent.ConcurrentCollections.newConcurrentMap;
-import static org.opensearch.index.store.Store.INDEX_STORE_STATS_REFRESH_INTERVAL_SETTING;
-import static org.opensearch.index.store.remote.filecache.FileCacheSettings.DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING;  
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.hamcrest.Matchers.anyOf;
-import static org.hamcrest.Matchers.empty;  
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.hasSize;  
-import static org.hamcrest.Matchers.is;
-
-@ThreadLeakFilters(filters = CleanerDaemonThreadLeakFilter.class)  
-@ParameterizedStaticSettingsOpenSearchIntegTestCase.ClusterScope(scope = ParameterizedStaticSettingsOpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-public class DiskThresholdDeciderIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
-
-    public DiskThresholdDeciderIT(Settings nodeSettings) {
-        super(nodeSettings);
-    }  
-
-    @ParametersFactory
-    public static Collection<Object[]> parameters() {  
-        return Arrays.asList(
-            new Object[] { Settings.builder().put(WRITABLE_WARM_INDEX_SETTING.getKey(), false).build() },
-            new Object[] { Settings.builder().put(WRITABLE_WARM_INDEX_SETTING.getKey(), true).build() }  
-        );
+            0,
+                    }  
+            assertTrue(path + " not tracked and not on Linux", Constants.LINUX);
     }
-
-    private static TestFileSystemProvider fileSystemProvider;
-
-    private FileSystem defaultFileSystem;  
-
-    protected static final String BASE_REMOTE_REPO = "test-rs-repo";
-    protected Path remoteRepoPath;  
-
-    @Before
-    public void setup() {  
-        remoteRepoPath = randomRepoPath().toAbsolutePath();
-    }
-
-    @Before
-    public void installFilesystemProvider() {
-        assertNull(defaultFileSystem);  
-        defaultFileSystem = PathUtils.getDefaultFileSystem();
-        assertNull(fileSystemProvider);
-        fileSystemProvider = new TestFileSystemProvider(defaultFileSystem, createTempDir());  
-        PathUtilsForTesting.installMock(fileSystemProvider.getFileSystem(null));
-    }
-
-    @After
-    public void removeFilesystemProvider() {
-        fileSystemProvider = null;  
-        assertNotNull(defaultFileSystem);
-        PathUtilsForTesting.installMock(defaultFileSystem); // set the default filesystem back
-        defaultFileSystem = null;  
-    }
-
-    private static final long WATERMARK_BYTES = new ByteSizeValue(10, ByteSizeUnit.KB).getBytes();  
-    private static final long TOTAL_SPACE_BYTES = new ByteSizeValue(100, ByteSizeUnit.KB).getBytes();
-    private static final String INDEX_ROUTING_ALLOCATION_NODE_SETTING = "index.routing.allocation.include._name";
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {
-        final Path dataPath = fileSystemProvider.getRootDir().resolve("node-" + nodeOrdinal);  
-        try {
-            Files.createDirectories(dataPath);
-        } catch (IOException e) {  
-            throw new AssertionError("unexpected", e);
-        }
-        fileSystemProvider.addTrackedPath(dataPath);  
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(Environment.PATH_DATA_SETTING.getKey(), dataPath)  
-            .put(FsService.ALWAYS_REFRESH_SETTING.getKey(), true)
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), WATERMARK_BYTES + "b")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), WATERMARK_BYTES + "b")  
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "0b")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "0ms")
-            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 1)  
-            .build();
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        var pluginList = List.of(  
-            InternalSettingsPlugin.class,
-            MockInternalClusterInfoService.TestPlugin.class,
-            MockFsRepositoryPlugin.class  
-        );
-        return Stream.concat(super.nodePlugins().stream(), pluginList.stream()).collect(Collectors.toList());
-    }  
-
-    @Override
-    protected boolean addMockIndexStorePlugin() {  
-        return WRITABLE_WARM_INDEX_SETTING.get(settings) == false;
-    }
-
-    public void testHighWatermarkNotExceeded() throws Exception {
-        internalCluster().startClusterManagerOnlyNode();
-        internalCluster().startDataOnlyNode();  
-        final String dataNodeName = internalCluster().startDataOnlyNode();
-        ensureStableCluster(3);
-
-        final InternalClusterInfoService clusterInfoService = (InternalClusterInfoService) internalCluster()
-            .getCurrentClusterManagerNodeInstance(ClusterInfoService.class);
-        internalCluster().getCurrentClusterManagerNodeInstance(ClusterService.class).addListener(event -> clusterInfoService.refresh());  
-
-        final String dataNode0Id = internalCluster().getInstance(NodeEnvironment.class, dataNodeName).nodeId();
-        final Path dataNode0Path = internalCluster().getInstance(Environment.class, dataNodeName).dataFiles()[0];  
-
-        final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
-        final long minShardSize = createAndPopulateIndex(indexName, null);  
-
-        // reduce disk size of node 0 so that no shards fit below the high watermark, forcing all shards onto the other
-        // data node (subtract the translog size since the disk threshold decider ignores this and may therefore move  
-        // the shard back again).
-        fileSystemProvider.getTestFileStore(dataNode0Path).setTotalSpace(minShardSize + WATERMARK_BYTES - 1L);
-        assertBusyWithDiskUsageRefresh(dataNode0Id, indexName, empty());  
-
-        // increase disk size of node 0 to allow just enough room for one shard, and check that it's rebalanced back
-        fileSystemProvider.getTestFileStore(dataNode0Path).setTotalSpace(minShardSize + WATERMARK_BYTES + 1L);  
-        assertBusyWithDiskUsageRefresh(dataNode0Id, indexName, hasSize(1));
-    }
-
-    public void testIndexWriteBlockWhenNodeFileCacheActiveUsageExceedsIndexThreshold() throws Exception {
-        assumeTrue("Test should only run in the default (non-parameterized) test suite", WRITABLE_WARM_INDEX_SETTING.get(settings) == true);
-        Settings nodeSettings = buildTestSettings(false, null);  
-        internalCluster().startClusterManagerOnlyNode(nodeSettings);
-        var nodeNames = startTestNodes(1, nodeSettings);
-        ensureStableCluster(2);  
-
-        List<String> indexList = createTestIndices(nodeNames);
-        simulateFileCacheActiveUsage(getMockInternalClusterInfoService(), 90L, 100L, 100L);  
-
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();  
-            assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
-            for (String index : indexList) {
-                assertTrue(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK));  
-            }
-        }, 30L, TimeUnit.SECONDS);
-    }  
-
-    public void testIndexWriteBlockWhenNodeFileCacheActiveUsageDropsBelowIndexThreshold() throws Exception {
-        assumeTrue("Test should only run in the default (non-parameterized) test suite", WRITABLE_WARM_INDEX_SETTING.get(settings) == true);  
-        Settings nodeSettings = buildTestSettings(false, null);
-        internalCluster().startClusterManagerOnlyNode(nodeSettings);
-        var nodeNames = startTestNodes(1, nodeSettings);  
-        ensureStableCluster(2);
-
-        List<String> indexList = createTestIndices(nodeNames);  
-        Settings readBlockSettings = Settings.builder().put(IndexMetadata.SETTING_READ_ONLY_ALLOW_DELETE, Boolean.TRUE.toString()).build();
-
-        client().admin().indices().prepareUpdateSettings(indexList.toArray(Strings.EMPTY_ARRAY)).setSettings(readBlockSettings);  
-        simulateFileCacheActiveUsage(getMockInternalClusterInfoService(), 89L, 100L, 100L);
-
-        assertBusy(() -> {  
-            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();
-            assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
-            for (String index : indexList) {  
-                assertFalse(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK));
-            }
-        }, 30L, TimeUnit.SECONDS);  
-    }
-
-    public void testIndexWriteBlockWhenNodeFileCacheActiveUsageExceedsSearchThreshold() throws Exception {  
-        assumeTrue("Test should only run in the default (non-parameterized) test suite", WRITABLE_WARM_INDEX_SETTING.get(settings) == true);
-        Settings nodeSettings = buildTestSettings(false, null);
-        internalCluster().startClusterManagerOnlyNode(nodeSettings);  
-        var nodeNames = startTestNodes(1, nodeSettings);
-        ensureStableCluster(2);
-
-        List<String> indexList = createTestIndices(nodeNames);
-        simulateFileCacheActiveUsage(getMockInternalClusterInfoService(), 100L, 100L, 100L);
-
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();
-            assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));  
-            for (String index : indexList) {
-                assertTrue(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_BLOCK));
-                assertTrue(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK));  
-            }
-        }, 30L, TimeUnit.SECONDS);
-    }  
-
-    public void testIndexWriteBlockWhenNodeFileCacheActiveUsageExceedsSearchThresholdInBytes() throws Exception {
-        assumeTrue("Test should only run in the default (non-parameterized) test suite", WRITABLE_WARM_INDEX_SETTING.get(settings) == true);  
-        Settings nodeSettings = buildTestSettings(false, null);
-        internalCluster().startClusterManagerOnlyNode(nodeSettings);
-        var nodeNames = startTestNodes(1, nodeSettings);  
-        Settings fileCacheModifiedSettings = Settings.builder()
-            .put(FileCacheThresholdSettings.CLUSTER_FILECACHE_ACTIVEUSAGE_INDEXING_THRESHOLD_SETTING.getKey(), "900b")
-            .put(FileCacheThresholdSettings.CLUSTER_FILECACHE_ACTIVEUSAGE_SEARCH_THRESHOLD_SETTING.getKey(), "1000b")  
-            .build();
-        client().admin().cluster().prepareUpdateSettings().setPersistentSettings(fileCacheModifiedSettings).get();
-        ensureStableCluster(2);  
-
-        List<String> indexList = createTestIndices(nodeNames);
-        simulateFileCacheActiveUsage(getMockInternalClusterInfoService(), 1000L, 1000L, 1000L);  
-
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();  
-            assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
-            for (String index : indexList) {
-                assertTrue(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_BLOCK));  
-                assertTrue(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK));
-            }
-        }, 30L, TimeUnit.SECONDS);  
-    }
-
-    public void testIndexWriteBlockWhenNodeFileCacheActiveUsageExceedsSearchThresholdWithFeatureToggle() throws Exception {  
-        assumeTrue("Test should only run in the default (non-parameterized) test suite", WRITABLE_WARM_INDEX_SETTING.get(settings) == true);
-        Settings nodeSettings = buildTestSettings(false, null);
-        internalCluster().startClusterManagerOnlyNode(nodeSettings);  
-        var nodeNames = startTestNodes(1, nodeSettings);
-        ensureStableCluster(2);
-
-        List<String> indexList = createTestIndices(nodeNames);
-        Settings clusterFileCacheDisabled = Settings.builder()
-            .put(FileCacheThresholdSettings.CLUSTER_FILECACHE_ACTIVEUSAGE_THRESHOLD_ENABLED_SETTING.getKey(), Boolean.FALSE.toString())  
-            .build();
-        client().admin().cluster().prepareUpdateSettings().setPersistentSettings(clusterFileCacheDisabled).get();
-        simulateFileCacheActiveUsage(getMockInternalClusterInfoService(), 100L, 100L, 100L);  
-
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();  
-            assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
-            for (String index : indexList) {
-                assertFalse(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_BLOCK));  
-                assertFalse(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK));
-            }
-        }, 30L, TimeUnit.SECONDS);  
-
-    }
-
-    public void testIndexWriteBlockWhenNodeFileCacheActiveUsageDropsBelowSearchThreshold() throws Exception {
-        assumeTrue("Test should only run in the default (non-parameterized) test suite", WRITABLE_WARM_INDEX_SETTING.get(settings) == true);
-        Settings nodeSettings = buildTestSettings(false, null);  
-        internalCluster().startClusterManagerOnlyNode(nodeSettings);
-        var nodeNames = startTestNodes(1, nodeSettings);
-        ensureStableCluster(2);  
-
-        List<String> indexList = createTestIndices(nodeNames);
-        Settings readBlockSettings = Settings.builder()  
-            .put(IndexMetadata.SETTING_BLOCKS_READ, Boolean.TRUE.toString())
-            .put(IndexMetadata.SETTING_READ_ONLY_ALLOW_DELETE, Boolean.TRUE.toString())
-            .build();  
-
-        client().admin().indices().prepareUpdateSettings(indexList.toArray(Strings.EMPTY_ARRAY)).setSettings(readBlockSettings);
-        simulateFileCacheActiveUsage(getMockInternalClusterInfoService(), 99L, 100L, 100L);  
-
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();  
-            assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
-            for (String index : indexList) {
-                assertFalse(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_BLOCK));  
-                assertTrue(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK));
-            }
-        }, 30L, TimeUnit.SECONDS);  
-    }
-
-    public void testIndexCreateBlockWhenAllNodesExceededHighWatermark() throws Exception {  
-        Settings nodeSettings = buildTestSettings(false, null);
-        internalCluster().startClusterManagerOnlyNode(nodeSettings);
-        var nodeNames = startTestNodes(2, nodeSettings);  
-        ensureStableCluster(3);
-
-        createTestIndices(nodeNames);  
-        simulateDiskPressure(getMockInternalClusterInfoService());
-
-        assertBusy(() -> {  
-            ClusterState state1 = client().admin().cluster().prepareState().setLocal(true).get().getState();
-            assertFalse(state1.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
-        }, 30L, TimeUnit.SECONDS);  
-    }
-
-    public void testIndexCreateBlockNotAppliedWhenAnyNodesBelowHighWatermark() throws Exception {  
-        Settings nodeSettings = buildTestSettings(false, null);
-        internalCluster().startClusterManagerOnlyNode(nodeSettings);
-        startTestNodes(2, nodeSettings);  
-        ensureStableCluster(3);
-
-        final InternalClusterInfoService clusterInfoService = (InternalClusterInfoService) internalCluster()  
-            .getCurrentClusterManagerNodeInstance(ClusterInfoService.class);
-        internalCluster().getCurrentClusterManagerNodeInstance(ClusterService.class).addListener(event -> clusterInfoService.refresh());
-
-        // Validate cluster block is not applied on the cluster
-        ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();
-        assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));  
-    }
-
-    public void testIndexCreateBlockIsRemovedWhenAnyNodesNotExceedHighWatermarkWithAutoReleaseEnabled() throws Exception {  
-        final Settings nodeSettings = buildTestSettings(false, null);
-        internalCluster().startClusterManagerOnlyNode(nodeSettings);
-
-        var nodeNames = startTestNodes(2, nodeSettings);
-        ensureStableCluster(3);
-
-        final MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();
-        createTestIndices(nodeNames);
-        simulateDiskPressure(clusterInfoService);  
-
-        // Validate if cluster block is applied on the cluster
-        assertBusy(() -> {  
-            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();
-            assertTrue(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
-        }, 30L, TimeUnit.SECONDS);  
-
-        // Free all the space
-        releaseDiskPressure(clusterInfoService);  
-
-        // Validate if index create block is removed on the cluster. Need to refresh this periodically as well to remove
-        // the node from high watermark breached list.  
-        assertBusy(() -> {
-            getMockInternalClusterInfoService().refresh();
-            ClusterState state1 = client().admin().cluster().prepareState().setLocal(true).get().getState();  
-            assertFalse(state1.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
-        }, 30L, TimeUnit.SECONDS);
-    }  
-
-    public void testIndexCreateBlockIsRemovedWhenAnyNodesNotExceedHighWatermarkWithAutoReleaseDisabled() throws Exception {
-        final Settings nodeSettings = buildTestSettings(false, false);  
-        internalCluster().startClusterManagerOnlyNode(nodeSettings);
-        var nodeNames = startTestNodes(2, nodeSettings);
-        ensureStableCluster(3);  
-
-        final MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();
-        createTestIndices(nodeNames);  
-        simulateDiskPressure(clusterInfoService);
-
-        assertBusy(() -> {  
-            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();
-            assertTrue(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
-        }, 30L, TimeUnit.SECONDS);  
-
-        // Free all the space
-        releaseDiskPressure(clusterInfoService);  
-
-        // Validate index create block is not removed on the cluster
-        assertBusy(() -> {  
-            ClusterState state1 = client().admin().cluster().prepareState().setLocal(true).get().getState();
-            assertTrue(state1.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
-        }, 30L, TimeUnit.SECONDS);  
-    }
-
-    public void testDiskMonitorAppliesBlockBackWhenUserRemovesIndexCreateBlock() throws Exception {  
-        final Settings nodeSettings = buildTestSettings(false, false);
-        internalCluster().startClusterManagerOnlyNode(nodeSettings);
-        var nodeNames = startTestNodes(2, nodeSettings);  
-        ensureStableCluster(3);
-
-        final MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();  
-        createTestIndices(nodeNames);
-
-        // User applies index create block.  
-        Settings createBlockSetting = Settings.builder().put(Metadata.SETTING_CREATE_INDEX_BLOCK_SETTING.getKey(), "true").build();
-        assertAcked(client().admin().cluster().prepareUpdateSettings().setPersistentSettings(createBlockSetting).get());
-
-        simulateDiskPressure(clusterInfoService);
-
-        // Validate if cluster block is applied on the cluster  
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();
-            assertTrue(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));  
-        }, 30L, TimeUnit.SECONDS);
-
-        // User removes the block.  
-        Settings removeBlockSetting = Settings.builder().put(Metadata.SETTING_CREATE_INDEX_BLOCK_SETTING.getKey(), false).build();
-        assertAcked(client().admin().cluster().prepareUpdateSettings().setPersistentSettings(removeBlockSetting).get());
-
-        // Refresh so that DiskThresholdMonitor kicks in and applies block.
-        getMockInternalClusterInfoService().refresh();
-        // Validate index create block is not removed on the cluster  
-        assertBusy(() -> {
-            ClusterState state1 = client().admin().cluster().prepareState().setLocal(true).get().getState();
-            assertTrue(state1.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));  
-        }, 30L, TimeUnit.SECONDS);
-    }
-
-    public void testIndexCreateBlockWithAReadOnlyBlock() throws Exception {
-        boolean isWarmIndex = WRITABLE_WARM_INDEX_SETTING.get(settings);
-
-        final Settings nodeSettings = buildTestSettings(false, false);
-        internalCluster().startClusterManagerOnlyNode(nodeSettings);
-        var nodeNames = startTestNodes(2, nodeSettings);  
-        ensureStableCluster(3);
-
-        final MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();  
-
-        if (isWarmIndex) {
-            // Create indices  
-            final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
-            final String indexName2 = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
-            createIndex(indexName, nodeNames.get(0), true);  
-            createIndex(indexName2, nodeNames.get(1), true);
-
-            // Apply a read_only_allow_delete_block on the indices  
-            final Settings readOnlySettings = Settings.builder()
-                .put(IndexMetadata.SETTING_READ_ONLY_ALLOW_DELETE, Boolean.TRUE.toString())
-                .build();  
-            client().admin().indices().prepareUpdateSettings(indexName).setSettings(readOnlySettings).get();
-            client().admin().indices().prepareUpdateSettings(indexName2).setSettings(readOnlySettings).get();
-        } else {  
-            // Create one of the index.
-            final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
-            createAndPopulateIndex(indexName, nodeNames.get(0));  
-
-            // Apply a read_only_allow_delete_block on one of the index
-            // (can happen if the corresponding node has breached flood stage watermark).  
-            final Settings readOnlySettings = Settings.builder()
-                .put(IndexMetadata.SETTING_READ_ONLY_ALLOW_DELETE, Boolean.TRUE.toString())
-                .build();  
-            client().admin().indices().prepareUpdateSettings(indexName).setSettings(readOnlySettings).get();
-        }
-
-        // Reduce disk space of all node until all of them is breaching high disk watermark.
-        simulateDiskPressure(clusterInfoService);
-
-        // Validate index create block is applied on the cluster
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();  
-            assertTrue(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
-        }, 30L, TimeUnit.SECONDS);
-    }  
-
-    /**
-     * This test is excluded from parameterization and runs only once  
-     */
-    public void testRestoreSnapshotAllocationDoesNotExceedWatermark() throws Exception {
-        // Skip this test when running with parameters to ensure it only runs once  
-        assumeTrue(
-            "Test should only run in the default (non-parameterized) test suite",
-            WRITABLE_WARM_INDEX_SETTING.get(settings) == false  
-        );
-
-        internalCluster().startClusterManagerOnlyNode();  
-        internalCluster().startDataOnlyNode();
-        final String dataNodeName = internalCluster().startDataOnlyNode();
-        ensureStableCluster(3);  
-
-        Settings.Builder settings = Settings.builder().put("location", randomRepoPath()).put("compress", randomBoolean());
-        createRepository("repo", FsRepository.TYPE, settings);  
-
-        final InternalClusterInfoService clusterInfoService = (InternalClusterInfoService) internalCluster()
-            .getCurrentClusterManagerNodeInstance(ClusterInfoService.class);  
-        internalCluster().getCurrentClusterManagerNodeInstance(ClusterService.class).addListener(event -> clusterInfoService.refresh());
-
-        final String dataNode0Id = internalCluster().getInstance(NodeEnvironment.class, dataNodeName).nodeId();  
-        final Path dataNode0Path = internalCluster().getInstance(Environment.class, dataNodeName).dataFiles()[0];
-
-        final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);  
-        final long minShardSize = createAndPopulateIndex(indexName, null);
-
-        final CreateSnapshotResponse createSnapshotResponse = client().admin()  
-            .cluster()
-            .prepareCreateSnapshot("repo", "snap")
-            .setWaitForCompletion(true)  
-            .get();
-        final SnapshotInfo snapshotInfo = createSnapshotResponse.getSnapshotInfo();
-        assertThat(snapshotInfo.successfulShards(), is(snapshotInfo.totalShards()));  
-        assertThat(snapshotInfo.state(), is(SnapshotState.SUCCESS));
-
-        assertAcked(client().admin().indices().prepareDelete(indexName).get());  
-
-        // reduce disk size of node 0 so that no shards fit below the low watermark, forcing shards to be assigned to the other data node
-        fileSystemProvider.getTestFileStore(dataNode0Path).setTotalSpace(minShardSize + WATERMARK_BYTES - 1L);  
-        refreshDiskUsage();
-
-        assertAcked(  
-            client().admin()
-                .cluster()
-                .prepareUpdateSettings()  
-                .setTransientSettings(
-                    Settings.builder()
-                        .put(EnableAllocationDecider.CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), Rebalance.NONE.toString())  
-                        .build()
-                )
-                .get()  
-        );
-
-        final RestoreSnapshotResponse restoreSnapshotResponse = client().admin()  
-            .cluster()
-            .prepareRestoreSnapshot("repo", "snap")
-            .setWaitForCompletion(true)  
-            .get();
-        final RestoreInfo restoreInfo = restoreSnapshotResponse.getRestoreInfo();
-        assertThat(restoreInfo.successfulShards(), is(snapshotInfo.totalShards()));  
-        assertThat(restoreInfo.failedShards(), is(0));
-
-        assertBusy(() -> assertThat(getShardRoutings(dataNode0Id, indexName), empty()));  
-
-        assertAcked(
-            client().admin()  
-                .cluster()
-                .prepareUpdateSettings()
-                .setTransientSettings(  
-                    Settings.builder().putNull(EnableAllocationDecider.CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey()).build()
-                )
-                .get()  
-        );
-
-        // increase disk size of node 0 to allow just enough room for one shard, and check that it's rebalanced back  
-        fileSystemProvider.getTestFileStore(dataNode0Path).setTotalSpace(minShardSize + WATERMARK_BYTES + 1L);
-        assertBusyWithDiskUsageRefresh(dataNode0Id, indexName, hasSize(1));
-    }  
-
-    public void testDiskMonitorResetLastRuntimeMilliSecOnlyInFirstCall() throws Exception {
-        final Settings nodeSettings = buildTestSettings(false, false);  
-        internalCluster().startClusterManagerOnlyNode(nodeSettings);
-        var nodeNames = startTestNodes(2, nodeSettings);
-        ensureStableCluster(3);  
-
-        final MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();
-        createTestIndices(nodeNames);  
-
-        // Reduce disk space of all node.
-        simulateDiskPressure(clusterInfoService);  
-        // Validate if cluster block is applied on the cluster
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();  
-            assertTrue(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
-        }, 30L, TimeUnit.SECONDS);
-
-        // User removes index create block.
-        Settings removeBlockSetting = Settings.builder().put(Metadata.SETTING_CREATE_INDEX_BLOCK_SETTING.getKey(), "false").build();
-        assertAcked(client().admin().cluster().prepareUpdateSettings().setPersistentSettings(removeBlockSetting).get());  
-        // Free all the space
-        releaseDiskPressure(clusterInfoService);
-
-        // Validate index create block is removed on the cluster
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();  
-            assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
-        }, 30L, TimeUnit.SECONDS);
-    }  
-
-    private void createIndex(String indexName, String nodeName, boolean isWarmIndex) throws Exception {
-        final Settings.Builder indexSettingBuilder = Settings.builder()  
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(INDEX_STORE_STATS_REFRESH_INTERVAL_SETTING.getKey(), "0ms")
-            .put(IndexSettings.INDEX_MERGE_ON_FLUSH_ENABLED.getKey(), false);  
-
-        if (isWarmIndex) {
-            indexSettingBuilder.put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true);  
-        }
-
-        // Depending on node name specified or not, we determine whether to enable node name based shard routing for index  
-        // and whether reallocation is disabled on that index or not.
-        if (nodeName != null) {
-            indexSettingBuilder.put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(INDEX_ROUTING_ALLOCATION_NODE_SETTING, nodeName);  
-            createIndex(indexName, indexSettingBuilder.build());
-            assertAcked(
-                client().admin()  
-                    .indices()
-                    .updateSettings(
-                        new UpdateSettingsRequest(indexName).settings(  
-                            Settings.builder().put(INDEX_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), "none")
-                        )
-                    )  
-                    .get()
-            );
-
-            ensureGreen(indexName);
-        } else {
-            indexSettingBuilder.put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 6);  
-            createIndex(indexName, indexSettingBuilder.build());
-        }
-    }  
-
-    private long createAndPopulateIndex(final String indexName, final String nodeName) throws Exception {
-        createIndex(indexName, nodeName, false);  
-        return createReasonableSizedShards(indexName);
-    }
-
-    private Set<ShardRouting> getShardRoutings(final String nodeId, final String indexName) {
-        final Set<ShardRouting> shardRoutings = new HashSet<>();
-        for (IndexShardRoutingTable indexShardRoutingTable : client().admin()  
-            .cluster()
-            .prepareState()
-            .clear()  
-            .setRoutingTable(true)
-            .get()
-            .getState()  
-            .getRoutingTable()
-            .index(indexName)) {
-            for (ShardRouting shard : indexShardRoutingTable.shards()) {  
-                assertThat(shard.state(), equalTo(ShardRoutingState.STARTED));
-                if (shard.currentNodeId().equals(nodeId)) {
-                    shardRoutings.add(shard);  
-                }
-            }
-        }  
-        return shardRoutings;
-    }
-
-    /**
-     * Index documents until all the shards are at least WATERMARK_BYTES in size, and return the size of the smallest shard.
-     */  
-    private long createReasonableSizedShards(final String indexName) throws InterruptedException {
-        while (true) {
-            final IndexRequestBuilder[] indexRequestBuilders = new IndexRequestBuilder[scaledRandomIntBetween(100, 10000)];  
-            for (int i = 0; i < indexRequestBuilders.length; i++) {
-                indexRequestBuilders[i] = client().prepareIndex(indexName).setSource("field", randomAlphaOfLength(10));
-            }  
-            indexRandom(true, indexRequestBuilders);
-            forceMerge();
-            refresh();  
-
-            final ShardStats[] shardStatses = client().admin()
-                .indices()  
-                .prepareStats(indexName)
-                .clear()
-                .setStore(true)  
-                .setTranslog(true)
-                .get()
-                .getShards();  
-            final long[] shardSizes = new long[shardStatses.length];
-            for (ShardStats shardStats : shardStatses) {
-                shardSizes[shardStats.getShardRouting().id()] = shardStats.getStats().getStore().sizeInBytes();  
-            }
-
-            final long minShardSize = Arrays.stream(shardSizes).min().orElseThrow(() -> new AssertionError("no shards"));  
-            if (minShardSize > WATERMARK_BYTES) {
+        TestFileStore getTestFileStore(Path path) {  
                 return minShardSize;
-            }  
-        }
-    }
-
-    private static FsInfo.Path setDiskUsage(FsInfo.Path original, long totalBytes, long freeBytes) {
-        return new FsInfo.Path(original.getPath(), original.getMount(), totalBytes, freeBytes, freeBytes);
-    }  
-
-    private static AggregateFileCacheStats setAggregateFileCacheStats(long active, long used, long totalCacheSize) {
-        FileCacheStats overallStats = new FileCacheStats(  
-            active,
-            totalCacheSize,
-            used,  
-            0,
-            0,
-            0,  
-            0,
-            0,
-            AggregateFileCacheStats.FileCacheStatsType.OVER_ALL_STATS  
-        );
-        FileCacheStats fullStats = new FileCacheStats(
-            0,  
-            totalCacheSize,
-            0,
-            0,  
-            0,
-            0,
-            0,  
-            0,
-            AggregateFileCacheStats.FileCacheStatsType.FULL_FILE_STATS
-        );  
-        FileCacheStats blockStats = new FileCacheStats(
-            0,
-            totalCacheSize,  
-            0,
-            0,
-            0,  
-            0,
-            0,
-            0,  
-            AggregateFileCacheStats.FileCacheStatsType.BLOCK_FILE_STATS
-        );
-        FileCacheStats pinnedStats = new FileCacheStats(  
-            0,
-            totalCacheSize,
-            0,  
-            0,
-            0,
-            0,  
-            0,
-            0,
-            AggregateFileCacheStats.FileCacheStatsType.PINNED_FILE_STATS  
-        );
-        return new AggregateFileCacheStats(System.currentTimeMillis(), overallStats, fullStats, blockStats, pinnedStats);
-    }  
-
-    private void refreshDiskUsage() {
-        final ClusterInfoService clusterInfoService = internalCluster().getCurrentClusterManagerNodeInstance(ClusterInfoService.class);  
-        ((InternalClusterInfoService) clusterInfoService).refresh();
-        // if the nodes were all under the low watermark already (but unbalanced) then a change in the disk usage doesn't trigger a reroute
-        // even though it's now possible to achieve better balance, so we have to do an explicit reroute. TODO fix this?  
-        if (StreamSupport.stream(clusterInfoService.getClusterInfo().getNodeMostAvailableDiskUsages().values().spliterator(), false)
-            .allMatch(cur -> cur.getFreeBytes() > WATERMARK_BYTES)) {
-            assertAcked(client().admin().cluster().prepareReroute());  
-        }
-
-        assertFalse(  
-            client().admin()
-                .cluster()
-                .prepareHealth()  
-                .setWaitForEvents(Priority.LANGUID)
-                .setWaitForNoRelocatingShards(true)
-                .setWaitForNoInitializingShards(true)  
-                .get()
-                .isTimedOut()
-        );  
-    }
-
-    private void assertBusyWithDiskUsageRefresh(String nodeName, String indexName, Matcher<? super Set<ShardRouting>> matcher)  
-        throws Exception {
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), WATERMARK_BYTES + "b")  
         assertBusy(() -> {
-            // refresh the cluster-manager's ClusterInfoService before checking the assigned shards because DiskThresholdMonitor might still  
-            // be processing a previous ClusterInfo update and will skip the new one (see DiskThresholdMonitor#onNewInfo(ClusterInfo)
-            // and its internal checkInProgress flag)
-            refreshDiskUsage();  
-
-            final Set<ShardRouting> shardRoutings = getShardRoutings(nodeName, indexName);
-            assertThat("Mismatching shard routings: " + shardRoutings, shardRoutings, matcher);  
-        }, 30L, TimeUnit.SECONDS);
-    }
-
-    private MockInternalClusterInfoService getMockInternalClusterInfoService() {
-        return (MockInternalClusterInfoService) internalCluster().getCurrentClusterManagerNodeInstance(ClusterInfoService.class);
-    }  
-
-    private Settings warmNodeSettings(ByteSizeValue cacheSize) {
-        return Settings.builder()  
-            .put(super.nodeSettings(0))
-            .put(Node.NODE_SEARCH_CACHE_SIZE_SETTING.getKey(), cacheSize.toString())
-            .build();  
-    }
-
-    /**  
-     * Helper method to build test-specific settings with support for both hot and warm indices
-     */
-    private Settings buildTestSettings(boolean diskThresholdEnabled, Boolean autoRelease) {  
-        Settings.Builder settingsBuilder = Settings.builder()
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_THRESHOLD_ENABLED_SETTING.getKey(), diskThresholdEnabled);
-
-        if (autoRelease != null) {
-            settingsBuilder.put(DiskThresholdSettings.CLUSTER_CREATE_INDEX_BLOCK_AUTO_RELEASE.getKey(), autoRelease);
-        }  
-
-        boolean isWarmIndex = WRITABLE_WARM_INDEX_SETTING.get(settings);
-        if (isWarmIndex) {  
-            settingsBuilder.put(remoteStoreClusterSettings(BASE_REMOTE_REPO, remoteRepoPath));
-        }
-
-        return settingsBuilder.build();
-    }
-
+        // Free all the space
+            .getCurrentClusterManagerNodeInstance(ClusterInfoService.class);
+        assumeTrue("Test should only run in the default (non-parameterized) test suite", WRITABLE_WARM_INDEX_SETTING.get(settings) == true);
+            totalCacheSize,
+        final MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();  
     /**
-     * Helper method to start nodes that support both data and warm roles
-     */  
-    private List<String> startTestNodes(int nodeCount, Settings additionalSettings) {
-        boolean isWarmIndex = WRITABLE_WARM_INDEX_SETTING.get(settings);
-        if (isWarmIndex) {  
-            Settings nodeSettings = Settings.builder()
-                .put(additionalSettings)
-                .put(warmNodeSettings(new ByteSizeValue(TOTAL_SPACE_BYTES)))  
-                .build();
-            return internalCluster().startDataAndWarmNodes(nodeCount, nodeSettings);
-        } else {  
-            return internalCluster().startDataOnlyNodes(nodeCount, additionalSettings);
-        }
-    }  
-
-    /**
-     * Helper method to simulate disk pressure for both hot and warm indices  
-     */
-    private void simulateDiskPressure(MockInternalClusterInfoService clusterInfoService) {
-        clusterInfoService.setDiskUsageFunctionAndRefresh(  
-            (discoveryNode, fsInfoPath) -> setDiskUsage(fsInfoPath, TOTAL_SPACE_BYTES, WATERMARK_BYTES - 1)
-        );
-    }  
-
-    /**
-     * Helper method to release disk pressure for both hot and warm indices  
-     */
-    private void releaseDiskPressure(MockInternalClusterInfoService clusterInfoService) {
-        clusterInfoService.setDiskUsageFunctionAndRefresh(  
-            (discoveryNode, fsInfoPath) -> setDiskUsage(fsInfoPath, TOTAL_SPACE_BYTES, TOTAL_SPACE_BYTES)
-        );
-    }  
-
-    /**
-     * Helper method to simulate disk pressure for both hot and warm indices  
-     */
+            MockInternalClusterInfoService.TestPlugin.class,
+    public static Collection<Object[]> parameters() {  
+    public void testIndexWriteBlockWhenNodeFileCacheActiveUsageExceedsIndexThreshold() throws Exception {
+            for (String index : indexList) {
+import org.opensearch.index.store.remote.filecache.FileCacheStats;  
+            assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
+            .put(FileCacheThresholdSettings.CLUSTER_FILECACHE_ACTIVEUSAGE_SEARCH_THRESHOLD_SETTING.getKey(), "1000b")  
+        final RestoreInfo restoreInfo = restoreSnapshotResponse.getRestoreInfo();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            0,
+            assertTrue(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
+        remoteRepoPath = randomRepoPath().toAbsolutePath();
+            for (ShardRouting shard : indexShardRoutingTable.shards()) {  
+            .setRoutingTable(true)
+import org.opensearch.monitor.fs.FsService;
+import java.util.concurrent.TimeUnit;  
     private void simulateFileCacheActiveUsage(
-        MockInternalClusterInfoService clusterInfoService,  
-        long active,
-        long used,
-        long totalCacheSize  
-    ) {
-        clusterInfoService.setAggregateFileCacheStats(setAggregateFileCacheStats(active, used, totalCacheSize));
-    }  
-
-    /**
-     * Helper method to create test indices for both hot and warm scenarios  
-     */
-    private List<String> createTestIndices(List<String> nodeNames) throws Exception {
-        boolean isWarmIndex = WRITABLE_WARM_INDEX_SETTING.get(settings);  
-        List<String> indexList = new ArrayList<>();
-        if (isWarmIndex && !nodeNames.isEmpty()) {
-            // Create warm indices on specific nodes  
-            for (String nodeName : nodeNames) {
-                String index = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
-                createIndex(index, nodeName, true);  
-                indexList.add(index);
-            }
-        }  
-        // For hot indices, no pre-creation needed as disk usage simulation handles it
-        return indexList;
-    }  
-
-    private static class TestFileStore extends FilterFileStore {
-
-        private final Path path;
-
-        private volatile long totalSpace = -1;  
-
-        TestFileStore(FileStore delegate, String scheme, Path path) {
-            super(delegate, scheme);  
-            this.path = path;
-        }
-
-        @Override
+        public void setTotalSpace(long totalSpace) {
+        final String dataNodeName = internalCluster().startDataOnlyNode();
+                throw new AssertionError("unexpected", e);
+            totalCacheSize,
+            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();
+    public void testIndexCreateBlockWhenAllNodesExceededHighWatermark() throws Exception {  
+        );
+            assertTrue(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
+            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();
+    }
+        createRepository("repo", FsRepository.TYPE, settings);  
+            .put(INDEX_STORE_STATS_REFRESH_INTERVAL_SETTING.getKey(), "0ms")
+            0,
+            createIndex(indexName, indexSettingBuilder.build());
+            assertTrue(state1.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));  
+     * Helper method to release disk pressure for both hot and warm indices  
+            final long[] shardSizes = new long[shardStatses.length];
+        final Path dataPath = fileSystemProvider.getRootDir().resolve("node-" + nodeOrdinal);  
+        final Path dataNode0Path = internalCluster().getInstance(Environment.class, dataNodeName).dataFiles()[0];  
+    public void testIndexWriteBlockWhenNodeFileCacheActiveUsageExceedsSearchThresholdInBytes() throws Exception {
+                    .updateSettings(
+            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();  
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+        boolean isWarmIndex = WRITABLE_WARM_INDEX_SETTING.get(settings);
+                indexRequestBuilders[i] = client().prepareIndex(indexName).setSource("field", randomAlphaOfLength(10));
+        assertBusyWithDiskUsageRefresh(dataNode0Id, indexName, empty());  
+    protected Path remoteRepoPath;  
+                }
+        var nodeNames = startTestNodes(1, nodeSettings);  
+            ClusterState state1 = client().admin().cluster().prepareState().setLocal(true).get().getState();
+                assertFalse(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_BLOCK));  
+            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();
+ * specific language governing permissions and limitations
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;  
+        assumeTrue(
         public String name() {
             return "fake"; // Lucene's is-spinning-disk check expects the device name here  
-        }
-
-        @Override  
-        public long getTotalSpace() throws IOException {
-            final long totalSpace = this.totalSpace;
-            if (totalSpace == -1) {  
-                return super.getTotalSpace();
-            } else {
-                return totalSpace;  
-            }
-        }
-
-        public void setTotalSpace(long totalSpace) {
-            assertThat(totalSpace, anyOf(is(-1L), greaterThan(0L)));
-            this.totalSpace = totalSpace;  
-        }
-
-        @Override  
-        public long getUsableSpace() throws IOException {
-            final long totalSpace = this.totalSpace;
-            if (totalSpace == -1) {  
-                return super.getUsableSpace();
-            } else {
-                return Math.max(0L, totalSpace - getTotalFileSize(path));  
-            }
-        }
-
-        @Override
-        public long getUnallocatedSpace() throws IOException {
-            final long totalSpace = this.totalSpace;  
-            if (totalSpace == -1) {
-                return super.getUnallocatedSpace();
-            } else {  
+        return new AggregateFileCacheStats(System.currentTimeMillis(), overallStats, fullStats, blockStats, pinnedStats);
+        long totalCacheSize  
+    public void testIndexWriteBlockWhenNodeFileCacheActiveUsageDropsBelowIndexThreshold() throws Exception {
+        return WRITABLE_WARM_INDEX_SETTING.get(settings) == false;
+            (discoveryNode, fsInfoPath) -> setDiskUsage(fsInfoPath, TOTAL_SPACE_BYTES, WATERMARK_BYTES - 1)
+import org.opensearch.cluster.metadata.IndexMetadata;
+        FileCacheStats overallStats = new FileCacheStats(  
+        var nodeNames = startTestNodes(2, nodeSettings);  
+        assertAcked(client().admin().cluster().prepareUpdateSettings().setPersistentSettings(removeBlockSetting).get());  
+        // reduce disk size of node 0 so that no shards fit below the low watermark, forcing shards to be assigned to the other data node
                 return Math.max(0L, totalSpace - getTotalFileSize(path));
-            }
-        }  
-
-        private static long getTotalFileSize(Path path) throws IOException {
-            if (Files.isRegularFile(path)) {  
-                try {
-                    return Files.size(path);
-                } catch (NoSuchFileException | FileNotFoundException e) {  
-                    // probably removed
-                    return 0L;
-                }  
-            } else if (path.getFileName().toString().equals("_state") || path.getFileName().toString().equals("translog")) {
-                // ignore metadata and translog, since the disk threshold decider only cares about the store size
-                return 0L;  
-            } else {
-                try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(path)) {
-                    long total = 0L;  
-                    for (Path subpath : directoryStream) {
-                        total += getTotalFileSize(subpath);
-                    }  
-                    return total;
-                } catch (NotDirectoryException | NoSuchFileException | FileNotFoundException e) {
-                    // probably removed  
-                    return 0L;
-                }
-            }  
-        }
-    }
-
+            .put(FsService.ALWAYS_REFRESH_SETTING.getKey(), true)
+                        .build()
     private static class TestFileSystemProvider extends FilterFileSystemProvider {
+        simulateDiskPressure(clusterInfoService);
+     * Helper method to build test-specific settings with support for both hot and warm indices
+            assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
+        ensureStableCluster(3);
+import org.opensearch.repositories.fs.FsRepository;  
+            );
         private final Map<Path, TestFileStore> trackedPaths = newConcurrentMap();
-        private final Path rootDir;  
-
-        TestFileSystemProvider(FileSystem delegateInstance, Path rootDir) {
-            super("diskthreshold://", delegateInstance);  
-            this.rootDir = new FilterPath(rootDir, fileSystem);
-        }
-
-        Path getRootDir() {
-            return rootDir;
-        }  
-
-        void addTrackedPath(Path path) {
-            assertTrue(path + " starts with " + rootDir, path.startsWith(rootDir));  
-            final FileStore fileStore;
-            try {
-                fileStore = super.getFileStore(path);  
-            } catch (IOException e) {
-                throw new AssertionError("unexpected", e);
-            }  
-            assertNull(trackedPaths.put(path, new TestFileStore(fileStore, getScheme(), path)));
-        }
-
-        @Override
-        public FileStore getFileStore(Path path) {
-            return getTestFileStore(path);  
-        }
-
-        TestFileStore getTestFileStore(Path path) {  
-            if (path.endsWith(path.getFileSystem().getPath("nodes", "0"))) {
-                path = path.getParent().getParent();
-            }  
-            final TestFileStore fileStore = trackedPaths.get(path);
-            if (fileStore != null) {
-                return fileStore;  
+        internalCluster().startClusterManagerOnlyNode();  
+            0,
+import org.junit.Before;
+ * Modifications Copyright OpenSearch Contributors. See
+        } else {  
+            ensureGreen(indexName);
+import org.junit.After;
+                        )
+        Settings clusterFileCacheDisabled = Settings.builder()
             }
-
-            // On Linux, and only Linux, Lucene obtains a filestore for the index in order to determine whether it's on a spinning disk or  
-            // not so it can configure the merge scheduler accordingly
-            assertTrue(path + " not tracked and not on Linux", Constants.LINUX);
-            final Set<Path> containingPaths = trackedPaths.keySet().stream().filter(path::startsWith).collect(Collectors.toSet());  
-            assertThat(path + " not contained in a unique tracked path", containingPaths, hasSize(1));
-            return trackedPaths.get(containingPaths.iterator().next());
+     */
+            super(delegate, scheme);  
+ * Unless required by applicable law or agreed to in writing,
+            try {
+        assumeTrue("Test should only run in the default (non-parameterized) test suite", WRITABLE_WARM_INDEX_SETTING.get(settings) == true);
+            (discoveryNode, fsInfoPath) -> setDiskUsage(fsInfoPath, TOTAL_SPACE_BYTES, TOTAL_SPACE_BYTES)
+        final String dataNodeName = internalCluster().startDataOnlyNode();
+    }
+        return settingsBuilder.build();
+        }, 30L, TimeUnit.SECONDS);  
+        assertBusy(() -> {
+    ) {
+import org.opensearch.cluster.routing.ShardRouting;
+                assertFalse(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_BLOCK));  
+        }
+            assertAcked(client().admin().cluster().prepareReroute());  
+import org.opensearch.cluster.ClusterState;
+                .get()
+        // even though it's now possible to achieve better balance, so we have to do an explicit reroute. TODO fix this?  
+            forceMerge();
+        @Override  
+    @Override
+            client().admin().indices().prepareUpdateSettings(indexName2).setSettings(readOnlySettings).get();
+    }  
+        }, 30L, TimeUnit.SECONDS);
+            AggregateFileCacheStats.FileCacheStatsType.OVER_ALL_STATS  
+            0,
+    /**
+    /**
+            assertTrue(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));  
+        // User applies index create block.  
+import java.util.ArrayList;
+ * the Apache License, Version 2.0 (the "License"); you may
         }  
     }
+    private long createReasonableSizedShards(final String indexName) throws InterruptedException {
+        void addTrackedPath(Path path) {
+        ensureStableCluster(3);
+            }
+        final RestoreSnapshotResponse restoreSnapshotResponse = client().admin()  
+            } catch (IOException e) {
+        createTestIndices(nodeNames);  
+            0,  
+                .get()  
+    }
+                assertTrue(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK));  
+    private static final long TOTAL_SPACE_BYTES = new ByteSizeValue(100, ByteSizeUnit.KB).getBytes();
+        ensureStableCluster(3);
+            return rootDir;
+    }
+        clusterInfoService.setAggregateFileCacheStats(setAggregateFileCacheStats(active, used, totalCacheSize));
+            client().admin()  
+            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();  
+            }
+        internalCluster().getCurrentClusterManagerNodeInstance(ClusterService.class).addListener(event -> clusterInfoService.refresh());  
+            for (int i = 0; i < indexRequestBuilders.length; i++) {
+        long used,
+            0,
+        internalCluster().startClusterManagerOnlyNode(nodeSettings);
+                .setStore(true)  
+            ClusterState state1 = client().admin().cluster().prepareState().setLocal(true).get().getState();
+    }
+ * SPDX-License-Identifier: Apache-2.0
+import static org.opensearch.common.util.FeatureFlags.WRITABLE_WARM_INDEX_SETTING;  
+            // refresh the cluster-manager's ClusterInfoService before checking the assigned shards because DiskThresholdMonitor might still  
+            0,
+            for (ShardStats shardStats : shardStatses) {
+        List<String> indexList = new ArrayList<>();
+ * license agreements. See the NOTICE file distributed with
+        if (isWarmIndex && !nodeNames.isEmpty()) {
+     */  
+                return super.getUsableSpace();
+import org.opensearch.snapshots.RestoreInfo;
+        List<String> indexList = createTestIndices(nodeNames);
+        ensureStableCluster(3);
+                .clear()
+                .prepareHealth()  
+    }
+            0,
+        super(nodeSettings);
+import org.opensearch.common.Priority;
+        return Settings.builder()  
+        @Override
+        internalCluster().startClusterManagerOnlyNode(nodeSettings);
+import org.opensearch.index.IndexSettings;  
+    }  
+            }
+                    return Files.size(path);
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "0ms")
+        );
+import java.util.HashSet;
+        List<String> indexList = createTestIndices(nodeNames);
 }
+import org.opensearch.monitor.fs.FsInfo;
+    private FileSystem defaultFileSystem;  
+    }  
+            }
+            .setWaitForCompletion(true)  
+        ((InternalClusterInfoService) clusterInfoService).refresh();
+            assertTrue(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
+import static org.hamcrest.Matchers.empty;  
+        if (nodeName != null) {
+        );
+     * This test is excluded from parameterization and runs only once  
+            indexRandom(true, indexRequestBuilders);
+        );  
+        ensureStableCluster(2);  
+    private void refreshDiskUsage() {
+        );  
+        ensureStableCluster(2);
+        final InternalClusterInfoService clusterInfoService = (InternalClusterInfoService) internalCluster()  
+        client().admin().indices().prepareUpdateSettings(indexList.toArray(Strings.EMPTY_ARRAY)).setSettings(readBlockSettings);  
+        return (MockInternalClusterInfoService) internalCluster().getCurrentClusterManagerNodeInstance(ClusterInfoService.class);
+            .getState()  
+            0,
+        getMockInternalClusterInfoService().refresh();
+                        total += getTotalFileSize(subpath);
+            // Create warm indices on specific nodes  
+    private static class TestFileStore extends FilterFileStore {
+ * KIND, either express or implied.  See the License for the
+package org.opensearch.cluster.routing.allocation.decider;
+import org.opensearch.core.common.unit.ByteSizeUnit;
+        // Reduce disk space of all node.
+import org.opensearch.action.index.IndexRequestBuilder;  
+            0,  
+        assertBusy(() -> {
+        var nodeNames = startTestNodes(2, nodeSettings);
+            }  
+            for (String index : indexList) {
+        final Settings nodeSettings = buildTestSettings(false, false);
+                assertTrue(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK));
+            client().admin()
+        Path getRootDir() {
+                .setWaitForEvents(Priority.LANGUID)
+import java.util.Collection;  
+            0,  
+ *
+                assertTrue(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_BLOCK));  
+    protected Settings nodeSettings(int nodeOrdinal) {
+        final Settings.Builder indexSettingBuilder = Settings.builder()  
+            return internalCluster().startDataOnlyNodes(nodeCount, additionalSettings);
+                    .indices()
+    }  
+    }
+            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();  
+import java.nio.file.NoSuchFileException;
+            totalCacheSize,  
+        simulateFileCacheActiveUsage(getMockInternalClusterInfoService(), 100L, 100L, 100L);  
+import org.opensearch.core.common.unit.ByteSizeValue;
+        fileSystemProvider.getTestFileStore(dataNode0Path).setTotalSpace(minShardSize + WATERMARK_BYTES - 1L);  
+        }, 30L, TimeUnit.SECONDS);
+import org.opensearch.cluster.routing.allocation.decider.EnableAllocationDecider.Rebalance;  
+                path = path.getParent().getParent();
+import java.util.stream.Stream;
+        // data node (subtract the translog size since the disk threshold decider ignores this and may therefore move  
+    private Settings buildTestSettings(boolean diskThresholdEnabled, Boolean autoRelease) {  
+    }  
+                .setWaitForNoInitializingShards(true)  
+        ensureStableCluster(2);  
+     */
+    @Before
+        boolean isWarmIndex = WRITABLE_WARM_INDEX_SETTING.get(settings);  
+            final Settings readOnlySettings = Settings.builder()
+    }  
+    }
+            final IndexRequestBuilder[] indexRequestBuilders = new IndexRequestBuilder[scaledRandomIntBetween(100, 10000)];  
+        }, 30L, TimeUnit.SECONDS);
+    protected static final String BASE_REMOTE_REPO = "test-rs-repo";
+            if (totalSpace == -1) {  
+            if (totalSpace == -1) {  
+            // Apply a read_only_allow_delete_block on the indices  
+            // be processing a previous ClusterInfo update and will skip the new one (see DiskThresholdMonitor#onNewInfo(ClusterInfo)
+        simulateDiskPressure(getMockInternalClusterInfoService());
+    public void installFilesystemProvider() {
+        FileCacheStats fullStats = new FileCacheStats(
+            .put(FileCacheThresholdSettings.CLUSTER_FILECACHE_ACTIVEUSAGE_THRESHOLD_ENABLED_SETTING.getKey(), Boolean.FALSE.toString())  
+        TestFileStore(FileStore delegate, String scheme, Path path) {
+        defaultFileSystem = PathUtils.getDefaultFileSystem();
+        return Arrays.asList(
+        final CreateSnapshotResponse createSnapshotResponse = client().admin()  
+            .cluster()
+                return super.getTotalSpace();
+                .cluster()
+        assertThat(restoreInfo.failedShards(), is(0));
+            .cluster()
+ * under the License.  
+        if (isWarmIndex) {  
+        final Set<ShardRouting> shardRoutings = new HashSet<>();
+        assertNull(fileSystemProvider);
+ * You may obtain a copy of the License at  
+            0,
+                .setTranslog(true)
+        FileCacheStats blockStats = new FileCacheStats(
+            new Object[] { Settings.builder().put(WRITABLE_WARM_INDEX_SETTING.getKey(), false).build() },
+import org.opensearch.common.io.PathUtilsForTesting;
+        var nodeNames = startTestNodes(2, nodeSettings);
+                .setTransientSettings(  
+        Settings nodeSettings = buildTestSettings(false, null);
+                .isTimedOut()
+    private List<String> startTestNodes(int nodeCount, Settings additionalSettings) {
+    @Override
+        // the node from high watermark breached list.  
+        // Validate index create block is removed on the cluster
+        simulateFileCacheActiveUsage(getMockInternalClusterInfoService(), 1000L, 1000L, 1000L);  
+            }
+        var nodeNames = startTestNodes(1, nodeSettings);  
+        // Validate index create block is applied on the cluster
+        assertBusy(() -> {
+        internalCluster().startClusterManagerOnlyNode(nodeSettings);
+            new Object[] { Settings.builder().put(WRITABLE_WARM_INDEX_SETTING.getKey(), true).build() }  
+            .index(indexName)) {
+        Settings removeBlockSetting = Settings.builder().put(Metadata.SETTING_CREATE_INDEX_BLOCK_SETTING.getKey(), "false").build();
+import static org.hamcrest.Matchers.greaterThan;
+        }
+        final MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();  
+        }
+            final Settings readOnlySettings = Settings.builder()
+            ClusterState state1 = client().admin().cluster().prepareState().setLocal(true).get().getState();  
+        }
+            assertFalse(state1.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
+            ClusterState state1 = client().admin().cluster().prepareState().setLocal(true).get().getState();
+@ThreadLeakFilters(filters = CleanerDaemonThreadLeakFilter.class)  
+import static org.opensearch.common.util.concurrent.ConcurrentCollections.newConcurrentMap;
+                try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(path)) {
+            assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
+        assertBusyWithDiskUsageRefresh(dataNode0Id, indexName, hasSize(1));
+            assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
+        private final Path path;
+            AggregateFileCacheStats.FileCacheStatsType.FULL_FILE_STATS
+     * Index documents until all the shards are at least WATERMARK_BYTES in size, and return the size of the smallest shard.
+            return internalCluster().startDataAndWarmNodes(nodeCount, nodeSettings);
+        PathUtilsForTesting.installMock(defaultFileSystem); // set the default filesystem back
+        refreshDiskUsage();
+        }, 30L, TimeUnit.SECONDS);
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+ * this file be licensed under the Apache-2.0 license or a
+        final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);  
+        }
+            for (String index : indexList) {
+import org.opensearch.cluster.routing.ShardRoutingState;  
+        MockInternalClusterInfoService clusterInfoService,  
+                .cluster()
+            .prepareRestoreSnapshot("repo", "snap")
+        assumeTrue("Test should only run in the default (non-parameterized) test suite", WRITABLE_WARM_INDEX_SETTING.get(settings) == true);
+        assertNotNull(defaultFileSystem);
+            this.path = path;
+        // and whether reallocation is disabled on that index or not.
+        assumeTrue("Test should only run in the default (non-parameterized) test suite", WRITABLE_WARM_INDEX_SETTING.get(settings) == true);  
+            this.rootDir = new FilterPath(rootDir, fileSystem);
+            totalCacheSize,
+        }, 30L, TimeUnit.SECONDS);
+        internalCluster().startClusterManagerOnlyNode(nodeSettings);
+        clusterInfoService.setDiskUsageFunctionAndRefresh(  
+        // For hot indices, no pre-creation needed as disk usage simulation handles it
+                return super.getUnallocatedSpace();
+            .setWaitForCompletion(true)  
+                indexList.add(index);
+     * Helper method to create test indices for both hot and warm scenarios  
+        var nodeNames = startTestNodes(2, nodeSettings);
+            } else if (path.getFileName().toString().equals("_state") || path.getFileName().toString().equals("translog")) {
+            0,
+                try {
+            }
+ * GitHub history for details.
+    }  
+        final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+    private Settings warmNodeSettings(ByteSizeValue cacheSize) {
+            final long totalSpace = this.totalSpace;  
+        }
+        var pluginList = List.of(  
+        var nodeNames = startTestNodes(1, nodeSettings);
+ * this work for additional information regarding copyright
+import org.opensearch.node.Node;  
+import org.opensearch.test.InternalSettingsPlugin;
+        public long getUsableSpace() throws IOException {
+            }
+        ensureStableCluster(3);  
+        assertFalse(  
+        ensureStableCluster(3);
+        // the shard back again).
+        }  
+import org.apache.lucene.tests.mockfile.FilterFileSystemProvider;
+            indexSettingBuilder.put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(INDEX_ROUTING_ALLOCATION_NODE_SETTING, nodeName);  
+import org.opensearch.cluster.ClusterInfoService;
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "0b")
+    private void createIndex(String indexName, String nodeName, boolean isWarmIndex) throws Exception {
+            0,  
+        @Override
+                assertFalse(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK));
+            Files.createDirectories(dataPath);
+        final ClusterInfoService clusterInfoService = internalCluster().getCurrentClusterManagerNodeInstance(ClusterInfoService.class);  
+    public void testIndexCreateBlockWithAReadOnlyBlock() throws Exception {
+        final InternalClusterInfoService clusterInfoService = (InternalClusterInfoService) internalCluster()
+                return totalSpace;  
+            final long totalSpace = this.totalSpace;
+        );
+            } else {
+                } catch (NotDirectoryException | NoSuchFileException | FileNotFoundException e) {
+     */  
+        Settings.Builder settings = Settings.builder().put("location", randomRepoPath()).put("compress", randomBoolean());
+    /**  
+import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
+        var nodeNames = startTestNodes(1, nodeSettings);
+            createIndex(indexName, indexSettingBuilder.build());
+            settingsBuilder.put(DiskThresholdSettings.CLUSTER_CREATE_INDEX_BLOCK_AUTO_RELEASE.getKey(), autoRelease);
+ *
+import java.nio.file.NotDirectoryException;
+                String index = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+import org.opensearch.cluster.routing.allocation.FileCacheThresholdSettings;
+                            Settings.builder().put(INDEX_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), "none")
+    public void testRestoreSnapshotAllocationDoesNotExceedWatermark() throws Exception {
+        releaseDiskPressure(clusterInfoService);
+            for (String nodeName : nodeNames) {
+            // not so it can configure the merge scheduler accordingly
+        assumeTrue("Test should only run in the default (non-parameterized) test suite", WRITABLE_WARM_INDEX_SETTING.get(settings) == true);  
+ * not use this file except in compliance with the License.
+            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
+            if (path.endsWith(path.getFileSystem().getPath("nodes", "0"))) {
+        createTestIndices(nodeNames);
+    }  
+            assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
+    private Set<ShardRouting> getShardRoutings(final String nodeId, final String indexName) {
+import org.opensearch.index.store.remote.filecache.AggregateFileCacheStats;
+import org.hamcrest.Matcher;  
+        if (autoRelease != null) {
+    private static TestFileSystemProvider fileSystemProvider;
+                .setTransientSettings(
+import org.opensearch.cluster.metadata.Metadata;  
+    }
+        // reduce disk size of node 0 so that no shards fit below the high watermark, forcing all shards onto the other
+        );
+            createIndex(indexName, nodeNames.get(0), true);  
+        }, 30L, TimeUnit.SECONDS);  
+        final String dataNode0Id = internalCluster().getInstance(NodeEnvironment.class, dataNodeName).nodeId();
+ */
+            }
+        final Settings nodeSettings = buildTestSettings(false, false);
+        // Validate if cluster block is applied on the cluster  
+        private volatile long totalSpace = -1;  
+            .build();  
+        internalCluster().startClusterManagerOnlyNode(nodeSettings);
+    public void testDiskMonitorResetLastRuntimeMilliSecOnlyInFirstCall() throws Exception {
+    public void removeFilesystemProvider() {
+    }
+import static org.hamcrest.Matchers.is;
+        Settings readBlockSettings = Settings.builder()  
+    public void testIndexWriteBlockWhenNodeFileCacheActiveUsageDropsBelowSearchThreshold() throws Exception {
+import java.util.stream.StreamSupport;  
+        final String dataNode0Id = internalCluster().getInstance(NodeEnvironment.class, dataNodeName).nodeId();  
+        // Skip this test when running with parameters to ensure it only runs once  
+                // ignore metadata and translog, since the disk threshold decider only cares about the store size
+import java.nio.file.FileStore;
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_THRESHOLD_ENABLED_SETTING.getKey(), diskThresholdEnabled);
+            InternalSettingsPlugin.class,
+import org.opensearch.cluster.InternalClusterInfoService;  
+ * compatible open source license.
+            0,
+            .put(super.nodeSettings(0))
+        Settings readBlockSettings = Settings.builder().put(IndexMetadata.SETTING_READ_ONLY_ALLOW_DELETE, Boolean.TRUE.toString()).build();
+        internalCluster().getCurrentClusterManagerNodeInstance(ClusterService.class).addListener(event -> clusterInfoService.refresh());
+        ensureStableCluster(2);
+        var nodeNames = startTestNodes(1, nodeSettings);
+            // (can happen if the corresponding node has breached flood stage watermark).  
+import org.opensearch.common.settings.Settings;
+        ensureStableCluster(3);  
+        TestFileSystemProvider(FileSystem delegateInstance, Path rootDir) {
+        @Override  
+        assertAcked(client().admin().cluster().prepareUpdateSettings().setPersistentSettings(createBlockSetting).get());
+        assertBusy(() -> {
+            final Set<Path> containingPaths = trackedPaths.keySet().stream().filter(path::startsWith).collect(Collectors.toSet());  
+            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();  
+                fileStore = super.getFileStore(path);  
+            AggregateFileCacheStats.FileCacheStatsType.PINNED_FILE_STATS  
+        var nodeNames = startTestNodes(1, nodeSettings);
+            .put(IndexSettings.INDEX_MERGE_ON_FLUSH_ENABLED.getKey(), false);  
+        } else {
+        );
+        }, 30L, TimeUnit.SECONDS);
+                        .put(EnableAllocationDecider.CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), Rebalance.NONE.toString())  
+        simulateFileCacheActiveUsage(getMockInternalClusterInfoService(), 90L, 100L, 100L);  
+                    long total = 0L;  
+        }, 30L, TimeUnit.SECONDS);  
+        assertBusyWithDiskUsageRefresh(dataNode0Id, indexName, hasSize(1));
+    /**
+    }
+    }  
+                    )  
+                .put(additionalSettings)
+            }
+    private void releaseDiskPressure(MockInternalClusterInfoService clusterInfoService) {
+            return getTestFileStore(path);  
+    public void testIndexCreateBlockIsRemovedWhenAnyNodesNotExceedHighWatermarkWithAutoReleaseDisabled() throws Exception {
+            .clear()  
+    /**
+ * Licensed to Elasticsearch under one or more contributor  
+        ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();
+            Settings nodeSettings = Settings.builder()
+        boolean isWarmIndex = WRITABLE_WARM_INDEX_SETTING.get(settings);
+        assertThat(restoreInfo.successfulShards(), is(snapshotInfo.totalShards()));  
+                .setWaitForNoRelocatingShards(true)
+    }  
+                return 0L;  
+            }
+        // Validate if index create block is removed on the cluster. Need to refresh this periodically as well to remove
+        if (StreamSupport.stream(clusterInfoService.getClusterInfo().getNodeMostAvailableDiskUsages().values().spliterator(), false)
+            assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));  
+                assertTrue(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK));
+    public void setup() {  
+import java.util.Set;
+            .put(IndexMetadata.SETTING_READ_ONLY_ALLOW_DELETE, Boolean.TRUE.toString())
+        client().admin().cluster().prepareUpdateSettings().setPersistentSettings(fileCacheModifiedSettings).get();
+            .put(FileCacheThresholdSettings.CLUSTER_FILECACHE_ACTIVEUSAGE_INDEXING_THRESHOLD_SETTING.getKey(), "900b")
+            }  
+                .put(warmNodeSettings(new ByteSizeValue(TOTAL_SPACE_BYTES)))  
+                        new UpdateSettingsRequest(indexName).settings(  
+        releaseDiskPressure(clusterInfoService);  
+            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();  
+    }
+            .put(Node.NODE_SEARCH_CACHE_SIZE_SETTING.getKey(), cacheSize.toString())
+                    return 0L;
+import org.opensearch.common.io.PathUtils;  
+                    Settings.builder()
+import static org.opensearch.index.store.Store.INDEX_STORE_STATS_REFRESH_INTERVAL_SETTING;
+                }  
+            .build();
+            .allMatch(cur -> cur.getFreeBytes() > WATERMARK_BYTES)) {
+        // Validate index create block is not removed on the cluster
+        long active,
+    private static FsInfo.Path setDiskUsage(FsInfo.Path original, long totalBytes, long freeBytes) {
+ */  
+import static org.opensearch.index.store.remote.filecache.FileCacheSettings.DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING;  
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+                client().admin()  
+import org.apache.lucene.tests.mockfile.FilterFileStore;
+        }
+            .get();
+                .getShards();  
+        // Reduce disk space of all node until all of them is breaching high disk watermark.
+                    shardRoutings.add(shard);  
+            active,
+            .prepareCreateSnapshot("repo", "snap")
+                .indices()  
+        for (IndexShardRoutingTable indexShardRoutingTable : client().admin()  
+        // Validate if cluster block is applied on the cluster
+    public void testDiskMonitorAppliesBlockBackWhenUserRemovesIndexCreateBlock() throws Exception {  
+                .prepareUpdateSettings()  
+    /**
+                .prepareStats(indexName)
+        fileSystemProvider.getTestFileStore(dataNode0Path).setTotalSpace(minShardSize + WATERMARK_BYTES + 1L);  
+    public void testIndexCreateBlockIsRemovedWhenAnyNodesNotExceedHighWatermarkWithAutoReleaseEnabled() throws Exception {  
+            assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
+        @Override
+        boolean isWarmIndex = WRITABLE_WARM_INDEX_SETTING.get(settings);
+        }  
+        simulateDiskPressure(clusterInfoService);
+        fileSystemProvider = null;  
+    }
+    private void assertBusyWithDiskUsageRefresh(String nodeName, String indexName, Matcher<? super Set<ShardRouting>> matcher)  
+            refresh();  
+        ensureStableCluster(3);  
+        Settings nodeSettings = buildTestSettings(false, null);
+        }
+    private void simulateDiskPressure(MockInternalClusterInfoService clusterInfoService) {
+        if (isWarmIndex) {
+            .getCurrentClusterManagerNodeInstance(ClusterInfoService.class);  
+            for (String index : indexList) {
+        // Validate if cluster block is applied on the cluster
+        // Refresh so that DiskThresholdMonitor kicks in and applies block.
+            if (totalSpace == -1) {
+import java.util.stream.Collectors;
+        assertNull(defaultFileSystem);  
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), WATERMARK_BYTES + "b")
+        final Settings nodeSettings = buildTestSettings(false, false);  
+        FileCacheStats pinnedStats = new FileCacheStats(  
+    public void testIndexCreateBlockNotAppliedWhenAnyNodesBelowHighWatermark() throws Exception {  
+        while (true) {
+    }  
+    public void testIndexWriteBlockWhenNodeFileCacheActiveUsageExceedsSearchThresholdWithFeatureToggle() throws Exception {  
+        // increase disk size of node 0 to allow just enough room for one shard, and check that it's rebalanced back  
+        throws Exception {
+import org.opensearch.env.Environment;  
+     * Helper method to simulate disk pressure for both hot and warm indices  
+    }  
+        assertBusy(() -> {  
+        PathUtilsForTesting.installMock(fileSystemProvider.getFileSystem(null));
+        final long minShardSize = createAndPopulateIndex(indexName, null);
+import static org.hamcrest.Matchers.anyOf;
+        assertBusy(() -> {
+    private MockInternalClusterInfoService getMockInternalClusterInfoService() {
+            MockFsRepositoryPlugin.class  
+        // if the nodes were all under the low watermark already (but unbalanced) then a change in the disk usage doesn't trigger a reroute
+import org.opensearch.index.store.remote.file.CleanerDaemonThreadLeakFilter;
+            .put(IndexMetadata.SETTING_BLOCKS_READ, Boolean.TRUE.toString())
+                    .get()
+        assertBusy(() -> {
+            WRITABLE_WARM_INDEX_SETTING.get(settings) == false  
+            // Apply a read_only_allow_delete_block on one of the index
+            0,
+        }
+ * The OpenSearch Contributors require contributions made to  
+                createIndex(index, nodeName, true);  
+                .cluster()
+        simulateDiskPressure(clusterInfoService);  
+        }  
+        ensureStableCluster(2);  
+        var nodeNames = startTestNodes(2, nodeSettings);  
+            0,
+        public FileStore getFileStore(Path path) {
+        }
+        }, 30L, TimeUnit.SECONDS);  
+                    Settings.builder().putNull(EnableAllocationDecider.CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey()).build()
+        List<String> indexList = createTestIndices(nodeNames);
+    private static AggregateFileCacheStats setAggregateFileCacheStats(long active, long used, long totalCacheSize) {
+    }  
+            indexSettingBuilder.put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 6);  
+        simulateFileCacheActiveUsage(getMockInternalClusterInfoService(), 89L, 100L, 100L);
+        }
+            assertThat(path + " not contained in a unique tracked path", containingPaths, hasSize(1));
+                shardSizes[shardStats.getShardRouting().id()] = shardStats.getStats().getStore().sizeInBytes();  
+        assertBusy(() -> {
+@ParameterizedStaticSettingsOpenSearchIntegTestCase.ClusterScope(scope = ParameterizedStaticSettingsOpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+                .build();  
+    }  
+                .get()
+            final Set<ShardRouting> shardRoutings = getShardRoutings(nodeName, indexName);
+     */
+            // Create indices  
+        simulateDiskPressure(clusterInfoService);
+        }, 30L, TimeUnit.SECONDS);  
+        final Settings nodeSettings = buildTestSettings(false, null);
+ *  
+        Settings createBlockSetting = Settings.builder().put(Metadata.SETTING_CREATE_INDEX_BLOCK_SETTING.getKey(), "true").build();
+        // Validate index create block is not removed on the cluster  
+import org.opensearch.action.admin.indices.stats.ShardStats;
+                )
+    @ParametersFactory
+        }, 30L, TimeUnit.SECONDS);  
+                .prepareUpdateSettings()
+            .build();
+                .build();
+        // Free all the space
+    }
+        ensureStableCluster(2);
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+            final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+        }
+        assertAcked(  
+import org.opensearch.remotestore.multipart.mocks.MockFsRepositoryPlugin;
+                assertFalse(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK));
+        final MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();
+            AggregateFileCacheStats.FileCacheStatsType.BLOCK_FILE_STATS
+        assertThat(snapshotInfo.successfulShards(), is(snapshotInfo.totalShards()));  
+        final MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();
+import org.opensearch.index.IndexModule;
+    protected boolean addMockIndexStorePlugin() {  
+        Settings nodeSettings = buildTestSettings(false, null);
+        createTestIndices(nodeNames);  
+        }
+        final MockInternalClusterInfoService clusterInfoService = getMockInternalClusterInfoService();
+        }  
+        Settings nodeSettings = buildTestSettings(false, null);  
+            assertAcked(
+            assertTrue(state1.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
+            0,  
+                .put(IndexMetadata.SETTING_READ_ONLY_ALLOW_DELETE, Boolean.TRUE.toString())
+        } catch (IOException e) {  
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.plugins.Plugin;
+    }
+public class DiskThresholdDeciderIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
+                assertTrue(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_BLOCK));
+            .put(DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 1)  
+/*
+            0,  
+                    // probably removed  
+        return Settings.builder()
+            }  
+        clusterInfoService.setDiskUsageFunctionAndRefresh(  
+     * Helper method to start nodes that support both data and warm roles
+        internalCluster().startClusterManagerOnlyNode(nodeSettings);
+            .getCurrentClusterManagerNodeInstance(ClusterInfoService.class);
+        createTestIndices(nodeNames);  
+            assertThat("Mismatching shard routings: " + shardRoutings, shardRoutings, matcher);  
+    }
+        private static long getTotalFileSize(Path path) throws IOException {
+        assertBusy(() -> {  
+            .prepareState()
+            0,
+            client().admin().indices().prepareUpdateSettings(indexName).setSettings(readOnlySettings).get();
+        final Path dataNode0Path = internalCluster().getInstance(Environment.class, dataNodeName).dataFiles()[0];
+        return shardRoutings;
+    public void testIndexWriteBlockWhenNodeFileCacheActiveUsageExceedsSearchThreshold() throws Exception {  
+        return new FsInfo.Path(original.getPath(), original.getMount(), totalBytes, freeBytes, freeBytes);
+            .build();  
+        assertBusy(() -> {
+import java.nio.file.Files;  
+        var nodeNames = startTestNodes(2, nodeSettings);  
+import java.io.FileNotFoundException;
+    public void testHighWatermarkNotExceeded() throws Exception {
+import org.opensearch.cluster.routing.allocation.DiskThresholdSettings;
+        releaseDiskPressure(clusterInfoService);  
+        private final Path rootDir;  
+        return indexList;
+        return Stream.concat(super.nodePlugins().stream(), pluginList.stream()).collect(Collectors.toList());
+        assertBusy(() -> {  
+                    for (Path subpath : directoryStream) {
+    @Before
+        Settings.Builder settingsBuilder = Settings.builder()
+        assertBusy(() -> {
+        fileSystemProvider.getTestFileStore(dataNode0Path).setTotalSpace(minShardSize + WATERMARK_BYTES + 1L);
+        public long getUnallocatedSpace() throws IOException {
+import java.util.Map;
+        }, 30L, TimeUnit.SECONDS);
+        }
+        Settings fileCacheModifiedSettings = Settings.builder()
+        createTestIndices(nodeNames);
+    private static final long WATERMARK_BYTES = new ByteSizeValue(10, ByteSizeUnit.KB).getBytes();  
+        final Settings nodeSettings = buildTestSettings(false, false);  
+            assertFalse(state1.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
+        assertBusy(() -> {  
+        simulateFileCacheActiveUsage(getMockInternalClusterInfoService(), 100L, 100L, 100L);
+        assertAcked(client().admin().cluster().prepareUpdateSettings().setPersistentSettings(removeBlockSetting).get());
+        fileSystemProvider.addTrackedPath(dataPath);  
+            }
+                assertThat(shard.state(), equalTo(ShardRoutingState.STARTED));
+     */
+            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();  
+    }  
+            assertTrue(path + " starts with " + rootDir, path.startsWith(rootDir));  
+        createIndex(indexName, nodeName, false);  
+                    return total;
+        List<String> indexList = createTestIndices(nodeNames);
+        return createReasonableSizedShards(indexName);
+            .put(super.nodeSettings(nodeOrdinal))
+            createAndPopulateIndex(indexName, nodeNames.get(0));  
+                .get()  
+import static org.hamcrest.Matchers.equalTo;
+            refreshDiskUsage();  
+        );
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+        defaultFileSystem = null;  
+    }
+        internalCluster().startClusterManagerOnlyNode(nodeSettings);  
+                } catch (NoSuchFileException | FileNotFoundException e) {  
+        assertBusy(() -> {
+            } else {  
+            .get()
+    }
+        assumeTrue("Test should only run in the default (non-parameterized) test suite", WRITABLE_WARM_INDEX_SETTING.get(settings) == true);
+            } else {
+        simulateFileCacheActiveUsage(getMockInternalClusterInfoService(), 99L, 100L, 100L);  
+            }
+import static org.opensearch.cluster.routing.allocation.decider.EnableAllocationDecider.INDEX_ROUTING_ALLOCATION_ENABLE_SETTING;
+                }
+            assertThat(totalSpace, anyOf(is(-1L), greaterThan(0L)));
+        assertThat(snapshotInfo.state(), is(SnapshotState.SUCCESS));
+            // Create one of the index.
+            .getRoutingTable()
+import org.opensearch.cluster.MockInternalClusterInfoService;
+import java.nio.file.DirectoryStream;  
+            final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+            // On Linux, and only Linux, Lucene obtains a filestore for the index in order to determine whether it's on a spinning disk or  
+        assertBusy(() -> {  
+ */  
+ * ownership. Elasticsearch licenses this file to you under  
+            assertNull(trackedPaths.put(path, new TestFileStore(fileStore, getScheme(), path)));
+        internalCluster().startClusterManagerOnlyNode(nodeSettings);  
+            0,
+        if (isWarmIndex) {
+                return fileStore;  
+            0,  
+        internalCluster().getCurrentClusterManagerNodeInstance(ClusterService.class).addListener(event -> clusterInfoService.refresh());
+            final TestFileStore fileStore = trackedPaths.get(path);
+        public long getTotalSpace() throws IOException {
+            if (minShardSize > WATERMARK_BYTES) {
+        Settings nodeSettings = buildTestSettings(false, null);
+import java.io.IOException;
+        // User removes index create block.
+            .build();
+        );
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+            }  
+    private static final String INDEX_ROUTING_ALLOCATION_NODE_SETTING = "index.routing.allocation.include._name";
+        client().admin().cluster().prepareUpdateSettings().setPersistentSettings(clusterFileCacheDisabled).get();
+     */
+        try {
+            .cluster()
+            for (String index : indexList) {  
+        internalCluster().startClusterManagerOnlyNode(nodeSettings);
+import org.opensearch.snapshots.SnapshotState;  
+        Settings removeBlockSetting = Settings.builder().put(Metadata.SETTING_CREATE_INDEX_BLOCK_SETTING.getKey(), false).build();
+import org.opensearch.core.common.Strings;  
+        internalCluster().startClusterManagerOnlyNode(nodeSettings);
+    }  
+        fileSystemProvider = new TestFileSystemProvider(defaultFileSystem, createTempDir());  
+            for (String index : indexList) {
+                    // probably removed
+    /**
+            indexSettingBuilder.put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true);  
+        final SnapshotInfo snapshotInfo = createSnapshotResponse.getSnapshotInfo();
+        }, 30L, TimeUnit.SECONDS);
+        assertFalse(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));  
+    }
+            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();  
+        }
+            .get();
+            }  
+        // Validate cluster block is not applied on the cluster
+                )
+            if (Files.isRegularFile(path)) {  
+            createIndex(indexName2, nodeNames.get(1), true);
+        Settings nodeSettings = buildTestSettings(false, null);
+     */
+        }, 30L, TimeUnit.SECONDS);
+        // Free all the space
+                .put(IndexMetadata.SETTING_READ_ONLY_ALLOW_DELETE, Boolean.TRUE.toString())
+        } else {  
+            "Test should only run in the default (non-parameterized) test suite",
+            .put(Environment.PATH_DATA_SETTING.getKey(), dataPath)  
+    }  
+            0,
+        ensureStableCluster(3);
+        }, 30L, TimeUnit.SECONDS);  
+import org.opensearch.snapshots.SnapshotInfo;
+            0,
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    @After
+    }
+    private long createAndPopulateIndex(final String indexName, final String nodeName) throws Exception {
+    }
+import java.util.Locale;  
+        internalCluster().startClusterManagerOnlyNode(nodeSettings);
+        internalCluster().startDataOnlyNode();  
+        final long minShardSize = createAndPopulateIndex(indexName, null);  
+        List<String> indexList = createTestIndices(nodeNames);
+            final FileStore fileStore;
+                assertTrue(state.getBlocks().hasIndexBlock(index, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK));  
+import static org.hamcrest.Matchers.hasSize;  
+/*  
+        if (isWarmIndex) {  
+import org.apache.lucene.util.Constants;
+        fileSystemProvider.getTestFileStore(dataNode0Path).setTotalSpace(minShardSize + WATERMARK_BYTES - 1L);
+        assertBusy(() -> assertThat(getShardRoutings(dataNode0Id, indexName), empty()));  
+        assertAcked(client().admin().indices().prepareDelete(indexName).get());  
+                return Math.max(0L, totalSpace - getTotalFileSize(path));  
+        simulateDiskPressure(clusterInfoService);  
+        assertAcked(
+            final long minShardSize = Arrays.stream(shardSizes).min().orElseThrow(() -> new AssertionError("no shards"));  
+        List<String> indexList = createTestIndices(nodeNames);  
+    public DiskThresholdDeciderIT(Settings nodeSettings) {
+            used,  
+import java.util.Arrays;
+            getMockInternalClusterInfoService().refresh();
+        // increase disk size of node 0 to allow just enough room for one shard, and check that it's rebalanced back
+            client().admin().indices().prepareUpdateSettings(indexName).setSettings(readOnlySettings).get();
+                if (shard.currentNodeId().equals(nodeId)) {
+        }, 30L, TimeUnit.SECONDS);  
+            } else {
+    @Override
+        assertBusy(() -> {
+        // Depending on node name specified or not, we determine whether to enable node name based shard routing for index  
+        }
+        Settings nodeSettings = buildTestSettings(false, null);  
+        );
+            return trackedPaths.get(containingPaths.iterator().next());
+            this.totalSpace = totalSpace;  
+            0,  
+        startTestNodes(2, nodeSettings);  
+import java.nio.file.FileSystem;
+            final ShardStats[] shardStatses = client().admin()
+                .build();  
+        Settings nodeSettings = buildTestSettings(false, null);
+            super("diskthreshold://", delegateInstance);  
+        final InternalClusterInfoService clusterInfoService = (InternalClusterInfoService) internalCluster()
+        internalCluster().startDataOnlyNode();
+            ClusterState state = client().admin().cluster().prepareState().setLocal(true).get().getState();
+        client().admin().indices().prepareUpdateSettings(indexList.toArray(Strings.EMPTY_ARRAY)).setSettings(readBlockSettings);
+        internalCluster().startClusterManagerOnlyNode(nodeSettings);
+        // User removes the block.  
+        internalCluster().startClusterManagerOnlyNode(nodeSettings);
+                    return 0L;
+            // and its internal checkInProgress flag)
+            final String indexName2 = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+            final long totalSpace = this.totalSpace;
+            if (fileStore != null) {
+     * Helper method to simulate disk pressure for both hot and warm indices  
+            throw new AssertionError("unexpected", e);
+import org.apache.lucene.tests.mockfile.FilterPath;  
+        }
+    }
+import java.nio.file.Path;  
+        }  
+    private List<String> createTestIndices(List<String> nodeNames) throws Exception {
+            client().admin()
+        internalCluster().startClusterManagerOnlyNode();
+import java.util.List;
+ * software distributed under the License is distributed on an
+            settingsBuilder.put(remoteStoreClusterSettings(BASE_REMOTE_REPO, remoteRepoPath));
+/*  
+import org.opensearch.env.NodeEnvironment;
+            assertTrue(state.blocks().hasGlobalBlockWithId(Metadata.CLUSTER_CREATE_INDEX_BLOCK.id()));
+        );

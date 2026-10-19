@@ -1,269 +1,242 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.dsl.types;
-
-import org.opensearch.analytics.qa.Dataset;
-import org.opensearch.analytics.qa.DatasetProvisioner;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Comparator;  
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;  
-import java.util.Objects;
+        long expectedTotal = asLong(goldenHits.get("total"));
 import java.util.TreeMap;
-
-/**
- * Validates a parquet DSL {@code _search} response against a committed golden file.
- *  
- * <p>Golden files live at {@code datasets/<type>/dsl/expected/q<N>.json} and capture the meaningful
- * parts of a search response:
- * <pre>  
- *   {
- *     "hits": {
- *       "total": 3,  
- *       "sources": [ { ... _source ... }, ... ]   // hit ordering ignored; array values within a _source are not
- *     }
- *   }  
- * </pre>
- * {@code total} is compared against {@code hits.total.value}; {@code sources} is compared against each
- * hit's {@code _source} with numeric tolerance. The {@code sources} list itself is order-independent  
- * (hit ordering is ignored), but values <i>within</i> a {@code _source} — including array fields such as
- * {@code tags} — are compared in order, so a reordered array is a mismatch. A {@code total} of 0 with an
- * empty (or absent) {@code sources} is a perfectly valid golden — e.g. an aggregation-only query or a  
- * query that legitimately matches nothing.
- *
+            );
+    private static String compareSource(Map<String, Object> expected, Map<String, Object> actual, String label) {  
+            return true;
+            return label + ": no golden file at " + goldenPath;  
+import java.util.Locale;
+}
+            }
+        }
+            List<String> parts = new ArrayList<>();  
+        try {
+                    e.getKey(),
+                expectedSources.size(),  
  * <p><b>The expected answer is the TRUE answer, not parquet's answer.</b> Expected answers are generated  
- * out-of-band by running each dataset on a vanilla OpenSearch index (default Lucene backend, no parquet
- * settings) — the reference implementation — and committed. This suite only ever <i>validates</i> the
+import java.util.Map;  
+ * SPDX-License-Identifier: Apache-2.0
+                "%s: hit count mismatch - expected %d sources, got %d",
+        if (total instanceof Map) {  
+        return org.opensearch.common.xcontent.XContentHelper.convertToMap(
+                );
+            out.add(src instanceof Map ? (Map<String, Object>) src : Map.of());
+            org.opensearch.common.xcontent.XContentType.JSON.xContent(),
+import java.util.Comparator;  
+        );
+ * The OpenSearch Contributors require contributions made to  
+            return String.format(
+                new TreeMap<>(expected).keySet(),  
+        if (o instanceof List) {
+            return String.format(Locale.ROOT, "%s: total mismatch - expected %d, got %d", label, expectedTotal, actualTotal);
+        if (expected.size() != actual.size()) {
+ *     "hits": {
+    // ── extraction from a live response ────────────────────────────────────────  
+                }
+            List<Object> expectedList = (List<Object>) expected;
+            return sb.append("}").toString();  
+                    e.getValue(),
+            }
+        if (expectedSources.size() != actualSources.size()) {
+    private static String canonical(Object o) {  
+        }
+    }
+                return false;
+/*  
+                label,
+            if (diff != null) {
+        return out;
+            return Math.abs(((Number) expected).doubleValue() - ((Number) actual).doubleValue()) < NUMERIC_TOLERANCE;
+ *
+ * query that legitimately matches nothing.
+            }  
+            return '"' + (String) o + '"';  
+ * <p>Golden files live at {@code datasets/<type>/dsl/expected/q<N>.json} and capture the meaningful
  * parquet response against the committed expected answer, so any place parquet deviates (null text  
+                sb.append('"').append(e.getKey()).append("\":").append(canonical(e.getValue()));
+            TreeMap<String, Object> sorted = new TreeMap<>((Map<String, Object>) o);
+        }
+                parts.add(canonical(e));
+    // ── helpers ──────────────────────────────────────────────────────────────
+                if (!valuesEqual(expectedList.get(i), actualList.get(i))) {  
+        if (expectedTotal != actualTotal) {  
+ * empty (or absent) {@code sources} is a perfectly valid golden — e.g. an aggregation-only query or a  
+            }
+import java.util.ArrayList;
+     */  
+        }
+        List<Map<String, Object>> out = new ArrayList<>();
+            if (!valuesEqual(e.getValue(), actual.get(e.getKey()))) {
+        List<Map<String, Object>> actualSources = extractSources(actual);
+        exp.sort(byCanonical);  
+    private static String compare(Map<String, Object> golden, Map<String, Object> actual, String label) {
+ *       "sources": [ { ... _source ... }, ... ]   // hit ordering ignored; array values within a _source are not
+        return Objects.equals(expected, actual);  
+    /** Canonical string form of a source map: keys sorted recursively, for order-independent compare. */
+ *     }
+    }
+                Locale.ROOT,  
+            return String.format(
+            // are not collapsed during hit pairing. Hit *list* ordering is still ignored — see compare().
+            Object src = hit.get("_source");
+            // Preserve element order so that array-order differences yield distinct canonical keys and
+        }
+                new TreeMap<>(actual).keySet()
+     * @return {@code null} when validation passes; otherwise a human-readable failure message
+        Object total = hits.get("total");
+    private DslResponseValidator() {}  
+import java.util.Objects;
+        if (expected instanceof Number && actual instanceof Number) {  
+    }
+                "%s: field count mismatch - expected %s, got %s",
+            return label + ": failed to load/parse golden " + goldenPath + ": " + e.getMessage();
+    private static long extractTotal(Map<String, Object> response) {  
+    @SuppressWarnings("unchecked")  
+        return null;
+    }  
+    @SuppressWarnings("unchecked")
+        return null;  
+ * (hit ordering is ignored), but values <i>within</i> a {@code _source} — including array fields such as
+        }
+                    Locale.ROOT,
+        if (o instanceof String) {
+        } catch (Exception e) {  
+        List<Map<String, Object>> out = new ArrayList<>();  
+            // must match element-for-element in the same order. Compare positionally; do not sort.
+        }
+    }
+                return String.format(  
+            String diff = compareSource(exp.get(i), act.get(i), label + " source " + i);
+        return String.valueOf(o);
+ * </pre>
+    }
+/**
+        return compare(golden, actual, label);
+                    sb.append(",");
+    private static long asLong(Object o) {
  * {@code _source}, multi-valued keyword / custom-id / geo / nested failures) correctly shows red. This
+    private static List<Map<String, Object>> extractSources(Map<String, Object> response) {
+            for (Object e : (List<Object>) o) {
+            false
+        Map<String, Object> hits = (Map<String, Object>) response.get("hits");
+            return asLong(((Map<String, Object>) total).get("value"));
+ * this file be licensed under the Apache-2.0 license or a
+            StringBuilder sb = new StringBuilder("{");  
+import java.util.List;
+        List<Map<String, Object>> expectedSources = asSourceList(goldenHits.get("sources"));
+ * Validates a parquet DSL {@code _search} response against a committed golden file.
+        // Older/typed responses may carry a bare number.  
+     * Validate {@code actual} against the golden for {@code dataset}/q{@code queryNumber}.  
+ *       "total": 3,  
  * mirrors the PPL/SQL suite in {@code analytics-engine-rest}, whose expected files are known-correct
+ * compatible open source license.
+    private static Map<String, Object> parseJson(String json) throws IOException {  
+package org.opensearch.dsl.types;
+    @SuppressWarnings("unchecked")
+            return out;
+                    return false;
+                if (!first) {  
+        }
+        }  
+                label,
+                    label,  
+    @SuppressWarnings("unchecked")
+            }
+                return diff;  
+    // ── comparison ───────────────────────────────────────────────────────────
+        return out;
+        }
+    private static boolean valuesEqual(Object expected, Object actual) {
+        List<Map<String, Object>> exp = new ArrayList<>(expectedSources);  
+        Map<String, Object> golden;  
+        if (o instanceof List) {  
+            );
+ *   }  
+                }
+        return o instanceof Number ? ((Number) o).longValue() : 0L;  
+        List<Map<String, Object>> hitList = (List<Map<String, Object>>) hits.get("hits");
+        String label = "DSL " + dataset.name + " Q" + queryNumber;
+import java.io.IOException;
+ * parts of a search response:
+        String goldenPath = dataset.expectedResponseResourcePath("dsl", queryNumber);  
+        if (expected instanceof List && actual instanceof List) {  
+        }  
+            if (expectedList.size() != actualList.size()) {  
+                    out.add((Map<String, Object>) e);  
+        for (Map.Entry<String, Object> e : expected.entrySet()) {
+        List<Map<String, Object>> act = new ArrayList<>(actualSources);
+            return 0;  
  * answers, never the engine's own output.  
+    private static final double NUMERIC_TOLERANCE = 1e-9;
+        if (o instanceof Map) {
+        }  
+            golden = parseJson(DatasetProvisioner.loadResource(goldenPath));
+        }  
+                actualSources.size()
+ */  
+        }
+    @SuppressWarnings("unchecked")  
+        }  
+            // _source array order is significant — unlike hit ordering, an array field such as `tags`  
+        if (hits == null) {
+        Map<String, Object> hits = (Map<String, Object>) response.get("hits");
+ *  
+    /**
+        if (DslResponseValidator.class.getClassLoader().getResource(goldenPath) == null) {
+            List<Object> actualList = (List<Object>) actual;
+    private static List<Map<String, Object>> asSourceList(Object o) {
+ * {@code total} is compared against {@code hits.total.value}; {@code sources} is compared against each
+ *   {
+                if (e instanceof Map) {
+        Map<String, Object> goldenHits = (Map<String, Object>) golden.get("hits");
+                    actual.get(e.getKey())  
+        for (int i = 0; i < exp.size(); i++) {  
+            return "[" + String.join(",", parts) + "]";  
+    public static String validate(Dataset dataset, int queryNumber, Map<String, Object> actual) {
+                    "%s field [%s]: value mismatch - expected %s, got %s",
+        }
+                Locale.ROOT,  
+        act.sort(byCanonical);
+        }
+            json,  
+            boolean first = true;
+    }
+            for (int i = 0; i < expectedList.size(); i++) {
+        if (hitList == null) {  
+ * out-of-band by running each dataset on a vanilla OpenSearch index (default Lucene backend, no parquet
+    @SuppressWarnings("unchecked")
+                return String.format(Locale.ROOT, "%s: missing field [%s]", label, e.getKey());  
+                }
+            }
+            if (!actual.containsKey(e.getKey())) {
+    }
+ *
+        if (hits == null) {
  */
 public final class DslResponseValidator {
-
-    private static final double NUMERIC_TOLERANCE = 1e-9;
-
-    private DslResponseValidator() {}  
-
-    /**
-     * Validate {@code actual} against the golden for {@code dataset}/q{@code queryNumber}.  
-     *
-     * @return {@code null} when validation passes; otherwise a human-readable failure message
-     */  
-    public static String validate(Dataset dataset, int queryNumber, Map<String, Object> actual) {
-        String label = "DSL " + dataset.name + " Q" + queryNumber;
-        String goldenPath = dataset.expectedResponseResourcePath("dsl", queryNumber);  
-
-        if (DslResponseValidator.class.getClassLoader().getResource(goldenPath) == null) {
-            return label + ": no golden file at " + goldenPath;  
-        }
-
-        Map<String, Object> golden;  
-        try {
-            golden = parseJson(DatasetProvisioner.loadResource(goldenPath));
-        } catch (Exception e) {  
-            return label + ": failed to load/parse golden " + goldenPath + ": " + e.getMessage();
-        }
-
-        return compare(golden, actual, label);
-    }
-
-    // ── comparison ───────────────────────────────────────────────────────────
-
-    @SuppressWarnings("unchecked")  
-    private static String compare(Map<String, Object> golden, Map<String, Object> actual, String label) {
-        Map<String, Object> goldenHits = (Map<String, Object>) golden.get("hits");
-        if (goldenHits == null) {  
-            return label + ": golden has no \"hits\" block";
-        }
-
-        long expectedTotal = asLong(goldenHits.get("total"));
-        long actualTotal = extractTotal(actual);
-        if (expectedTotal != actualTotal) {  
-            return String.format(Locale.ROOT, "%s: total mismatch - expected %d, got %d", label, expectedTotal, actualTotal);
-        }
-
-        List<Map<String, Object>> expectedSources = asSourceList(goldenHits.get("sources"));
-        List<Map<String, Object>> actualSources = extractSources(actual);
-
-        if (expectedSources.size() != actualSources.size()) {
-            return String.format(
-                Locale.ROOT,  
-                "%s: hit count mismatch - expected %d sources, got %d",
-                label,
-                expectedSources.size(),  
-                actualSources.size()
-            );
-        }  
-
-        // Order-independent: sort both by canonical string form, then compare element-wise.
-        List<Map<String, Object>> exp = new ArrayList<>(expectedSources);  
-        List<Map<String, Object>> act = new ArrayList<>(actualSources);
-        Comparator<Map<String, Object>> byCanonical = Comparator.comparing(DslResponseValidator::canonical);
-        exp.sort(byCanonical);  
-        act.sort(byCanonical);
-
-        for (int i = 0; i < exp.size(); i++) {  
-            String diff = compareSource(exp.get(i), act.get(i), label + " source " + i);
-            if (diff != null) {
-                return diff;  
-            }
-        }
-        return null;  
-    }
-
-    private static String compareSource(Map<String, Object> expected, Map<String, Object> actual, String label) {  
-        if (expected.size() != actual.size()) {
-            return String.format(
-                Locale.ROOT,  
-                "%s: field count mismatch - expected %s, got %s",
-                label,
-                new TreeMap<>(expected).keySet(),  
-                new TreeMap<>(actual).keySet()
-            );
-        }  
-        for (Map.Entry<String, Object> e : expected.entrySet()) {
-            if (!actual.containsKey(e.getKey())) {
-                return String.format(Locale.ROOT, "%s: missing field [%s]", label, e.getKey());  
-            }
-            if (!valuesEqual(e.getValue(), actual.get(e.getKey()))) {
-                return String.format(  
-                    Locale.ROOT,
-                    "%s field [%s]: value mismatch - expected %s, got %s",
-                    label,  
-                    e.getKey(),
-                    e.getValue(),
-                    actual.get(e.getKey())  
-                );
-            }
-        }  
-        return null;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static boolean valuesEqual(Object expected, Object actual) {
-        if (expected instanceof Number && actual instanceof Number) {  
-            return Math.abs(((Number) expected).doubleValue() - ((Number) actual).doubleValue()) < NUMERIC_TOLERANCE;
-        }
-        if (expected instanceof List && actual instanceof List) {  
-            List<Object> expectedList = (List<Object>) expected;
-            List<Object> actualList = (List<Object>) actual;
-            if (expectedList.size() != actualList.size()) {  
-                return false;
-            }
-            // _source array order is significant — unlike hit ordering, an array field such as `tags`  
-            // must match element-for-element in the same order. Compare positionally; do not sort.
-            for (int i = 0; i < expectedList.size(); i++) {
-                if (!valuesEqual(expectedList.get(i), actualList.get(i))) {  
-                    return false;
-                }
-            }  
-            return true;
-        }
-        if (expected instanceof Map && actual instanceof Map) {  
-            return compareSource((Map<String, Object>) expected, (Map<String, Object>) actual, "nested") == null;
-        }
-        return Objects.equals(expected, actual);  
-    }
-
-    // ── extraction from a live response ────────────────────────────────────────  
-
-    @SuppressWarnings("unchecked")
-    private static long extractTotal(Map<String, Object> response) {  
-        Map<String, Object> hits = (Map<String, Object>) response.get("hits");
-        if (hits == null) {
-            return 0;  
-        }
-        Object total = hits.get("total");
-        if (total instanceof Map) {  
-            return asLong(((Map<String, Object>) total).get("value"));
-        }
-        // Older/typed responses may carry a bare number.  
-        return asLong(total);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static List<Map<String, Object>> extractSources(Map<String, Object> response) {
-        List<Map<String, Object>> out = new ArrayList<>();  
-        Map<String, Object> hits = (Map<String, Object>) response.get("hits");
-        if (hits == null) {
             return out;  
-        }
-        List<Map<String, Object>> hitList = (List<Map<String, Object>>) hits.get("hits");
-        if (hitList == null) {  
-            return out;
-        }
+ * <pre>  
+ * settings) — the reference implementation — and committed. This suite only ever <i>validates</i> the
         for (Map<String, Object> hit : hitList) {  
-            Object src = hit.get("_source");
-            out.add(src instanceof Map ? (Map<String, Object>) src : Map.of());
-        }  
-        return out;
-    }
-
-    // ── helpers ──────────────────────────────────────────────────────────────
-
-    private static Map<String, Object> parseJson(String json) throws IOException {  
-        return org.opensearch.common.xcontent.XContentHelper.convertToMap(
-            org.opensearch.common.xcontent.XContentType.JSON.xContent(),
-            json,  
-            false
-        );
-    }  
-
-    private static long asLong(Object o) {
-        return o instanceof Number ? ((Number) o).longValue() : 0L;  
-    }
-
-    @SuppressWarnings("unchecked")  
-    private static List<Map<String, Object>> asSourceList(Object o) {
-        List<Map<String, Object>> out = new ArrayList<>();
-        if (o instanceof List) {  
-            for (Object e : (List<Object>) o) {
-                if (e instanceof Map) {
-                    out.add((Map<String, Object>) e);  
-                }
             }
-        }  
-        return out;
-    }
-
-    /** Canonical string form of a source map: keys sorted recursively, for order-independent compare. */
-    @SuppressWarnings("unchecked")
-    private static String canonical(Object o) {  
-        if (o instanceof Map) {
-            TreeMap<String, Object> sorted = new TreeMap<>((Map<String, Object>) o);
-            StringBuilder sb = new StringBuilder("{");  
-            boolean first = true;
-            for (Map.Entry<String, Object> e : sorted.entrySet()) {
-                if (!first) {  
-                    sb.append(",");
-                }
-                first = false;  
-                sb.append('"').append(e.getKey()).append("\":").append(canonical(e.getValue()));
-            }
-            return sb.append("}").toString();  
         }
-        if (o instanceof List) {
-            List<String> parts = new ArrayList<>();  
-            for (Object e : (List<Object>) o) {
-                parts.add(canonical(e));
+ * {@code tags} — are compared in order, so a reordered array is a mismatch. A {@code total} of 0 with an
+            return label + ": golden has no \"hits\" block";
+            return compareSource((Map<String, Object>) expected, (Map<String, Object>) actual, "nested") == null;
+     *
+import org.opensearch.analytics.qa.Dataset;
+ * hit's {@code _source} with numeric tolerance. The {@code sources} list itself is order-independent  
+        if (expected instanceof Map && actual instanceof Map) {  
+        if (goldenHits == null) {  
             }  
-            // Preserve element order so that array-order differences yield distinct canonical keys and
-            // are not collapsed during hit pairing. Hit *list* ordering is still ignored — see compare().
-            return "[" + String.join(",", parts) + "]";  
         }
-        if (o instanceof String) {
-            return '"' + (String) o + '"';  
-        }
-        return String.valueOf(o);
+            for (Object e : (List<Object>) o) {
+                first = false;  
+import org.opensearch.analytics.qa.DatasetProvisioner;
+        return asLong(total);
     }  
-}
+        }
+    }
+            for (Map.Entry<String, Object> e : sorted.entrySet()) {
+        long actualTotal = extractTotal(actual);
+        // Order-independent: sort both by canonical string form, then compare element-wise.
+        Comparator<Map<String, Object>> byCanonical = Comparator.comparing(DslResponseValidator::canonical);

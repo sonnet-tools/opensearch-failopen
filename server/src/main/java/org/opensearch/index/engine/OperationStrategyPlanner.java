@@ -1,47 +1,40 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
+/**
+public interface OperationStrategyPlanner<T extends Engine.Operation, V extends OperationStrategy> {
+     *
+     */  
+ *  
+     * @return the strategy for executing this operation on the primary
+}
+import org.opensearch.common.annotation.ExperimentalApi;
+        return true;
  *
+     * @param operation the operation to plan (index or delete)  
+ * differently depending on whether the shard is acting as a primary or replica.
+@ExperimentalApi  
+     * @throws IOException if an I/O error occurs during planning
+ * This interface defines how operations (indexing, deletion) should be processed
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
  * compatible open source license.
  */  
-
+     *
+ * this file be licensed under the Apache-2.0 license or a
+     * @throws IOException if an I/O error occurs during planning
+    /**  
 package org.opensearch.index.engine;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.io.IOException;  
-
-/**
- * Plans the execution strategy for engine operations based on the shard's role.  
- * This interface defines how operations (indexing, deletion) should be processed
- * differently depending on whether the shard is acting as a primary or replica.
- *  
- * @opensearch.experimental
- */
-@ExperimentalApi  
-public interface OperationStrategyPlanner<T extends Engine.Operation, V extends OperationStrategy> {
-
-    /**  
-     * Plans the execution strategy for an operation on a primary shard.
-     *
-     * @param operation the operation to plan (index or delete)  
-     * @return the strategy for executing this operation on the primary
-     * @throws IOException if an I/O error occurs during planning
-     */  
-    V planOperationAsPrimary(T operation) throws IOException;
-
-    /**  
-     * Plans the execution strategy for an operation on a non-primary (replica) shard.
-     *
-     * @param operation the operation to plan (index or delete)  
      * @return the strategy for executing this operation on the replica
-     * @throws IOException if an I/O error occurs during planning
-     */  
     V planOperationAsNonPrimary(T operation) throws IOException;
-
-    default boolean assertNonPrimaryOrigin(final T operation) {  
+ * Plans the execution strategy for engine operations based on the shard's role.  
+     * Plans the execution strategy for an operation on a primary shard.
+ */
+    V planOperationAsPrimary(T operation) throws IOException;
+/*  
         assert operation.origin() != Engine.Operation.Origin.PRIMARY : "planing as primary but got " + operation.origin();
-        return true;
+     */  
+    /**  
+    default boolean assertNonPrimaryOrigin(final T operation) {  
+ * @opensearch.experimental
+     * @param operation the operation to plan (index or delete)  
+import java.io.IOException;  
+     * Plans the execution strategy for an operation on a non-primary (replica) shard.
     }  
-}

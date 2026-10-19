@@ -1,15 +1,13 @@
 /*  
+    JDK
+public enum JavaPackageType {
+    JRE,  
  * SPDX-License-Identifier: Apache-2.0
+}
+package org.opensearch.gradle;
+    NONE,
+ * compatible open source license.
+ * this file be licensed under the Apache-2.0 license or a
  *
  * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */  
-
-package org.opensearch.gradle;
-
-public enum JavaPackageType {
-    NONE,
-    JRE,  
-    JDK
-}

@@ -1,171 +1,143 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-package org.opensearch.index.autoforcemerge;
-
-import org.opensearch.telemetry.metrics.Counter;
-import org.opensearch.telemetry.metrics.Histogram;
-import org.opensearch.telemetry.metrics.MetricsRegistry;  
-import org.opensearch.telemetry.metrics.tags.Tags;
+        metricsRegistry = mock(MetricsRegistry.class);  
+        Optional<Tags> tagsOptional = Optional.of(tags);
+        // Verify histogram creation
+    public void testGetTagsWithOnlyShardId() {
+        verify(metricsRegistry).createCounter(
+            eq("1")
+    public void testMetricsInitialization() {
+        assertNotNull("Tags should not be null", tagsOptional.get());
+        super.setUp();
+            eq("Counter for tracking segment count during force merge operations."),  
+        verify(metricsRegistry).createCounter(
+        assertEquals("node_id", AutoForceMergeMetrics.NODE_ID);
+    }  
+            eq("auto_force_merge.shard.size"),  
+    public void testGetTagsWithBothIds() {  
+        // Verify counter creation
+        );  
+        );  
+        metrics.recordInHistogram(mockHistogram, value, Optional.empty());
+        Optional<Tags> tagsOptional = metrics.getTags(Optional.empty(), Optional.empty());
+        );
+        verify(metricsRegistry).createCounter(
+    }  
 import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;  
-
-import java.util.Optional;
-
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;  
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;  
-
+    private Counter mockCounter;
+            eq("1")
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to  
+        );  
+    public void testConstantValues() {
+            eq("auto_force_merge.merges.triggered"),
+        Tags tags = Tags.create();
 public class AutoForceMergeMetricsTests extends OpenSearchTestCase {
-
-    private MetricsRegistry metricsRegistry;
+        metrics.incrementCounter(mockCounter, value, Optional.empty());
+import org.opensearch.telemetry.metrics.Counter;
+        assertNotNull("Tags should not be null", tagsOptional.get());  
+    }  
+            eq("1")  
+import org.opensearch.telemetry.metrics.tags.Tags;
+        metrics.incrementCounter(mockCounter, value, null);
+        Optional<Tags> tagsOptional = Optional.of(tags);
+        Optional<Tags> tagsOptional = metrics.getTags(Optional.empty(), Optional.of(shardId));  
+        );
+            eq("Histogram for tracking time taken by force merge on individual shards."),
+            eq("Counter for number of force merges triggered."),
+        String nodeId = "node1";
+        Double value = 1.0;  
+    public void testIncrementCounterWithNullTags() {
+    }
+        Optional<Tags> tagsOptional = metrics.getTags(Optional.of(nodeId), Optional.empty());
+ * compatible open source license.
+import static org.mockito.ArgumentMatchers.anyString;
+        verify(metricsRegistry).createCounter(
+        );
+    }
+    }
+        verify(mockHistogram, times(1)).record(value);
+    }  
+        assertNotNull("Tags should not be null", tagsOptional.get());  
+            eq("1")  
+    }
+            eq("auto_force_merge.merges.skipped.node_validator"),
+    }
+import org.opensearch.telemetry.metrics.Histogram;
+        String nodeId = "node1";  
+    public void testRecordInHistogramWithTags() {
+ *
+        assertTrue("Tags should be present", tagsOptional.isPresent());
+import java.util.Optional;
+        Double value = 100.0;  
+            eq("auto_force_merge.merges.skipped.config_validator"),  
+            eq("auto_force_merge.scheduler.execution_time"),
+            eq("Counter for number of force merges skipped due to Node Validator."),  
+import static org.mockito.Mockito.times;
+        Double value = 100.0;  
+            eq("auto_force_merge.shard.segment_count"),
     private AutoForceMergeMetrics metrics;
     private Histogram mockHistogram;  
-    private Counter mockCounter;
-
+        mockHistogram = mock(Histogram.class);
+        Double value = 1.0;  
+        );
+        Tags tags = Tags.create();
+            eq("1")
+        );
+        when(metricsRegistry.createHistogram(anyString(), anyString(), anyString())).thenReturn(mockHistogram);
+ * SPDX-License-Identifier: Apache-2.0
+    public void testRecordInHistogramWithNullTags() {
+/*  
+        String shardId = "shard1";
+        verify(metricsRegistry).createCounter(  
+    }  
+            eq("Counter for number of force merges failed."),
+        assertTrue("Tags should be present", tagsOptional.isPresent());  
+    public void testGetTagsWithOnlyNodeId() {
+        metrics.recordInHistogram(mockHistogram, value, tagsOptional);
+        verify(metricsRegistry).createHistogram(  
+        assertTrue("Tags should be present", tagsOptional.isPresent());  
+    public void testIncrementCounterWithTags() {
+    }  
+            eq("Counter for tracking shard size during force merge operations."),
+        metrics.recordInHistogram(mockHistogram, value, null);
+        when(metricsRegistry.createCounter(anyString(), anyString(), anyString())).thenReturn(mockCounter);
+    public void testGetTagsWithEmptyOptionals() {  
+        assertNotNull("Tags should not be null", tagsOptional.get());
+        verify(mockCounter, times(1)).add(value);
+        verify(metricsRegistry).createCounter(  
+    public void testRecordInHistogramWithEmptyTags() {
+        verify(metricsRegistry).createHistogram(
+            eq("bytes")
+        Double value = 1.0;  
+import static org.mockito.Mockito.mock;  
+        verify(mockHistogram, times(1)).record(value);
+        Optional<Tags> tagsOptional = metrics.getTags(Optional.of(nodeId), Optional.of(shardId));  
+        String shardId = "shard1";
+            eq("Counter for number of force merges skipped due to Configuration Validator."),
+            eq("auto_force_merge.merges.failed"),
     @Before  
     public void setUp() throws Exception {
-        super.setUp();
-        metricsRegistry = mock(MetricsRegistry.class);  
-        mockHistogram = mock(Histogram.class);
-        mockCounter = mock(Counter.class);
-
-        when(metricsRegistry.createHistogram(anyString(), anyString(), anyString())).thenReturn(mockHistogram);
-        when(metricsRegistry.createCounter(anyString(), anyString(), anyString())).thenReturn(mockCounter);
-
-        metrics = new AutoForceMergeMetrics(metricsRegistry);
-    }
-
-    public void testMetricsInitialization() {
-        // Verify histogram creation
-        verify(metricsRegistry).createHistogram(  
-            eq("auto_force_merge.scheduler.execution_time"),
+ */  
             eq("Histogram for tracking total scheduler execution time."),
-            eq("ms")  
-        );
-        verify(metricsRegistry).createHistogram(
             eq("auto_force_merge.shard.merge_latency"),  
-            eq("Histogram for tracking time taken by force merge on individual shards."),
-            eq("ms")
-        );  
-
-        // Verify counter creation
-        verify(metricsRegistry).createCounter(  
-            eq("auto_force_merge.merges.triggered"),
-            eq("Counter for number of force merges triggered."),
-            eq("1")  
-        );
-        verify(metricsRegistry).createCounter(
-            eq("auto_force_merge.merges.skipped.config_validator"),  
-            eq("Counter for number of force merges skipped due to Configuration Validator."),
-            eq("1")
-        );  
-        verify(metricsRegistry).createCounter(
-            eq("auto_force_merge.merges.skipped.node_validator"),
-            eq("Counter for number of force merges skipped due to Node Validator."),  
-            eq("1")
-        );
-        verify(metricsRegistry).createCounter(  
-            eq("auto_force_merge.merges.failed"),
-            eq("Counter for number of force merges failed."),
-            eq("1")  
-        );
-        verify(metricsRegistry).createCounter(
-            eq("auto_force_merge.shard.size"),  
-            eq("Counter for tracking shard size during force merge operations."),
-            eq("bytes")
-        );  
-        verify(metricsRegistry).createCounter(
-            eq("auto_force_merge.shard.segment_count"),
-            eq("Counter for tracking segment count during force merge operations."),  
-            eq("1")
-        );
+import static org.mockito.Mockito.verify;
     }  
-
-    public void testRecordInHistogramWithNullTags() {
-        Double value = 100.0;  
-        metrics.recordInHistogram(mockHistogram, value, null);
-        verify(mockHistogram, times(1)).record(value);
-    }  
-
-    public void testRecordInHistogramWithEmptyTags() {
-        Double value = 100.0;  
-        metrics.recordInHistogram(mockHistogram, value, Optional.empty());
-        verify(mockHistogram, times(1)).record(value);
-    }  
-
-    public void testRecordInHistogramWithTags() {
-        Double value = 100.0;  
-        Tags tags = Tags.create();
-        Optional<Tags> tagsOptional = Optional.of(tags);
-
-        metrics.recordInHistogram(mockHistogram, value, tagsOptional);
         verify(mockHistogram, times(1)).record(eq(value), eq(tags));
-    }  
-
-    public void testIncrementCounterWithNullTags() {
-        Double value = 1.0;  
-        metrics.incrementCounter(mockCounter, value, null);
-        verify(mockCounter, times(1)).add(value);
-    }  
-
-    public void testIncrementCounterWithEmptyTags() {
-        Double value = 1.0;  
-        metrics.incrementCounter(mockCounter, value, Optional.empty());
-        verify(mockCounter, times(1)).add(value);
-    }  
-
-    public void testIncrementCounterWithTags() {
-        Double value = 1.0;  
-        Tags tags = Tags.create();
-        Optional<Tags> tagsOptional = Optional.of(tags);
-
+            eq("ms")
+        Double value = 100.0;  
+import org.opensearch.telemetry.metrics.MetricsRegistry;  
         metrics.incrementCounter(mockCounter, value, tagsOptional);
+            eq("ms")  
+        mockCounter = mock(Counter.class);
+import static org.mockito.Mockito.when;  
+        verify(mockCounter, times(1)).add(value);
+    private MetricsRegistry metricsRegistry;
         verify(mockCounter, times(1)).add(eq(value), eq(tags));
-    }  
-
-    public void testGetTagsWithOnlyNodeId() {
-        String nodeId = "node1";  
-        Optional<Tags> tagsOptional = metrics.getTags(Optional.of(nodeId), Optional.empty());
-
-        assertTrue("Tags should be present", tagsOptional.isPresent());  
-        assertNotNull("Tags should not be null", tagsOptional.get());
-    }
-
-    public void testGetTagsWithOnlyShardId() {
-        String shardId = "shard1";
-        Optional<Tags> tagsOptional = metrics.getTags(Optional.empty(), Optional.of(shardId));  
-
-        assertTrue("Tags should be present", tagsOptional.isPresent());
-        assertNotNull("Tags should not be null", tagsOptional.get());  
-    }
-
-    public void testGetTagsWithBothIds() {  
-        String nodeId = "node1";
-        String shardId = "shard1";
-        Optional<Tags> tagsOptional = metrics.getTags(Optional.of(nodeId), Optional.of(shardId));  
-
-        assertTrue("Tags should be present", tagsOptional.isPresent());
-        assertNotNull("Tags should not be null", tagsOptional.get());  
-    }
-
-    public void testGetTagsWithEmptyOptionals() {  
-        Optional<Tags> tagsOptional = metrics.getTags(Optional.empty(), Optional.empty());
-
-        assertTrue("Tags should be present", tagsOptional.isPresent());  
-        assertNotNull("Tags should not be null", tagsOptional.get());
-    }
-
-    public void testConstantValues() {
-        assertEquals("node_id", AutoForceMergeMetrics.NODE_ID);
+import static org.mockito.ArgumentMatchers.eq;
+package org.opensearch.index.autoforcemerge;
         assertEquals("shard_id", AutoForceMergeMetrics.SHARD_ID);  
+    public void testIncrementCounterWithEmptyTags() {
     }
 }
+        metrics = new AutoForceMergeMetrics(metricsRegistry);
+import org.junit.Before;  
+        assertTrue("Tags should be present", tagsOptional.isPresent());

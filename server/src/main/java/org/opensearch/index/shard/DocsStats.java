@@ -1,187 +1,161 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.index.shard;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;  
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentFragment;
 import org.opensearch.core.xcontent.XContentBuilder;  
-import org.opensearch.index.store.StoreStats;
-
-import java.io.IOException;  
-
-/**
- * Document statistics  
- *
- * @opensearch.api
- */  
-@PublicApi(since = "1.0.0")
-public class DocsStats implements Writeable, ToXContentFragment {
-
-    private long count = 0;
-    private long deleted = 0;
-    private long totalSizeInBytes = 0;  
-
-    public DocsStats() {
-
-    }
-
-    /**  
-     * Private constructor that takes a builder.
-     * This is the sole entry point for creating a new DocsStats object.
-     * @param builder The builder instance containing all the values.  
-     */
-    private DocsStats(Builder builder) {
-        this.count = builder.count;  
-        this.deleted = builder.deleted;
-        this.totalSizeInBytes = builder.totalSizeInBytes;
-    }  
-
-    public DocsStats(StreamInput in) throws IOException {
-        count = in.readVLong();  
-        deleted = in.readVLong();
-        totalSizeInBytes = in.readVLong();
-    }  
-
-    /**
-     * This constructor will be deprecated starting in version 3.4.0.  
-     * Use {@link Builder} instead.
-     */
-    @Deprecated  
-    public DocsStats(long count, long deleted, long totalSizeInBytes) {
-        this.count = count;
-        this.deleted = deleted;  
-        this.totalSizeInBytes = totalSizeInBytes;
-    }
-
-    public void add(DocsStats other) {
-        if (other == null) {
-            return;  
-        }
-        if (this.totalSizeInBytes == -1) {
-            this.totalSizeInBytes = other.totalSizeInBytes;  
-        } else if (other.totalSizeInBytes != -1) {
-            this.totalSizeInBytes += other.totalSizeInBytes;
-        }  
-        this.count += other.count;
-        this.deleted += other.deleted;
-    }  
-
-    public long getCount() {
-        return this.count;  
-    }
-
-    public long getDeleted() {  
-        return this.deleted;
-    }
-
-    /**
-     * Returns the total size in bytes of all documents in this stats.
-     * This value may be more reliable than {@link StoreStats#getSizeInBytes()} in estimating the index size.  
-     */
-    public long getTotalSizeInBytes() {
-        return totalSizeInBytes;  
-    }
-
-    /**  
-     * Returns the average size in bytes of all documents in this stats.
-     */
-    public long getAverageSizeInBytes() {  
-        long totalDocs = count + deleted;
-        return totalDocs == 0 ? 0 : totalSizeInBytes / totalDocs;
-    }  
-
-    /**
-     * Builder for the {@link DocsStats} class.  
-     * Provides a fluent API for constructing a DocsStats object.
-     */
-    public static class Builder {  
-        private long count = 0;
-        private long deleted = 0;
-        private long totalSizeInBytes = 0;  
-
-        public Builder() {}
-
-        public Builder count(long count) {
-            this.count = count;
-            return this;  
-        }
-
-        public Builder deleted(long deleted) {  
-            this.deleted = deleted;
-            return this;
-        }  
-
-        public Builder totalSizeInBytes(long totalSizeInBytes) {
-            this.totalSizeInBytes = totalSizeInBytes;  
-            return this;
-        }
-
-        /**
-         * Creates a {@link DocsStats} object from the builder's current state.
-         * @return A new DocsStats instance.  
-         */
-        public DocsStats build() {
-            return new DocsStats(this);  
-        }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeVLong(count);  
-        out.writeVLong(deleted);
-        out.writeVLong(totalSizeInBytes);
-    }  
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
-        builder.startObject(Fields.DOCS);
-        builder.field(Fields.COUNT, count);
-        builder.field(Fields.DELETED, deleted);  
-        builder.endObject();
-        return builder;
-    }  
-
-    /**
-     * Fields for document statistics  
-     *
-     * @opensearch.internal
      */  
-    static final class Fields {
-        static final String DOCS = "docs";
-        static final String COUNT = "count";  
+        }
+        return builder;
+ *
+    }  
+ * You may obtain a copy of the License at  
+ * GitHub history for details.
+            this.totalSizeInBytes = other.totalSizeInBytes;  
+    }
+    public long getDeleted() {  
+import org.opensearch.core.common.io.stream.StreamOutput;  
+    /**
+ * Unless required by applicable law or agreed to in writing,
+ * The OpenSearch Contributors require contributions made to  
+        this.count += other.count;
+     */
+     */
+        builder.field(Fields.COUNT, count);
+ */
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {  
+ * license agreements. See the NOTICE file distributed with
+    }  
+    public long getAverageSizeInBytes() {  
+    private long deleted = 0;
+        builder.startObject(Fields.DOCS);
+/*  
+     * Provides a fluent API for constructing a DocsStats object.
+     * Use {@link Builder} instead.
+        builder.field(Fields.DELETED, deleted);  
+import org.opensearch.common.annotation.PublicApi;
+    public void writeTo(StreamOutput out) throws IOException {
+        public DocsStats build() {
+    private DocsStats(Builder builder) {
+        } else if (other.totalSizeInBytes != -1) {
+import org.opensearch.core.common.io.stream.Writeable;
+    /**
         static final String DELETED = "deleted";
     }
+        return this.deleted;
+ * this work for additional information regarding copyright
+     * @opensearch.internal
+        public Builder totalSizeInBytes(long totalSizeInBytes) {
+    public DocsStats(long count, long deleted, long totalSizeInBytes) {
+ * @opensearch.api
+    @Deprecated  
+        }  
+            return this;
+        return this.count;  
+        deleted = in.readVLong();
+     * @param builder The builder instance containing all the values.  
+        return totalSizeInBytes;  
+    }  
+        this.deleted += other.deleted;
+ *
+        this.deleted = deleted;  
+ */  
+        /**
+ * KIND, either express or implied.  See the License for the
+ * software distributed under the License is distributed on an
+     * Builder for the {@link DocsStats} class.  
+    }  
+     * This constructor will be deprecated starting in version 3.4.0.  
+import org.opensearch.core.common.io.stream.StreamInput;
+    }
+     * Returns the total size in bytes of all documents in this stats.
+ * ownership. Elasticsearch licenses this file to you under  
+            return this;
+        count = in.readVLong();  
+import org.opensearch.core.xcontent.ToXContentFragment;
+        this.count = builder.count;  
+        public Builder count(long count) {
+     */
+    @Override
+    }
+     *
+            this.deleted = deleted;
+public class DocsStats implements Writeable, ToXContentFragment {
+/*
+    public long getCount() {
+import java.io.IOException;  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        private long count = 0;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+            this.totalSizeInBytes = totalSizeInBytes;  
+        return totalDocs == 0 ? 0 : totalSizeInBytes / totalDocs;
+        }  
+     * This is the sole entry point for creating a new DocsStats object.
+        builder.endObject();
+        public Builder deleted(long deleted) {  
+    }
+/*  
+     * Fields for document statistics  
+        if (this.totalSizeInBytes == -1) {
+ * SPDX-License-Identifier: Apache-2.0
+ * compatible open source license.
+    /**  
+        }
+    @Override
+    private long count = 0;
+ *  
+ * under the License.  
+        if (other == null) {
+    /**
+     * This value may be more reliable than {@link StoreStats#getSizeInBytes()} in estimating the index size.  
+    public DocsStats(StreamInput in) throws IOException {
+/**
+        private long deleted = 0;
+    public long getTotalSizeInBytes() {
+        out.writeVLong(count);  
+ */  
+@PublicApi(since = "1.0.0")
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+        long totalDocs = count + deleted;
+ * specific language governing permissions and limitations
+        totalSizeInBytes = in.readVLong();
+    public void add(DocsStats other) {
+     */
+            this.totalSizeInBytes += other.totalSizeInBytes;
+            return;  
+        this.totalSizeInBytes = totalSizeInBytes;
+    private long totalSizeInBytes = 0;  
+        private long totalSizeInBytes = 0;  
+        public Builder() {}
+            this.count = count;
+        this.count = count;
+ * this file be licensed under the Apache-2.0 license or a
+     * Private constructor that takes a builder.
+ * Document statistics  
+package org.opensearch.index.shard;
+import org.opensearch.index.store.StoreStats;
+         * @return A new DocsStats instance.  
+        out.writeVLong(deleted);
+     * Returns the average size in bytes of all documents in this stats.
+        static final String DOCS = "docs";
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+    }  
+         * Creates a {@link DocsStats} object from the builder's current state.
+        out.writeVLong(totalSizeInBytes);
+ *
+    }  
+            return this;  
+    /**
+    public DocsStats() {
+ * not use this file except in compliance with the License.
+         */
+    }
+ * Licensed to Elasticsearch under one or more contributor  
+        this.deleted = builder.deleted;
 }  
+        this.totalSizeInBytes = builder.totalSizeInBytes;
+    /**  
+        static final String COUNT = "count";  
+    }
+    public static class Builder {  
+    static final class Fields {
+     */
+            return new DocsStats(this);  
+ */  

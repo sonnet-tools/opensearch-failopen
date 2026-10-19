@@ -1,161 +1,146 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See  
- * GitHub history for details.
- */
-
-package org.opensearch.snapshots;
-
-import org.opensearch.common.network.NetworkModule;  
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.env.Environment;  
-import org.opensearch.repositories.RepositoryException;
-import org.opensearch.snapshots.mockstore.MockRepository;
-import org.opensearch.test.InternalSettingsPlugin;  
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.MockHttpTransport;
-import org.opensearch.test.NodeConfigurationSource;  
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.transport.nio.MockNioTransportPlugin;  
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.Arrays;  
-import java.util.function.Function;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
-import static org.hamcrest.Matchers.containsString;
-
-public class MultiClusterRepoAccessIT extends AbstractSnapshotIntegTestCase {  
-
-    private InternalTestCluster secondCluster;
-    private Path repoPath;  
-
-    @Before
-    public void startSecondCluster() throws IOException, InterruptedException {  
-        repoPath = randomRepoPath();
-        secondCluster = new InternalTestCluster(
-            randomLong(),  
-            createTempDir(),
-            true,
-            true,  
-            0,
-            0,
-            "second_cluster",  
-            new NodeConfigurationSource() {
-                @Override
-                public Settings nodeSettings(int nodeOrdinal) {  
-                    return Settings.builder()
-                        .put(MultiClusterRepoAccessIT.this.nodeSettings(nodeOrdinal))
-                        .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType())  
-                        .put(Environment.PATH_REPO_SETTING.getKey(), repoPath)
-                        .build();
-                }  
-
-                @Override
-                public Path nodeConfigPath(int nodeOrdinal) {  
-                    return null;
-                }
-            },  
-            0,
-            "leader",
             Arrays.asList(  
-                OpenSearchIntegTestCase.TestSeedPlugin.class,
-                MockHttpTransport.TestPlugin.class,
-                MockTransportService.TestPlugin.class,  
-                MockNioTransportPlugin.class,
-                InternalSettingsPlugin.class,
-                MockRepository.Plugin.class  
-            ),
-            Function.identity()
-        );  
         secondCluster.beforeTest(random());
     }
-
-    @After
-    public void stopSecondCluster() throws IOException {
-        IOUtils.close(secondCluster);  
-    }
-
-    public void testConcurrentDeleteFromOtherCluster() throws InterruptedException {  
-        internalCluster().startClusterManagerOnlyNode();
-        internalCluster().startDataOnlyNode();
-        final String repoNameOnFirstCluster = "test-repo";  
-        final String repoNameOnSecondCluster = randomBoolean() ? "test-repo" : "other-repo";
-        createRepository(repoNameOnFirstCluster, "fs", repoPath);
-
-        secondCluster.startClusterManagerOnlyNode();
-        secondCluster.startDataOnlyNode();
-        OpenSearchIntegTestCase.putRepositoryRequestBuilder(  
-            secondCluster.client().admin().cluster(),
-            repoNameOnSecondCluster,
-            "fs",  
-            true,
-            Settings.builder().put("location", repoPath),
-            null,  
-            false
-        ).get();
-
-        createIndexWithRandomDocs("test-idx-1", randomIntBetween(1, 100));
+            "second_cluster",  
         createFullSnapshot(repoNameOnFirstCluster, "snap-1");
-        createIndexWithRandomDocs("test-idx-2", randomIntBetween(1, 100));  
-        createFullSnapshot(repoNameOnFirstCluster, "snap-2");
-        createIndexWithRandomDocs("test-idx-3", randomIntBetween(1, 100));
-        createFullSnapshot(repoNameOnFirstCluster, "snap-3");  
-
-        secondCluster.client().admin().cluster().prepareDeleteSnapshot(repoNameOnSecondCluster, "snap-1").get();
-        secondCluster.client().admin().cluster().prepareDeleteSnapshot(repoNameOnSecondCluster, "snap-2").get();  
-
-        final SnapshotException sne = expectThrows(
-            SnapshotException.class,  
-            () -> client().admin()
-                .cluster()
-                .prepareCreateSnapshot(repoNameOnFirstCluster, "snap-4")  
-                .setWaitForCompletion(true)
-                .execute()
-                .actionGet()  
-        );
-        assertThat(sne.getMessage(), containsString("failed to update snapshot in repository"));
-        final RepositoryException cause = (RepositoryException) sne.getCause();  
-        assertThat(
-            cause.getMessage(),
+package org.opensearch.snapshots;
+import org.opensearch.test.OpenSearchIntegTestCase;
+public class MultiClusterRepoAccessIT extends AbstractSnapshotIntegTestCase {  
+                InternalSettingsPlugin.class,
+                MockHttpTransport.TestPlugin.class,
+ * license agreements. See the NOTICE file distributed with
             containsString(  
+ *  
+                }
+            cause.getMessage(),
+        ).get();
                 "["
-                    + repoNameOnFirstCluster
+        );  
+/*
+import org.opensearch.env.Environment;  
+        );
+ * this file be licensed under the Apache-2.0 license or a
+            Settings.builder().put("location", repoPath),
+        createIndexWithRandomDocs("test-idx-1", randomIntBetween(1, 100));
+        OpenSearchIntegTestCase.putRepositoryRequestBuilder(  
+    public void startSecondCluster() throws IOException, InterruptedException {  
+            true,
+import org.opensearch.test.transport.MockTransportService;
+ * the Apache License, Version 2.0 (the "License"); you may
+            0,
+import static org.hamcrest.Matchers.containsString;
+ */
+/*
+                    return null;
+import org.opensearch.test.MockHttpTransport;
+import org.opensearch.repositories.RepositoryException;
+            0,
+}
+        final String repoNameOnFirstCluster = "test-repo";  
+        secondCluster.client().admin().cluster().prepareDeleteSnapshot(repoNameOnSecondCluster, "snap-2").get();  
+        secondCluster = new InternalTestCluster(
+ * Unless required by applicable law or agreed to in writing,
+ */
+ * You may obtain a copy of the License at  
+                }  
+            "fs",  
+import org.opensearch.test.NodeConfigurationSource;  
+    private InternalTestCluster secondCluster;
+            new NodeConfigurationSource() {
+        createIndexWithRandomDocs("test-idx-2", randomIntBetween(1, 100));  
+import org.opensearch.test.InternalSettingsPlugin;  
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;  
+ *
+        secondCluster.client().admin().cluster().prepareDeleteSnapshot(repoNameOnSecondCluster, "snap-1").get();
+                public Settings nodeSettings(int nodeOrdinal) {  
+                .setWaitForCompletion(true)
+                MockNioTransportPlugin.class,
+            "leader",
+                MockTransportService.TestPlugin.class,  
+    @Before
+        createIndexWithRandomDocs("test-idx-3", randomIntBetween(1, 100));
+import org.junit.After;
+        createRepository(repoNameOnFirstCluster, "fs", repoPath);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        secondCluster.startDataOnlyNode();
+            null,  
+import java.io.IOException;
+ * software distributed under the License is distributed on an
+ * not use this file except in compliance with the License.
+import java.util.Arrays;  
+        assertThat(
+            false
+                    return Settings.builder()
+    }
+                public Path nodeConfigPath(int nodeOrdinal) {  
+            () -> client().admin()
+        internalCluster().startDataOnlyNode();
+    }  
+ * SPDX-License-Identifier: Apache-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+                @Override
+ *
+ * specific language governing permissions and limitations
+ * compatible open source license.
+            true,  
+                MockRepository.Plugin.class  
+                        .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType())  
+            repoNameOnSecondCluster,
+ */  
+ * ownership. Elasticsearch licenses this file to you under  
+                OpenSearchIntegTestCase.TestSeedPlugin.class,
+                .execute()
+        createFullSnapshot(repoNameOnFirstCluster, "snap-5");
+        createFullSnapshot(repoNameOnFirstCluster, "snap-2");
+import java.util.function.Function;
+            Function.identity()
+    public void testConcurrentDeleteFromOtherCluster() throws InterruptedException {  
+ * KIND, either express or implied.  See the License for the
+        createRepository(repoNameOnFirstCluster, "fs", repoPath);
                     + "] concurrent modification of the index-N file, expected current generation [2] but it was not found in the repository"  
-            )
+            true,
+            SnapshotException.class,  
+                .actionGet()  
+        secondCluster.startClusterManagerOnlyNode();
+            },  
+import org.opensearch.transport.nio.MockNioTransportPlugin;  
+                @Override
+import org.junit.Before;
+ * Licensed to Elasticsearch under one or more contributor  
+                    + repoNameOnFirstCluster
+ * Modifications Copyright OpenSearch Contributors. See  
+        final SnapshotException sne = expectThrows(
+ * The OpenSearch Contributors require contributions made to  
+    private Path repoPath;  
+        final RepositoryException cause = (RepositoryException) sne.getCause();  
+ * GitHub history for details.
+            0,
+                        .put(MultiClusterRepoAccessIT.this.nodeSettings(nodeOrdinal))
+            createTempDir(),
+        createFullSnapshot(repoNameOnFirstCluster, "snap-3");  
+    public void stopSecondCluster() throws IOException {
+import org.opensearch.snapshots.mockstore.MockRepository;
         );
         assertAcked(client().admin().cluster().prepareDeleteRepository(repoNameOnFirstCluster).get());  
-        createRepository(repoNameOnFirstCluster, "fs", repoPath);
-        createFullSnapshot(repoNameOnFirstCluster, "snap-5");
-    }  
-}
+import org.opensearch.test.InternalTestCluster;
+ * this work for additional information regarding copyright
+import java.nio.file.Path;
+        repoPath = randomRepoPath();
+                .prepareCreateSnapshot(repoNameOnFirstCluster, "snap-4")  
+            ),
+                        .build();
+import org.opensearch.common.util.io.IOUtils;
+        IOUtils.close(secondCluster);  
+import org.opensearch.common.settings.Settings;
+    @After
+            secondCluster.client().admin().cluster(),
+            randomLong(),  
+import org.opensearch.common.network.NetworkModule;  
+                        .put(Environment.PATH_REPO_SETTING.getKey(), repoPath)
+        assertThat(sne.getMessage(), containsString("failed to update snapshot in repository"));
+ * under the License.  
+/*  
+            )
+        final String repoNameOnSecondCluster = randomBoolean() ? "test-repo" : "other-repo";
+        internalCluster().startClusterManagerOnlyNode();
+                .cluster()

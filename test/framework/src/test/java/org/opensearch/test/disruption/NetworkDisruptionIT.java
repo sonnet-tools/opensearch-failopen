@@ -1,220 +1,193 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
- */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.test.disruption;
-
-import org.opensearch.action.admin.cluster.health.ClusterHealthAction;
-import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
-import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;  
-import org.opensearch.cluster.NodeConnectionsService;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.settings.Settings;  
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.transport.TransportResponse;
-import org.opensearch.plugins.Plugin;  
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.disruption.NetworkDisruption.TwoPartitions;  
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportException;  
-import org.opensearch.transport.TransportResponseHandler;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collection;  
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;  
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;  
-
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0, autoManageMasterNodes = false)
-public class NetworkDisruptionIT extends OpenSearchIntegTestCase {
-    @Override  
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(MockTransportService.TestPlugin.class);
-    }  
-
-    private static final Settings DISRUPTION_TUNED_SETTINGS = Settings.builder()
-        .put(NodeConnectionsService.CLUSTER_NODE_RECONNECT_INTERVAL_SETTING.getKey(), "2s")  
-        .build();
-
-    /**  
-     * Creates 3 to 5 mixed-node cluster and splits it into 2 parts.
-     * The first part is guaranteed to have at least the majority of the nodes,
-     * so that cluster-manager could be elected on this side.  
-     */
-    private Tuple<Set<String>, Set<String>> prepareDisruptedCluster() {
-        int numOfNodes = randomIntBetween(3, 5);  
-        internalCluster().setBootstrapClusterManagerNodeIndex(numOfNodes - 1);
-        Set<String> nodes = new HashSet<>(internalCluster().startNodes(numOfNodes, DISRUPTION_TUNED_SETTINGS));
-        ensureGreen();  
-        assertThat(nodes.size(), greaterThanOrEqualTo(3));
-        int majority = nodes.size() / 2 + 1;
-        Set<String> side1 = new HashSet<>(randomSubsetOf(randomIntBetween(majority, nodes.size() - 1), nodes));  
-        assertThat(side1.size(), greaterThanOrEqualTo(majority));
-        Set<String> side2 = new HashSet<>(nodes);
-        side2.removeAll(side1);  
-        assertThat(side2.size(), greaterThanOrEqualTo(1));
-        NetworkDisruption networkDisruption = new NetworkDisruption(new TwoPartitions(side1, side2), NetworkDisruption.DISCONNECT);
-        internalCluster().setDisruptionScheme(networkDisruption);  
-        networkDisruption.startDisrupting();
-
-        return Tuple.tuple(side1, side2);  
-    }
-
-    public void testClearDisruptionSchemeWhenNodeIsDown() throws IOException {  
-        Tuple<Set<String>, Set<String>> sides = prepareDisruptedCluster();
-
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(randomFrom(sides.v2())));  
-        internalCluster().clearDisruptionScheme();
-    }
-
-    public void testNetworkPartitionRemovalRestoresConnections() throws Exception {
-        Tuple<Set<String>, Set<String>> sides = prepareDisruptedCluster();
-        Set<String> side1 = sides.v1();  
-        Set<String> side2 = sides.v2();
-
-        // sends some requests to the majority side part  
-        client(randomFrom(side1)).admin().cluster().prepareNodesInfo().get();
-        internalCluster().clearDisruptionScheme();
-        // check all connections are restored  
-        for (String nodeA : side1) {
-            for (String nodeB : side2) {
-                TransportService serviceA = internalCluster().getInstance(TransportService.class, nodeA);  
-                TransportService serviceB = internalCluster().getInstance(TransportService.class, nodeB);
-                // TODO assertBusy should not be here, see https://github.com/elastic/elasticsearch/issues/38348
-                assertBusy(() -> {  
-                    assertTrue(nodeA + " is not connected to " + nodeB, serviceA.nodeConnected(serviceB.getLocalNode()));
-                    assertTrue(nodeB + " is not connected to " + nodeA, serviceB.nodeConnected(serviceA.getLocalNode()));
-                });  
-            }
-        }
-    }  
-
-    public void testTransportRespondsEventually() throws InterruptedException {
-        internalCluster().setBootstrapClusterManagerNodeIndex(0);  
-        internalCluster().ensureAtLeastNumDataNodes(randomIntBetween(3, 5));
-        final NetworkDisruption.DisruptedLinks disruptedLinks;
-        if (randomBoolean()) {  
-            disruptedLinks = TwoPartitions.random(random(), internalCluster().getNodeNames());
-        } else {
-            disruptedLinks = NetworkDisruption.Bridge.random(random(), internalCluster().getNodeNames());  
-        }
-
-        NetworkDisruption networkDisruption = new NetworkDisruption(  
-            disruptedLinks,
-            randomFrom(NetworkDisruption.UNRESPONSIVE, NetworkDisruption.DISCONNECT, NetworkDisruption.NetworkDelay.random(random()))
-        );  
-        internalCluster().setDisruptionScheme(networkDisruption);
-
-        networkDisruption.startDisrupting();  
-
-        int requests = randomIntBetween(1, 200);
         CountDownLatch latch = new CountDownLatch(requests);  
-        for (int i = 0; i < requests - 1; ++i) {
-            sendRequest(
-                internalCluster().getInstance(TransportService.class),  
-                internalCluster().getInstance(TransportService.class),
-                latch
-            );  
-        }
-
-        // send a request that is guaranteed disrupted.  
-        Tuple<TransportService, TransportService> disruptedPair = findDisruptedPair(disruptedLinks);
-        sendRequest(disruptedPair.v1(), disruptedPair.v2(), latch);
-
-        // give a bit of time to send something under disruption.
-        assertFalse(
-            latch.await(500, TimeUnit.MILLISECONDS) && networkDisruption.getNetworkLinkDisruptionType() != NetworkDisruption.DISCONNECT  
-        );
-        networkDisruption.stopDisrupting();
-
-        latch.await(30, TimeUnit.SECONDS);
-        assertEquals("All requests must respond, requests: " + requests, 0, latch.getCount());
+ *
+     * so that cluster-manager could be elected on this side.  
+        // sends some requests to the majority side part  
+import org.opensearch.test.transport.MockTransportService;
     }  
-
-    private Tuple<TransportService, TransportService> findDisruptedPair(NetworkDisruption.DisruptedLinks disruptedLinks) {
-        Optional<Tuple<TransportService, TransportService>> disruptedPair = disruptedLinks.nodes()  
-            .stream()
-            .flatMap(n1 -> disruptedLinks.nodes().stream().map(n2 -> Tuple.tuple(n1, n2)))
-            .filter(pair -> disruptedLinks.disrupt(pair.v1(), pair.v2()))  
-            .map(
-                pair -> Tuple.tuple(
-                    internalCluster().getInstance(TransportService.class, pair.v1()),  
-                    internalCluster().getInstance(TransportService.class, pair.v2())
-                )
-            )  
-            .findFirst();
-        // since we have 3+ nodes, we are sure to find a disrupted pair, also for bridge disruptions.
-        assertTrue(disruptedPair.isPresent());  
-        return disruptedPair.get();
-    }
-
-    private void sendRequest(TransportService source, TransportService target, CountDownLatch latch) {
-        source.sendRequest(
-            target.getLocalNode(),  
-            ClusterHealthAction.NAME,
-            new ClusterHealthRequest(),
-            new TransportResponseHandler<TransportResponse>() {  
-                private AtomicBoolean responded = new AtomicBoolean();
-
-                @Override  
                 public void handleResponse(TransportResponse response) {
-                    assertTrue(responded.compareAndSet(false, true));
-                    latch.countDown();  
-                }
-
-                @Override  
-                public void handleException(TransportException exp) {
-                    assertTrue(responded.compareAndSet(false, true));
-                    latch.countDown();  
-                }
-
-                @Override  
-                public String executor() {
-                    return ThreadPool.Names.SAME;
-                }  
-
+import org.opensearch.core.transport.TransportResponse;
                 @Override
+            sendRequest(
+import java.util.Collection;  
+                    internalCluster().getInstance(TransportService.class, pair.v2())
+        internalCluster().setDisruptionScheme(networkDisruption);
+            );  
+                internalCluster().getInstance(TransportService.class),
+                @Override  
+        assertThat(side2.size(), greaterThanOrEqualTo(1));
+        internalCluster().clearDisruptionScheme();
+            disruptedLinks = NetworkDisruption.Bridge.random(random(), internalCluster().getNodeNames());  
+                @Override  
+        Set<String> side2 = sides.v2();
+ * not use this file except in compliance with the License.
+import org.opensearch.action.admin.cluster.health.ClusterHealthAction;
+                )
+            .map(
+            disruptedLinks = TwoPartitions.random(random(), internalCluster().getNodeNames());
+            randomFrom(NetworkDisruption.UNRESPONSIVE, NetworkDisruption.DISCONNECT, NetworkDisruption.NetworkDelay.random(random()))
+            latch.await(500, TimeUnit.MILLISECONDS) && networkDisruption.getNetworkLinkDisruptionType() != NetworkDisruption.DISCONNECT  
+        internalCluster().setBootstrapClusterManagerNodeIndex(numOfNodes - 1);
+            target.getLocalNode(),  
+                pair -> Tuple.tuple(
+        NetworkDisruption networkDisruption = new NetworkDisruption(  
+    private Tuple<TransportService, TransportService> findDisruptedPair(NetworkDisruption.DisruptedLinks disruptedLinks) {
+        for (int i = 0; i < requests - 1; ++i) {
+        networkDisruption.startDisrupting();  
+    private static final Settings DISRUPTION_TUNED_SETTINGS = Settings.builder()
+            for (String nodeB : side2) {
+import org.opensearch.plugins.Plugin;  
+        Set<String> side1 = new HashSet<>(randomSubsetOf(randomIntBetween(majority, nodes.size() - 1), nodes));  
+ * specific language governing permissions and limitations
+ * compatible open source license.
+    /**  
+        // give a bit of time to send something under disruption.
+/*  
+        internalCluster().setBootstrapClusterManagerNodeIndex(0);  
+ * under the License.  
+        Set<String> nodes = new HashSet<>(internalCluster().startNodes(numOfNodes, DISRUPTION_TUNED_SETTINGS));
+                @Override  
+ *  
+        return disruptedPair.get();
+                    internalCluster().getInstance(TransportService.class, pair.v1()),  
                 public TransportResponse read(StreamInput in) throws IOException {  
-                    return ClusterHealthResponse.readResponseFrom(in);
-                }
-            }  
-        );
-    }
+            new ClusterHealthRequest(),
+        internalCluster().clearDisruptionScheme();
+            }
+import org.opensearch.transport.TransportException;  
+ * SPDX-License-Identifier: Apache-2.0
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0, autoManageMasterNodes = false)
+        Tuple<Set<String>, Set<String>> sides = prepareDisruptedCluster();
+/*  
+                internalCluster().getInstance(TransportService.class),  
+ * Licensed to Elasticsearch under one or more contributor  
+        return Arrays.asList(MockTransportService.TestPlugin.class);
+    private Tuple<Set<String>, Set<String>> prepareDisruptedCluster() {
+        return Tuple.tuple(side1, side2);  
+        } else {
+                TransportService serviceB = internalCluster().getInstance(TransportService.class, nodeB);
+        internalCluster().ensureAtLeastNumDataNodes(randomIntBetween(3, 5));
+import org.opensearch.threadpool.ThreadPool;
+/*
+        assertTrue(disruptedPair.isPresent());  
+        NetworkDisruption networkDisruption = new NetworkDisruption(new TwoPartitions(side1, side2), NetworkDisruption.DISCONNECT);
+import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
+            .stream()
+            ClusterHealthAction.NAME,
+    public void testNetworkPartitionRemovalRestoresConnections() throws Exception {
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+import org.opensearch.transport.TransportService;
+ * software distributed under the License is distributed on an
 }  
+        latch.await(30, TimeUnit.SECONDS);
+    }
+        // check all connections are restored  
+                    assertTrue(responded.compareAndSet(false, true));
+                // TODO assertBusy should not be here, see https://github.com/elastic/elasticsearch/issues/38348
+        networkDisruption.startDisrupting();
+import org.opensearch.transport.TransportResponseHandler;
+    }
+        int requests = randomIntBetween(1, 200);
+        .build();
+                    assertTrue(nodeB + " is not connected to " + nodeA, serviceB.nodeConnected(serviceA.getLocalNode()));
+        assertThat(nodes.size(), greaterThanOrEqualTo(3));
+ * You may obtain a copy of the License at  
+                    return ClusterHealthResponse.readResponseFrom(in);
+ * license agreements. See the NOTICE file distributed with
+        Set<String> side1 = sides.v1();  
+import java.util.Set;  
+    public void testTransportRespondsEventually() throws InterruptedException {
+        Tuple<Set<String>, Set<String>> sides = prepareDisruptedCluster();
+import java.util.concurrent.TimeUnit;
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+ * ownership. Elasticsearch licenses this file to you under  
+    public void testClearDisruptionSchemeWhenNodeIsDown() throws IOException {  
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+                latch
+            }  
+            .findFirst();
+ * GitHub history for details.
+import java.util.Arrays;
+                }
+                assertBusy(() -> {  
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(randomFrom(sides.v2())));  
+                public void handleException(TransportException exp) {
+    private void sendRequest(TransportService source, TransportService target, CountDownLatch latch) {
+                    assertTrue(responded.compareAndSet(false, true));
+public class NetworkDisruptionIT extends OpenSearchIntegTestCase {
+        int numOfNodes = randomIntBetween(3, 5);  
+        assertEquals("All requests must respond, requests: " + requests, 0, latch.getCount());
+                }  
+        internalCluster().setDisruptionScheme(networkDisruption);  
+        Tuple<TransportService, TransportService> disruptedPair = findDisruptedPair(disruptedLinks);
+                    latch.countDown();  
+import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;  
+import java.util.HashSet;
+                public String executor() {
+        if (randomBoolean()) {  
+import java.util.concurrent.atomic.AtomicBoolean;  
+        Set<String> side2 = new HashSet<>(nodes);
+                    return ThreadPool.Names.SAME;
+                }
+    }
+        Optional<Tuple<TransportService, TransportService>> disruptedPair = disruptedLinks.nodes()  
+        assertThat(side1.size(), greaterThanOrEqualTo(majority));
+ */  
+    }  
+        );  
+            .filter(pair -> disruptedLinks.disrupt(pair.v1(), pair.v2()))  
+import org.opensearch.test.InternalTestCluster;
+package org.opensearch.test.disruption;
+                }
+                });  
+    }  
+        source.sendRequest(
+import java.io.IOException;
+        );
+        for (String nodeA : side1) {
+            disruptedLinks,
+        .put(NodeConnectionsService.CLUSTER_NODE_RECONNECT_INTERVAL_SETTING.getKey(), "2s")  
+        // since we have 3+ nodes, we are sure to find a disrupted pair, also for bridge disruptions.
+        ensureGreen();  
+                private AtomicBoolean responded = new AtomicBoolean();
+        int majority = nodes.size() / 2 + 1;
+import org.opensearch.cluster.NodeConnectionsService;
+ * The OpenSearch Contributors require contributions made to  
+import org.opensearch.core.common.io.stream.StreamInput;
+ * Modifications Copyright OpenSearch Contributors. See
+                    assertTrue(nodeA + " is not connected to " + nodeB, serviceA.nodeConnected(serviceB.getLocalNode()));
+            )  
+        client(randomFrom(side1)).admin().cluster().prepareNodesInfo().get();
+ */  
+        assertFalse(
+        networkDisruption.stopDisrupting();
+import java.util.concurrent.CountDownLatch;
+        );
+import java.util.Optional;
+                TransportService serviceA = internalCluster().getInstance(TransportService.class, nodeA);  
+    }
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.test.OpenSearchIntegTestCase;
+ * Unless required by applicable law or agreed to in writing,
+     */
+        final NetworkDisruption.DisruptedLinks disruptedLinks;
+     * The first part is guaranteed to have at least the majority of the nodes,
+ * this work for additional information regarding copyright
+     * Creates 3 to 5 mixed-node cluster and splits it into 2 parts.
+            new TransportResponseHandler<TransportResponse>() {  
+            .flatMap(n1 -> disruptedLinks.nodes().stream().map(n2 -> Tuple.tuple(n1, n2)))
+import org.opensearch.test.disruption.NetworkDisruption.TwoPartitions;  
+ * KIND, either express or implied.  See the License for the
+    @Override  
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import org.opensearch.common.settings.Settings;  
+ *
+ */
+        sendRequest(disruptedPair.v1(), disruptedPair.v2(), latch);
+        side2.removeAll(side1);  
+                    latch.countDown();  
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        // send a request that is guaranteed disrupted.  
+        }
+import org.opensearch.common.collect.Tuple;

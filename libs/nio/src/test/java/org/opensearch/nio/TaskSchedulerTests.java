@@ -1,117 +1,100 @@
-/*  
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to  
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */  
-
-/*
- * Licensed to Elasticsearch under one or more contributor  
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under  
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at  
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *  
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.  
+        long nanoTime = System.nanoTime();
  */
-
-/*  
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */  
-
-package org.opensearch.nio;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.concurrent.TimeUnit;  
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.LockSupport;
-
-public class TaskSchedulerTests extends OpenSearchTestCase {
-
-    private TaskScheduler scheduler = new TaskScheduler();  
-
     public void testScheduleTask() {
-        AtomicBoolean complete = new AtomicBoolean(false);  
-
-        long executeTime = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(10);
+        assertTrue(first.get());  
+    private TaskScheduler scheduler = new TaskScheduler();  
         scheduler.scheduleAtRelativeTime(() -> complete.set(true), executeTime);  
-
-        while (true) {
+ * Modifications Copyright OpenSearch Contributors. See
             long nanoTime = System.nanoTime();  
-            Runnable runnable = scheduler.pollTask(nanoTime);
-            if (nanoTime - executeTime >= 0) {
-                runnable.run();  
+ * under the License.  
                 assertTrue(complete.get());
+ *  
+ * GitHub history for details.
+ * software distributed under the License is distributed on an
+        scheduler.pollTask(executeTime + 10).run();
+        AtomicBoolean third = new AtomicBoolean(false);  
+        assertFalse(second.get());
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY  
+        while (true) {
+ */  
+    public void testPollScheduleTaskAtExactTime() {
+    }
+        scheduler.scheduleAtRelativeTime(() -> second.set(true), executeTime + 1);
+        long executeTime = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(10);
+        long executeTime = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(10);
+/*  
+        assertTrue(first.get());
+/*
                 break;
-            } else {  
+        long executeTime = nanoTime + TimeUnit.MILLISECONDS.toNanos(10);  
+        assertTrue(second.get());  
+        assertTrue(third.get());
+ * not use this file except in compliance with the License.
+        assertNull(scheduler.pollTask(executeTime + 10));
+public class TaskSchedulerTests extends OpenSearchTestCase {
+        assertEquals(TimeUnit.MILLISECONDS.toNanos(5), scheduler.nanosUntilNextTask(nanoTime + TimeUnit.MILLISECONDS.toNanos(5)));  
+        scheduler.pollTask(executeTime + 10).run();  
+        assertTrue(second.get());
+    }
+        scheduler.scheduleAtRelativeTime(() -> {}, executeTime);  
+ * Licensed to Elasticsearch under one or more contributor  
+        scheduler.scheduleAtRelativeTime(() -> second.set(true), executeTime + 1);
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.test.OpenSearchTestCase;
+        AtomicBoolean second = new AtomicBoolean(false);
+ * this work for additional information regarding copyright
+    public void testTaskCancel() {
+ *
+    public void testTaskOrdering() {  
+    }  
+        cancellable.run();  
+import java.util.concurrent.atomic.AtomicBoolean;
+        assertFalse(third.get());
+            Runnable runnable = scheduler.pollTask(nanoTime);
+        Runnable cancellable = scheduler.scheduleAtRelativeTime(() -> first.set(true), executeTime);  
                 assertNull(runnable);
+ * The OpenSearch Contributors require contributions made to  
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        assertTrue(second.get());  
+    }
+        long executeTime = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(10);
+        scheduler.pollTask(executeTime + 10).run();
+ * ownership. Elasticsearch licenses this file to you under  
+        scheduler.pollTask(executeTime + 10).run();
+        AtomicBoolean second = new AtomicBoolean(false);
+        }
+        AtomicBoolean first = new AtomicBoolean(false);
+ * specific language governing permissions and limitations
+        scheduler.scheduleAtRelativeTime(() -> third.set(true), executeTime + 2);
                 LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(1));
             }  
-        }
-    }
-
-    public void testPollScheduleTaskAtExactTime() {
-        long executeTime = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(10);
-        scheduler.scheduleAtRelativeTime(() -> {}, executeTime);  
-
-        assertNull(scheduler.pollTask(executeTime - 1));
-        assertNotNull(scheduler.pollTask(executeTime));  
-    }
-
-    public void testTaskOrdering() {  
-        AtomicBoolean first = new AtomicBoolean(false);
-        AtomicBoolean second = new AtomicBoolean(false);
-        AtomicBoolean third = new AtomicBoolean(false);  
-        long executeTime = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(10);
-        scheduler.scheduleAtRelativeTime(() -> third.set(true), executeTime + 2);
-        scheduler.scheduleAtRelativeTime(() -> first.set(true), executeTime);  
-        scheduler.scheduleAtRelativeTime(() -> second.set(true), executeTime + 1);
-
-        scheduler.pollTask(executeTime + 10).run();  
-        assertTrue(first.get());
-        assertFalse(second.get());
-        assertFalse(third.get());  
-        scheduler.pollTask(executeTime + 10).run();
-        assertTrue(first.get());
-        assertTrue(second.get());  
-        assertFalse(third.get());
-        scheduler.pollTask(executeTime + 10).run();
-        assertTrue(first.get());  
-        assertTrue(second.get());
-        assertTrue(third.get());
-    }  
-
-    public void testTaskCancel() {
-        AtomicBoolean first = new AtomicBoolean(false);  
-        AtomicBoolean second = new AtomicBoolean(false);
-        long executeTime = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(10);
-        Runnable cancellable = scheduler.scheduleAtRelativeTime(() -> first.set(true), executeTime);  
-        scheduler.scheduleAtRelativeTime(() -> second.set(true), executeTime + 1);
-
-        cancellable.run();  
-        scheduler.pollTask(executeTime + 10).run();
-        assertFalse(first.get());
-        assertTrue(second.get());  
-        assertNull(scheduler.pollTask(executeTime + 10));
-    }
-
-    public void testNanosUntilNextTask() {
-        long nanoTime = System.nanoTime();
-        long executeTime = nanoTime + TimeUnit.MILLISECONDS.toNanos(10);  
         scheduler.scheduleAtRelativeTime(() -> {}, executeTime);
-        assertEquals(TimeUnit.MILLISECONDS.toNanos(10), scheduler.nanosUntilNextTask(nanoTime));
-        assertEquals(TimeUnit.MILLISECONDS.toNanos(5), scheduler.nanosUntilNextTask(nanoTime + TimeUnit.MILLISECONDS.toNanos(5)));  
-    }
+ *
+ * You may obtain a copy of the License at  
+        assertFalse(first.get());
+        scheduler.scheduleAtRelativeTime(() -> first.set(true), executeTime);  
+        assertTrue(first.get());
+        AtomicBoolean complete = new AtomicBoolean(false);  
 }
+        assertFalse(third.get());  
+                runnable.run();  
+            if (nanoTime - executeTime >= 0) {
+ * license agreements. See the NOTICE file distributed with
+/*  
+ * SPDX-License-Identifier: Apache-2.0
+ */  
+import java.util.concurrent.locks.LockSupport;
+import java.util.concurrent.TimeUnit;  
+    }
+        assertEquals(TimeUnit.MILLISECONDS.toNanos(10), scheduler.nanosUntilNextTask(nanoTime));
+ * the Apache License, Version 2.0 (the "License"); you may
+ * compatible open source license.
+ * KIND, either express or implied.  See the License for the
+package org.opensearch.nio;
+        AtomicBoolean first = new AtomicBoolean(false);  
+ * this file be licensed under the Apache-2.0 license or a
+        assertNull(scheduler.pollTask(executeTime - 1));
+        long executeTime = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(10);
+        assertNotNull(scheduler.pollTask(executeTime));  
+    public void testNanosUntilNextTask() {
+            } else {  
