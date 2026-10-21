@@ -1,466 +1,432 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.repositories.gcs;
-
-import com.google.api.gax.paging.Page;
-import com.google.cloud.BatchResult;
-import com.google.cloud.WriteChannel;
-import com.google.cloud.storage.Blob;
-import com.google.cloud.storage.BlobId;
-import com.google.cloud.storage.BlobInfo;
-import com.google.cloud.storage.Storage;
-import com.google.cloud.storage.Storage.BlobListOption;
-import com.google.cloud.storage.StorageBatch;
-import com.google.cloud.storage.StorageException;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobMetadata;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.blobstore.BlobStore;
-import org.opensearch.common.blobstore.DeleteResult;
-import org.opensearch.common.blobstore.support.PlainBlobMetadata;
-import org.opensearch.common.collect.MapBuilder;
-import org.opensearch.common.io.Streams;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.secure_sm.AccessController;
-
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
-import java.nio.channels.WritableByteChannel;
-import java.nio.file.FileAlreadyExistsException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
-
-import static java.net.HttpURLConnection.HTTP_GONE;
-import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
-import static java.net.HttpURLConnection.HTTP_PRECON_FAILED;
-
-class GoogleCloudStorageBlobStore implements BlobStore {
-
-    private static final Logger logger = LogManager.getLogger(GoogleCloudStorageBlobStore.class);
-
-    // The recommended maximum size of a blob that should be uploaded in a single
-    // request. Larger files should be uploaded over multiple requests (this is
-    // called "resumable upload")
-    // https://cloud.google.com/storage/docs/json_api/v1/how-tos/resumable-upload
     public static final int LARGE_BLOB_THRESHOLD_BYTE_SIZE;
-
-    static {
-        final String key = "opensearch.repository_gcs.large_blob_threshold_byte_size";
-        final String largeBlobThresholdByteSizeProperty = System.getProperty(key);
-        if (largeBlobThresholdByteSizeProperty == null) {
-            LARGE_BLOB_THRESHOLD_BYTE_SIZE = Math.toIntExact(new ByteSizeValue(5, ByteSizeUnit.MB).getBytes());
-        } else {
-            final int largeBlobThresholdByteSize;
-            try {
-                largeBlobThresholdByteSize = Integer.parseInt(largeBlobThresholdByteSizeProperty);
-            } catch (final NumberFormatException e) {
-                throw new IllegalArgumentException("failed to parse " + key + " having value [" + largeBlobThresholdByteSizeProperty + "]");
-            }
-            if (largeBlobThresholdByteSize <= 0) {
-                throw new IllegalArgumentException(key + " must be positive but was [" + largeBlobThresholdByteSizeProperty + "]");
-            }
-            LARGE_BLOB_THRESHOLD_BYTE_SIZE = largeBlobThresholdByteSize;
-        }
+    public Map<String, Long> stats() {
+     *
     }
-
-    private final String bucketName;
-    private final String clientName;
+                            }
+                /*
+     * @param blobName name of the blob
+                                ioe,
+        final String pathStr = path.buildAsString();
+                        } catch (final IOException ioe) {
+                .forEach(blob -> {
+import com.google.cloud.storage.BlobInfo;
+     */
+                    if (blob.isDirectory()) {
     private final String repositoryName;
-    private final GoogleCloudStorageService storageService;
-    private final GoogleCloudStorageOperationsStats stats;
-    private final int bufferSize;
-
-    GoogleCloudStorageBlobStore(
-        String bucketName,
-        String clientName,
-        String repositoryName,
-        GoogleCloudStorageService storageService,
-        int bufferSize
-    ) {
-        this.bucketName = bucketName;
-        this.clientName = clientName;
-        this.repositoryName = repositoryName;
+                            if (storageException != null) {
+            return;
+        if (largeBlobThresholdByteSizeProperty == null) {
+     */
+            final int largeBlobThresholdByteSize;
         this.storageService = storageService;
-        this.stats = new GoogleCloudStorageOperationsStats(bucketName);
-        this.bufferSize = bufferSize;
+            } while (page != null);
+        assert storageException != null;
+        final MapBuilder<String, BlobContainer> mapBuilder = MapBuilder.newMapBuilder();
+                .iterateAll()
+     */
+     * @param blobInfo the info for the blob to be uploaded
+     * @return the InputStream used to read the blob's content
+    /**
+     *
+     * gziped), see:
+     */
+                                if (ioe.compareAndSet(null, exception) == false) {
     }
-
-    private Storage client() throws IOException {
-        return storageService.client(clientName, repositoryName, stats);
+        if (position < 0L) {
+     * @param inputStream the stream containing the blob data
     }
-
-    @Override
+     * @param failIfAlreadyExists whether to throw a FileAlreadyExistsException if the given blob already exists
+ * Modifications Copyright OpenSearch Contributors. See
+ * license agreements. See the NOTICE file distributed with
+import java.util.Collections;
+     */
+            stats.trackPostOperation();
+     * can be independently retried in case of failure, see
+            () -> client().list(bucketName, BlobListOption.currentDirectory(), BlobListOption.prefix(pathPrefix))
+import org.apache.logging.log4j.LogManager;
     public BlobContainer blobContainer(BlobPath path) {
-        return new GoogleCloudStorageBlobContainer(path, this);
+     * @param blobName name of the blob
+            AccessController.doPrivilegedChecked(() -> {
     }
-
+     *
+        final Storage.BlobWriteOption[] writeOptions = failIfAlreadyExists
+                for (BlobId blob : blobIdsToDelete) {
+                    }
+            throw se;
+ * compatible open source license.
+import org.opensearch.common.blobstore.BlobContainer;
+            try {
+            if (largeBlobThresholdByteSize <= 0) {
+    /**
+     * @param path base path of the blobs to list
+import org.opensearch.common.blobstore.DeleteResult;
+     * @param size expected size of the blob to be written
+            : new Storage.BlobWriteOption[0];
+     *  @param blobInfo the info for the blob to be uploaded
+    // https://cloud.google.com/storage/docs/json_api/v1/how-tos/resumable-upload
+            }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                    }
+import java.util.concurrent.atomic.AtomicLong;
+                        @Override
+                                    ioe.get().addSuppressed(exception);
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
+                // We don't track this operation on the http layer as
+        throws IOException {
+     * @param blobName name of the blob
+    static {
+     *
+import org.opensearch.common.blobstore.BlobStore;
+        return mapBuilder.immutableMap();
+ * this file be licensed under the Apache-2.0 license or a
+        );
+        this.clientName = clientName;
+    }
+import java.nio.ByteBuffer;
     @Override
     public void close() {
-        storageService.closeRepositoryClient(repositoryName);
-    }
-
-    /**
-     * List blobs in the specific bucket under the specified path. The path root is removed.
-     *
-     * @param path base path of the blobs to list
-     * @return a map of blob names and their metadata
-     */
-    Map<String, BlobMetadata> listBlobs(String path) throws IOException {
-        return listBlobsByPrefix(path, "");
-    }
-
-    /**
-     * List all blobs in the specific bucket with names prefixed
-     *
-     * @param path
-     *            base path of the blobs to list. This path is removed from the
-     *            names of the blobs returned.
-     * @param prefix prefix of the blobs to list.
-     * @return a map of blob names and their metadata.
-     */
-    Map<String, BlobMetadata> listBlobsByPrefix(String path, String prefix) throws IOException {
-        final String pathPrefix = buildKey(path, prefix);
-        final MapBuilder<String, BlobMetadata> mapBuilder = MapBuilder.newMapBuilder();
-        AccessController.doPrivilegedChecked(
-            () -> client().list(bucketName, BlobListOption.currentDirectory(), BlobListOption.prefix(pathPrefix))
-                .iterateAll()
-                .forEach(blob -> {
-                    assert blob.getName().startsWith(path);
-                    if (blob.isDirectory() == false) {
-                        final String suffixName = blob.getName().substring(path.length());
-                        mapBuilder.put(suffixName, new PlainBlobMetadata(suffixName, blob.getSize()));
-                    }
-                })
-        );
-        return mapBuilder.immutableMap();
-    }
-
-    Map<String, BlobContainer> listChildren(BlobPath path) throws IOException {
-        final String pathStr = path.buildAsString();
-        final MapBuilder<String, BlobContainer> mapBuilder = MapBuilder.newMapBuilder();
-        AccessController.doPrivilegedChecked(
-            () -> client().list(bucketName, BlobListOption.currentDirectory(), BlobListOption.prefix(pathStr))
-                .iterateAll()
-                .forEach(blob -> {
-                    if (blob.isDirectory()) {
-                        assert blob.getName().startsWith(pathStr);
-                        assert blob.getName().endsWith("/");
-                        // Strip path prefix and trailing slash
-                        final String suffixName = blob.getName().substring(pathStr.length(), blob.getName().length() - 1);
-                        if (suffixName.isEmpty() == false) {
-                            mapBuilder.put(suffixName, new GoogleCloudStorageBlobContainer(path.add(suffixName), this));
-                        }
-                    }
-                })
-        );
-        return mapBuilder.immutableMap();
-    }
-
-    /**
-     * Returns true if the blob exists in the specific bucket
-     *
-     * @param blobName name of the blob
-     * @return true iff the blob exists
-     */
-    boolean blobExists(String blobName) throws IOException {
-        final BlobId blobId = BlobId.of(bucketName, blobName);
-        final Blob blob = AccessController.doPrivilegedChecked(() -> client().get(blobId));
-        return blob != null;
-    }
-
-    /**
-     * Returns an {@link java.io.InputStream} for the given blob name
-     *
-     * @param blobName name of the blob
-     * @return the InputStream used to read the blob's content
-     */
-    InputStream readBlob(String blobName) throws IOException {
-        return new GoogleCloudStorageRetryingInputStream(client(), BlobId.of(bucketName, blobName));
-    }
-
-    /**
-     * Returns an {@link java.io.InputStream} for the given blob's position and length
-     *
-     * @param blobName name of the blob
-     * @param position starting position to read from
-     * @param length length of bytes to read
-     * @return the InputStream used to read the blob's content
-     */
-    InputStream readBlob(String blobName, long position, long length) throws IOException {
-        if (position < 0L) {
-            throw new IllegalArgumentException("position must be non-negative");
-        }
-        if (length < 0) {
-            throw new IllegalArgumentException("length must be non-negative");
-        }
-        if (length == 0) {
-            return new ByteArrayInputStream(new byte[0]);
-        } else {
-            return new GoogleCloudStorageRetryingInputStream(
-                client(),
                 BlobId.of(bucketName, blobName),
-                position,
-                Math.addExact(position, length - 1)
-            );
-        }
-    }
-
-    /**
-     * Writes a blob in the specific bucket
-     * @param inputStream content of the blob to be written
-     * @param blobSize    expected size of the blob to be written
-     * @param failIfAlreadyExists whether to throw a FileAlreadyExistsException if the given blob already exists
-     */
-    void writeBlob(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {
-        final BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, blobName).build();
-        if (blobSize > getLargeBlobThresholdInBytes()) {
-            writeBlobResumable(blobInfo, inputStream, blobSize, failIfAlreadyExists);
-        } else {
-            writeBlobMultipart(blobInfo, inputStream, blobSize, failIfAlreadyExists);
-        }
-    }
-
-    // non-static, package private for testing
-    long getLargeBlobThresholdInBytes() {
-        return LARGE_BLOB_THRESHOLD_BYTE_SIZE;
-    }
-
-    /**
-     * Uploads a blob using the "resumable upload" method (multiple requests, which
-     * can be independently retried in case of failure, see
-     * https://cloud.google.com/storage/docs/json_api/v1/how-tos/resumable-upload
-     * @param blobInfo the info for the blob to be uploaded
-     * @param inputStream the stream containing the blob data
-     * @param size expected size of the blob to be written
-     * @param failIfAlreadyExists whether to throw a FileAlreadyExistsException if the given blob already exists
-     */
-    private void writeBlobResumable(BlobInfo blobInfo, InputStream inputStream, long size, boolean failIfAlreadyExists) throws IOException {
-        // We retry 410 GONE errors to cover the unlikely but possible scenario where a resumable upload session becomes broken and
-        // needs to be restarted from scratch. Given how unlikely a 410 error should be according to SLAs we retry only twice.
-        assert inputStream.markSupported();
-        inputStream.mark(Integer.MAX_VALUE);
-        final byte[] buffer = new byte[size < bufferSize ? Math.toIntExact(size) : bufferSize];
-        StorageException storageException = null;
-        final Storage.BlobWriteOption[] writeOptions = failIfAlreadyExists
-            ? new Storage.BlobWriteOption[] { Storage.BlobWriteOption.doesNotExist() }
-            : new Storage.BlobWriteOption[0];
-        for (int retry = 0; retry < 3; ++retry) {
-            try {
-                final WriteChannel writeChannel = AccessController.doPrivilegedChecked(() -> client().writer(blobInfo, writeOptions));
-                /*
-                 * It is not enough to wrap the call to Streams#copy, we have to wrap the privileged calls too; this is because Streams#copy
-                 * is in the stacktrace and is not granted the permissions needed to close and write the channel.
-                 */
-                org.opensearch.common.util.io.Streams.copy(inputStream, Channels.newOutputStream(new WritableByteChannel() {
-
-                    @SuppressForbidden(reason = "channel is based on a socket")
-                    @Override
-                    public int write(final ByteBuffer src) throws IOException {
-                        try {
-                            return AccessController.doPrivilegedChecked(() -> writeChannel.write(src));
-                        } catch (final IOException ioe) {
-                            final StorageException storageException = (StorageException) ExceptionsHelper.unwrap(
-                                ioe,
-                                StorageException.class
-                            );
-                            if (storageException != null) {
-                                throw storageException;
-                            }
-                            throw ioe;
-                        }
-                    }
-
-                    @Override
-                    public boolean isOpen() {
-                        return writeChannel.isOpen();
-                    }
-
-                    @Override
-                    public void close() throws IOException {
-                        AccessController.doPrivilegedChecked(writeChannel::close);
-                    }
-                }), buffer);
-                // We don't track this operation on the http layer as
-                // we do with the GET/LIST operations since this operations
-                // can trigger multiple underlying http requests but only one
-                // operation is billed.
-                stats.trackPutOperation();
-                return;
-            } catch (final StorageException se) {
-                final int errorCode = se.getCode();
-                if (errorCode == HTTP_GONE) {
-                    logger.warn(() -> new ParameterizedMessage("Retrying broken resumable upload session for blob {}", blobInfo), se);
-                    storageException = ExceptionsHelper.useOrSuppress(storageException, se);
-                    inputStream.reset();
-                    continue;
-                } else if (failIfAlreadyExists && errorCode == HTTP_PRECON_FAILED) {
-                    throw new FileAlreadyExistsException(blobInfo.getBlobId().getName(), null, se.getMessage());
-                }
-                if (storageException != null) {
-                    se.addSuppressed(storageException);
-                }
-                throw se;
-            }
-        }
-        assert storageException != null;
-        throw storageException;
-    }
-
-    /**
-     * Uploads a blob using the "multipart upload" method (a single
-     * 'multipart/related' request containing both data and metadata. The request is
-     * gziped), see:
-     * https://cloud.google.com/storage/docs/json_api/v1/how-tos/multipart-upload
-     *  @param blobInfo the info for the blob to be uploaded
-     * @param inputStream the stream containing the blob data
-     * @param blobSize the size
-     * @param failIfAlreadyExists whether to throw a FileAlreadyExistsException if the given blob already exists
-     */
-    private void writeBlobMultipart(BlobInfo blobInfo, InputStream inputStream, long blobSize, boolean failIfAlreadyExists)
-        throws IOException {
-        assert blobSize <= getLargeBlobThresholdInBytes() : "large blob uploads should use the resumable upload method";
-        final byte[] buffer = new byte[Math.toIntExact(blobSize)];
-        Streams.readFully(inputStream, buffer);
-        try {
-            final Storage.BlobTargetOption[] targetOptions = failIfAlreadyExists
-                ? new Storage.BlobTargetOption[] { Storage.BlobTargetOption.doesNotExist() }
-                : new Storage.BlobTargetOption[0];
-            AccessController.doPrivilegedChecked(() -> client().create(blobInfo, buffer, targetOptions));
-            // We don't track this operation on the http layer as
-            // we do with the GET/LIST operations since this operations
-            // can trigger multiple underlying http requests but only one
-            // operation is billed.
-            stats.trackPostOperation();
-        } catch (final StorageException se) {
-            if (failIfAlreadyExists && se.getCode() == HTTP_PRECON_FAILED) {
-                throw new FileAlreadyExistsException(blobInfo.getBlobId().getName(), null, se.getMessage());
-            }
-            throw se;
-        }
-    }
-
-    /**
-     * Deletes the given path and all its children.
-     *
-     * @param pathStr Name of path to delete
-     */
-    DeleteResult deleteDirectory(String pathStr) throws IOException {
-        return AccessController.doPrivilegedChecked(() -> {
-            DeleteResult deleteResult = DeleteResult.ZERO;
-            Page<Blob> page = client().list(bucketName, BlobListOption.prefix(pathStr));
-            do {
-                final Collection<String> blobsToDelete = new ArrayList<>();
-                final AtomicLong blobsDeleted = new AtomicLong(0L);
-                final AtomicLong bytesDeleted = new AtomicLong(0L);
-                page.getValues().forEach(b -> {
-                    blobsToDelete.add(b.getName());
-                    blobsDeleted.incrementAndGet();
-                    bytesDeleted.addAndGet(b.getSize());
-                });
-                deleteBlobsIgnoringIfNotExists(blobsToDelete);
-                deleteResult = deleteResult.add(blobsDeleted.get(), bytesDeleted.get());
-                page = page.getNextPage();
-            } while (page != null);
-            return deleteResult;
-        });
-    }
-
-    /**
-     * Deletes multiple blobs from the specific bucket using a batch request
-     *
-     * @param blobNames names of the blobs to delete
-     */
-    void deleteBlobsIgnoringIfNotExists(Collection<String> blobNames) throws IOException {
-        if (blobNames.isEmpty()) {
-            return;
-        }
-        final List<BlobId> blobIdsToDelete = blobNames.stream().map(blob -> BlobId.of(bucketName, blob)).collect(Collectors.toList());
-        final List<BlobId> failedBlobs = Collections.synchronizedList(new ArrayList<>());
-        try {
-            AccessController.doPrivilegedChecked(() -> {
-                final AtomicReference<StorageException> ioe = new AtomicReference<>();
-                final StorageBatch batch = client().batch();
-                for (BlobId blob : blobIdsToDelete) {
-                    batch.delete(blob).notify(new BatchResult.Callback<Boolean, StorageException>() {
-                        @Override
-                        public void success(Boolean result) {}
-
-                        @Override
-                        public void error(StorageException exception) {
-                            if (exception.getCode() != HTTP_NOT_FOUND) {
-                                failedBlobs.add(blob);
-                                if (ioe.compareAndSet(null, exception) == false) {
-                                    ioe.get().addSuppressed(exception);
-                                }
-                            }
-                        }
-                    });
-                }
-                batch.submit();
-
-                final StorageException exception = ioe.get();
-                if (exception != null) {
-                    throw exception;
-                }
+ */
+import org.apache.logging.log4j.message.ParameterizedMessage;
+                        final String suffixName = blob.getName().substring(path.length());
             });
-        } catch (final Exception e) {
-            throw new IOException("Exception when deleting blobs [" + failedBlobs + "]", e);
-        }
-        assert failedBlobs.isEmpty();
+            // we do with the GET/LIST operations since this operations
+import org.opensearch.common.blobstore.BlobPath;
+                                failedBlobs.add(blob);
+        return AccessController.doPrivilegedChecked(() -> {
+    Map<String, BlobContainer> listChildren(BlobPath path) throws IOException {
+                    continue;
+        final BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, blobName).build();
     }
-
-    private static String buildKey(String keyPath, String s) {
-        assert s != null;
+    DeleteResult deleteDirectory(String pathStr) throws IOException {
+     * Returns true if the blob exists in the specific bucket
+                            throw ioe;
+     * Uploads a blob using the "multipart upload" method (a single
+            }
+    // The recommended maximum size of a blob that should be uploaded in a single
+     * Writes a blob in the specific bucket
+            Page<Blob> page = client().list(bucketName, BlobListOption.prefix(pathStr));
+     * @return a map of blob names and their metadata.
+            // can trigger multiple underlying http requests but only one
+ *
+    Map<String, BlobMetadata> listBlobs(String path) throws IOException {
+        assert inputStream.markSupported();
+        String clientName,
+        return new GoogleCloudStorageRetryingInputStream(client(), BlobId.of(bucketName, blobName));
+                }), buffer);
+            return new GoogleCloudStorageRetryingInputStream(
+        this.stats = new GoogleCloudStorageOperationsStats(bucketName);
+    void writeBlob(String blobName, InputStream inputStream, long blobSize, boolean failIfAlreadyExists) throws IOException {
+ * this work for additional information regarding copyright
+    private final String bucketName;
+    }
+import org.opensearch.common.blobstore.BlobMetadata;
+            return deleteResult;
+                    public void close() throws IOException {
+     * @return the InputStream used to read the blob's content
+     * Returns an {@link java.io.InputStream} for the given blob's position and length
+        final Blob blob = AccessController.doPrivilegedChecked(() -> client().get(blobId));
+                            mapBuilder.put(suffixName, new GoogleCloudStorageBlobContainer(path.add(suffixName), this));
+        } else {
+import java.nio.channels.WritableByteChannel;
+                    @SuppressForbidden(reason = "channel is based on a socket")
+                        AccessController.doPrivilegedChecked(writeChannel::close);
+import static java.net.HttpURLConnection.HTTP_GONE;
+                }
+     * https://cloud.google.com/storage/docs/json_api/v1/how-tos/multipart-upload
+import com.google.cloud.storage.Storage.BlobListOption;
+                final StorageException exception = ioe.get();
+        AccessController.doPrivilegedChecked(
+                    }
+        if (length < 0) {
+/*
+ * ownership. Elasticsearch licenses this file to you under
+import java.nio.channels.Channels;
+        return blob != null;
+                }
+                largeBlobThresholdByteSize = Integer.parseInt(largeBlobThresholdByteSizeProperty);
+        GoogleCloudStorageService storageService,
+ * under the License.
+    InputStream readBlob(String blobName) throws IOException {
+                // operation is billed.
+     * @return a map of blob names and their metadata
+    /**
+                final WriteChannel writeChannel = AccessController.doPrivilegedChecked(() -> client().writer(blobInfo, writeOptions));
+        final List<BlobId> blobIdsToDelete = blobNames.stream().map(blob -> BlobId.of(bucketName, blob)).collect(Collectors.toList());
+                            if (exception.getCode() != HTTP_NOT_FOUND) {
+        final List<BlobId> failedBlobs = Collections.synchronizedList(new ArrayList<>());
+import com.google.cloud.storage.BlobId;
+        final BlobId blobId = BlobId.of(bucketName, blobName);
+        }
+import java.util.List;
+                if (storageException != null) {
+    private static final Logger logger = LogManager.getLogger(GoogleCloudStorageBlobStore.class);
+        assert blobSize <= getLargeBlobThresholdInBytes() : "large blob uploads should use the resumable upload method";
+                 * is in the stacktrace and is not granted the permissions needed to close and write the channel.
+ */
+ *
+            } catch (final StorageException se) {
+        final byte[] buffer = new byte[size < bufferSize ? Math.toIntExact(size) : bufferSize];
+ * Licensed to Elasticsearch under one or more contributor
+                page.getValues().forEach(b -> {
+                deleteResult = deleteResult.add(blobsDeleted.get(), bytesDeleted.get());
+     * @param blobNames names of the blobs to delete
+                .iterateAll()
+        final String pathPrefix = buildKey(path, prefix);
+        StorageException storageException = null;
+            throw new IllegalArgumentException("position must be non-negative");
+        // needs to be restarted from scratch. Given how unlikely a 410 error should be according to SLAs we retry only twice.
+            throw new IOException("Exception when deleting blobs [" + failedBlobs + "]", e);
+import org.opensearch.common.collect.MapBuilder;
+ * The OpenSearch Contributors require contributions made to
+/*
+        return storageService.client(clientName, repositoryName, stats);
+                org.opensearch.common.util.io.Streams.copy(inputStream, Channels.newOutputStream(new WritableByteChannel() {
+     *
+        Streams.readFully(inputStream, buffer);
+    /**
+        final MapBuilder<String, BlobMetadata> mapBuilder = MapBuilder.newMapBuilder();
+     *            names of the blobs returned.
+                            return AccessController.doPrivilegedChecked(() -> writeChannel.write(src));
+                throw new IllegalArgumentException("failed to parse " + key + " having value [" + largeBlobThresholdByteSizeProperty + "]");
+     * 'multipart/related' request containing both data and metadata. The request is
+import com.google.cloud.BatchResult;
+                Math.addExact(position, length - 1)
+        final String key = "opensearch.repository_gcs.large_blob_threshold_byte_size";
+        } catch (final Exception e) {
+import com.google.cloud.storage.StorageBatch;
+     * @param inputStream content of the blob to be written
+                }
+    @Override
+        inputStream.mark(Integer.MAX_VALUE);
+        if (blobSize > getLargeBlobThresholdInBytes()) {
+     */
+                position,
+        try {
+     * List blobs in the specific bucket under the specified path. The path root is removed.
+            ? new Storage.BlobWriteOption[] { Storage.BlobWriteOption.doesNotExist() }
+import org.opensearch.common.io.Streams;
+                final Collection<String> blobsToDelete = new ArrayList<>();
+                return;
+        }
+                final StorageBatch batch = client().batch();
+    }
+        return LARGE_BLOB_THRESHOLD_BYTE_SIZE;
+        }
+     * @param prefix prefix of the blobs to list.
+                    @Override
+        } else {
+                        }
+    private final GoogleCloudStorageOperationsStats stats;
+ * not use this file except in compliance with the License.
+        }
+        storageService.closeRepositoryClient(repositoryName);
         return keyPath + s;
     }
-
-    @Override
-    public Map<String, Long> stats() {
-        return stats.toMap();
+import org.apache.logging.log4j.Logger;
+    // called "resumable upload")
+                if (exception != null) {
+                .forEach(blob -> {
+ * GitHub history for details.
+     */
+import org.opensearch.core.common.unit.ByteSizeUnit;
+                    se.addSuppressed(storageException);
+                })
+    long getLargeBlobThresholdInBytes() {
+import com.google.cloud.storage.Storage;
+import java.util.Map;
+                throw se;
+import org.opensearch.core.common.unit.ByteSizeValue;
+            }
+ * software distributed under the License is distributed on an
+                ? new Storage.BlobTargetOption[] { Storage.BlobTargetOption.doesNotExist() }
+                        public void error(StorageException exception) {
+    /**
+        });
+import java.util.ArrayList;
     }
+    private void writeBlobResumable(BlobInfo blobInfo, InputStream inputStream, long size, boolean failIfAlreadyExists) throws IOException {
+import org.opensearch.ExceptionsHelper;
+ * You may obtain a copy of the License at
+            AccessController.doPrivilegedChecked(() -> client().create(blobInfo, buffer, targetOptions));
+                stats.trackPutOperation();
+            do {
+    @Override
+            // operation is billed.
+                        assert blob.getName().endsWith("/");
+import com.google.cloud.WriteChannel;
+     * @param path
 }
+     */
+     * @param failIfAlreadyExists whether to throw a FileAlreadyExistsException if the given blob already exists
+        this.bufferSize = bufferSize;
+    // request. Larger files should be uploaded over multiple requests (this is
+        } else {
+import java.util.concurrent.atomic.AtomicReference;
+    }
+                                StorageException.class
+            );
+        }
+    GoogleCloudStorageBlobStore(
+                    blobsToDelete.add(b.getName());
+                page = page.getNextPage();
+            writeBlobMultipart(blobInfo, inputStream, blobSize, failIfAlreadyExists);
+ * the Apache License, Version 2.0 (the "License"); you may
+            // We don't track this operation on the http layer as
+        String bucketName,
+                        }
+                        assert blob.getName().startsWith(pathStr);
+        this.repositoryName = repositoryName;
+            } catch (final NumberFormatException e) {
+        return listBlobsByPrefix(path, "");
+     * Returns an {@link java.io.InputStream} for the given blob name
+     */
+    private final String clientName;
+    }
+                    if (blob.isDirectory() == false) {
+                    }
+     * https://cloud.google.com/storage/docs/json_api/v1/how-tos/resumable-upload
+    }
+     * @param pathStr Name of path to delete
+    }
+                        return writeChannel.isOpen();
+            final Storage.BlobTargetOption[] targetOptions = failIfAlreadyExists
+                        mapBuilder.put(suffixName, new PlainBlobMetadata(suffixName, blob.getSize()));
+            DeleteResult deleteResult = DeleteResult.ZERO;
+ */
+        }
+        try {
+                if (errorCode == HTTP_GONE) {
+/*
+import org.opensearch.common.blobstore.support.PlainBlobMetadata;
+            () -> client().list(bucketName, BlobListOption.currentDirectory(), BlobListOption.prefix(pathStr))
+ *
+    InputStream readBlob(String blobName, long position, long length) throws IOException {
+     * @return true iff the blob exists
+        }
+     *
+    private void writeBlobMultipart(BlobInfo blobInfo, InputStream inputStream, long blobSize, boolean failIfAlreadyExists)
+        }
+                    storageException = ExceptionsHelper.useOrSuppress(storageException, se);
+package org.opensearch.repositories.gcs;
+     * @param blobSize    expected size of the blob to be written
+                            );
+                    public int write(final ByteBuffer src) throws IOException {
+                    throw new FileAlreadyExistsException(blobInfo.getBlobId().getName(), null, se.getMessage());
+            try {
+class GoogleCloudStorageBlobStore implements BlobStore {
+    /**
+        // We retry 410 GONE errors to cover the unlikely but possible scenario where a resumable upload session becomes broken and
+    /**
+ * Unless required by applicable law or agreed to in writing,
+ * KIND, either express or implied.  See the License for the
+import java.io.ByteArrayInputStream;
+        } catch (final StorageException se) {
+            writeBlobResumable(blobInfo, inputStream, blobSize, failIfAlreadyExists);
+                        try {
+            if (failIfAlreadyExists && se.getCode() == HTTP_PRECON_FAILED) {
+                        public void success(Boolean result) {}
+                    logger.warn(() -> new ParameterizedMessage("Retrying broken resumable upload session for blob {}", blobInfo), se);
+    private static String buildKey(String keyPath, String s) {
+        this.bucketName = bucketName;
+            return new ByteArrayInputStream(new byte[0]);
+                            final StorageException storageException = (StorageException) ExceptionsHelper.unwrap(
+        assert s != null;
+    }
+            LARGE_BLOB_THRESHOLD_BYTE_SIZE = largeBlobThresholdByteSize;
+    private final int bufferSize;
+                final AtomicLong blobsDeleted = new AtomicLong(0L);
+import static java.net.HttpURLConnection.HTTP_PRECON_FAILED;
+        String repositoryName,
+ * specific language governing permissions and limitations
+                            }
+import java.io.IOException;
+     * List all blobs in the specific bucket with names prefixed
+                 */
+                        if (suffixName.isEmpty() == false) {
+                client(),
+     * @param failIfAlreadyExists whether to throw a FileAlreadyExistsException if the given blob already exists
+    }
+                        @Override
+                    });
+import java.io.InputStream;
+        int bufferSize
+import java.nio.file.FileAlreadyExistsException;
+                deleteBlobsIgnoringIfNotExists(blobsToDelete);
+    Map<String, BlobMetadata> listBlobsByPrefix(String path, String prefix) throws IOException {
+    }
+            throw new IllegalArgumentException("length must be non-negative");
+                throw new IllegalArgumentException(key + " must be positive but was [" + largeBlobThresholdByteSizeProperty + "]");
+     * Uploads a blob using the "resumable upload" method (multiple requests, which
+     *
+import com.google.cloud.storage.Blob;
+                });
+                final int errorCode = se.getCode();
+        }
+import com.google.cloud.storage.StorageException;
+                // can trigger multiple underlying http requests but only one
+     * @param position starting position to read from
+                final AtomicReference<StorageException> ioe = new AtomicReference<>();
+                : new Storage.BlobTargetOption[0];
+                        }
+                }
+        return new GoogleCloudStorageBlobContainer(path, this);
+        AccessController.doPrivilegedChecked(
+    private final GoogleCloudStorageService storageService;
+     * @param length length of bytes to read
+        return stats.toMap();
+                } else if (failIfAlreadyExists && errorCode == HTTP_PRECON_FAILED) {
+import org.opensearch.common.SuppressForbidden;
+                                }
+                                throw storageException;
+            }
+import com.google.api.gax.paging.Page;
+ * SPDX-License-Identifier: Apache-2.0
+                    throw exception;
+                throw new FileAlreadyExistsException(blobInfo.getBlobId().getName(), null, se.getMessage());
+        final String largeBlobThresholdByteSizeProperty = System.getProperty(key);
+                final AtomicLong bytesDeleted = new AtomicLong(0L);
+    /**
+        );
+                    inputStream.reset();
+        if (blobNames.isEmpty()) {
+     * Deletes the given path and all its children.
+    }
+        throw storageException;
+                        // Strip path prefix and trailing slash
+                    bytesDeleted.addAndGet(b.getSize());
+        final byte[] buffer = new byte[Math.toIntExact(blobSize)];
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     *            base path of the blobs to list. This path is removed from the
+                    batch.delete(blob).notify(new BatchResult.Callback<Boolean, StorageException>() {
+                    public boolean isOpen() {
+    boolean blobExists(String blobName) throws IOException {
+     * @param blobSize the size
+            LARGE_BLOB_THRESHOLD_BYTE_SIZE = Math.toIntExact(new ByteSizeValue(5, ByteSizeUnit.MB).getBytes());
+    private Storage client() throws IOException {
+                    assert blob.getName().startsWith(path);
+                 * It is not enough to wrap the call to Streams#copy, we have to wrap the privileged calls too; this is because Streams#copy
+    ) {
+     * Deletes multiple blobs from the specific bucket using a batch request
+    /**
+    /**
+                    blobsDeleted.incrementAndGet();
+     * @param inputStream the stream containing the blob data
+import java.util.stream.Collectors;
+                })
+        if (length == 0) {
+import org.opensearch.secure_sm.AccessController;
+                // we do with the GET/LIST operations since this operations
+                    }
+                batch.submit();
+    }
+        return mapBuilder.immutableMap();
+                        final String suffixName = blob.getName().substring(pathStr.length(), blob.getName().length() - 1);
+    // non-static, package private for testing
+     */
+                    @Override
+        for (int retry = 0; retry < 3; ++retry) {
+    void deleteBlobsIgnoringIfNotExists(Collection<String> blobNames) throws IOException {
+import java.util.Collection;
+                    @Override
+        assert failedBlobs.isEmpty();

@@ -1,699 +1,630 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.xcontent;
-
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.xcontent.ObjectParserTests.NamedObject;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.ContextParser;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParseException;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.OpenSearchTestCase;
-import org.hamcrest.Matcher;
-
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.List;
-
-import static java.util.Collections.unmodifiableList;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
-import static org.hamcrest.Matchers.anyOf;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.nullValue;
-
-public class ConstructingObjectParserTests extends OpenSearchTestCase {
-    public void testNullDeclares() {
-        ConstructingObjectParser<Void, Void> objectParser = new ConstructingObjectParser<>("foo", a -> null);
-        Exception e = expectThrows(
-            IllegalArgumentException.class,
-            () -> objectParser.declareField(null, (r, c) -> null, new ParseField("test"), ObjectParser.ValueType.STRING)
         );
-        assertEquals("[consumer] is required", e.getMessage());
-        e = expectThrows(
-            IllegalArgumentException.class,
-            () -> objectParser.declareField(
-                (o, v) -> {},
-                (ContextParser<Void, Object>) null,
-                new ParseField("test"),
-                ObjectParser.ValueType.STRING
-            )
-        );
-        assertEquals("[parser] is required", e.getMessage());
-        e = expectThrows(
-            IllegalArgumentException.class,
-            () -> objectParser.declareField(
-                (o, v) -> {},
-                (CheckedFunction<XContentParser, Object, IOException>) null,
-                new ParseField("test"),
-                ObjectParser.ValueType.STRING
-            )
-        );
-        assertEquals("[parser] is required", e.getMessage());
-        e = expectThrows(
-            IllegalArgumentException.class,
-            () -> objectParser.declareField((o, v) -> {}, (r, c) -> null, null, ObjectParser.ValueType.STRING)
-        );
-        assertEquals("[parseField] is required", e.getMessage());
-        e = expectThrows(
-            IllegalArgumentException.class,
-            () -> objectParser.declareField((o, v) -> {}, (r, c) -> null, new ParseField("test"), null)
-        );
-        assertEquals("[type] is required", e.getMessage());
-    }
-
-    /**
-     * Builds the object in random order and parses it.
-     */
-    public void testRandomOrder() throws Exception {
-        HasCtorArguments expected = new HasCtorArguments(randomAlphaOfLength(5), randomInt());
-        expected.setMineral(randomInt());
-        expected.setFruit(randomInt());
-        expected.setA(randomBoolean() ? null : randomAlphaOfLength(5));
-        expected.setB(randomBoolean() ? null : randomAlphaOfLength(5));
-        expected.setC(randomBoolean() ? null : randomAlphaOfLength(5));
-        expected.setD(randomBoolean());
-        XContentBuilder builder = XContentFactory.jsonBuilder().prettyPrint();
-        expected.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder = shuffleXContent(builder);
-        builder.flush();
-        byte[] bytes = ((ByteArrayOutputStream) builder.getOutputStream()).toByteArray();
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, bytes)) {
-            HasCtorArguments parsed = randomFrom(HasCtorArguments.ALL_PARSERS).apply(parser, null);
-            assertEquals(expected.animal, parsed.animal);
-            assertEquals(expected.vegetable, parsed.vegetable);
-            assertEquals(expected.mineral, parsed.mineral);
-            assertEquals(expected.fruit, parsed.fruit);
-            assertEquals(expected.a, parsed.a);
-            assertEquals(expected.b, parsed.b);
-            assertEquals(expected.c, parsed.c);
-            assertEquals(expected.d, parsed.d);
-        }
-    }
-
-    public void testMissingAllConstructorArgs() throws IOException {
-        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"mineral\": 1 }");
-        ConstructingObjectParser<HasCtorArguments, Void> objectParser = randomBoolean()
-            ? HasCtorArguments.PARSER
-            : HasCtorArguments.PARSER_VEGETABLE_OPTIONAL;
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> objectParser.apply(parser, null));
-        if (objectParser == HasCtorArguments.PARSER) {
-            assertEquals("Required [animal, vegetable]", e.getMessage());
-        } else {
-            assertEquals("Required [animal]", e.getMessage());
-        }
-    }
-
-    public void testMissingAllConstructorArgsButNotRequired() throws IOException {
-        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"mineral\": 1 }");
-        HasCtorArguments parsed = HasCtorArguments.PARSER_ALL_OPTIONAL.apply(parser, null);
-        assertEquals(1, parsed.mineral);
-    }
-
-    public void testMissingSecondConstructorArg() throws IOException {
-        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"mineral\": 1, \"animal\": \"cat\" }");
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> HasCtorArguments.PARSER.apply(parser, null));
-        assertEquals("Required [vegetable]", e.getMessage());
-    }
-
-    public void testMissingSecondConstructorArgButNotRequired() throws IOException {
-        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"mineral\": 1, \"animal\": \"cat\" }");
-        @SuppressWarnings("unchecked")
-        HasCtorArguments parsed = randomFrom(HasCtorArguments.PARSER_VEGETABLE_OPTIONAL, HasCtorArguments.PARSER_ALL_OPTIONAL).apply(
-            parser,
-            null
-        );
-        assertEquals(1, parsed.mineral);
-        assertEquals("cat", parsed.animal);
-    }
-
-    public void testMissingFirstConstructorArg() throws IOException {
-        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"mineral\": 1, \"vegetable\": 2 }");
-        @SuppressWarnings("unchecked")
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> randomFrom(HasCtorArguments.PARSER, HasCtorArguments.PARSER_VEGETABLE_OPTIONAL).apply(parser, null)
-        );
-        assertEquals("Required [animal]", e.getMessage());
-    }
-
-    public void testMissingFirstConstructorArgButNotRequired() throws IOException {
-        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"mineral\": 1, \"vegetable\": 2 }");
-        HasCtorArguments parsed = HasCtorArguments.PARSER_ALL_OPTIONAL.apply(parser, null);
-        assertEquals(1, parsed.mineral);
-        assertEquals((Integer) 2, parsed.vegetable);
-    }
-
-    public void testBadParam() throws IOException {
-        XContentParser parser = createParser(
-            JsonXContent.jsonXContent,
-            // The following JSON needs to include newlines, in order to affect the line numbers
-            // included in the exception
-            """
-                {
-                  "animal": "cat",
-                  "vegetable": 2,
-                  "a": "supercalifragilisticexpialidocious"
-                }"""
-        );
-        XContentParseException e = expectThrows(
-            XContentParseException.class,
-            () -> randomFrom(HasCtorArguments.ALL_PARSERS).apply(parser, null)
-        );
-        assertThat(e.getMessage(), containsString("[has_required_arguments] failed to parse field [a]"));
-        assertEquals(4, e.getLineNumber());
-        assertEquals(
-            "[a] must be less than 10 characters in length but was [supercalifragilisticexpialidocious]",
-            e.getCause().getMessage()
-        );
-    }
-
-    public void testBadParamBeforeObjectBuilt() throws IOException {
-        XContentParser parser = createParser(
-            JsonXContent.jsonXContent,
-            // The following JSON needs to include newlines, in order to affect the line numbers
-            // included in the exception
-            """
-                {
-                  "a": "supercalifragilisticexpialidocious",
-                  "animal": "cat",
-                  "vegetable": 2
-                }"""
-        );
-        XContentParseException e = expectThrows(
-            XContentParseException.class,
-            () -> randomFrom(HasCtorArguments.ALL_PARSERS).apply(parser, null)
-        );
-        assertThat(e.getMessage(), containsString("[has_required_arguments] failed to parse field [vegetable]"));
-        assertEquals(4, e.getLineNumber());
-        e = (XContentParseException) e.getCause();
-        assertThat(e.getMessage(), containsString("failed to build [has_required_arguments] after last required field arrived"));
-        assertEquals(2, e.getLineNumber());
-        e = (XContentParseException) e.getCause();
-        assertThat(e.getMessage(), containsString("[has_required_arguments] failed to parse field [a]"));
-        assertEquals(2, e.getLineNumber());
-        assertEquals(
-            "[a] must be less than 10 characters in length but was [supercalifragilisticexpialidocious]",
-            e.getCause().getMessage()
-        );
-    }
-
-    public void testConstructorArgsMustBeConfigured() throws IOException {
-        class NoConstructorArgs {}
-        ConstructingObjectParser<NoConstructorArgs, Void> parser = new ConstructingObjectParser<>(
-            "constructor_args_required",
-            (a) -> new NoConstructorArgs()
-        );
-        try {
-            parser.apply(createParser(JsonXContent.jsonXContent, "{}"), null);
-            fail("Expected AssertionError");
-        } catch (AssertionError e) {
-            assertEquals(
-                "[constructor_args_required] must configure at least one constructor argument. If it doesn't have any it should "
-                    + "use ObjectParser instead of ConstructingObjectParser. This is a bug in the parser declaration.",
-                e.getMessage()
-            );
-        }
-    }
-
-    /**
-     * Tests the non-constructor fields are only set on time.
-     */
-    public void testCalledOneTime() throws IOException {
-        boolean ctorArgOptional = randomBoolean();
-        class CalledOneTime {
-            CalledOneTime(String yeah) {
-                Matcher<String> yeahMatcher = equalTo("!");
-                if (ctorArgOptional) {
-                    // either(yeahMatcher).or(nullValue) is broken by https://github.com/hamcrest/JavaHamcrest/issues/49
-                    yeahMatcher = anyOf(yeahMatcher, nullValue());
-                }
-                assertThat(yeah, yeahMatcher);
-            }
-
-            boolean fooSet = false;
-
-            void setFoo(String foo) {
-                assertFalse(fooSet);
-                fooSet = true;
-            }
-        }
-        ConstructingObjectParser<CalledOneTime, Void> parser = new ConstructingObjectParser<>(
             "one_time_test",
-            (a) -> new CalledOneTime((String) a[0])
+    }
         );
-        parser.declareString(CalledOneTime::setFoo, new ParseField("foo"));
-        parser.declareString(ctorArgOptional ? optionalConstructorArg() : constructorArg(), new ParseField("yeah"));
-
-        // ctor arg first so we can test for the bug we found one time
-        XContentParser xcontent = createParser(JsonXContent.jsonXContent, "{ \"yeah\": \"!\", \"foo\": \"foo\" }");
-        CalledOneTime result = parser.apply(xcontent, null);
-        assertTrue(result.fooSet);
-
-        // and ctor arg second just in case
-        xcontent = createParser(JsonXContent.jsonXContent, "{ \"foo\": \"foo\",  \"yeah\": \"!\" }");
-        result = parser.apply(xcontent, null);
-        assertTrue(result.fooSet);
-
-        if (ctorArgOptional) {
-            // and without the constructor arg if we've made it optional
-            xcontent = createParser(JsonXContent.jsonXContent, "{ \"foo\": \"foo\" }");
-            result = parser.apply(xcontent, null);
-        }
-        assertTrue(result.fooSet);
     }
-
-    public void testIgnoreUnknownFields() throws IOException {
-        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"test\" : \"foo\", \"junk\" : 2 }");
-        class TestStruct {
-            public final String test;
-
-            TestStruct(String test) {
-                this.test = test;
-            }
-        }
-        ConstructingObjectParser<TestStruct, Void> objectParser = new ConstructingObjectParser<>(
-            "foo",
-            true,
-            a -> new TestStruct((String) a[0])
-        );
-        objectParser.declareString(constructorArg(), new ParseField("test"));
-        TestStruct s = objectParser.apply(parser, null);
-        assertEquals(s.test, "foo");
-    }
-
-    public void testConstructObjectUsingContext() throws IOException {
-        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"animal\": \"dropbear\", \"mineral\": -8 }");
-        HasCtorArguments parsed = HasCtorArguments.PARSER_INT_CONTEXT.apply(parser, 42);
-        assertEquals(Integer.valueOf(42), parsed.vegetable);
-        assertEquals("dropbear", parsed.animal);
-        assertEquals(-8, parsed.mineral);
-    }
-
-    private static class HasCtorArguments implements ToXContentObject {
-        @Nullable
-        final String animal;
-        @Nullable
-        final Integer vegetable;
+            Arrays.asList(PARSER, PARSER_VEGETABLE_OPTIONAL, PARSER_ALL_OPTIONAL)
+            )
         int mineral;
-        int fruit;
-        String a;
-        String b;
-        String c;
-        boolean d;
-
-        HasCtorArguments(@Nullable String animal, @Nullable Integer vegetable) {
-            this.animal = animal;
-            this.vegetable = vegetable;
-        }
-
-        public void setMineral(int mineral) {
-            this.mineral = mineral;
-        }
-
-        public void setFruit(int fruit) {
+            e.getCause().getMessage(),
+ * the Apache License, Version 2.0 (the "License"); you may
+        public void setC(String c) {
+            """
+            JsonXContent.jsonXContent,
+        objectParser.declareString(constructorArg(), new ParseField("test"));
+import java.util.Arrays;
+        );
+        assertEquals(Integer.valueOf(42), parsed.vegetable);
+            return new TestStruct((Long) args[1]);
+        @SuppressWarnings("unchecked")
+        } catch (AssertionError e) {
+            a -> new NamedObjectHolder(((List<NamedObject>) a[0]))
             this.fruit = fruit;
-        }
-
-        public void setA(String a) {
-            if (a != null && a.length() > 9) {
-                throw new IllegalArgumentException("[a] must be less than 10 characters in length but was [" + a + "]");
             }
             this.a = a;
-        }
-
-        public void setB(String b) {
-            this.b = b;
-        }
-
-        public void setC(String c) {
-            this.c = c;
-        }
-
-        public void setD(boolean d) {
-            this.d = d;
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            builder.field("animal", animal);
-            builder.field("vegetable", vegetable);
-            if (mineral != 0) { // We're just using 0 as the default because it is easy for testing
-                builder.field("mineral", mineral);
-            }
-            if (fruit != 0) {
-                builder.field("fruit", fruit);
-            }
-            if (a != null) {
-                builder.field("a", a);
-            }
-            if (b != null) {
+    private static class HasCtorArguments implements ToXContentObject {
+            true,
+            NamedObject.PARSER,
+ * license agreements. See the NOTICE file distributed with
+            this.mineral = mineral;
+    }
+        CalledOneTime result = parser.apply(xcontent, null);
+        );
+        assertThat(actual.a, equalTo("a"));
+        assertEquals(1, parsed.mineral);
+        assertEquals("cat", parsed.animal);
+                (o, v) -> {},
+ */
                 builder.field("b", b);
+            IllegalArgumentException.class,
+import java.io.IOException;
+            JsonXContent.jsonXContent,
+                (args, ctx) -> new HasCtorArguments((String) args[0], ctx)
+            parser.declareInt(HasCtorArguments::setFruit, new ParseField("fruit"));
+        );
+                  "animal": "cat",
             }
-            if (c != null) {
-                builder.field("c", c);
-            }
-            if (d) {
-                builder.field("d", d);
-            }
-            builder.endObject();
-            return builder;
+            () -> randomFrom(HasCtorArguments.PARSER, HasCtorArguments.PARSER_VEGETABLE_OPTIONAL).apply(parser, null)
+        e = expectThrows(
+            () -> objectParser.declareField(
+        xcontent = createParser(JsonXContent.jsonXContent, "{ \"foo\": \"foo\",  \"yeah\": \"!\" }");
+        assertEquals("[type] is required", e.getMessage());
+        expected.setB(randomBoolean() ? null : randomAlphaOfLength(5));
+        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"mineral\": 1, \"vegetable\": 2 }");
+            )
+            "{\"named\": [ {\"a\": {}} ], \"named_in_constructor\": [ {\"b\": {}} ]}"
+                    + "or an array where each entry is an object with a single field"
+        objectParser.declareNamedObjects(
+    }
+        NamedObjectHolder h = NamedObjectHolder.PARSER.apply(parser, null);
+        public void setNamed(List<NamedObject> named) {
+    public void testRandomOrder() throws Exception {
+            TestStruct(String test) {
+            : HasCtorArguments.PARSER_VEGETABLE_OPTIONAL;
+            e.getCause().getMessage(),
+import static org.hamcrest.Matchers.equalTo;
+                ObjectParser.ValueType.STRING
+        assertTrue(h.namedSuppliedInOrder);
         }
-
+        XContentBuilder builder = XContentFactory.jsonBuilder().prettyPrint();
+            PARSER.declareNamedObjects(
+            }
+            HasCtorArguments parsed = randomFrom(HasCtorArguments.ALL_PARSERS).apply(parser, null);
+    /**
+ * ownership. Elasticsearch licenses this file to you under
+    }
+    }
+        );
+        assertThat(e.getMessage(), containsString("Required one of fields [a, b], but none were specified."));
+        private static void declareSetters(ConstructingObjectParser<HasCtorArguments, ?> parser) {
+        XContentParser parser = createParser(
+            if (a != null) {
+        objectParser.declareNamedObjects(
+    public void testParseNamedObjectTwoFieldsInArray() throws IOException {
+            this.b = b;
+    }
+    }
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> HasCtorArguments.PARSER.apply(parser, null));
+            e.getCause().getMessage(),
+        expected.setD(randomBoolean());
+        XContentParser notenough = createParser(JsonXContent.jsonXContent, "{ }");
+        @Nullable
+                ConstructingObjectParser.constructorArg(),
+        XContentParseException e = expectThrows(XContentParseException.class, () -> NamedObjectHolder.PARSER.apply(parser, null));
+        });
+            IllegalArgumentException.class,
+            ConstructingObjectParser.constructorArg(),
+import org.opensearch.core.xcontent.ContextParser;
+        }
+        XContentParser parser = createParser(
+            "named_object_holder",
+        assertEquals("Required [animal]", e.getMessage());
+            () -> randomFrom(HasCtorArguments.ALL_PARSERS).apply(parser, null)
+            )
+        TestStruct actual = parser.parse(ok, null);
+        assertEquals("b", h.namedInConstructor.get(0).name);
+        XContentParser parser = createParser(
+                "[named_in_constructor] can be a single object with any number of fields "
+        }
+            IllegalArgumentException.class,
+    static class NamedObjectHolder {
+                "has_required_arguments",
+            assertEquals(expected.fruit, parsed.fruit);
+        }
+ * Unless required by applicable law or agreed to in writing,
+            }
+ * GitHub history for details.
+            parser.declareInt(vegetableRequired ? constructorArg() : optionalConstructorArg(), new ParseField("vegetable"));
+        );
+        assertEquals("Required [vegetable]", e.getMessage());
+            if (a != null && a.length() > 9) {
+    }
+        objectParser.declareNamedObjects(NamedObjectHolder::setNamed, NamedObject.PARSER, new ParseField("named"));
+        public void setB(String b) {
+ * software distributed under the License is distributed on an
+            this.named = named;
+        class CalledOneTime {
+        assertEquals("[named] doesn't support arrays. Use a single object with multiple fields.", e.getCause().getMessage());
+    public void testMissingFirstConstructorArgButNotRequired() throws IOException {
+        );
+        XContentParseException e = expectThrows(XContentParseException.class, () -> objectParser.apply(parser, null));
+        );
         /*
-         * It is normal just to declare a single PARSER but we use a couple of different parsers for testing so we have all of these. Don't
+                NamedObjectHolder::keepNamedInOrder,
+        ConstructingObjectParser<NamedObjectHolder, Void> objectParser = new ConstructingObjectParser<>(
+            namedSuppliedInOrder = true;
+        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"animal\": \"dropbear\", \"mineral\": -8 }");
+    public void testNullDeclares() {
+/*
+        ConstructingObjectParser<TestStruct, Void> parser = new ConstructingObjectParser<>("teststruct", args -> {
+        assertThat(h.namedInConstructor, hasSize(1));
+        }
+            e.getCause().getMessage(),
+        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"mineral\": 1, \"vegetable\": 2 }");
+import org.opensearch.core.xcontent.ToXContent;
+        XContentParseException e = expectThrows(
+        ConstructingObjectParser<TestStruct, Void> objectParser = new ConstructingObjectParser<>(
+        String a;
+        expected.setFruit(randomInt());
+        objectParser.declareNamedObjects(NamedObjectHolder::setNamed, NamedObject.PARSER, new ParseField("named"));
+            assertEquals(expected.vegetable, parsed.vegetable);
+            "{\"named\": [ {\"a\": {}} ], \"named_in_constructor\": [ \"junk\" ]}"
+ * not use this file except in compliance with the License.
+        assertEquals("[parser] is required", e.getMessage());
+    public void testParseNamedObjectJunkInArrayConstructorArg() throws IOException {
+        assertThat(e.getMessage(), containsString("failed to build [has_required_arguments] after last required field arrived"));
+                new ParseField("test"),
+                assertFalse(fooSet);
+            """
+            public final String test;
+            assertEquals(expected.b, parsed.b);
+        );
+        assertTrue(result.fooSet);
+        XContentParser parser = createParser(
+            assertEquals("Required [animal]", e.getMessage());
+            ConstructingObjectParser<HasCtorArguments, Integer> parser = new ConstructingObjectParser<>(
+            }
+            new ParseField("named_in_constructor")
+        assertEquals("[parser] is required", e.getMessage());
+        XContentParser xcontent = createParser(JsonXContent.jsonXContent, "{ \"yeah\": \"!\", \"foo\": \"foo\" }");
+        // Now firing the xml through it fails
+        public void setD(boolean d) {
+import org.opensearch.common.xcontent.json.JsonXContent;
+        String c;
+            assertEquals(expected.mineral, parsed.mineral);
+            assertEquals(expected.animal, parsed.animal);
+        @SuppressWarnings("unchecked")
+            a -> new NamedObjectHolder(((List<NamedObject>) a[0]))
+            () -> objectParser.declareField(null, (r, c) -> null, new ParseField("test"), ObjectParser.ValueType.STRING)
          * this this style is normal just because it is in the test.
-         */
+        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named_in_constructor]"));
+    }
+        XContentParseException e = expectThrows(XContentParseException.class, () -> NamedObjectHolder.PARSER.apply(parser, null));
+    public void testConstructObjectUsingContext() throws IOException {
+        assertThat(
+                this.a = null;
+        XContentParser parser = createParser(
+        }
+                }
+                NamedObject.PARSER,
         public static final ConstructingObjectParser<HasCtorArguments, Void> PARSER = buildParser(true, true);
+                new ParseField("named_in_constructor")
+        HasCtorArguments(@Nullable String animal, @Nullable Integer vegetable) {
+        public void setA(String a) {
+            "{\"named\": {\"a\": {}}, \"named_in_constructor\": [ {\"b\": {}} ]}"
+            )
+            parser.declareString(HasCtorArguments::setA, new ParseField("a"));
+            this.namedInConstructor = namedInConstructor;
+            JsonXContent.jsonXContent,
+        );
+        TestStruct s = objectParser.apply(parser, null);
+        e = expectThrows(
+            parser.declareString(HasCtorArguments::setB, new ParseField("b"));
+ *
+                (o, v) -> {},
+import org.hamcrest.Matcher;
+import org.opensearch.core.xcontent.XContentParser;
+            "{\"named\": [ {\"a\": {}, \"b\": {}}], \"named_in_constructor\": [ {\"c\": {}} ]}"
+import org.opensearch.core.ParseField;
+        NamedObjectHolder(List<NamedObject> namedInConstructor) {
+        );
+            // The following JSON needs to include newlines, in order to affect the line numbers
+        public static final ConstructingObjectParser<NamedObjectHolder, Void> PARSER = new ConstructingObjectParser<>(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            if (d) {
+            containsString(
+        HasCtorArguments expected = new HasCtorArguments(randomAlphaOfLength(5), randomInt());
+        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"mineral\": 1 }");
+        // ctor arg first so we can test for the bug we found one time
+ */
+            )
+        public static final ConstructingObjectParser<HasCtorArguments, Integer> PARSER_INT_CONTEXT = buildContextParser();
+        ConstructingObjectParser<Void, Void> objectParser = new ConstructingObjectParser<>("foo", a -> null);
+        boolean d;
+        assertThat(h.named, hasSize(1));
+        private static ConstructingObjectParser<HasCtorArguments, Integer> buildContextParser() {
+        int fruit;
+            a -> new NamedObjectHolder(((List<NamedObject>) a[0]))
+        @Override
+                (ContextParser<Void, Object>) null,
+            boolean fooSet = false;
+        private boolean namedSuppliedInOrder = false;
+import org.opensearch.test.OpenSearchTestCase;
+        assertThat(e.getMessage(), containsString("[has_required_arguments] failed to parse field [vegetable]"));
+            () -> objectParser.declareField((o, v) -> {}, (r, c) -> null, new ParseField("test"), null)
+            parser.declareString(HasCtorArguments::setC, new ParseField("c"));
+        class TestStruct {
+        XContentParser parser = createParser(JsonXContent.jsonXContent, "{\"named\": [ {} ], \"named_in_constructor\": [ {\"a\": {}} ]}");
+        String b;
+        }
+    public void testParseNamedObjectNoFieldsInArray() throws IOException {
+        );
+        expected.setMineral(randomInt());
+        public void keepNamedInOrder() {
+     * Builds the object in random order and parses it.
+import org.opensearch.core.xcontent.XContentBuilder;
+        assertEquals(4, e.getLineNumber());
+        }
+            "{\"named\": { \"a\": {} }, \"named_in_constructor\": { \"b\": {} } }"
+                this.b = 0;
+            )
+import org.opensearch.common.xcontent.ObjectParserTests.NamedObject;
+            "foo",
+import org.opensearch.core.xcontent.ToXContentObject;
+                "[named] can be a single object with any number of fields "
+import static org.hamcrest.Matchers.anyOf;
+                throw new IllegalArgumentException("[a] must be less than 10 characters in length but was [" + a + "]");
+        }
+        Exception e = expectThrows(
+            containsString("[named_in_constructor] doesn't support arrays. Use a single object with multiple fields.")
+    }
+        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named]"));
+    }
+        XContentParser parser = createParser(JsonXContent.jsonXContent, "{\"named\": [ {\"a\": {}} ], \"named_in_constructor\": [ {} ]}");
+import org.opensearch.common.Nullable;
+import org.opensearch.core.xcontent.XContentParseException;
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+                    yeahMatcher = anyOf(yeahMatcher, nullValue());
+            IllegalArgumentException.class,
+            }
+        );
+            XContentParseException.class,
+            containsString(
+            "[a] must be less than 10 characters in length but was [supercalifragilisticexpialidocious]",
+        assertThat(e.getMessage(), containsString("[has_required_arguments] failed to parse field [a]"));
+            XContentParseException.class,
+    public void testParseNamedObjectInOrderNotSupported() throws IOException {
+                builder.field("a", a);
+            JsonXContent.jsonXContent,
+                    // either(yeahMatcher).or(nullValue) is broken by https://github.com/hamcrest/JavaHamcrest/issues/49
+        }
+        assertEquals("dropbear", parsed.animal);
+                NamedObjectHolder::keepNamedInOrder,
+    public void testMissingSecondConstructorArg() throws IOException {
+ * this work for additional information regarding copyright
+        }
+        private static ConstructingObjectParser<HasCtorArguments, Void> buildParser(boolean animalRequired, boolean vegetableRequired) {
+            parser.declareBoolean(HasCtorArguments::setD, new ParseField("d"));
+            ? HasCtorArguments.PARSER
+        final Integer vegetable;
+        parser.declareLong(optionalConstructorArg(), new ParseField("b"));
+                "[constructor_args_required] must configure at least one constructor argument. If it doesn't have any it should "
+                  "a": "supercalifragilisticexpialidocious"
+    public void testBadParamBeforeObjectBuilt() throws IOException {
+            "[a] must be less than 10 characters in length but was [supercalifragilisticexpialidocious]",
+            builder.field("animal", animal);
+    }
+            builder.endObject();
+        assertEquals("[consumer] is required", e.getMessage());
+            CalledOneTime(String yeah) {
+ */
+        parser.declareString(optionalConstructorArg(), new ParseField("a"));
+import java.util.List;
+                assertThat(yeah, yeahMatcher);
+        boolean ctorArgOptional = randomBoolean();
+        XContentParseException e = expectThrows(XContentParseException.class, () -> NamedObjectHolder.PARSER.apply(parser, null));
+        );
+    }
+         * It is normal just to declare a single PARSER but we use a couple of different parsers for testing so we have all of these. Don't
+            parser.apply(createParser(JsonXContent.jsonXContent, "{}"), null);
+import org.opensearch.core.xcontent.ObjectParser;
+        public void setMineral(int mineral) {
+    public void testRequiredAndExclusiveFields() throws IOException {
+        assertThat(actual.b, equalTo(0L));
+        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named]"));
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, bytes)) {
+            builder.startObject();
+    public void testCalledOneTime() throws IOException {
+        ConstructingObjectParser<CalledOneTime, Void> parser = new ConstructingObjectParser<>(
+            // included in the exception
+            if (mineral != 0) { // We're just using 0 as the default because it is easy for testing
+            e.getCause().getMessage()
+            )
+                fooSet = true;
+        );
+            }
+            this.vegetable = vegetable;
+public class ConstructingObjectParserTests extends OpenSearchTestCase {
+        XContentParseException e = expectThrows(XContentParseException.class, () -> NamedObjectHolder.PARSER.apply(parser, null));
         public static final ConstructingObjectParser<HasCtorArguments, Void> PARSER_VEGETABLE_OPTIONAL = buildParser(true, false);
         public static final ConstructingObjectParser<HasCtorArguments, Void> PARSER_ALL_OPTIONAL = buildParser(false, false);
-
-        public static final List<ConstructingObjectParser<HasCtorArguments, Void>> ALL_PARSERS = unmodifiableList(
-            Arrays.asList(PARSER, PARSER_VEGETABLE_OPTIONAL, PARSER_ALL_OPTIONAL)
-        );
-
-        public static final ConstructingObjectParser<HasCtorArguments, Integer> PARSER_INT_CONTEXT = buildContextParser();
-
-        private static ConstructingObjectParser<HasCtorArguments, Void> buildParser(boolean animalRequired, boolean vegetableRequired) {
-            ConstructingObjectParser<HasCtorArguments, Void> parser = new ConstructingObjectParser<>(
-                "has_required_arguments",
-                a -> new HasCtorArguments((String) a[0], (Integer) a[1])
-            );
-            parser.declareString(animalRequired ? constructorArg() : optionalConstructorArg(), new ParseField("animal"));
-            parser.declareInt(vegetableRequired ? constructorArg() : optionalConstructorArg(), new ParseField("vegetable"));
-            declareSetters(parser);
-            return parser;
-        }
-
-        private static ConstructingObjectParser<HasCtorArguments, Integer> buildContextParser() {
-            ConstructingObjectParser<HasCtorArguments, Integer> parser = new ConstructingObjectParser<>(
-                "has_required_arguments",
-                false,
-                (args, ctx) -> new HasCtorArguments((String) args[0], ctx)
-            );
-            parser.declareString(constructorArg(), new ParseField("animal"));
-            declareSetters(parser);
-            return parser;
-        }
-
-        private static void declareSetters(ConstructingObjectParser<HasCtorArguments, ?> parser) {
-            parser.declareInt(HasCtorArguments::setMineral, new ParseField("mineral"));
-            parser.declareInt(HasCtorArguments::setFruit, new ParseField("fruit"));
-            parser.declareString(HasCtorArguments::setA, new ParseField("a"));
-            parser.declareString(HasCtorArguments::setB, new ParseField("b"));
-            parser.declareString(HasCtorArguments::setC, new ParseField("c"));
-            parser.declareBoolean(HasCtorArguments::setD, new ParseField("d"));
-        }
+        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"mineral\": 1, \"animal\": \"cat\" }");
+        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"mineral\": 1, \"animal\": \"cat\" }");
     }
-
-    public void testParseNamedObject() throws IOException {
-        XContentParser parser = createParser(
-            JsonXContent.jsonXContent,
-            "{\"named\": { \"a\": {} }, \"named_in_constructor\": { \"b\": {} } }"
-        );
-        NamedObjectHolder h = NamedObjectHolder.PARSER.apply(parser, null);
-        assertThat(h.named, hasSize(1));
-        assertEquals("a", h.named.get(0).name);
-        assertThat(h.namedInConstructor, hasSize(1));
-        assertEquals("b", h.namedInConstructor.get(0).name);
+            }
+    public void testParseNamedObjectInOrder() throws IOException {
         assertFalse(h.namedSuppliedInOrder);
     }
-
-    public void testParseNamedObjectInOrder() throws IOException {
-        XContentParser parser = createParser(
-            JsonXContent.jsonXContent,
-            "{\"named\": [ {\"a\": {}} ], \"named_in_constructor\": [ {\"b\": {}} ]}"
-        );
-        NamedObjectHolder h = NamedObjectHolder.PARSER.apply(parser, null);
-        assertThat(h.named, hasSize(1));
-        assertEquals("a", h.named.get(0).name);
-        assertThat(h.namedInConstructor, hasSize(1));
-        assertEquals("b", h.namedInConstructor.get(0).name);
-        assertTrue(h.namedSuppliedInOrder);
-    }
-
-    public void testParseNamedObjectTwoFieldsInArray() throws IOException {
-        XContentParser parser = createParser(
-            JsonXContent.jsonXContent,
-            "{\"named\": [ {\"a\": {}, \"b\": {}}], \"named_in_constructor\": [ {\"c\": {}} ]}"
-        );
-        XContentParseException e = expectThrows(XContentParseException.class, () -> NamedObjectHolder.PARSER.apply(parser, null));
-        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named]"));
-        assertThat(
-            e.getCause().getMessage(),
-            containsString(
-                "[named] can be a single object with any number of fields "
-                    + "or an array where each entry is an object with a single field"
-            )
-        );
-    }
-
-    public void testParseNamedObjectTwoFieldsInArrayConstructorArg() throws IOException {
-        XContentParser parser = createParser(
-            JsonXContent.jsonXContent,
-            "{\"named\": [ {\"a\": {}}], \"named_in_constructor\": [ {\"c\": {}, \"d\": {}} ]}"
-        );
-        XContentParseException e = expectThrows(XContentParseException.class, () -> NamedObjectHolder.PARSER.apply(parser, null));
-        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named_in_constructor]"));
-        assertThat(
-            e.getCause().getMessage(),
-            containsString(
-                "[named_in_constructor] can be a single object with any number of fields "
-                    + "or an array where each entry is an object with a single field"
-            )
-        );
-    }
-
-    public void testParseNamedObjectNoFieldsInArray() throws IOException {
-        XContentParser parser = createParser(JsonXContent.jsonXContent, "{\"named\": [ {} ], \"named_in_constructor\": [ {\"a\": {}} ]}");
-        XContentParseException e = expectThrows(XContentParseException.class, () -> NamedObjectHolder.PARSER.apply(parser, null));
-        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named]"));
-        assertThat(
-            e.getCause().getMessage(),
-            containsString(
-                "[named] can be a single object with any number of fields "
-                    + "or an array where each entry is an object with a single field"
-            )
-        );
-    }
-
-    public void testParseNamedObjectNoFieldsInArrayConstructorArg() throws IOException {
-        XContentParser parser = createParser(JsonXContent.jsonXContent, "{\"named\": [ {\"a\": {}} ], \"named_in_constructor\": [ {} ]}");
-        XContentParseException e = expectThrows(XContentParseException.class, () -> NamedObjectHolder.PARSER.apply(parser, null));
-        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named_in_constructor]"));
-        assertThat(
-            e.getCause().getMessage(),
-            containsString(
-                "[named_in_constructor] can be a single object with any number of fields "
-                    + "or an array where each entry is an object with a single field"
-            )
-        );
-    }
-
-    public void testParseNamedObjectJunkInArray() throws IOException {
-        XContentParser parser = createParser(
-            JsonXContent.jsonXContent,
-            "{\"named\": [ \"junk\" ], \"named_in_constructor\": [ {\"a\": {}} ]}"
-        );
-        XContentParseException e = expectThrows(XContentParseException.class, () -> NamedObjectHolder.PARSER.apply(parser, null));
-        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named]"));
-        assertThat(
-            e.getCause().getMessage(),
-            containsString(
-                "[named] can be a single object with any number of fields "
-                    + "or an array where each entry is an object with a single field"
-            )
-        );
-    }
-
-    public void testParseNamedObjectJunkInArrayConstructorArg() throws IOException {
-        XContentParser parser = createParser(
-            JsonXContent.jsonXContent,
-            "{\"named\": [ {\"a\": {}} ], \"named_in_constructor\": [ \"junk\" ]}"
-        );
-        XContentParseException e = expectThrows(XContentParseException.class, () -> NamedObjectHolder.PARSER.apply(parser, null));
-        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named_in_constructor]"));
-        assertThat(
-            e.getCause().getMessage(),
-            containsString(
-                "[named_in_constructor] can be a single object with any number of fields "
-                    + "or an array where each entry is an object with a single field"
-            )
-        );
-    }
-
-    public void testParseNamedObjectInOrderNotSupported() throws IOException {
-        XContentParser parser = createParser(
-            JsonXContent.jsonXContent,
-            "{\"named\": [\n" + "  {\"a\": {}}" + "],\"named_in_constructor\": {\"b\": {}}" + "}"
-        );
-
-        // Create our own parser for this test so we can disable support for the "ordered" mode specified by the array above
-        @SuppressWarnings("unchecked")
-        ConstructingObjectParser<NamedObjectHolder, Void> objectParser = new ConstructingObjectParser<>(
-            "named_object_holder",
-            a -> new NamedObjectHolder(((List<NamedObject>) a[0]))
-        );
-        objectParser.declareNamedObjects(
-            ConstructingObjectParser.constructorArg(),
-            NamedObject.PARSER,
-            new ParseField("named_in_constructor")
-        );
-        objectParser.declareNamedObjects(NamedObjectHolder::setNamed, NamedObject.PARSER, new ParseField("named"));
-
-        // Now firing the xml through it fails
-        XContentParseException e = expectThrows(XContentParseException.class, () -> objectParser.apply(parser, null));
-        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named]"));
-        assertEquals("[named] doesn't support arrays. Use a single object with multiple fields.", e.getCause().getMessage());
-    }
-
-    public void testParseNamedObjectInOrderNotSupportedConstructorArg() throws IOException {
-        XContentParser parser = createParser(
-            JsonXContent.jsonXContent,
-            "{\"named\": {\"a\": {}}, \"named_in_constructor\": [ {\"b\": {}} ]}"
-        );
-
-        // Create our own parser for this test so we can disable support for the "ordered" mode specified by the array above
-        @SuppressWarnings("unchecked")
-        ConstructingObjectParser<NamedObjectHolder, Void> objectParser = new ConstructingObjectParser<>(
-            "named_object_holder",
-            a -> new NamedObjectHolder(((List<NamedObject>) a[0]))
-        );
-        objectParser.declareNamedObjects(
-            ConstructingObjectParser.constructorArg(),
-            NamedObject.PARSER,
-            new ParseField("named_in_constructor")
-        );
-        objectParser.declareNamedObjects(NamedObjectHolder::setNamed, NamedObject.PARSER, new ParseField("named"));
-
-        // Now firing the xml through it fails
-        XContentParseException e = expectThrows(XContentParseException.class, () -> objectParser.apply(parser, null));
-        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named_in_constructor]"));
-        assertThat(
-            e.getCause().getMessage(),
-            containsString("[named_in_constructor] doesn't support arrays. Use a single object with multiple fields.")
-        );
-    }
-
-    static class NamedObjectHolder {
-        @SuppressWarnings("unchecked")
-        public static final ConstructingObjectParser<NamedObjectHolder, Void> PARSER = new ConstructingObjectParser<>(
-            "named_object_holder",
-            a -> new NamedObjectHolder(((List<NamedObject>) a[0]))
-        );
-        static {
-            PARSER.declareNamedObjects(
-                ConstructingObjectParser.constructorArg(),
-                NamedObject.PARSER,
-                NamedObjectHolder::keepNamedInOrder,
-                new ParseField("named_in_constructor")
-            );
-            PARSER.declareNamedObjects(
-                NamedObjectHolder::setNamed,
-                NamedObject.PARSER,
-                NamedObjectHolder::keepNamedInOrder,
-                new ParseField("named")
-            );
-        }
-
-        private List<NamedObject> named;
-        private List<NamedObject> namedInConstructor;
-        private boolean namedSuppliedInOrder = false;
-
-        NamedObjectHolder(List<NamedObject> namedInConstructor) {
-            this.namedInConstructor = namedInConstructor;
-        }
-
-        public void setNamed(List<NamedObject> named) {
-            this.named = named;
-        }
-
-        public void keepNamedInOrder() {
-            namedSuppliedInOrder = true;
-        }
-    }
-
-    public void testRequiredAndExclusiveFields() throws IOException {
-
-        class TestStruct {
-            final String a;
-            final long b;
-
-            TestStruct(String a) {
-                this.a = a;
-                this.b = 0;
-            }
-
-            TestStruct(long b) {
-                this.a = null;
-                this.b = b;
-            }
-        }
-
-        XContentParser ok = createParser(JsonXContent.jsonXContent, "{ \"a\" : \"a\" }");
-        XContentParser toomany = createParser(JsonXContent.jsonXContent, "{ \"a\" : \"a\", \"b\" : 1 }");
-        XContentParser notenough = createParser(JsonXContent.jsonXContent, "{ }");
-
-        ConstructingObjectParser<TestStruct, Void> parser = new ConstructingObjectParser<>("teststruct", args -> {
-            if (args[0] != null) {
+                false,
                 return new TestStruct((String) args[0]);
-            }
-            return new TestStruct((Long) args[1]);
-        });
-        parser.declareString(optionalConstructorArg(), new ParseField("a"));
-        parser.declareLong(optionalConstructorArg(), new ParseField("b"));
-        parser.declareExclusiveFieldSet("a", "b");
-        parser.declareRequiredFieldSet("a", "b");
-
-        TestStruct actual = parser.parse(ok, null);
-        assertThat(actual.a, equalTo("a"));
-        assertThat(actual.b, equalTo(0L));
-
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> parser.parse(toomany, null));
+                builder.field("d", d);
         assertThat(e.getMessage(), containsString("allowed together: [a, b]"));
-
-        e = expectThrows(IllegalArgumentException.class, () -> parser.parse(notenough, null));
-        assertThat(e.getMessage(), containsString("Required one of fields [a, b], but none were specified."));
+            PARSER.declareNamedObjects(
+        static {
+        private List<NamedObject> namedInConstructor;
+                "[named_in_constructor] can be a single object with any number of fields "
+            containsString(
+            "{\"named\": [ \"junk\" ], \"named_in_constructor\": [ {\"a\": {}} ]}"
+ * The OpenSearch Contributors require contributions made to
+            if (args[0] != null) {
+            ConstructingObjectParser<HasCtorArguments, Void> parser = new ConstructingObjectParser<>(
+        }
+        assertEquals(-8, parsed.mineral);
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            this.c = c;
+        assertEquals(4, e.getLineNumber());
     }
+                }"""
+            containsString(
+                new ParseField("test"),
+        HasCtorArguments parsed = HasCtorArguments.PARSER_ALL_OPTIONAL.apply(parser, null);
+        assertEquals("a", h.named.get(0).name);
+    public void testParseNamedObjectNoFieldsInArrayConstructorArg() throws IOException {
+        @Nullable
+        XContentParser parser = createParser(
+            }
+            JsonXContent.jsonXContent,
+            );
+/*
+    }
+ * this file be licensed under the Apache-2.0 license or a
+                NamedObjectHolder::setNamed,
+        );
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> objectParser.apply(parser, null));
+    public void testParseNamedObjectJunkInArray() throws IOException {
+        assertThat(h.named, hasSize(1));
+        );
+            parser.declareString(constructorArg(), new ParseField("animal"));
+            if (b != null) {
+                this.test = test;
+import static org.hamcrest.Matchers.containsString;
+        XContentParser parser = createParser(
+            JsonXContent.jsonXContent,
+import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
+                e.getMessage()
+        );
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                this.a = a;
+        HasCtorArguments parsed = randomFrom(HasCtorArguments.PARSER_VEGETABLE_OPTIONAL, HasCtorArguments.PARSER_ALL_OPTIONAL).apply(
+        assertThat(
+        assertThat(
+        class NoConstructorArgs {}
+        ConstructingObjectParser<NamedObjectHolder, Void> objectParser = new ConstructingObjectParser<>(
+                builder.field("fruit", fruit);
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals(1, parsed.mineral);
+        );
+        e = expectThrows(IllegalArgumentException.class, () -> parser.parse(notenough, null));
+            ConstructingObjectParser.constructorArg(),
+    public void testParseNamedObject() throws IOException {
+            "constructor_args_required",
+        }
+            NamedObject.PARSER,
+                NamedObject.PARSER,
+ * compatible open source license.
+            );
+        expected.toXContent(builder, ToXContent.EMPTY_PARAMS);
+package org.opensearch.common.xcontent;
+            builder.field("vegetable", vegetable);
+    public void testMissingAllConstructorArgs() throws IOException {
+    public void testMissingSecondConstructorArgButNotRequired() throws IOException {
+    }
+                a -> new HasCtorArguments((String) a[0], (Integer) a[1])
+        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named_in_constructor]"));
+        e = (XContentParseException) e.getCause();
+        @SuppressWarnings("unchecked")
+        if (objectParser == HasCtorArguments.PARSER) {
+            )
+    public void testMissingFirstConstructorArg() throws IOException {
+            assertEquals(expected.c, parsed.c);
+        assertTrue(result.fooSet);
+import static org.hamcrest.Matchers.hasSize;
+        );
+        final String animal;
+        );
+        e = expectThrows(
+        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named_in_constructor]"));
+            );
+        if (ctorArgOptional) {
+            IllegalArgumentException.class,
+        XContentParser toomany = createParser(JsonXContent.jsonXContent, "{ \"a\" : \"a\", \"b\" : 1 }");
+        public void setFruit(int fruit) {
+    }
+        parser.declareExclusiveFieldSet("a", "b");
+        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named_in_constructor]"));
+            e.getCause().getMessage()
+        }
+        assertEquals("a", h.named.get(0).name);
+        parser.declareString(CalledOneTime::setFoo, new ParseField("foo"));
+     */
+        }
+        );
+        ConstructingObjectParser<HasCtorArguments, Void> objectParser = randomBoolean()
+    public void testParseNamedObjectInOrderNotSupportedConstructorArg() throws IOException {
+        assertEquals(2, e.getLineNumber());
+        e = expectThrows(
+import org.opensearch.common.CheckedFunction;
+        );
+ *
+            assertEquals(expected.d, parsed.d);
+         */
+            a -> new TestStruct((String) a[0])
+    /**
+        IllegalArgumentException e = expectThrows(
+                  "a": "supercalifragilisticexpialidocious",
+            }
+                }"""
+        e = (XContentParseException) e.getCause();
+     * Tests the non-constructor fields are only set on time.
+        assertEquals(1, parsed.mineral);
+    }
+                  "animal": "cat",
+    }
+            "{\"named\": [ {\"a\": {}}], \"named_in_constructor\": [ {\"c\": {}, \"d\": {}} ]}"
+            "named_object_holder",
+            assertEquals(expected.a, parsed.a);
+ * KIND, either express or implied.  See the License for the
+                (CheckedFunction<XContentParser, Object, IOException>) null,
+                    + "or an array where each entry is an object with a single field"
+    }
+                "[named] can be a single object with any number of fields "
+        // and ctor arg second just in case
+        ConstructingObjectParser<NoConstructorArgs, Void> parser = new ConstructingObjectParser<>(
+            }
+        builder = shuffleXContent(builder);
+import static java.util.Collections.unmodifiableList;
+            final String a;
+            // The following JSON needs to include newlines, in order to affect the line numbers
+/*
+            () -> randomFrom(HasCtorArguments.ALL_PARSERS).apply(parser, null)
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> parser.parse(toomany, null));
+    }
+        XContentParser ok = createParser(JsonXContent.jsonXContent, "{ \"a\" : \"a\" }");
+            // and without the constructor arg if we've made it optional
+    public void testMissingAllConstructorArgsButNotRequired() throws IOException {
+        assertThat(h.namedInConstructor, hasSize(1));
+            assertEquals("Required [animal, vegetable]", e.getMessage());
+                    + "or an array where each entry is an object with a single field"
+                new ParseField("named")
+        );
+                    + "or an array where each entry is an object with a single field"
+            JsonXContent.jsonXContent,
+        XContentParseException e = expectThrows(XContentParseException.class, () -> NamedObjectHolder.PARSER.apply(parser, null));
+            new ParseField("named_in_constructor")
+        }
+        XContentParser parser = createParser(
+        expected.setA(randomBoolean() ? null : randomAlphaOfLength(5));
+            null
+                {
+            parser.declareInt(HasCtorArguments::setMineral, new ParseField("mineral"));
+    public void testIgnoreUnknownFields() throws IOException {
+                  "vegetable": 2
+        NamedObjectHolder h = NamedObjectHolder.PARSER.apply(parser, null);
+        }
+            }
+            // included in the exception
+        expected.setC(randomBoolean() ? null : randomAlphaOfLength(5));
+        );
+        assertThat(
+            "{\"named\": [\n" + "  {\"a\": {}}" + "],\"named_in_constructor\": {\"b\": {}}" + "}"
+            parser.declareString(animalRequired ? constructorArg() : optionalConstructorArg(), new ParseField("animal"));
+            JsonXContent.jsonXContent,
+            return builder;
+        } else {
+            TestStruct(long b) {
+    }
+        assertEquals("b", h.namedInConstructor.get(0).name);
+                  "vegetable": 2,
+                "[named_in_constructor] can be a single object with any number of fields "
+        private List<NamedObject> named;
+                builder.field("c", c);
+        parser.declareRequiredFieldSet("a", "b");
+        assertEquals(
+        assertEquals((Integer) 2, parsed.vegetable);
+        );
+ * under the License.
+        );
 }
+            }
+        );
+        );
+    }
+            this.d = d;
+        XContentParseException e = expectThrows(
+            result = parser.apply(xcontent, null);
+ * Licensed to Elasticsearch under one or more contributor
+        result = parser.apply(xcontent, null);
+            void setFoo(String foo) {
+    public void testBadParam() throws IOException {
+            );
+ * You may obtain a copy of the License at
+        }
+            final long b;
+            return parser;
+        );
+        assertEquals(s.test, "foo");
+        }
+        );
+            if (fruit != 0) {
+        );
+            containsString(
+        @SuppressWarnings("unchecked")
+        // Now firing the xml through it fails
+            declareSetters(parser);
+            e.getCause().getMessage(),
+     */
+        assertThat(
+            return parser;
+        assertEquals(2, e.getLineNumber());
+                "[named] can be a single object with any number of fields "
+        assertEquals(
+        XContentParser parser = createParser(
+        XContentParseException e = expectThrows(XContentParseException.class, () -> objectParser.apply(parser, null));
+            () -> objectParser.declareField(
+        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"mineral\": 1 }");
+                    + "or an array where each entry is an object with a single field"
+        }
+        try {
+                {
+                if (ctorArgOptional) {
+        @SuppressWarnings("unchecked")
+    public void testParseNamedObjectTwoFieldsInArrayConstructorArg() throws IOException {
+        parser.declareString(ctorArgOptional ? optionalConstructorArg() : constructorArg(), new ParseField("yeah"));
+    }
+                    + "or an array where each entry is an object with a single field"
+        }
+        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named]"));
+            );
+        );
+        assertThat(
+        class TestStruct {
+            (a) -> new NoConstructorArgs()
+        XContentParser parser = createParser(
+                builder.field("mineral", mineral);
+import java.io.ByteArrayOutputStream;
+            containsString(
+            e.getCause().getMessage(),
+        assertEquals("[parseField] is required", e.getMessage());
+            fail("Expected AssertionError");
+        );
+        public static final List<ConstructingObjectParser<HasCtorArguments, Void>> ALL_PARSERS = unmodifiableList(
+        assertTrue(result.fooSet);
+                Matcher<String> yeahMatcher = equalTo("!");
+import static org.hamcrest.Matchers.nullValue;
+            e.getCause().getMessage(),
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+            (a) -> new CalledOneTime((String) a[0])
+            if (c != null) {
+                    + "use ObjectParser instead of ConstructingObjectParser. This is a bug in the parser declaration.",
+            xcontent = createParser(JsonXContent.jsonXContent, "{ \"foo\": \"foo\" }");
+            () -> objectParser.declareField((o, v) -> {}, (r, c) -> null, null, ObjectParser.ValueType.STRING)
+            "named_object_holder",
+        assertThat(e.getMessage(), containsString("[named_object_holder] failed to parse field [named]"));
+ *
+            JsonXContent.jsonXContent,
+            parser,
+        XContentParser parser = createParser(JsonXContent.jsonXContent, "{ \"test\" : \"foo\", \"junk\" : 2 }");
+ * Modifications Copyright OpenSearch Contributors. See
+            declareSetters(parser);
+        builder.flush();
+        );
+            this.animal = animal;
+        HasCtorArguments parsed = HasCtorArguments.PARSER_INT_CONTEXT.apply(parser, 42);
+                "has_required_arguments",
+                this.b = b;
+        HasCtorArguments parsed = HasCtorArguments.PARSER_ALL_OPTIONAL.apply(parser, null);
+        );
+            IllegalArgumentException.class,
+            TestStruct(String a) {
+                ObjectParser.ValueType.STRING
+        byte[] bytes = ((ByteArrayOutputStream) builder.getOutputStream()).toByteArray();
+        XContentParseException e = expectThrows(XContentParseException.class, () -> NamedObjectHolder.PARSER.apply(parser, null));
+            JsonXContent.jsonXContent,
+    public void testConstructorArgsMustBeConfigured() throws IOException {
+            assertEquals(
+        assertThat(
+        // Create our own parser for this test so we can disable support for the "ordered" mode specified by the array above
+ * specific language governing permissions and limitations
+        // Create our own parser for this test so we can disable support for the "ordered" mode specified by the array above
+        }
+        assertThat(e.getMessage(), containsString("[has_required_arguments] failed to parse field [a]"));

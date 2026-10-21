@@ -1,449 +1,414 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.ObjectParser.ValueType;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.aggregations.metrics.InternalExtendedStats.Fields;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
-
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
-
-/**
- * An extended stats agg result parsed between nodes
- *
- * @opensearch.internal
- */
-public class ParsedExtendedStats extends ParsedStats implements ExtendedStats {
-
-    protected double sumOfSquares;
-    protected double variance;
-    protected double variancePopulation;
-    protected double varianceSampling;
-    protected double stdDeviation;
-    protected double stdDeviationPopulation;
-    protected double stdDeviationSampling;
-    protected double stdDeviationBoundUpper;
-    protected double stdDeviationBoundLower;
-    protected double stdDeviationBoundUpperPopulation;
-    protected double stdDeviationBoundLowerPopulation;
-    protected double stdDeviationBoundUpperSampling;
-    protected double stdDeviationBoundLowerSampling;
-
-    protected double sum;
-    protected double avg;
-
-    @Override
-    public String getType() {
-        return ExtendedStatsAggregationBuilder.NAME;
-    }
-
-    @Override
-    public double getSumOfSquares() {
-        return sumOfSquares;
-    }
-
-    @Override
-    public double getVariance() {
-        return variance;
-    }
-
-    @Override
-    public double getVariancePopulation() {
-        return variancePopulation;
-    }
-
-    @Override
-    public double getVarianceSampling() {
-        return varianceSampling;
-    }
-
-    @Override
-    public double getStdDeviation() {
-        return stdDeviation;
-    }
-
-    @Override
-    public double getStdDeviationPopulation() {
-        return stdDeviationPopulation;
-    }
-
-    @Override
-    public double getStdDeviationSampling() {
-        return stdDeviationSampling;
-    }
-
-    private void setStdDeviationBounds(List<Double> bounds) {
-        this.stdDeviationBoundUpper = bounds.get(0);
-        this.stdDeviationBoundLower = bounds.get(1);
-        this.stdDeviationBoundUpperPopulation = bounds.get(2) == null ? 0 : bounds.get(2);
-        this.stdDeviationBoundLowerPopulation = bounds.get(3) == null ? 0 : bounds.get(3);
-        this.stdDeviationBoundUpperSampling = bounds.get(4) == null ? 0 : bounds.get(4);
-        this.stdDeviationBoundLowerSampling = bounds.get(5) == null ? 0 : bounds.get(5);
-    }
-
-    @Override
-    public double getStdDeviationBound(Bounds bound) {
-        switch (bound) {
-            case UPPER:
-                return stdDeviationBoundUpper;
-            case UPPER_POPULATION:
-                return stdDeviationBoundUpperPopulation;
-            case UPPER_SAMPLING:
-                return stdDeviationBoundUpperSampling;
-            case LOWER:
-                return stdDeviationBoundLower;
-            case LOWER_POPULATION:
-                return stdDeviationBoundLowerPopulation;
-            case LOWER_SAMPLING:
-                return stdDeviationBoundLowerSampling;
-            default:
-                throw new IllegalArgumentException("Unknown bounds type " + bound);
-        }
-    }
-
-    private void setStdDeviationBoundsAsString(List<String> boundsAsString) {
-        this.valueAsString.put(Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_upper", boundsAsString.get(0));
-        this.valueAsString.put(Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_lower", boundsAsString.get(1));
-        if (boundsAsString.get(2) != null) {
-            this.valueAsString.put(Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_upper_population", boundsAsString.get(2));
-        }
-        if (boundsAsString.get(3) != null) {
-            this.valueAsString.put(Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_lower_population", boundsAsString.get(3));
-        }
-        if (boundsAsString.get(4) != null) {
-            this.valueAsString.put(Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_upper_sampling", boundsAsString.get(4));
-        }
-        if (boundsAsString.get(5) != null) {
-            this.valueAsString.put(Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_lower_sampling", boundsAsString.get(5));
-        }
-    }
-
-    @Override
-    public String getStdDeviationAsString() {
-        return valueAsString.getOrDefault(Fields.STD_DEVIATION_AS_STRING, Double.toString(stdDeviation));
-    }
-
-    @Override
-    public String getStdDeviationPopulationAsString() {
-        return valueAsString.getOrDefault(Fields.STD_DEVIATION_POPULATION_AS_STRING, Double.toString(stdDeviationPopulation));
-    }
-
-    @Override
-    public String getStdDeviationSamplingAsString() {
-        return valueAsString.getOrDefault(Fields.STD_DEVIATION_SAMPLING_AS_STRING, Double.toString(stdDeviationSampling));
-    }
-
-    @Override
-    public String getStdDeviationBoundAsString(Bounds bound) {
-        switch (bound) {
-            case UPPER:
-                return valueAsString.getOrDefault(
-                    Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_upper",
-                    Double.toString(stdDeviationBoundUpper)
-                );
-            case UPPER_POPULATION:
-                return valueAsString.getOrDefault(
-                    Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_upper_population",
-                    Double.toString(stdDeviationBoundUpperPopulation)
-                );
-            case UPPER_SAMPLING:
-                return valueAsString.getOrDefault(
-                    Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_upper_sampling",
-                    Double.toString(stdDeviationBoundUpperSampling)
-                );
-            case LOWER:
-                return valueAsString.getOrDefault(
-                    Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_lower",
-                    Double.toString(stdDeviationBoundLower)
-                );
-            case LOWER_POPULATION:
-                return valueAsString.getOrDefault(
-                    Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_lower_population",
-                    Double.toString(stdDeviationBoundLowerPopulation)
-                );
-            case LOWER_SAMPLING:
-                return valueAsString.getOrDefault(
-                    Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_lower_sampling",
-                    Double.toString(stdDeviationBoundLowerSampling)
-                );
-            default:
-                throw new IllegalArgumentException("Unknown bounds type " + bound);
-        }
-    }
-
-    @Override
-    public String getSumOfSquaresAsString() {
-        return valueAsString.getOrDefault(Fields.SUM_OF_SQRS_AS_STRING, Double.toString(sumOfSquares));
-    }
-
-    @Override
-    public String getVarianceAsString() {
-        return valueAsString.getOrDefault(Fields.VARIANCE_AS_STRING, Double.toString(variance));
-    }
-
-    @Override
-    public String getVariancePopulationAsString() {
-        return valueAsString.getOrDefault(Fields.VARIANCE_POPULATION_AS_STRING, Double.toString(variancePopulation));
-    }
-
-    @Override
-    public String getVarianceSamplingAsString() {
-        return valueAsString.getOrDefault(Fields.VARIANCE_SAMPLING_AS_STRING, Double.toString(varianceSampling));
-    }
-
-    @Override
-    protected XContentBuilder otherStatsToXContent(XContentBuilder builder, Params params) throws IOException {
-        if (count != 0) {
-            builder.field(Fields.SUM_OF_SQRS, sumOfSquares);
-            builder.field(Fields.VARIANCE, getVariance());
-            builder.field(Fields.VARIANCE_POPULATION, getVariancePopulation());
-            builder.field(Fields.VARIANCE_SAMPLING, getVarianceSampling());
-            builder.field(Fields.STD_DEVIATION, getStdDeviation());
-            builder.field(Fields.STD_DEVIATION_POPULATION, getStdDeviationPopulation());
-            builder.field(Fields.STD_DEVIATION_SAMPLING, getStdDeviationSampling());
-            builder.startObject(Fields.STD_DEVIATION_BOUNDS);
-            {
-                builder.field(Fields.UPPER, getStdDeviationBound(Bounds.UPPER));
-                builder.field(Fields.LOWER, getStdDeviationBound(Bounds.LOWER));
-                builder.field(Fields.UPPER_POPULATION, getStdDeviationBound(Bounds.UPPER_POPULATION));
-                builder.field(Fields.LOWER_POPULATION, getStdDeviationBound(Bounds.LOWER_POPULATION));
-                builder.field(Fields.UPPER_SAMPLING, getStdDeviationBound(Bounds.UPPER_SAMPLING));
-                builder.field(Fields.LOWER_SAMPLING, getStdDeviationBound(Bounds.LOWER_SAMPLING));
-            }
             builder.endObject();
-            if (valueAsString.containsKey(Fields.SUM_OF_SQRS_AS_STRING)) {
-                builder.field(Fields.SUM_OF_SQRS_AS_STRING, getSumOfSquaresAsString());
-                builder.field(Fields.VARIANCE_AS_STRING, getVarianceAsString());
-                builder.field(Fields.VARIANCE_POPULATION_AS_STRING, getVariancePopulationAsString());
-                builder.field(Fields.VARIANCE_SAMPLING_AS_STRING, getVarianceSamplingAsString());
-                builder.field(Fields.STD_DEVIATION_AS_STRING, getStdDeviationAsString());
-                builder.field(Fields.STD_DEVIATION_POPULATION_AS_STRING, getStdDeviationPopulationAsString());
-                builder.field(Fields.STD_DEVIATION_SAMPLING_AS_STRING, getStdDeviationSamplingAsString());
-                builder.startObject(Fields.STD_DEVIATION_BOUNDS_AS_STRING);
-                {
-                    builder.field(Fields.UPPER, getStdDeviationBoundAsString(Bounds.UPPER));
-                    builder.field(Fields.LOWER, getStdDeviationBoundAsString(Bounds.LOWER));
-                    builder.field(Fields.UPPER_POPULATION, getStdDeviationBoundAsString(Bounds.UPPER_POPULATION));
-                    builder.field(Fields.LOWER_POPULATION, getStdDeviationBoundAsString(Bounds.LOWER_POPULATION));
-                    builder.field(Fields.UPPER_SAMPLING, getStdDeviationBoundAsString(Bounds.UPPER_SAMPLING));
-                    builder.field(Fields.LOWER_SAMPLING, getStdDeviationBoundAsString(Bounds.LOWER_SAMPLING));
-                }
-                builder.endObject();
-            }
-        } else {
-            builder.nullField(Fields.SUM_OF_SQRS);
-            builder.nullField(Fields.VARIANCE);
-            builder.nullField(Fields.VARIANCE_POPULATION);
-            builder.nullField(Fields.VARIANCE_SAMPLING);
-            builder.nullField(Fields.STD_DEVIATION);
-            builder.nullField(Fields.STD_DEVIATION_POPULATION);
-            builder.nullField(Fields.STD_DEVIATION_SAMPLING);
-            builder.startObject(Fields.STD_DEVIATION_BOUNDS);
-            {
-                builder.nullField(Fields.UPPER);
                 builder.nullField(Fields.LOWER);
-                builder.nullField(Fields.UPPER_POPULATION);
-                builder.nullField(Fields.LOWER_POPULATION);
-                builder.nullField(Fields.UPPER_SAMPLING);
-                builder.nullField(Fields.LOWER_SAMPLING);
+        this.stdDeviationBoundUpper = bounds.get(0);
+            builder.nullField(Fields.STD_DEVIATION_POPULATION);
+            (parser, context) -> parseDouble(parser, 0),
+        objectParser.declareField(
+            optionalConstructorArg(),
+/*
+ */
+            ValueType.DOUBLE_OR_NULL
+        );
+        objectParser.declareString(
             }
-            builder.endObject();
+                builder.field(Fields.VARIANCE_AS_STRING, getVarianceAsString());
+    public double getStdDeviationPopulation() {
+/*
+        return variance;
+ * compatible open source license.
+        objectParser.declareString(
+                builder.field(Fields.UPPER_SAMPLING, getStdDeviationBound(Bounds.UPPER_SAMPLING));
         }
-        return builder;
-    }
-
-    private static final ObjectParser<ParsedExtendedStats, Void> PARSER = new ObjectParser<>(
-        ParsedExtendedStats.class.getSimpleName(),
-        true,
-        ParsedExtendedStats::new
-    );
-
-    private static final ConstructingObjectParser<List<Double>, Void> STD_BOUNDS_PARSER = new ConstructingObjectParser<>(
-        ParsedExtendedStats.class.getSimpleName() + "_STD_BOUNDS",
-        true,
-        args -> Arrays.stream(args).map(d -> (Double) d).collect(Collectors.toList())
-    );
-
-    private static final ConstructingObjectParser<List<String>, Void> STD_BOUNDS_AS_STRING_PARSER = new ConstructingObjectParser<>(
-        ParsedExtendedStats.class.getSimpleName() + "_STD_BOUNDS_AS_STRING",
-        true,
-        args -> Arrays.stream(args).map(d -> (String) d).collect(Collectors.toList())
-    );
-
-    static {
-        STD_BOUNDS_PARSER.declareField(
-            constructorArg(),
-            (parser, context) -> parseDouble(parser, 0),
-            new ParseField(Fields.UPPER),
             ValueType.DOUBLE_OR_NULL
-        );
-        STD_BOUNDS_PARSER.declareField(
-            constructorArg(),
-            (parser, context) -> parseDouble(parser, 0),
-            new ParseField(Fields.LOWER),
-            ValueType.DOUBLE_OR_NULL
-        );
-        STD_BOUNDS_PARSER.declareField(
-            optionalConstructorArg(),
-            (parser, context) -> parseDouble(parser, 0),
-            new ParseField(Fields.UPPER_POPULATION),
-            ValueType.DOUBLE_OR_NULL
-        );
-        STD_BOUNDS_PARSER.declareField(
-            optionalConstructorArg(),
-            (parser, context) -> parseDouble(parser, 0),
-            new ParseField(Fields.LOWER_POPULATION),
-            ValueType.DOUBLE_OR_NULL
-        );
-        STD_BOUNDS_PARSER.declareField(
-            optionalConstructorArg(),
-            (parser, context) -> parseDouble(parser, 0),
-            new ParseField(Fields.UPPER_SAMPLING),
-            ValueType.DOUBLE_OR_NULL
-        );
-        STD_BOUNDS_PARSER.declareField(
-            optionalConstructorArg(),
+ *
             (parser, context) -> parseDouble(parser, 0),
             new ParseField(Fields.LOWER_SAMPLING),
-            ValueType.DOUBLE_OR_NULL
-        );
-        STD_BOUNDS_AS_STRING_PARSER.declareString(constructorArg(), new ParseField(Fields.UPPER));
-        STD_BOUNDS_AS_STRING_PARSER.declareString(constructorArg(), new ParseField(Fields.LOWER));
-        STD_BOUNDS_AS_STRING_PARSER.declareString(optionalConstructorArg(), new ParseField(Fields.UPPER_POPULATION));
-        STD_BOUNDS_AS_STRING_PARSER.declareString(optionalConstructorArg(), new ParseField(Fields.LOWER_POPULATION));
-        STD_BOUNDS_AS_STRING_PARSER.declareString(optionalConstructorArg(), new ParseField(Fields.UPPER_SAMPLING));
-        STD_BOUNDS_AS_STRING_PARSER.declareString(optionalConstructorArg(), new ParseField(Fields.LOWER_SAMPLING));
-        declareExtendedStatsFields(PARSER);
+ * this work for additional information regarding copyright
+ * under the License.
     }
-
-    protected static void declareExtendedStatsFields(ObjectParser<? extends ParsedExtendedStats, Void> objectParser) {
-        declareAggregationFields(objectParser);
-        declareStatsFields(objectParser);
-        objectParser.declareField(
-            (agg, value) -> agg.sumOfSquares = value,
-            (parser, context) -> parseDouble(parser, 0),
-            new ParseField(Fields.SUM_OF_SQRS),
-            ValueType.DOUBLE_OR_NULL
-        );
-        objectParser.declareField(
-            (agg, value) -> agg.variance = value,
-            (parser, context) -> parseDouble(parser, 0),
-            new ParseField(Fields.VARIANCE),
-            ValueType.DOUBLE_OR_NULL
-        );
-        objectParser.declareField(
-            (agg, value) -> agg.variancePopulation = value,
-            (parser, context) -> parseDouble(parser, 0),
-            new ParseField(Fields.VARIANCE_POPULATION),
-            ValueType.DOUBLE_OR_NULL
-        );
-        objectParser.declareField(
-            (agg, value) -> agg.varianceSampling = value,
-            (parser, context) -> parseDouble(parser, 0),
-            new ParseField(Fields.VARIANCE_SAMPLING),
-            ValueType.DOUBLE_OR_NULL
-        );
-        objectParser.declareField(
+            case UPPER:
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+/*
+            builder.nullField(Fields.STD_DEVIATION_SAMPLING);
+        true,
+        true,
+                builder.field(Fields.SUM_OF_SQRS_AS_STRING, getSumOfSquaresAsString());
+    private static final ObjectParser<ParsedExtendedStats, Void> PARSER = new ObjectParser<>(
+                builder.field(Fields.STD_DEVIATION_POPULATION_AS_STRING, getStdDeviationPopulationAsString());
+        }
             (agg, value) -> agg.stdDeviation = value,
             (parser, context) -> parseDouble(parser, 0),
-            new ParseField(Fields.STD_DEVIATION),
-            ValueType.DOUBLE_OR_NULL
+    }
+        declareAggregationFields(objectParser);
+    protected double sum;
+    protected double stdDeviationBoundLowerPopulation;
+            case UPPER:
+    @Override
+    static {
+    @Override
+    @Override
+ * not use this file except in compliance with the License.
+    public String getVarianceAsString() {
+            new ParseField(Fields.VARIANCE),
+                );
+            builder.field(Fields.STD_DEVIATION_SAMPLING, getStdDeviationSampling());
         );
+            builder.field(Fields.STD_DEVIATION_POPULATION, getStdDeviationPopulation());
+                builder.startObject(Fields.STD_DEVIATION_BOUNDS_AS_STRING);
+    private static final ConstructingObjectParser<List<Double>, Void> STD_BOUNDS_PARSER = new ConstructingObjectParser<>(
+                return stdDeviationBoundLowerSampling;
+        switch (bound) {
+        return variancePopulation;
+        switch (bound) {
         objectParser.declareField(
+        true,
+                );
+            default:
+            new ParseField(Fields.UPPER),
+            (agg, value) -> agg.variancePopulation = value,
+    }
+        ParsedExtendedStats.class.getSimpleName() + "_STD_BOUNDS",
+                return stdDeviationBoundUpperSampling;
+    @Override
+        this.stdDeviationBoundUpperPopulation = bounds.get(2) == null ? 0 : bounds.get(2);
+            new ParseField(Fields.UPPER_POPULATION),
+        objectParser.declareField(
+            this.valueAsString.put(Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_lower_sampling", boundsAsString.get(5));
+        objectParser.declareString(
+    );
+            builder.endObject();
             (agg, value) -> agg.stdDeviationPopulation = value,
-            (parser, context) -> parseDouble(parser, 0),
-            new ParseField(Fields.STD_DEVIATION_POPULATION),
+        this.valueAsString.put(Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_lower", boundsAsString.get(1));
+            builder.nullField(Fields.STD_DEVIATION);
+                builder.field(Fields.LOWER, getStdDeviationBound(Bounds.LOWER));
             ValueType.DOUBLE_OR_NULL
+                return stdDeviationBoundUpperPopulation;
+                builder.nullField(Fields.LOWER_POPULATION);
+    public String getSumOfSquaresAsString() {
         );
+        } else {
+ * @opensearch.internal
+    }
+        return builder;
+            builder.startObject(Fields.STD_DEVIATION_BOUNDS);
+                builder.nullField(Fields.UPPER);
+        ParsedExtendedStats parsedStats = PARSER.apply(parser, null);
+        );
+ * Licensed to Elasticsearch under one or more contributor
+        this.stdDeviationBoundLowerPopulation = bounds.get(3) == null ? 0 : bounds.get(3);
+    protected static void declareExtendedStatsFields(ObjectParser<? extends ParsedExtendedStats, Void> objectParser) {
+            new ParseField(Fields.VARIANCE_SAMPLING_AS_STRING)
+ * You may obtain a copy of the License at
+        return valueAsString.getOrDefault(Fields.STD_DEVIATION_SAMPLING_AS_STRING, Double.toString(stdDeviationSampling));
+                builder.endObject();
+    public double getStdDeviationSampling() {
+            (parser, context) -> parseDouble(parser, 0),
+    protected double avg;
+                builder.nullField(Fields.LOWER_SAMPLING);
+    protected double stdDeviationBoundUpperPopulation;
+            ValueType.DOUBLE_OR_NULL
+            this.valueAsString.put(Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_lower_population", boundsAsString.get(3));
+ *
+        STD_BOUNDS_AS_STRING_PARSER.declareString(constructorArg(), new ParseField(Fields.UPPER));
+    }
+                    builder.field(Fields.LOWER_POPULATION, getStdDeviationBoundAsString(Bounds.LOWER_POPULATION));
+    protected double stdDeviationPopulation;
+            (parser, context) -> parseDouble(parser, 0),
+    }
+        return valueAsString.getOrDefault(Fields.SUM_OF_SQRS_AS_STRING, Double.toString(sumOfSquares));
+    private void setStdDeviationBoundsAsString(List<String> boundsAsString) {
+                builder.nullField(Fields.UPPER_SAMPLING);
+        STD_BOUNDS_AS_STRING_PARSER.declareString(optionalConstructorArg(), new ParseField(Fields.UPPER_SAMPLING));
+        args -> Arrays.stream(args).map(d -> (String) d).collect(Collectors.toList())
+        if (count != 0) {
+    @Override
+    private static final ConstructingObjectParser<List<String>, Void> STD_BOUNDS_AS_STRING_PARSER = new ConstructingObjectParser<>(
+                return stdDeviationBoundLowerPopulation;
+            optionalConstructorArg(),
+            ValueType.DOUBLE_OR_NULL
+        STD_BOUNDS_PARSER.declareField(
+ * GitHub history for details.
+    public double getVarianceSampling() {
+    }
+    );
+        ParsedExtendedStats.class.getSimpleName() + "_STD_BOUNDS_AS_STRING",
+    private void setStdDeviationBounds(List<Double> bounds) {
+            new ParseField(Fields.STD_DEVIATION),
+        );
+                    Double.toString(stdDeviationBoundLower)
+        STD_BOUNDS_PARSER.declareField(
+                    builder.field(Fields.UPPER_SAMPLING, getStdDeviationBoundAsString(Bounds.UPPER_SAMPLING));
+            (parser, context) -> parseDouble(parser, 0),
+            ValueType.DOUBLE_OR_NULL
+            optionalConstructorArg(),
+            case UPPER_POPULATION:
+        if (boundsAsString.get(4) != null) {
+        this.stdDeviationBoundLowerSampling = bounds.get(5) == null ? 0 : bounds.get(5);
+        return valueAsString.getOrDefault(Fields.STD_DEVIATION_AS_STRING, Double.toString(stdDeviation));
+                throw new IllegalArgumentException("Unknown bounds type " + bound);
+        );
+import org.opensearch.core.xcontent.XContentBuilder;
+            builder.nullField(Fields.VARIANCE_SAMPLING);
+import java.io.IOException;
+            builder.field(Fields.STD_DEVIATION, getStdDeviation());
+            if (valueAsString.containsKey(Fields.SUM_OF_SQRS_AS_STRING)) {
+            this.valueAsString.put(Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_upper_sampling", boundsAsString.get(4));
+            new ParseField(Fields.SUM_OF_SQRS_AS_STRING)
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            case LOWER_POPULATION:
+            default:
+            (parser, context) -> parseDouble(parser, 0),
+        );
+                return valueAsString.getOrDefault(
+            }
+    protected XContentBuilder otherStatsToXContent(XContentBuilder builder, Params params) throws IOException {
+        objectParser.declareString(
+            ValueType.DOUBLE_OR_NULL
+                }
+            (agg, value) -> agg.valueAsString.put(Fields.STD_DEVIATION_POPULATION_AS_STRING, value),
+import org.opensearch.search.aggregations.metrics.InternalExtendedStats.Fields;
+    @Override
+                {
+        ParsedExtendedStats::new
+                builder.field(Fields.VARIANCE_POPULATION_AS_STRING, getVariancePopulationAsString());
+                    Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_upper",
+                );
+import org.opensearch.core.ParseField;
+        return valueAsString.getOrDefault(Fields.VARIANCE_AS_STRING, Double.toString(variance));
+        );
+            (agg, value) -> agg.variance = value,
+                    Double.toString(stdDeviationBoundLowerSampling)
+        objectParser.declareString(
+                builder.field(Fields.VARIANCE_SAMPLING_AS_STRING, getVarianceSamplingAsString());
+        STD_BOUNDS_AS_STRING_PARSER.declareString(optionalConstructorArg(), new ParseField(Fields.UPPER_POPULATION));
+    public String getVarianceSamplingAsString() {
+        return ExtendedStatsAggregationBuilder.NAME;
+        STD_BOUNDS_PARSER.declareField(
+    public String getStdDeviationBoundAsString(Bounds bound) {
+ *
+        );
+                return valueAsString.getOrDefault(
+    }
+                return valueAsString.getOrDefault(
+                throw new IllegalArgumentException("Unknown bounds type " + bound);
+ */
         objectParser.declareField(
-            (agg, value) -> agg.stdDeviationSampling = value,
-            (parser, context) -> parseDouble(parser, 0),
-            new ParseField(Fields.STD_DEVIATION_SAMPLING),
-            ValueType.DOUBLE_OR_NULL
+        }
+                builder.field(Fields.STD_DEVIATION_SAMPLING_AS_STRING, getStdDeviationSamplingAsString());
+                    Double.toString(stdDeviationBoundUpper)
+            builder.field(Fields.VARIANCE, getVariance());
+        if (boundsAsString.get(5) != null) {
+            builder.field(Fields.VARIANCE_POPULATION, getVariancePopulation());
         );
-        objectParser.declareObject(
-            ParsedExtendedStats::setStdDeviationBounds,
+        return parsedStats;
+    protected double variance;
+    @Override
+    @Override
+            (agg, value) -> agg.valueAsString.put(Fields.VARIANCE_AS_STRING, value),
+        STD_BOUNDS_PARSER.declareField(
+            case LOWER_SAMPLING:
+ */
+            constructorArg(),
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+                    Double.toString(stdDeviationBoundUpperPopulation)
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.xcontent.ObjectParser;
+                    builder.field(Fields.LOWER, getStdDeviationBoundAsString(Bounds.LOWER));
+    @Override
+    protected double stdDeviationSampling;
+ */
+            new ParseField(Fields.STD_DEVIATION_SAMPLING),
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+                    Double.toString(stdDeviationBoundUpperSampling)
+    protected double stdDeviation;
+        return varianceSampling;
+                return valueAsString.getOrDefault(
+        return stdDeviation;
+        this.stdDeviationBoundUpperSampling = bounds.get(4) == null ? 0 : bounds.get(4);
+                );
+        ParsedExtendedStats.class.getSimpleName(),
+        objectParser.declareField(
+            (parser, context) -> parseDouble(parser, 0),
+                );
+            new ParseField(Fields.UPPER_SAMPLING),
+                    Double.toString(stdDeviationBoundLowerPopulation)
+    public String getVariancePopulationAsString() {
+        );
             STD_BOUNDS_PARSER,
+            ValueType.DOUBLE_OR_NULL
+    }
+            case UPPER_POPULATION:
+            builder.field(Fields.VARIANCE_SAMPLING, getVarianceSampling());
+            new ParseField(Fields.STD_DEVIATION_POPULATION_AS_STRING)
+    public String getType() {
+            (agg, value) -> agg.stdDeviationSampling = value,
+    @Override
+            (parser, context) -> parseDouble(parser, 0),
+            (parser, context) -> parseDouble(parser, 0),
+            (agg, value) -> agg.valueAsString.put(Fields.STD_DEVIATION_SAMPLING_AS_STRING, value),
+    public String getStdDeviationSamplingAsString() {
+                    Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_lower_population",
+            optionalConstructorArg(),
+        );
+        return valueAsString.getOrDefault(Fields.STD_DEVIATION_POPULATION_AS_STRING, Double.toString(stdDeviationPopulation));
+    }
+                    Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_upper_sampling",
+            (agg, value) -> agg.valueAsString.put(Fields.SUM_OF_SQRS_AS_STRING, value),
+        objectParser.declareObject(
+    protected double stdDeviationBoundLower;
+import java.util.List;
+    protected double variancePopulation;
+                    builder.field(Fields.UPPER_POPULATION, getStdDeviationBoundAsString(Bounds.UPPER_POPULATION));
+            (parser, context) -> parseDouble(parser, 0),
+ *
+    public String getStdDeviationPopulationAsString() {
+        objectParser.declareString(
+            case LOWER:
+    }
+            case UPPER_SAMPLING:
+        this.stdDeviationBoundLower = bounds.get(1);
+ * ownership. Elasticsearch licenses this file to you under
+        );
+        declareStatsFields(objectParser);
+            case LOWER_SAMPLING:
+        objectParser.declareString(
+import java.util.Arrays;
+        objectParser.declareObject(
+ * An extended stats agg result parsed between nodes
+            this.valueAsString.put(Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_upper_population", boundsAsString.get(2));
+        }
+        objectParser.declareField(
+    }
+            ValueType.DOUBLE_OR_NULL
+import org.opensearch.core.xcontent.XContentParser;
+                builder.field(Fields.UPPER, getStdDeviationBound(Bounds.UPPER));
             new ParseField(Fields.STD_DEVIATION_BOUNDS)
         );
-        objectParser.declareString(
-            (agg, value) -> agg.valueAsString.put(Fields.SUM_OF_SQRS_AS_STRING, value),
-            new ParseField(Fields.SUM_OF_SQRS_AS_STRING)
-        );
-        objectParser.declareString(
-            (agg, value) -> agg.valueAsString.put(Fields.VARIANCE_AS_STRING, value),
-            new ParseField(Fields.VARIANCE_AS_STRING)
-        );
-        objectParser.declareString(
-            (agg, value) -> agg.valueAsString.put(Fields.VARIANCE_POPULATION_AS_STRING, value),
-            new ParseField(Fields.VARIANCE_POPULATION_AS_STRING)
-        );
-        objectParser.declareString(
             (agg, value) -> agg.valueAsString.put(Fields.VARIANCE_SAMPLING_AS_STRING, value),
-            new ParseField(Fields.VARIANCE_SAMPLING_AS_STRING)
+            case UPPER_SAMPLING:
         );
-        objectParser.declareString(
-            (agg, value) -> agg.valueAsString.put(Fields.STD_DEVIATION_AS_STRING, value),
-            new ParseField(Fields.STD_DEVIATION_AS_STRING)
-        );
-        objectParser.declareString(
-            (agg, value) -> agg.valueAsString.put(Fields.STD_DEVIATION_POPULATION_AS_STRING, value),
-            new ParseField(Fields.STD_DEVIATION_POPULATION_AS_STRING)
-        );
-        objectParser.declareString(
-            (agg, value) -> agg.valueAsString.put(Fields.STD_DEVIATION_SAMPLING_AS_STRING, value),
-            new ParseField(Fields.STD_DEVIATION_SAMPLING_AS_STRING)
-        );
-        objectParser.declareObject(
-            ParsedExtendedStats::setStdDeviationBoundsAsString,
-            STD_BOUNDS_AS_STRING_PARSER,
-            new ParseField(Fields.STD_DEVIATION_BOUNDS_AS_STRING)
-        );
+ * the Apache License, Version 2.0 (the "License"); you may
+                return valueAsString.getOrDefault(
+            (agg, value) -> agg.valueAsString.put(Fields.VARIANCE_POPULATION_AS_STRING, value),
+        if (boundsAsString.get(2) != null) {
+            (agg, value) -> agg.sumOfSquares = value,
+            (parser, context) -> parseDouble(parser, 0),
+    @Override
     }
-
-    public static ParsedExtendedStats fromXContent(XContentParser parser, final String name) {
-        ParsedExtendedStats parsedStats = PARSER.apply(parser, null);
+        }
+            builder.field(Fields.SUM_OF_SQRS, sumOfSquares);
+        declareExtendedStatsFields(PARSER);
+package org.opensearch.search.aggregations.metrics;
+        return sumOfSquares;
+    @Override
+    }
+        STD_BOUNDS_AS_STRING_PARSER.declareString(optionalConstructorArg(), new ParseField(Fields.LOWER_POPULATION));
+    protected double stdDeviationBoundUpper;
         parsedStats.setName(name);
-        return parsedStats;
+                    builder.field(Fields.UPPER, getStdDeviationBoundAsString(Bounds.UPPER));
+            case LOWER:
+            constructorArg(),
+            builder.nullField(Fields.SUM_OF_SQRS);
+import java.util.stream.Collectors;
+        );
+            new ParseField(Fields.VARIANCE_SAMPLING),
+ * Modifications Copyright OpenSearch Contributors. See
+            }
+    public String getStdDeviationAsString() {
+            {
+    protected double varianceSampling;
+    protected double stdDeviationBoundUpperSampling;
+    public double getStdDeviation() {
+    @Override
+        objectParser.declareField(
+        return valueAsString.getOrDefault(Fields.VARIANCE_POPULATION_AS_STRING, Double.toString(variancePopulation));
+            new ParseField(Fields.SUM_OF_SQRS),
+/**
+            new ParseField(Fields.STD_DEVIATION_SAMPLING_AS_STRING)
+    @Override
+    protected double sumOfSquares;
     }
+    protected double stdDeviationBoundLowerSampling;
+ * SPDX-License-Identifier: Apache-2.0
+            ValueType.DOUBLE_OR_NULL
+                    Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_lower_sampling",
+            new ParseField(Fields.VARIANCE_POPULATION),
+            ParsedExtendedStats::setStdDeviationBounds,
+                    Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_lower",
+import org.opensearch.core.xcontent.ObjectParser.ValueType;
+                    builder.field(Fields.LOWER_SAMPLING, getStdDeviationBoundAsString(Bounds.LOWER_SAMPLING));
+        );
+            ValueType.DOUBLE_OR_NULL
+    public static ParsedExtendedStats fromXContent(XContentParser parser, final String name) {
+        STD_BOUNDS_AS_STRING_PARSER.declareString(optionalConstructorArg(), new ParseField(Fields.LOWER_SAMPLING));
+        );
+                    Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_upper_population",
+                builder.field(Fields.UPPER_POPULATION, getStdDeviationBound(Bounds.UPPER_POPULATION));
+        STD_BOUNDS_PARSER.declareField(
+        );
+public class ParsedExtendedStats extends ParsedStats implements ExtendedStats {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                return stdDeviationBoundLower;
 }
+ * specific language governing permissions and limitations
+ * Unless required by applicable law or agreed to in writing,
+        );
+        if (boundsAsString.get(3) != null) {
+            (agg, value) -> agg.varianceSampling = value,
+    @Override
+            ValueType.DOUBLE_OR_NULL
+            builder.startObject(Fields.STD_DEVIATION_BOUNDS);
+ * KIND, either express or implied.  See the License for the
+import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
+            new ParseField(Fields.STD_DEVIATION_POPULATION),
+    public double getStdDeviationBound(Bounds bound) {
+            STD_BOUNDS_AS_STRING_PARSER,
+        STD_BOUNDS_AS_STRING_PARSER.declareString(constructorArg(), new ParseField(Fields.LOWER));
+                return stdDeviationBoundUpper;
+                builder.field(Fields.STD_DEVIATION_AS_STRING, getStdDeviationAsString());
+            ValueType.DOUBLE_OR_NULL
+            new ParseField(Fields.STD_DEVIATION_AS_STRING)
+            {
+            new ParseField(Fields.STD_DEVIATION_BOUNDS_AS_STRING)
+    }
+    public double getVariance() {
+            (agg, value) -> agg.valueAsString.put(Fields.STD_DEVIATION_AS_STRING, value),
+    );
+        this.valueAsString.put(Fields.STD_DEVIATION_BOUNDS_AS_STRING + "_upper", boundsAsString.get(0));
+        );
+                );
+            new ParseField(Fields.VARIANCE_POPULATION_AS_STRING)
+            builder.nullField(Fields.VARIANCE);
+            builder.nullField(Fields.VARIANCE_POPULATION);
+    }
+        args -> Arrays.stream(args).map(d -> (Double) d).collect(Collectors.toList())
+    }
+    @Override
+    }
+            new ParseField(Fields.VARIANCE_AS_STRING)
+        return stdDeviationSampling;
+        STD_BOUNDS_PARSER.declareField(
+            new ParseField(Fields.LOWER_POPULATION),
+            case LOWER_POPULATION:
+            ParsedExtendedStats::setStdDeviationBoundsAsString,
+        return valueAsString.getOrDefault(Fields.VARIANCE_SAMPLING_AS_STRING, Double.toString(varianceSampling));
+ * The OpenSearch Contributors require contributions made to
+                builder.field(Fields.LOWER_SAMPLING, getStdDeviationBound(Bounds.LOWER_SAMPLING));
+    @Override
+ * software distributed under the License is distributed on an
+    }
+        );
+    }
+        }
+                return valueAsString.getOrDefault(
+        return stdDeviationPopulation;
+    public double getVariancePopulation() {
+            (parser, context) -> parseDouble(parser, 0),
+                builder.field(Fields.LOWER_POPULATION, getStdDeviationBound(Bounds.LOWER_POPULATION));
+        }
+    public double getSumOfSquares() {
+                builder.nullField(Fields.UPPER_POPULATION);
+    }
+            new ParseField(Fields.LOWER),
+    }

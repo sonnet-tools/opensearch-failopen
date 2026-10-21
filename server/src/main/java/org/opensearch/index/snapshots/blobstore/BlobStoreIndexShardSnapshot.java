@@ -1,609 +1,554 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
+     */
 package org.opensearch.index.snapshots.blobstore;
-
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.Version;
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
+        /**
 import org.opensearch.core.xcontent.XContentParserUtils;
-import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
-import org.opensearch.index.store.StoreFileMetadata;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.stream.IntStream;
-
-/**
- * Shard snapshot metadata
- *
- * @opensearch.internal
- */
-public class BlobStoreIndexShardSnapshot implements ToXContentFragment, IndexShardSnapshot {
-
+         * Checks if a file in a store is the same file
+ * the Apache License, Version 2.0 (the "License"); you may
+                return false;
     /**
-     * Information about snapshotted file
-     *
-     * @opensearch.internal
-     */
-    public static class FileInfo {
-
-        private final String name;
-        private final ByteSizeValue partSize;
-        private final long partBytes;
-        private final int numberOfParts;
-        private final StoreFileMetadata metadata;
-
-        /**
-         * Constructs a new instance of file info
-         *
-         * @param name         file name as stored in the blob store
-         * @param metadata  the files meta data
-         * @param partSize     size of the single chunk
-         */
-        public FileInfo(String name, StoreFileMetadata metadata, ByteSizeValue partSize) {
-            this.name = name;
-            this.metadata = metadata;
-
-            long partBytes = Long.MAX_VALUE;
-            if (partSize != null && partSize.getBytes() > 0) {
-                partBytes = partSize.getBytes();
-            }
-
-            if (metadata.length() == 0) {
-                numberOfParts = 1;
-            } else {
-                long longNumberOfParts = 1L + (metadata.length() - 1L) / partBytes; // ceil(len/partBytes), but beware of long overflow
-                numberOfParts = (int) longNumberOfParts;
-                if (numberOfParts != longNumberOfParts) { // also beware of int overflow, although 2^32 parts is already ludicrous
-                    throw new IllegalArgumentException("part size [" + partSize + "] too small for file [" + metadata + "]");
-                }
-            }
-
-            this.partSize = partSize;
-            this.partBytes = partBytes;
-            assert IntStream.range(0, numberOfParts).mapToLong(this::partBytes).sum() == metadata.length();
-        }
-
-        /**
-         * Returns the base file name
-         *
-         * @return file name
-         */
-        public String name() {
-            return name;
-        }
-
-        /**
-         * Returns part name if file is stored as multiple parts
-         *
-         * @param part part number
-         * @return part name
-         */
-        public String partName(int part) {
-            if (numberOfParts > 1) {
-                return name + ".part" + part;
-            } else {
-                return name;
-            }
-        }
-
-        /**
-         * Returns base file name from part name
-         *
-         * @param blobName part name
-         * @return base file name
-         */
-        public static String canonicalName(String blobName) {
-            if (blobName.contains(".part")) {
-                return blobName.substring(0, blobName.indexOf(".part"));
-            }
-            return blobName;
-        }
-
-        /**
-         * Returns original file name
-         *
-         * @return original file name
-         */
-        public String physicalName() {
-            return metadata.name();
-        }
-
-        /**
-         * File length
-         *
-         * @return file length
-         */
         public long length() {
-            return metadata.length();
-        }
-
-        /**
-         * Returns part size
-         *
-         * @return part size
-         */
-        public ByteSizeValue partSize() {
-            return partSize;
-        }
-
-        /**
          * Returns the size (in bytes) of a given part
-         *
-         * @return the size (in bytes) of a given part
-         */
-        public long partBytes(int part) {
-            assert 0 <= part && part < numberOfParts : part + " vs " + numberOfParts;
-            if (numberOfParts == 1) {
-                return length();
-            }
-            // First and last-but-one parts have a size equal to partBytes
-            if (part < (numberOfParts - 1)) {
-                return partBytes;
-            }
-            // Last part size is deducted from the length and the number of parts
-            final long lastPartBytes = length() - (this.partBytes * (numberOfParts - 1));
-            assert 0 < lastPartBytes && lastPartBytes <= partBytes : lastPartBytes + " vs " + partBytes;
-            return lastPartBytes;
-        }
-
-        /**
-         * Returns number of parts
-         *
-         * @return number of parts
-         */
-        public int numberOfParts() {
-            return numberOfParts;
-        }
-
-        /**
-         * Returns file md5 checksum provided by {@link org.opensearch.index.store.Store}
-         *
-         * @return file checksum
-         */
-        public String checksum() {
-            return metadata.checksum();
-        }
-
-        /**
-         * Returns the StoreFileMetadata for this file info.
-         */
-        public StoreFileMetadata metadata() {
-            return metadata;
-        }
-
-        /**
-         * Checks if a file in a store is the same file
-         *
-         * @param md file in a store
-         * @return true if file in a store this file has the same checksum and length
-         */
-        public boolean isSame(StoreFileMetadata md) {
-            return metadata.isSame(md);
-        }
-
-        /**
-         * Checks if a file in a store is the same file
-         *
-         * @param fileInfo file in a store
-         * @return true if file in a store this file has the same checksum and length
-         */
-        public boolean isSame(FileInfo fileInfo) {
-            if (numberOfParts != fileInfo.numberOfParts) {
-                return false;
-            }
-            if (partBytes != fileInfo.partBytes) {
-                return false;
-            }
-            if (!name.equals(fileInfo.name)) {
-                return false;
-            }
-            if (partSize != null) {
-                if (!partSize.equals(fileInfo.partSize)) {
-                    return false;
-                }
-            } else {
-                if (fileInfo.partSize != null) {
-                    return false;
-                }
-            }
-            return metadata.isSame(fileInfo.metadata);
-        }
-
-        static final String NAME = "name";
-        static final String PHYSICAL_NAME = "physical_name";
-        static final String LENGTH = "length";
-        static final String CHECKSUM = "checksum";
-        static final String PART_SIZE = "part_size";
-        static final String WRITTEN_BY = "written_by";
-        static final String META_HASH = "meta_hash";
-
-        /**
-         * Serializes file info into JSON
-         *
-         * @param file    file info
-         * @param builder XContent builder
-         * @param params  parameters
-         */
-        public static void toXContent(FileInfo file, XContentBuilder builder, ToXContent.Params params) throws IOException {
-            builder.startObject();
-            builder.field(NAME, file.name);
-            builder.field(PHYSICAL_NAME, file.metadata.name());
-            builder.field(LENGTH, file.metadata.length());
-            builder.field(CHECKSUM, file.metadata.checksum());
-            if (file.partSize != null) {
-                builder.field(PART_SIZE, file.partSize.getBytes());
-            }
-
-            if (file.metadata.writtenBy() != null) {
-                builder.field(WRITTEN_BY, file.metadata.writtenBy());
-            }
-
-            if (file.metadata.hash() != null && file.metadata().hash().length > 0) {
-                BytesRef br = file.metadata.hash();
-                builder.field(META_HASH, br.bytes, br.offset, br.length);
-            }
-            builder.endObject();
-        }
-
-        /**
-         * Parses JSON that represents file info
-         *
-         * @param parser parser
-         * @return file info
-         */
-        public static FileInfo fromXContent(XContentParser parser) throws IOException {
-            XContentParser.Token token = parser.currentToken();
-            String name = null;
-            String physicalName = null;
-            long length = -1;
-            String checksum = null;
-            ByteSizeValue partSize = null;
-            Version writtenBy = null;
-            String writtenByStr = null;
-            BytesRef metaHash = new BytesRef();
-            if (token == XContentParser.Token.START_OBJECT) {
-                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                    if (token == XContentParser.Token.FIELD_NAME) {
-                        String currentFieldName = parser.currentName();
-                        token = parser.nextToken();
-                        if (token.isValue()) {
-                            if (NAME.equals(currentFieldName)) {
-                                name = parser.text();
-                            } else if (PHYSICAL_NAME.equals(currentFieldName)) {
-                                physicalName = parser.text();
-                            } else if (LENGTH.equals(currentFieldName)) {
-                                length = parser.longValue();
-                            } else if (CHECKSUM.equals(currentFieldName)) {
-                                checksum = parser.text();
-                            } else if (PART_SIZE.equals(currentFieldName)) {
-                                partSize = new ByteSizeValue(parser.longValue());
-                            } else if (WRITTEN_BY.equals(currentFieldName)) {
-                                writtenByStr = parser.text();
-                                writtenBy = Lucene.parseVersionLenient(writtenByStr, null);
-                            } else if (META_HASH.equals(currentFieldName)) {
-                                metaHash.bytes = parser.binaryValue();
-                                metaHash.offset = 0;
-                                metaHash.length = metaHash.bytes.length;
-                            } else {
-                                throw new OpenSearchParseException("unknown parameter [{}]", currentFieldName);
+    /**
+        if (parser.currentToken() == null) { // fresh parser? move to the first token
+        return incrementalSize;
+            startTime,
+         * File length
+                if (token.isValue()) {
                             }
-                        } else {
-                            throw new OpenSearchParseException("unexpected token  [{}]", token);
-                        }
-                    } else {
-                        throw new OpenSearchParseException("unexpected token [{}]", token);
-                    }
-                }
-            }
-
-            // Verify that file information is complete
-            if (name == null || Strings.validFileName(name) == false) {
-                throw new OpenSearchParseException("missing or invalid file name [" + name + "]");
-            } else if (physicalName == null || Strings.validFileNameExcludingSlash(physicalName) == false) {
-                throw new OpenSearchParseException("missing or invalid physical file name [" + physicalName + "]");
-            } else if (length < 0) {
-                throw new OpenSearchParseException("missing or invalid file length");
-            } else if (writtenBy == null) {
-                throw new OpenSearchParseException("missing or invalid written_by [" + writtenByStr + "]");
-            } else if (checksum == null) {
-                throw new OpenSearchParseException("missing checksum for name [" + name + "]");
-            }
-            return new FileInfo(name, new StoreFileMetadata(physicalName, length, checksum, writtenBy, metaHash), partSize);
-        }
-
-        @Override
-        public String toString() {
-            return "[name: "
-                + name
-                + ", numberOfParts: "
-                + numberOfParts
-                + ", partSize: "
-                + partSize
-                + ", partBytes: "
-                + partBytes
-                + ", metadata: "
-                + metadata
-                + "]";
-        }
-    }
-
-    /**
-     * Snapshot name
-     */
-    private final String snapshot;
-
-    private final long indexVersion;
-
-    private final long startTime;
-
-    private final long time;
-
-    private final int incrementalFileCount;
-
-    private final long incrementalSize;
-
-    private final List<FileInfo> indexFiles;
-
-    /**
-     * Constructs new shard snapshot metadata from snapshot metadata
-     *
-     * @param snapshot              snapshot name
-     * @param indexVersion          index version
-     * @param indexFiles            list of files in the shard
-     * @param startTime             snapshot start time
-     * @param time                  snapshot running time
-     * @param incrementalFileCount  incremental of files that were snapshotted
-     * @param incrementalSize       incremental size of snapshot
-     */
-    public BlobStoreIndexShardSnapshot(
-        String snapshot,
-        long indexVersion,
-        List<FileInfo> indexFiles,
-        long startTime,
-        long time,
-        int incrementalFileCount,
-        long incrementalSize
-    ) {
-        assert snapshot != null;
-        assert indexVersion >= 0;
-        this.snapshot = snapshot;
-        this.indexVersion = indexVersion;
-        this.indexFiles = Collections.unmodifiableList(new ArrayList<>(indexFiles));
-        this.startTime = startTime;
-        this.time = time;
-        this.incrementalFileCount = incrementalFileCount;
-        this.incrementalSize = incrementalSize;
-    }
-
-    /**
-     * Creates a new instance has a different name and zero incremental file counts but is identical to this instance in terms of the files
-     * it references.
-     *
-     * @param targetSnapshotName target snapshot name
-     * @param startTime          time the clone operation on the repository was started
-     * @param time               time it took to create the clone
-     */
     public BlobStoreIndexShardSnapshot asClone(String targetSnapshotName, long startTime, long time) {
-        return new BlobStoreIndexShardSnapshot(targetSnapshotName, indexVersion, indexFiles, startTime, time, 0, 0);
-    }
-
-    /**
-     * Returns snapshot name
-     *
-     * @return snapshot name
-     */
-    public String snapshot() {
-        return snapshot;
-    }
-
-    /**
-     * Returns list of files in the shard
-     *
-     * @return list of files
-     */
-    public List<FileInfo> indexFiles() {
+         * @return true if file in a store this file has the same checksum and length
+        private final int numberOfParts;
+                + ", partBytes: "
+         *
+        assert indexVersion >= 0;
         return indexFiles;
     }
-
-    /**
-     * Returns snapshot start time
-     */
-    public long startTime() {
-        return startTime;
     }
-
-    /**
-     * Returns snapshot running time
-     */
-    public long time() {
-        return time;
-    }
-
-    /**
-     * Returns incremental of files that were snapshotted
-     */
+         * @param blobName part name
+        }
     public int incrementalFileCount() {
-        return incrementalFileCount;
-    }
-
-    /**
-     * Returns total number of files that are referenced by this snapshot
-     */
-    public int totalFileCount() {
-        return indexFiles.size();
-    }
-
-    /**
-     * Returns incremental of files size that were snapshotted
-     */
-    public long incrementalSize() {
-        return incrementalSize;
-    }
-
-    /**
-     * Returns total size of all files that where snapshotted
-     */
-    public long totalSize() {
-        return indexFiles.stream().mapToLong(fi -> fi.metadata().length()).sum();
-    }
-
-    private static final String NAME = "name";
-    private static final String INDEX_VERSION = "index_version";
-    private static final String START_TIME = "start_time";
-    private static final String TIME = "time";
-    private static final String FILES = "files";
-    // for the sake of BWC keep the actual property names as in 6.x
-    // + there is a constraint in #fromXContent() that leads to OpenSearchParseException("unknown parameter [incremental_file_count]");
-    private static final String INCREMENTAL_FILE_COUNT = "number_of_files";
-    private static final String INCREMENTAL_SIZE = "total_size";
-
-    private static final ParseField PARSE_NAME = new ParseField(NAME);
-    private static final ParseField PARSE_INDEX_VERSION = new ParseField(INDEX_VERSION, "index-version");
-    private static final ParseField PARSE_START_TIME = new ParseField(START_TIME);
-    private static final ParseField PARSE_TIME = new ParseField(TIME);
-    private static final ParseField PARSE_INCREMENTAL_FILE_COUNT = new ParseField(INCREMENTAL_FILE_COUNT);
-    private static final ParseField PARSE_INCREMENTAL_SIZE = new ParseField(INCREMENTAL_SIZE);
-    private static final ParseField PARSE_FILES = new ParseField(FILES);
-
-    /**
-     * Serializes shard snapshot metadata info into JSON
-     *
-     * @param builder  XContent builder
-     * @param params   parameters
-     */
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field(NAME, snapshot);
-        builder.field(INDEX_VERSION, indexVersion);
-        builder.field(START_TIME, startTime);
-        builder.field(TIME, time);
-        builder.field(INCREMENTAL_FILE_COUNT, incrementalFileCount);
-        builder.field(INCREMENTAL_SIZE, incrementalSize);
-        builder.startArray(FILES);
-        for (FileInfo fileInfo : indexFiles) {
-            FileInfo.toXContent(fileInfo, builder, params);
-        }
-        builder.endArray();
-        return builder;
-    }
-
-    /**
-     * Parses shard snapshot metadata
-     *
-     * @param parser parser
-     * @return shard snapshot metadata
-     */
-    public static BlobStoreIndexShardSnapshot fromXContent(XContentParser parser) throws IOException {
-        String snapshot = null;
-        long indexVersion = -1;
-        long startTime = 0;
-        long time = 0;
-        int incrementalFileCount = 0;
-        long incrementalSize = 0;
-
-        List<FileInfo> indexFiles = new ArrayList<>();
-        if (parser.currentToken() == null) { // fresh parser? move to the first token
-            parser.nextToken();
-        }
-        XContentParser.Token token = parser.currentToken();
-        if (token == XContentParser.Token.START_OBJECT) {
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                XContentParserUtils.ensureExpectedToken(XContentParser.Token.FIELD_NAME, token, parser);
-                final String currentFieldName = parser.currentName();
-                token = parser.nextToken();
-                if (token.isValue()) {
-                    if (PARSE_NAME.match(currentFieldName, parser.getDeprecationHandler())) {
-                        snapshot = parser.text();
-                    } else if (PARSE_INDEX_VERSION.match(currentFieldName, parser.getDeprecationHandler())) {
-                        // The index-version is needed for backward compatibility with v 1.0
-                        indexVersion = parser.longValue();
-                    } else if (PARSE_START_TIME.match(currentFieldName, parser.getDeprecationHandler())) {
-                        startTime = parser.longValue();
-                    } else if (PARSE_TIME.match(currentFieldName, parser.getDeprecationHandler())) {
-                        time = parser.longValue();
-                    } else if (PARSE_INCREMENTAL_FILE_COUNT.match(currentFieldName, parser.getDeprecationHandler())) {
-                        incrementalFileCount = parser.intValue();
-                    } else if (PARSE_INCREMENTAL_SIZE.match(currentFieldName, parser.getDeprecationHandler())) {
-                        incrementalSize = parser.longValue();
-                    } else {
-                        throw new OpenSearchParseException("unknown parameter [{}]", currentFieldName);
-                    }
-                } else if (token == XContentParser.Token.START_ARRAY) {
-                    if (PARSE_FILES.match(currentFieldName, parser.getDeprecationHandler())) {
-                        while ((parser.nextToken()) != XContentParser.Token.END_ARRAY) {
-                            indexFiles.add(FileInfo.fromXContent(parser));
-                        }
-                    } else {
-                        throw new OpenSearchParseException("unknown parameter [{}]", currentFieldName);
-                    }
-                } else {
-                    throw new OpenSearchParseException("unexpected token [{}]", token);
-                }
-            }
-        }
-
-        return new BlobStoreIndexShardSnapshot(
-            snapshot,
-            indexVersion,
-            Collections.unmodifiableList(indexFiles),
-            startTime,
-            time,
-            incrementalFileCount,
-            incrementalSize
-        );
-    }
-
-    @Override
-    public IndexShardSnapshotStatus getIndexShardSnapshotStatus() {
-        return IndexShardSnapshotStatus.newDone(
-            startTime,
-            time,
-            incrementalFileCount,
-            totalFileCount(),
+            if (file.metadata.writtenBy() != null) {
+         *
             incrementalSize,
+            } else if (writtenBy == null) {
+                            } else if (PART_SIZE.equals(currentFieldName)) {
+import java.util.stream.IntStream;
+         * @param params  parameters
+        if (token == XContentParser.Token.START_OBJECT) {
+         */
+        /**
+                            } else if (PHYSICAL_NAME.equals(currentFieldName)) {
+         * @param md file in a store
+    @Override
+         *
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+         */
+                throw new OpenSearchParseException("missing checksum for name [" + name + "]");
+                + name
+            this.name = name;
             totalSize(),
-            null
-        ); // Not adding a real generation here as it doesn't matter to callers
+        this.startTime = startTime;
+                        } else {
+     *
+         * @return true if file in a store this file has the same checksum and length
+    /**
+         * @param metadata  the files meta data
+        List<FileInfo> indexFiles,
+                token = parser.nextToken();
+        private final String name;
+                        throw new OpenSearchParseException("unknown parameter [{}]", currentFieldName);
+                return false;
+            }
+        public String toString() {
+                        }
+            BytesRef metaHash = new BytesRef();
+        /**
+     * Constructs new shard snapshot metadata from snapshot metadata
+                        incrementalSize = parser.longValue();
+                    throw new IllegalArgumentException("part size [" + partSize + "] too small for file [" + metadata + "]");
+ * Licensed to Elasticsearch under one or more contributor
+            return metadata.length();
+                                name = parser.text();
+                    if (PARSE_FILES.match(currentFieldName, parser.getDeprecationHandler())) {
+     * @opensearch.internal
+            }
+        builder.field(INDEX_VERSION, indexVersion);
+     */
+                    return false;
+ *
+            builder.endObject();
+                        startTime = parser.longValue();
+            builder.startObject();
+            String physicalName = null;
+            Collections.unmodifiableList(indexFiles),
+                } else {
+            builder.field(CHECKSUM, file.metadata.checksum());
+                return false;
+            this.partBytes = partBytes;
+        builder.endArray();
+    /**
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     */
+        /**
+         */
+     */
+     * @return snapshot name
+        for (FileInfo fileInfo : indexFiles) {
+     */
+                + numberOfParts
+            totalFileCount(),
+ * specific language governing permissions and limitations
+        }
+            builder.field(PHYSICAL_NAME, file.metadata.name());
+                    } else if (PARSE_INCREMENTAL_SIZE.match(currentFieldName, parser.getDeprecationHandler())) {
+import org.apache.lucene.util.BytesRef;
+            FileInfo.toXContent(fileInfo, builder, params);
+     * @param targetSnapshotName target snapshot name
+        builder.field(INCREMENTAL_FILE_COUNT, incrementalFileCount);
+         * @param part part number
+         * @param name         file name as stored in the blob store
+import org.opensearch.index.store.StoreFileMetadata;
+/*
+        this.incrementalFileCount = incrementalFileCount;
+                } else if (token == XContentParser.Token.START_ARRAY) {
+            Version writtenBy = null;
+            }
+            }
+         */
+        this.snapshot = snapshot;
     }
+         *
+import org.opensearch.OpenSearchParseException;
+        this.time = time;
+    // for the sake of BWC keep the actual property names as in 6.x
+    private static final String INCREMENTAL_SIZE = "total_size";
+                                checksum = parser.text();
+        builder.field(INCREMENTAL_SIZE, incrementalSize);
+ * Modifications Copyright OpenSearch Contributors. See
+    /**
+            } else {
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.core.ParseField;
+         * Returns part size
+                    }
+         *
+            // Verify that file information is complete
+        static final String WRITTEN_BY = "written_by";
+                        indexVersion = parser.longValue();
+    }
+import org.opensearch.core.xcontent.ToXContentFragment;
+    ) {
+                throw new OpenSearchParseException("missing or invalid file length");
+            this.partSize = partSize;
+ * The OpenSearch Contributors require contributions made to
+    }
+ * GitHub history for details.
+                                metaHash.length = metaHash.bytes.length;
+    /**
+         */
+    private static final ParseField PARSE_TIME = new ParseField(TIME);
+     */
+            return metadata;
+     * @param indexFiles            list of files in the shard
+            return lastPartBytes;
+    public IndexShardSnapshotStatus getIndexShardSnapshotStatus() {
+            if (file.partSize != null) {
+    private static final ParseField PARSE_START_TIME = new ParseField(START_TIME);
+/*
+            if (numberOfParts > 1) {
+        public static String canonicalName(String blobName) {
+                + ", partSize: "
+        /**
+                return name;
+        public boolean isSame(StoreFileMetadata md) {
+            this.metadata = metadata;
+    /**
+        long indexVersion = -1;
+                numberOfParts = 1;
+         * @return number of parts
+         * @return base file name
+         *
+     * Creates a new instance has a different name and zero incremental file counts but is identical to this instance in terms of the files
+                        while ((parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+            } else if (checksum == null) {
+        /**
+     */
+    }
+                return partBytes;
+    }
+                            } else if (WRITTEN_BY.equals(currentFieldName)) {
+         */
+        long incrementalSize
+         * Parses JSON that represents file info
+     * Serializes shard snapshot metadata info into JSON
+    private final List<FileInfo> indexFiles;
+import org.opensearch.core.xcontent.XContentParser;
+                + ", metadata: "
+                    }
+            return blobName;
+        }
+import org.opensearch.core.common.unit.ByteSizeValue;
+                }
+import java.util.List;
+            if (part < (numberOfParts - 1)) {
+        }
+        }
+            }
+         * @return part size
+            } else if (physicalName == null || Strings.validFileNameExcludingSlash(physicalName) == false) {
+            indexVersion,
+    // + there is a constraint in #fromXContent() that leads to OpenSearchParseException("unknown parameter [incremental_file_count]");
+    @Override
+                                metaHash.bytes = parser.binaryValue();
+    }
+     * Returns list of files in the shard
+         */
+        String snapshot,
+ * this file be licensed under the Apache-2.0 license or a
+         * Returns the base file name
+            String writtenByStr = null;
+                        if (token.isValue()) {
+                }
+ * under the License.
+    }
+            if (numberOfParts == 1) {
+            startTime,
+                if (numberOfParts != longNumberOfParts) { // also beware of int overflow, although 2^32 parts is already ludicrous
+     * @param builder  XContent builder
+     * Returns snapshot running time
+import java.util.Collections;
+                                length = parser.longValue();
+        public FileInfo(String name, StoreFileMetadata metadata, ByteSizeValue partSize) {
+         *
+            // First and last-but-one parts have a size equal to partBytes
+         * Returns the StoreFileMetadata for this file info.
+         *
+    private final int incrementalFileCount;
+     * @param startTime          time the clone operation on the repository was started
+                return name + ".part" + part;
+                            } else {
+                if (!partSize.equals(fileInfo.partSize)) {
+import java.util.ArrayList;
+         */
+            builder.field(NAME, file.name);
+         */
+         * @param parser parser
+         *
+/**
+                XContentParserUtils.ensureExpectedToken(XContentParser.Token.FIELD_NAME, token, parser);
+    public static class FileInfo {
+        builder.field(START_TIME, startTime);
+    }
+     */
+         * @return part name
+        builder.field(TIME, time);
+        }
+                            if (NAME.equals(currentFieldName)) {
+public class BlobStoreIndexShardSnapshot implements ToXContentFragment, IndexShardSnapshot {
+        /**
+            if (name == null || Strings.validFileName(name) == false) {
+    private static final String INDEX_VERSION = "index_version";
+        static final String CHECKSUM = "checksum";
+                + "]";
+            }
+        /**
+                                partSize = new ByteSizeValue(parser.longValue());
+     *
+    public long startTime() {
+            assert 0 <= part && part < numberOfParts : part + " vs " + numberOfParts;
+     * @param startTime             snapshot start time
+            builder.field(LENGTH, file.metadata.length());
+        /**
+         * @return file checksum
+        public String name() {
+                builder.field(WRITTEN_BY, file.metadata.writtenBy());
+        return builder;
+     *
+     * Returns snapshot name
+            if (!name.equals(fileInfo.name)) {
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                builder.field(META_HASH, br.bytes, br.offset, br.length);
+    /**
+import org.opensearch.common.lucene.Lucene;
+import org.opensearch.core.xcontent.XContentBuilder;
+            }
+        ); // Not adding a real generation here as it doesn't matter to callers
+            }
+ */
+            return new FileInfo(name, new StoreFileMetadata(physicalName, length, checksum, writtenBy, metaHash), partSize);
+        /**
+        }
+                return length();
+                    } else if (PARSE_INCREMENTAL_FILE_COUNT.match(currentFieldName, parser.getDeprecationHandler())) {
+ * @opensearch.internal
+            }
+                long longNumberOfParts = 1L + (metadata.length() - 1L) / partBytes; // ceil(len/partBytes), but beware of long overflow
+     * Parses shard snapshot metadata
+        public int numberOfParts() {
+    public BlobStoreIndexShardSnapshot(
+        return snapshot;
+                        }
+            // Last part size is deducted from the length and the number of parts
+            }
+ *
+     * Returns snapshot start time
+     * Returns total number of files that are referenced by this snapshot
+        assert snapshot != null;
+        public static FileInfo fromXContent(XContentParser parser) throws IOException {
+        return startTime;
+            incrementalFileCount,
+/*
+            long partBytes = Long.MAX_VALUE;
+        /**
+            return metadata.isSame(md);
+        public static void toXContent(FileInfo file, XContentBuilder builder, ToXContent.Params params) throws IOException {
+ * You may obtain a copy of the License at
+                + metadata
+     */
+            long length = -1;
+    private final String snapshot;
+            if (file.metadata.hash() != null && file.metadata().hash().length > 0) {
+import org.opensearch.core.xcontent.ToXContent;
+        return indexFiles.size();
+        }
+                        token = parser.nextToken();
+        long startTime,
+                    return false;
+         * Serializes file info into JSON
+     * @param params   parameters
+        public long partBytes(int part) {
+                throw new OpenSearchParseException("missing or invalid physical file name [" + physicalName + "]");
+        this.indexVersion = indexVersion;
+                        incrementalFileCount = parser.intValue();
+        private final StoreFileMetadata metadata;
+                    }
+    private static final String NAME = "name";
+     */
+        }
+        public String checksum() {
+                if (fileInfo.partSize != null) {
+ */
+                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+            return metadata.checksum();
+    }
+        builder.startArray(FILES);
+                    } else {
+    private static final ParseField PARSE_FILES = new ParseField(FILES);
+                partBytes = partSize.getBytes();
+                }
+         * Returns part name if file is stored as multiple parts
+            time,
+        static final String NAME = "name";
+ */
+         * @return file length
+        public String physicalName() {
+    private final long startTime;
+    public long totalSize() {
+        /**
+                + partBytes
+                                writtenByStr = parser.text();
+        List<FileInfo> indexFiles = new ArrayList<>();
+         * @return original file name
+        }
+    public long time() {
+            return name;
+     *
+         * Checks if a file in a store is the same file
+    private static final ParseField PARSE_INCREMENTAL_SIZE = new ParseField(INCREMENTAL_SIZE);
+     * Snapshot name
+                        String currentFieldName = parser.currentName();
+            return metadata.isSame(fileInfo.metadata);
+        }
+        @Override
+        int incrementalFileCount,
+            if (metadata.length() == 0) {
+         */
+                numberOfParts = (int) longNumberOfParts;
+            if (numberOfParts != fileInfo.numberOfParts) {
+import java.io.IOException;
+         * @return file info
+        }
+            if (partBytes != fileInfo.partBytes) {
+import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
+ * license agreements. See the NOTICE file distributed with
+         */
+        return indexFiles.stream().mapToLong(fi -> fi.metadata().length()).sum();
+                    } else if (PARSE_START_TIME.match(currentFieldName, parser.getDeprecationHandler())) {
+            }
+            XContentParser.Token token = parser.currentToken();
+    /**
+        builder.field(NAME, snapshot);
+     *
+         * Returns base file name from part name
+        }
+            if (blobName.contains(".part")) {
+        }
+        return time;
+     * Information about snapshotted file
+        );
+         */
+        public String partName(int part) {
+    private static final String INCREMENTAL_FILE_COUNT = "number_of_files";
+        long startTime = 0;
+         */
+                    if (PARSE_NAME.match(currentFieldName, parser.getDeprecationHandler())) {
+        static final String META_HASH = "meta_hash";
+    private static final String START_TIME = "start_time";
+         * Returns number of parts
+        String snapshot = null;
+        int incrementalFileCount = 0;
+        static final String LENGTH = "length";
+                    } else if (PARSE_INDEX_VERSION.match(currentFieldName, parser.getDeprecationHandler())) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    private static final String TIME = "time";
+        /**
+            assert 0 < lastPartBytes && lastPartBytes <= partBytes : lastPartBytes + " vs " + partBytes;
+        this.incrementalSize = incrementalSize;
+    }
+     * Returns total size of all files that where snapshotted
+     * it references.
+        private final ByteSizeValue partSize;
+    private static final String FILES = "files";
+            time,
+         *
+            if (partSize != null) {
+                            } else if (META_HASH.equals(currentFieldName)) {
+         *
+    private final long time;
+            return "[name: "
+        private final long partBytes;
+            parser.nextToken();
+        /**
+import org.apache.lucene.util.Version;
 }
+    /**
+                }
+         * @param file    file info
+                throw new OpenSearchParseException("missing or invalid written_by [" + writtenByStr + "]");
+         * @param fileInfo file in a store
+            } else {
+        }
+         *
+         * @param partSize     size of the single chunk
+                return blobName.substring(0, blobName.indexOf(".part"));
+     * @param incrementalFileCount  incremental of files that were snapshotted
+import org.opensearch.core.common.Strings;
+            final long lastPartBytes = length() - (this.partBytes * (numberOfParts - 1));
+     */
+ * KIND, either express or implied.  See the License for the
+        }
+            ByteSizeValue partSize = null;
+            return metadata.name();
+ *
+ * Shard snapshot metadata
+        }
+        long incrementalSize = 0;
+        long indexVersion,
+                    throw new OpenSearchParseException("unexpected token [{}]", token);
+            }
+        public ByteSizeValue partSize() {
+    /**
+ * ownership. Elasticsearch licenses this file to you under
+     * @param time                  snapshot running time
+            if (token == XContentParser.Token.START_OBJECT) {
+        /**
+                            } else if (CHECKSUM.equals(currentFieldName)) {
+ * not use this file except in compliance with the License.
+        return incrementalFileCount;
+                builder.field(PART_SIZE, file.partSize.getBytes());
+     * Returns incremental of files that were snapshotted
+                        snapshot = parser.text();
+     * @param snapshot              snapshot name
+            snapshot,
+                    } else {
+         * Constructs a new instance of file info
+        public boolean isSame(FileInfo fileInfo) {
+    /**
+         * @param builder XContent builder
+     * @param parser parser
+                + partSize
+            } else {
+        }
+     * @param indexVersion          index version
+                                writtenBy = Lucene.parseVersionLenient(writtenByStr, null);
+                            } else if (LENGTH.equals(currentFieldName)) {
+    private final long incrementalSize;
+            assert IntStream.range(0, numberOfParts).mapToLong(this::partBytes).sum() == metadata.length();
+    /**
+    private static final ParseField PARSE_INDEX_VERSION = new ParseField(INDEX_VERSION, "index-version");
+        this.indexFiles = Collections.unmodifiableList(new ArrayList<>(indexFiles));
+                            indexFiles.add(FileInfo.fromXContent(parser));
+    private static final ParseField PARSE_NAME = new ParseField(NAME);
+                        // The index-version is needed for backward compatibility with v 1.0
+        return new BlobStoreIndexShardSnapshot(
+                        throw new OpenSearchParseException("unexpected token [{}]", token);
+     * @param incrementalSize       incremental size of snapshot
+    /**
+                BytesRef br = file.metadata.hash();
+         * Returns file md5 checksum provided by {@link org.opensearch.index.store.Store}
+                            throw new OpenSearchParseException("unexpected token  [{}]", token);
+         * @return the size (in bytes) of a given part
+    }
+        long time,
+            incrementalSize
+                }
+            } else if (length < 0) {
+                                throw new OpenSearchParseException("unknown parameter [{}]", currentFieldName);
+ * software distributed under the License is distributed on an
+    private static final ParseField PARSE_INCREMENTAL_FILE_COUNT = new ParseField(INCREMENTAL_FILE_COUNT);
+                + ", numberOfParts: "
+            String name = null;
+ *
+        static final String PHYSICAL_NAME = "physical_name";
+     */
+                                physicalName = parser.text();
+         * @return file name
+    public int totalFileCount() {
+            null
+            return partSize;
+     * @return list of files
+    public static BlobStoreIndexShardSnapshot fromXContent(XContentParser parser) throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+                throw new OpenSearchParseException("missing or invalid file name [" + name + "]");
+        return new BlobStoreIndexShardSnapshot(targetSnapshotName, indexVersion, indexFiles, startTime, time, 0, 0);
+    }
+                        time = parser.longValue();
+                final String currentFieldName = parser.currentName();
+        return IndexShardSnapshotStatus.newDone(
+ */
+         *
+            }
+            if (partSize != null && partSize.getBytes() > 0) {
+     * @return shard snapshot metadata
+ * this work for additional information regarding copyright
+        }
+     * @param time               time it took to create the clone
+                    } else if (PARSE_TIME.match(currentFieldName, parser.getDeprecationHandler())) {
+        public StoreFileMetadata metadata() {
+        static final String PART_SIZE = "part_size";
+            }
+            }
+     * Returns incremental of files size that were snapshotted
+     *
+    public List<FileInfo> indexFiles() {
+            incrementalFileCount,
+            }
+ * compatible open source license.
+    public String snapshot() {
+                    } else {
+    public long incrementalSize() {
+         *
+                    if (token == XContentParser.Token.FIELD_NAME) {
+                                metaHash.offset = 0;
+            return numberOfParts;
+                        throw new OpenSearchParseException("unknown parameter [{}]", currentFieldName);
+     */
+         */
+     */
+         * Returns original file name
+     *
+         */
+    private final long indexVersion;
+        long time = 0;
+        XContentParser.Token token = parser.currentToken();
+            String checksum = null;

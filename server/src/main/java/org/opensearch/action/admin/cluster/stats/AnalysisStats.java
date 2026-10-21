@@ -1,354 +1,318 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.cluster.stats;
-
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.MappingMetadata;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-
-/**
- * Statistics about analysis usage.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public final class AnalysisStats implements ToXContentFragment, Writeable {
-
-    /**
-     * Create {@link AnalysisStats} from the given cluster state.
-     */
-    public static AnalysisStats of(ClusterState state) {
-        final Map<String, IndexFeatureStats> usedCharFilterTypes = new HashMap<>();
-        final Map<String, IndexFeatureStats> usedTokenizerTypes = new HashMap<>();
-        final Map<String, IndexFeatureStats> usedTokenFilterTypes = new HashMap<>();
-        final Map<String, IndexFeatureStats> usedAnalyzerTypes = new HashMap<>();
-        final Map<String, IndexFeatureStats> usedBuiltInCharFilters = new HashMap<>();
-        final Map<String, IndexFeatureStats> usedBuiltInTokenizers = new HashMap<>();
-        final Map<String, IndexFeatureStats> usedBuiltInTokenFilters = new HashMap<>();
-        final Map<String, IndexFeatureStats> usedBuiltInAnalyzers = new HashMap<>();
-
-        for (IndexMetadata indexMetadata : state.metadata()) {
-            Set<String> indexAnalyzers = new HashSet<>();
-            MappingMetadata mappingMetadata = indexMetadata.mapping();
-            if (mappingMetadata != null) {
-                MappingVisitor.visitMapping(mappingMetadata.getSourceAsMap(), fieldMapping -> {
-                    for (String key : new String[] { "analyzer", "search_analyzer", "search_quote_analyzer" }) {
-                        Object analyzerO = fieldMapping.get(key);
-                        if (analyzerO != null) {
-                            final String analyzer = analyzerO.toString();
-                            IndexFeatureStats stats = usedBuiltInAnalyzers.computeIfAbsent(analyzer, IndexFeatureStats::new);
-                            stats.count++;
-                            if (indexAnalyzers.add(analyzer)) {
-                                stats.indexCount++;
-                            }
-                        }
-                    }
-                });
-            }
-
-            Set<String> indexCharFilters = new HashSet<>();
-            Set<String> indexTokenizers = new HashSet<>();
-            Set<String> indexTokenFilters = new HashSet<>();
-
-            Set<String> indexAnalyzerTypes = new HashSet<>();
-            Set<String> indexCharFilterTypes = new HashSet<>();
-            Set<String> indexTokenizerTypes = new HashSet<>();
-            Set<String> indexTokenFilterTypes = new HashSet<>();
-
-            Settings indexSettings = indexMetadata.getSettings();
-            Map<String, Settings> analyzerSettings = indexSettings.getGroups("index.analysis.analyzer");
-            usedBuiltInAnalyzers.keySet().removeAll(analyzerSettings.keySet());
-            for (Settings analyzerSetting : analyzerSettings.values()) {
-                final String analyzerType = analyzerSetting.get("type", "custom");
-                IndexFeatureStats stats = usedAnalyzerTypes.computeIfAbsent(analyzerType, IndexFeatureStats::new);
-                stats.count++;
-                if (indexAnalyzerTypes.add(analyzerType)) {
-                    stats.indexCount++;
-                }
-
-                for (String charFilter : analyzerSetting.getAsList("char_filter")) {
-                    stats = usedBuiltInCharFilters.computeIfAbsent(charFilter, IndexFeatureStats::new);
-                    stats.count++;
-                    if (indexCharFilters.add(charFilter)) {
-                        stats.indexCount++;
-                    }
-                }
-
-                String tokenizer = analyzerSetting.get("tokenizer");
-                if (tokenizer != null) {
-                    stats = usedBuiltInTokenizers.computeIfAbsent(tokenizer, IndexFeatureStats::new);
-                    stats.count++;
-                    if (indexTokenizers.add(tokenizer)) {
-                        stats.indexCount++;
-                    }
-                }
-
-                for (String filter : analyzerSetting.getAsList("filter")) {
-                    stats = usedBuiltInTokenFilters.computeIfAbsent(filter, IndexFeatureStats::new);
-                    stats.count++;
-                    if (indexTokenFilters.add(filter)) {
-                        stats.indexCount++;
-                    }
-                }
-            }
-
-            Map<String, Settings> charFilterSettings = indexSettings.getGroups("index.analysis.char_filter");
-            usedBuiltInCharFilters.keySet().removeAll(charFilterSettings.keySet());
-            aggregateAnalysisTypes(charFilterSettings.values(), usedCharFilterTypes, indexCharFilterTypes);
-
-            Map<String, Settings> tokenizerSettings = indexSettings.getGroups("index.analysis.tokenizer");
-            usedBuiltInTokenizers.keySet().removeAll(tokenizerSettings.keySet());
-            aggregateAnalysisTypes(tokenizerSettings.values(), usedTokenizerTypes, indexTokenizerTypes);
-
-            Map<String, Settings> tokenFilterSettings = indexSettings.getGroups("index.analysis.filter");
-            usedBuiltInTokenFilters.keySet().removeAll(tokenFilterSettings.keySet());
-            aggregateAnalysisTypes(tokenFilterSettings.values(), usedTokenFilterTypes, indexTokenFilterTypes);
-        }
-        return new AnalysisStats(
-            usedCharFilterTypes.values(),
-            usedTokenizerTypes.values(),
-            usedTokenFilterTypes.values(),
-            usedAnalyzerTypes.values(),
-            usedBuiltInCharFilters.values(),
-            usedBuiltInTokenizers.values(),
-            usedBuiltInTokenFilters.values(),
-            usedBuiltInAnalyzers.values()
-        );
-    }
-
-    private static void aggregateAnalysisTypes(
-        Collection<Settings> settings,
-        Map<String, IndexFeatureStats> stats,
-        Set<String> indexTypes
-    ) {
-        for (Settings analysisComponentSettings : settings) {
-            final String type = analysisComponentSettings.get("type");
-            if (type != null) {
-                IndexFeatureStats s = stats.computeIfAbsent(type, IndexFeatureStats::new);
-                s.count++;
+        Collection<IndexFeatureStats> usedBuiltInAnalyzers
+    public Set<IndexFeatureStats> getUsedBuiltInTokenFilters() {
                 if (indexTypes.add(type)) {
+        toXContentCollection(builder, params, "built_in_tokenizers", usedBuiltInTokenizers);
+ * KIND, either express or implied.  See the License for the
+                            IndexFeatureStats stats = usedBuiltInAnalyzers.computeIfAbsent(analyzer, IndexFeatureStats::new);
+        final Map<String, IndexFeatureStats> usedBuiltInTokenizers = new HashMap<>();
+import java.util.Set;
+import java.util.ArrayList;
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    }
+        usedAnalyzers = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
+        }
+                    if (indexTokenFilters.add(filter)) {
+            Set<String> indexCharFilters = new HashSet<>();
+ * The OpenSearch Contributors require contributions made to
+                            stats.count++;
+        return usedTokenizers;
+    private final Set<IndexFeatureStats> usedBuiltInCharFilters, usedBuiltInTokenizers, usedBuiltInTokenFilters, usedBuiltInAnalyzers;
+    }
+import org.opensearch.core.common.Strings;
+        this.usedCharFilters = sort(usedCharFilters);
+            usedBuiltInTokenizers.keySet().removeAll(tokenizerSettings.keySet());
+        return Objects.equals(usedCharFilters, that.usedCharFilters)
+        final Map<String, IndexFeatureStats> usedAnalyzerTypes = new HashMap<>();
+ * Unless required by applicable law or agreed to in writing,
+    private static Set<IndexFeatureStats> sort(Collection<IndexFeatureStats> set) {
+import java.util.Map;
+            usedBuiltInAnalyzers.keySet().removeAll(analyzerSettings.keySet());
+    public String toString() {
+import org.opensearch.core.xcontent.ToXContent;
+                        stats.indexCount++;
+            usedBuiltInTokenFilters.values(),
+            && Objects.equals(usedTokenFilters, that.usedTokenFilters)
+        final Map<String, IndexFeatureStats> usedBuiltInAnalyzers = new HashMap<>();
+            final String type = analysisComponentSettings.get("type");
+            usedBuiltInTokenFilters.keySet().removeAll(tokenFilterSettings.keySet());
+                final String analyzerType = analyzerSetting.get("type", "custom");
+ */
+    public Set<IndexFeatureStats> getUsedCharFilterTypes() {
+        );
+        builder.startObject("analysis");
+        return Collections.unmodifiableSet(new LinkedHashSet<>(list));
+     * Create {@link AnalysisStats} from the given cluster state.
+                if (tokenizer != null) {
+    /**
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+    }
+import org.opensearch.cluster.metadata.MappingMetadata;
+    @Override
+    }
+                        if (analyzerO != null) {
+import org.opensearch.core.common.io.stream.StreamInput;
+     * Return the set of used built-in token filters in the cluster.
+     * Return the set of used built-in tokenizers in the cluster.
+        builder.endObject();
+        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
+import java.util.HashSet;
+    private void toXContentCollection(XContentBuilder builder, Params params, String name, Collection<? extends ToXContent> coll)
+        out.writeCollection(usedTokenFilters);
+        for (IndexMetadata indexMetadata : state.metadata()) {
+    public void writeTo(StreamOutput out) throws IOException {
+    }
+                }
+     */
+import org.opensearch.common.annotation.PublicApi;
+        for (Settings analysisComponentSettings : settings) {
+    }
+ * specific language governing permissions and limitations
+import java.io.IOException;
+            Set<String> indexTokenFilterTypes = new HashSet<>();
+    ) {
+     * Return the set of used char filters in the cluster.
+    public Set<IndexFeatureStats> getUsedBuiltInTokenizers() {
+            for (Settings analyzerSetting : analyzerSettings.values()) {
+                    stats.count++;
+                            final String analyzer = analyzerO.toString();
+                IndexFeatureStats stats = usedAnalyzerTypes.computeIfAbsent(analyzerType, IndexFeatureStats::new);
+    public int hashCode() {
+        Collection<IndexFeatureStats> usedCharFilters,
+        toXContentCollection(builder, params, "built_in_analyzers", usedBuiltInAnalyzers);
+ *
+        this.usedBuiltInCharFilters = sort(usedBuiltInCharFilters);
+                            if (indexAnalyzers.add(analyzer)) {
+            usedCharFilters,
+    /**
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        final Map<String, IndexFeatureStats> usedTokenizerTypes = new HashMap<>();
+ * ownership. Elasticsearch licenses this file to you under
+                    stats = usedBuiltInTokenFilters.computeIfAbsent(filter, IndexFeatureStats::new);
+        this.usedTokenFilters = sort(usedTokenFilters);
+    public static AnalysisStats of(ClusterState state) {
+ * GitHub history for details.
+                MappingVisitor.visitMapping(mappingMetadata.getSourceAsMap(), fieldMapping -> {
+import java.util.HashMap;
+    }
+                    }
+     */
+    @Override
+            && Objects.equals(usedTokenizers, that.usedTokenizers)
+        throws IOException {
+        return new AnalysisStats(
+            Set<String> indexCharFilterTypes = new HashSet<>();
+            aggregateAnalysisTypes(charFilterSettings.values(), usedCharFilterTypes, indexCharFilterTypes);
+    }
+        return builder;
+     */
+ * this work for additional information regarding copyright
+        Map<String, IndexFeatureStats> stats,
+            usedTokenFilters,
+        this.usedBuiltInAnalyzers = sort(usedBuiltInAnalyzers);
+import org.opensearch.core.common.io.stream.Writeable;
+                    stats = usedBuiltInTokenizers.computeIfAbsent(tokenizer, IndexFeatureStats::new);
+        Collection<Settings> settings,
+        usedTokenizers = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
+ *
+        usedBuiltInTokenFilters = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
+        out.writeCollection(usedCharFilters);
+ * Statistics about analysis usage.
+                    for (String key : new String[] { "analyzer", "search_analyzer", "search_quote_analyzer" }) {
+            }
+        Collection<IndexFeatureStats> usedAnalyzers,
+            usedBuiltInAnalyzers
+                if (indexAnalyzerTypes.add(analyzerType)) {
+        final Map<String, IndexFeatureStats> usedBuiltInTokenFilters = new HashMap<>();
+    }
+        list.sort(Comparator.comparing(IndexFeatureStats::getName));
+import org.opensearch.core.xcontent.XContentBuilder;
+        Collection<IndexFeatureStats> usedTokenizers,
+    @Override
+ */
+import org.opensearch.core.common.io.stream.StreamOutput;
+    }
+                            }
+}
+        Collection<IndexFeatureStats> usedTokenFilters,
+                for (String charFilter : analyzerSetting.getAsList("char_filter")) {
+            usedBuiltInCharFilters.keySet().removeAll(charFilterSettings.keySet());
+     */
+ * Licensed to Elasticsearch under one or more contributor
+            usedBuiltInTokenizers.values(),
+ * license agreements. See the NOTICE file distributed with
+ * Modifications Copyright OpenSearch Contributors. See
+    ) {
+ * @opensearch.api
+    public Set<IndexFeatureStats> getUsedTokenFilterTypes() {
+     * Return the set of used analyzers in the cluster.
+            if (mappingMetadata != null) {
+        toXContentCollection(builder, params, "built_in_filters", usedBuiltInTokenFilters);
+ *
+import org.opensearch.core.xcontent.ToXContentFragment;
+        if (o == null || getClass() != o.getClass()) return false;
+ * You may obtain a copy of the License at
+            usedCharFilterTypes.values(),
+        Collection<IndexFeatureStats> usedBuiltInTokenizers,
+import org.opensearch.common.settings.Settings;
+ * SPDX-License-Identifier: Apache-2.0
+            usedBuiltInAnalyzers.values()
+            usedAnalyzerTypes.values(),
+                }
+            usedBuiltInCharFilters,
+    /**
+                s.count++;
+import org.opensearch.cluster.ClusterState;
+import java.util.List;
+                        }
+                        stats.indexCount++;
+                        Object analyzerO = fieldMapping.get(key);
+        );
+        toXContentCollection(builder, params, "filter_types", usedTokenFilters);
+    }
+    public Set<IndexFeatureStats> getUsedAnalyzerTypes() {
+            usedBuiltInCharFilters.values(),
+        usedCharFilters = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
+    public Set<IndexFeatureStats> getUsedTokenizerTypes() {
+            Set<String> indexAnalyzers = new HashSet<>();
+    private final Set<IndexFeatureStats> usedCharFilters, usedTokenizers, usedTokenFilters, usedAnalyzers;
+    }
+     * Return the set of used tokenizers in the cluster.
+            Settings indexSettings = indexMetadata.getSettings();
+            }
+            Map<String, Settings> charFilterSettings = indexSettings.getGroups("index.analysis.char_filter");
+        this.usedBuiltInTokenFilters = sort(usedBuiltInTokenFilters);
+ */
+        if (this == o) return true;
+    }
                     s.indexCount++;
                 }
-            }
-        }
-    }
-
-    private static Set<IndexFeatureStats> sort(Collection<IndexFeatureStats> set) {
         List<IndexFeatureStats> list = new ArrayList<>(set);
-        list.sort(Comparator.comparing(IndexFeatureStats::getName));
-        return Collections.unmodifiableSet(new LinkedHashSet<>(list));
-    }
-
-    private final Set<IndexFeatureStats> usedCharFilters, usedTokenizers, usedTokenFilters, usedAnalyzers;
-    private final Set<IndexFeatureStats> usedBuiltInCharFilters, usedBuiltInTokenizers, usedBuiltInTokenFilters, usedBuiltInAnalyzers;
-
-    AnalysisStats(
-        Collection<IndexFeatureStats> usedCharFilters,
-        Collection<IndexFeatureStats> usedTokenizers,
-        Collection<IndexFeatureStats> usedTokenFilters,
-        Collection<IndexFeatureStats> usedAnalyzers,
-        Collection<IndexFeatureStats> usedBuiltInCharFilters,
-        Collection<IndexFeatureStats> usedBuiltInTokenizers,
-        Collection<IndexFeatureStats> usedBuiltInTokenFilters,
-        Collection<IndexFeatureStats> usedBuiltInAnalyzers
-    ) {
-        this.usedCharFilters = sort(usedCharFilters);
-        this.usedTokenizers = sort(usedTokenizers);
-        this.usedTokenFilters = sort(usedTokenFilters);
-        this.usedAnalyzers = sort(usedAnalyzers);
-        this.usedBuiltInCharFilters = sort(usedBuiltInCharFilters);
-        this.usedBuiltInTokenizers = sort(usedBuiltInTokenizers);
-        this.usedBuiltInTokenFilters = sort(usedBuiltInTokenFilters);
-        this.usedBuiltInAnalyzers = sort(usedBuiltInAnalyzers);
-    }
-
-    public AnalysisStats(StreamInput input) throws IOException {
-        usedCharFilters = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
-        usedTokenizers = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
-        usedTokenFilters = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
-        usedAnalyzers = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
-        usedBuiltInCharFilters = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
-        usedBuiltInTokenizers = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
-        usedBuiltInTokenFilters = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
-        usedBuiltInAnalyzers = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeCollection(usedCharFilters);
-        out.writeCollection(usedTokenizers);
-        out.writeCollection(usedTokenFilters);
-        out.writeCollection(usedAnalyzers);
-        out.writeCollection(usedBuiltInCharFilters);
-        out.writeCollection(usedBuiltInTokenizers);
-        out.writeCollection(usedBuiltInTokenFilters);
-        out.writeCollection(usedBuiltInAnalyzers);
-    }
-
     /**
-     * Return the set of used char filters in the cluster.
-     */
-    public Set<IndexFeatureStats> getUsedCharFilterTypes() {
-        return usedCharFilters;
+                });
     }
-
-    /**
-     * Return the set of used tokenizers in the cluster.
      */
-    public Set<IndexFeatureStats> getUsedTokenizerTypes() {
-        return usedTokenizers;
-    }
-
+                    }
     /**
-     * Return the set of used token filters in the cluster.
-     */
-    public Set<IndexFeatureStats> getUsedTokenFilterTypes() {
-        return usedTokenFilters;
-    }
-
-    /**
-     * Return the set of used analyzers in the cluster.
-     */
-    public Set<IndexFeatureStats> getUsedAnalyzerTypes() {
-        return usedAnalyzers;
-    }
-
-    /**
-     * Return the set of used built-in char filters in the cluster.
-     */
-    public Set<IndexFeatureStats> getUsedBuiltInCharFilters() {
-        return usedBuiltInCharFilters;
-    }
-
-    /**
-     * Return the set of used built-in tokenizers in the cluster.
-     */
-    public Set<IndexFeatureStats> getUsedBuiltInTokenizers() {
+/*
         return usedBuiltInTokenizers;
-    }
-
-    /**
-     * Return the set of used built-in token filters in the cluster.
+                    }
+                    if (indexCharFilters.add(charFilter)) {
+        out.writeCollection(usedBuiltInTokenizers);
+        return usedBuiltInCharFilters;
+/*
      */
-    public Set<IndexFeatureStats> getUsedBuiltInTokenFilters() {
-        return usedBuiltInTokenFilters;
+            Map<String, Settings> tokenizerSettings = indexSettings.getGroups("index.analysis.tokenizer");
+        Collection<IndexFeatureStats> usedBuiltInTokenFilters,
+        return usedCharFilters;
+                    stats = usedBuiltInCharFilters.computeIfAbsent(charFilter, IndexFeatureStats::new);
     }
-
     /**
-     * Return the set of used built-in analyzers in the cluster.
-     */
-    public Set<IndexFeatureStats> getUsedBuiltInAnalyzers() {
-        return usedBuiltInAnalyzers;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        AnalysisStats that = (AnalysisStats) o;
-        return Objects.equals(usedCharFilters, that.usedCharFilters)
-            && Objects.equals(usedTokenizers, that.usedTokenizers)
-            && Objects.equals(usedTokenFilters, that.usedTokenFilters)
-            && Objects.equals(usedAnalyzers, that.usedAnalyzers)
-            && Objects.equals(usedBuiltInCharFilters, that.usedBuiltInCharFilters)
-            && Objects.equals(usedBuiltInTokenizers, that.usedBuiltInTokenizers)
-            && Objects.equals(usedBuiltInTokenFilters, that.usedBuiltInTokenFilters)
-            && Objects.equals(usedBuiltInAnalyzers, that.usedBuiltInAnalyzers);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(
-            usedCharFilters,
-            usedTokenizers,
-            usedTokenFilters,
-            usedAnalyzers,
-            usedBuiltInCharFilters,
-            usedBuiltInTokenizers,
-            usedBuiltInTokenFilters,
-            usedBuiltInAnalyzers
-        );
-    }
-
-    private void toXContentCollection(XContentBuilder builder, Params params, String name, Collection<? extends ToXContent> coll)
-        throws IOException {
-        builder.startArray(name);
-        for (ToXContent toXContent : coll) {
-            toXContent.toXContent(builder, params);
+        out.writeCollection(usedAnalyzers);
+ * compatible open source license.
+                }
+        usedBuiltInCharFilters = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
+        this.usedTokenizers = sort(usedTokenizers);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import java.util.Comparator;
+        usedBuiltInTokenizers = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
+                for (String filter : analyzerSetting.getAsList("filter")) {
         }
-        builder.endArray();
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject("analysis");
-        toXContentCollection(builder, params, "char_filter_types", usedCharFilters);
+import java.util.LinkedHashSet;
+        this.usedBuiltInTokenizers = sort(usedBuiltInTokenizers);
+ *
         toXContentCollection(builder, params, "tokenizer_types", usedTokenizers);
-        toXContentCollection(builder, params, "filter_types", usedTokenFilters);
-        toXContentCollection(builder, params, "analyzer_types", usedAnalyzers);
+                stats.count++;
+    public Set<IndexFeatureStats> getUsedBuiltInCharFilters() {
+        Collection<IndexFeatureStats> usedBuiltInCharFilters,
+            if (type != null) {
+    }
+        out.writeCollection(usedBuiltInAnalyzers);
+                    if (indexTokenizers.add(tokenizer)) {
+    public Set<IndexFeatureStats> getUsedBuiltInAnalyzers() {
+            Map<String, Settings> analyzerSettings = indexSettings.getGroups("index.analysis.analyzer");
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            usedTokenFilterTypes.values(),
+        AnalysisStats that = (AnalysisStats) o;
+        out.writeCollection(usedBuiltInCharFilters);
+    /**
+        for (ToXContent toXContent : coll) {
+            MappingMetadata mappingMetadata = indexMetadata.mapping();
+        this.usedAnalyzers = sort(usedAnalyzers);
+     * Return the set of used built-in char filters in the cluster.
+        Set<String> indexTypes
+public final class AnalysisStats implements ToXContentFragment, Writeable {
+ */
+import java.util.Collections;
+    public boolean equals(Object o) {
+     */
+                IndexFeatureStats s = stats.computeIfAbsent(type, IndexFeatureStats::new);
+            Set<String> indexTokenizerTypes = new HashSet<>();
+        builder.endArray();
+    AnalysisStats(
+                        stats.indexCount++;
         toXContentCollection(builder, params, "built_in_char_filters", usedBuiltInCharFilters);
-        toXContentCollection(builder, params, "built_in_tokenizers", usedBuiltInTokenizers);
-        toXContentCollection(builder, params, "built_in_filters", usedBuiltInTokenFilters);
-        toXContentCollection(builder, params, "built_in_analyzers", usedBuiltInAnalyzers);
-        builder.endObject();
-        return builder;
+    public AnalysisStats(StreamInput input) throws IOException {
+        usedBuiltInAnalyzers = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
+        }
+        return usedBuiltInTokenFilters;
+            && Objects.equals(usedBuiltInTokenizers, that.usedBuiltInTokenizers)
+        out.writeCollection(usedTokenizers);
+                    stats.indexCount++;
+ * the Apache License, Version 2.0 (the "License"); you may
+            usedBuiltInTokenizers,
+        toXContentCollection(builder, params, "analyzer_types", usedAnalyzers);
+import org.opensearch.cluster.metadata.IndexMetadata;
+        return usedTokenFilters;
+            Map<String, Settings> tokenFilterSettings = indexSettings.getGroups("index.analysis.filter");
+                                stats.indexCount++;
+            Set<String> indexAnalyzerTypes = new HashSet<>();
+        toXContentCollection(builder, params, "char_filter_types", usedCharFilters);
+            Set<String> indexTokenizers = new HashSet<>();
+            toXContent.toXContent(builder, params);
+        final Map<String, IndexFeatureStats> usedTokenFilterTypes = new HashMap<>();
+            aggregateAnalysisTypes(tokenFilterSettings.values(), usedTokenFilterTypes, indexTokenFilterTypes);
+/**
+package org.opensearch.action.admin.cluster.stats;
+            && Objects.equals(usedBuiltInTokenFilters, that.usedBuiltInTokenFilters)
     }
-
+/*
+import java.util.Objects;
+@PublicApi(since = "1.0.0")
+            usedBuiltInTokenFilters,
+                    stats.count++;
+            }
+        final Map<String, IndexFeatureStats> usedBuiltInCharFilters = new HashMap<>();
+        final Map<String, IndexFeatureStats> usedCharFilterTypes = new HashMap<>();
+ * not use this file except in compliance with the License.
+     * Return the set of used token filters in the cluster.
+        return Objects.hash(
+        return usedBuiltInAnalyzers;
+    /**
+                }
+import java.util.Collection;
+     * Return the set of used built-in analyzers in the cluster.
+    }
     @Override
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
-    }
-}
+ * software distributed under the License is distributed on an
+            usedAnalyzers,
+            && Objects.equals(usedBuiltInCharFilters, that.usedBuiltInCharFilters)
+            usedTokenizerTypes.values(),
+                String tokenizer = analyzerSetting.get("tokenizer");
+    /**
+            Set<String> indexTokenFilters = new HashSet<>();
+            && Objects.equals(usedBuiltInAnalyzers, that.usedBuiltInAnalyzers);
+            aggregateAnalysisTypes(tokenizerSettings.values(), usedTokenizerTypes, indexTokenizerTypes);
+ * under the License.
+    private static void aggregateAnalysisTypes(
+        builder.startArray(name);
+        usedTokenFilters = Collections.unmodifiableSet(new LinkedHashSet<>(input.readList(IndexFeatureStats::new)));
+    @Override
+                    stats.count++;
+            usedTokenizers,
+     */
+        return usedAnalyzers;
+                    }
+     */
+            && Objects.equals(usedAnalyzers, that.usedAnalyzers)
+        out.writeCollection(usedBuiltInTokenFilters);

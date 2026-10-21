@@ -1,343 +1,301 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.support.single.instance;
-
-import org.opensearch.action.UnavailableShardsException;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.HandledTransportAction;
-import org.opensearch.action.support.TransportIndicesResolvingAction;
-import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.ClusterStateObserver;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.ResolvedIndices;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.ShardIterator;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.AbstractRunnable;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.action.ActionResponse;
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.Writeable;
+                return;
 import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexNotFoundException;
-import org.opensearch.node.NodeClosedException;
-import org.opensearch.tasks.Task;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.threadpool.ThreadPool.Names;
-import org.opensearch.transport.ConnectTransportException;
-import org.opensearch.transport.TransportChannel;
-import org.opensearch.transport.TransportException;
-import org.opensearch.transport.TransportRequestHandler;
-import org.opensearch.transport.TransportRequestOptions;
-import org.opensearch.transport.TransportResponseHandler;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-
-import static org.opensearch.cluster.metadata.IndexNameExpressionResolver.EXCLUDED_DATA_STREAMS_KEY;
-
-/**
- * Base class for a single operation action
- *
- * @opensearch.internal
- */
-public abstract class TransportInstanceSingleOperationAction<
-    Request extends InstanceShardOperationRequest<Request>,
-    Response extends ActionResponse> extends HandledTransportAction<Request, Response> implements TransportIndicesResolvingAction<Request> {
-
-    protected final ThreadPool threadPool;
-    protected final ClusterService clusterService;
-    protected final TransportService transportService;
-    protected final IndexNameExpressionResolver indexNameExpressionResolver;
-
-    final String shardActionName;
-
-    protected TransportInstanceSingleOperationAction(
-        String actionName,
-        ThreadPool threadPool,
-        ClusterService clusterService,
-        TransportService transportService,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        Writeable.Reader<Request> request
-    ) {
-        super(actionName, transportService, actionFilters, request);
-        this.threadPool = threadPool;
-        this.clusterService = clusterService;
-        this.transportService = transportService;
-        this.indexNameExpressionResolver = indexNameExpressionResolver;
-        this.shardActionName = actionName + "[s]";
-        transportService.registerRequestHandler(shardActionName, Names.SAME, request, new ShardTransportHandler());
-    }
-
-    @Override
-    protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
-        new AsyncSingleAction(request, listener).start();
-    }
-
-    @Override
-    public ResolvedIndices resolveIndices(Request request) {
-        if (request.concreteIndex() != null) {
-            return ResolvedIndices.of(request.concreteIndex());
-        } else {
             try {
-                return ResolvedIndices.of(indexNameExpressionResolver.concreteWriteIndex(clusterService.state(), request).getName());
-            } catch (IndexNotFoundException e) {
-                // We just return the original unresolved expression. The error we encountered here will
-                // be encountered again in the doStart() method
-                return ResolvedIndices.of(request.index());
-            }
-        }
-    }
-
-    protected abstract String executor(ShardId shardId);
-
-    protected abstract void shardOperation(Request request, ActionListener<Response> listener);
-
-    protected abstract Response newResponse(StreamInput in) throws IOException;
-
-    protected ClusterBlockException checkGlobalBlock(ClusterState state) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.WRITE);
-    }
-
-    protected ClusterBlockException checkRequestBlock(ClusterState state, Request request) {
-        return state.blocks().indexBlockedException(ClusterBlockLevel.WRITE, request.concreteIndex());
-    }
-
-    /**
-     * Resolves the request. Throws an exception if the request cannot be resolved.
-     */
-    protected abstract void resolveRequest(ClusterState state, Request request);
-
-    protected boolean retryOnFailure(Exception e) {
-        return false;
-    }
-
-    protected TransportRequestOptions transportOptions() {
-        return TransportRequestOptions.EMPTY;
-    }
-
-    /**
-     * Should return an iterator with a single shard!
-     */
-    protected abstract ShardIterator shards(ClusterState clusterState, Request request);
-
-    /**
-     * Asynchronous single action
-     *
-     * @opensearch.internal
-     */
-    class AsyncSingleAction {
-
-        private final ActionListener<Response> listener;
-        private final Request request;
-        private volatile ClusterStateObserver observer;
-        private ShardIterator shardIt;
-
-        AsyncSingleAction(Request request, ActionListener<Response> listener) {
-            this.request = request;
-            this.listener = listener;
-        }
-
-        public void start() {
-            ClusterState state = clusterService.state();
-            this.observer = new ClusterStateObserver(state, clusterService, request.timeout(), logger, threadPool.getThreadContext());
-            doStart(state);
-        }
-
-        protected void doStart(ClusterState clusterState) {
-            try {
-                ClusterBlockException blockException = checkGlobalBlock(clusterState);
-                if (blockException != null) {
-                    if (blockException.retryable()) {
-                        retry(blockException);
-                        return;
                     } else {
-                        throw blockException;
-                    }
                 }
-                try {
-                    request.concreteIndex(indexNameExpressionResolver.concreteWriteIndex(clusterState, request).getName());
-                } catch (IndexNotFoundException e) {
-                    if (request.includeDataStreams() == false && e.getMetadataKeys().contains(EXCLUDED_DATA_STREAMS_KEY)) {
-                        throw new IllegalArgumentException("only write ops with an op_type of create are allowed in data streams");
-                    } else {
-                        throw e;
-                    }
-                }
-                resolveRequest(clusterState, request);
-                blockException = checkRequestBlock(clusterState, request);
-                if (blockException != null) {
-                    if (blockException.retryable()) {
-                        retry(blockException);
-                        return;
-                    } else {
-                        throw blockException;
-                    }
-                }
-                shardIt = shards(clusterState, request);
-            } catch (Exception e) {
-                listener.onFailure(e);
-                return;
-            }
-
-            // no shardIt, might be in the case between index gateway recovery and shardIt initialization
-            if (shardIt.size() == 0) {
-                retry(null);
-                return;
-            }
-
-            // this transport only make sense with an iterator that returns a single shard routing (like primary)
-            assert shardIt.size() == 1;
-
-            ShardRouting shard = shardIt.nextOrNull();
-            assert shard != null;
-
-            if (!shard.active()) {
-                retry(null);
-                return;
-            }
-
-            request.shardId = shardIt.shardId();
-            DiscoveryNode node = clusterState.nodes().get(shard.currentNodeId());
-            transportService.sendRequest(node, shardActionName, request, transportOptions(), new TransportResponseHandler<Response>() {
-
-                @Override
-                public Response read(StreamInput in) throws IOException {
-                    return newResponse(in);
-                }
-
-                @Override
-                public String executor() {
-                    return ThreadPool.Names.SAME;
-                }
-
-                @Override
-                public void handleResponse(Response response) {
-                    listener.onResponse(response);
-                }
-
-                @Override
-                public void handleException(TransportException exp) {
-                    final Throwable cause = exp.unwrapCause();
-                    // if we got disconnected from the node, or the node / shard is not in the right state (being closed)
-                    if (cause instanceof ConnectTransportException || cause instanceof NodeClosedException || retryOnFailure(exp)) {
-                        retry((Exception) cause);
-                    } else {
-                        listener.onFailure(exp);
-                    }
-                }
-            });
-        }
-
-        void retry(@Nullable final Exception failure) {
-            if (observer.isTimedOut()) {
-                // we running as a last attempt after a timeout has happened. don't retry
-                Exception listenFailure = failure;
-                if (listenFailure == null) {
-                    if (shardIt == null) {
-                        listenFailure = new UnavailableShardsException(
-                            request.concreteIndex(),
-                            -1,
-                            "Timeout waiting for [{}], request: {}",
-                            request.timeout(),
-                            actionName
-                        );
-                    } else {
-                        listenFailure = new UnavailableShardsException(
-                            shardIt.shardId(),
-                            "[{}] shardIt, [{}] active : Timeout waiting for [{}], request: {}",
                             shardIt.size(),
-                            shardIt.sizeActive(),
-                            request.timeout(),
-                            actionName
-                        );
-                    }
-                }
-                listener.onFailure(listenFailure);
-                return;
-            }
-
-            observer.waitForNextChange(new ClusterStateObserver.Listener() {
-                @Override
-                public void onNewClusterState(ClusterState state) {
-                    doStart(state);
-                }
-
-                @Override
-                public void onClusterServiceClose() {
-                    listener.onFailure(new NodeClosedException(clusterService.localNode()));
-                }
-
-                @Override
-                public void onTimeout(TimeValue timeout) {
-                    // just to be on the safe side, see if we can start it now?
-                    doStart(observer.setAndGetObservedState());
-                }
-            }, request.timeout());
-        }
-    }
-
-    /**
-     * Transport handler per shard
-     *
-     * @opensearch.internal
-     */
-    private class ShardTransportHandler implements TransportRequestHandler<Request> {
-
-        @Override
-        public void messageReceived(final Request request, final TransportChannel channel, Task task) throws Exception {
+ * this file be licensed under the Apache-2.0 license or a
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                if (blockException != null) {
+                        listenFailure = new UnavailableShardsException(
             threadPool.executor(executor(request.shardId)).execute(new AbstractRunnable() {
-                @Override
-                public void onFailure(Exception e) {
-                    try {
-                        channel.sendResponse(e);
+    }
+                protected void doRun() {
+                    // if we got disconnected from the node, or the node / shard is not in the right state (being closed)
+                    } else {
+import org.opensearch.action.support.HandledTransportAction;
+                            actionName
+                            "[{}] shardIt, [{}] active : Timeout waiting for [{}], request: {}",
+    public ResolvedIndices resolveIndices(Request request) {
+    @Override
+    ) {
+    }
                     } catch (Exception inner) {
-                        inner.addSuppressed(e);
-                        logger.warn("failed to send response for " + shardActionName, inner);
+        this.shardActionName = actionName + "[s]";
+        new AsyncSingleAction(request, listener).start();
+                    return ThreadPool.Names.SAME;
+import org.opensearch.index.IndexNotFoundException;
+                }
+        @Override
+                }
+            ShardRouting shard = shardIt.nextOrNull();
+                return;
+            } catch (Exception e) {
+                @Override
+    protected final ClusterService clusterService;
+            assert shardIt.size() == 1;
+import org.opensearch.action.UnavailableShardsException;
+                return ResolvedIndices.of(indexNameExpressionResolver.concreteWriteIndex(clusterService.state(), request).getName());
+        }
+    @Override
+                @Override
+     *
+        super(actionName, transportService, actionFilters, request);
+     */
+                            "Timeout waiting for [{}], request: {}",
+ * The OpenSearch Contributors require contributions made to
+                            shardIt.sizeActive(),
+        public void start() {
+                        throw blockException;
+        protected void doStart(ClusterState clusterState) {
+                    // just to be on the safe side, see if we can start it now?
+                ClusterBlockException blockException = checkGlobalBlock(clusterState);
+                        retry(blockException);
+import org.opensearch.transport.TransportRequestHandler;
+                    doStart(observer.setAndGetObservedState());
+                        channel.sendResponse(e);
                     }
                 }
-
+    protected abstract void resolveRequest(ClusterState state, Request request);
+import org.opensearch.core.action.ActionResponse;
+    /**
+                    doStart(state);
+        IndexNameExpressionResolver indexNameExpressionResolver,
+ *
+        private final Request request;
+    private class ShardTransportHandler implements TransportRequestHandler<Request> {
+import org.opensearch.core.common.io.stream.Writeable;
+                    if (cause instanceof ConnectTransportException || cause instanceof NodeClosedException || retryOnFailure(exp)) {
+import org.opensearch.transport.TransportChannel;
+                        inner.addSuppressed(e);
+                        );
+            transportService.sendRequest(node, shardActionName, request, transportOptions(), new TransportResponseHandler<Response>() {
+    protected ClusterBlockException checkRequestBlock(ClusterState state, Request request) {
+import org.opensearch.common.Nullable;
+                public String executor() {
+                return ResolvedIndices.of(request.index());
+    /**
+            try {
+                            actionName
+            doStart(state);
+ *
+import org.opensearch.tasks.Task;
+                }
+        AsyncSingleAction(Request request, ActionListener<Response> listener) {
+            if (!shard.active()) {
+                return;
+package org.opensearch.action.support.single.instance;
+            this.listener = listener;
+                    } else {
+import org.opensearch.transport.ConnectTransportException;
+                    listener.onFailure(new NodeClosedException(clusterService.localNode()));
+import static org.opensearch.cluster.metadata.IndexNameExpressionResolver.EXCLUDED_DATA_STREAMS_KEY;
+        }
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import java.io.IOException;
+    Request extends InstanceShardOperationRequest<Request>,
+    protected final IndexNameExpressionResolver indexNameExpressionResolver;
+ * software distributed under the License is distributed on an
                 @Override
-                protected void doRun() {
+                    try {
+            assert shard != null;
+                Exception listenFailure = failure;
+ *
+    final String shardActionName;
+                    }
+import org.opensearch.cluster.routing.ShardRouting;
+ */
+                }
+                public Response read(StreamInput in) throws IOException {
+                        listenFailure = new UnavailableShardsException(
+ * Unless required by applicable law or agreed to in writing,
+                            -1,
+ * the Apache License, Version 2.0 (the "License"); you may
+    protected boolean retryOnFailure(Exception e) {
+    protected ClusterBlockException checkGlobalBlock(ClusterState state) {
+                    }
+    }
+    protected TransportRequestOptions transportOptions() {
+                // We just return the original unresolved expression. The error we encountered here will
+            } catch (IndexNotFoundException e) {
+                        retry(blockException);
+            if (shardIt.size() == 0) {
+        this.transportService = transportService;
+     * Asynchronous single action
+                @Override
+                    if (blockException.retryable()) {
                     shardOperation(request, ActionListener.wrap(channel::sendResponse, this::onFailure));
                 }
+     */
+    protected TransportInstanceSingleOperationAction(
+                    } else {
+                @Override
+    protected abstract void shardOperation(Request request, ActionListener<Response> listener);
+        } else {
+        return false;
+                resolveRequest(clusterState, request);
+                }
+        void retry(@Nullable final Exception failure) {
+                            request.timeout(),
+ * specific language governing permissions and limitations
+        private volatile ClusterStateObserver observer;
+    protected final TransportService transportService;
+/*
+                @Override
+ *
+            // no shardIt, might be in the case between index gateway recovery and shardIt initialization
+import org.opensearch.action.support.TransportIndicesResolvingAction;
+                }
+                listener.onFailure(e);
+import org.opensearch.transport.TransportResponseHandler;
+        this.indexNameExpressionResolver = indexNameExpressionResolver;
+            }
+            this.observer = new ClusterStateObserver(state, clusterService, request.timeout(), logger, threadPool.getThreadContext());
             });
         }
-    }
+                blockException = checkRequestBlock(clusterState, request);
 }
+                } catch (IndexNotFoundException e) {
+                // we running as a last attempt after a timeout has happened. don't retry
+        this.clusterService = clusterService;
+    protected final ThreadPool threadPool;
+            request.shardId = shardIt.shardId();
+                @Override
+        }
+import org.opensearch.threadpool.ThreadPool;
+        ThreadPool threadPool,
+import org.opensearch.transport.TransportException;
+import org.opensearch.cluster.block.ClusterBlockLevel;
+        }
+                }
+     */
+            observer.waitForNextChange(new ClusterStateObserver.Listener() {
+                    listener.onResponse(response);
+                shardIt = shards(clusterState, request);
+                    }
+import org.opensearch.core.action.ActionListener;
+                return;
+            return ResolvedIndices.of(request.concreteIndex());
+import org.opensearch.common.util.concurrent.AbstractRunnable;
+     *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     * Transport handler per shard
+    }
+        Writeable.Reader<Request> request
+                    final Throwable cause = exp.unwrapCause();
+     * @opensearch.internal
+ * SPDX-License-Identifier: Apache-2.0
+    protected abstract String executor(ShardId shardId);
+            if (observer.isTimedOut()) {
+/**
+        ActionFilters actionFilters,
+                    return newResponse(in);
+                        throw new IllegalArgumentException("only write ops with an op_type of create are allowed in data streams");
+                    }
+                        );
+    protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
+                try {
+import org.opensearch.action.support.ActionFilters;
+                    if (request.includeDataStreams() == false && e.getMetadataKeys().contains(EXCLUDED_DATA_STREAMS_KEY)) {
+                if (listenFailure == null) {
+ * ownership. Elasticsearch licenses this file to you under
+import org.opensearch.cluster.metadata.ResolvedIndices;
+        public void messageReceived(final Request request, final TransportChannel channel, Task task) throws Exception {
+            }
+                        return;
+                    }
+ * KIND, either express or implied.  See the License for the
+ * Licensed to Elasticsearch under one or more contributor
+    /**
+                listener.onFailure(listenFailure);
+        String actionName,
+                public void handleResponse(Response response) {
+ * this work for additional information regarding copyright
+ * Modifications Copyright OpenSearch Contributors. See
+                            request.timeout(),
+ * not use this file except in compliance with the License.
+import org.opensearch.cluster.ClusterState;
+    }
+        if (request.concreteIndex() != null) {
+import org.opensearch.cluster.node.DiscoveryNode;
+ */
+                if (blockException != null) {
+ */
+ * under the License.
+            ClusterState state = clusterService.state();
+                public void onClusterServiceClose() {
+    class AsyncSingleAction {
+import org.opensearch.cluster.block.ClusterBlockException;
+            }
+        private final ActionListener<Response> listener;
+                public void onFailure(Exception e) {
+                        return;
+/*
+                        logger.warn("failed to send response for " + shardActionName, inner);
+            this.request = request;
+                    if (blockException.retryable()) {
+                        throw e;
+                    } else {
+            }, request.timeout());
+ * @opensearch.internal
+    }
+                @Override
+                        retry((Exception) cause);
+import org.opensearch.node.NodeClosedException;
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.cluster.service.ClusterService;
+        }
+                public void onNewClusterState(ClusterState state) {
+ * Base class for a single operation action
+    }
+            });
+                        throw blockException;
+ * You may obtain a copy of the License at
+    protected abstract Response newResponse(StreamInput in) throws IOException;
+    protected abstract ShardIterator shards(ClusterState clusterState, Request request);
+ * compatible open source license.
+        TransportService transportService,
+import org.opensearch.transport.TransportRequestOptions;
+            // this transport only make sense with an iterator that returns a single shard routing (like primary)
+        private ShardIterator shardIt;
+                        listener.onFailure(exp);
+     * @opensearch.internal
+        return TransportRequestOptions.EMPTY;
+                // be encountered again in the doStart() method
+                            request.concreteIndex(),
+                public void handleException(TransportException exp) {
+                }
+     * Should return an iterator with a single shard!
+        this.threadPool = threadPool;
+public abstract class TransportInstanceSingleOperationAction<
+import org.opensearch.threadpool.ThreadPool.Names;
+            }
+            }
+                    request.concreteIndex(indexNameExpressionResolver.concreteWriteIndex(clusterState, request).getName());
+                retry(null);
+        transportService.registerRequestHandler(shardActionName, Names.SAME, request, new ShardTransportHandler());
+    }
+        return state.blocks().indexBlockedException(ClusterBlockLevel.WRITE, request.concreteIndex());
+                }
+    /**
+     * Resolves the request. Throws an exception if the request cannot be resolved.
+ * GitHub history for details.
+                    if (shardIt == null) {
+        ClusterService clusterService,
+                retry(null);
+                            shardIt.shardId(),
+                public void onTimeout(TimeValue timeout) {
+ */
+                @Override
+                }
+import org.opensearch.common.unit.TimeValue;
+     */
+        return state.blocks().globalBlockedException(ClusterBlockLevel.WRITE);
+    }
+            DiscoveryNode node = clusterState.nodes().get(shard.currentNodeId());
+import org.opensearch.cluster.routing.ShardIterator;
+import org.opensearch.transport.TransportService;
+    Response extends ActionResponse> extends HandledTransportAction<Request, Response> implements TransportIndicesResolvingAction<Request> {
+/*

@@ -1,194 +1,165 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.arrow.flight.stats;
-
-import org.opensearch.action.FailedNodeException;
-import org.opensearch.action.support.nodes.BaseNodesResponse;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.List;
-
-class FlightStatsResponse extends BaseNodesResponse<FlightNodeStats> implements ToXContentObject {
-
-    public FlightStatsResponse(StreamInput in) throws IOException {
-        super(in);
-    }
-
-    public FlightStatsResponse(ClusterName clusterName, List<FlightNodeStats> nodes, List<FailedNodeException> failures) {
-        super(clusterName, nodes, failures);
-    }
-
-    @Override
-    protected List<FlightNodeStats> readNodesFrom(StreamInput in) throws IOException {
-        return in.readList(FlightNodeStats::new);
-    }
-
-    @Override
-    protected void writeNodesTo(StreamOutput out, List<FlightNodeStats> nodes) throws IOException {
-        out.writeList(nodes);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.field("cluster_name", getClusterName().value());
-
-        builder.startObject("nodes");
-        for (FlightNodeStats nodeStats : getNodes()) {
-            builder.startObject(nodeStats.getNode().getId());
-            builder.field("name", nodeStats.getNode().getName());
-            builder.field(
-                "streamAddress",
-                nodeStats.getNode().getStreamAddress() != null
-                    ? nodeStats.getNode().getStreamAddress().toString()
-                    : nodeStats.getNode().getAddress().toString()
-            );
-            nodeStats.getMetrics().toXContent(builder, params);
-            builder.endObject();
-        }
-        builder.endObject();
-
-        builder.startObject("cluster_stats");
-        aggregateClusterStats(builder, params);
-        builder.endObject();
-
-        builder.endObject();
-        return builder;
-    }
-
-    private void aggregateClusterStats(XContentBuilder builder, Params params) throws IOException {
-        long totalClientCallsStarted = 0;
-        long totalClientCallsCompleted = 0;
-        long totalClientCallDuration = 0;
-        long totalClientRequestBytes = 0;
-
-        long totalClientBatchesRequested = 0;
-        long totalClientBatchesReceived = 0;
-        long totalClientBatchReceivedBytes = 0;
-        long totalClientBatchProcessingTime = 0;
-
-        long totalServerCallsStarted = 0;
-        long totalServerCallsCompleted = 0;
-        long totalServerCallDuration = 0;
-        long totalServerRequestBytes = 0;
-
-        long totalServerBatchesSent = 0;
-        long totalServerBatchSentBytes = 0;
-        long totalServerBatchProcessingTime = 0;
-
-        for (FlightNodeStats nodeStats : getNodes()) {
-            FlightMetrics metrics = nodeStats.getMetrics();
-
-            FlightMetrics.ClientCallMetrics clientCallMetrics = metrics.getClientCallMetrics();
-            totalClientCallsStarted += clientCallMetrics.getStarted();
-            totalClientCallsCompleted += clientCallMetrics.getCompleted();
-            totalClientCallDuration += clientCallMetrics.getDuration().getSum();
-            totalClientRequestBytes += clientCallMetrics.getRequestBytes().getSum();
-
-            FlightMetrics.ClientBatchMetrics clientBatchMetrics = metrics.getClientBatchMetrics();
-            totalClientBatchesRequested += clientBatchMetrics.getBatchesRequested();
-            totalClientBatchesReceived += clientBatchMetrics.getBatchesReceived();
-            totalClientBatchReceivedBytes += clientBatchMetrics.getReceivedBytes().getSum();
-            totalClientBatchProcessingTime += clientBatchMetrics.getProcessingTime().getSum();
-
-            FlightMetrics.ServerCallMetrics serverCallMetrics = metrics.getServerCallMetrics();
-            totalServerCallsStarted += serverCallMetrics.getStarted();
-            totalServerCallsCompleted += serverCallMetrics.getCompleted();
-            totalServerCallDuration += serverCallMetrics.getDuration().getSum();
             totalServerRequestBytes += serverCallMetrics.getRequestBytes().getSum();
-
-            FlightMetrics.ServerBatchMetrics serverBatchMetrics = metrics.getServerBatchMetrics();
-            totalServerBatchesSent += serverBatchMetrics.getBatchesSent();
-            totalServerBatchSentBytes += serverBatchMetrics.getSentBytes().getSum();
-            totalServerBatchProcessingTime += serverBatchMetrics.getProcessingTime().getSum();
-        }
-
-        builder.startObject("client");
-
-        builder.startObject("calls");
-        builder.field("started", totalClientCallsStarted);
-        builder.field("completed", totalClientCallsCompleted);
-        builder.humanReadableField(
-            "duration_nanos",
-            "duration",
-            new TimeValue(totalClientCallDuration, java.util.concurrent.TimeUnit.NANOSECONDS)
-        );
-        if (totalClientCallsCompleted > 0) {
-            long avgDurationNanos = totalClientCallDuration / totalClientCallsCompleted;
-            builder.humanReadableField(
-                "avg_duration_nanos",
-                "avg_duration",
-                new TimeValue(avgDurationNanos, java.util.concurrent.TimeUnit.NANOSECONDS)
-            );
-        }
-        builder.humanReadableField("request_bytes", "request", new ByteSizeValue(totalClientRequestBytes));
-        builder.humanReadableField("response_bytes", "response", new ByteSizeValue(totalClientBatchReceivedBytes));
-        builder.endObject();
-
-        builder.startObject("batches");
-        builder.field("requested", totalClientBatchesRequested);
-        builder.field("received", totalClientBatchesReceived);
-        builder.humanReadableField("received_bytes", "received_size", new ByteSizeValue(totalClientBatchReceivedBytes));
-        if (totalClientBatchesReceived > 0) {
-            long avgProcessingTimeNanos = totalClientBatchProcessingTime / totalClientBatchesReceived;
-            builder.humanReadableField(
-                "avg_processing_time_nanos",
-                "avg_processing_time",
-                new TimeValue(avgProcessingTimeNanos, java.util.concurrent.TimeUnit.NANOSECONDS)
-            );
-        }
-        builder.endObject();
-
-        builder.endObject();
-
-        builder.startObject("server");
-
-        builder.startObject("calls");
-        builder.field("started", totalServerCallsStarted);
         builder.field("completed", totalServerCallsCompleted);
-        builder.humanReadableField(
-            "duration_nanos",
-            "duration",
-            new TimeValue(totalServerCallDuration, java.util.concurrent.TimeUnit.NANOSECONDS)
-        );
-        if (totalServerCallsCompleted > 0) {
-            long avgDurationNanos = totalServerCallDuration / totalServerCallsCompleted;
-            builder.humanReadableField(
-                "avg_duration_nanos",
-                "avg_duration",
-                new TimeValue(avgDurationNanos, java.util.concurrent.TimeUnit.NANOSECONDS)
-            );
-        }
-        builder.humanReadableField("request_bytes", "request", new ByteSizeValue(totalServerRequestBytes));
-        builder.humanReadableField("response_bytes", "response", new ByteSizeValue(totalServerBatchSentBytes));
-        builder.endObject();
-
-        builder.startObject("batches");
-        builder.field("sent", totalServerBatchesSent);
-        builder.humanReadableField("sent_bytes", "sent_size", new ByteSizeValue(totalServerBatchSentBytes));
         if (totalServerBatchesSent > 0) {
-            long avgProcessingTimeNanos = totalServerBatchProcessingTime / totalServerBatchesSent;
-            builder.humanReadableField(
-                "avg_processing_time_nanos",
-                "avg_processing_time",
-                new TimeValue(avgProcessingTimeNanos, java.util.concurrent.TimeUnit.NANOSECONDS)
-            );
+    protected List<FlightNodeStats> readNodesFrom(StreamInput in) throws IOException {
+            totalServerCallDuration += serverCallMetrics.getDuration().getSum();
+        builder.field("completed", totalClientCallsCompleted);
+        long totalClientBatchesReceived = 0;
+        long totalClientRequestBytes = 0;
+        for (FlightNodeStats nodeStats : getNodes()) {
+        );
+        builder.endObject();
+        builder.field("received", totalClientBatchesReceived);
+            "duration_nanos",
+                "avg_duration",
+import org.opensearch.core.common.unit.ByteSizeValue;
         }
+            "duration_nanos",
+    protected void writeNodesTo(StreamOutput out, List<FlightNodeStats> nodes) throws IOException {
+        long totalServerCallsStarted = 0;
+import org.opensearch.core.common.io.stream.StreamOutput;
+        super(in);
+        builder.humanReadableField("received_bytes", "received_size", new ByteSizeValue(totalClientBatchReceivedBytes));
+            builder.humanReadableField(
+        long totalClientCallDuration = 0;
+            long avgProcessingTimeNanos = totalServerBatchProcessingTime / totalServerBatchesSent;
+import org.opensearch.cluster.ClusterName;
+        }
+            builder.field("name", nodeStats.getNode().getName());
+            totalClientCallDuration += clientCallMetrics.getDuration().getSum();
+                "avg_processing_time_nanos",
+            builder.field(
+            builder.humanReadableField(
+            totalServerCallsCompleted += serverCallMetrics.getCompleted();
         builder.endObject();
-
+            builder.endObject();
+        super(clusterName, nodes, failures);
+            totalClientCallsStarted += clientCallMetrics.getStarted();
+        }
+            long avgProcessingTimeNanos = totalClientBatchProcessingTime / totalClientBatchesReceived;
+        }
+        long totalClientBatchesRequested = 0;
+    public FlightStatsResponse(StreamInput in) throws IOException {
+        long totalClientCallsCompleted = 0;
+            builder.humanReadableField(
+        long totalClientBatchProcessingTime = 0;
+            FlightMetrics.ClientBatchMetrics clientBatchMetrics = metrics.getClientBatchMetrics();
+        }
+            );
+                "avg_processing_time",
+            totalClientBatchReceivedBytes += clientBatchMetrics.getReceivedBytes().getSum();
+import java.util.List;
+                nodeStats.getNode().getStreamAddress() != null
+                new TimeValue(avgDurationNanos, java.util.concurrent.TimeUnit.NANOSECONDS)
+        if (totalServerCallsCompleted > 0) {
         builder.endObject();
-    }
 }
+import org.opensearch.core.common.io.stream.StreamInput;
+        if (totalClientBatchesReceived > 0) {
+    @Override
+        long totalClientCallsStarted = 0;
+        builder.humanReadableField("request_bytes", "request", new ByteSizeValue(totalServerRequestBytes));
+            builder.humanReadableField(
+        builder.field("cluster_name", getClusterName().value());
+ * SPDX-License-Identifier: Apache-2.0
+        for (FlightNodeStats nodeStats : getNodes()) {
+        builder.humanReadableField("response_bytes", "response", new ByteSizeValue(totalServerBatchSentBytes));
+            "duration",
+        builder.humanReadableField(
+        long totalClientBatchReceivedBytes = 0;
+import org.opensearch.core.xcontent.XContentBuilder;
+            );
+        builder.endObject();
+                "avg_duration_nanos",
+        long totalServerBatchesSent = 0;
+                    : nodeStats.getNode().getAddress().toString()
+            new TimeValue(totalServerCallDuration, java.util.concurrent.TimeUnit.NANOSECONDS)
+        builder.field("started", totalServerCallsStarted);
+        builder.humanReadableField(
+import org.opensearch.common.unit.TimeValue;
+ */
+    }
+            totalClientBatchesReceived += clientBatchMetrics.getBatchesReceived();
+        builder.humanReadableField("sent_bytes", "sent_size", new ByteSizeValue(totalServerBatchSentBytes));
+                "avg_processing_time",
+    }
+            totalServerBatchSentBytes += serverBatchMetrics.getSentBytes().getSum();
+        builder.startObject("cluster_stats");
+import java.io.IOException;
+            totalClientBatchesRequested += clientBatchMetrics.getBatchesRequested();
+            );
+            totalClientBatchProcessingTime += clientBatchMetrics.getProcessingTime().getSum();
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+import org.opensearch.core.xcontent.ToXContentObject;
+            long avgDurationNanos = totalClientCallDuration / totalClientCallsCompleted;
+        if (totalClientCallsCompleted > 0) {
+            "duration",
+import org.opensearch.action.FailedNodeException;
+        out.writeList(nodes);
+            FlightMetrics.ServerCallMetrics serverCallMetrics = metrics.getServerCallMetrics();
+        builder.field("sent", totalServerBatchesSent);
+        );
+            );
+        return builder;
+        builder.field("requested", totalClientBatchesRequested);
+    }
+                "avg_processing_time_nanos",
+            totalServerBatchProcessingTime += serverBatchMetrics.getProcessingTime().getSum();
+        builder.endObject();
+        builder.endObject();
+                "avg_duration",
+            FlightMetrics.ClientCallMetrics clientCallMetrics = metrics.getClientCallMetrics();
+        long totalServerBatchSentBytes = 0;
+                new TimeValue(avgProcessingTimeNanos, java.util.concurrent.TimeUnit.NANOSECONDS)
+    }
+            );
+                new TimeValue(avgProcessingTimeNanos, java.util.concurrent.TimeUnit.NANOSECONDS)
+            long avgDurationNanos = totalServerCallDuration / totalServerCallsCompleted;
+                    ? nodeStats.getNode().getStreamAddress().toString()
+        aggregateClusterStats(builder, params);
+        builder.startObject("client");
+            FlightMetrics metrics = nodeStats.getMetrics();
+        builder.startObject("nodes");
+        long totalServerRequestBytes = 0;
+            totalClientCallsCompleted += clientCallMetrics.getCompleted();
+            totalServerBatchesSent += serverBatchMetrics.getBatchesSent();
+        }
+class FlightStatsResponse extends BaseNodesResponse<FlightNodeStats> implements ToXContentObject {
+            builder.startObject(nodeStats.getNode().getId());
+        builder.humanReadableField("request_bytes", "request", new ByteSizeValue(totalClientRequestBytes));
+        long totalServerCallsCompleted = 0;
+            nodeStats.getMetrics().toXContent(builder, params);
+                "streamAddress",
+                "avg_duration_nanos",
+        builder.startObject("batches");
+        long totalServerCallDuration = 0;
+ *
+                new TimeValue(avgDurationNanos, java.util.concurrent.TimeUnit.NANOSECONDS)
+    @Override
+/*
+    @Override
+    private void aggregateClusterStats(XContentBuilder builder, Params params) throws IOException {
+            totalServerCallsStarted += serverCallMetrics.getStarted();
+        long totalServerBatchProcessingTime = 0;
+            FlightMetrics.ServerBatchMetrics serverBatchMetrics = metrics.getServerBatchMetrics();
+        builder.startObject("server");
+    }
+        return in.readList(FlightNodeStats::new);
+        builder.field("started", totalClientCallsStarted);
+        builder.endObject();
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        builder.startObject();
+package org.opensearch.arrow.flight.stats;
+    public FlightStatsResponse(ClusterName clusterName, List<FlightNodeStats> nodes, List<FailedNodeException> failures) {
+ * The OpenSearch Contributors require contributions made to
+        builder.startObject("calls");
+        builder.startObject("calls");
+            totalClientRequestBytes += clientCallMetrics.getRequestBytes().getSum();
+        builder.startObject("batches");
+import org.opensearch.action.support.nodes.BaseNodesResponse;
+        builder.endObject();
+            new TimeValue(totalClientCallDuration, java.util.concurrent.TimeUnit.NANOSECONDS)
+        builder.humanReadableField("response_bytes", "response", new ByteSizeValue(totalClientBatchReceivedBytes));
+ * compatible open source license.
+        builder.endObject();

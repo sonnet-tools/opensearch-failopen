@@ -1,248 +1,223 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.transport.netty4.ssl;
-
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.network.NetworkService;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.PageCacheRecycler;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.common.util.net.NetUtils;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
-import org.opensearch.fips.FipsAwareSslProvider;
-import org.opensearch.plugins.SecureTransportSettingsProvider;
-import org.opensearch.plugins.TransportExceptionHandler;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.BouncyCastleThreadFilter;
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.test.transport.StubbableTransport;
-import org.opensearch.transport.AbstractSimpleTransportTestCase;
-import org.opensearch.transport.ConnectTransportException;
-import org.opensearch.transport.ConnectionProfile;
-import org.opensearch.transport.Netty4NioSocketChannel;
-import org.opensearch.transport.NettyAllocator;
-import org.opensearch.transport.SharedGroupFactory;
-import org.opensearch.transport.TcpChannel;
-import org.opensearch.transport.TcpTransport;
-import org.opensearch.transport.TestProfiles;
-import org.opensearch.transport.Transport;
-import org.opensearch.transport.netty4.Netty4TcpChannel;
-
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
-import javax.net.ssl.TrustManagerFactory;
-
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.nio.channels.SocketChannel;
-import java.security.KeyStore;
-import java.util.Collections;
-import java.util.Optional;
-
-import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-
-@ThreadLeakFilters(filters = { BouncyCastleThreadFilter.class })
-public class SimpleSecureNetty4TransportTests extends AbstractSimpleTransportTestCase {
-
-    private static final char[] PASSWORD = "password".toCharArray();
-
-    // Cached contexts to avoid repeated keystore loading and SSL context creation
-    // (especially slow in FIPS mode with BCFKS).
-    private static volatile SslContext cachedClientSslContext;
-    private static volatile SslContext cachedServerSslContext;
-
-    private static final FipsAwareSslProvider<SslContext> serverSslContextProvider = (
-        String keyStoreType,
-        String fileExtension,
-        String jcaProvider,
-        String jsseProvider) -> {
-        if (cachedServerSslContext == null) {
-            synchronized (SimpleSecureNetty4TransportTests.class) {
-                if (cachedServerSslContext == null) {
-                    try {
-                        var keyStore = KeyStore.getInstance(keyStoreType, jcaProvider);
-                        keyStore.load(
-                            SimpleSecureNetty4TransportTests.class.getResourceAsStream("/netty4-server-keystore" + fileExtension),
-                            PASSWORD
-                        );
-                        var keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm(), jsseProvider);
                         keyManagerFactory.init(keyStore, PASSWORD);
-
-                        cachedServerSslContext = SslContextBuilder.forServer(keyManagerFactory).clientAuth(ClientAuth.NONE).build();
-                    } catch (Exception e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-            }
-        }
-        return cachedServerSslContext;
-    };
-
-    private static final FipsAwareSslProvider<SslContext> clientSslContextProvider = (
-        String keyStoreType,
-        String fileExtension,
-        String jcaProvider,
-        String jsseProvider) -> {
-        if (cachedClientSslContext == null) {
-            synchronized (SimpleSecureNetty4TransportTests.class) {
-                if (cachedClientSslContext == null) {
+import org.opensearch.common.settings.Settings;
                     try {
-                        final KeyStore trustStore = KeyStore.getInstance(keyStoreType, jcaProvider);
-                        trustStore.load(
-                            SimpleSecureNetty4TransportTests.class.getResourceAsStream("/netty4-client-truststore" + fileExtension),
-                            PASSWORD
-                        );
-                        var trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm(), jsseProvider);
-                        trustManagerFactory.init(trustStore);
-
-                        cachedClientSslContext = SslContextBuilder.forClient()
-                            .clientAuth(ClientAuth.NONE)
-                            .trustManager(trustManagerFactory)
-                            .build();
-                    } catch (Exception e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-            }
-        }
-        return cachedClientSslContext;
-    };
-
-    @Override
-    protected Transport build(Settings settings, final Version version, ClusterSettings clusterSettings, boolean doHandshake) {
-        NamedWriteableRegistry namedWriteableRegistry = new NamedWriteableRegistry(Collections.emptyList());
-        final SecureTransportSettingsProvider secureTransportSettingsProvider = new SecureTransportSettingsProvider() {
-            @Override
-            public Optional<TransportExceptionHandler> buildServerTransportExceptionHandler(Settings settings, Transport transport) {
-                return Optional.empty();
-            }
-
-            @Override
-            public Optional<SSLEngine> buildSecureServerTransportEngine(Settings settings, Transport transport) throws SSLException {
-                return Optional.of(serverSslContextProvider.create().newEngine(NettyAllocator.getAllocator()));
-            }
-
-            @Override
-            public Optional<SSLEngine> buildSecureClientTransportEngine(Settings settings, String hostname, int port) throws SSLException {
-                return Optional.of(clientSslContextProvider.create().newEngine(NettyAllocator.getAllocator(), hostname, port));
-            }
-        };
-
-        return new SecureNetty4Transport(
-            settings,
-            version,
-            threadPool,
-            new NetworkService(Collections.emptyList()),
-            PageCacheRecycler.NON_RECYCLING_INSTANCE,
-            namedWriteableRegistry,
-            new NoneCircuitBreakerService(),
-            new SharedGroupFactory(settings),
-            secureTransportSettingsProvider,
-            NoopTracer.INSTANCE
-        ) {
-
-            @Override
-            public void executeHandshake(
-                DiscoveryNode node,
-                TcpChannel channel,
-                ConnectionProfile profile,
-                ActionListener<Version> listener
-            ) {
-                if (doHandshake) {
-                    super.executeHandshake(node, channel, profile, listener);
-                } else {
-                    listener.onResponse(version.minimumCompatibilityVersion());
-                }
-            }
-        };
-    }
-
-    public void testConnectException() throws UnknownHostException {
-        try {
-            serviceA.connectToNode(
-                new DiscoveryNode(
-                    "C",
-                    new TransportAddress(InetAddress.getByName("localhost"), 9876),
-                    emptyMap(),
-                    emptySet(),
-                    Version.CURRENT
-                )
-            );
-            fail("Expected ConnectTransportException");
-        } catch (ConnectTransportException e) {
-            assertThat(e.getMessage(), containsString("connect_exception"));
-            assertThat(e.getMessage(), containsString("[127.0.0.1:9876]"));
-        }
-    }
-
-    public void testDefaultKeepAliveSettings() throws IOException {
-        assumeTrue("setting default keepalive options not supported on this platform", (IOUtils.LINUX || IOUtils.MAC_OS_X));
-        try (
-            MockTransportService serviceC = buildService("TS_C", Version.CURRENT, Settings.EMPTY);
-            MockTransportService serviceD = buildService("TS_D", Version.CURRENT, Settings.EMPTY)
-        ) {
-            serviceC.start();
-            serviceC.acceptIncomingRequests();
-            serviceD.start();
-            serviceD.acceptIncomingRequests();
-
-            try (Transport.Connection connection = serviceC.openConnection(serviceD.getLocalDiscoNode(), TestProfiles.LIGHT_PROFILE)) {
-                assertThat(connection, instanceOf(StubbableTransport.WrappedConnection.class));
-                Transport.Connection conn = ((StubbableTransport.WrappedConnection) connection).getConnection();
-                assertThat(conn, instanceOf(TcpTransport.NodeChannels.class));
-                TcpTransport.NodeChannels nodeChannels = (TcpTransport.NodeChannels) conn;
-                for (TcpChannel channel : nodeChannels.getChannels()) {
-                    assertFalse(channel.isServerChannel());
-                    checkDefaultKeepAliveOptions(channel);
-                }
-
-                assertThat(serviceD.getOriginalTransport(), instanceOf(TcpTransport.class));
-                for (TcpChannel channel : getAcceptedChannels((TcpTransport) serviceD.getOriginalTransport())) {
                     assertTrue(channel.isServerChannel());
-                    checkDefaultKeepAliveOptions(channel);
-                }
+import org.opensearch.transport.NettyAllocator;
             }
-        }
+            MockTransportService serviceC = buildService("TS_C", Version.CURRENT, Settings.EMPTY);
+                        final KeyStore trustStore = KeyStore.getInstance(keyStoreType, jcaProvider);
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
+                    } catch (Exception e) {
+                    Version.CURRENT
+        String keyStoreType,
+import static java.util.Collections.emptyMap;
+            new SharedGroupFactory(settings),
     }
-
-    private void checkDefaultKeepAliveOptions(TcpChannel channel) throws IOException {
-        assertThat(channel, instanceOf(Netty4TcpChannel.class));
-        Netty4TcpChannel nettyChannel = (Netty4TcpChannel) channel;
-        assertThat(nettyChannel.getNettyChannel(), instanceOf(Netty4NioSocketChannel.class));
-        Netty4NioSocketChannel netty4NioSocketChannel = (Netty4NioSocketChannel) nettyChannel.getNettyChannel();
-        SocketChannel socketChannel = netty4NioSocketChannel.javaChannel();
+                ActionListener<Version> listener
+                        throw new RuntimeException(e);
+import io.netty.handler.ssl.ClientAuth;
+import java.io.IOException;
         assertThat(socketChannel.supportedOptions(), hasItem(NetUtils.getTcpKeepIdleSocketOptionOrNull()));
-        Integer keepIdle = socketChannel.getOption(NetUtils.getTcpKeepIdleSocketOptionOrNull());
-        assertNotNull(keepIdle);
-        assertThat(keepIdle, lessThanOrEqualTo(500));
-        assertThat(socketChannel.supportedOptions(), hasItem(NetUtils.getTcpKeepIntervalSocketOptionOrNull()));
-        Integer keepInterval = socketChannel.getOption(NetUtils.getTcpKeepIntervalSocketOptionOrNull());
-        assertNotNull(keepInterval);
-        assertThat(keepInterval, lessThanOrEqualTo(500));
+                TcpChannel channel,
+import java.security.KeyStore;
+    // Cached contexts to avoid repeated keystore loading and SSL context creation
+                    emptySet(),
+import org.opensearch.common.util.net.NetUtils;
+        String jsseProvider) -> {
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+                }
+            settings,
+                    }
     }
-
+            try (Transport.Connection connection = serviceC.openConnection(serviceD.getLocalDiscoNode(), TestProfiles.LIGHT_PROFILE)) {
+import static org.hamcrest.Matchers.hasItem;
+        assertThat(keepIdle, lessThanOrEqualTo(500));
+                TcpTransport.NodeChannels nodeChannels = (TcpTransport.NodeChannels) conn;
+/*
+            serviceC.acceptIncomingRequests();
+            @Override
+        Netty4TcpChannel nettyChannel = (Netty4TcpChannel) channel;
+    private static final char[] PASSWORD = "password".toCharArray();
+                } else {
+import org.opensearch.test.BouncyCastleThreadFilter;
+                            SimpleSecureNetty4TransportTests.class.getResourceAsStream("/netty4-server-keystore" + fileExtension),
+            @Override
+        final SecureTransportSettingsProvider secureTransportSettingsProvider = new SecureTransportSettingsProvider() {
+@ThreadLeakFilters(filters = { BouncyCastleThreadFilter.class })
+        if (cachedClientSslContext == null) {
+                        trustManagerFactory.init(trustStore);
+import java.util.Optional;
+        try (
+import org.opensearch.core.common.transport.TransportAddress;
+                            .build();
+                assertThat(connection, instanceOf(StubbableTransport.WrappedConnection.class));
+import org.opensearch.transport.Netty4NioSocketChannel;
+        }
+                            .trustManager(trustManagerFactory)
+import static java.util.Collections.emptySet;
+            }
+                            PASSWORD
+            @Override
+                    new TransportAddress(InetAddress.getByName("localhost"), 9876),
+    protected Transport build(Settings settings, final Version version, ClusterSettings clusterSettings, boolean doHandshake) {
+        ) {
+                assertThat(serviceD.getOriginalTransport(), instanceOf(TcpTransport.class));
+ */
+        assertNotNull(keepIdle);
+                    checkDefaultKeepAliveOptions(channel);
+import org.opensearch.common.settings.ClusterSettings;
+import javax.net.ssl.SSLException;
+import java.net.InetAddress;
+        assertNotNull(keepInterval);
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+        return cachedServerSslContext;
+import org.opensearch.test.transport.StubbableTransport;
+                        cachedClientSslContext = SslContextBuilder.forClient()
+        assertThat(socketChannel.supportedOptions(), hasItem(NetUtils.getTcpKeepIntervalSocketOptionOrNull()));
+        };
+                        );
+import org.opensearch.transport.TestProfiles;
+import org.opensearch.transport.AbstractSimpleTransportTestCase;
+        } catch (ConnectTransportException e) {
+        return cachedClientSslContext;
+            public void executeHandshake(
+                    }
+import org.opensearch.common.network.NetworkService;
+    private void checkDefaultKeepAliveOptions(TcpChannel channel) throws IOException {
+                        var keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm(), jsseProvider);
+                        );
+        String keyStoreType,
+                return Optional.empty();
+                if (cachedClientSslContext == null) {
+        }
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        Integer keepInterval = socketChannel.getOption(NetUtils.getTcpKeepIntervalSocketOptionOrNull());
+            }
+import org.opensearch.transport.ConnectTransportException;
+import org.opensearch.transport.SharedGroupFactory;
+        if (cachedServerSslContext == null) {
+                }
+            fail("Expected ConnectTransportException");
+            PageCacheRecycler.NON_RECYCLING_INSTANCE,
+                        throw new RuntimeException(e);
+                }
+                            .clientAuth(ClientAuth.NONE)
+                ConnectionProfile profile,
+            }
+                            PASSWORD
+import javax.net.ssl.KeyManagerFactory;
+import io.netty.handler.ssl.SslContextBuilder;
+import javax.net.ssl.TrustManagerFactory;
+        Integer keepIdle = socketChannel.getOption(NetUtils.getTcpKeepIdleSocketOptionOrNull());
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
+import org.opensearch.Version;
+                new DiscoveryNode(
+import io.netty.handler.ssl.SslContext;
+    private static volatile SslContext cachedServerSslContext;
+import static org.hamcrest.Matchers.containsString;
+            public Optional<SSLEngine> buildSecureClientTransportEngine(Settings settings, String hostname, int port) throws SSLException {
+        NamedWriteableRegistry namedWriteableRegistry = new NamedWriteableRegistry(Collections.emptyList());
+            @Override
+            namedWriteableRegistry,
+import org.opensearch.transport.Transport;
+    }
+import java.util.Collections;
+        Netty4NioSocketChannel netty4NioSocketChannel = (Netty4NioSocketChannel) nettyChannel.getNettyChannel();
+ * compatible open source license.
+            threadPool,
+            synchronized (SimpleSecureNetty4TransportTests.class) {
+                if (doHandshake) {
+import org.opensearch.transport.TcpChannel;
+        SocketChannel socketChannel = netty4NioSocketChannel.javaChannel();
+import org.opensearch.transport.TcpTransport;
+import java.nio.channels.SocketChannel;
+import org.opensearch.transport.netty4.Netty4TcpChannel;
+import java.net.UnknownHostException;
+            public Optional<TransportExceptionHandler> buildServerTransportExceptionHandler(Settings settings, Transport transport) {
+                        cachedServerSslContext = SslContextBuilder.forServer(keyManagerFactory).clientAuth(ClientAuth.NONE).build();
+                }
+package org.opensearch.transport.netty4.ssl;
+                if (cachedServerSslContext == null) {
+        };
+        String fileExtension,
+                for (TcpChannel channel : nodeChannels.getChannels()) {
+                            SimpleSecureNetty4TransportTests.class.getResourceAsStream("/netty4-client-truststore" + fileExtension),
+            serviceA.connectToNode(
+    };
+            serviceD.acceptIncomingRequests();
+        }
+                    try {
+            public Optional<SSLEngine> buildSecureServerTransportEngine(Settings settings, Transport transport) throws SSLException {
+                    checkDefaultKeepAliveOptions(channel);
+            synchronized (SimpleSecureNetty4TransportTests.class) {
+import org.opensearch.cluster.node.DiscoveryNode;
+                        keyStore.load(
+            new NetworkService(Collections.emptyList()),
+            }
+    private static final FipsAwareSslProvider<SslContext> serverSslContextProvider = (
+    @Override
+import org.opensearch.fips.FipsAwareSslProvider;
+            version,
+            );
+            }
+            MockTransportService serviceD = buildService("TS_D", Version.CURRENT, Settings.EMPTY)
+public class SimpleSecureNetty4TransportTests extends AbstractSimpleTransportTestCase {
+            assertThat(e.getMessage(), containsString("[127.0.0.1:9876]"));
+        assertThat(keepInterval, lessThanOrEqualTo(500));
 }
+    private static volatile SslContext cachedClientSslContext;
+                    assertFalse(channel.isServerChannel());
+                        var keyStore = KeyStore.getInstance(keyStoreType, jcaProvider);
+            assertThat(e.getMessage(), containsString("connect_exception"));
+            secureTransportSettingsProvider,
+            new NoneCircuitBreakerService(),
+import org.opensearch.plugins.TransportExceptionHandler;
+import org.opensearch.common.util.PageCacheRecycler;
+    };
+import org.opensearch.common.util.io.IOUtils;
+                for (TcpChannel channel : getAcceptedChannels((TcpTransport) serviceD.getOriginalTransport())) {
+            ) {
+        assertThat(channel, instanceOf(Netty4TcpChannel.class));
+                    } catch (Exception e) {
+import org.opensearch.plugins.SecureTransportSettingsProvider;
+                        trustStore.load(
+                    listener.onResponse(version.minimumCompatibilityVersion());
+                return Optional.of(clientSslContextProvider.create().newEngine(NettyAllocator.getAllocator(), hostname, port));
+import static org.hamcrest.Matchers.instanceOf;
+            serviceC.start();
+        assertThat(nettyChannel.getNettyChannel(), instanceOf(Netty4NioSocketChannel.class));
+    // (especially slow in FIPS mode with BCFKS).
+ *
+                return Optional.of(serverSslContextProvider.create().newEngine(NettyAllocator.getAllocator()));
+        String jcaProvider,
+                Transport.Connection conn = ((StubbableTransport.WrappedConnection) connection).getConnection();
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+        String jsseProvider) -> {
+    public void testDefaultKeepAliveSettings() throws IOException {
+                )
+                    super.executeHandshake(node, channel, profile, listener);
+                    "C",
+                    emptyMap(),
+    }
+        return new SecureNetty4Transport(
+import org.opensearch.test.transport.MockTransportService;
+    public void testConnectException() throws UnknownHostException {
+import org.opensearch.transport.ConnectionProfile;
+    private static final FipsAwareSslProvider<SslContext> clientSslContextProvider = (
+import org.opensearch.core.action.ActionListener;
+                DiscoveryNode node,
+        String jcaProvider,
+        String fileExtension,
+        assumeTrue("setting default keepalive options not supported on this platform", (IOUtils.LINUX || IOUtils.MAC_OS_X));
+        try {
+import javax.net.ssl.SSLEngine;
+                        var trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm(), jsseProvider);
+        }
+            serviceD.start();
+        ) {
+ * The OpenSearch Contributors require contributions made to
+                assertThat(conn, instanceOf(TcpTransport.NodeChannels.class));
+            NoopTracer.INSTANCE
+            }
+                }

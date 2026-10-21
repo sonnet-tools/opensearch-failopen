@@ -1,870 +1,781 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.bulk;
-
-import org.opensearch.Version;
-import org.opensearch.action.DocWriteRequest;
-import org.opensearch.action.admin.indices.create.CreateIndexResponse;
-import org.opensearch.action.index.IndexAction;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.ActionTestUtils;
-import org.opensearch.action.support.AutoCreateIndex;
-import org.opensearch.action.update.UpdateRequest;
-import org.opensearch.cluster.ClusterChangedEvent;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateApplier;
-import org.opensearch.cluster.metadata.AliasMetadata;
-import org.opensearch.cluster.metadata.ComposableIndexTemplate;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.IndexTemplateMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.metadata.MetadataIndexTemplateService;
-import org.opensearch.cluster.metadata.Template;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.collect.MapBuilder;
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.AtomicArray;
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.index.IndexNotFoundException;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.IndexingPressureService;
-import org.opensearch.indices.SystemIndices;
-import org.opensearch.ingest.IngestService;
-import org.opensearch.tasks.Task;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.ClusterServiceUtils;
-import org.opensearch.test.OpenSearchSingleNodeTestCase;
-import org.opensearch.test.VersionUtils;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.threadpool.ThreadPool.Names;
-import org.opensearch.transport.TransportResponseHandler;
-import org.opensearch.transport.TransportService;
-import org.junit.Before;
-
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiConsumer;
-
-import org.mockito.ArgumentCaptor;
-
-import static java.util.Collections.emptyMap;
-import static org.opensearch.ingest.IngestServiceTests.createIngestServiceWithProcessors;
-import static org.hamcrest.Matchers.containsString;
+                                .build()
+        assertTrue(action.isExecuted);
+        Exception exception = new Exception("fake exception");
+        assertFalse(action.isExecuted); // no local index execution
+        @Override
 import static org.hamcrest.Matchers.sameInstance;
-import static org.mockito.Answers.RETURNS_MOCKS;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyInt;
-import static org.mockito.Mockito.anyString;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
-
-public class TransportBulkActionIngestTests extends OpenSearchSingleNodeTestCase {
-
-    /**
-     * Index for which mock settings contain a default pipeline.
-     */
-    private static final String WITH_DEFAULT_PIPELINE = "index_with_default_pipeline";
-    private static final String WITH_DEFAULT_PIPELINE_ALIAS = "alias_for_index_with_default_pipeline";
-
-    private static final Settings SETTINGS = Settings.builder().put(AutoCreateIndex.AUTO_CREATE_INDEX_SETTING.getKey(), true).build();
-
-    private static final Thread DUMMY_WRITE_THREAD = new Thread(ThreadPool.Names.WRITE);
-
-    /** Services needed by bulk action */
-    TransportService transportService;
-    ClusterService clusterService;
-    IngestService ingestService;
-    ThreadPool threadPool;
-
-    /** Arguments to callbacks we want to capture, but which require generics, so we must use @Captor */
-    ArgumentCaptor<BiConsumer<Integer, Exception>> failureHandler;
-    ArgumentCaptor<BiConsumer<Thread, Exception>> completionHandler;
-    ArgumentCaptor<TransportResponseHandler<BulkResponse>> remoteResponseHandler;
-    ArgumentCaptor<Iterable<DocWriteRequest<?>>> bulkDocsItr;
-
-    /** The actual action we want to test, with real indexing mocked */
-    TestTransportBulkAction action;
-
-    /** Single item bulk write action that wraps index requests */
-    TestSingleItemBulkWriteAction singleItemBulkWriteAction;
-
-    /** True if the next call to the index action should act as an ingest node */
-    boolean localIngest;
-
-    /** The nodes that forwarded index requests should be cycled through. */
-    DiscoveryNodes nodes;
-    DiscoveryNode remoteNode1;
-    DiscoveryNode remoteNode2;
-
-    /** A subclass of the real bulk action to allow skipping real bulk indexing, and marking when it would have happened. */
-    class TestTransportBulkAction extends TransportBulkAction {
-        boolean isExecuted = false; // set when the "real" bulk execution happens
-
-        boolean needToCheck; // pluggable return value for `needToCheck`
-
-        boolean indexCreated = true; // If set to false, will be set to true by call to createIndex
-
-        TestTransportBulkAction() {
-            super(
-                threadPool,
-                transportService,
-                clusterService,
-                ingestService,
-                null,
-                null,
-                new ActionFilters(Collections.emptySet()),
-                null,
-                new AutoCreateIndex(
-                    SETTINGS,
-                    new ClusterSettings(SETTINGS, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
-                    new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
-                    new SystemIndices(emptyMap())
-                ),
-                new IndexingPressureService(
-                    SETTINGS,
-                    ClusterServiceUtils.createClusterService(
-                        SETTINGS,
-                        new ClusterSettings(SETTINGS, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
-                        null
-                    )
-                ),
-                null,
-                new SystemIndices(emptyMap()),
-                NoopTracer.INSTANCE
-            );
-        }
-
-        @Override
-        protected boolean needToCheck() {
-            return needToCheck;
-        }
-
-        @Override
-        void executeBulk(
-            Task task,
-            final BulkRequest bulkRequest,
-            final long startTimeNanos,
-            final ActionListener<BulkResponse> listener,
-            final AtomicArray<BulkItemResponse> responses,
-            Map<String, IndexNotFoundException> indicesThatCannotBeCreated
-        ) {
-            assertTrue(indexCreated);
-            isExecuted = true;
-        }
-
-        @Override
-        void createIndex(String index, TimeValue timeout, Version minNodeVersion, ActionListener<CreateIndexResponse> listener) {
-            indexCreated = true;
-            listener.onResponse(null);
-        }
-    }
-
-    class TestSingleItemBulkWriteAction extends TransportSingleItemBulkWriteAction<IndexRequest, IndexResponse> {
-
-        TestSingleItemBulkWriteAction(TestTransportBulkAction bulkAction) {
-            super(
-                IndexAction.NAME,
-                TransportBulkActionIngestTests.this.transportService,
-                new ActionFilters(Collections.emptySet()),
-                IndexRequest::new,
-                bulkAction,
-                new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY))
-            );
-        }
-    }
-
-    @Before
-    public void setupAction() {
-        // initialize captors, which must be members to use @Capture because of generics
-        threadPool = mock(ThreadPool.class);
-        final ExecutorService direct = OpenSearchExecutors.newDirectExecutorService();
-        when(threadPool.executor(anyString())).thenReturn(direct);
-
-        bulkDocsItr = ArgumentCaptor.forClass(Iterable.class);
-        failureHandler = ArgumentCaptor.forClass(BiConsumer.class);
-        completionHandler = ArgumentCaptor.forClass(BiConsumer.class);
-        remoteResponseHandler = ArgumentCaptor.forClass(TransportResponseHandler.class);
-
-        // setup services that will be called by action
-        transportService = mock(TransportService.class, RETURNS_MOCKS);
-        clusterService = mock(ClusterService.class);
-        localIngest = true;
-        // setup nodes for local and remote
-        DiscoveryNode localNode = mock(DiscoveryNode.class);
-        when(localNode.isIngestNode()).thenAnswer(stub -> localIngest);
-        when(clusterService.localNode()).thenReturn(localNode);
-        remoteNode1 = mock(DiscoveryNode.class);
-        remoteNode2 = mock(DiscoveryNode.class);
-        nodes = mock(DiscoveryNodes.class);
-        final Map<String, DiscoveryNode> ingestNodes = Map.of("node1", remoteNode1, "node2", remoteNode2);
-        when(nodes.getIngestNodes()).thenReturn(ingestNodes);
-        when(nodes.getMinNodeVersion()).thenReturn(VersionUtils.randomCompatibleVersion(random(), Version.CURRENT));
-        ClusterState state = mock(ClusterState.class);
-        when(state.getNodes()).thenReturn(nodes);
-        Metadata metadata = Metadata.builder()
-            .indices(
-                new HashMap<>(
-                    MapBuilder.<String, IndexMetadata>newMapBuilder()
-                        .put(
-                            WITH_DEFAULT_PIPELINE,
-                            IndexMetadata.builder(WITH_DEFAULT_PIPELINE)
-                                .settings(
-                                    settings(Version.CURRENT).put(IndexSettings.DEFAULT_PIPELINE.getKey(), "default_pipeline").build()
-                                )
-                                .putAlias(AliasMetadata.builder(WITH_DEFAULT_PIPELINE_ALIAS).build())
-                                .numberOfShards(1)
-                                .numberOfReplicas(1)
-                                .build()
-                        )
-                        .put(
-                            ".system",
-                            IndexMetadata.builder(".system")
-                                .settings(settings(Version.CURRENT))
-                                .system(true)
-                                .numberOfShards(1)
-                                .numberOfReplicas(0)
-                                .build()
-                        )
-                        .map()
-                )
-            )
-            .build();
-        when(state.getMetadata()).thenReturn(metadata);
-        when(state.metadata()).thenReturn(metadata);
-        when(clusterService.state()).thenReturn(state);
-        doAnswer(invocation -> {
-            ClusterChangedEvent event = mock(ClusterChangedEvent.class);
-            when(event.state()).thenReturn(state);
-            ((ClusterStateApplier) invocation.getArguments()[0]).applyClusterState(event);
-            return null;
-        }).when(clusterService).addStateApplier(any(ClusterStateApplier.class));
-        // setup the mocked ingest service for capturing calls
-        ingestService = spy(createIngestServiceWithProcessors(Collections.emptyMap()));
-        doNothing().when(ingestService).executeBulkRequest(anyInt(), any(), any(), any(), any(), anyString());
-        action = new TestTransportBulkAction();
-        singleItemBulkWriteAction = new TestSingleItemBulkWriteAction(action);
+        assertFalse(failureCalled.get());
+    public void testFindDefaultPipelineFromV2TemplateMatch() throws Exception {
         reset(transportService); // call on construction of action
-    }
-
-    public void testIngestSkipped() throws Exception {
-        BulkRequest bulkRequest = new BulkRequest();
-        IndexRequest indexRequest = new IndexRequest("index").id("id");
-        indexRequest.source(emptyMap());
-        bulkRequest.add(indexRequest);
-        action.execute(null, bulkRequest, ActionListener.wrap(response -> {}, exception -> { throw new AssertionError(exception); }));
-        assertTrue(action.isExecuted);
-        verify(ingestService, times(1)).resolvePipelines(any(), any(), any());
-        verifyNoMoreInteractions(ingestService);
-    }
-
-    public void testSingleItemBulkActionIngestSkipped() throws Exception {
-        IndexRequest indexRequest = new IndexRequest("index").id("id");
-        indexRequest.source(emptyMap());
-        singleItemBulkWriteAction.execute(null, indexRequest, ActionListener.wrap(response -> {}, exception -> {
-            throw new AssertionError(exception);
-        }));
-        assertTrue(action.isExecuted);
-        verify(ingestService, times(1)).resolvePipelines(any(), any(), any());
-        verifyNoMoreInteractions(ingestService);
-    }
-
-    public void testIngestLocal() throws Exception {
-        Exception exception = new Exception("fake exception");
-        BulkRequest bulkRequest = new BulkRequest();
-        IndexRequest indexRequest1 = new IndexRequest("index").id("id");
-        indexRequest1.source(emptyMap());
-        indexRequest1.setPipeline("testpipeline");
-        IndexRequest indexRequest2 = new IndexRequest("index").id("id");
-        indexRequest2.source(emptyMap());
-        indexRequest2.setPipeline("testpipeline");
-        bulkRequest.add(indexRequest1);
-        bulkRequest.add(indexRequest2);
-
-        AtomicBoolean responseCalled = new AtomicBoolean(false);
-        AtomicBoolean failureCalled = new AtomicBoolean(false);
-        action.execute(null, bulkRequest, ActionListener.wrap(response -> {
-            BulkItemResponse itemResponse = response.iterator().next();
-            assertThat(itemResponse.getFailure().getMessage(), containsString("fake exception"));
-            responseCalled.set(true);
-        }, e -> {
-            assertThat(e, sameInstance(exception));
-            failureCalled.set(true);
-        }));
-
-        // check failure works, and passes through to the listener
-        assertFalse(action.isExecuted); // haven't executed yet
-        assertFalse(responseCalled.get());
-        assertFalse(failureCalled.get());
-        verify(ingestService).executeBulkRequest(
-            eq(bulkRequest.numberOfActions()),
-            bulkDocsItr.capture(),
-            failureHandler.capture(),
-            completionHandler.capture(),
-            any(),
-            eq(Names.WRITE)
-        );
-        completionHandler.getValue().accept(null, exception);
-        assertTrue(failureCalled.get());
-
-        // now check success
-        Iterator<DocWriteRequest<?>> req = bulkDocsItr.getValue().iterator();
-        failureHandler.getValue().accept(0, exception); // have an exception for our one index request
-        indexRequest2.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
-        completionHandler.getValue().accept(DUMMY_WRITE_THREAD, null);
-        assertTrue(action.isExecuted);
-        assertFalse(responseCalled.get()); // listener would only be called by real index action, not our mocked one
-        verifyNoInteractions(transportService);
-    }
-
-    public void testSingleItemBulkActionIngestLocal() throws Exception {
-        Exception exception = new Exception("fake exception");
-        IndexRequest indexRequest = new IndexRequest("index").id("id");
-        indexRequest.source(emptyMap());
-        indexRequest.setPipeline("testpipeline");
-        AtomicBoolean responseCalled = new AtomicBoolean(false);
-        AtomicBoolean failureCalled = new AtomicBoolean(false);
-        singleItemBulkWriteAction.execute(null, indexRequest, ActionListener.wrap(response -> { responseCalled.set(true); }, e -> {
-            assertThat(e, sameInstance(exception));
-            failureCalled.set(true);
-        }));
-
-        // check failure works, and passes through to the listener
-        assertFalse(action.isExecuted); // haven't executed yet
-        assertFalse(responseCalled.get());
-        assertFalse(failureCalled.get());
-        verify(ingestService).executeBulkRequest(
+            Map<String, IndexNotFoundException> indicesThatCannotBeCreated
             eq(1),
-            bulkDocsItr.capture(),
-            failureHandler.capture(),
-            completionHandler.capture(),
-            any(),
-            eq(Names.WRITE)
-        );
-        completionHandler.getValue().accept(null, exception);
-        assertTrue(failureCalled.get());
-
-        // now check success
-        indexRequest.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
-        completionHandler.getValue().accept(DUMMY_WRITE_THREAD, null);
-        assertTrue(action.isExecuted);
-        assertFalse(responseCalled.get()); // listener would only be called by real index action, not our mocked one
-        verifyNoInteractions(transportService);
-    }
-
-    public void testIngestSystemLocal() throws Exception {
-        Exception exception = new Exception("fake exception");
-        BulkRequest bulkRequest = new BulkRequest();
-        IndexRequest indexRequest1 = new IndexRequest(".system").id("id");
-        indexRequest1.source(emptyMap());
-        indexRequest1.setPipeline("testpipeline");
-        IndexRequest indexRequest2 = new IndexRequest(".system").id("id");
-        indexRequest2.source(emptyMap());
-        indexRequest2.setPipeline("testpipeline");
-        bulkRequest.add(indexRequest1);
-        bulkRequest.add(indexRequest2);
-
-        AtomicBoolean responseCalled = new AtomicBoolean(false);
-        AtomicBoolean failureCalled = new AtomicBoolean(false);
-        ActionTestUtils.execute(action, null, bulkRequest, ActionListener.wrap(response -> {
-            BulkItemResponse itemResponse = response.iterator().next();
-            assertThat(itemResponse.getFailure().getMessage(), containsString("fake exception"));
-            responseCalled.set(true);
-        }, e -> {
-            assertThat(e, sameInstance(exception));
-            failureCalled.set(true);
-        }));
-
-        // check failure works, and passes through to the listener
-        assertFalse(action.isExecuted); // haven't executed yet
-        assertFalse(responseCalled.get());
-        assertFalse(failureCalled.get());
-        verify(ingestService).executeBulkRequest(
-            eq(bulkRequest.numberOfActions()),
-            bulkDocsItr.capture(),
-            failureHandler.capture(),
-            completionHandler.capture(),
-            any(),
-            eq(Names.SYSTEM_WRITE)
-        );
-        completionHandler.getValue().accept(null, exception);
-        assertTrue(failureCalled.get());
-
-        // now check success
-        Iterator<DocWriteRequest<?>> req = bulkDocsItr.getValue().iterator();
-        failureHandler.getValue().accept(0, exception); // have an exception for our one index request
-        indexRequest2.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
-        completionHandler.getValue().accept(DUMMY_WRITE_THREAD, null);
-        assertTrue(action.isExecuted);
-        assertFalse(responseCalled.get()); // listener would only be called by real index action, not our mocked one
-        verifyNoInteractions(transportService);
-    }
-
-    public void testIngestForward() throws Exception {
-        localIngest = false;
-        BulkRequest bulkRequest = new BulkRequest();
-        IndexRequest indexRequest = new IndexRequest("index").id("id");
         indexRequest.source(emptyMap());
-        indexRequest.setPipeline("testpipeline");
-        bulkRequest.add(indexRequest);
-        BulkResponse bulkResponse = mock(BulkResponse.class);
-        AtomicBoolean responseCalled = new AtomicBoolean(false);
-        ActionListener<BulkResponse> listener = ActionListener.wrap(response -> {
-            responseCalled.set(true);
-            assertSame(bulkResponse, response);
-        }, e -> { throw new AssertionError(e); });
-        action.execute(null, bulkRequest, listener);
-
         // should not have executed ingest locally
-        verify(ingestService, never()).executeBulkRequest(anyInt(), any(), any(), any(), any(), any());
-        // but instead should have sent to a remote node with the transport service
-        ArgumentCaptor<DiscoveryNode> node = ArgumentCaptor.forClass(DiscoveryNode.class);
-        verify(transportService).sendRequest(node.capture(), eq(BulkAction.NAME), any(), remoteResponseHandler.capture());
-        boolean usedNode1 = node.getValue() == remoteNode1; // make sure we used one of the nodes
-        if (usedNode1 == false) {
-            assertSame(remoteNode2, node.getValue());
-        }
-        assertFalse(action.isExecuted); // no local index execution
-        assertFalse(responseCalled.get()); // listener not called yet
-
-        remoteResponseHandler.getValue().handleResponse(bulkResponse); // call the listener for the remote node
-        assertTrue(responseCalled.get()); // now the listener we passed should have been delegated to by the remote listener
-        assertFalse(action.isExecuted); // still no local index execution
-
-        // now make sure ingest nodes are rotated through with a subsequent request
-        reset(transportService);
-        action.execute(null, bulkRequest, listener);
-        verify(transportService).sendRequest(node.capture(), eq(BulkAction.NAME), any(), remoteResponseHandler.capture());
-        if (usedNode1) {
-            assertSame(remoteNode2, node.getValue());
-        } else {
-            assertSame(remoteNode1, node.getValue());
-        }
-    }
-
-    public void testSingleItemBulkActionIngestForward() throws Exception {
-        localIngest = false;
-        IndexRequest indexRequest = new IndexRequest("index").id("id");
-        indexRequest.source(emptyMap());
-        indexRequest.setPipeline("testpipeline");
-        IndexResponse indexResponse = mock(IndexResponse.class);
-        AtomicBoolean responseCalled = new AtomicBoolean(false);
-        ActionListener<IndexResponse> listener = ActionListener.wrap(response -> {
-            responseCalled.set(true);
-            assertSame(indexResponse, response);
-        }, e -> { throw new AssertionError(e); });
-        singleItemBulkWriteAction.execute(null, indexRequest, listener);
-
-        // should not have executed ingest locally
-        verify(ingestService, never()).executeBulkRequest(anyInt(), any(), any(), any(), any(), any());
-        // but instead should have sent to a remote node with the transport service
-        ArgumentCaptor<DiscoveryNode> node = ArgumentCaptor.forClass(DiscoveryNode.class);
-        verify(transportService).sendRequest(node.capture(), eq(BulkAction.NAME), any(), remoteResponseHandler.capture());
-        boolean usedNode1 = node.getValue() == remoteNode1; // make sure we used one of the nodes
-        if (usedNode1 == false) {
-            assertSame(remoteNode2, node.getValue());
-        }
-        assertFalse(action.isExecuted); // no local index execution
-        assertFalse(responseCalled.get()); // listener not called yet
-
-        BulkItemResponse itemResponse = new BulkItemResponse(0, DocWriteRequest.OpType.CREATE, indexResponse);
-        BulkItemResponse[] bulkItemResponses = new BulkItemResponse[1];
-        bulkItemResponses[0] = itemResponse;
-        remoteResponseHandler.getValue().handleResponse(new BulkResponse(bulkItemResponses, 0)); // call the listener for the remote node
-        assertTrue(responseCalled.get()); // now the listener we passed should have been delegated to by the remote listener
-        assertFalse(action.isExecuted); // still no local index execution
-
-        // now make sure ingest nodes are rotated through with a subsequent request
-        reset(transportService);
-        singleItemBulkWriteAction.execute(null, indexRequest, listener);
-        verify(transportService).sendRequest(node.capture(), eq(BulkAction.NAME), any(), remoteResponseHandler.capture());
-        if (usedNode1) {
-            assertSame(remoteNode2, node.getValue());
-        } else {
-            assertSame(remoteNode1, node.getValue());
-        }
-    }
-
-    public void testUseDefaultPipeline() throws Exception {
-        validateDefaultPipeline(new IndexRequest(WITH_DEFAULT_PIPELINE).id("id"));
-    }
-
-    public void testUseDefaultPipelineWithAlias() throws Exception {
-        validateDefaultPipeline(new IndexRequest(WITH_DEFAULT_PIPELINE_ALIAS).id("id"));
-    }
-
-    public void testUseDefaultPipelineWithBulkUpsert() throws Exception {
-        String indexRequestName = randomFrom(new String[] { null, WITH_DEFAULT_PIPELINE, WITH_DEFAULT_PIPELINE_ALIAS });
-        validatePipelineWithBulkUpsert(indexRequestName, WITH_DEFAULT_PIPELINE);
-    }
-
-    public void testUseDefaultPipelineWithBulkUpsertWithAlias() throws Exception {
-        String indexRequestName = randomFrom(new String[] { null, WITH_DEFAULT_PIPELINE, WITH_DEFAULT_PIPELINE_ALIAS });
-        validatePipelineWithBulkUpsert(indexRequestName, WITH_DEFAULT_PIPELINE_ALIAS);
-    }
-
-    private void validatePipelineWithBulkUpsert(@Nullable String indexRequestIndexName, String updateRequestIndexName) throws Exception {
-        Exception exception = new Exception("fake exception");
-        BulkRequest bulkRequest = new BulkRequest();
-        IndexRequest indexRequest1 = new IndexRequest(indexRequestIndexName).id("id1").source(emptyMap());
-        IndexRequest indexRequest2 = new IndexRequest(indexRequestIndexName).id("id2").source(emptyMap());
-        IndexRequest indexRequest3 = new IndexRequest(indexRequestIndexName).id("id3").source(emptyMap());
-
-        IndexRequest indexRequestForNormalUpdate = new IndexRequest(indexRequestIndexName).id("id4").source(emptyMap());
-
-        IndexRequest indexRequestDocForNormalUpsert = new IndexRequest(indexRequestIndexName).id("id5").source(emptyMap());
-        IndexRequest indexRequestUpsertForNormalUpsert = new IndexRequest(indexRequestIndexName).id("id6").source(emptyMap());
-
-        // Build update requests
-        UpdateRequest upsertRequest = new UpdateRequest(updateRequestIndexName, "id1").upsert(indexRequest1).script(mockScript("1"));
-        UpdateRequest docAsUpsertRequest = new UpdateRequest(updateRequestIndexName, "id2").doc(indexRequest2).docAsUpsert(true);
-        // this test only covers the mechanics that scripted bulk upserts will execute a default pipeline. However, in practice scripted
-        // bulk upserts with a default pipeline are a bit surprising since the script executes AFTER the pipeline.
-        UpdateRequest scriptedUpsert = new UpdateRequest(updateRequestIndexName, "id2").upsert(indexRequest3)
-            .script(mockScript("1"))
-            .scriptedUpsert(true);
-        UpdateRequest regularUpdate = new UpdateRequest(updateRequestIndexName, "id4").doc(indexRequestForNormalUpdate);
-        UpdateRequest upsertWithDocAndUpsertRequest = new UpdateRequest(updateRequestIndexName, "id4").doc(indexRequestDocForNormalUpsert)
-            .upsert(indexRequestUpsertForNormalUpsert);
-
-        // Add update requests
-        bulkRequest.add(upsertRequest).add(docAsUpsertRequest).add(scriptedUpsert).add(regularUpdate).add(upsertWithDocAndUpsertRequest);
-
-        AtomicBoolean responseCalled = new AtomicBoolean(false);
-        AtomicBoolean failureCalled = new AtomicBoolean(false);
-        assertNull(indexRequest1.getPipeline());
-        assertNull(indexRequest2.getPipeline());
-        assertNull(indexRequest3.getPipeline());
-        assertNull(indexRequestForNormalUpdate.getPipeline());
-        assertNull(indexRequestDocForNormalUpsert.getPipeline());
-        assertNull(indexRequestUpsertForNormalUpsert.getPipeline());
-
-        action.execute(null, bulkRequest, ActionListener.wrap(response -> {
-            BulkItemResponse itemResponse = response.iterator().next();
-            assertThat(itemResponse.getFailure().getMessage(), containsString("fake exception"));
-            responseCalled.set(true);
-        }, e -> {
-            assertThat(e, sameInstance(exception));
-            failureCalled.set(true);
-        }));
-
-        // check failure works, and passes through to the listener
-        assertFalse(action.isExecuted); // haven't executed yet
-        assertFalse(responseCalled.get());
-        assertFalse(failureCalled.get());
-        verify(ingestService).executeBulkRequest(
-            eq(bulkRequest.numberOfActions()),
-            bulkDocsItr.capture(),
-            failureHandler.capture(),
-            completionHandler.capture(),
-            any(),
-            eq(Names.WRITE)
-        );
-        assertEquals(indexRequest1.getPipeline(), "default_pipeline");
-        assertEquals(indexRequest2.getPipeline(), "default_pipeline");
-        assertEquals(indexRequest3.getPipeline(), "default_pipeline");
-        assertEquals(indexRequestForNormalUpdate.getPipeline(), IngestService.NOOP_PIPELINE_NAME);
-        assertEquals(indexRequestDocForNormalUpsert.getPipeline(), IngestService.NOOP_PIPELINE_NAME);
-        assertEquals(indexRequestUpsertForNormalUpsert.getPipeline(), "default_pipeline");
-        completionHandler.getValue().accept(null, exception);
-        assertTrue(failureCalled.get());
-
-        // Verify for different Update cases, we call the correct resolve
-        // An update request has two child update requests, DOC and UPSERT
-        // 1. DOC will only have system pipeline resolved. Exception is if docAsUpsert is true, DOC will have all pipelines resolved
-        // 2. UPSERT will have ALL pipelines resolved
-        verify(ingestService, times(1)).resolvePipelines(eq(upsertRequest), eq(indexRequest1), any());
-        verify(ingestService, never()).resolveSystemIngestPipeline(any(), eq(indexRequest1), any());
-
-        verify(ingestService, times(1)).resolvePipelines(eq(docAsUpsertRequest), eq(indexRequest2), any());
-        verify(ingestService, never()).resolveSystemIngestPipeline(any(), eq(indexRequest2), any());
-
-        verify(ingestService, times(1)).resolvePipelines(eq(scriptedUpsert), eq(indexRequest3), any());
-        verify(ingestService, never()).resolveSystemIngestPipeline(any(), eq(indexRequest3), any());
-
-        verify(ingestService, never()).resolvePipelines(any(), eq(indexRequestForNormalUpdate), any());
-        verify(ingestService, times(1)).resolveSystemIngestPipeline(any(), eq(indexRequestForNormalUpdate), any());
-
-        verify(ingestService, never()).resolvePipelines(any(), eq(indexRequestDocForNormalUpsert), any());
-        verify(ingestService, times(1)).resolveSystemIngestPipeline(
-            eq(upsertWithDocAndUpsertRequest),
-            eq(indexRequestDocForNormalUpsert),
-            any()
-        );
-
-        verify(ingestService, times(1)).resolvePipelines(eq(upsertWithDocAndUpsertRequest), eq(indexRequestUpsertForNormalUpsert), any());
+                NoopTracer.INSTANCE
+/*
+        assertTrue(action.isExecuted);
         verify(ingestService, never()).resolveSystemIngestPipeline(any(), eq(indexRequestUpsertForNormalUpsert), any());
-
-        // now check success of the transport bulk action
-        indexRequest1.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
-        indexRequest2.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
-        indexRequest3.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
-        indexRequestForNormalUpdate.setPipeline(IngestService.NOOP_PIPELINE_NAME);
-        indexRequestDocForNormalUpsert.setPipeline(IngestService.NOOP_PIPELINE_NAME);
-        indexRequestUpsertForNormalUpsert.setPipeline(IngestService.NOOP_PIPELINE_NAME);
-
-        completionHandler.getValue().accept(DUMMY_WRITE_THREAD, null);
-        assertTrue(action.isExecuted);
-        assertFalse(responseCalled.get()); // listener would only be called by real index action, not our mocked one
+        when(localNode.isIngestNode()).thenAnswer(stub -> localIngest);
+            any()
+                .build()
+        singleItemBulkWriteAction.execute(null, indexRequest, listener);
+        ) {
+        reset(transportService);
+        nodes = mock(DiscoveryNodes.class);
+        IndexRequest indexRequestDocForNormalUpsert = new IndexRequest(indexRequestIndexName).id("id5").source(emptyMap());
         verifyNoInteractions(transportService);
-    }
-
-    public void testDoExecuteCalledTwiceCorrectly() throws Exception {
-        Exception exception = new Exception("fake exception");
-        IndexRequest indexRequest = new IndexRequest("missing_index").id("id");
-        indexRequest.setPipeline("testpipeline");
-        indexRequest.source(emptyMap());
-        AtomicBoolean responseCalled = new AtomicBoolean(false);
-        AtomicBoolean failureCalled = new AtomicBoolean(false);
-        action.needToCheck = true;
-        action.indexCreated = false;
-        singleItemBulkWriteAction.execute(null, indexRequest, ActionListener.wrap(response -> responseCalled.set(true), e -> {
-            assertThat(e, sameInstance(exception));
-            failureCalled.set(true);
-        }));
-
-        // check failure works, and passes through to the listener
-        assertFalse(action.isExecuted); // haven't executed yet
-        assertFalse(action.indexCreated); // no index yet
-        assertFalse(responseCalled.get());
-        assertFalse(failureCalled.get());
-        verify(ingestService).executeBulkRequest(
+                .order(1)
+        // setup nodes for local and remote
+        ActionListener<BulkResponse> listener = ActionListener.wrap(response -> {
+            .build();
+            final AtomicArray<BulkItemResponse> responses,
+        // bulk upserts with a default pipeline are a bit surprising since the script executes AFTER the pipeline.
+        when(clusterService.state()).thenReturn(state);
+            .scriptedUpsert(true);
+        action.execute(null, bulkRequest, ActionListener.wrap(response -> {
+import static org.hamcrest.Matchers.containsString;
+            BulkItemResponse itemResponse = response.iterator().next();
+        assertEquals(indexRequest.getPipeline(), "default_pipeline");
             eq(1),
-            bulkDocsItr.capture(),
-            failureHandler.capture(),
-            completionHandler.capture(),
-            any(),
-            eq(Names.WRITE)
-        );
-        completionHandler.getValue().accept(null, exception);
-        assertFalse(action.indexCreated); // still no index yet, the ingest node failed.
-        assertTrue(failureCalled.get());
-
-        // now check success
-        indexRequest.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
-        completionHandler.getValue().accept(DUMMY_WRITE_THREAD, null);
-        assertTrue(action.isExecuted);
-        assertTrue(action.indexCreated); // now the index is created since we skipped the ingest node path.
+        UpdateRequest regularUpdate = new UpdateRequest(updateRequestIndexName, "id4").doc(indexRequestForNormalUpdate);
+    private static final Thread DUMMY_WRITE_THREAD = new Thread(ThreadPool.Names.WRITE);
+        IndexRequest indexRequest1 = new IndexRequest("index").id("id");
         assertFalse(responseCalled.get()); // listener would only be called by real index action, not our mocked one
-        verifyNoInteractions(transportService);
-    }
-
-    public void testNotFindDefaultPipelineFromTemplateMatches() {
-        Exception exception = new Exception("fake exception");
-        IndexRequest indexRequest = new IndexRequest("missing_index").id("id");
-        indexRequest.source(emptyMap());
         AtomicBoolean responseCalled = new AtomicBoolean(false);
-        AtomicBoolean failureCalled = new AtomicBoolean(false);
-        singleItemBulkWriteAction.execute(null, indexRequest, ActionListener.wrap(response -> responseCalled.set(true), e -> {
-            assertThat(e, sameInstance(exception));
-            failureCalled.set(true);
-        }));
-        assertEquals(IngestService.NOOP_PIPELINE_NAME, indexRequest.getPipeline());
-        verify(ingestService, times(1)).resolvePipelines(any(), any(), any());
-        verifyNoMoreInteractions(ingestService);
-    }
-
+        // this test only covers the mechanics that scripted bulk upserts will execute a default pipeline. However, in practice scripted
+        indexRequest.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.action.support.ActionFilters;
+                transportService,
+        assertFalse(action.isExecuted); // haven't executed yet
+        assertTrue(action.isExecuted);
+                .order(2)
+        // check failure works, and passes through to the listener
+            eq(bulkRequest.numberOfActions()),
+        assertFalse(responseCalled.get()); // listener would only be called by real index action, not our mocked one
+        IndexRequest indexRequestUpsertForNormalUpsert = new IndexRequest(indexRequestIndexName).id("id6").source(emptyMap());
+        void createIndex(String index, TimeValue timeout, Version minNodeVersion, ActionListener<CreateIndexResponse> listener) {
+            bulkDocsItr.capture(),
     public void testFindDefaultPipelineFromTemplateMatch() {
         Exception exception = new Exception("fake exception");
-        ClusterState state = clusterService.state();
-
-        final Map<String, IndexTemplateMetadata> templateMetadataBuilder = new HashMap<>();
-        templateMetadataBuilder.put(
-            "template1",
-            IndexTemplateMetadata.builder("template1")
-                .patterns(Arrays.asList("missing_index"))
-                .order(1)
-                .settings(Settings.builder().put(IndexSettings.DEFAULT_PIPELINE.getKey(), "pipeline1").build())
-                .build()
-        );
-        templateMetadataBuilder.put(
-            "template2",
-            IndexTemplateMetadata.builder("template2")
-                .patterns(Arrays.asList("missing_*"))
-                .order(2)
-                .settings(Settings.builder().put(IndexSettings.DEFAULT_PIPELINE.getKey(), "pipeline2").build())
-                .build()
-        );
-        templateMetadataBuilder.put(
-            "template3",
-            IndexTemplateMetadata.builder("template3").patterns(Arrays.asList("missing*")).order(3).build()
-        );
-        templateMetadataBuilder.put(
-            "template4",
-            IndexTemplateMetadata.builder("template4")
-                .patterns(Arrays.asList("nope"))
-                .order(4)
-                .settings(Settings.builder().put(IndexSettings.DEFAULT_PIPELINE.getKey(), "pipeline4").build())
-                .build()
-        );
-
-        Metadata metadata = mock(Metadata.class);
-        when(state.metadata()).thenReturn(metadata);
-        when(state.getMetadata()).thenReturn(metadata);
-        when(metadata.templates()).thenReturn(templateMetadataBuilder);
-        when(metadata.getTemplates()).thenReturn(templateMetadataBuilder);
-        when(metadata.indices()).thenReturn(Map.of());
-
-        IndexRequest indexRequest = new IndexRequest("missing_index").id("id");
-        indexRequest.source(emptyMap());
-        AtomicBoolean responseCalled = new AtomicBoolean(false);
-        AtomicBoolean failureCalled = new AtomicBoolean(false);
-        singleItemBulkWriteAction.execute(null, indexRequest, ActionListener.wrap(response -> responseCalled.set(true), e -> {
-            assertThat(e, sameInstance(exception));
-            failureCalled.set(true);
-        }));
-
-        assertEquals("pipeline2", indexRequest.getPipeline());
-        verify(ingestService).executeBulkRequest(
-            eq(1),
-            bulkDocsItr.capture(),
-            failureHandler.capture(),
-            completionHandler.capture(),
+        boolean needToCheck; // pluggable return value for `needToCheck`
             any(),
-            eq(Names.WRITE)
-        );
+            failureHandler.capture(),
+        assertFalse(action.isExecuted); // still no local index execution
     }
-
-    public void testFindDefaultPipelineFromV2TemplateMatch() throws Exception {
-        Exception exception = new Exception("fake exception");
-
-        ComposableIndexTemplate t1 = new ComposableIndexTemplate(
-            Collections.singletonList("missing_*"),
-            new Template(
-                Settings.builder().put(IndexSettings.DEFAULT_PIPELINE.getKey(), "pipeline2").build(),
-                new CompressedXContent("{}"),
-                null
-            ),
-            null,
-            null,
-            null,
-            null,
-            null
-        );
-
-        ClusterState state = clusterService.state();
-        final MetadataIndexTemplateService metadataIndexTemplateService = getInstanceFromNode(MetadataIndexTemplateService.class);
-        metadataIndexTemplateService.addIndexTemplateV2(state, false, "my-template", t1);
-        Metadata metadata = Metadata.builder().put("my-template", t1).build();
-        when(state.metadata()).thenReturn(metadata);
-        when(state.getMetadata()).thenReturn(metadata);
-        // mock the cluster state for the ingest service
-        ClusterState ingestServiceClusterState = ClusterState.builder(new ClusterName("_name")).metadata(metadata).build();
-        ingestService.applyClusterState(
-            new ClusterChangedEvent("testFindDefaultPipelineFromV2TemplateMatch", ingestServiceClusterState, ingestServiceClusterState)
-        );
-
-        IndexRequest indexRequest = new IndexRequest("missing_index").id("id");
-        indexRequest.source(emptyMap());
-        AtomicBoolean responseCalled = new AtomicBoolean(false);
-        AtomicBoolean failureCalled = new AtomicBoolean(false);
-        singleItemBulkWriteAction.execute(null, indexRequest, ActionListener.wrap(response -> responseCalled.set(true), e -> {
-            assertThat(e, sameInstance(exception));
-            failureCalled.set(true);
-        }));
-
-        assertEquals("pipeline2", indexRequest.getPipeline());
-
-        verify(ingestService).executeBulkRequest(
-            eq(1),
-            bulkDocsItr.capture(),
-            failureHandler.capture(),
-            completionHandler.capture(),
-            any(),
-            eq(Names.WRITE)
-        );
-
+import org.opensearch.action.index.IndexRequest;
+    ArgumentCaptor<BiConsumer<Integer, Exception>> failureHandler;
+    private static final String WITH_DEFAULT_PIPELINE_ALIAS = "alias_for_index_with_default_pipeline";
+    /**
+        action = new TestTransportBulkAction();
+        localIngest = false;
         state.metadata().templatesV2().remove("my-template");
-    }
-
-    private void validateDefaultPipeline(IndexRequest indexRequest) {
-        Exception exception = new Exception("fake exception");
-        indexRequest.source(emptyMap());
-        AtomicBoolean responseCalled = new AtomicBoolean(false);
-        AtomicBoolean failureCalled = new AtomicBoolean(false);
-        assertNull(indexRequest.getPipeline());
+        threadPool = mock(ThreadPool.class);
         singleItemBulkWriteAction.execute(null, indexRequest, ActionListener.wrap(response -> { responseCalled.set(true); }, e -> {
-            assertThat(e, sameInstance(exception));
             failureCalled.set(true);
+            BulkItemResponse itemResponse = response.iterator().next();
+import java.util.HashMap;
+        // should not have executed ingest locally
+    public void testUseDefaultPipelineWithAlias() throws Exception {
         }));
-
-        // check failure works, and passes through to the listener
-        assertFalse(action.isExecuted); // haven't executed yet
-        assertFalse(responseCalled.get());
-        assertFalse(failureCalled.get());
-        verify(ingestService).executeBulkRequest(
-            eq(1),
-            bulkDocsItr.capture(),
-            failureHandler.capture(),
-            completionHandler.capture(),
-            any(),
-            eq(Names.WRITE)
-        );
-        assertEquals(indexRequest.getPipeline(), "default_pipeline");
-        completionHandler.getValue().accept(null, exception);
-        assertTrue(failureCalled.get());
-
-        // now check success
-        indexRequest.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
-        completionHandler.getValue().accept(DUMMY_WRITE_THREAD, null);
-        assertTrue(action.isExecuted);
-        assertFalse(responseCalled.get()); // listener would only be called by real index action, not our mocked one
-        verifyNoInteractions(transportService);
     }
+        assertTrue(failureCalled.get());
+        }, e -> { throw new AssertionError(e); });
+import org.opensearch.cluster.metadata.IndexMetadata;
+        AtomicBoolean failureCalled = new AtomicBoolean(false);
+            any(),
+            failureHandler.capture(),
+import org.opensearch.action.DocWriteRequest;
+        verifyNoInteractions(transportService);
+                null,
+        assertFalse(failureCalled.get());
+import static org.mockito.Mockito.reset;
+        indexRequest.setPipeline("testpipeline");
+            responseCalled.set(true);
+        ingestService = spy(createIngestServiceWithProcessors(Collections.emptyMap()));
+        failureHandler.getValue().accept(0, exception); // have an exception for our one index request
+        boolean indexCreated = true; // If set to false, will be set to true by call to createIndex
+                                .numberOfReplicas(1)
+        );
+                .settings(Settings.builder().put(IndexSettings.DEFAULT_PIPELINE.getKey(), "pipeline4").build())
+        assertEquals(indexRequest2.getPipeline(), "default_pipeline");
+     * Index for which mock settings contain a default pipeline.
+        indexRequestUpsertForNormalUpsert.setPipeline(IngestService.NOOP_PIPELINE_NAME);
+        AtomicBoolean responseCalled = new AtomicBoolean(false);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * this work for additional information regarding copyright
+        failureHandler.getValue().accept(0, exception); // have an exception for our one index request
+    }
+    private static final String WITH_DEFAULT_PIPELINE = "index_with_default_pipeline";
+            ((ClusterStateApplier) invocation.getArguments()[0]).applyClusterState(event);
+import java.util.concurrent.atomic.AtomicBoolean;
+        }
+    public void testSingleItemBulkActionIngestForward() throws Exception {
+        final Map<String, DiscoveryNode> ingestNodes = Map.of("node1", remoteNode1, "node2", remoteNode2);
+import org.opensearch.index.IndexNotFoundException;
+import static org.mockito.Mockito.mock;
+import org.opensearch.test.ClusterServiceUtils;
+        ingestService.applyClusterState(
+        ActionListener<IndexResponse> listener = ActionListener.wrap(response -> {
+                            WITH_DEFAULT_PIPELINE,
+            bulkDocsItr.capture(),
+        assertNull(indexRequest3.getPipeline());
+            completionHandler.capture(),
+        BulkRequest bulkRequest = new BulkRequest();
+    ThreadPool threadPool;
+        }));
+    public void setupAction() {
+        verify(ingestService, never()).resolvePipelines(any(), eq(indexRequestForNormalUpdate), any());
+            .script(mockScript("1"))
+            null
+        }));
+        ClusterState ingestServiceClusterState = ClusterState.builder(new ClusterName("_name")).metadata(metadata).build();
+                .patterns(Arrays.asList("nope"))
+        }));
+            assertThat(e, sameInstance(exception));
+    }
+        bulkRequest.add(indexRequest1);
+        AtomicBoolean failureCalled = new AtomicBoolean(false);
+        completionHandler.getValue().accept(null, exception);
+import java.util.Map;
+    }
+import org.opensearch.threadpool.ThreadPool.Names;
+    /** A subclass of the real bulk action to allow skipping real bulk indexing, and marking when it would have happened. */
+            assertThat(e, sameInstance(exception));
+        boolean usedNode1 = node.getValue() == remoteNode1; // make sure we used one of the nodes
+import org.opensearch.cluster.metadata.ComposableIndexTemplate;
+            eq(Names.WRITE)
+        verify(ingestService, times(1)).resolvePipelines(eq(docAsUpsertRequest), eq(indexRequest2), any());
+        ClusterState state = clusterService.state();
+    public void testIngestForward() throws Exception {
+    }
+                .build()
+        Exception exception = new Exception("fake exception");
+            any(),
+        completionHandler.getValue().accept(null, exception);
+        // check failure works, and passes through to the listener
+        verifyNoMoreInteractions(ingestService);
+            new ClusterChangedEvent("testFindDefaultPipelineFromV2TemplateMatch", ingestServiceClusterState, ingestServiceClusterState)
+            BulkItemResponse itemResponse = response.iterator().next();
+        verify(ingestService, never()).executeBulkRequest(anyInt(), any(), any(), any(), any(), any());
+        completionHandler.getValue().accept(DUMMY_WRITE_THREAD, null);
+    ArgumentCaptor<BiConsumer<Thread, Exception>> completionHandler;
+/*
+            failureCalled.set(true);
+        assertFalse(responseCalled.get()); // listener would only be called by real index action, not our mocked one
+        assertTrue(failureCalled.get());
+        BulkResponse bulkResponse = mock(BulkResponse.class);
+            eq(Names.WRITE)
+        doNothing().when(ingestService).executeBulkRequest(anyInt(), any(), any(), any(), any(), anyString());
+        }));
+ * under the License.
+        bulkItemResponses[0] = itemResponse;
+                                .settings(settings(Version.CURRENT))
+        assertFalse(responseCalled.get()); // listener would only be called by real index action, not our mocked one
+        if (usedNode1 == false) {
+        ArgumentCaptor<DiscoveryNode> node = ArgumentCaptor.forClass(DiscoveryNode.class);
+            failureCalled.set(true);
+            ),
+        }
+        assertFalse(responseCalled.get());
+ * software distributed under the License is distributed on an
+        assertFalse(action.isExecuted); // haven't executed yet
+            Collections.singletonList("missing_*"),
+import static org.mockito.Mockito.anyInt;
+        );
+import org.opensearch.common.settings.Settings;
+        completionHandler.getValue().accept(DUMMY_WRITE_THREAD, null);
+    ArgumentCaptor<TransportResponseHandler<BulkResponse>> remoteResponseHandler;
+            null,
+    }
+        verify(transportService).sendRequest(node.capture(), eq(BulkAction.NAME), any(), remoteResponseHandler.capture());
+            responseCalled.set(true);
+        verify(ingestService, never()).resolvePipelines(any(), eq(indexRequestDocForNormalUpsert), any());
+        IndexRequest indexRequest = new IndexRequest("index").id("id");
+            any(),
+                            ".system",
+        assertFalse(responseCalled.get()); // listener not called yet
+        indexRequest.source(emptyMap());
+        assertTrue(action.isExecuted);
+    /** True if the next call to the index action should act as an ingest node */
+import static org.mockito.Mockito.verify;
+        when(metadata.getTemplates()).thenReturn(templateMetadataBuilder);
+        indexRequest2.setPipeline("testpipeline");
+            );
+        );
+            eq(1),
+import org.opensearch.Version;
+            eq(upsertWithDocAndUpsertRequest),
+            failureCalled.set(true);
+        IndexRequest indexRequest2 = new IndexRequest(indexRequestIndexName).id("id2").source(emptyMap());
+            assertSame(remoteNode2, node.getValue());
+        assertFalse(failureCalled.get());
+            responseCalled.set(true);
+        BulkItemResponse itemResponse = new BulkItemResponse(0, DocWriteRequest.OpType.CREATE, indexResponse);
+        }
+        singleItemBulkWriteAction = new TestSingleItemBulkWriteAction(action);
+            eq(Names.SYSTEM_WRITE)
+            super(
+            failureHandler.capture(),
+        indexRequestDocForNormalUpsert.setPipeline(IngestService.NOOP_PIPELINE_NAME);
+    /** The actual action we want to test, with real indexing mocked */
+    }
+            eq(Names.WRITE)
+                        )
+import static org.mockito.Mockito.anyString;
+                    ClusterServiceUtils.createClusterService(
+import org.junit.Before;
+        // now check success
+        AtomicBoolean failureCalled = new AtomicBoolean(false);
+import org.opensearch.action.index.IndexResponse;
+/*
+            null,
+        ActionTestUtils.execute(action, null, bulkRequest, ActionListener.wrap(response -> {
+        BulkRequest bulkRequest = new BulkRequest();
+        String indexRequestName = randomFrom(new String[] { null, WITH_DEFAULT_PIPELINE, WITH_DEFAULT_PIPELINE_ALIAS });
+            any(),
+        verifyNoInteractions(transportService);
+        indexRequest2.source(emptyMap());
+        verify(ingestService).executeBulkRequest(
+            assertSame(remoteNode1, node.getValue());
+    public void testIngestSkipped() throws Exception {
+import org.opensearch.cluster.metadata.IndexTemplateMetadata;
+        }));
+        DiscoveryNode localNode = mock(DiscoveryNode.class);
+        bulkRequest.add(indexRequest1);
+import org.opensearch.cluster.node.DiscoveryNodes;
+        }));
+        remoteResponseHandler.getValue().handleResponse(new BulkResponse(bulkItemResponses, 0)); // call the listener for the remote node
+        when(state.getMetadata()).thenReturn(metadata);
+        final MetadataIndexTemplateService metadataIndexTemplateService = getInstanceFromNode(MetadataIndexTemplateService.class);
+            IndexTemplateMetadata.builder("template1")
+    public void testSingleItemBulkActionIngestSkipped() throws Exception {
+            assertThat(e, sameInstance(exception));
+        verify(ingestService, never()).executeBulkRequest(anyInt(), any(), any(), any(), any(), any());
+ * The OpenSearch Contributors require contributions made to
+                    SETTINGS,
+        when(state.getMetadata()).thenReturn(metadata);
+    public void testUseDefaultPipeline() throws Exception {
+                                    settings(Version.CURRENT).put(IndexSettings.DEFAULT_PIPELINE.getKey(), "default_pipeline").build()
+        final ExecutorService direct = OpenSearchExecutors.newDirectExecutorService();
+        AtomicBoolean responseCalled = new AtomicBoolean(false);
+        templateMetadataBuilder.put(
+                new IndexingPressureService(
+        assertFalse(action.indexCreated); // no index yet
+        BulkRequest bulkRequest = new BulkRequest();
+        AtomicBoolean failureCalled = new AtomicBoolean(false);
+                TransportBulkActionIngestTests.this.transportService,
+        verify(transportService).sendRequest(node.capture(), eq(BulkAction.NAME), any(), remoteResponseHandler.capture());
+        // check failure works, and passes through to the listener
+import org.opensearch.cluster.metadata.MetadataIndexTemplateService;
+        remoteNode2 = mock(DiscoveryNode.class);
+import org.opensearch.test.VersionUtils;
+                new AutoCreateIndex(
+        }
+            when(event.state()).thenReturn(state);
+        assertFalse(failureCalled.get());
+import static org.mockito.Mockito.when;
+ *
+    }
+        verify(ingestService, times(1)).resolvePipelines(eq(upsertWithDocAndUpsertRequest), eq(indexRequestUpsertForNormalUpsert), any());
+    }
+        // initialize captors, which must be members to use @Capture because of generics
+        if (usedNode1) {
+        ClusterState state = mock(ClusterState.class);
+        void executeBulk(
+                )
+        assertNull(indexRequest1.getPipeline());
+    private void validateDefaultPipeline(IndexRequest indexRequest) {
+        }, e -> {
+import static org.mockito.Answers.RETURNS_MOCKS;
+        );
+        BulkItemResponse[] bulkItemResponses = new BulkItemResponse[1];
+    private void validatePipelineWithBulkUpsert(@Nullable String indexRequestIndexName, String updateRequestIndexName) throws Exception {
+    /** Arguments to callbacks we want to capture, but which require generics, so we must use @Captor */
+        );
+        indexRequest.setPipeline("testpipeline");
+        verify(ingestService, never()).resolveSystemIngestPipeline(any(), eq(indexRequest3), any());
+        }
+            assertSame(remoteNode2, node.getValue());
+            bulkDocsItr.capture(),
+        }));
+ * You may obtain a copy of the License at
+package org.opensearch.action.bulk;
+    }
+        AtomicBoolean responseCalled = new AtomicBoolean(false);
+        assertNull(indexRequest2.getPipeline());
+        // now check success
+        }));
+        Exception exception = new Exception("fake exception");
+                    )
+    private static final Settings SETTINGS = Settings.builder().put(AutoCreateIndex.AUTO_CREATE_INDEX_SETTING.getKey(), true).build();
+import org.opensearch.cluster.metadata.Template;
+            responseCalled.set(true);
+                    MapBuilder.<String, IndexMetadata>newMapBuilder()
+        verify(ingestService, times(1)).resolveSystemIngestPipeline(any(), eq(indexRequestForNormalUpdate), any());
+        // mock the cluster state for the ingest service
+            failureHandler.capture(),
+            failureHandler.capture(),
+        completionHandler = ArgumentCaptor.forClass(BiConsumer.class);
+        when(state.metadata()).thenReturn(metadata);
+        assertEquals(indexRequest3.getPipeline(), "default_pipeline");
+            assertTrue(indexCreated);
+        remoteResponseHandler.getValue().handleResponse(bulkResponse); // call the listener for the remote node
+                threadPool,
+        singleItemBulkWriteAction.execute(null, indexRequest, ActionListener.wrap(response -> {}, exception -> {
+        Exception exception = new Exception("fake exception");
+        when(nodes.getIngestNodes()).thenReturn(ingestNodes);
+        localIngest = true;
+import org.opensearch.indices.SystemIndices;
+        IndexRequest indexRequest = new IndexRequest("index").id("id");
+    }
+        IndexRequest indexRequestForNormalUpdate = new IndexRequest(indexRequestIndexName).id("id4").source(emptyMap());
+        bulkRequest.add(indexRequest2);
+        bulkDocsItr = ArgumentCaptor.forClass(Iterable.class);
+        );
+import java.util.concurrent.ExecutorService;
+        );
+                .settings(Settings.builder().put(IndexSettings.DEFAULT_PIPELINE.getKey(), "pipeline1").build())
+        assertFalse(action.isExecuted); // haven't executed yet
+        // now make sure ingest nodes are rotated through with a subsequent request
+        }, e -> { throw new AssertionError(e); });
+ * compatible open source license.
+ * not use this file except in compliance with the License.
+        indexRequest.source(emptyMap());
+        Iterator<DocWriteRequest<?>> req = bulkDocsItr.getValue().iterator();
+        if (usedNode1) {
+        indexRequest1.setPipeline("testpipeline");
+        // Add update requests
+    class TestSingleItemBulkWriteAction extends TransportSingleItemBulkWriteAction<IndexRequest, IndexResponse> {
+        verifyNoInteractions(transportService);
+    DiscoveryNodes nodes;
+        @Override
+                                .putAlias(AliasMetadata.builder(WITH_DEFAULT_PIPELINE_ALIAS).build())
+        verifyNoInteractions(transportService);
+import org.opensearch.action.update.UpdateRequest;
+        verify(ingestService, never()).resolveSystemIngestPipeline(any(), eq(indexRequest1), any());
+    }
+        final Map<String, IndexTemplateMetadata> templateMetadataBuilder = new HashMap<>();
+        );
+        Metadata metadata = mock(Metadata.class);
+        AtomicBoolean failureCalled = new AtomicBoolean(false);
+                            IndexMetadata.builder(".system")
+            eq(Names.WRITE)
+import static org.opensearch.ingest.IngestServiceTests.createIngestServiceWithProcessors;
+import org.opensearch.action.support.AutoCreateIndex;
+            failureCalled.set(true);
+        indexRequest.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
+        ComposableIndexTemplate t1 = new ComposableIndexTemplate(
+            assertSame(indexResponse, response);
+    public void testUseDefaultPipelineWithBulkUpsert() throws Exception {
+            "template3",
+        verify(ingestService).executeBulkRequest(
 }
+        verify(ingestService, times(1)).resolvePipelines(eq(upsertRequest), eq(indexRequest1), any());
+            assertThat(itemResponse.getFailure().getMessage(), containsString("fake exception"));
+public class TransportBulkActionIngestTests extends OpenSearchSingleNodeTestCase {
+    }
+        verify(ingestService).executeBulkRequest(
+            failureCalled.set(true);
+                IndexAction.NAME,
+            indexCreated = true;
+            null,
+        completionHandler.getValue().accept(null, exception);
+                .patterns(Arrays.asList("missing_*"))
+            bulkDocsItr.capture(),
+        completionHandler.getValue().accept(null, exception);
+import java.util.function.BiConsumer;
+ * KIND, either express or implied.  See the License for the
+            eq(1),
+        indexRequest1.setPipeline("testpipeline");
+        singleItemBulkWriteAction.execute(null, indexRequest, ActionListener.wrap(response -> { responseCalled.set(true); }, e -> {
+ * license agreements. See the NOTICE file distributed with
+            bulkDocsItr.capture(),
+    boolean localIngest;
+    ArgumentCaptor<Iterable<DocWriteRequest<?>>> bulkDocsItr;
+                                .build()
+            eq(Names.WRITE)
+import org.opensearch.cluster.metadata.AliasMetadata;
+        assertFalse(failureCalled.get());
+        IndexRequest indexRequest = new IndexRequest("missing_index").id("id");
+        }).when(clusterService).addStateApplier(any(ClusterStateApplier.class));
+        singleItemBulkWriteAction.execute(null, indexRequest, ActionListener.wrap(response -> responseCalled.set(true), e -> {
+        }
+import org.opensearch.index.IndexSettings;
+            assertThat(e, sameInstance(exception));
+        action.needToCheck = true;
+        indexRequest.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
+import org.opensearch.common.compress.CompressedXContent;
+        IndexResponse indexResponse = mock(IndexResponse.class);
+        validateDefaultPipeline(new IndexRequest(WITH_DEFAULT_PIPELINE_ALIAS).id("id"));
+import org.opensearch.action.support.ActionTestUtils;
+        );
+        );
+        UpdateRequest upsertWithDocAndUpsertRequest = new UpdateRequest(updateRequestIndexName, "id4").doc(indexRequestDocForNormalUpsert)
+            ClusterChangedEvent event = mock(ClusterChangedEvent.class);
+        remoteNode1 = mock(DiscoveryNode.class);
+                IndexRequest::new,
+        Exception exception = new Exception("fake exception");
+            final BulkRequest bulkRequest,
+        Iterator<DocWriteRequest<?>> req = bulkDocsItr.getValue().iterator();
+        indexRequest.source(emptyMap());
+        assertTrue(responseCalled.get()); // now the listener we passed should have been delegated to by the remote listener
+        AtomicBoolean responseCalled = new AtomicBoolean(false);
+            "template4",
+                            IndexMetadata.builder(WITH_DEFAULT_PIPELINE)
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
+                new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY))
+     */
+                    new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
+        verify(ingestService).executeBulkRequest(
+ * the Apache License, Version 2.0 (the "License"); you may
+        IndexRequest indexRequest = new IndexRequest("index").id("id");
+        remoteResponseHandler = ArgumentCaptor.forClass(TransportResponseHandler.class);
+            failureCalled.set(true);
+        // check failure works, and passes through to the listener
+                new HashMap<>(
+        assertFalse(action.isExecuted); // haven't executed yet
+                        SETTINGS,
+        validateDefaultPipeline(new IndexRequest(WITH_DEFAULT_PIPELINE).id("id"));
+        @Override
+import org.opensearch.cluster.metadata.Metadata;
+        validatePipelineWithBulkUpsert(indexRequestName, WITH_DEFAULT_PIPELINE);
+ */
+        IndexRequest indexRequest = new IndexRequest("index").id("id");
+            bulkDocsItr.capture(),
+        verifyNoInteractions(transportService);
+            listener.onResponse(null);
+        UpdateRequest docAsUpsertRequest = new UpdateRequest(updateRequestIndexName, "id2").doc(indexRequest2).docAsUpsert(true);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * this file be licensed under the Apache-2.0 license or a
+            failureCalled.set(true);
+        bulkRequest.add(upsertRequest).add(docAsUpsertRequest).add(scriptedUpsert).add(regularUpdate).add(upsertWithDocAndUpsertRequest);
+    public void testIngestLocal() throws Exception {
+            super(
+        verify(ingestService).executeBulkRequest(
+                clusterService,
+        // now check success of the transport bulk action
+                null,
+                                .system(true)
+        when(state.getMetadata()).thenReturn(metadata);
+            assertSame(remoteNode1, node.getValue());
+        validatePipelineWithBulkUpsert(indexRequestName, WITH_DEFAULT_PIPELINE_ALIAS);
+        IndexRequest indexRequest2 = new IndexRequest(".system").id("id");
+        action.execute(null, bulkRequest, ActionListener.wrap(response -> {}, exception -> { throw new AssertionError(exception); }));
+    DiscoveryNode remoteNode2;
+            completionHandler.capture(),
+        assertFalse(action.isExecuted); // no local index execution
+        action.execute(null, bulkRequest, ActionListener.wrap(response -> {
+ *
+                    new SystemIndices(emptyMap())
+        AtomicBoolean responseCalled = new AtomicBoolean(false);
+        verify(ingestService).executeBulkRequest(
+        assertFalse(responseCalled.get());
+import java.util.Collections;
+        // now check success
+            assertSame(bulkResponse, response);
+            any(),
+    public void testNotFindDefaultPipelineFromTemplateMatches() {
+        IndexRequest indexRequest2 = new IndexRequest("index").id("id");
+        // check failure works, and passes through to the listener
+        verify(ingestService, times(1)).resolvePipelines(any(), any(), any());
+        assertTrue(action.isExecuted);
+        assertTrue(failureCalled.get());
+        AtomicBoolean responseCalled = new AtomicBoolean(false);
+        // setup services that will be called by action
+            eq(bulkRequest.numberOfActions()),
+        );
+            bulkDocsItr.capture(),
+        bulkRequest.add(indexRequest);
+import org.opensearch.threadpool.ThreadPool;
+            )
+        assertFalse(responseCalled.get());
+            IndexTemplateMetadata.builder("template3").patterns(Arrays.asList("missing*")).order(3).build()
+        verify(ingestService, never()).resolveSystemIngestPipeline(any(), eq(indexRequest2), any());
+        when(metadata.templates()).thenReturn(templateMetadataBuilder);
+    /** The nodes that forwarded index requests should be cycled through. */
+        assertEquals("pipeline2", indexRequest.getPipeline());
+        verifyNoMoreInteractions(ingestService);
+    }
+import org.opensearch.common.util.concurrent.OpenSearchExecutors;
+    DiscoveryNode remoteNode1;
+        );
+            eq(1),
+                                .numberOfShards(1)
+        assertEquals(IngestService.NOOP_PIPELINE_NAME, indexRequest.getPipeline());
+            failureHandler.capture(),
+        verify(ingestService).executeBulkRequest(
+    }
+        // An update request has two child update requests, DOC and UPSERT
+        verify(transportService).sendRequest(node.capture(), eq(BulkAction.NAME), any(), remoteResponseHandler.capture());
+            return null;
+            assertThat(itemResponse.getFailure().getMessage(), containsString("fake exception"));
+        verifyNoMoreInteractions(ingestService);
+        ClusterState state = clusterService.state();
+        assertTrue(action.isExecuted);
+        bulkRequest.add(indexRequest2);
+            failureHandler.capture(),
+import org.opensearch.cluster.ClusterStateApplier;
+        IndexRequest indexRequest = new IndexRequest("missing_index").id("id");
+            final long startTimeNanos,
+                        .map()
+        assertFalse(responseCalled.get());
+        String indexRequestName = randomFrom(new String[] { null, WITH_DEFAULT_PIPELINE, WITH_DEFAULT_PIPELINE_ALIAS });
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+        indexRequest1.source(emptyMap());
+                .patterns(Arrays.asList("missing_index"))
+        assertFalse(responseCalled.get()); // listener not called yet
+ * Unless required by applicable law or agreed to in writing,
+                .build()
+        assertTrue(responseCalled.get()); // now the listener we passed should have been delegated to by the remote listener
+        AtomicBoolean responseCalled = new AtomicBoolean(false);
+        } else {
+        AtomicBoolean failureCalled = new AtomicBoolean(false);
+import org.opensearch.common.Nullable;
+        assertEquals(indexRequestUpsertForNormalUpsert.getPipeline(), "default_pipeline");
+        AtomicBoolean failureCalled = new AtomicBoolean(false);
+        // setup the mocked ingest service for capturing calls
+    }
+        Exception exception = new Exception("fake exception");
+        templateMetadataBuilder.put(
+        }
+ * Licensed to Elasticsearch under one or more contributor
+        indexRequest.source(emptyMap());
+            assertSame(remoteNode2, node.getValue());
+        TestSingleItemBulkWriteAction(TestTransportBulkAction bulkAction) {
+        when(state.metadata()).thenReturn(metadata);
+ * SPDX-License-Identifier: Apache-2.0
+import static org.mockito.Mockito.spy;
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+            .upsert(indexRequestUpsertForNormalUpsert);
+        assertFalse(action.isExecuted); // haven't executed yet
+        templateMetadataBuilder.put(
+import static org.mockito.Mockito.never;
+        // 2. UPSERT will have ALL pipelines resolved
+import org.mockito.ArgumentCaptor;
+            any(),
+        );
+        // check failure works, and passes through to the listener
+        } else {
+        action.indexCreated = false;
+import org.opensearch.common.settings.ClusterSettings;
+                ),
+        Metadata metadata = Metadata.builder().put("my-template", t1).build();
+import org.opensearch.transport.TransportService;
+        indexRequest.source(emptyMap());
+        AtomicBoolean failureCalled = new AtomicBoolean(false);
+            IndexTemplateMetadata.builder("template2")
+        transportService = mock(TransportService.class, RETURNS_MOCKS);
+        // Verify for different Update cases, we call the correct resolve
+            null,
+    class TestTransportBulkAction extends TransportBulkAction {
+ * GitHub history for details.
+        );
+        UpdateRequest scriptedUpsert = new UpdateRequest(updateRequestIndexName, "id2").upsert(indexRequest3)
+        bulkRequest.add(indexRequest);
+        BulkRequest bulkRequest = new BulkRequest();
+import org.opensearch.tasks.Task;
+import org.opensearch.action.admin.indices.create.CreateIndexResponse;
+import org.opensearch.cluster.ClusterName;
+        ArgumentCaptor<DiscoveryNode> node = ArgumentCaptor.forClass(DiscoveryNode.class);
+import org.opensearch.common.unit.TimeValue;
+        verify(transportService).sendRequest(node.capture(), eq(BulkAction.NAME), any(), remoteResponseHandler.capture());
+        verify(ingestService, times(1)).resolvePipelines(any(), any(), any());
+        when(state.metadata()).thenReturn(metadata);
+        completionHandler.getValue().accept(DUMMY_WRITE_THREAD, null);
+            responseCalled.set(true);
+            isExecuted = true;
+                        )
+            any(),
+import org.opensearch.cluster.ClusterChangedEvent;
+        reset(transportService);
+import org.opensearch.core.action.ActionListener;
+            assertThat(e, sameInstance(exception));
+import java.util.Iterator;
+        indexRequest2.setPipeline("testpipeline");
+    TestTransportBulkAction action;
+        indexRequest.source(emptyMap());
+        indexRequestForNormalUpdate.setPipeline(IngestService.NOOP_PIPELINE_NAME);
+            completionHandler.capture(),
+                bulkAction,
+        completionHandler.getValue().accept(null, exception);
+            return needToCheck;
+import org.opensearch.common.collect.MapBuilder;
+        Metadata metadata = Metadata.builder()
+        completionHandler.getValue().accept(DUMMY_WRITE_THREAD, null);
+import static org.mockito.Mockito.times;
+    TransportService transportService;
+        localIngest = false;
+    }
+        templateMetadataBuilder.put(
+            new Template(
+import static org.mockito.Mockito.verifyNoInteractions;
+        indexRequest.setPipeline("testpipeline");
+import static org.mockito.Mockito.any;
+        IndexRequest indexRequest = new IndexRequest("index").id("id");
+            assertThat(e, sameInstance(exception));
+        assertTrue(action.isExecuted);
+        indexRequest3.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
+ */
+    @Before
+            assertThat(itemResponse.getFailure().getMessage(), containsString("fake exception"));
+        assertTrue(action.indexCreated); // now the index is created since we skipped the ingest node path.
+        assertTrue(failureCalled.get());
+                ),
+            Task task,
+        AtomicBoolean responseCalled = new AtomicBoolean(false);
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.ingest.IngestService;
+            completionHandler.capture(),
+        }, e -> {
+            assertThat(e, sameInstance(exception));
+            completionHandler.capture(),
+ * specific language governing permissions and limitations
+        assertFalse(responseCalled.get()); // listener would only be called by real index action, not our mocked one
+        indexRequest.setPipeline("testpipeline");
+            assertThat(e, sameInstance(exception));
+                        .put(
+        indexRequest2.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
+                .settings(Settings.builder().put(IndexSettings.DEFAULT_PIPELINE.getKey(), "pipeline2").build())
+        completionHandler.getValue().accept(DUMMY_WRITE_THREAD, null);
+        assertNull(indexRequest.getPipeline());
+        assertFalse(failureCalled.get());
+        // 1. DOC will only have system pipeline resolved. Exception is if docAsUpsert is true, DOC will have all pipelines resolved
+import static org.mockito.Mockito.doAnswer;
+        verify(ingestService).executeBulkRequest(
+    /** Single item bulk write action that wraps index requests */
+            completionHandler.capture(),
+            );
+        singleItemBulkWriteAction.execute(null, indexRequest, ActionListener.wrap(response -> responseCalled.set(true), e -> {
+        assertNull(indexRequestForNormalUpdate.getPipeline());
+        TestTransportBulkAction() {
+            assertSame(remoteNode2, node.getValue());
+        boolean usedNode1 = node.getValue() == remoteNode1; // make sure we used one of the nodes
+        metadataIndexTemplateService.addIndexTemplateV2(state, false, "my-template", t1);
+        singleItemBulkWriteAction.execute(null, indexRequest, ActionListener.wrap(response -> responseCalled.set(true), e -> {
+        IndexRequest indexRequest = new IndexRequest("missing_index").id("id");
+        UpdateRequest upsertRequest = new UpdateRequest(updateRequestIndexName, "id1").upsert(indexRequest1).script(mockScript("1"));
+        // but instead should have sent to a remote node with the transport service
+        AtomicBoolean failureCalled = new AtomicBoolean(false);
+        assertNull(indexRequestUpsertForNormalUpsert.getPipeline());
+        indexRequest1.source(emptyMap());
+            assertThat(e, sameInstance(exception));
+        // now make sure ingest nodes are rotated through with a subsequent request
+    IngestService ingestService;
+        }, e -> {
+        verify(ingestService, times(1)).resolvePipelines(eq(scriptedUpsert), eq(indexRequest3), any());
+    public void testDoExecuteCalledTwiceCorrectly() throws Exception {
+        singleItemBulkWriteAction.execute(null, indexRequest, listener);
+import org.opensearch.cluster.service.ClusterService;
+        indexRequest2.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
+                new CompressedXContent("{}"),
+        // Build update requests
+                                .numberOfShards(1)
+        assertFalse(responseCalled.get()); // listener would only be called by real index action, not our mocked one
+        IndexRequest indexRequest3 = new IndexRequest(indexRequestIndexName).id("id3").source(emptyMap());
+    public void testSingleItemBulkActionIngestLocal() throws Exception {
+ * ownership. Elasticsearch licenses this file to you under
+import static org.mockito.Mockito.eq;
+        IndexRequest indexRequest = new IndexRequest("missing_index").id("id");
+                new SystemIndices(emptyMap()),
+        when(metadata.indices()).thenReturn(Map.of());
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+        when(nodes.getMinNodeVersion()).thenReturn(VersionUtils.randomCompatibleVersion(random(), Version.CURRENT));
+            "template2",
+import org.opensearch.action.index.IndexAction;
+        AtomicBoolean responseCalled = new AtomicBoolean(false);
+                                .numberOfReplicas(0)
+        assertTrue(failureCalled.get());
+        assertEquals(indexRequestForNormalUpdate.getPipeline(), IngestService.NOOP_PIPELINE_NAME);
+        assertEquals(indexRequestDocForNormalUpsert.getPipeline(), IngestService.NOOP_PIPELINE_NAME);
+        );
+import org.opensearch.cluster.node.DiscoveryNode;
+            final ActionListener<BulkResponse> listener,
+        assertEquals(indexRequest1.getPipeline(), "default_pipeline");
+import org.opensearch.common.util.concurrent.AtomicArray;
+        assertFalse(responseCalled.get());
+        when(clusterService.localNode()).thenReturn(localNode);
+                ingestService,
+            eq(indexRequestDocForNormalUpsert),
+import static java.util.Collections.emptyMap;
+                null,
+        indexRequest.source(emptyMap());
+        protected boolean needToCheck() {
+    ClusterService clusterService;
+    TestSingleItemBulkWriteAction singleItemBulkWriteAction;
+        assertEquals("pipeline2", indexRequest.getPipeline());
+                    new ClusterSettings(SETTINGS, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
+        completionHandler.getValue().accept(null, exception);
+                    SETTINGS,
+        failureHandler = ArgumentCaptor.forClass(BiConsumer.class);
+import static org.mockito.Mockito.doNothing;
+                .order(4)
+        indexRequest1.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
+        action.execute(null, bulkRequest, listener);
+            throw new AssertionError(exception);
+        assertTrue(action.isExecuted);
+import org.opensearch.index.IndexingPressureService;
+        // but instead should have sent to a remote node with the transport service
+            failureCalled.set(true);
+ *
+        completionHandler.getValue().accept(DUMMY_WRITE_THREAD, null);
+            IndexTemplateMetadata.builder("template4")
+        indexRequest.source(emptyMap());
+        Exception exception = new Exception("fake exception");
+            "template1",
+            completionHandler.capture(),
+        // now check success
+        assertFalse(action.isExecuted); // haven't executed yet
+        }
+        when(state.getNodes()).thenReturn(nodes);
+    /** Services needed by bulk action */
+                                .settings(
+        Exception exception = new Exception("fake exception");
+                        null
+        // now check success
+        BulkRequest bulkRequest = new BulkRequest();
+    public void testIngestSystemLocal() throws Exception {
+        indexRequest.source(emptyMap());
+        IndexRequest indexRequest1 = new IndexRequest(".system").id("id");
+        assertNull(indexRequestDocForNormalUpsert.getPipeline());
+import org.opensearch.common.util.concurrent.ThreadContext;
+                new ActionFilters(Collections.emptySet()),
+ */
+            eq(Names.WRITE)
+        assertFalse(responseCalled.get());
+        assertFalse(action.indexCreated); // still no index yet, the ingest node failed.
+import java.util.Arrays;
+        clusterService = mock(ClusterService.class);
+                null
+        assertTrue(failureCalled.get());
+    public void testUseDefaultPipelineWithBulkUpsertWithAlias() throws Exception {
+                null,
+                new ActionFilters(Collections.emptySet()),
+                Settings.builder().put(IndexSettings.DEFAULT_PIPELINE.getKey(), "pipeline2").build(),
+        doAnswer(invocation -> {
+            .indices(
+        singleItemBulkWriteAction.execute(null, indexRequest, ActionListener.wrap(response -> responseCalled.set(true), e -> {
+        verify(ingestService, times(1)).resolveSystemIngestPipeline(
+        boolean isExecuted = false; // set when the "real" bulk execution happens
+            completionHandler.capture(),
+    }
+        }
+        if (usedNode1 == false) {
+    }
+        assertFalse(action.isExecuted); // still no local index execution
+        indexRequest2.source(emptyMap());
+        IndexRequest indexRequest1 = new IndexRequest(indexRequestIndexName).id("id1").source(emptyMap());
+        verify(ingestService, times(1)).resolvePipelines(any(), any(), any());
+        }));
+            eq(Names.WRITE)
+            bulkDocsItr.capture(),
+        action.execute(null, bulkRequest, listener);
+                        new ClusterSettings(SETTINGS, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
+            failureHandler.capture(),
+        AtomicBoolean responseCalled = new AtomicBoolean(false);
+        when(threadPool.executor(anyString())).thenReturn(direct);
+                        .put(
+                                )
+import org.opensearch.transport.TransportResponseHandler;
+        indexRequest2.setPipeline(IngestService.NOOP_PIPELINE_NAME); // this is done by the real pipeline execution service when processing
+            eq(bulkRequest.numberOfActions()),

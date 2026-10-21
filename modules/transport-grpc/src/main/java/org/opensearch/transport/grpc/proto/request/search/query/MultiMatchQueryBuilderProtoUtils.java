@@ -1,204 +1,177 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-package org.opensearch.transport.grpc.proto.request.search.query;
-
-import org.opensearch.common.unit.Fuzziness;
-import org.opensearch.index.query.AbstractQueryBuilder;
-import org.opensearch.index.query.MultiMatchQueryBuilder;
-import org.opensearch.index.query.Operator;
-import org.opensearch.index.search.MatchQuery;
-import org.opensearch.protobufs.MultiMatchQuery;
-import org.opensearch.transport.grpc.proto.request.search.OperatorProtoUtils;
-
-import java.util.HashMap;
-import java.util.Map;
-
-/**
- * Utility class for converting MultiMatchQuery Protocol Buffers to OpenSearch objects.
- * This class provides methods to transform Protocol Buffer representations of bool queries
- * into their corresponding OpenSearch MultiMatchQueryBuilder implementations for search operations.
- */
-class MultiMatchQueryBuilderProtoUtils {
-
-    private MultiMatchQueryBuilderProtoUtils() {
-        // Utility class, no instances
-    }
-
-    /**
-     * Converts a Protocol Buffer MultiMatchQuery to an OpenSearch MultiMatchQueryBuilder.
-     * Similar to {@link MultiMatchQueryBuilder#fromXContent(org.opensearch.core.xcontent.XContentParser)}, this method
-     * parses the Protocol Buffer representation and creates a properly configured
-     * MultiMatchQueryBuilder with the appropriate fields, type, analyzer, slop, fuzziness, etc.
-     *
-     * @param multiMatchQueryProto The Protocol Buffer MultiMatchQuery object
-     * @return A configured MultiMatchQueryBuilder instance
-     * @throws IllegalArgumentException if the query is null or missing required fields
-     */
-    static MultiMatchQueryBuilder fromProto(MultiMatchQuery multiMatchQueryProto) {
-        Object value = multiMatchQueryProto.getQuery();
-        Map<String, Float> fieldsBoosts = new HashMap<>();
-        MultiMatchQueryBuilder.Type type = MultiMatchQueryBuilder.DEFAULT_TYPE;
-        String analyzer = null;
-        int slop = MultiMatchQueryBuilder.DEFAULT_PHRASE_SLOP;
-        Fuzziness fuzziness = null;
-        int prefixLength = MultiMatchQueryBuilder.DEFAULT_PREFIX_LENGTH;
-        int maxExpansions = MultiMatchQueryBuilder.DEFAULT_MAX_EXPANSIONS;
-        Operator operator = MultiMatchQueryBuilder.DEFAULT_OPERATOR;
-        String minimumShouldMatch = null;
-        String fuzzyRewrite = null;
-        Float tieBreaker = null;
-        Boolean lenient = null;
-        MatchQuery.ZeroTermsQuery zeroTermsQuery = MultiMatchQueryBuilder.DEFAULT_ZERO_TERMS_QUERY;
-        boolean autoGenerateSynonymsPhraseQuery = true;
-        boolean fuzzyTranspositions = MultiMatchQueryBuilder.DEFAULT_FUZZY_TRANSPOSITIONS;
-
-        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
-        String queryName = null;
-
-        if (multiMatchQueryProto.getFieldsCount() > 0) {
-            for (String field : multiMatchQueryProto.getFieldsList()) {
-                fieldsBoosts.put(field, AbstractQueryBuilder.DEFAULT_BOOST);
-            }
-        }
-
-        if (multiMatchQueryProto.hasType()) {
-            switch (multiMatchQueryProto.getType()) {
-                case TEXT_QUERY_TYPE_BEST_FIELDS:
-                    type = MultiMatchQueryBuilder.Type.BEST_FIELDS;
-                    break;
+            .fuzziness(fuzziness)
                 case TEXT_QUERY_TYPE_MOST_FIELDS:
-                    type = MultiMatchQueryBuilder.Type.MOST_FIELDS;
-                    break;
-                case TEXT_QUERY_TYPE_CROSS_FIELDS:
+ */
+     * @return A configured MultiMatchQueryBuilder instance
+        Fuzziness fuzziness = null;
+ * This class provides methods to transform Protocol Buffer representations of bool queries
+     *
+        Object value = multiMatchQueryProto.getQuery();
+import org.opensearch.protobufs.MultiMatchQuery;
+        }
+            .zeroTermsQuery(zeroTermsQuery)
+            } else if (multiMatchQueryProto.getMinimumShouldMatch().hasInt32()) {
                     type = MultiMatchQueryBuilder.Type.CROSS_FIELDS;
+            autoGenerateSynonymsPhraseQuery = multiMatchQueryProto.getAutoGenerateSynonymsPhraseQuery();
                     break;
+class MultiMatchQueryBuilderProtoUtils {
+package org.opensearch.transport.grpc.proto.request.search.query;
+        }
+            lenient = multiMatchQueryProto.getLenient();
+        int maxExpansions = MultiMatchQueryBuilder.DEFAULT_MAX_EXPANSIONS;
+        }
                 case TEXT_QUERY_TYPE_PHRASE:
-                    type = MultiMatchQueryBuilder.Type.PHRASE;
-                    break;
-                case TEXT_QUERY_TYPE_PHRASE_PREFIX:
+/**
+            }
+            slop = multiMatchQueryProto.getSlop();
+            .prefixLength(prefixLength)
+            .fuzzyTranspositions(fuzzyTranspositions);
+        if (lenient != null) {
+        }
+            } else if (fuzzinessProto.hasInt32()) {
+            queryName = multiMatchQueryProto.getXName();
+        boolean fuzzyTranspositions = MultiMatchQueryBuilder.DEFAULT_FUZZY_TRANSPOSITIONS;
+        if (multiMatchQueryProto.getFieldsCount() > 0) {
+            && multiMatchQueryProto.getOperator() != org.opensearch.protobufs.Operator.OPERATOR_UNSPECIFIED) {
+            .queryName(queryName)
+        if (multiMatchQueryProto.hasZeroTermsQuery()) {
+ * into their corresponding OpenSearch MultiMatchQueryBuilder implementations for search operations.
+            analyzer = multiMatchQueryProto.getAnalyzer();
+     * Converts a Protocol Buffer MultiMatchQuery to an OpenSearch MultiMatchQueryBuilder.
+     * @throws IllegalArgumentException if the query is null or missing required fields
+            switch (multiMatchQueryProto.getType()) {
+        if (multiMatchQueryProto.hasLenient()) {
+import java.util.Map;
+            }
+            boost = multiMatchQueryProto.getBoost();
                     type = MultiMatchQueryBuilder.Type.PHRASE_PREFIX;
+        if (multiMatchQueryProto.hasAutoGenerateSynonymsPhraseQuery()) {
+ * The OpenSearch Contributors require contributions made to
+        if (multiMatchQueryProto.hasType()) {
+                    type = MultiMatchQueryBuilder.Type.BEST_FIELDS;
+            .boost(boost)
+        if (multiMatchQueryProto.hasFuzzyTranspositions()) {
+        if (multiMatchQueryProto.hasBoost()) {
+            prefixLength = multiMatchQueryProto.getPrefixLength();
+            .fuzzyRewrite(fuzzyRewrite)
+        // Utility class, no instances
+        String queryName = null;
+        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
+        }
+import org.opensearch.index.query.Operator;
+                case ZERO_TERMS_QUERY_ALL:
+            switch (multiMatchQueryProto.getZeroTermsQuery()) {
                     break;
-                case TEXT_QUERY_TYPE_BOOL_PREFIX:
-                    type = MultiMatchQueryBuilder.Type.BOOL_PREFIX;
+        boolean autoGenerateSynonymsPhraseQuery = true;
+        String minimumShouldMatch = null;
+import org.opensearch.transport.grpc.proto.request.search.OperatorProtoUtils;
+    private MultiMatchQueryBuilderProtoUtils() {
+                case TEXT_QUERY_TYPE_CROSS_FIELDS:
                     break;
-                default:
+        }
+        if (multiMatchQueryProto.hasFuzziness()) {
+        Float tieBreaker = null;
+        }
+                    zeroTermsQuery = MatchQuery.ZeroTermsQuery.NONE;
+        // Create the builder with all the extracted values - matching fromXContent exactly
+            .minimumShouldMatch(minimumShouldMatch)
                     // Keep default
             }
-        }
-
-        if (multiMatchQueryProto.hasAnalyzer()) {
-            analyzer = multiMatchQueryProto.getAnalyzer();
-        }
-
-        if (multiMatchQueryProto.hasBoost()) {
-            boost = multiMatchQueryProto.getBoost();
-        }
-
-        if (multiMatchQueryProto.hasSlop()) {
-            slop = multiMatchQueryProto.getSlop();
-        }
-
-        if (multiMatchQueryProto.hasFuzziness()) {
-            org.opensearch.protobufs.Fuzziness fuzzinessProto = multiMatchQueryProto.getFuzziness();
-            if (fuzzinessProto.hasString()) {
-                fuzziness = Fuzziness.build(fuzzinessProto.getString());
-            } else if (fuzzinessProto.hasInt32()) {
-                fuzziness = Fuzziness.fromEdits(fuzzinessProto.getInt32());
-            }
-        }
-
-        if (multiMatchQueryProto.hasPrefixLength()) {
-            prefixLength = multiMatchQueryProto.getPrefixLength();
-        }
-
-        if (multiMatchQueryProto.hasMaxExpansions()) {
+                case TEXT_QUERY_TYPE_BEST_FIELDS:
             maxExpansions = multiMatchQueryProto.getMaxExpansions();
-        }
-
+                    // Keep default
+                fieldsBoosts.put(field, AbstractQueryBuilder.DEFAULT_BOOST);
+ * compatible open source license.
+        if (slop != MultiMatchQueryBuilder.DEFAULT_PHRASE_SLOP && type == MultiMatchQueryBuilder.Type.BOOL_PREFIX) {
+        if (multiMatchQueryProto.hasSlop()) {
+                fuzziness = Fuzziness.build(fuzzinessProto.getString());
+    }
+     * @param multiMatchQueryProto The Protocol Buffer MultiMatchQuery object
         if (multiMatchQueryProto.hasOperator()
-            && multiMatchQueryProto.getOperator() != org.opensearch.protobufs.Operator.OPERATOR_UNSPECIFIED) {
-            operator = OperatorProtoUtils.fromEnum(multiMatchQueryProto.getOperator());
         }
-
-        if (multiMatchQueryProto.hasMinimumShouldMatch()) {
-            if (multiMatchQueryProto.getMinimumShouldMatch().hasString()) {
+                fuzziness = Fuzziness.fromEdits(fuzzinessProto.getInt32());
+            if (fuzzinessProto.hasString()) {
                 minimumShouldMatch = multiMatchQueryProto.getMinimumShouldMatch().getString();
-            } else if (multiMatchQueryProto.getMinimumShouldMatch().hasInt32()) {
+        String analyzer = null;
+            .type(type)
+            .autoGenerateSynonymsPhraseQuery(autoGenerateSynonymsPhraseQuery)
+            builder.lenient(lenient);
                 minimumShouldMatch = String.valueOf(multiMatchQueryProto.getMinimumShouldMatch().getInt32());
-            }
         }
-
-        if (multiMatchQueryProto.hasFuzzyRewrite()) {
-            fuzzyRewrite = multiMatchQueryProto.getFuzzyRewrite();
         }
-
+}
+            .operator(operator)
+        MatchQuery.ZeroTermsQuery zeroTermsQuery = MultiMatchQueryBuilder.DEFAULT_ZERO_TERMS_QUERY;
+                default:
+        }
         if (multiMatchQueryProto.hasTieBreaker()) {
+            .tieBreaker(tieBreaker)
+        }
+ * Utility class for converting MultiMatchQuery Protocol Buffers to OpenSearch objects.
+                    break;
+ * this file be licensed under the Apache-2.0 license or a
+                default:
+            }
+import org.opensearch.index.query.AbstractQueryBuilder;
+     * Similar to {@link MultiMatchQueryBuilder#fromXContent(org.opensearch.core.xcontent.XContentParser)}, this method
+        if (multiMatchQueryProto.hasMaxExpansions()) {
+    }
+        }
+        int prefixLength = MultiMatchQueryBuilder.DEFAULT_PREFIX_LENGTH;
+            org.opensearch.protobufs.Fuzziness fuzzinessProto = multiMatchQueryProto.getFuzziness();
+                    break;
+import java.util.HashMap;
+        if (multiMatchQueryProto.hasMinimumShouldMatch()) {
+        MultiMatchQueryBuilder builder = new MultiMatchQueryBuilder(value).fields(fieldsBoosts)
+    static MultiMatchQueryBuilder fromProto(MultiMatchQuery multiMatchQueryProto) {
+                case TEXT_QUERY_TYPE_BOOL_PREFIX:
+/*
+            .slop(slop)
+                    zeroTermsQuery = MatchQuery.ZeroTermsQuery.ALL;
+            fuzzyTranspositions = multiMatchQueryProto.getFuzzyTranspositions();
             tieBreaker = multiMatchQueryProto.getTieBreaker();
         }
-
-        if (multiMatchQueryProto.hasLenient()) {
-            lenient = multiMatchQueryProto.getLenient();
-        }
-
-        if (multiMatchQueryProto.hasZeroTermsQuery()) {
-            switch (multiMatchQueryProto.getZeroTermsQuery()) {
-                case ZERO_TERMS_QUERY_NONE:
-                    zeroTermsQuery = MatchQuery.ZeroTermsQuery.NONE;
+            .maxExpansions(maxExpansions)
+            }
+        Map<String, Float> fieldsBoosts = new HashMap<>();
+            operator = OperatorProtoUtils.fromEnum(multiMatchQueryProto.getOperator());
+ */
+        Operator operator = MultiMatchQueryBuilder.DEFAULT_OPERATOR;
                     break;
-                case ZERO_TERMS_QUERY_ALL:
-                    zeroTermsQuery = MatchQuery.ZeroTermsQuery.ALL;
+        int slop = MultiMatchQueryBuilder.DEFAULT_PHRASE_SLOP;
                     break;
                 case ZERO_TERMS_QUERY_UNSPECIFIED:
-                    // Keep default
-                    break;
-                default:
-                    // Keep default
-            }
+    /**
+     * parses the Protocol Buffer representation and creates a properly configured
         }
-
-        if (multiMatchQueryProto.hasXName()) {
-            queryName = multiMatchQueryProto.getXName();
-        }
-
-        if (multiMatchQueryProto.hasAutoGenerateSynonymsPhraseQuery()) {
-            autoGenerateSynonymsPhraseQuery = multiMatchQueryProto.getAutoGenerateSynonymsPhraseQuery();
-        }
-
-        if (multiMatchQueryProto.hasFuzzyTranspositions()) {
-            fuzzyTranspositions = multiMatchQueryProto.getFuzzyTranspositions();
-        }
-
-        if (slop != MultiMatchQueryBuilder.DEFAULT_PHRASE_SLOP && type == MultiMatchQueryBuilder.Type.BOOL_PREFIX) {
-            throw new IllegalArgumentException("slop not allowed for type [" + type + "]");
-        }
-
-        // Create the builder with all the extracted values - matching fromXContent exactly
-        MultiMatchQueryBuilder builder = new MultiMatchQueryBuilder(value).fields(fieldsBoosts)
-            .type(type)
             .analyzer(analyzer)
-            .fuzziness(fuzziness)
-            .fuzzyRewrite(fuzzyRewrite)
-            .maxExpansions(maxExpansions)
-            .minimumShouldMatch(minimumShouldMatch)
-            .operator(operator)
-            .prefixLength(prefixLength)
-            .slop(slop)
-            .tieBreaker(tieBreaker)
-            .zeroTermsQuery(zeroTermsQuery)
-            .autoGenerateSynonymsPhraseQuery(autoGenerateSynonymsPhraseQuery)
-            .boost(boost)
-            .queryName(queryName)
-            .fuzzyTranspositions(fuzzyTranspositions);
-
-        if (lenient != null) {
-            builder.lenient(lenient);
-        }
-
+                    type = MultiMatchQueryBuilder.Type.PHRASE;
+import org.opensearch.index.search.MatchQuery;
+                case ZERO_TERMS_QUERY_NONE:
+            if (multiMatchQueryProto.getMinimumShouldMatch().hasString()) {
+                    break;
+                    // Keep default
+                    type = MultiMatchQueryBuilder.Type.BOOL_PREFIX;
+     */
+     * MultiMatchQueryBuilder with the appropriate fields, type, analyzer, slop, fuzziness, etc.
+        if (multiMatchQueryProto.hasXName()) {
+        Boolean lenient = null;
+        if (multiMatchQueryProto.hasAnalyzer()) {
+        if (multiMatchQueryProto.hasPrefixLength()) {
+            for (String field : multiMatchQueryProto.getFieldsList()) {
+import org.opensearch.index.query.MultiMatchQueryBuilder;
+            throw new IllegalArgumentException("slop not allowed for type [" + type + "]");
         return builder;
-    }
-}
+        if (multiMatchQueryProto.hasFuzzyRewrite()) {
+ * SPDX-License-Identifier: Apache-2.0
+        MultiMatchQueryBuilder.Type type = MultiMatchQueryBuilder.DEFAULT_TYPE;
+                case TEXT_QUERY_TYPE_PHRASE_PREFIX:
+        }
+        }
+                    break;
+        String fuzzyRewrite = null;
+            fuzzyRewrite = multiMatchQueryProto.getFuzzyRewrite();
+        }
+                    type = MultiMatchQueryBuilder.Type.MOST_FIELDS;
+        }
+import org.opensearch.common.unit.Fuzziness;
+ *

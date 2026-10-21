@@ -1,216 +1,198 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
+                        }
  * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.example.expertscript;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.PostingsEnum;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.IndexSearcher;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.ScriptPlugin;
-import org.opensearch.script.ScoreScript;
-import org.opensearch.script.ScoreScript.LeafFactory;
-import org.opensearch.script.ScriptContext;
-import org.opensearch.script.ScriptEngine;
-import org.opensearch.script.ScriptFactory;
-import org.opensearch.search.lookup.SearchLookup;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Set;
-
-/**
- * An example script plugin that adds a {@link ScriptEngine}
- * implementing expert scoring.
- */
-public class ExpertScriptPlugin extends Plugin implements ScriptPlugin {
-
-    /**
-     * Instantiate this plugin.
-     */
-    public ExpertScriptPlugin() {}
-
-    @Override
-    public ScriptEngine getScriptEngine(Settings settings, Collection<ScriptContext<?>> contexts) {
-        return new MyExpertScriptEngine();
-    }
-
-    /** An example {@link ScriptEngine} that uses Lucene segment details to
-     *  implement pure document frequency scoring. */
-    // tag::expert_engine
-    private static class MyExpertScriptEngine implements ScriptEngine {
-        @Override
-        public String getType() {
-            return "expert_scripts";
-        }
-
-        @Override
-        public <T> T compile(
-            String scriptName,
-            String scriptSource,
-            ScriptContext<T> context,
-            Map<String, String> params
-        ) {
             if (context.equals(ScoreScript.CONTEXT) == false) {
-                throw new IllegalArgumentException(getType()
-                        + " scripts cannot be used for context ["
-                        + context.name + "]");
-            }
-            // we use the script "source" as the script identifier
-            if ("pure_df".equals(scriptSource)) {
-                ScoreScript.Factory factory = new PureDfFactory();
-                return context.factoryClazz.cast(factory);
-            }
-            throw new IllegalArgumentException("Unknown script name "
-                    + scriptSource);
-        }
-
-        @Override
-        public void close() {
-            // optionally close resources
-        }
-
-        @Override
-        public Set<ScriptContext<?>> getSupportedContexts() {
-            return Collections.singleton(ScoreScript.CONTEXT);
-        }
-
-        private static class PureDfFactory implements ScoreScript.Factory,
-                                                      ScriptFactory {
-            @Override
-            public boolean isResultDeterministic() {
-                // PureDfLeafFactory only uses deterministic APIs, this
                 // implies the results are cacheable.
-                return true;
-            }
-
-            @Override
-            public LeafFactory newFactory(
-                Map<String, Object> params,
-                SearchLookup lookup,
-                IndexSearcher indexSearcher
-            ) {
-                return new PureDfLeafFactory(params, lookup, indexSearcher);
-            }
-        }
-
-        private static class PureDfLeafFactory implements LeafFactory {
-            private final Map<String, Object> params;
-            private final SearchLookup lookup;
-            private final IndexSearcher indexSearcher;
-            private final String field;
+        @Override
             private final String term;
-
-            private PureDfLeafFactory(
-                        Map<String, Object> params, SearchLookup lookup, IndexSearcher indexSearcher) {
-                if (params.containsKey("field") == false) {
+            private final Map<String, Object> params;
+                        if (postings.docID() < docid) {
+ */
+                        } catch (IOException e) {
+import org.opensearch.script.ScriptFactory;
+ *
+                     * the field and/or term don't exist in this segment,
+            }
+ * software distributed under the License is distributed on an
+ * Modifications Copyright OpenSearch Contributors. See
+            if ("pure_df".equals(scriptSource)) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.plugins.Plugin;
+ * Unless required by applicable law or agreed to in writing,
+                            throw new UncheckedIOException(e);
                     throw new IllegalArgumentException(
+        private static class PureDfLeafFactory implements LeafFactory {
+                        @Override
+                        + context.name + "]");
+import java.util.Collection;
                             "Missing parameter [field]");
-                }
-                if (params.containsKey("term") == false) {
-                    throw new IllegalArgumentException(
-                            "Missing parameter [term]");
-                }
-                this.params = params;
-                this.lookup = lookup;
-                this.indexSearcher = indexSearcher;
-                field = params.get("field").toString();
-                term = params.get("term").toString();
+/**
             }
-
+                            try {
+                    public double execute(ExplanationHolder explanation) {
             @Override
-            public boolean needs_score() {
-                return false;  // Return true if the script needs the score
-            }
-
-            @Override
-            public ScoreScript newInstance(LeafReaderContext context)
-                    throws IOException {
-                PostingsEnum postings = context.reader().postings(
                         new Term(field, term));
                 if (postings == null) {
-                    /*
-                     * the field and/or term don't exist in this segment,
-                     * so always return 0
-                     */
-                    return new ScoreScript(params, lookup, indexSearcher, context) {
-                        @Override
-                        public double execute(
-                            ExplanationHolder explanation
-                        ) {
-                            return 0.0d;
-                        }
-                    };
-                }
-                return new ScoreScript(params, lookup, indexSearcher, context) {
-                    int currentDocid = -1;
-                    @Override
-                    public void setDocument(int docid) {
-                        /*
-                         * advance has undefined behavior calling with
-                         * a docid <= its current docid
-                         */
-                        if (postings.docID() < docid) {
-                            try {
-                                postings.advance(docid);
-                            } catch (IOException e) {
-                                throw new UncheckedIOException(e);
-                            }
-                        }
-                        currentDocid = docid;
-                    }
-                    @Override
-                    public double execute(ExplanationHolder explanation) {
-                        if (postings.docID() != currentDocid) {
-                            /*
-                             * advance moved past the current doc, so this
-                             * doc has no occurrences of the term
+                            "Missing parameter [term]");
+import org.opensearch.common.settings.Settings;
+        private static class PureDfFactory implements ScoreScript.Factory,
+import org.opensearch.plugins.ScriptPlugin;
+import org.opensearch.search.lookup.SearchLookup;
                              */
-                            return 0.0d;
-                        }
-                        try {
-                            return postings.freq();
-                        } catch (IOException e) {
-                            throw new UncheckedIOException(e);
-                        }
-                    }
-                };
-            }
+ * specific language governing permissions and limitations
+ * SPDX-License-Identifier: Apache-2.0
         }
+            }
+ * GitHub history for details.
+                    }
+                        if (postings.docID() != currentDocid) {
+            private final SearchLookup lookup;
+        ) {
+import org.apache.lucene.index.LeafReaderContext;
+ */
+                    return new ScoreScript(params, lookup, indexSearcher, context) {
+        }
+                }
+ * this file be licensed under the Apache-2.0 license or a
+ * this work for additional information regarding copyright
+                                throw new UncheckedIOException(e);
+            ) {
+import org.apache.lucene.index.Term;
+     * Instantiate this plugin.
+                    /*
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                        public double execute(
+import java.util.Set;
+ * the Apache License, Version 2.0 (the "License"); you may
+            String scriptName,
+            // optionally close resources
+ *
+                    int currentDocid = -1;
+    // tag::expert_engine
+                this.params = params;
+import org.opensearch.script.ScoreScript.LeafFactory;
+                term = params.get("term").toString();
+    public ScriptEngine getScriptEngine(Settings settings, Collection<ScriptContext<?>> contexts) {
+        }
+     *  implement pure document frequency scoring. */
+            @Override
     }
-    // end::expert_engine
+            public boolean needs_score() {
+import java.io.UncheckedIOException;
+            return "expert_scripts";
+            }
+ * not use this file except in compliance with the License.
+        @Override
+/*
+                IndexSearcher indexSearcher
+    /**
+/*
+                        }
+        @Override
+import org.apache.lucene.search.IndexSearcher;
+ *
 }
+            }
+package org.opensearch.example.expertscript;
+import org.opensearch.script.ScoreScript;
+                if (params.containsKey("term") == false) {
+                            return postings.freq();
+            String scriptSource,
+                            return 0.0d;
+        }
+                if (params.containsKey("field") == false) {
+                PostingsEnum postings = context.reader().postings(
+                    @Override
+                field = params.get("field").toString();
+                this.lookup = lookup;
+                            } catch (IOException e) {
+                SearchLookup lookup,
+            private final IndexSearcher indexSearcher;
+            private PureDfLeafFactory(
+                }
+    @Override
+                            ExplanationHolder explanation
+ * Licensed to Elasticsearch under one or more contributor
+ * compatible open source license.
+                this.indexSearcher = indexSearcher;
+                    public void setDocument(int docid) {
+                         * a docid <= its current docid
+ * The OpenSearch Contributors require contributions made to
+                                postings.advance(docid);
+import org.opensearch.script.ScriptContext;
+                         * advance has undefined behavior calling with
+                    }
+            ScriptContext<T> context,
+            return Collections.singleton(ScoreScript.CONTEXT);
+ * implementing expert scoring.
+ */
+                Map<String, Object> params,
+                     * so always return 0
+                }
+                throw new IllegalArgumentException(getType()
+                    throws IOException {
+            @Override
+            Map<String, String> params
+ * You may obtain a copy of the License at
+                return new PureDfLeafFactory(params, lookup, indexSearcher);
+                            return 0.0d;
+                    @Override
+                        Map<String, Object> params, SearchLookup lookup, IndexSearcher indexSearcher) {
+        @Override
+    public ExpertScriptPlugin() {}
+    private static class MyExpertScriptEngine implements ScriptEngine {
+            }
+import org.apache.lucene.index.PostingsEnum;
+import java.io.IOException;
+        }
+                ScoreScript.Factory factory = new PureDfFactory();
+            public LeafFactory newFactory(
+        public void close() {
+                        /*
+import java.util.Collections;
+    }
+                    + scriptSource);
+        public Set<ScriptContext<?>> getSupportedContexts() {
+            throw new IllegalArgumentException("Unknown script name "
+                };
+    // end::expert_engine
+import java.util.Map;
+ * KIND, either express or implied.  See the License for the
+                return new ScoreScript(params, lookup, indexSearcher, context) {
+        return new MyExpertScriptEngine();
+        public <T> T compile(
+            }
+import org.opensearch.script.ScriptEngine;
+public class ExpertScriptPlugin extends Plugin implements ScriptPlugin {
+                             * doc has no occurrences of the term
+                        currentDocid = docid;
+                        }
+                // PureDfLeafFactory only uses deterministic APIs, this
+                         */
+                            /*
+                    throw new IllegalArgumentException(
+                        }
+ */
+     */
+                        ) {
+ * An example script plugin that adds a {@link ScriptEngine}
+                        try {
+                             * advance moved past the current doc, so this
+ * under the License.
+                return false;  // Return true if the script needs the score
+                     */
+                return true;
+                                                      ScriptFactory {
+        public String getType() {
+                            }
+            public boolean isResultDeterministic() {
+    /** An example {@link ScriptEngine} that uses Lucene segment details to
+                        + " scripts cannot be used for context ["
+            // we use the script "source" as the script identifier
+        }
+                    };
+/*
+            private final String field;
+            @Override
+ * license agreements. See the NOTICE file distributed with
+            public ScoreScript newInstance(LeafReaderContext context)
+                return context.factoryClazz.cast(factory);

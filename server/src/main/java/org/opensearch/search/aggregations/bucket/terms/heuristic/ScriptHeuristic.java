@@ -1,218 +1,191 @@
+import org.opensearch.core.common.io.stream.StreamInput;
+    public boolean equals(Object obj) {
+ * You may obtain a copy of the License at
+import org.opensearch.core.xcontent.XContentBuilder;
+    @Override
+        private final LongAccessor supersetSizeHolder;
+/*
+            params.put("_superset_size", supersetSizeHolder);
+     *
+package org.opensearch.search.aggregations.bucket.terms.heuristic;
+    }
+            return value;
+        SignificantTermsHeuristicScoreScript.Factory factory = context.scriptService()
+ * under the License.
+    @Override
+ * compatible open source license.
+            SignificantTermsHeuristicScoreScript.CONTEXT
+        }
+        @Override
+    static class ExecutableScriptHeuristic extends ScriptHeuristic {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        public long longValue() {
+        public String toString() {
+ *
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+/*
+ * KIND, either express or implied.  See the License for the
+        public float floatValue() {
+ * Licensed to Elasticsearch under one or more contributor
+    @Override
+ *
+    }
+     * @return a "significance" score
+            params.put("_superset_freq", supersetDfHolder);
+    }
+    }
+     * @param supersetFreq The frequency of the term in the superset from which the sample was taken
+    @Override
+        }
+ * The OpenSearch Contributors require contributions made to
+            this.executableScript = executableScript;
+    );
+    public SignificanceHeuristic rewrite(QueryShardContext queryShardContext) {
+        @Override
+        if (getClass() != obj.getClass()) {
+        }
+        }
+    }
+        return NAME;
+        ScriptHeuristic other = (ScriptHeuristic) obj;
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.script.SignificantTermsHeuristicScoreScript;
+    /**
+        this.script = script;
+    public String getWriteableName() {
+ * Script significance heuristic for significant terms agg
+        NAME,
 /*
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.terms.heuristic;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.script.Script;
-import org.opensearch.script.SignificantTermsHeuristicScoreScript;
-import org.opensearch.search.aggregations.InternalAggregation;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-
-/**
- * Script significance heuristic for significant terms agg
- *
- * @opensearch.internal
- */
-public class ScriptHeuristic extends SignificanceHeuristic {
-    public static final String NAME = "script_heuristic";
-    public static final ConstructingObjectParser<ScriptHeuristic, Void> PARSER = new ConstructingObjectParser<>(
-        NAME,
-        args -> new ScriptHeuristic((Script) args[0])
-    );
-    static {
         Script.declareScript(PARSER, constructorArg());
-    }
-
-    private final Script script;
-
-    /**
-     * This class holds an executable form of the script with private variables ready for execution
-     * on a single search thread.
-     *
-     * @opensearch.internal
-     */
-    static class ExecutableScriptHeuristic extends ScriptHeuristic {
-        private final LongAccessor subsetSizeHolder;
-        private final LongAccessor supersetSizeHolder;
-        private final LongAccessor subsetDfHolder;
-        private final LongAccessor supersetDfHolder;
-        private final SignificantTermsHeuristicScoreScript executableScript;
-        private final Map<String, Object> params = new HashMap<>();
-
-        ExecutableScriptHeuristic(Script script, SignificantTermsHeuristicScoreScript executableScript) {
-            super(script);
+        args -> new ScriptHeuristic((Script) args[0])
             subsetSizeHolder = new LongAccessor();
-            supersetSizeHolder = new LongAccessor();
-            subsetDfHolder = new LongAccessor();
-            supersetDfHolder = new LongAccessor();
-            this.executableScript = executableScript;
-            params.putAll(script.getParams());
-            params.put("_subset_freq", subsetDfHolder);
-            params.put("_subset_size", subsetSizeHolder);
-            params.put("_superset_freq", supersetDfHolder);
-            params.put("_superset_size", supersetSizeHolder);
         }
-
-        @Override
-        public double getScore(long subsetFreq, long subsetSize, long supersetFreq, long supersetSize) {
-            subsetSizeHolder.value = subsetSize;
-            supersetSizeHolder.value = supersetSize;
-            subsetDfHolder.value = subsetFreq;
-            supersetDfHolder.value = supersetFreq;
-            return executableScript.execute(params);
-        }
-    }
-
-    public ScriptHeuristic(Script script) {
-        this.script = script;
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public ScriptHeuristic(StreamInput in) throws IOException {
-        this(new Script(in));
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        script.writeTo(out);
-    }
-
-    @Override
-    public SignificanceHeuristic rewrite(InternalAggregation.ReduceContext context) {
-        SignificantTermsHeuristicScoreScript.Factory factory = context.scriptService()
-            .compile(script, SignificantTermsHeuristicScoreScript.CONTEXT);
-        return new ExecutableScriptHeuristic(script, factory.newInstance());
-    }
-
-    @Override
-    public SignificanceHeuristic rewrite(QueryShardContext queryShardContext) {
-        SignificantTermsHeuristicScoreScript.Factory compiledScript = queryShardContext.compile(
-            script,
-            SignificantTermsHeuristicScoreScript.CONTEXT
-        );
-        return new ExecutableScriptHeuristic(script, compiledScript.newInstance());
-    }
-
-    /**
-     * Calculates score with a script
-     *
-     * @param subsetFreq   The frequency of the term in the selected sample
-     * @param subsetSize   The size of the selected sample (typically number of docs)
-     * @param supersetFreq The frequency of the term in the superset from which the sample was taken
-     * @param supersetSize The size of the superset from which the sample was taken  (typically number of docs)
-     * @return a "significance" score
-     */
-    @Override
-    public double getScore(long subsetFreq, long subsetSize, long supersetFreq, long supersetSize) {
-        throw new UnsupportedOperationException(
-            "This scoring heuristic must have 'rewrite' called on it to provide a version ready " + "for use"
-        );
-    }
-
-    @Override
-    public String getWriteableName() {
-        return NAME;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params builderParams) throws IOException {
-        builder.startObject(NAME);
-        builder.field(Script.SCRIPT_PARSE_FIELD.getPreferredName());
-        script.toXContent(builder, builderParams);
-        builder.endObject();
-        return builder;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(script);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
         if (obj == null) {
-            return false;
-        }
-        if (getClass() != obj.getClass()) {
-            return false;
-        }
-        ScriptHeuristic other = (ScriptHeuristic) obj;
-        return Objects.equals(script, other.script);
-    }
-
-    /**
-     * Accesses long values
-     *
-     * @opensearch.internal
-     */
-    public final class LongAccessor extends Number {
-        public long value;
-
-        @Override
-        public int intValue() {
-            return (int) value;
-        }
-
-        @Override
-        public long longValue() {
-            return value;
-        }
-
-        @Override
-        public float floatValue() {
-            return value;
-        }
-
-        @Override
-        public double doubleValue() {
-            return value;
-        }
-
-        @Override
-        public String toString() {
+            script,
             return Long.toString(value);
+ */
+        public double getScore(long subsetFreq, long subsetSize, long supersetFreq, long supersetSize) {
+ * license agreements. See the NOTICE file distributed with
+            return value;
+        @Override
+        return Objects.hash(script);
+    /**
+    @Override
+        script.toXContent(builder, builderParams);
+            params.put("_subset_freq", subsetDfHolder);
+        private final LongAccessor supersetDfHolder;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    /**
+    public ScriptHeuristic(Script script) {
+ * ownership. Elasticsearch licenses this file to you under
+            supersetSizeHolder.value = supersetSize;
+    private final Script script;
+    public ScriptHeuristic(StreamInput in) throws IOException {
+        return new ExecutableScriptHeuristic(script, compiledScript.newInstance());
+    public final class LongAccessor extends Number {
+    public int hashCode() {
+            params.putAll(script.getParams());
+        ExecutableScriptHeuristic(Script script, SignificantTermsHeuristicScoreScript executableScript) {
+            return false;
+import java.io.IOException;
+        return Objects.equals(script, other.script);
+ */
+     * Accesses long values
+    public XContentBuilder toXContent(XContentBuilder builder, Params builderParams) throws IOException {
+ * Unless required by applicable law or agreed to in writing,
         }
+        builder.field(Script.SCRIPT_PARSE_FIELD.getPreferredName());
+/**
+    public static final String NAME = "script_heuristic";
+            .compile(script, SignificantTermsHeuristicScoreScript.CONTEXT);
     }
+            "This scoring heuristic must have 'rewrite' called on it to provide a version ready " + "for use"
+        @Override
+     */
+    @Override
+    }
+        public int intValue() {
+import java.util.Objects;
+     * Read from a stream.
+import java.util.Map;
+ * specific language governing permissions and limitations
+        builder.startObject(NAME);
+        private final Map<String, Object> params = new HashMap<>();
+        @Override
+     * @opensearch.internal
+    }
+     * @param subsetSize   The size of the selected sample (typically number of docs)
+    public double getScore(long subsetFreq, long subsetSize, long supersetFreq, long supersetSize) {
 }
+        }
+            return (int) value;
+     */
+        return builder;
+        this(new Script(in));
+import org.opensearch.script.Script;
+            super(script);
+        private final LongAccessor subsetSizeHolder;
+        public long value;
+    @Override
+    /**
+     */
+        return new ExecutableScriptHeuristic(script, factory.newInstance());
+    public SignificanceHeuristic rewrite(InternalAggregation.ReduceContext context) {
+     * @param subsetFreq   The frequency of the term in the selected sample
+import java.util.HashMap;
+            return value;
+ * GitHub history for details.
+    }
+     * Calculates score with a script
+ * the Apache License, Version 2.0 (the "License"); you may
+     */
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+            subsetSizeHolder.value = subsetSize;
+    }
+ * this file be licensed under the Apache-2.0 license or a
+ * not use this file except in compliance with the License.
+    @Override
+        SignificantTermsHeuristicScoreScript.Factory compiledScript = queryShardContext.compile(
+            supersetSizeHolder = new LongAccessor();
+        );
+    }
+    public static final ConstructingObjectParser<ScriptHeuristic, Void> PARSER = new ConstructingObjectParser<>(
+        script.writeTo(out);
+     * @param supersetSize The size of the superset from which the sample was taken  (typically number of docs)
+        public double doubleValue() {
+    static {
+     * This class holds an executable form of the script with private variables ready for execution
+        }
+            subsetDfHolder = new LongAccessor();
+ * software distributed under the License is distributed on an
+     *
+ * @opensearch.internal
+ *
+        private final LongAccessor subsetDfHolder;
+            return executableScript.execute(params);
+ */
+     * @opensearch.internal
+        @Override
+ * this work for additional information regarding copyright
+import org.opensearch.search.aggregations.InternalAggregation;
+    public void writeTo(StreamOutput out) throws IOException {
+    }
+        }
+        throw new UnsupportedOperationException(
+            supersetDfHolder = new LongAccessor();
+        builder.endObject();
+        private final SignificantTermsHeuristicScoreScript executableScript;
+            params.put("_subset_size", subsetSizeHolder);
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+            return false;
+import org.opensearch.index.query.QueryShardContext;
+            subsetDfHolder.value = subsetFreq;
+     * on a single search thread.
+public class ScriptHeuristic extends SignificanceHeuristic {
+     *
+ *
+            supersetDfHolder.value = supersetFreq;
+    }
+        );

@@ -1,786 +1,743 @@
----
-teardown:
-  - do:
-      ingest.delete_pipeline:
-        id: "1"
-        ignore: 404
-
----
-"Test creat fingerprint processor":
-  - skip:
-      version: " - 2.15.99"
+            field: {
+  - match: { _source.fingerprint: "SHA-256@2.16.0:Sdlg0BodM3n1my4BvaTfJCPrvHxfrxno0kCLfMaC+XY=" }
+  - match: { acknowledged: true }
       reason: "introduced in 2.16.0"
-  - do:
-      catch: /field name cannot be null nor empty/
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "fields": [null]
-                }
-              }
-            ]
-          }
-  - do:
-      catch: /field name cannot be null nor empty/
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "exclude_fields": [""]
-                }
-              }
-            ]
-          }
-  - do:
-      catch: /either fields or exclude\_fields can be set/
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "fields": ["foo"],
-                  "exclude_fields": ["bar"]
-                }
-              }
-            ]
-          }
-
-  - do:
-      catch: /hash method must be MD5@2.16.0\, SHA\-1@2.16.0, SHA\-256@2.16.0 or SHA3\-256@2.16.0/
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "fields": ["foo"],
-                  "hash_method": "non-existing"
-                }
-              }
-            ]
-          }
-
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "fields" : ["foo"],
                   "target_field" : "fingerprint_field",
-                  "hash_method": "SHA-256@2.16.0"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      ingest.put_pipeline:
-        id: "1"
+  - match: { _source.fingerprint: "SHA-256@2.16.0:Sdlg0BodM3n1my4BvaTfJCPrvHxfrxno0kCLfMaC+XY=" }
         body:  >
-          {
-            "processors": [
-              {
                 "fingerprint" : {
-                }
-              }
             ]
+        body: {
+            "processors": [
+                  "fields" : ["foo", "bar", "zoo"],
           }
-  - match: { acknowledged: true }
-
----
-"Test fingerprint processor with ignore_missing":
+        id: "1"
+                }
+      index:
+                "fingerprint" : {
+  - do:
+        id: 4
+            }
+  - match: { _source.target: "SHA-1@2.16.0:YqpBTuHXCPV04j/7lGfWeUl8Tyo=" }
+        body:  >
   - skip:
-      version: " - 2.15.99"
-      reason: "introduced in 2.16.0"
+              {
+              }
+                }
+      get:
+            "processors": [
+                "fingerprint" : {
+              {
+                }
+                  "fields" : ["foo"],
+              }
+  - do:
+  - do:
+            }
+          },
+  - do:
+  - do:
+  - do:
+        index: test
+              {
+          },
+          zoo: null
+              }
+          {
+      get:
+          {
+  - skip:
+        id: "1"
+  - match: { acknowledged: true }
+              innerField: "inner"
+  - match: { _source.fingerprint: "SHA-1@2.16.0:KYJ4pc4ouFmAbgZGp7CfNoykZeo=" }
+        }
+      ingest.put_pipeline:
+        body:  >
+  - match: { acknowledged: true }
+          foo: [1, 2, 3],
+                }
+          }
+                "fingerprint" : {
+          zoo: null
+        id: 4
+  - match: { acknowledged: true }
+                "fingerprint" : {
+  - match: { acknowledged: true }
+            "processors": [
+  - do:
+      get:
+        }
+"Test fingerprint processor with non-primitive fields and SHA-1":
+        }
+        index: test
+            field: {
+          },
+          foo: [1, 2, 3],
+          bar: {
+        index: test
+              innerField: "inner"
+          foo: [1, 2, 3],
+                "fingerprint" : {
+        id: "1"
+        pipeline: "1"
+        body: {
+        pipeline: "1"
+  - do:
+            field: {
+"Test fingerprint processor with custom target field":
+        }
+        id: 1
+---
+        index: test
+      index:
+  - match: { acknowledged: true }
+        index: test
+      index:
+            }
+        pipeline: "1"
+              }
+          {
+  - do:
+        id: 3
   - do:
       ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
+          foo: [1, 2, 3],
+            field: {
+  - match: { _source.fingerprint: "SHA-256@2.16.0:Sdlg0BodM3n1my4BvaTfJCPrvHxfrxno0kCLfMaC+XY=" }
+          bar: {
+          },
+---
+  - skip:
             "processors": [
-              {
-                "fingerprint" : {
-                  "fields" : ["foo"]
+        id: 4
+            ]
+          {
+              }
+      version: " - 2.15.99"
+        index: test
                 }
               }
+  - match: { acknowledged: true }
+          },
+  - do:
+              {
+            field: {
+        body:  >
+  - do:
+                }
+  - do:
+      get:
+      index:
+              }
+      get:
+        body: {
+      catch: /field name cannot be null nor empty/
+        }
+            field: {
+        body: {
+        id: 3
+  - do:
+        id: 1
+        body: {
+        index: test
+                  "fields": ["foo"],
+            "processors": [
+      version: " - 2.15.99"
+        pipeline: "1"
+      index:
+        id: 1
+      index:
+          }
+      get:
+            ]
+              innerField: "inner"
+      index:
+        id: 4
+  - do:
+      version: " - 2.15.99"
+        pipeline: "1"
+          },
+      catch: /either fields or exclude\_fields can be set/
+          zoo: null
+      ingest.put_pipeline:
+      ingest.put_pipeline:
+            ]
+          foo: [1, 2, 3],
+                }
+      ingest.put_pipeline:
+        }
+                  "exclude_fields":[]
+            "processors": [
+                  "hash_method" : "MD5@2.16.0"
+  - do:
+"Test fingerprint processor with non-primitive fields and MD5":
+        index: test
+                  "fields" : ["foo", "bar", "zoo"],
+              }
+            field: {
+  - match: { _source.fingerprint: "SHA-256@2.16.0:Sdlg0BodM3n1my4BvaTfJCPrvHxfrxno0kCLfMaC+XY=" }
+                  "fields": ["foo"],
+            ]
+        pipeline: "1"
+        body: {
+  - match: { acknowledged: true }
+            }
+        }
+  - do:
+      version: " - 2.15.99"
+                  "hash_method" : "SHA-256@2.16.0"
+        id: "1"
+        body:  >
+  - do:
+                }
+                  "fields":[],
+        id: "1"
+          {
+            ]
+          },
+            ]
+        body:  >
+        body:  >
+        body:  >
+  - skip:
+        }
+          foo: [1, 2, 3],
+  - match: { _source.fingerprint: "MD5@2.16.0:NovpcJ+MYHzEZtCewcDPTQ==" }
+                "fingerprint" : {
+                }
+      version: " - 2.15.99"
+        id: 2
+            }
+          },
+              }
+              }
+            "processors": [
+        }
+  - match: { acknowledged: true }
+                "fingerprint" : {
+              }
+          {
+        pipeline: "1"
+      reason: "introduced in 2.16.0"
+      ingest.put_pipeline:
+                }
+        pipeline: "1"
+      get:
+  - match: { acknowledged: true }
+          {
+        id: 1
+          foo: [1, 2, 3],
+                  "hash_method" : "MD5@2.16.0"
+        index: test
+          {
+        body: {
+      get:
+                }
+                  "exclude_fields":[],
+          foo: [1, 2, 3],
+            }
+      ingest.put_pipeline:
+        index: test
+        id: 3
+        pipeline: "1"
+                  "fields" : ["foo"],
+            ]
+            }
+            }
+        }
+  - do:
+  - do:
+      ingest.put_pipeline:
+        body: {
+      ingest.put_pipeline:
+        id: 4
+        pipeline: "1"
+          zoo: null
+        pipeline: "1"
+                  "fields":[],
+                "fingerprint" : {
+        body:  >
+        id: 2
+      get:
+            "processors": [
+          {
+        id: "1"
+      ingest.put_pipeline:
+      index:
+          bar: {
+  - do:
+        id: "1"
+      index:
+      get:
+      index:
+  - do:
+        }
+              innerField: "inner"
+          foo: [1, 2, 3],
+            "processors": [
+                }
+        index: test
+        }
+                  "exclude_fields":[],
+        body:  >
+          {
+"Test fingerprint processor with ignore_missing":
+        id: 1
+        index: test
+            }
+        pipeline: "1"
+        id: 2
+              innerField: "inner"
+          bar: {
+  - do:
+        id: 3
+        pipeline: "1"
+            field: {
+                }
+        }
+        id: 3
+      reason: "introduced in 2.16.0"
+                  "fields": [null]
+          bar: {
+            "processors": [
+        pipeline: "1"
+        id: "1"
+        index: test
+      get:
+            "processors": [
+          }
+---
+  - do:
+        body: {
+          }
+        }
+              }
+      ingest.put_pipeline:
+              {
+"Test fingerprint processor with non-primitive fields and SHA3-256":
+  - match: { _source.fingerprint: "SHA-1@2.16.0:YqpBTuHXCPV04j/7lGfWeUl8Tyo=" }
+---
+            ]
+      ingest.put_pipeline:
+      version: " - 2.15.99"
+  - do:
+              {
+            ]
+            "processors": [
+            field: {
+          }
+        index: test
+              {
+              {
+        body:  >
+          {
+        id: "1"
+              }
+      ingest.put_pipeline:
+          }
+        id: "1"
+        body:  >
+  - skip:
+        index: test
+          }
+                "fingerprint" : {
+              innerField: "inner"
+                }
+          },
+          zoo: null
+          zoo: null
+              }
+        body: {
+        id: "1"
+          zoo: null
+                  "hash_method" : "SHA-256@2.16.0"
+            ]
+        index: test
+      ingest.put_pipeline:
+            ]
+              innerField: "inner"
+      index:
+  - do:
+        body:  >
+        index: test
+                }
+                }
+  - do:
+              }
+  - do:
+        id: 1
+        pipeline: "1"
+  - match: { acknowledged: true }
+        }
+            ]
+  - do:
+        id: 1
             ]
           }
+        id: "1"
+            "processors": [
+          {
+        id: 4
+        body:  >
+          foo: [1, 2, 3],
+  - match: { _source.fingerprint: "SHA3-256@2.16.0:+GZCkMLEMkUA/4IrEZEZZYsVMbZdpJ92ppN3wUsFYOI=" }
+        id: 3
   - match: { acknowledged: true }
-
+                  "fields" : ["foo"]
+                "fingerprint" : {
+      get:
+      index:
   - do:
+  - skip:
+  - do:
+              innerField: "inner"
+  - do:
+        }
+        id: 1
+        id: 3
+      get:
+  - do:
+        }
+        body:  >
+  - do:
+                "fingerprint" : {
+  - do:
+      index:
+        body: {
+          zoo: null
+                }
+        pipeline: "1"
+              {
+        id: "1"
+          bar: {
+  - do:
+        id: "1"
+              innerField: "inner"
+                  "ignore_missing" : true
+  - do:
+        index: test
+            "processors": [
+          zoo: null
+        pipeline: "1"
+                "fingerprint" : {
+            "processors": [
+        index: test
+      get:
+      catch: /field name cannot be null nor empty/
+          }
+          }
+              innerField: "inner"
+            ]
+              {
+        id: "1"
+          }
+  - do:
+          {
+          zoo: null
+                  "hash_method" : "SHA3-256@2.16.0"
+              }
+              {
+      ingest.put_pipeline:
+  - do:
+        index: test
+            field: {
+            ]
+          bar: {
+      ingest.put_pipeline:
+          },
+  - match: { acknowledged: true }
+  - do:
+              }
+                  "exclude_fields": [""]
+  - do:
+              innerField: "inner"
+          {
+  - match: { _source.fingerprint: "MD5@2.16.0:NovpcJ+MYHzEZtCewcDPTQ==" }
+        id: 4
+  - do:
+        id: 2
+        id: "1"
+      reason: "introduced in 2.16.0"
+                  "target_field" : "target"
+  - match: { acknowledged: true }
+            ]
+      get:
+            "processors": [
+          }
+  - match: { acknowledged: true }
+                  "exclude_fields":[],
+        index: test
+            ]
+              innerField: "inner"
+                  "hash_method" : "SHA-256@2.16.0"
+        index: test
+      index:
+                  "fields" : ["foo", "bar", "zoo"],
+          zoo: null
+          foo: [1, 2, 3],
+            }
+          }
+        index: test
+        body: {
+                  "hash_method" : "SHA3-256@2.16.0"
+              {
+              {
+          foo: [1, 2, 3],
+  - do:
+          {
+---
+      reason: "introduced in 2.16.0"
+        id: "1"
       catch: /field \[foo\] doesn't exist/
       index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          bar: "bar"
-        }
-
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "fields" : ["foo", "bar"],
-                  "ignore_missing" : true
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          foo: "foo"
-        }
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.fingerprint: "SHA-1@2.16.0:YqpBTuHXCPV04j/7lGfWeUl8Tyo=" }
-
----
-"Test fingerprint processor with custom target field":
-  - skip:
-      version: " - 2.15.99"
-      reason: "introduced in 2.16.0"
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "fields" : ["foo"],
-                  "target_field" : "target"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          foo: "foo"
-        }
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.target: "SHA-1@2.16.0:YqpBTuHXCPV04j/7lGfWeUl8Tyo=" }
-
----
-"Test fingerprint processor with non-primitive fields and SHA-1":
-  - skip:
-      version: " - 2.15.99"
-      reason: "introduced in 2.16.0"
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "fields" : ["foo", "bar", "zoo"]
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.fingerprint: "SHA-1@2.16.0:KYJ4pc4ouFmAbgZGp7CfNoykZeo=" }
-
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 2
-        pipeline: "1"
-        body: {
-          foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
-  - do:
-      get:
-        index: test
-        id: 2
-  - match: { _source.fingerprint: "SHA-1@2.16.0:KYJ4pc4ouFmAbgZGp7CfNoykZeo=" }
-
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "fields":[]
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 3
-        pipeline: "1"
-        body: {
-          foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
-  - do:
-      get:
-        index: test
-        id: 3
-  - match: { _source.fingerprint: "SHA-1@2.16.0:KYJ4pc4ouFmAbgZGp7CfNoykZeo=" }
-
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "exclude_fields":[]
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 4
-        pipeline: "1"
-        body: {
-          foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
-  - do:
-      get:
-        index: test
-        id: 4
-  - match: { _source.fingerprint: "SHA-1@2.16.0:KYJ4pc4ouFmAbgZGp7CfNoykZeo=" }
-
----
-"Test fingerprint processor with non-primitive fields and MD5":
-  - skip:
-      version: " - 2.15.99"
-      reason: "introduced in 2.16.0"
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "fields" : ["foo", "bar", "zoo"],
-                  "hash_method" : "MD5@2.16.0"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.fingerprint: "MD5@2.16.0:NovpcJ+MYHzEZtCewcDPTQ==" }
-
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "hash_method" : "MD5@2.16.0"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 2
-        pipeline: "1"
-        body: {
-          foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
-  - do:
-      get:
-        index: test
-        id: 2
-  - match: { _source.fingerprint: "MD5@2.16.0:NovpcJ+MYHzEZtCewcDPTQ==" }
-
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "fields":[],
-                  "hash_method" : "MD5@2.16.0"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 3
-        pipeline: "1"
-        body: {
-          foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
-  - do:
-      get:
-        index: test
-        id: 3
-  - match: { _source.fingerprint: "MD5@2.16.0:NovpcJ+MYHzEZtCewcDPTQ==" }
-
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "exclude_fields":[],
-                  "hash_method" : "MD5@2.16.0"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 4
-        pipeline: "1"
-        body: {
-          foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
-  - do:
-      get:
-        index: test
-        id: 4
-  - match: { _source.fingerprint: "MD5@2.16.0:NovpcJ+MYHzEZtCewcDPTQ==" }
-
-
----
 "Test fingerprint processor with non-primitive fields and SHA-256":
-  - skip:
-      version: " - 2.15.99"
-      reason: "introduced in 2.16.0"
+            field: {
+        body: {
   - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "fields" : ["foo", "bar", "zoo"],
-                  "hash_method" : "SHA-256@2.16.0"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
         index: test
         id: 1
-        pipeline: "1"
-        body: {
-          foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.fingerprint: "SHA-256@2.16.0:Sdlg0BodM3n1my4BvaTfJCPrvHxfrxno0kCLfMaC+XY=" }
-
-  - do:
-      ingest.put_pipeline:
         id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "hash_method" : "SHA-256@2.16.0"
-                }
               }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 2
-        pipeline: "1"
-        body: {
-          foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
-  - do:
-      get:
-        index: test
-        id: 2
-  - match: { _source.fingerprint: "SHA-256@2.16.0:Sdlg0BodM3n1my4BvaTfJCPrvHxfrxno0kCLfMaC+XY=" }
-
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
           {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "fields":[],
-                  "hash_method" : "SHA-256@2.16.0"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 3
-        pipeline: "1"
-        body: {
-          foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
-  - do:
-      get:
-        index: test
-        id: 3
-  - match: { _source.fingerprint: "SHA-256@2.16.0:Sdlg0BodM3n1my4BvaTfJCPrvHxfrxno0kCLfMaC+XY=" }
-
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "exclude_fields":[],
-                  "hash_method" : "SHA-256@2.16.0"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
         id: 4
-        pipeline: "1"
-        body: {
-          foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
-  - do:
-      get:
+          {
+                "fingerprint" : {
         index: test
-        id: 4
-  - match: { _source.fingerprint: "SHA-256@2.16.0:Sdlg0BodM3n1my4BvaTfJCPrvHxfrxno0kCLfMaC+XY=" }
-
+          {
+            field: {
+          {
+        body:  >
+                  "exclude_fields": ["bar"]
+        index: test
+          }
+      ingest.put_pipeline:
+          }
+        index: test
+          bar: {
+              {
+  - do:
+      index:
 ---
-"Test fingerprint processor with non-primitive fields and SHA3-256":
-  - skip:
-      version: " - 2.15.99"
-      reason: "introduced in 2.16.0"
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
-                  "fields" : ["foo", "bar", "zoo"],
-                  "hash_method" : "SHA3-256@2.16.0"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
       index:
-        index: test
-        id: 1
-        pipeline: "1"
         body: {
-          foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
-  - do:
-      get:
-        index: test
         id: 1
-  - match: { _source.fingerprint: "SHA3-256@2.16.0:+GZCkMLEMkUA/4IrEZEZZYsVMbZdpJ92ppN3wUsFYOI=" }
-
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "fingerprint" : {
+            field: {
+        index: test
                   "hash_method" : "SHA3-256@2.16.0"
-                }
-              }
-            ]
-          }
   - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 2
-        pipeline: "1"
-        body: {
-          foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
-  - do:
-      get:
-        index: test
-        id: 2
-  - match: { _source.fingerprint: "SHA3-256@2.16.0:+GZCkMLEMkUA/4IrEZEZZYsVMbZdpJ92ppN3wUsFYOI=" }
-
-  - do:
-      ingest.put_pipeline:
-        id: "1"
         body:  >
-          {
-            "processors": [
               {
                 "fingerprint" : {
                   "fields":[],
-                  "hash_method" : "SHA3-256@2.16.0"
-                }
+      reason: "introduced in 2.16.0"
+      ingest.put_pipeline:
+            "processors": [
+        body:  >
+      get:
+        body:  >
+"Test creat fingerprint processor":
+            "processors": [
+          {
               }
-            ]
-          }
-  - match: { acknowledged: true }
-
   - do:
-      index:
+      catch: /hash method must be MD5@2.16.0\, SHA\-1@2.16.0, SHA\-256@2.16.0 or SHA3\-256@2.16.0/
+        id: "1"
+                }
+        id: "1"
+  - do:
+        body:  >
         index: test
-        id: 3
-        pipeline: "1"
-        body: {
-          foo: [1, 2, 3],
+  - do:
+            ]
+                "fingerprint" : {
+                  "hash_method" : "SHA3-256@2.16.0"
+          {
+              {
+      get:
+                "fingerprint" : {
+  - do:
+            ]
+            field: {
+              {
+              innerField: "inner"
+                "fingerprint" : {
+                "fingerprint" : {
+                }
+  - do:
+          },
+            }
+  - match: { acknowledged: true }
+  - do:
+          bar: {
+      get:
           bar: {
             field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
-        }
+                  "hash_method" : "SHA-256@2.16.0"
+          }
+  - match: { acknowledged: true }
+        id: "1"
+          }
   - do:
-      get:
-        index: test
+            "processors": [
         id: 3
-  - match: { _source.fingerprint: "SHA3-256@2.16.0:+GZCkMLEMkUA/4IrEZEZZYsVMbZdpJ92ppN3wUsFYOI=" }
-
+                "fingerprint" : {
+        pipeline: "1"
+              }
+                  "hash_method": "SHA-256@2.16.0"
+        index: test
+          foo: "foo"
+              }
+                  "hash_method": "non-existing"
+              {
+            }
+        id: "1"
+              innerField: "inner"
+                "fingerprint" : {
+      ingest.put_pipeline:
+      ingest.put_pipeline:
+  - match: { _source.fingerprint: "SHA-1@2.16.0:KYJ4pc4ouFmAbgZGp7CfNoykZeo=" }
+                "fingerprint" : {
+        id: 1
+              {
+---
+          {
+        id: 2
+                }
   - do:
       ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
               {
-                "fingerprint" : {
-                  "exclude_fields":[],
-                  "hash_method" : "SHA3-256@2.16.0"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
   - do:
-      index:
-        index: test
-        id: 4
-        pipeline: "1"
-        body: {
           foo: [1, 2, 3],
-          bar: {
-            field: {
-              innerField: "inner"
-            }
-          },
-          zoo: null
+              }
         }
   - do:
-      get:
-        index: test
-        id: 4
+          bar: {
+              innerField: "inner"
+        body: {
+  - match: { acknowledged: true }
+      ingest.put_pipeline:
+          {
+                }
+              {
+          }
+  - match: { _source.fingerprint: "SHA-1@2.16.0:KYJ4pc4ouFmAbgZGp7CfNoykZeo=" }
   - match: { _source.fingerprint: "SHA3-256@2.16.0:+GZCkMLEMkUA/4IrEZEZZYsVMbZdpJ92ppN3wUsFYOI=" }
+          {
+        index: test
+                }
+          bar: {
+                }
+          zoo: null
+            }
+            }
+          }
+              }
+          },
+        body:  >
+            }
+            field: {
+  - do:
+          }
+  - do:
+        body:  >
+                  "fields" : ["foo", "bar"],
+            "processors": [
+        index: test
+              innerField: "inner"
+  - do:
+              {
+          bar: {
+        index: test
+          }
+          bar: {
+  - match: { _source.fingerprint: "SHA3-256@2.16.0:+GZCkMLEMkUA/4IrEZEZZYsVMbZdpJ92ppN3wUsFYOI=" }
+      ingest.delete_pipeline:
+      ingest.put_pipeline:
+                  "fields":[]
+          bar: {
+            "processors": [
+            ]
+          bar: "bar"
+      ingest.put_pipeline:
+        body: {
+        body:  >
+  - match: { _source.fingerprint: "MD5@2.16.0:NovpcJ+MYHzEZtCewcDPTQ==" }
+        body:  >
+              {
+            "processors": [
+        index: test
+          foo: "foo"
+          bar: {
+          },
+        id: 1
+          foo: [1, 2, 3],
+        pipeline: "1"
+        body: {
+        id: 2
+                }
+            "processors": [
+                "fingerprint" : {
+                "fingerprint" : {
+              {
+  - match: { acknowledged: true }
+  - match: { _source.fingerprint: "MD5@2.16.0:NovpcJ+MYHzEZtCewcDPTQ==" }
+        id: "1"
+              }
+        ignore: 404
+  - do:
+          }
+      reason: "introduced in 2.16.0"
+teardown:
+---
+        body:  >
+        id: "1"
+          foo: [1, 2, 3],
+        body: {
+                  "hash_method" : "MD5@2.16.0"
+            "processors": [
+              {
+            ]
+        body: {
+        }
+        index: test
+              }
+          foo: [1, 2, 3],
+  - match: { acknowledged: true }
+          {
+          }
+                }
+  - match: { _source.fingerprint: "SHA3-256@2.16.0:+GZCkMLEMkUA/4IrEZEZZYsVMbZdpJ92ppN3wUsFYOI=" }
+            "processors": [
+        id: "1"
+          }
+          zoo: null
+          zoo: null
+            }
+  - do:
+            ]
+  - skip:
+  - do:
+        index: test
+        id: 2
+                  "hash_method" : "MD5@2.16.0"
+  - match: { _source.fingerprint: "SHA-1@2.16.0:KYJ4pc4ouFmAbgZGp7CfNoykZeo=" }
+          zoo: null
+        id: 1
+        index: test
+            ]
+      index:
+                "fingerprint" : {
+      index:
+      ingest.put_pipeline:
+                  "fields" : ["foo", "bar", "zoo"]
+          },
+  - do:
+          zoo: null
+  - do:
+          },
+          },
+        id: 2
+        id: "1"
+      version: " - 2.15.99"
+            ]

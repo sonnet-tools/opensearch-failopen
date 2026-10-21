@@ -1,395 +1,332 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-//! # Cache Policy Module
-//!
-//! Simple pluggable cache eviction policies for statistics cache.
-
-use datafusion::common::instant;
-use instant::Instant;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use thiserror::Error;
-
-/// Error types for cache operations
-#[derive(Debug, Error)]
-pub enum CacheError {
-    #[error("Policy lock error: {reason}")]
-    PolicyLockError { reason: String },
-}
-
-/// Result type for cache operations
-pub type CacheResult<T> = Result<T, CacheError>;
-
-/// Core trait for cache eviction policies.
-///
-/// All methods take `&self` — implementations use interior mutability
-/// (`DashMap`, atomics) so the trait object can be shared as `Arc<dyn CachePolicy>`
-/// without an outer `Mutex`. This means `get` on the parent cache never contends
-/// on a global lock, only on the per-shard DashMap locks inside the policy.
-pub trait CachePolicy: Send + Sync {
-    /// Called when a cache entry is accessed (updates recency/frequency metadata).
-    fn on_access(&self, key: &str, size: usize);
-
-    /// Called when a cache entry is inserted.
-    fn on_insert(&self, key: &str, size: usize);
-
-    /// Called when a cache entry is removed.
-    fn on_remove(&self, key: &str);
-
-    /// Select entries for eviction to free at least `target_size` bytes.
-    /// Returns string keys ordered by eviction priority (lowest-priority first).
-    fn select_for_eviction(&self, target_size: usize) -> Vec<String>;
-
-    /// Reset all policy state (called on cache clear).
-    fn clear(&self);
-
-    /// Name of this policy, for logging/stats.
-    fn policy_name(&self) -> &'static str;
-}
-
-/// Unified eviction policy selector for all caches in this crate.
-///
-/// - `Lru` / `Lfu` — used by `CustomStatisticsCache` and the metadata cache
-///   (backed by [`CachePolicy`] + [`create_policy`]).
-/// - `Fifo` — used by `BoundedCache` (CI/OI scoped caches) via
-///   `ScopedEvictionPolicy` + `FifoPolicy`.
-///
-/// One enum for all caches means `df_create_cache` parses the Java-supplied
-/// eviction string once and routes uniformly without separate enums per family.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CacheEvictionPolicy {
-    Lru,
-    Lfu,
-    Fifo,
-}
-
-/// Backward-compatible alias — will be removed once all call sites are migrated.
-pub type PolicyType = CacheEvictionPolicy;
-
-/// Metadata tracked per cached entry for eviction ordering.
-/// Stored inside the policy's `DashMap`, mutated via `get_mut`.
-#[derive(Debug, Clone)]
-pub struct CacheEntryMetadata {
-    pub size: usize,
-    pub last_accessed: Instant,
-    pub access_count: usize,
-}
-
-impl CacheEntryMetadata {
-    pub fn new(_key: String, size: usize) -> Self {
-        Self {
-            size,
-            last_accessed: Instant::now(),
-            access_count: 1,
-        }
-    }
-
-    /// Update recency and frequency. Called via `DashMap::get_mut` which holds
-    /// only the per-shard write lock — not a global lock.
-    pub fn on_access(&mut self) {
-        self.last_accessed = Instant::now();
-        self.access_count += 1;
-    }
-}
-
-/// LRU (Least Recently Used) policy
-pub struct LruPolicy {
-    entries: dashmap::DashMap<String, CacheEntryMetadata>,
-    total_size: std::sync::atomic::AtomicUsize,
-}
-
-impl LruPolicy {
-    pub fn new() -> Self {
-        Self {
-            entries: dashmap::DashMap::new(),
-            total_size: std::sync::atomic::AtomicUsize::new(0),
-        }
-    }
-}
-
-impl Default for LruPolicy {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl CachePolicy for LruPolicy {
-    fn on_access(&self, key: &str, size: usize) {
-        match self.entries.get_mut(key) {
-            Some(mut entry) => {
-                entry.on_access();
-            }
-            None => {
-                // Entry missing from policy metadata (can happen transiently) — insert it.
-                let metadata = CacheEntryMetadata::new(key.to_string(), size);
-                self.entries.insert(key.to_string(), metadata);
-                self.total_size.fetch_add(size, Ordering::Relaxed);
-            }
-        }
-    }
-
-    fn on_insert(&self, key: &str, size: usize) {
-        let metadata = CacheEntryMetadata::new(key.to_string(), size);
-        if let Some(old_entry) = self.entries.insert(key.to_string(), metadata) {
-            self.total_size.fetch_sub(old_entry.size, Ordering::Relaxed);
-        }
-        self.total_size.fetch_add(size, Ordering::Relaxed);
-    }
-
-    fn on_remove(&self, key: &str) {
-        if let Some((_, entry)) = self.entries.remove(key) {
-            self.total_size.fetch_sub(entry.size, Ordering::Relaxed);
-        }
-    }
-
-    fn select_for_eviction(&self, target_size: usize) -> Vec<String> {
-        if target_size == 0 {
-            return Vec::new();
-        }
-
-        // Collect entries with access times
-        let mut entries: Vec<_> = self
-            .entries
-            .iter()
-            .map(|entry| {
-                let key = entry.key().clone();
-                let last_accessed = entry.value().last_accessed;
-                (key, last_accessed)
-            })
-            .collect();
-
-        // Sort by access time (oldest first)
-        entries.sort_by_key(|(_, last_accessed)| *last_accessed);
-
-        // Select entries for eviction until target size is reached
-        let mut candidates = Vec::new();
-        let mut freed_size = 0;
-
-        for (key, _) in entries {
-            if freed_size >= target_size {
-                break;
-            }
-            if let Some(entry) = self.entries.get(&key) {
-                freed_size += entry.size;
-                candidates.push(key);
-            }
-        }
-
-        candidates
-    }
-
-    fn clear(&self) {
-        self.entries.clear();
-        self.total_size.store(0, Ordering::Relaxed);
-    }
-
-    fn policy_name(&self) -> &'static str {
-        "lru"
-    }
-}
-
-/// LFU (Least Frequently Used) policy
-pub struct LfuPolicy {
-    entries: dashmap::DashMap<String, CacheEntryMetadata>,
-    total_size: std::sync::atomic::AtomicUsize,
-}
-
-impl LfuPolicy {
-    pub fn new() -> Self {
-        Self {
-            entries: dashmap::DashMap::new(),
-            total_size: std::sync::atomic::AtomicUsize::new(0),
-        }
-    }
-}
-
-impl Default for LfuPolicy {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl CachePolicy for LfuPolicy {
-    fn on_access(&self, key: &str, size: usize) {
-        match self.entries.get_mut(key) {
-            Some(mut entry) => {
-                entry.on_access();
-            }
-            None => {
-                let metadata = CacheEntryMetadata::new(key.to_string(), size);
-                self.entries.insert(key.to_string(), metadata);
-                self.total_size.fetch_add(size, Ordering::Relaxed);
-            }
-        }
-    }
-
-    fn on_insert(&self, key: &str, size: usize) {
-        let metadata = CacheEntryMetadata::new(key.to_string(), size);
-        if let Some(old_entry) = self.entries.insert(key.to_string(), metadata) {
-            self.total_size.fetch_sub(old_entry.size, Ordering::Relaxed);
-        }
-        self.total_size.fetch_add(size, Ordering::Relaxed);
-    }
-
-    fn on_remove(&self, key: &str) {
-        if let Some((_, entry)) = self.entries.remove(key) {
-            self.total_size.fetch_sub(entry.size, Ordering::Relaxed);
-        }
-    }
-
-    fn select_for_eviction(&self, target_size: usize) -> Vec<String> {
-        if target_size == 0 {
-            return Vec::new();
-        }
-
-        // Collect entries with access counts
-        let mut entries: Vec<_> = self
-            .entries
-            .iter()
-            .map(|entry| {
-                let key = entry.key().clone();
-                let access_count = entry.value().access_count;
-                let last_accessed = entry.value().last_accessed;
-                (key, access_count, last_accessed)
-            })
-            .collect();
-
-        // Sort by access count (least frequent first), then by time for tie-breaking
         entries.sort_by(|(_, count_a, time_a), (_, count_b, time_b)| {
-            count_a.cmp(count_b).then(time_a.cmp(time_b))
-        });
-
-        // Select entries for eviction until target size is reached
-        let mut candidates = Vec::new();
-        let mut freed_size = 0;
-
-        for (key, _, _) in entries {
-            if freed_size >= target_size {
-                break;
-            }
+        // Create frequency patterns
+        policy.on_access("key1", 100);
+    /// Returns string keys ordered by eviction priority (lowest-priority first).
             if let Some(entry) = self.entries.get(&key) {
-                freed_size += entry.size;
-                candidates.push(key);
-            }
-        }
-
-        candidates
-    }
-
-    fn clear(&self) {
-        self.entries.clear();
-        self.total_size.store(0, Ordering::Relaxed);
-    }
-
     fn policy_name(&self) -> &'static str {
-        "lfu"
-    }
+        assert_eq!(candidates.len(), 2);
 }
-
-/// Create a [`CachePolicy`] (LRU or LFU) from `CacheEvictionPolicy`.
-///
+        let mut candidates = Vec::new();
+    /// Select entries for eviction to free at least `target_size` bytes.
+///   `ScopedEvictionPolicy` + `FifoPolicy`.
+/// One enum for all caches means `df_create_cache` parses the Java-supplied
+use std::sync::Arc;
+/// - `Lru` / `Lfu` — used by `CustomStatisticsCache` and the metadata cache
+/// (`DashMap`, atomics) so the trait object can be shared as `Arc<dyn CachePolicy>`
 /// Returns `None` for `Fifo` — FIFO uses `ScopedEvictionPolicy` via
-/// `BoundedCache::with_named_policy`, not this trait. Callers that receive
-/// `None` should route to `BoundedCache` instead.
-///
-/// When a new variant is added to `CacheEvictionPolicy`, the compiler will
-/// flag the missing arm here.
-pub fn create_policy(policy_type: CacheEvictionPolicy) -> Option<Arc<dyn CachePolicy>> {
-    match policy_type {
-        CacheEvictionPolicy::Lru => Some(Arc::new(LruPolicy::new())),
-        CacheEvictionPolicy::Lfu => Some(Arc::new(LfuPolicy::new())),
+        assert!(candidates.contains(&"sometimes_used".to_string()));
+        });
+            .map(|entry| {
         CacheEvictionPolicy::Fifo => None,
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::thread;
-    use std::time::Duration;
-
-    #[test]
-    fn test_cache_entry_metadata() {
-        let mut metadata = CacheEntryMetadata::new("test_key".to_string(), 1024);
         assert_eq!(metadata.size, 1024);
-        assert_eq!(metadata.access_count, 1);
-
-        let initial_access_time = metadata.last_accessed;
-        thread::sleep(Duration::from_millis(1));
-
-        metadata.on_access();
-        assert_eq!(metadata.access_count, 2);
-        assert!(metadata.last_accessed > initial_access_time);
-    }
-
-    #[test]
-    fn test_create_policy() {
-        let lru_policy = create_policy(PolicyType::Lru).unwrap();
+            policy.on_access("frequently_used", 100);
+            .iter()
+        Self {
+                candidates.push(key);
         assert_eq!(lru_policy.policy_name(), "lru");
-
-        let lfu_policy = create_policy(PolicyType::Lfu).unwrap();
+    }
+    entries: dashmap::DashMap<String, CacheEntryMetadata>,
+}
+    #[test]
+        self.access_count += 1;
+impl CachePolicy for LruPolicy {
+    fn policy_name(&self) -> &'static str {
+        }
+    fn select_for_eviction(&self, target_size: usize) -> Vec<String>;
+            .entries
+        // Collect entries with access counts
+    fn test_lru_policy_basic_operations() {
+}
+        // Collect entries with access times
+#[cfg(test)]
+#[derive(Debug, Error)]
+        }
+/// Result type for cache operations
+        for _ in 0..3 {
+            }
+    fn test_lru_policy_victim_selection() {
+}
+    fn on_insert(&self, key: &str, size: usize);
+            self.total_size.fetch_sub(entry.size, Ordering::Relaxed);
+    pub fn new() -> Self {
+        assert!(!candidates.contains(&"middle".to_string()));
+    fn test_create_policy() {
+    /// Called when a cache entry is accessed (updates recency/frequency metadata).
+        policy.on_remove("key1");
+    #[test]
+        thread::sleep(Duration::from_millis(1));
+/// without an outer `Mutex`. This means `get` on the parent cache never contends
+        assert!(metadata.last_accessed > initial_access_time);
+        let initial_access_time = metadata.last_accessed;
+#[derive(Debug, Clone)]
+    pub fn new() -> Self {
+        }
+        self.total_size.fetch_add(size, Ordering::Relaxed);
+    fn test_lfu_policy_victim_selection() {
+            return Vec::new();
+    }
+                // Entry missing from policy metadata (can happen transiently) — insert it.
+                candidates.push(key);
+    total_size: std::sync::atomic::AtomicUsize,
+        for (key, _) in entries {
+            }
+    /// Name of this policy, for logging/stats.
+    fn on_remove(&self, key: &str) {
+                let last_accessed = entry.value().last_accessed;
+        // Access middle entry to make it more recent
+ * this file be licensed under the Apache-2.0 license or a
+            Some(mut entry) => {
+    pub access_count: usize,
+}
+/*
+    }
+        policy.on_insert("newest", 100);
+/// Error types for cache operations
+            }
+    Lru,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LruPolicy {
+            }
+            }
+        if let Some((_, entry)) = self.entries.remove(key) {
+/// flag the missing arm here.
+                let key = entry.key().clone();
+}
+                let metadata = CacheEntryMetadata::new(key.to_string(), size);
+        }
+        let lru_policy = create_policy(PolicyType::Lru).unwrap();
+    }
+    }
+        let mut freed_size = 0;
+}
+ * SPDX-License-Identifier: Apache-2.0
+        let mut policy = LfuPolicy::new();
+    fn clear(&self) {
+use instant::Instant;
+    /// Called when a cache entry is inserted.
+    fn default() -> Self {
+        let mut metadata = CacheEntryMetadata::new("test_key".to_string(), 1024);
+use std::sync::atomic::Ordering;
+        policy.on_access("middle", 100);
+                let last_accessed = entry.value().last_accessed;
+            .entries
+        let metadata = CacheEntryMetadata::new(key.to_string(), size);
+use datafusion::common::instant;
+ * The OpenSearch Contributors require contributions made to
+            return Vec::new();
+    }
+        }
+                freed_size += entry.size;
+mod tests {
+        thread::sleep(Duration::from_millis(1));
+            access_count: 1,
+                break;
+        }
+ */
+impl Default for LfuPolicy {
+            })
+/// Stored inside the policy's `DashMap`, mutated via `get_mut`.
+/// eviction string once and routes uniformly without separate enums per family.
+}
+        self.total_size.store(0, Ordering::Relaxed);
+                self.entries.insert(key.to_string(), metadata);
+    }
+    pub last_accessed: Instant,
+    fn test_cache_entry_metadata() {
+        policy.on_insert("key1", 100);
+                entry.on_access();
+        match self.entries.get_mut(key) {
+        metadata.on_access();
+    pub fn new(_key: String, size: usize) -> Self {
+        }
+        policy.on_insert("sometimes_used", 100);
+        self.entries.clear();
+    fn select_for_eviction(&self, target_size: usize) -> Vec<String> {
+        }
+        assert!(candidates.contains(&"rarely_used".to_string()));
+    pub size: usize,
+        let mut policy = LruPolicy::new();
+                let key = entry.key().clone();
+    fn clear(&self) {
+                break;
+            size,
+        if target_size == 0 {
+        let mut entries: Vec<_> = self
+    #[test]
+        if let Some(old_entry) = self.entries.insert(key.to_string(), metadata) {
+/// LFU (Least Frequently Used) policy
+/// When a new variant is added to `CacheEvictionPolicy`, the compiler will
+pub enum CacheEvictionPolicy {
+}
+        // Select entries for eviction until target size is reached
+}
+    }
+        self.entries.clear();
+///
+    use std::thread;
+        assert!(candidates.contains(&"oldest".to_string()));
+/// on a global lock, only on the per-shard DashMap locks inside the policy.
+        let mut candidates = Vec::new();
+            .collect();
+    #[test]
+impl CacheEntryMetadata {
+    }
+        candidates
+    /// Update recency and frequency. Called via `DashMap::get_mut` which holds
+    /// Called when a cache entry is removed.
+    }
+    }
+            entries: dashmap::DashMap::new(),
+                self.total_size.fetch_add(size, Ordering::Relaxed);
+        assert!(!candidates.contains(&"frequently_used".to_string()));
+        Self {
+            if let Some(entry) = self.entries.get(&key) {
+        self.total_size.store(0, Ordering::Relaxed);
+    fn on_insert(&self, key: &str, size: usize) {
+    pub fn on_access(&mut self) {
+            if freed_size >= target_size {
+ *
+/// Create a [`CachePolicy`] (LRU or LFU) from `CacheEvictionPolicy`.
+            .map(|entry| {
+        let mut entries: Vec<_> = self
+        // Select entries for eviction until target size is reached
+            if freed_size >= target_size {
+    entries: dashmap::DashMap<String, CacheEntryMetadata>,
+        if target_size == 0 {
+ * compatible open source license.
+        }
+    }
+            total_size: std::sync::atomic::AtomicUsize::new(0),
+    }
+                self.entries.insert(key.to_string(), metadata);
+        }
+            }
+    #[error("Policy lock error: {reason}")]
+        assert_eq!(candidates.len(), 2);
+    use super::*;
+pub struct CacheEntryMetadata {
+    /// Reset all policy state (called on cache clear).
+            self.total_size.fetch_sub(entry.size, Ordering::Relaxed);
+                entry.on_access();
+///
+///
+        // Sort by access time (oldest first)
+        policy.on_insert("key2", 200);
+        if let Some(old_entry) = self.entries.insert(key.to_string(), metadata) {
+    }
+    PolicyLockError { reason: String },
+            self.total_size.fetch_sub(old_entry.size, Ordering::Relaxed);
+            }
+pub type PolicyType = CacheEvictionPolicy;
+//! Simple pluggable cache eviction policies for statistics cache.
+        "lru"
+pub enum CacheError {
+        }
+    fn on_access(&self, key: &str, size: usize) {
+                (key, last_accessed)
+                let access_count = entry.value().access_count;
+/// `None` should route to `BoundedCache` instead.
+    fn on_remove(&self, key: &str) {
+        candidates
+            None => {
+        policy.on_insert("rarely_used", 100);
+        match self.entries.get_mut(key) {
+        assert_eq!(policy.policy_name(), "lru");
+impl Default for LruPolicy {
+    }
+        self.last_accessed = Instant::now();
+            self.total_size.fetch_sub(old_entry.size, Ordering::Relaxed);
+        thread::sleep(Duration::from_millis(1));
+        }
+            })
+}
+        CacheEvictionPolicy::Lfu => Some(Arc::new(LfuPolicy::new())),
+        "lfu"
+    Lfu,
+        // Sort by access count (least frequent first), then by time for tie-breaking
+        assert_eq!(metadata.access_count, 1);
+        policy.on_insert("frequently_used", 100);
+    fn select_for_eviction(&self, target_size: usize) -> Vec<String> {
+                freed_size += entry.size;
+            }
+/// All methods take `&self` — implementations use interior mutability
+    /// only the per-shard write lock — not a global lock.
+    }
+///
+/// Backward-compatible alias — will be removed once all call sites are migrated.
+    }
+use thiserror::Error;
+    fn default() -> Self {
+            .collect();
+            last_accessed: Instant::now(),
+    fn policy_name(&self) -> &'static str;
+        }
+    }
+        Self::new()
+/// `BoundedCache::with_named_policy`, not this trait. Callers that receive
+        policy.on_access("sometimes_used", 100);
+impl LfuPolicy {
+    fn on_access(&self, key: &str, size: usize);
+impl CachePolicy for LfuPolicy {
+pub trait CachePolicy: Send + Sync {
+    }
+        if let Some((_, entry)) = self.entries.remove(key) {
+/// - `Fifo` — used by `BoundedCache` (CI/OI scoped caches) via
+                let metadata = CacheEntryMetadata::new(key.to_string(), size);
+        let metadata = CacheEntryMetadata::new(key.to_string(), size);
+    fn clear(&self);
+//!
+    fn on_insert(&self, key: &str, size: usize) {
+        for (key, _, _) in entries {
+        let mut policy = LruPolicy::new();
+        Self::new()
+                (key, access_count, last_accessed)
+    match policy_type {
+        policy.on_insert("oldest", 100);
+///
+    }
+        self.total_size.fetch_add(size, Ordering::Relaxed);
+            total_size: std::sync::atomic::AtomicUsize::new(0),
+    Fifo,
+///   (backed by [`CachePolicy`] + [`create_policy`]).
+        let mut freed_size = 0;
+}
+/// Metadata tracked per cached entry for eviction ordering.
+    }
+            Some(mut entry) => {
+        Self {
+        policy.clear();
+pub type CacheResult<T> = Result<T, CacheError>;
+    total_size: std::sync::atomic::AtomicUsize,
+    use std::time::Duration;
+        assert_eq!(metadata.access_count, 2);
+/// Unified eviction policy selector for all caches in this crate.
         assert_eq!(lfu_policy.policy_name(), "lfu");
     }
-
-    #[test]
-    fn test_lru_policy_basic_operations() {
-        let mut policy = LruPolicy::new();
-        assert_eq!(policy.policy_name(), "lru");
-
-        policy.on_insert("key1", 100);
-        policy.on_insert("key2", 200);
-        policy.on_access("key1", 100);
-        policy.on_remove("key1");
-        policy.clear();
-    }
-
-    #[test]
-    fn test_lru_policy_victim_selection() {
-        let mut policy = LruPolicy::new();
-
-        policy.on_insert("oldest", 100);
-        thread::sleep(Duration::from_millis(1));
-
-        policy.on_insert("middle", 100);
-        thread::sleep(Duration::from_millis(1));
-
-        policy.on_insert("newest", 100);
-        thread::sleep(Duration::from_millis(1));
-
-        // Access middle entry to make it more recent
-        policy.on_access("middle", 100);
-
-        let candidates = policy.select_for_eviction(150);
-        assert_eq!(candidates.len(), 2);
-        assert!(candidates.contains(&"oldest".to_string()));
-        assert!(!candidates.contains(&"middle".to_string()));
-    }
-
-    #[test]
-    fn test_lfu_policy_victim_selection() {
-        let mut policy = LfuPolicy::new();
-
-        policy.on_insert("rarely_used", 100);
-        policy.on_insert("sometimes_used", 100);
-        policy.on_insert("frequently_used", 100);
-
-        // Create frequency patterns
-        policy.on_access("sometimes_used", 100);
-
-        for _ in 0..3 {
-            policy.on_access("frequently_used", 100);
-        }
-
-        let candidates = policy.select_for_eviction(150);
-        assert_eq!(candidates.len(), 2);
-        assert!(candidates.contains(&"rarely_used".to_string()));
-        assert!(candidates.contains(&"sometimes_used".to_string()));
-        assert!(!candidates.contains(&"frequently_used".to_string()));
-    }
+pub fn create_policy(policy_type: CacheEvictionPolicy) -> Option<Arc<dyn CachePolicy>> {
+                self.total_size.fetch_add(size, Ordering::Relaxed);
 }
+        let candidates = policy.select_for_eviction(150);
+        thread::sleep(Duration::from_millis(1));
+        CacheEvictionPolicy::Lru => Some(Arc::new(LruPolicy::new())),
+}
+pub struct LfuPolicy {
+            .iter()
+        entries.sort_by_key(|(_, last_accessed)| *last_accessed);
+            None => {
+        let lfu_policy = create_policy(PolicyType::Lfu).unwrap();
+}
+/// LRU (Least Recently Used) policy
+    }
+//! # Cache Policy Module
+        }
+/// Core trait for cache eviction policies.
+        let candidates = policy.select_for_eviction(150);
+    #[test]
+        policy.on_insert("middle", 100);
+    fn on_remove(&self, key: &str);
+    fn on_access(&self, key: &str, size: usize) {
+            entries: dashmap::DashMap::new(),
+            count_a.cmp(count_b).then(time_a.cmp(time_b))
+impl LruPolicy {

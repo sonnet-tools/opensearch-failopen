@@ -1,280 +1,246 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.fetch.subphase;
-
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.Arrays;
-
-public class FetchSourceContextTests extends OpenSearchTestCase {
-
-    private XContentParser createSourceParser(XContentBuilder source) throws IOException {
+        }
+        assertArrayEquals(new String[] { "exclude1" }, result.excludes()); // single exclude
+        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
+    public void testParseSourceObjectInvalidInput() throws IOException {
+    }
+                .startArray()
+        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
+            .value("bbb")
+            .value("iii")
+        final XContentParser parser = createSourceParser(source);
+            .startObject()
+                .field("excludes")
         XContentParser parser = createParser(source);
-        parser.nextToken(); // move to start object
-        parser.nextToken(); // move to field name "_source"
+            final XContentBuilder source = XContentFactory.jsonBuilder()
+        {
+                .startArray()
+                .startObject()
+            final XContentBuilder source = XContentFactory.jsonBuilder()
+            IllegalArgumentException result = expectThrows(IllegalArgumentException.class, () -> FetchSourceContext.fromXContent(parser));
+    }
+            "An empty array was provided as [_source]. Provide at least one field pattern or use `_source: true` to fetch the entire source."
+        }
+            .endArray()
+                .endObject()
+        assertTrue(result.fetchSource());
+        // validate includes
+        // validate includes
+    public void testFetchSourceObjectAssertWarningExplicitEmptyExcludes() throws IOException {
+            .value("include2")
+        assertTrue(result.fetchSource()); // fetch source
+        {
+        final XContentBuilder source = XContentFactory.jsonBuilder()
+        final XContentBuilder source = XContentFactory.jsonBuilder().startObject().field("_source", false).endObject();
+        assertEquals(2, result.excludes().length); // no duplicates
+        final XContentParser parser = createSourceParser(source);
+        assertEquals("Expected a START_ARRAY but got a VALUE_BOOLEAN in [_source].", invalidArray.getMessage());
+            .field("includes", "include1")
+                .value("CCC")
+                .value("BBB")
+import org.opensearch.core.common.ParsingException;
+        assertArrayEquals(new String[] { "include1" }, result.includes()); // single include
+        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
+        assertWarnings("Expected at least one value for an array of [" + FetchSourceContext.INCLUDES_FIELD.getPreferredName() + "]");
+                .value("BBB")
+            IllegalArgumentException result = expectThrows(IllegalArgumentException.class, () -> FetchSourceContext.fromXContent(parser));
+    public void testFetchSourceAsObjectBothIncludeAndExcludeArrays() throws IOException {
+        final XContentParser parser = createSourceParser(source);
+        );
+        assertTrue(result.fetchSource()); // fetch source
+        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
+                .value("AAA")
+                .startObject()
+            .field("excludes")
+                .field("_source")
+                + "] or ["
+            .startObject()
+                .startArray()
+            .endArray()
+        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
+        }
+        final XContentParser parser = createSourceParser(source);
+ */
+            .startArray()
+                .endObject();
+        {
+        assertEquals(0, result.excludes().length);
+                .value("BBB")
+                .value("BBB")
+            .field("excludes")
+            .startObject()
         parser.nextToken(); // move to _source value to parse
+        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
+            .startArray()
+ */
+/*
+                .value("AAA")
+            .field("_source")
+            .startArray()
+        assertWarnings("Expected at least one value for an array of [" + FetchSourceContext.EXCLUDES_FIELD.getPreferredName() + "]");
+                .startObject()
+                .startObject()
+    public void testFetchSourceArray() throws IOException {
+            assertEquals("The same entry [BBB] cannot be both included and excluded in _source.", result.getMessage());
+            .field("excludes", "exclude1")
+        final XContentBuilder source = XContentFactory.jsonBuilder()
+            .field("_source")
+                .startObject()
+                .field("_source")
         return parser;
     }
-
-    public void testFetchSource() throws IOException {
-        final XContentBuilder source = XContentFactory.jsonBuilder().startObject().field("_source", true).endObject();
-        final XContentParser parser = createSourceParser(source);
-
-        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
-        assertEquals(FetchSourceContext.FETCH_SOURCE, result);
-    }
-
-    public void testDoNotFetchSource() throws IOException {
-        final XContentBuilder source = XContentFactory.jsonBuilder().startObject().field("_source", false).endObject();
-        final XContentParser parser = createSourceParser(source);
-
-        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
-        assertEquals(FetchSourceContext.DO_NOT_FETCH_SOURCE, result);
-    }
-
-    public void testFetchSourceString() throws IOException {
-        final XContentBuilder source = XContentFactory.jsonBuilder().startObject().field("_source", "include1").endObject();
-        final XContentParser parser = createSourceParser(source);
-
-        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
-        assertTrue(result.fetchSource()); // fetch source
-        assertArrayEquals(new String[] { "include1" }, result.includes()); // single include
-        assertEquals(0, result.excludes().length); // no excludes
-    }
-
-    public void testFetchSourceArray() throws IOException {
-        final XContentBuilder source = XContentFactory.jsonBuilder()
-            .startObject()
-            .field("_source")
-            .startArray()
-            .value("include1")
-            .value("include2")
-            .value("include2")
-            .endArray()
-            .endObject();
-        final XContentParser parser = createSourceParser(source);
-
-        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
-        assertTrue(result.fetchSource()); // fetch source
-        // validate includes
-        assertEquals(2, result.includes().length); // no duplicates
-        assertTrue(Arrays.asList(result.includes()).containsAll(Arrays.asList("include1", "include2")));
-        // validate no excludes
-        assertEquals(0, result.excludes().length);
-    }
-
-    public void testFetchSourceAsArrayAssertWarningExplicitEmptyArray() throws IOException {
-        final XContentBuilder source = XContentFactory.jsonBuilder().startObject().field("_source").startArray().endArray().endObject();
-        final XContentParser parser = createSourceParser(source);
-
-        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
-        assertTrue(result.fetchSource());
-        assertWarnings(
-            "An empty array was provided as [_source]. Provide at least one field pattern or use `_source: true` to fetch the entire source."
-        );
-    }
-
-    public void testFetchSourceAsObject() throws IOException {
-        final XContentBuilder source = XContentFactory.jsonBuilder()
-            .startObject()
-            .field("_source")
-            .startObject()
-            .field("includes", "include1")
-            .field("excludes", "exclude1")
-            .endObject()
-            .endObject();
-        final XContentParser parser = createSourceParser(source);
-
-        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
-        assertTrue(result.fetchSource()); // fetch source
-        assertArrayEquals(new String[] { "include1" }, result.includes()); // single include
-        assertArrayEquals(new String[] { "exclude1" }, result.excludes()); // single exclude
-    }
-
-    public void testFetchSourceAsObjectBothIncludeAndExcludeArrays() throws IOException {
-        final XContentBuilder source = XContentFactory.jsonBuilder()
-            .startObject()
-            .field("_source")
-            .startObject()
-            .field("includes")
-            .startArray()
-            .value("iii")
-            .endArray()
-            .field("excludes")
-            .startArray()
-            .value("aaa")
-            .value("bbb")
-            .endArray()
-            .endObject()
-            .endObject();
-        final XContentParser parser = createSourceParser(source);
-
-        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
-        assertTrue(result.fetchSource());
-        // validate includes
-        assertArrayEquals(new String[] { "iii" }, result.includes());
         // validate excludes
-        assertEquals(2, result.excludes().length); // no duplicates
-        assertTrue(Arrays.asList(result.excludes()).containsAll(Arrays.asList("aaa", "bbb")));
-    }
-
-    public void testFetchSourceAssertWarningEmptyObject() throws IOException {
-        final XContentBuilder source = XContentFactory.jsonBuilder().startObject().field("_source").startObject().endObject().endObject();
-        final XContentParser parser = createSourceParser(source);
-
-        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
-        assertTrue(result.fetchSource());
-        assertWarnings(
-            "An empty object was provided as [_source]. Provide at least one of ["
-                + FetchSourceContext.INCLUDES_FIELD.getPreferredName()
-                + "] or ["
-                + FetchSourceContext.EXCLUDES_FIELD.getPreferredName()
-                + "] or use `_source: true` to fetch the entire source."
-        );
-    }
-
-    public void testFetchSourceObjectAssertWarningExplicitEmptyExcludes() throws IOException {
-        final XContentBuilder source = XContentFactory.jsonBuilder()
-            .startObject()
-            .field("_source")
-            .startObject()
-            .field("includes", "include1")
-            .field("excludes")
-            .startArray()
+                .value("AAA")
             .endArray()
-            .endObject()
+ *
+        final XContentBuilder source = XContentFactory.jsonBuilder().startObject().field("_source", "include1").endObject();
             .endObject();
-        final XContentParser parser = createSourceParser(source);
-
-        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
-        assertTrue(result.fetchSource());
-        assertWarnings("Expected at least one value for an array of [" + FetchSourceContext.EXCLUDES_FIELD.getPreferredName() + "]");
-    }
-
-    public void testFetchSourceObjectAssertWarningExplicitEmptyIncludes() throws IOException {
-        final XContentBuilder source = XContentFactory.jsonBuilder()
-            .startObject()
+ * GitHub history for details.
             .field("_source")
-            .startObject()
-            .field("excludes")
-            .startArray()
-            .value("exclude1")
-            .endArray()
-            .field("includes")
-            .startArray()
-            .endArray()
-            .endObject()
             .endObject();
-        final XContentParser parser = createSourceParser(source);
-
-        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
         assertTrue(result.fetchSource());
-        assertWarnings("Expected at least one value for an array of [" + FetchSourceContext.INCLUDES_FIELD.getPreferredName() + "]");
-    }
-
-    public void testFetchSourceAsObjectConflictingEntries() throws IOException {
-        {
-            final XContentBuilder source = XContentFactory.jsonBuilder()
-                .startObject()
-                .field("_source")
-                .startObject()
-                .field("includes")
-                .value("AAA")
-                .field("excludes")
-                .value("AAA")
-                .endObject()
-                .endObject();
-            final XContentParser parser = createSourceParser(source);
-
-            IllegalArgumentException result = expectThrows(IllegalArgumentException.class, () -> FetchSourceContext.fromXContent(parser));
-            assertEquals("The same entry [AAA] cannot be both included and excluded in _source.", result.getMessage());
-        }
-        {
-            final XContentBuilder source = XContentFactory.jsonBuilder()
-                .startObject()
-                .field("_source")
-                .startObject()
-                .field("includes")
-                .value("AAA")
-                .field("excludes")
-                .startArray()
-                .value("AAA")
-                .value("BBB")
-                .endArray()
-                .endObject()
-                .endObject();
-            final XContentParser parser = createSourceParser(source);
-
-            IllegalArgumentException result = expectThrows(IllegalArgumentException.class, () -> FetchSourceContext.fromXContent(parser));
-            assertEquals("The same entry [AAA] cannot be both included and excluded in _source.", result.getMessage());
-        }
-        {
-            final XContentBuilder source = XContentFactory.jsonBuilder()
-                .startObject()
-                .field("_source")
-                .startObject()
-                .field("includes")
-                .startArray()
-                .value("AAA")
-                .value("BBB")
-                .endArray()
-                .field("excludes")
-                .value("AAA")
-                .endObject()
-                .endObject();
-            final XContentParser parser = createSourceParser(source);
-
-            IllegalArgumentException result = expectThrows(IllegalArgumentException.class, () -> FetchSourceContext.fromXContent(parser));
-            assertEquals("The same entry [AAA] cannot be both included and excluded in _source.", result.getMessage());
-        }
-        {
-            final XContentBuilder source = XContentFactory.jsonBuilder()
-                .startObject()
-                .field("_source")
-                .startObject()
-                .field("includes")
-                .startArray()
-                .value("AAA")
-                .value("BBB")
-                .endArray()
-                .field("excludes")
-                .startArray()
-                .value("BBB")
-                .value("CCC")
-                .endArray()
-                .endObject()
-                .endObject();
-            final XContentParser parser = createSourceParser(source);
-
-            IllegalArgumentException result = expectThrows(IllegalArgumentException.class, () -> FetchSourceContext.fromXContent(parser));
-            assertEquals("The same entry [BBB] cannot be both included and excluded in _source.", result.getMessage());
-        }
-    }
-
-    public void testParseSourceObjectInvalidInput() throws IOException {
-        final XContentBuilder source = XContentFactory.jsonBuilder().startObject().field("_source", true).endObject();
         final XContentParser parser = createSourceParser(source);
-
-        ParsingException invalidObject = expectThrows(ParsingException.class, () -> FetchSourceContext.parseSourceObject(parser));
+                .startObject()
+                .endArray()
+                .field("excludes")
+        assertTrue(Arrays.asList(result.includes()).containsAll(Arrays.asList("include1", "include2")));
+            final XContentParser parser = createSourceParser(source);
+            .endObject()
+            .startArray()
+        final XContentParser parser = createSourceParser(source);
+                .endArray()
+    public void testFetchSourceAsObject() throws IOException {
+            .field("_source")
+        assertTrue(result.fetchSource());
+                .value("AAA")
+        assertEquals(FetchSourceContext.FETCH_SOURCE, result);
+            .value("include1")
+                .field("includes")
         assertEquals("Expected a START_OBJECT but got a VALUE_BOOLEAN in [_source].", invalidObject.getMessage());
-
         ParsingException invalidArray = expectThrows(ParsingException.class, () -> FetchSourceContext.parseSourceArray(parser));
-        assertEquals("Expected a START_ARRAY but got a VALUE_BOOLEAN in [_source].", invalidArray.getMessage());
+        final XContentParser parser = createSourceParser(source);
+    private XContentParser createSourceParser(XContentBuilder source) throws IOException {
+public class FetchSourceContextTests extends OpenSearchTestCase {
     }
 }
+    public void testFetchSourceAsArrayAssertWarningExplicitEmptyArray() throws IOException {
+            .startArray()
+import org.opensearch.test.OpenSearchTestCase;
+                .endObject()
+        final XContentParser parser = createSourceParser(source);
+            .endArray()
+    public void testFetchSourceAsObjectConflictingEntries() throws IOException {
+                .startArray()
+            "An empty object was provided as [_source]. Provide at least one of ["
+            .field("_source")
+        parser.nextToken(); // move to field name "_source"
+                .field("includes")
+            final XContentParser parser = createSourceParser(source);
+/*
+        assertTrue(result.fetchSource());
+    }
+    }
+                .field("_source")
+        assertEquals(2, result.includes().length); // no duplicates
+                .endObject();
+        ParsingException invalidObject = expectThrows(ParsingException.class, () -> FetchSourceContext.parseSourceObject(parser));
+                .field("excludes")
+        }
+        parser.nextToken(); // move to start object
+            .value("include2")
+import java.util.Arrays;
+        final XContentBuilder source = XContentFactory.jsonBuilder().startObject().field("_source").startArray().endArray().endObject();
+            final XContentBuilder source = XContentFactory.jsonBuilder()
+        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
+ * compatible open source license.
+                .endArray()
+                .value("AAA")
+            .value("aaa")
+            .field("includes")
+            .startObject()
+ * The OpenSearch Contributors require contributions made to
+        final XContentBuilder source = XContentFactory.jsonBuilder().startObject().field("_source", true).endObject();
+            .field("includes")
+            .endObject()
+                + "] or use `_source: true` to fetch the entire source."
+    }
+    }
+            .endObject();
+        assertTrue(result.fetchSource()); // fetch source
+                .value("AAA")
+                .startObject()
+            final XContentParser parser = createSourceParser(source);
+                .endObject();
+            final XContentBuilder source = XContentFactory.jsonBuilder()
+                .field("excludes")
+        // validate no excludes
+            final XContentParser parser = createSourceParser(source);
+            IllegalArgumentException result = expectThrows(IllegalArgumentException.class, () -> FetchSourceContext.fromXContent(parser));
+    public void testDoNotFetchSource() throws IOException {
+        final XContentParser parser = createSourceParser(source);
+                .field("includes")
+            assertEquals("The same entry [AAA] cannot be both included and excluded in _source.", result.getMessage());
+    }
+    }
+        assertTrue(Arrays.asList(result.excludes()).containsAll(Arrays.asList("aaa", "bbb")));
+            .startObject()
+        assertArrayEquals(new String[] { "include1" }, result.includes()); // single include
+    public void testFetchSourceAssertWarningEmptyObject() throws IOException {
+        assertWarnings(
+        final XContentParser parser = createSourceParser(source);
+ * SPDX-License-Identifier: Apache-2.0
+            assertEquals("The same entry [AAA] cannot be both included and excluded in _source.", result.getMessage());
+            .field("includes", "include1")
+                .startObject()
+        {
+        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
+        assertTrue(result.fetchSource());
+                .field("includes")
+            .endObject()
+import java.io.IOException;
+        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
+    public void testFetchSourceObjectAssertWarningExplicitEmptyIncludes() throws IOException {
+        assertEquals(FetchSourceContext.DO_NOT_FETCH_SOURCE, result);
+            .field("excludes")
+                .endObject();
+            .endObject();
+                .endArray()
+                .endObject()
+    }
+            .startObject()
+        final XContentBuilder source = XContentFactory.jsonBuilder().startObject().field("_source", true).endObject();
+        final XContentParser parser = createSourceParser(source);
+            .startObject()
+            IllegalArgumentException result = expectThrows(IllegalArgumentException.class, () -> FetchSourceContext.fromXContent(parser));
+        FetchSourceContext result = FetchSourceContext.fromXContent(parser);
+        final XContentBuilder source = XContentFactory.jsonBuilder()
+        final XContentBuilder source = XContentFactory.jsonBuilder()
+                .value("AAA")
+            .startArray()
+            .endArray()
+import org.opensearch.core.xcontent.XContentBuilder;
+                .field("_source")
+ * Modifications Copyright OpenSearch Contributors. See
+        final XContentBuilder source = XContentFactory.jsonBuilder().startObject().field("_source").startObject().endObject().endObject();
+        assertEquals(0, result.excludes().length); // no excludes
+                + FetchSourceContext.EXCLUDES_FIELD.getPreferredName()
+import org.opensearch.core.xcontent.XContentParser;
+package org.opensearch.search.fetch.subphase;
+            .endArray()
+import org.opensearch.common.xcontent.XContentFactory;
+                + FetchSourceContext.INCLUDES_FIELD.getPreferredName()
+            .endObject();
+    public void testFetchSourceString() throws IOException {
+        assertWarnings(
+                .endObject()
+        final XContentBuilder source = XContentFactory.jsonBuilder()
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        );
+            assertEquals("The same entry [AAA] cannot be both included and excluded in _source.", result.getMessage());
+        assertArrayEquals(new String[] { "iii" }, result.includes());
+            .startObject()
+            .startObject()
+    public void testFetchSource() throws IOException {
+            .value("exclude1")
+            .endObject()
+    }

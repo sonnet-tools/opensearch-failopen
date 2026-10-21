@@ -1,176 +1,150 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.composite;
-
-import org.opensearch.action.admin.indices.create.CreateIndexResponse;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.arrow.allocator.ArrowBasePlugin;
-import org.opensearch.be.datafusion.DataFusionPlugin;
-import org.opensearch.be.lucene.LucenePlugin;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.parquet.ParquetDataFormatPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-
-import static org.opensearch.composite.CompositeDataFormatPlugin.CLUSTER_RESTRICT_COMPOSITE_DATAFORMAT_SETTING;
-
-/**
  * Integration tests for {@link CompositeDataFormatPlugin#CLUSTER_RESTRICT_COMPOSITE_DATAFORMAT_SETTING}
- * enforcement. The setting is {@code Property.Final}, so each test starts nodes with its own
- * settings bag.
- */
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+        ensureGreen(INDEX_NAME);
+    public void testAllowsOverrideWhenRestrictIsFalse() {
+    }
+        internalCluster().startDataOnlyNode(nodeSettings(false));
 public class RestrictCompositeDataFormatOverrideIT extends OpenSearchIntegTestCase {
-
-    private static final String INDEX_NAME = "test-composite-restrict";
-    private static final String CLUSTER_DEFAULT_PRIMARY = "lucene";
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(
-            ArrowBasePlugin.class,
-            ParquetDataFormatPlugin.class,
-            CompositeDataFormatPlugin.class,
+package org.opensearch.composite;
             LucenePlugin.class,
-            DataFusionPlugin.class
-        );
     }
-
-    private Settings nodeSettings(boolean restrict) {
-        return Settings.builder()
-            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)
+            .setSettings(Settings.builder().put(CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey(), "parquet"))
+        CreateIndexResponse response = client().admin().indices().prepareCreate(INDEX_NAME).setSettings(indexSettings).get();
+            .indices()
+            "expected validation error to mention ["
+        assertTrue(
+            "expected validation error to mention ["
+        return Arrays.asList(
+ * enforcement. The setting is {@code Property.Final}, so each test starts nodes with its own
             .put(CLUSTER_RESTRICT_COMPOSITE_DATAFORMAT_SETTING.getKey(), restrict)
+import org.opensearch.action.admin.indices.create.CreateIndexResponse;
+        );
+    public void testRejectsTemplateOverrideWhenRestrictIsTrue() {
+            () -> client().admin().indices().prepareCreate(INDEX_NAME).setSettings(indexSettings).get()
+        assertTrue(response.isAcknowledged());
+        assertTrue(response.isAcknowledged());
+            .setPatterns(Collections.singletonList(INDEX_NAME + "*"))
             .put(CompositeDataFormatPlugin.CLUSTER_PRIMARY_DATA_FORMAT.getKey(), CLUSTER_DEFAULT_PRIMARY)
-            .build();
-    }
-
-    public void testRejectsPrimaryOverrideWhenRestrictIsTrue() {
-        internalCluster().startClusterManagerOnlyNode(nodeSettings(true));
-        internalCluster().startDataOnlyNode(nodeSettings(true));
-
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey(), "parquet")
-            .build();
-
-        IllegalArgumentException thrown = expectThrows(
-            IllegalArgumentException.class,
-            () -> client().admin().indices().prepareCreate(INDEX_NAME).setSettings(indexSettings).get()
-        );
-        String message = thrown.getMessage();
-        assertTrue(
-            "expected validation error to mention ["
-                + CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey()
-                + "] but was ["
+    private static final String CLUSTER_DEFAULT_PRIMARY = "lucene";
+import org.opensearch.plugins.Plugin;
                 + message
-                + "]",
-            message.contains(CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey())
-        );
-        assertTrue(
-            "expected validation error to mention restrict setting but was [" + message + "]",
-            message.contains(CLUSTER_RESTRICT_COMPOSITE_DATAFORMAT_SETTING.getKey())
-        );
-    }
-
-    public void testRejectsSecondaryOverrideWhenRestrictIsTrue() {
-        internalCluster().startClusterManagerOnlyNode(nodeSettings(true));
-        internalCluster().startDataOnlyNode(nodeSettings(true));
-
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .putList(CompositeDataFormatPlugin.SECONDARY_DATA_FORMATS.getKey(), "parquet")
+ */
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+        ensureGreen(INDEX_NAME);
+/**
             .build();
-
-        IllegalArgumentException thrown = expectThrows(
+        return Settings.builder()
+    }
+            .get();
+import java.util.Collection;
             IllegalArgumentException.class,
+            .setOrder(0)
+        internalCluster().startClusterManagerOnlyNode(nodeSettings(true));
             () -> client().admin().indices().prepareCreate(INDEX_NAME).setSettings(indexSettings).get()
-        );
-        String message = thrown.getMessage();
+        IllegalArgumentException thrown = expectThrows(
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
         assertTrue(
-            "expected validation error to mention ["
-                + CompositeDataFormatPlugin.SECONDARY_DATA_FORMATS.getKey()
-                + "] but was ["
-                + message
-                + "]",
+        assertTrue(
+            ArrowBasePlugin.class,
+            .setSettings(Settings.builder().put(CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey(), "parquet"))
             message.contains(CompositeDataFormatPlugin.SECONDARY_DATA_FORMATS.getKey())
+            .build();
+        internalCluster().startDataOnlyNode(nodeSettings(true));
+import static org.opensearch.composite.CompositeDataFormatPlugin.CLUSTER_RESTRICT_COMPOSITE_DATAFORMAT_SETTING;
+            .build();
+        internalCluster().startClusterManagerOnlyNode(nodeSettings(true));
+ * SPDX-License-Identifier: Apache-2.0
         );
-    }
-
+        internalCluster().startClusterManagerOnlyNode(nodeSettings(false));
     public void testAcceptsMatchingOverrideWhenRestrictIsTrue() {
         internalCluster().startClusterManagerOnlyNode(nodeSettings(true));
-        internalCluster().startDataOnlyNode(nodeSettings(true));
-
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey(), CLUSTER_DEFAULT_PRIMARY)
-            .build();
-
-        CreateIndexResponse response = client().admin().indices().prepareCreate(INDEX_NAME).setSettings(indexSettings).get();
-        assertTrue(response.isAcknowledged());
         ensureGreen(INDEX_NAME);
-    }
-
-    public void testAllowsOverrideWhenRestrictIsFalse() {
-        internalCluster().startClusterManagerOnlyNode(nodeSettings(false));
-        internalCluster().startDataOnlyNode(nodeSettings(false));
-
-        Settings indexSettings = Settings.builder()
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+            .putList(CompositeDataFormatPlugin.SECONDARY_DATA_FORMATS.getKey(), "parquet")
+import java.util.Collections;
+                + "] but was ["
+            CompositeDataFormatPlugin.class,
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+                + CompositeDataFormatPlugin.SECONDARY_DATA_FORMATS.getKey()
+import org.opensearch.test.OpenSearchIntegTestCase;
+        AcknowledgedResponse putTemplate = client().admin()
+        Settings indexSettings = Settings.builder()
+            .build();
+            .indices()
+import org.opensearch.be.lucene.LucenePlugin;
+import java.util.Arrays;
+ * settings bag.
             .put(CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey(), "parquet")
-            .build();
-
-        CreateIndexResponse response = client().admin().indices().prepareCreate(INDEX_NAME).setSettings(indexSettings).get();
-        assertTrue(response.isAcknowledged());
-        ensureGreen(INDEX_NAME);
-    }
-
-    public void testRejectsTemplateOverrideWhenRestrictIsTrue() {
-        internalCluster().startClusterManagerOnlyNode(nodeSettings(true));
-        internalCluster().startDataOnlyNode(nodeSettings(true));
-
         AcknowledgedResponse putTemplate = client().admin()
-            .indices()
-            .preparePutTemplate("restrict-composite-template")
-            .setPatterns(Collections.singletonList(INDEX_NAME + "*"))
-            .setSettings(Settings.builder().put(CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey(), "parquet"))
-            .setOrder(0)
-            .get();
-        assertTrue(putTemplate.isAcknowledged());
-
-        IllegalArgumentException thrown = expectThrows(IllegalArgumentException.class, () -> createIndex(INDEX_NAME));
-        assertTrue(thrown.getMessage().contains(CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey()));
-    }
-
-    public void testAllowsTemplateOverrideWhenRestrictIsFalse() {
         internalCluster().startClusterManagerOnlyNode(nodeSettings(false));
-        internalCluster().startDataOnlyNode(nodeSettings(false));
-
-        AcknowledgedResponse putTemplate = client().admin()
-            .indices()
-            .preparePutTemplate("permissive-composite-template")
-            .setPatterns(Collections.singletonList(INDEX_NAME + "*"))
-            .setSettings(Settings.builder().put(CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey(), "parquet"))
-            .setOrder(0)
-            .get();
-        assertTrue(putTemplate.isAcknowledged());
-
-        createIndex(INDEX_NAME);
-        ensureGreen(INDEX_NAME);
+    public void testRejectsSecondaryOverrideWhenRestrictIsTrue() {
+        );
+        Settings indexSettings = Settings.builder()
+        internalCluster().startClusterManagerOnlyNode(nodeSettings(true));
     }
+                + "]",
+        );
+        assertTrue(putTemplate.isAcknowledged());
+        assertTrue(thrown.getMessage().contains(CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey()));
+        createIndex(INDEX_NAME);
+        assertTrue(putTemplate.isAcknowledged());
+        internalCluster().startDataOnlyNode(nodeSettings(true));
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+import org.opensearch.cluster.metadata.IndexMetadata;
+            DataFusionPlugin.class
+import org.opensearch.parquet.ParquetDataFormatPlugin;
+        String message = thrown.getMessage();
+ * this file be licensed under the Apache-2.0 license or a
 }
+            .preparePutTemplate("restrict-composite-template")
+            ParquetDataFormatPlugin.class,
+        internalCluster().startDataOnlyNode(nodeSettings(true));
+        Settings indexSettings = Settings.builder()
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        String message = thrown.getMessage();
+            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)
+        IllegalArgumentException thrown = expectThrows(IllegalArgumentException.class, () -> createIndex(INDEX_NAME));
+        IllegalArgumentException thrown = expectThrows(
+            .put(CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey(), CLUSTER_DEFAULT_PRIMARY)
+            message.contains(CLUSTER_RESTRICT_COMPOSITE_DATAFORMAT_SETTING.getKey())
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+ *
+ * compatible open source license.
+            .setPatterns(Collections.singletonList(INDEX_NAME + "*"))
+import org.opensearch.common.util.FeatureFlags;
+        );
+    private Settings nodeSettings(boolean restrict) {
+/*
+    }
+ * The OpenSearch Contributors require contributions made to
+            .preparePutTemplate("permissive-composite-template")
+import org.opensearch.common.settings.Settings;
+        CreateIndexResponse response = client().admin().indices().prepareCreate(INDEX_NAME).setSettings(indexSettings).get();
+            IllegalArgumentException.class,
+        );
+    public void testRejectsPrimaryOverrideWhenRestrictIsTrue() {
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+        Settings indexSettings = Settings.builder()
+                + message
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+    public void testAllowsTemplateOverrideWhenRestrictIsFalse() {
+        internalCluster().startDataOnlyNode(nodeSettings(true));
+                + "] but was ["
+            "expected validation error to mention restrict setting but was [" + message + "]",
+                + "]",
+            .setOrder(0)
+    }
+import org.opensearch.be.datafusion.DataFusionPlugin;
+            .build();
+            .put(CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey(), "parquet")
+ */
+    }
+        internalCluster().startDataOnlyNode(nodeSettings(false));
+    @Override
+import org.opensearch.arrow.allocator.ArrowBasePlugin;
+            .get();
+                + CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey()
+    }
+    private static final String INDEX_NAME = "test-composite-restrict";
+            message.contains(CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.getKey())

@@ -1,601 +1,552 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.plugins;
-
-import org.opensearch.Version;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.bootstrap.JarHell;
-import org.opensearch.common.xcontent.json.JsonXContentParser;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.semver.SemverRange;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Properties;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-import tools.jackson.core.json.JsonFactory;
-import tools.jackson.core.json.JsonFactoryBuilder;
-import tools.jackson.core.json.JsonReadFeature;
-
-import static org.opensearch.semver.SemverRange.RANGE_PATTERN;
-
-/**
- * An in-memory representation of the plugin descriptor.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class PluginInfo implements Writeable, ToXContentObject {
-
-    public static final String OPENSEARCH_PLUGIN_PROPERTIES = "plugin-descriptor.properties";
-    public static final String OPENSEARCH_PLUGIN_POLICY = "plugin-security.policy";
-    private static final JsonFactory jsonFactory = new JsonFactoryBuilder().configure(JsonReadFeature.ALLOW_UNQUOTED_PROPERTY_NAMES, true)
-        .build();
-
-    private final String name;
-    private final String description;
-    private final String version;
-    private final List<SemverRange> opensearchVersionRanges;
-    private final String javaVersion;
-    private final String classname;
-    private final String customFolderName;
-    private final List<String> extendedPlugins;
-    // Optional extended plugins are a subset of extendedPlugins that only contains the optional extended plugins
-    private final List<String> optionalExtendedPlugins;
-    private final boolean hasNativeController;
-
-    /**
-     * Construct plugin info.
-     *
-     * @param name                  the name of the plugin
-     * @param description           a description of the plugin
-     * @param version               an opaque version identifier for the plugin
-     * @param opensearchVersion     the version of OpenSearch the plugin was built for
-     * @param javaVersion           the version of Java the plugin was built with
-     * @param classname             the entry point to the plugin
-     * @param customFolderName      the custom folder name for the plugin
-     * @param extendedPlugins       other plugins this plugin extends through SPI
-     * @param hasNativeController   whether or not the plugin has a native controller
-     */
-    public PluginInfo(
-        String name,
-        String description,
-        String version,
-        Version opensearchVersion,
-        String javaVersion,
-        String classname,
-        String customFolderName,
-        List<String> extendedPlugins,
-        boolean hasNativeController
-    ) {
-        this(
-            name,
-            description,
-            version,
-            List.of(SemverRange.fromString(opensearchVersion.toString())),
-            javaVersion,
-            classname,
-            customFolderName,
-            extendedPlugins,
-            hasNativeController
-        );
-    }
-
-    public PluginInfo(
-        String name,
-        String description,
-        String version,
-        List<SemverRange> opensearchVersionRanges,
-        String javaVersion,
-        String classname,
-        String customFolderName,
-        List<String> extendedPlugins,
-        boolean hasNativeController
-    ) {
-        this.name = name;
-        this.description = description;
-        this.version = version;
-        // Ensure only one range is specified (for now)
-        if (opensearchVersionRanges.size() != 1) {
-            throw new IllegalArgumentException(
-                "Exactly one range is allowed to be specified in dependencies for the plugin [" + name + "]"
-            );
-        }
-        this.opensearchVersionRanges = opensearchVersionRanges;
-        this.javaVersion = javaVersion;
-        this.classname = classname;
-        this.customFolderName = customFolderName;
-        this.extendedPlugins = extendedPlugins.stream().map(s -> s.split(";")[0]).collect(Collectors.toUnmodifiableList());
-        this.optionalExtendedPlugins = extendedPlugins.stream()
-            .filter(PluginInfo::isOptionalExtension)
-            .map(s -> s.split(";")[0])
-            .collect(Collectors.toUnmodifiableList());
-        this.hasNativeController = hasNativeController;
-    }
-
-    /**
-     * Construct plugin info.
-     *
-     * @param name                  the name of the plugin
-     * @param description           a description of the plugin
-     * @param version               an opaque version identifier for the plugin
-     * @param opensearchVersion     the version of OpenSearch the plugin was built for
-     * @param javaVersion           the version of Java the plugin was built with
-     * @param classname             the entry point to the plugin
-     * @param extendedPlugins       other plugins this plugin extends through SPI
-     * @param hasNativeController   whether or not the plugin has a native controller
-     */
-    public PluginInfo(
-        String name,
-        String description,
-        String version,
-        Version opensearchVersion,
-        String javaVersion,
-        String classname,
-        List<String> extendedPlugins,
-        boolean hasNativeController
-    ) {
-        this(
-            name,
-            description,
-            version,
-            opensearchVersion,
-            javaVersion,
-            classname,
-            null /* customFolderName */,
-            extendedPlugins,
-            hasNativeController
-        );
-    }
-
-    /**
-     * Construct plugin info from a stream.
-     *
-     * @param in the stream
-     * @throws IOException if an I/O exception occurred reading the plugin info from the stream
-     */
-    @SuppressWarnings("unchecked")
-    public PluginInfo(final StreamInput in) throws IOException {
-        this.name = in.readString();
-        this.description = in.readString();
-        this.version = in.readString();
-        if (in.getVersion().onOrAfter(Version.V_2_13_0)) {
-            this.opensearchVersionRanges = (List<SemverRange>) in.readGenericValue();
-        } else {
-            this.opensearchVersionRanges = List.of(new SemverRange(in.readVersion(), SemverRange.RangeOperator.DEFAULT));
-        }
-        this.javaVersion = in.readString();
-        this.classname = in.readString();
-        this.customFolderName = in.readString();
-        this.extendedPlugins = in.readStringList();
-        this.hasNativeController = in.readBoolean();
-        if (in.getVersion().onOrAfter(Version.V_2_19_0)) {
-            this.optionalExtendedPlugins = in.readStringList();
-        } else {
-            this.optionalExtendedPlugins = new ArrayList<>();
-        }
-
-    }
-
-    static boolean isOptionalExtension(String extendedPlugin) {
-        String[] dependency = extendedPlugin.split(";");
-        return dependency.length > 1 && "optional=true".equals(dependency[1]);
-    }
-
-    @Override
-    public void writeTo(final StreamOutput out) throws IOException {
-        out.writeString(name);
-        out.writeString(description);
-        out.writeString(version);
-        if (out.getVersion().onOrAfter(Version.V_2_13_0)) {
-            out.writeGenericValue(opensearchVersionRanges);
-        } else {
-            /*
-            This works for currently supported range notations (=,~)
-            As more notations get added, then a suitable version must be picked.
-             */
-            out.writeVersion(opensearchVersionRanges.get(0).getRangeVersion());
-        }
-        out.writeString(javaVersion);
-        out.writeString(classname);
-        if (customFolderName != null) {
-            out.writeString(customFolderName);
-        } else {
-            out.writeString(name);
-        }
-        out.writeStringCollection(extendedPlugins);
-        out.writeBoolean(hasNativeController);
-        if (out.getVersion().onOrAfter(Version.V_2_19_0)) {
-            out.writeStringCollection(optionalExtendedPlugins);
-        }
-    }
-
-    /**
-     * Reads the plugin descriptor file.
-     *
-     * @param path           the path to the root directory for the plugin
-     * @return the plugin info
-     * @throws IOException if an I/O exception occurred reading the plugin descriptor
-     */
-    public static PluginInfo readFromProperties(final Path path) throws IOException {
-        final Path descriptor = path.resolve(OPENSEARCH_PLUGIN_PROPERTIES);
-
-        final Map<String, String> propsMap;
-        {
-            final Properties props = new Properties();
-            try (InputStream stream = Files.newInputStream(descriptor)) {
-                props.load(stream);
-            }
-            propsMap = props.stringPropertyNames().stream().collect(Collectors.toMap(Function.identity(), props::getProperty));
-        }
-
-        final String name = propsMap.remove("name");
-        if (name == null || name.isEmpty()) {
-            throw new IllegalArgumentException("property [name] is missing in [" + descriptor + "]");
-        }
-        final String description = propsMap.remove("description");
-        if (description == null) {
-            throw new IllegalArgumentException("property [description] is missing for plugin [" + name + "]");
-        }
-        final String version = propsMap.remove("version");
-        if (version == null) {
-            throw new IllegalArgumentException("property [version] is missing for plugin [" + name + "]");
-        }
-
-        final String opensearchVersionString = propsMap.remove("opensearch.version");
-        final String dependenciesValue = propsMap.remove("dependencies");
-        if (opensearchVersionString == null && dependenciesValue == null) {
-            throw new IllegalArgumentException(
-                "Either [opensearch.version] or [dependencies] property must be specified for the plugin [" + name + "]"
-            );
-        }
-        if (opensearchVersionString != null && dependenciesValue != null) {
-            throw new IllegalArgumentException(
-                "Only one of [opensearch.version] or [dependencies] property can be specified for the plugin [" + name + "]"
-            );
-        }
-
-        final List<SemverRange> opensearchVersionRanges = new ArrayList<>();
-        if (opensearchVersionString != null) {
-            opensearchVersionRanges.add(SemverRange.fromString(opensearchVersionString));
-        } else {
-            Map<String, String> dependenciesMap;
-            try (
-                final JsonXContentParser parser = new JsonXContentParser(
-                    NamedXContentRegistry.EMPTY,
-                    DeprecationHandler.IGNORE_DEPRECATIONS,
-                    jsonFactory.createParser(dependenciesValue)
-                )
-            ) {
-                dependenciesMap = parser.mapStrings();
-            }
-            if (dependenciesMap.size() != 1) {
-                throw new IllegalArgumentException(
-                    "Exactly one dependency is allowed to be specified in plugin descriptor properties: " + dependenciesMap
-                );
-            }
-            if (dependenciesMap.keySet().stream().noneMatch(s -> s.equals("opensearch"))) {
-                throw new IllegalArgumentException("Only opensearch is allowed to be specified as a plugin dependency: " + dependenciesMap);
-            }
-            String opensearchDependencyVersion = dependenciesMap.get("opensearch");
-            String[] ranges = opensearchDependencyVersion.split(",");
-            String opensearchVersion = ranges[0];
-            if (RANGE_PATTERN.matcher(opensearchDependencyVersion).matches()) {
-                opensearchVersion = opensearchDependencyVersion;
-            } else if (ranges.length != 1) {
-                throw new IllegalArgumentException(
-                    "Exactly one range is allowed to be specified in dependencies for the plugin [" + name + "]"
-                );
-            }
-            opensearchVersionRanges.add(SemverRange.fromString(opensearchVersion.trim()));
-        }
-
-        final String javaVersionString = propsMap.remove("java.version");
-        if (javaVersionString == null) {
-            throw new IllegalArgumentException("property [java.version] is missing for plugin [" + name + "]");
-        }
-        JarHell.checkVersionFormat(javaVersionString);
-        final String classname = propsMap.remove("classname");
-        if (classname == null) {
-            throw new IllegalArgumentException("property [classname] is missing for plugin [" + name + "]");
-        }
-
-        final String customFolderNameValue = propsMap.remove("custom.foldername");
-        final String customFolderName;
-        customFolderName = customFolderNameValue;
-
-        final String extendedString = propsMap.remove("extended.plugins");
-        final List<String> extendedPlugins;
-        if (extendedString == null) {
-            extendedPlugins = Collections.emptyList();
-        } else {
             extendedPlugins = Arrays.asList(Strings.delimitedListToStringArray(extendedString, ","));
-        }
-
-        final String hasNativeControllerValue = propsMap.remove("has.native.controller");
-        final boolean hasNativeController;
-        if (hasNativeControllerValue == null) {
-            hasNativeController = false;
-        } else {
-            switch (hasNativeControllerValue) {
-                case "true":
-                    hasNativeController = true;
-                    break;
-                case "false":
-                    hasNativeController = false;
-                    break;
-                default:
-                    final String message = String.format(
-                        Locale.ROOT,
-                        "property [%s] must be [%s], [%s], or unspecified but was [%s]",
-                        "has_native_controller",
-                        "true",
-                        "false",
-                        hasNativeControllerValue
-                    );
-                    throw new IllegalArgumentException(message);
+        out.writeString(version);
+                throw new IllegalArgumentException(
+            .append("Version: ")
+            Map<String, String> dependenciesMap;
             }
-        }
-
-        if (propsMap.isEmpty() == false) {
-            throw new IllegalArgumentException("Unknown properties in plugin descriptor: " + propsMap.keySet());
-        }
-
-        return new PluginInfo(
-            name,
-            description,
-            version,
-            opensearchVersionRanges,
-            javaVersionString,
-            classname,
-            customFolderName,
-            extendedPlugins,
-            hasNativeController
-        );
-    }
-
-    /**
-     * The name of the plugin.
-     *
-     * @return the plugin name
-     */
-    public String getName() {
-        return name;
-    }
-
-    /**
-     * The description of the plugin.
-     *
-     * @return the plugin description
-     */
-    public String getDescription() {
-        return description;
-    }
-
-    /**
-     * The entry point to the plugin.
-     *
-     * @return the entry point to the plugin
-     */
-    public String getClassname() {
-        return classname;
-    }
-
-    /**
-     * The custom folder name for the plugin.
-     *
-     * @return the custom folder name for the plugin
-     */
-    public String getFolderName() {
-        return customFolderName;
-    }
-
-    /**
-     * Other plugins this plugin extends through SPI.
-     *
-     * @return the names of the plugins extended
-     */
-    public boolean isExtendedPluginOptional(String extendedPlugin) {
-        return optionalExtendedPlugins.contains(extendedPlugin);
-    }
-
-    /**
-     * Other plugins this plugin extends through SPI
-     *
-     * @return the names of the plugins extended
-     */
-    public List<String> getExtendedPlugins() {
-        return extendedPlugins.stream().map(s -> s.split(";")[0]).collect(Collectors.toUnmodifiableList());
-    }
-
-    /**
-     * The version of the plugin
-     *
-     * @return the version
-     */
-    public String getVersion() {
-        return version;
-    }
-
-    /**
-     * The list of OpenSearch version ranges the plugin is compatible with.
-     *
-     * @return a list of OpenSearch version ranges
-     */
-    public List<SemverRange> getOpenSearchVersionRanges() {
-        return opensearchVersionRanges;
-    }
-
-    /**
-     * Pretty print the semver ranges and return the string.
-     * @return semver ranges string
-     */
-    public String getOpenSearchVersionRangesString() {
-        if (opensearchVersionRanges == null || opensearchVersionRanges.isEmpty()) {
-            throw new IllegalStateException("Opensearch version ranges list cannot be empty");
-        }
-        if (opensearchVersionRanges.size() == 1) {
-            return opensearchVersionRanges.get(0).toString();
-        }
-        return opensearchVersionRanges.stream().map(Object::toString).collect(Collectors.joining(",", "[", "]"));
-    }
-
-    /**
-     * The version of Java the plugin was built with.
-     *
-     * @return a java version string
-     */
-    public String getJavaVersion() {
-        return javaVersion;
-    }
-
-    /**
-     * Whether or not the plugin has a native controller.
-     *
+        return hasNativeController;
+        this.hasNativeController = in.readBoolean();
+        } else {
      * @return {@code true} if the plugin has a native controller
      */
-    public boolean hasNativeController() {
-        return hasNativeController;
-    }
-
+                    hasNativeController = true;
     /**
-     * The target folder name for the plugin.
-     *
-     * @return the custom folder name for the plugin if the folder name is specified, else return the id with kebab-case.
-     */
-    public String getTargetFolderName() {
-        return (this.customFolderName == null || this.customFolderName.isEmpty()) ? this.name : this.customFolderName;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
+                    NamedXContentRegistry.EMPTY,
         {
-            builder.field("name", name);
-            builder.field("version", version);
-            builder.field("opensearch_version", getOpenSearchVersionRangesString());
-            builder.field("java_version", javaVersion);
-            builder.field("description", description);
-            builder.field("classname", classname);
-            builder.field("custom_foldername", customFolderName);
-            builder.field("extended_plugins", extendedPlugins);
-            builder.field("has_native_controller", hasNativeController);
-            builder.field("optional_extended_plugins", optionalExtendedPlugins);
-        }
-        builder.endObject();
-
-        return builder;
+        out.writeString(description);
+            As more notations get added, then a suitable version must be picked.
     }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-
-        PluginInfo that = (PluginInfo) o;
-
-        if (!name.equals(that.name)) return false;
-        // TODO: since the plugins are unique by their directory name, this should only be a name check, version should not matter?
-        if (version != null ? !version.equals(that.version) : that.version != null) return false;
-
-        return true;
+ */
+            extendedPlugins,
+                props.load(stream);
+            This works for currently supported range notations (=,~)
+     *
+     *
+                throw new IllegalArgumentException("Only opensearch is allowed to be specified as a plugin dependency: " + dependenciesMap);
     }
-
-    @Override
-    public int hashCode() {
-        return name.hashCode();
-    }
-
-    @Override
-    public String toString() {
-        return toString("");
-    }
-
-    public String toString(String prefix) {
-        final StringBuilder information = new StringBuilder().append(prefix)
-            .append("- Plugin information:\n")
-            .append(prefix)
-            .append("Name: ")
-            .append(name)
-            .append("\n")
-            .append(prefix)
-            .append("Description: ")
-            .append(description)
-            .append("\n")
-            .append(prefix)
-            .append("Version: ")
-            .append(version)
-            .append("\n")
-            .append(prefix)
-            .append("OpenSearch Version: ")
-            .append(getOpenSearchVersionRangesString())
-            .append("\n")
-            .append(prefix)
-            .append("Java Version: ")
-            .append(javaVersion)
-            .append("\n")
-            .append(prefix)
-            .append("Native Controller: ")
-            .append(hasNativeController)
-            .append("\n")
-            .append(prefix)
-            .append("Extended Plugins: ")
+        this.javaVersion = in.readString();
             .append(extendedPlugins)
-            .append("\n")
+    }
+        this.customFolderName = customFolderName;
+                    hasNativeController = false;
+     * The entry point to the plugin.
+        final List<SemverRange> opensearchVersionRanges = new ArrayList<>();
+ *
+            this.opensearchVersionRanges = (List<SemverRange>) in.readGenericValue();
+        } else {
             .append(prefix)
-            .append(" * Classname: ")
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+import java.nio.file.Files;
+    public static final String OPENSEARCH_PLUGIN_PROPERTIES = "plugin-descriptor.properties";
+            builder.field("custom_foldername", customFolderName);
+    private final String description;
+ *
+        this.hasNativeController = hasNativeController;
+    public String getJavaVersion() {
+        boolean hasNativeController
+    }
+    private final String customFolderName;
             .append(classname)
-            .append("\n")
+    ) {
+    public PluginInfo(
+     * The list of OpenSearch version ranges the plugin is compatible with.
+            builder.field("optional_extended_plugins", optionalExtendedPlugins);
             .append(prefix)
-            .append("Folder name: ")
-            .append(customFolderName);
+            .append("\n")
+    private final String classname;
+        return toString("");
+     */
+        if (in.getVersion().onOrAfter(Version.V_2_19_0)) {
+     * @return the names of the plugins extended
+    private final String version;
+        String description,
+        String customFolderName,
+            this.optionalExtendedPlugins = in.readStringList();
+            opensearchVersionRanges,
+        }
+            );
+ * compatible open source license.
+            builder.field("java_version", javaVersion);
+     *
+        return version;
+            switch (hasNativeControllerValue) {
+            .append("\n")
+            .map(s -> s.split(";")[0])
+        if (classname == null) {
+        return extendedPlugins.stream().map(s -> s.split(";")[0]).collect(Collectors.toUnmodifiableList());
+     * @return the plugin description
+import java.io.InputStream;
+            version,
+import org.opensearch.core.xcontent.ToXContentObject;
+        if (opensearchVersionString != null) {
+    private final String name;
+     *
+package org.opensearch.plugins;
+        }
+            .append("\n")
+    public List<SemverRange> getOpenSearchVersionRanges() {
+    @Override
+import java.util.Locale;
+            throw new IllegalArgumentException("property [java.version] is missing for plugin [" + name + "]");
+     *
+        if (javaVersionString == null) {
+        final Map<String, String> propsMap;
+        } else {
+     * The version of the plugin
+        this(
+    public String getVersion() {
+import java.util.Properties;
+        );
+                );
+import tools.jackson.core.json.JsonReadFeature;
+    public String getName() {
+            try (
+            hasNativeController
+ * under the License.
+        String name,
+ * this work for additional information regarding copyright
+            }
+            .append(" * Classname: ")
+        String name,
+     * Other plugins this plugin extends through SPI.
+     */
+    /**
+                "Only one of [opensearch.version] or [dependencies] property can be specified for the plugin [" + name + "]"
+        }
+    }
+     * Other plugins this plugin extends through SPI
+            .append(prefix)
+            javaVersion,
+    public List<String> getExtendedPlugins() {
+            builder.field("classname", classname);
+            .append("Name: ")
+/*
+            if (dependenciesMap.keySet().stream().noneMatch(s -> s.equals("opensearch"))) {
+            out.writeString(name);
+        if (extendedString == null) {
+            }
+            .append(description)
+                final JsonXContentParser parser = new JsonXContentParser(
+            out.writeStringCollection(optionalExtendedPlugins);
+ * software distributed under the License is distributed on an
+        } else {
+        this.version = in.readString();
+            throw new IllegalArgumentException("property [name] is missing in [" + descriptor + "]");
+        // Ensure only one range is specified (for now)
+        this.extendedPlugins = in.readStringList();
+import org.opensearch.common.bootstrap.JarHell;
+        final String extendedString = propsMap.remove("extended.plugins");
+    public String getOpenSearchVersionRangesString() {
+        return true;
+     * @return the plugin info
+    /**
+            classname,
+        }
+        String version,
+    /**
+            .append(prefix)
+            try (InputStream stream = Files.newInputStream(descriptor)) {
+    // Optional extended plugins are a subset of extendedPlugins that only contains the optional extended plugins
+        String classname,
+import org.opensearch.core.common.io.stream.StreamInput;
+            throw new IllegalArgumentException("property [description] is missing for plugin [" + name + "]");
+            builder.field("extended_plugins", extendedPlugins);
+        String classname,
+                        "true",
+/*
+    }
+            .append("Extended Plugins: ")
+                    DeprecationHandler.IGNORE_DEPRECATIONS,
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException("Unknown properties in plugin descriptor: " + propsMap.keySet());
+            javaVersionString,
+     *
+        out.writeString(name);
+            ) {
+        }
+    }
+    }
+        }
+        out.writeBoolean(hasNativeController);
+     * @param classname             the entry point to the plugin
+    public boolean hasNativeController() {
+     * The target folder name for the plugin.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     * @return the version
+            builder.field("has_native_controller", hasNativeController);
+import java.util.function.Function;
+            .append(javaVersion)
+     *
+     * Reads the plugin descriptor file.
+        return opensearchVersionRanges.stream().map(Object::toString).collect(Collectors.joining(",", "[", "]"));
+import org.opensearch.core.xcontent.XContentBuilder;
+            .append("Java Version: ")
+        return new PluginInfo(
+ * @opensearch.api
+            throw new IllegalArgumentException(
+            );
+            opensearchVersionRanges.add(SemverRange.fromString(opensearchVersionString));
+    public int hashCode() {
+    public static PluginInfo readFromProperties(final Path path) throws IOException {
+     * @throws IOException if an I/O exception occurred reading the plugin info from the stream
+                    "Exactly one dependency is allowed to be specified in plugin descriptor properties: " + dependenciesMap
+        this.extendedPlugins = extendedPlugins.stream().map(s -> s.split(";")[0]).collect(Collectors.toUnmodifiableList());
+        return name;
+        this.opensearchVersionRanges = opensearchVersionRanges;
+public class PluginInfo implements Writeable, ToXContentObject {
+    /**
+        if (opensearchVersionRanges.size() == 1) {
+     */
+        return optionalExtendedPlugins.contains(extendedPlugin);
+    }
+            .append(name)
+    private final List<String> optionalExtendedPlugins;
+            if (dependenciesMap.size() != 1) {
+     * The custom folder name for the plugin.
+        }
+                "Either [opensearch.version] or [dependencies] property must be specified for the plugin [" + name + "]"
+                case "false":
+        String javaVersion,
+ * the Apache License, Version 2.0 (the "License"); you may
+            .append("OpenSearch Version: ")
+            } else if (ranges.length != 1) {
+ * license agreements. See the NOTICE file distributed with
+            }
+            .append("Native Controller: ")
+        if (customFolderName != null) {
+        if (propsMap.isEmpty() == false) {
+    private final String javaVersion;
+        final String hasNativeControllerValue = propsMap.remove("has.native.controller");
+        if (in.getVersion().onOrAfter(Version.V_2_13_0)) {
+     * @param description           a description of the plugin
+            throw new IllegalStateException("Opensearch version ranges list cannot be empty");
+            builder.field("description", description);
+    public boolean equals(Object o) {
+        this.classname = in.readString();
+     * The version of Java the plugin was built with.
+     * @return semver ranges string
+            null /* customFolderName */,
+import tools.jackson.core.json.JsonFactory;
+            String opensearchDependencyVersion = dependenciesMap.get("opensearch");
+import java.util.Arrays;
+            name,
+     * @throws IOException if an I/O exception occurred reading the plugin descriptor
+import java.io.IOException;
+            .append("\n")
+        if (version == null) {
+    }
+                        "false",
+            .append("Description: ")
+ * Licensed to Elasticsearch under one or more contributor
+        this.name = name;
+            .append(getOpenSearchVersionRangesString())
+        }
+        }
+    public String getClassname() {
+        if (this == o) return true;
+            description,
+            return opensearchVersionRanges.get(0).toString();
+        final String dependenciesValue = propsMap.remove("dependencies");
+    /**
         return information.toString();
     }
+     */
+     * @param classname             the entry point to the plugin
+     */
+    private final boolean hasNativeController;
+ *
+            propsMap = props.stringPropertyNames().stream().collect(Collectors.toMap(Function.identity(), props::getProperty));
+    public String getFolderName() {
+     * @param name                  the name of the plugin
+ * not use this file except in compliance with the License.
+    @SuppressWarnings("unchecked")
+     *
+    public PluginInfo(
+        String version,
+        String[] dependency = extendedPlugin.split(";");
+                    final String message = String.format(
+     * The name of the plugin.
+    /**
+    /**
+import org.opensearch.core.common.io.stream.StreamOutput;
+import java.util.stream.Collectors;
+            }
+    public String toString(String prefix) {
+            customFolderName,
+                        "property [%s] must be [%s], [%s], or unspecified but was [%s]",
+                    "Exactly one range is allowed to be specified in dependencies for the plugin [" + name + "]"
+            version,
+    @Override
+    /**
+    @Override
+     * @param path           the path to the root directory for the plugin
+    }
+                dependenciesMap = parser.mapStrings();
+    }
+ * specific language governing permissions and limitations
+     * Construct plugin info.
+        }
+        if (opensearchVersionString == null && dependenciesValue == null) {
+     */
+     * @param version               an opaque version identifier for the plugin
+    }
+            .append(prefix)
+    }
+            opensearchVersionRanges.add(SemverRange.fromString(opensearchVersion.trim()));
+     * @param version               an opaque version identifier for the plugin
+                )
+            hasNativeController = false;
+        }
+     * @param javaVersion           the version of Java the plugin was built with
+            javaVersion,
+ * KIND, either express or implied.  See the License for the
+                case "true":
+        this.classname = classname;
+     */
+     * @return the custom folder name for the plugin if the folder name is specified, else return the id with kebab-case.
+import org.opensearch.common.xcontent.json.JsonXContentParser;
+            builder.field("version", version);
+        String javaVersion,
+        String description,
+     * Construct plugin info.
+            .append("\n")
+        return opensearchVersionRanges;
+        return description;
+            .append("\n")
+import java.util.ArrayList;
+            hasNativeController
+        final StringBuilder information = new StringBuilder().append(prefix)
 }
+                        "has_native_controller",
+        builder.startObject();
+        Version opensearchVersion,
+            List.of(SemverRange.fromString(opensearchVersion.toString())),
+     * @return a list of OpenSearch version ranges
+            .collect(Collectors.toUnmodifiableList());
+        if (version != null ? !version.equals(that.version) : that.version != null) return false;
+    public String getTargetFolderName() {
+     */
+            out.writeGenericValue(opensearchVersionRanges);
+        out.writeString(javaVersion);
+     */
+     * @param opensearchVersion     the version of OpenSearch the plugin was built for
+     * @param in the stream
+        }
+     *
+        if (hasNativeControllerValue == null) {
+        return dependency.length > 1 && "optional=true".equals(dependency[1]);
+            .append(version)
+import tools.jackson.core.json.JsonFactoryBuilder;
+import java.util.Collections;
+    }
+    public PluginInfo(final StreamInput in) throws IOException {
+                default:
+import static org.opensearch.semver.SemverRange.RANGE_PATTERN;
+            classname,
+     * @param opensearchVersion     the version of OpenSearch the plugin was built for
+            throw new IllegalArgumentException(
+        boolean hasNativeController
+ *
+        String description,
+            throw new IllegalArgumentException("property [version] is missing for plugin [" + name + "]");
+        this.version = version;
+        if (out.getVersion().onOrAfter(Version.V_2_13_0)) {
+        JarHell.checkVersionFormat(javaVersionString);
+        builder.endObject();
+/*
+        final String name = propsMap.remove("name");
+     *
+     * @return the custom folder name for the plugin
+     *
+ * An in-memory representation of the plugin descriptor.
+                throw new IllegalArgumentException(
+        final String classname = propsMap.remove("classname");
+     * @param extendedPlugins       other plugins this plugin extends through SPI
+    /**
+     * @param name                  the name of the plugin
+        }
+            }
+     * @param extendedPlugins       other plugins this plugin extends through SPI
+     *
+        this.name = in.readString();
+        this(
+        // TODO: since the plugins are unique by their directory name, this should only be a name check, version should not matter?
+        return classname;
+            throw new IllegalArgumentException("property [classname] is missing for plugin [" + name + "]");
+        if (opensearchVersionRanges.size() != 1) {
+                "Exactly one range is allowed to be specified in dependencies for the plugin [" + name + "]"
+            /*
+     * Construct plugin info from a stream.
+    /**
+            description,
+        List<String> extendedPlugins,
+            name,
+        }
+ */
+    @Override
+            .filter(PluginInfo::isOptionalExtension)
+                    jsonFactory.createParser(dependenciesValue)
+     */
+     * @param description           a description of the plugin
+            opensearchVersion,
+     * @return the names of the plugins extended
+        .build();
+    ) {
+     * @param javaVersion           the version of Java the plugin was built with
+            String opensearchVersion = ranges[0];
+                    throw new IllegalArgumentException(message);
+                        Locale.ROOT,
+        if (opensearchVersionRanges == null || opensearchVersionRanges.isEmpty()) {
+            .append(customFolderName);
+            name,
+    /**
+    /**
+        }
+     * @return a java version string
+                    );
+/**
+            throw new IllegalArgumentException(
+     * The description of the plugin.
+    /**
+    ) {
+        );
+ * this file be licensed under the Apache-2.0 license or a
+        PluginInfo that = (PluginInfo) o;
+        if (!name.equals(that.name)) return false;
+import org.opensearch.core.common.io.stream.Writeable;
+        } else {
+             */
+ * The OpenSearch Contributors require contributions made to
+     * @param customFolderName      the custom folder name for the plugin
+        this.customFolderName = in.readString();
+        if (description == null) {
+            .append("- Plugin information:\n")
+                    break;
+                        hasNativeControllerValue
+    }
+            if (RANGE_PATTERN.matcher(opensearchDependencyVersion).matches()) {
+                );
+     */
+            hasNativeController
+    }
+        return name.hashCode();
+            version,
+            .append("\n")
+    public PluginInfo(
+ * Unless required by applicable law or agreed to in writing,
+        return customFolderName;
+        String customFolderName,
+    static boolean isOptionalExtension(String extendedPlugin) {
+            builder.field("name", name);
+@PublicApi(since = "1.0.0")
+            .append(prefix)
+        customFolderName = customFolderNameValue;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import java.util.Map;
+     * @return the entry point to the plugin
+        } else {
+ */
+        final String opensearchVersionString = propsMap.remove("opensearch.version");
+            extendedPlugins,
+            );
+        String classname,
+        String javaVersion,
+            extendedPlugins,
+    /**
+     * @return the plugin name
+    public boolean isExtendedPluginOptional(String extendedPlugin) {
+     * Whether or not the plugin has a native controller.
+        {
+    }
+     *
+ * ownership. Elasticsearch licenses this file to you under
+            out.writeVersion(opensearchVersionRanges.get(0).getRangeVersion());
+        if (o == null || getClass() != o.getClass()) return false;
+        if (out.getVersion().onOrAfter(Version.V_2_19_0)) {
+            .append(prefix)
+import org.opensearch.core.common.Strings;
+ * SPDX-License-Identifier: Apache-2.0
+        return javaVersion;
+     */
+        }
+     */
+        out.writeStringCollection(extendedPlugins);
+     */
+     */
+        }
+     *
+     *
+        return (this.customFolderName == null || this.customFolderName.isEmpty()) ? this.name : this.customFolderName;
+        final String version = propsMap.remove("version");
+        out.writeString(classname);
+        final String customFolderNameValue = propsMap.remove("custom.foldername");
+                    break;
+            classname,
+            .append("\n")
+import org.opensearch.core.xcontent.DeprecationHandler;
+    private static final JsonFactory jsonFactory = new JsonFactoryBuilder().configure(JsonReadFeature.ALLOW_UNQUOTED_PROPERTY_NAMES, true)
+        );
+            customFolderName,
+        this.javaVersion = javaVersion;
+        }
+    /**
+    public void writeTo(final StreamOutput out) throws IOException {
+        this.optionalExtendedPlugins = extendedPlugins.stream()
+        }
+import java.nio.file.Path;
+import java.util.List;
+        } else {
+        List<SemverRange> opensearchVersionRanges,
+import org.opensearch.semver.SemverRange;
+ * GitHub history for details.
+            .append(hasNativeController)
+            String[] ranges = opensearchDependencyVersion.split(",");
+        if (opensearchVersionString != null && dependenciesValue != null) {
+        final String javaVersionString = propsMap.remove("java.version");
+            out.writeString(customFolderName);
+    }
+    }
+     * @param hasNativeController   whether or not the plugin has a native controller
+        final Path descriptor = path.resolve(OPENSEARCH_PLUGIN_PROPERTIES);
+        List<String> extendedPlugins,
+        List<String> extendedPlugins,
+    }
+    }
+            this.optionalExtendedPlugins = new ArrayList<>();
+                opensearchVersion = opensearchDependencyVersion;
+        String version,
+        final List<String> extendedPlugins;
+    public static final String OPENSEARCH_PLUGIN_POLICY = "plugin-security.policy";
+import org.opensearch.Version;
+        return builder;
+        final boolean hasNativeController;
+            this.opensearchVersionRanges = List.of(new SemverRange(in.readVersion(), SemverRange.RangeOperator.DEFAULT));
+        this.description = in.readString();
+            extendedPlugins = Collections.emptyList();
+        boolean hasNativeController
+    private final List<String> extendedPlugins;
+        }
+     * @param hasNativeController   whether or not the plugin has a native controller
+        String name,
+ * You may obtain a copy of the License at
+     * Pretty print the semver ranges and return the string.
+            builder.field("opensearch_version", getOpenSearchVersionRangesString());
+            .append("Folder name: ")
+        final String description = propsMap.remove("description");
+        Version opensearchVersion,
+    public String toString() {
+        final String customFolderName;
+ */
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+            .append(prefix)
+        this.description = description;
+    private final List<SemverRange> opensearchVersionRanges;
+            final Properties props = new Properties();
+        }
+    @Override
+    public String getDescription() {
+            description,
+import org.opensearch.common.annotation.PublicApi;
+            .append(prefix)

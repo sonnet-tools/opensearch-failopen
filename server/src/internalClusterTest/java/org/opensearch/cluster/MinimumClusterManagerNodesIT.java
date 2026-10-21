@@ -1,429 +1,362 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster;
-
-import org.opensearch.action.admin.cluster.configuration.AddVotingConfigExclusionsAction;
-import org.opensearch.action.admin.cluster.configuration.AddVotingConfigExclusionsRequest;
-import org.opensearch.action.admin.cluster.configuration.ClearVotingConfigExclusionsAction;
-import org.opensearch.action.admin.cluster.configuration.ClearVotingConfigExclusionsRequest;
-import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
-import org.opensearch.cluster.coordination.FailedToCommitClusterStateException;
-import org.opensearch.cluster.coordination.NoClusterManagerBlockService;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Priority;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.set.Sets;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
-import org.opensearch.test.OpenSearchIntegTestCase.Scope;
-import org.opensearch.test.disruption.NetworkDisruption;
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.transport.client.Client;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicReference;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertNoTimeout;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
-
-@ClusterScope(scope = Scope.TEST, numDataNodes = 0, autoManageMasterNodes = false)
-public class MinimumClusterManagerNodesIT extends OpenSearchIntegTestCase {
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        final HashSet<Class<? extends Plugin>> classes = new HashSet<>(super.nodePlugins());
-        classes.add(MockTransportService.TestPlugin.class);
-        return classes;
-    }
-
-    public void testTwoNodesNoClusterManagerBlock() throws Exception {
-        internalCluster().setBootstrapClusterManagerNodeIndex(1);
-
-        Settings settings = Settings.builder().put("discovery.initial_state_timeout", "500ms").build();
-
-        logger.info("--> start first node");
-        String node1Name = internalCluster().startNode(settings);
-
-        logger.info("--> should be blocked, no cluster-manager...");
-        ClusterState state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(true));
-        assertThat(state.nodes().getSize(), equalTo(1)); // verify that we still see the local node in the cluster state
-
-        logger.info("--> start second node, cluster should be formed");
-        String node2Name = internalCluster().startNode(settings);
-
-        ClusterHealthResponse clusterHealthResponse = client().admin()
-            .cluster()
-            .prepareHealth()
-            .setWaitForEvents(Priority.LANGUID)
-            .setWaitForNodes("2")
-            .execute()
-            .actionGet();
-        assertThat(clusterHealthResponse.isTimedOut(), equalTo(false));
-
-        state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(false));
-        state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(false));
-
-        state = client().admin().cluster().prepareState().execute().actionGet().getState();
-        assertThat(state.nodes().getSize(), equalTo(2));
-        assertThat(state.metadata().indices().containsKey("test"), equalTo(false));
-
-        createIndex("test");
-        NumShards numShards = getNumShards("test");
-        logger.info("--> indexing some data");
-        for (int i = 0; i < 100; i++) {
+        }
             client().prepareIndex("test").setId(Integer.toString(i)).setSource("field", "value").execute().actionGet();
-        }
-        // make sure that all shards recovered before trying to flush
-        assertThat(
-            client().admin()
-                .cluster()
-                .prepareHealth("test")
-                .setWaitForActiveShards(numShards.totalNumShards)
-                .execute()
-                .actionGet()
-                .getActiveShards(),
-            equalTo(numShards.totalNumShards)
-        );
-        // flush for simpler debugging
-        flushAndRefresh();
-
-        logger.info("--> verify we get the data back");
-        for (int i = 0; i < 10; i++) {
-            assertThat(
-                client().prepareSearch()
-                    .setSize(0)
-                    .setQuery(QueryBuilders.matchAllQuery())
-                    .execute()
-                    .actionGet()
-                    .getHits()
-                    .getTotalHits()
-                    .value(),
-                equalTo(100L)
-            );
-        }
-
-        String clusterManagerNode = internalCluster().getClusterManagerName();
-        String otherNode = node1Name.equals(clusterManagerNode) ? node2Name : node1Name;
-        logger.info("--> add voting config exclusion for non-cluster-manager node, to be sure it's not elected");
-        client().execute(AddVotingConfigExclusionsAction.INSTANCE, new AddVotingConfigExclusionsRequest(otherNode)).get();
-        logger.info("--> stop cluster-manager node, no cluster-manager block should appear");
-        Settings clusterManagerDataPathSettings = internalCluster().dataPathSettings(clusterManagerNode);
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(clusterManagerNode));
-
-        assertBusy(() -> {
-            ClusterState clusterState = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-            assertTrue(clusterState.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID));
-        });
-
-        state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(true));
-        // verify that both nodes are still in the cluster state but there is no cluster-manager
-        assertThat(state.nodes().getSize(), equalTo(2));
-        assertThat(state.nodes().getClusterManagerNode(), equalTo(null));
-
-        logger.info("--> starting the previous cluster-manager node again...");
-        node2Name = internalCluster().startNode(Settings.builder().put(settings).put(clusterManagerDataPathSettings).build());
-
-        clusterHealthResponse = client().admin()
-            .cluster()
-            .prepareHealth()
-            .setWaitForEvents(Priority.LANGUID)
-            .setWaitForYellowStatus()
-            .setWaitForNodes("2")
-            .execute()
-            .actionGet();
-        assertThat(clusterHealthResponse.isTimedOut(), equalTo(false));
-
-        state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(false));
-        state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(false));
-
-        state = client().admin().cluster().prepareState().execute().actionGet().getState();
-        assertThat(state.nodes().getSize(), equalTo(2));
-        assertThat(state.metadata().indices().containsKey("test"), equalTo(true));
-
-        ensureGreen();
-
-        logger.info("--> verify we get the data back after cluster reform");
-        for (int i = 0; i < 10; i++) {
-            assertHitCount(client().prepareSearch().setSize(0).setQuery(QueryBuilders.matchAllQuery()).execute().actionGet(), 100);
-        }
-
-        logger.info("--> clearing voting config exclusions");
-        ClearVotingConfigExclusionsRequest clearRequest = new ClearVotingConfigExclusionsRequest();
-        clearRequest.setWaitForRemoval(false);
-        client().execute(ClearVotingConfigExclusionsAction.INSTANCE, clearRequest).get();
-
-        clusterManagerNode = internalCluster().getClusterManagerName();
-        otherNode = node1Name.equals(clusterManagerNode) ? node2Name : node1Name;
-        logger.info("--> add voting config exclusion for cluster-manager node, to be sure it's not elected");
-        client().execute(AddVotingConfigExclusionsAction.INSTANCE, new AddVotingConfigExclusionsRequest(clusterManagerNode)).get();
-        logger.info("--> stop non-cluster-manager node, no cluster-manager block should appear");
-        Settings otherNodeDataPathSettings = internalCluster().dataPathSettings(otherNode);
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(otherNode));
-
-        assertBusy(() -> {
-            ClusterState state1 = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-            assertThat(state1.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(true));
-        });
-
-        logger.info("--> starting the previous cluster-manager node again...");
-        internalCluster().startNode(Settings.builder().put(settings).put(otherNodeDataPathSettings).build());
-
-        ensureGreen();
-        clusterHealthResponse = client().admin()
-            .cluster()
-            .prepareHealth()
-            .setWaitForEvents(Priority.LANGUID)
-            .setWaitForNodes("2")
-            .setWaitForGreenStatus()
-            .execute()
-            .actionGet();
-        assertThat(clusterHealthResponse.isTimedOut(), equalTo(false));
-
-        state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(false));
-        state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(false));
-
-        state = client().admin().cluster().prepareState().execute().actionGet().getState();
-        assertThat(state.nodes().getSize(), equalTo(2));
-        assertThat(state.metadata().indices().containsKey("test"), equalTo(true));
-
-        logger.info("Running Cluster Health");
-        ensureGreen();
-
-        logger.info("--> verify we the data back");
-        for (int i = 0; i < 10; i++) {
-            assertHitCount(client().prepareSearch().setSize(0).setQuery(QueryBuilders.matchAllQuery()).execute().actionGet(), 100);
-        }
-    }
-
-    @AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/14289")
-    public void testThreeNodesNoClusterManagerBlock() throws Exception {
-        internalCluster().setBootstrapClusterManagerNodeIndex(2);
-
         Settings settings = Settings.builder().put("discovery.initial_state_timeout", "500ms").build();
-
-        logger.info("--> start first 2 nodes");
-        internalCluster().startNodes(2, settings);
-
-        ClusterState state;
-
+import org.opensearch.test.OpenSearchIntegTestCase;
+        state = client().admin().cluster().prepareState().execute().actionGet().getState();
+import org.opensearch.common.util.set.Sets;
+        final ClusterService clusterManagerClusterService = internalCluster().clusterService(clusterManager);
+        NetworkDisruption partition = isolateClusterManagerDisruption(NetworkDisruption.DISCONNECT);
+        for (int i = 0; i < 10; i++) {
         assertBusy(() -> {
-            for (Client client : clients()) {
-                ClusterState state1 = client.admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-                assertThat(state1.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(true));
-            }
+        logger.info("Running Cluster Health");
+        logger.info("--> verify we the data back");
+import static org.hamcrest.Matchers.notNullValue;
+        // make sure that all shards recovered before trying to flush
+import static org.hamcrest.Matchers.not;
+/*
+        internalCluster().stopRandomNodeNotCurrentClusterManager();
+ * SPDX-License-Identifier: Apache-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+            assertThat(st.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(true));
+        assertThat(clusterHealthResponse.isTimedOut(), equalTo(false));
+import static org.hamcrest.Matchers.instanceOf;
+        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(false));
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
+        state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
+        // flush for simpler debugging
+        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(true));
+        logger.info("--> should be blocked, no cluster-manager...");
+        );
+            .setWaitForGreenStatus()
+        ensureGreen();
+        ensureGreen();
+        logger.debug("--> check that there is no cluster-manager in minor partition");
+        // spin here to wait till the state is set
+        Settings settings = Settings.builder().put("discovery.initial_state_timeout", "500ms").build();
+        // make sure that all shards recovered before trying to flush
+                .cluster()
+        otherNode = node1Name.equals(clusterManagerNode) ? node2Name : node1Name;
+ */
+        state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
+ * Licensed to Elasticsearch under one or more contributor
+        assertThat(clusterHealthResponse.isTimedOut(), equalTo(false));
+ */
+import java.util.concurrent.CountDownLatch;
+                node + " processed the cluster state despite of a min cluster-manager node violation",
+        internalCluster().stopRandomNodeNotCurrentClusterManager();
+        ClusterHealthResponse clusterHealthResponse = client().admin()
+ * software distributed under the License is distributed on an
+        clusterManagerClusterService.submitStateUpdateTask("test", new ClusterStateUpdateTask() {
+        final AtomicReference<Exception> failure = new AtomicReference<>();
+        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(true));
+        assertThat(clusterHealthResponse.isTimedOut(), equalTo(false));
+                .setWaitForActiveShards(numShards.totalNumShards)
+@ClusterScope(scope = Scope.TEST, numDataNodes = 0, autoManageMasterNodes = false)
+                .getActiveShards(),
+        logger.info("--> verify we the data back");
+        logger.info("--> verify we get the data back");
+            equalTo(numShards.totalNumShards)
+import org.opensearch.cluster.service.ClusterService;
+        ClusterState state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.Priority;
+        ensureStableCluster(3);
+import org.opensearch.cluster.coordination.FailedToCommitClusterStateException;
         });
-
+            @Override
+        flushAndRefresh();
+            @Override
+        state = client().admin().cluster().prepareState().execute().actionGet().getState();
+        ensureGreen();
+            public ClusterState execute(ClusterState currentState) throws Exception {
+            client().admin()
+        logger.info("--> start first node");
+public class MinimumClusterManagerNodesIT extends OpenSearchIntegTestCase {
+        client().execute(AddVotingConfigExclusionsAction.INSTANCE, new AddVotingConfigExclusionsRequest(otherNode)).get();
+        logger.info("--> add voting config exclusion for cluster-manager node, to be sure it's not elected");
+        return classes;
+import java.util.concurrent.atomic.AtomicReference;
+                    .actionGet()
+ * You may obtain a copy of the License at
+            .setWaitForNodes("2")
+        internalCluster().startNodes(3, settings);
+                .cluster()
+            .actionGet();
+        logger.debug("--> waiting for cluster state to be processed/rejected");
+            .setWaitForEvents(Priority.LANGUID)
+                    .getTotalHits()
+        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(false));
+        Settings otherNodeDataPathSettings = internalCluster().dataPathSettings(otherNode);
+/*
+import org.opensearch.index.query.QueryBuilders;
+            .setWaitForEvents(Priority.LANGUID)
+import java.util.Set;
+        assertNoTimeout(client().admin().cluster().prepareHealth().setWaitForNodes("3").setWaitForEvents(Priority.LANGUID));
+        NumShards numShards = getNumShards("test");
+        Set<String> otherNodes = new HashSet<>(Arrays.asList(internalCluster().getNodeNames()));
+/*
+        assertThat(state.nodes().getSize(), equalTo(3));
+        internalCluster().setBootstrapClusterManagerNodeIndex(2);
         logger.info("--> start one more node");
         internalCluster().startNode(settings);
-
-        ensureGreen();
-        ClusterHealthResponse clusterHealthResponse = client().admin()
-            .cluster()
-            .prepareHealth()
-            .setWaitForEvents(Priority.LANGUID)
-            .setWaitForNodes("3")
-            .execute()
-            .actionGet();
-        assertThat(clusterHealthResponse.isTimedOut(), equalTo(false));
-
-        state = client().admin().cluster().prepareState().execute().actionGet().getState();
-        assertThat(state.nodes().getSize(), equalTo(3));
-
-        createIndex("test");
-        NumShards numShards = getNumShards("test");
-        logger.info("--> indexing some data");
-        for (int i = 0; i < 100; i++) {
-            client().prepareIndex("test").setId(Integer.toString(i)).setSource("field", "value").execute().actionGet();
-        }
-        ensureGreen();
-        // make sure that all shards recovered before trying to flush
-        assertThat(
-            client().admin()
-                .cluster()
-                .prepareHealth("test")
-                .setWaitForActiveShards(numShards.totalNumShards)
-                .execute()
-                .actionGet()
-                .isTimedOut(),
-            equalTo(false)
-        );
-        // flush for simpler debugging
-        client().admin().indices().prepareFlush().execute().actionGet();
-
-        refresh();
-        logger.info("--> verify we get the data back");
-        for (int i = 0; i < 10; i++) {
-            assertHitCount(client().prepareSearch().setSize(0).setQuery(QueryBuilders.matchAllQuery()).execute().actionGet(), 100);
-        }
-
-        List<String> nonClusterManagerNodes = new ArrayList<>(
-            Sets.difference(
-                Sets.newHashSet(internalCluster().getNodeNames()),
-                Collections.singleton(internalCluster().getClusterManagerName())
-            )
-        );
-        Settings nonClusterManagerDataPathSettings1 = internalCluster().dataPathSettings(nonClusterManagerNodes.get(0));
-        Settings nonClusterManagerDataPathSettings2 = internalCluster().dataPathSettings(nonClusterManagerNodes.get(1));
-        internalCluster().stopRandomNodeNotCurrentClusterManager();
-        internalCluster().stopRandomNodeNotCurrentClusterManager();
-
-        logger.info("--> verify that there is no cluster-manager anymore on remaining node");
-        // spin here to wait till the state is set
-        assertBusy(() -> {
-            ClusterState st = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-            assertThat(st.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(true));
-        });
-
-        logger.info("--> start back the 2 nodes ");
-        internalCluster().startNodes(nonClusterManagerDataPathSettings1, nonClusterManagerDataPathSettings2);
-
-        internalCluster().validateClusterFormed();
-        ensureGreen();
-
-        state = client().admin().cluster().prepareState().execute().actionGet().getState();
-        assertThat(state.nodes().getSize(), equalTo(3));
-
-        logger.info("--> verify we the data back");
-        for (int i = 0; i < 10; i++) {
-            assertHitCount(client().prepareSearch().setSize(0).setQuery(QueryBuilders.matchAllQuery()).execute().actionGet(), 100);
-        }
-    }
-
-    public void testCannotCommitStateThreeNodes() throws Exception {
-        internalCluster().setBootstrapClusterManagerNodeIndex(2);
-
-        Settings settings = Settings.builder().put("discovery.initial_state_timeout", "500ms").build();
-
-        internalCluster().startNodes(3, settings);
-        ensureStableCluster(3);
-
-        final String clusterManager = internalCluster().getClusterManagerName();
-        Set<String> otherNodes = new HashSet<>(Arrays.asList(internalCluster().getNodeNames()));
-        otherNodes.remove(clusterManager);
-        NetworkDisruption partition = isolateClusterManagerDisruption(NetworkDisruption.DISCONNECT);
-        internalCluster().setDisruptionScheme(partition);
-
-        final CountDownLatch latch = new CountDownLatch(1);
-        final AtomicReference<Exception> failure = new AtomicReference<>();
-        logger.debug("--> submitting for cluster state to be rejected");
-        final ClusterService clusterManagerClusterService = internalCluster().clusterService(clusterManager);
-        clusterManagerClusterService.submitStateUpdateTask("test", new ClusterStateUpdateTask() {
-            @Override
-            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                latch.countDown();
-            }
-
-            @Override
-            public ClusterState execute(ClusterState currentState) throws Exception {
-                logger.debug("--> starting the disruption, preventing cluster state publishing");
-                partition.startDisrupting();
-                Metadata.Builder metadata = Metadata.builder(currentState.metadata())
-                    .persistentSettings(
-                        Settings.builder().put(currentState.metadata().persistentSettings()).put("_SHOULD_NOT_BE_THERE_", true).build()
-                    );
-                return ClusterState.builder(currentState).metadata(metadata).build();
-            }
-
-            @Override
-            public void onFailure(String source, Exception e) {
-                failure.set(e);
-                latch.countDown();
-            }
-        });
-
-        logger.debug("--> waiting for cluster state to be processed/rejected");
-        latch.await();
-
-        assertThat(failure.get(), instanceOf(FailedToCommitClusterStateException.class));
-
-        logger.debug("--> check that there is no cluster-manager in minor partition");
-        assertBusy(() -> assertThat(clusterManagerClusterService.state().nodes().getClusterManagerNode(), nullValue()));
-
-        // let major partition to elect new cluster-manager, to ensure that old cluster-manager is not elected once partition is restored,
         // otherwise persistent setting (which is a part of accepted state on old cluster-manager) will be propagated to other nodes
-        logger.debug("--> wait for cluster-manager to be elected in major partition");
-        assertBusy(() -> {
-            DiscoveryNode clusterManagerNode = internalCluster().client(randomFrom(otherNodes))
-                .admin()
-                .cluster()
-                .prepareState()
-                .execute()
-                .actionGet()
-                .getState()
-                .nodes()
-                .getClusterManagerNode();
-            assertThat(clusterManagerNode, notNullValue());
+        latch.await();
+            .prepareHealth()
+                        Settings.builder().put(currentState.metadata().persistentSettings()).put("_SHOULD_NOT_BE_THERE_", true).build()
             assertThat(clusterManagerNode.getName(), not(equalTo(clusterManager)));
+            DiscoveryNode clusterManagerNode = internalCluster().client(randomFrom(otherNodes))
+        logger.info("--> stop non-cluster-manager node, no cluster-manager block should appear");
+            client().admin()
+            ClusterState state1 = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
+            assertHitCount(client().prepareSearch().setSize(0).setQuery(QueryBuilders.matchAllQuery()).execute().actionGet(), 100);
         });
-
+        node2Name = internalCluster().startNode(Settings.builder().put(settings).put(clusterManagerDataPathSettings).build());
+        final CountDownLatch latch = new CountDownLatch(1);
+    }
+        // let major partition to elect new cluster-manager, to ensure that old cluster-manager is not elected once partition is restored,
+    public void testCannotCommitStateThreeNodes() throws Exception {
+                latch.countDown();
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(clusterManagerNode));
+import org.opensearch.test.transport.MockTransportService;
+        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(false));
+        assertThat(state.nodes().getSize(), equalTo(2));
+            equalTo(false)
+        logger.info("--> stop cluster-manager node, no cluster-manager block should appear");
+        clusterHealthResponse = client().admin()
+ * Modifications Copyright OpenSearch Contributors. See
+            .setWaitForYellowStatus()
+import org.opensearch.test.InternalTestCluster;
+        assertThat(state.metadata().indices().containsKey("test"), equalTo(true));
+        logger.info("--> add voting config exclusion for non-cluster-manager node, to be sure it's not elected");
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        assertBusy(() -> {
+        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(false));
+            ClusterState st = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
+    @AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/14289")
+        });
+        );
+                    .persistentSettings(
+import org.opensearch.action.admin.cluster.configuration.ClearVotingConfigExclusionsAction;
+        for (int i = 0; i < 10; i++) {
+            assertTrue(clusterState.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID));
+        for (int i = 0; i < 10; i++) {
+        assertThat(
+        Settings nonClusterManagerDataPathSettings1 = internalCluster().dataPathSettings(nonClusterManagerNodes.get(0));
         partition.stopDisrupting();
-
-        logger.debug("--> waiting for cluster to heal");
-        assertNoTimeout(client().admin().cluster().prepareHealth().setWaitForNodes("3").setWaitForEvents(Priority.LANGUID));
-
-        for (String node : internalCluster().getNodeNames()) {
-            Settings nodeSetting = internalCluster().clusterService(node).state().metadata().settings();
-            assertThat(
-                node + " processed the cluster state despite of a min cluster-manager node violation",
+            );
+        otherNodes.remove(clusterManager);
+        ensureGreen();
+            .setWaitForNodes("2")
+            .prepareHealth()
+        state = client().admin().cluster().prepareState().execute().actionGet().getState();
+                latch.countDown();
                 nodeSetting.get("_SHOULD_NOT_BE_THERE_"),
-                nullValue()
+        assertThat(state.nodes().getSize(), equalTo(2));
+            Settings nodeSetting = internalCluster().clusterService(node).state().metadata().settings();
+        final HashSet<Class<? extends Plugin>> classes = new HashSet<>(super.nodePlugins());
+ * The OpenSearch Contributors require contributions made to
+import java.util.HashSet;
+                .prepareHealth("test")
+        assertBusy(() -> {
+                Collections.singleton(internalCluster().getClusterManagerName())
+                .setWaitForActiveShards(numShards.totalNumShards)
+import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
+        logger.info("--> verify we get the data back after cluster reform");
+            }
+        logger.info("--> start second node, cluster should be formed");
+        classes.add(MockTransportService.TestPlugin.class);
+        logger.debug("--> waiting for cluster to heal");
+                .execute()
+                failure.set(e);
+        // flush for simpler debugging
+            @Override
+ * specific language governing permissions and limitations
+        });
+            assertThat(clusterManagerNode, notNullValue());
+                Metadata.Builder metadata = Metadata.builder(currentState.metadata())
+ * Unless required by applicable law or agreed to in writing,
+            Sets.difference(
+import org.opensearch.transport.client.Client;
+        client().admin().indices().prepareFlush().execute().actionGet();
+            client().prepareIndex("test").setId(Integer.toString(i)).setSource("field", "value").execute().actionGet();
+            }
+        state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
+        }
+import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
+        logger.info("--> starting the previous cluster-manager node again...");
+            assertThat(
+import org.opensearch.test.disruption.NetworkDisruption;
+        logger.info("--> indexing some data");
+        for (String node : internalCluster().getNodeNames()) {
+    }
+            for (Client client : clients()) {
+            .setWaitForEvents(Priority.LANGUID)
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+        for (int i = 0; i < 100; i++) {
+ * GitHub history for details.
+        refresh();
             );
         }
-
+                Sets.newHashSet(internalCluster().getNodeNames()),
+        internalCluster().setBootstrapClusterManagerNodeIndex(2);
+            assertHitCount(client().prepareSearch().setSize(0).setQuery(QueryBuilders.matchAllQuery()).execute().actionGet(), 100);
+            .setWaitForNodes("2")
+        assertThat(state.nodes().getSize(), equalTo(3));
+        Settings clusterManagerDataPathSettings = internalCluster().dataPathSettings(clusterManagerNode);
+import java.util.Arrays;
+        assertThat(state.nodes().getSize(), equalTo(1)); // verify that we still see the local node in the cluster state
+            }
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertNoTimeout;
+        assertBusy(() -> {
+        client().execute(ClearVotingConfigExclusionsAction.INSTANCE, clearRequest).get();
+                .execute()
+        assertBusy(() -> {
+        String clusterManagerNode = internalCluster().getClusterManagerName();
+        assertThat(clusterHealthResponse.isTimedOut(), equalTo(false));
+                nullValue()
     }
+import org.opensearch.cluster.node.DiscoveryNode;
+ * this work for additional information regarding copyright
+        Settings nonClusterManagerDataPathSettings2 = internalCluster().dataPathSettings(nonClusterManagerNodes.get(1));
+            .execute()
+        assertThat(state.nodes().getSize(), equalTo(2));
+                logger.debug("--> starting the disruption, preventing cluster state publishing");
+        ClearVotingConfigExclusionsRequest clearRequest = new ClearVotingConfigExclusionsRequest();
+        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(false));
+            .execute()
+            .execute()
+    }
+        assertThat(state.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(false));
+import java.util.Collection;
+        assertThat(failure.get(), instanceOf(FailedToCommitClusterStateException.class));
+            .execute()
+                    .setSize(0)
+        logger.debug("--> wait for cluster-manager to be elected in major partition");
+                .actionGet()
+        assertThat(state.nodes().getSize(), equalTo(2));
+                partition.startDisrupting();
+        logger.info("--> verify that there is no cluster-manager anymore on remaining node");
+        String node1Name = internalCluster().startNode(settings);
+            .actionGet();
+ */
+            assertHitCount(client().prepareSearch().setSize(0).setQuery(QueryBuilders.matchAllQuery()).execute().actionGet(), 100);
+        clearRequest.setWaitForRemoval(false);
+                .nodes()
+        NumShards numShards = getNumShards("test");
+                .execute()
+                    .getHits()
+        String otherNode = node1Name.equals(clusterManagerNode) ? node2Name : node1Name;
+import org.opensearch.cluster.coordination.NoClusterManagerBlockService;
+        );
+        state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
+                .prepareHealth("test")
+        Settings settings = Settings.builder().put("discovery.initial_state_timeout", "500ms").build();
+                .getClusterManagerNode();
+            .cluster()
+        createIndex("test");
+                .isTimedOut(),
+        ensureGreen();
+import java.util.List;
+                equalTo(100L)
+        internalCluster().setBootstrapClusterManagerNodeIndex(1);
+import org.opensearch.action.admin.cluster.configuration.AddVotingConfigExclusionsAction;
+            }
+            assertThat(state1.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(true));
+            .setWaitForNodes("3")
+        logger.debug("--> submitting for cluster state to be rejected");
+                .getState()
+        logger.info("--> verify we get the data back");
+        assertThat(state.metadata().indices().containsKey("test"), equalTo(true));
+                .admin()
+ * license agreements. See the NOTICE file distributed with
+            .actionGet();
+        }
+            .actionGet();
+        logger.info("--> clearing voting config exclusions");
+package org.opensearch.cluster;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            .prepareHealth()
+                .actionGet()
+            public void onFailure(String source, Exception e) {
+import org.opensearch.action.admin.cluster.configuration.AddVotingConfigExclusionsRequest;
+            )
+        internalCluster().startNode(Settings.builder().put(settings).put(otherNodeDataPathSettings).build());
+        }
+    @Override
+        internalCluster().setDisruptionScheme(partition);
+        List<String> nonClusterManagerNodes = new ArrayList<>(
+ *
+                    .execute()
+        assertBusy(() -> assertThat(clusterManagerClusterService.state().nodes().getClusterManagerNode(), nullValue()));
+                    );
+        ensureGreen();
+        internalCluster().startNodes(2, settings);
+        internalCluster().validateClusterFormed();
+        assertThat(
+        state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
+        }
+import java.util.Collections;
+                assertThat(state1.blocks().hasGlobalBlockWithId(NoClusterManagerBlockService.NO_CLUSTER_MANAGER_BLOCK_ID), equalTo(true));
+        });
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+        String node2Name = internalCluster().startNode(settings);
+            .cluster()
+import org.opensearch.action.admin.cluster.configuration.ClearVotingConfigExclusionsRequest;
+        state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
+                ClusterState state1 = client.admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
+        }
+                    .value(),
+        ClusterState state;
+                client().prepareSearch()
+        assertThat(state.nodes().getClusterManagerNode(), equalTo(null));
+ * not use this file except in compliance with the License.
+import org.opensearch.test.OpenSearchIntegTestCase.Scope;
+ * KIND, either express or implied.  See the License for the
+        logger.info("--> indexing some data");
+        assertThat(state.metadata().indices().containsKey("test"), equalTo(false));
+                return ClusterState.builder(currentState).metadata(metadata).build();
+        clusterManagerNode = internalCluster().getClusterManagerName();
+            assertThat(
+            .cluster()
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(otherNode));
+    public void testThreeNodesNoClusterManagerBlock() throws Exception {
+            .prepareHealth()
+            .setWaitForEvents(Priority.LANGUID)
+        state = client().admin().cluster().prepareState().execute().actionGet().getState();
 }
+        state = client().admin().cluster().prepareState().execute().actionGet().getState();
+        }
+        createIndex("test");
+        state = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
+        ClusterHealthResponse clusterHealthResponse = client().admin()
+        logger.info("--> starting the previous cluster-manager node again...");
+ * ownership. Elasticsearch licenses this file to you under
+        for (int i = 0; i < 10; i++) {
+        client().execute(AddVotingConfigExclusionsAction.INSTANCE, new AddVotingConfigExclusionsRequest(clusterManagerNode)).get();
+import org.opensearch.common.settings.Settings;
+        // verify that both nodes are still in the cluster state but there is no cluster-manager
+import static org.hamcrest.Matchers.equalTo;
+                .cluster()
+import org.opensearch.plugins.Plugin;
+            assertHitCount(client().prepareSearch().setSize(0).setQuery(QueryBuilders.matchAllQuery()).execute().actionGet(), 100);
+            .cluster()
+ *
+ * under the License.
+        for (int i = 0; i < 100; i++) {
+        clusterHealthResponse = client().admin()
+                .actionGet()
+import java.util.ArrayList;
+                .prepareState()
+        logger.info("--> start back the 2 nodes ");
+import org.opensearch.cluster.metadata.Metadata;
+        internalCluster().startNodes(nonClusterManagerDataPathSettings1, nonClusterManagerDataPathSettings2);
+import static org.hamcrest.Matchers.nullValue;
+    public void testTwoNodesNoClusterManagerBlock() throws Exception {
+        for (int i = 0; i < 10; i++) {
+ * compatible open source license.
+            ClusterState clusterState = client().admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
+        logger.info("--> start first 2 nodes");
+        final String clusterManager = internalCluster().getClusterManagerName();
+        });
+                    .setQuery(QueryBuilders.matchAllQuery())
+ *

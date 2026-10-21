@@ -1,536 +1,485 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.coordination;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterChangedEvent;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.Diff;
-import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfiguration;
-import org.opensearch.cluster.coordination.PersistedStateRegistry.PersistedStateType;
-import org.opensearch.cluster.coordination.PublicationTransportHandler.PublicationContext;
-import org.opensearch.cluster.coordination.PublicationTransportHandler.RemotePublicationContext;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.gateway.GatewayMetaState.RemotePersistedState;
-import org.opensearch.gateway.remote.ClusterMetadataManifest;
-import org.opensearch.gateway.remote.ClusterStateDiffManifest;
-import org.opensearch.gateway.remote.RemoteClusterStateService;
-import org.opensearch.gateway.remote.RemoteDownloadStats;
-import org.opensearch.node.Node;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.transport.CapturingTransport;
-import org.opensearch.test.transport.CapturingTransport.CapturedRequest;
-import org.opensearch.transport.TransportService;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
-
-import org.mockito.Mockito;
-
-import static org.opensearch.gateway.remote.RemoteDownloadStats.INCOMING_PUBLICATION_FAILED_COUNT;
-import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY;
-import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
-
-public class PublicationTransportHandlerTests extends OpenSearchTestCase {
-
-    private static final long TERM = 5;
-    private static final long VERSION = 5;
-    private static final String CLUSTER_NAME = "test-cluster";
-    private static final String CLUSTER_UUID = "test-cluster-UUID";
-    private static final String MANIFEST_FILE = "path/to/manifest";
-    private static final String LOCAL_NODE_ID = "localNode";
-
-    private DeterministicTaskQueue deterministicTaskQueue;
-    private TransportService transportService;
-    private DiscoveryNode localNode;
-    private DiscoveryNode secondNode;
-
-    private CapturingTransport capturingTransport;
-
-    @Before
-    public void setup() {
-        deterministicTaskQueue = new DeterministicTaskQueue(
-            Settings.builder().put(Node.NODE_NAME_SETTING.getKey(), "test").build(),
-            random()
-        );
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        localNode = new DiscoveryNode(LOCAL_NODE_ID, buildNewFakeTransportAddress(), Version.CURRENT);
-        secondNode = new DiscoveryNode("secondNode", buildNewFakeTransportAddress(), Version.CURRENT);
-        capturingTransport = new CapturingTransport();
-        transportService = capturingTransport.createTransportService(
-            Settings.EMPTY,
-            deterministicTaskQueue.getThreadPool(),
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            x -> localNode,
-            clusterSettings,
-            Collections.emptySet(),
-            NoopTracer.INSTANCE
-        );
-    }
-
-    public void testDiffSerializationFailure() {
-        final PublicationTransportHandler handler = getPublicationTransportHandler(p -> null, null);
-
-        final DiscoveryNode otherNode = new DiscoveryNode("otherNode", buildNewFakeTransportAddress(), Version.CURRENT);
-        final ClusterState clusterState = CoordinationStateTests.clusterState(
-            2L,
-            1L,
-            DiscoveryNodes.builder().add(localNode).add(otherNode).localNodeId(localNode.getId()).build(),
-            VotingConfiguration.EMPTY_CONFIG,
-            VotingConfiguration.EMPTY_CONFIG,
-            0L
-        );
-
-        final ClusterState unserializableClusterState = new ClusterState(clusterState.version(), clusterState.stateUUID(), clusterState) {
-            @Override
-            public Diff<ClusterState> diff(ClusterState previousState) {
-                return new Diff<ClusterState>() {
-                    @Override
-                    public ClusterState apply(ClusterState part) {
-                        fail("this diff shouldn't be applied");
-                        return part;
-                    }
-
-                    @Override
-                    public void writeTo(StreamOutput out) throws IOException {
-                        throw new IOException("Simulated failure of diff serialization");
-                    }
-                };
-            }
-        };
-
-        OpenSearchException e = expectThrows(
-            OpenSearchException.class,
-            () -> handler.newPublicationContext(new ClusterChangedEvent("test", unserializableClusterState, clusterState), false, null)
-        );
+            () -> handler.handleIncomingRemotePublishRequest(remotePublishRequest)
         assertNotNull(e.getCause());
-        assertThat(e.getCause(), instanceOf(IOException.class));
-        assertThat(e.getCause().getMessage(), containsString("Simulated failure of diff serialization"));
-    }
-
-    public void testHandleIncomingRemotePublishRequestWhenNoCurrentPublishRequest() {
-        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
-
-        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
+ * KIND, either express or implied.  See the License for the
         Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
-        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
-        RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
-            localNode,
-            TERM,
-            VERSION,
-            CLUSTER_NAME,
-            CLUSTER_UUID,
-            MANIFEST_FILE
-        );
-
-        IllegalStateException e = expectThrows(
-            IllegalStateException.class,
-            () -> handler.handleIncomingRemotePublishRequest(remotePublishRequest)
-        );
-        assertThat(e.getMessage(), containsString("publication to self failed"));
-        verify(remoteClusterStateService, times(0)).fullIncomingPublicationFailed();
-        verify(remoteClusterStateService, times(1)).diffIncomingPublicationFailed();
-        verifyNoMoreInteractions(remoteClusterStateService);
-    }
-
-    public void testHandleIncomingRemotePublishRequestWhenTermMismatch() {
-        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
-
-        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
-        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
-        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
-        RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
-            localNode,
-            TERM,
-            VERSION,
-            CLUSTER_NAME,
-            CLUSTER_UUID,
-            MANIFEST_FILE
-        );
-        ClusterState clusterState = buildClusterState(6L, VERSION);
-        PublishRequest publishRequest = new PublishRequest(clusterState);
-        handler.setCurrentPublishRequestToSelf(publishRequest);
-        IllegalStateException e = expectThrows(
-            IllegalStateException.class,
-            () -> handler.handleIncomingRemotePublishRequest(remotePublishRequest)
-        );
-        assertThat(e.getMessage(), containsString("publication to self failed"));
-        verify(remoteClusterStateService, times(0)).fullIncomingPublicationFailed();
-        verify(remoteClusterStateService, times(1)).diffIncomingPublicationFailed();
-        verifyNoMoreInteractions(remoteClusterStateService);
-    }
-
-    public void testHandleIncomingRemotePublishRequestWhenVersionMismatch() {
-        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
-
-        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
-        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
-        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
-        RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
-            localNode,
-            TERM,
-            VERSION,
-            CLUSTER_NAME,
-            CLUSTER_UUID,
-            MANIFEST_FILE
-        );
-        ClusterState clusterState = buildClusterState(TERM, 11L);
-        PublishRequest publishRequest = new PublishRequest(clusterState);
-        handler.setCurrentPublishRequestToSelf(publishRequest);
-        IllegalStateException e = expectThrows(
-            IllegalStateException.class,
-            () -> handler.handleIncomingRemotePublishRequest(remotePublishRequest)
-        );
-        assertThat(e.getMessage(), containsString("publication to self failed"));
-        verify(remoteClusterStateService, times(1)).diffIncomingPublicationFailed();
-        verify(remoteClusterStateService, times(0)).fullIncomingPublicationFailed();
-        verifyNoMoreInteractions(remoteClusterStateService);
-    }
-
-    public void testHandleIncomingRemotePublishRequestForLocalNode() throws IOException {
-        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
-
-        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
-        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
-        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
-        RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
-            localNode,
-            TERM,
-            VERSION,
-            CLUSTER_NAME,
-            CLUSTER_UUID,
-            MANIFEST_FILE
-        );
-        ClusterState clusterState = buildClusterState(TERM, VERSION);
-        PublishRequest publishRequest = new PublishRequest(clusterState);
-        handler.setCurrentPublishRequestToSelf(publishRequest);
-        PublishWithJoinResponse publishWithJoinResponse = handler.handleIncomingRemotePublishRequest(remotePublishRequest);
-        assertThat(publishWithJoinResponse, is(expectedPublishResponse));
-        Mockito.verifyNoInteractions(remoteClusterStateService);
-    }
-
-    public void testDownloadRemotePersistedFullStateFailedStats() throws IOException {
-        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
-        PersistedStateStats remoteFullDownloadStats = new RemoteDownloadStats("dummy_full_stats");
-        PersistedStateStats remoteDiffDownloadStats = new RemoteDownloadStats("dummy_diff_stats");
-        when(remoteClusterStateService.getFullDownloadStats()).thenReturn(remoteFullDownloadStats);
-        when(remoteClusterStateService.getDiffDownloadStats()).thenReturn(remoteDiffDownloadStats);
-
-        doAnswer((i) -> {
-            remoteFullDownloadStats.getExtendedFields().put(INCOMING_PUBLICATION_FAILED_COUNT, new AtomicLong(1));
-            return null;
-        }).when(remoteClusterStateService).fullIncomingPublicationFailed();
-
-        doAnswer((i) -> {
-            remoteDiffDownloadStats.getExtendedFields().put(INCOMING_PUBLICATION_FAILED_COUNT, new AtomicLong(1));
-            return null;
-        }).when(remoteClusterStateService).diffIncomingPublicationFailed();
-
-        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
-        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
-        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
-        RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
-            secondNode,
-            TERM,
-            VERSION,
-            CLUSTER_NAME,
-            CLUSTER_UUID,
-            MANIFEST_FILE
-        );
-        ClusterState clusterState = buildClusterState(TERM, VERSION);
-        PublishRequest publishRequest = new PublishRequest(clusterState);
-        handler.setCurrentPublishRequestToSelf(publishRequest);
-
-        assertThrows(IllegalStateException.class, () -> handler.handleIncomingRemotePublishRequest(remotePublishRequest));
-        assertEquals(1, remoteClusterStateService.getDiffDownloadStats().getExtendedFields().get(INCOMING_PUBLICATION_FAILED_COUNT).get());
-        assertEquals(0, remoteClusterStateService.getFullDownloadStats().getExtendedFields().get(INCOMING_PUBLICATION_FAILED_COUNT).get());
-    }
-
-    public void testDownloadRemotePersistedDiffStateFailedStats() throws IOException {
-        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
+            @Override
+import org.opensearch.cluster.coordination.PublicationTransportHandler.RemotePublicationContext;
+        return ClusterState.builder(ClusterState.EMPTY_STATE).version(version).metadata(newMetadata).nodes(nodes).build();
         PersistedStateStats remoteDiffDownloadStats = new PersistedStateStats("dummy_stats");
-        when(remoteClusterStateService.getDiffDownloadStats()).thenReturn(remoteDiffDownloadStats);
-
-        ClusterMetadataManifest metadataManifest = new ClusterMetadataManifest.Builder().diffManifest(
-            new ClusterStateDiffManifest.Builder().fromStateUUID("state-uuid").build()
-        ).build();
-        when(remoteClusterStateService.getClusterMetadataManifestByFileName(any(), any())).thenReturn(metadataManifest);
-
         doAnswer((i) -> {
-            remoteDiffDownloadStats.getExtendedFields().put(INCOMING_PUBLICATION_FAILED_COUNT, new AtomicLong(1));
-            return null;
-        }).when(remoteClusterStateService).diffIncomingPublicationFailed();
-
-        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
-        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
-        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
-        ClusterState clusterState = mock(ClusterState.class);
-        when(clusterState.nodes()).thenReturn(mock(DiscoveryNodes.class));
-        handler.setLastSeenClusterState(clusterState);
-        when(clusterState.stateUUID()).thenReturn("state-uuid");
-        RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
-            secondNode,
-            TERM,
             VERSION,
-            CLUSTER_NAME,
-            CLUSTER_UUID,
-            MANIFEST_FILE
-        );
-        clusterState = buildClusterState(TERM, VERSION);
-        PublishRequest publishRequest = new PublishRequest(clusterState);
-        handler.setCurrentPublishRequestToSelf(publishRequest);
-
-        assertThrows(NullPointerException.class, () -> handler.handleIncomingRemotePublishRequest(remotePublishRequest));
-        assertEquals(1, remoteClusterStateService.getDiffDownloadStats().getExtendedFields().get(INCOMING_PUBLICATION_FAILED_COUNT).get());
-
-    }
-
-    public void testHandleIncomingRemotePublishRequestWhenManifestNotFound() throws IOException {
-        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
-
-        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
-        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
-        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
-        RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
-            secondNode,
-            TERM,
-            VERSION,
-            CLUSTER_NAME,
-            CLUSTER_UUID,
-            MANIFEST_FILE
-        );
-        when(remoteClusterStateService.getClusterMetadataManifestByFileName(CLUSTER_UUID, MANIFEST_FILE)).thenReturn(null);
-        ClusterState clusterState = buildClusterState(TERM, VERSION);
-        PublishRequest publishRequest = new PublishRequest(clusterState);
-        handler.setCurrentPublishRequestToSelf(publishRequest);
-        IllegalStateException e = expectThrows(
-            IllegalStateException.class,
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
             () -> handler.handleIncomingRemotePublishRequest(remotePublishRequest)
+import org.opensearch.OpenSearchException;
+        assertEquals(1, remoteClusterStateService.getDiffDownloadStats().getExtendedFields().get(INCOMING_PUBLICATION_FAILED_COUNT).get());
         );
-        assertThat(e.getMessage(), containsString("Publication failed as manifest was not found for"));
-        Mockito.verify(remoteClusterStateService, times(1)).getClusterMetadataManifestByFileName(Mockito.any(), Mockito.any());
-    }
-
-    public void testHandleIncomingRemotePublishRequestWhenNoLastSeenState() throws IOException {
-        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
-
-        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
-        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
-        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
+        }).when(remoteClusterStateService).fullIncomingPublicationFailed();
+        DiscoveryNodes nodes = DiscoveryNodes.builder().add(remoteNode1).add(remoteNode2).localNodeId(remoteNode1.getId()).build();
+    ) {
+ * license agreements. See the NOTICE file distributed with
+ */
+        ClusterChangedEvent event = new ClusterChangedEvent(
+                REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY,
+            CLUSTER_UUID,
+                };
+            CLUSTER_NAME,
+import org.opensearch.core.common.io.stream.StreamOutput;
         RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
-            secondNode,
+        assertNotNull(publicationContext2);
+        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
+        RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
+                        fail("this diff shouldn't be applied");
+            Version.CURRENT
+            DiscoveryNodes.builder().add(localNode).add(otherNode).localNodeId(localNode.getId()).build(),
+        ClusterState clusterState = buildClusterState(TERM, 11L);
+                REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY,
+import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfiguration;
+/*
+            buildClusterState(TERM, VERSION)
+        };
+        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
+        RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
+import java.util.Collections;
+    private ClusterState buildClusterStateWithRemoteNodes(long term, long version) {
+ * SPDX-License-Identifier: Apache-2.0
+        );
             TERM,
+        // Remote publication disabled
+        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
+        CoordinationMetadata.Builder coordMetadataBuilder = CoordinationMetadata.builder().term(term);
+            secondNode,
+ * not use this file except in compliance with the License.
+            MANIFEST_FILE
+        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
+            ),
+                "remote_state_repo",
+        ).build();
+        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
+            IllegalStateException.class,
+        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
+public class PublicationTransportHandlerTests extends OpenSearchTestCase {
+        );
+        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
+            IllegalStateException.class,
+    private DiscoveryNode localNode;
+        handler.setLastSeenClusterState(clusterState);
+import java.util.Optional;
+    public void setup() {
+        verify(remoteClusterStateService, times(0)).fullIncomingPublicationFailed();
+ * software distributed under the License is distributed on an
+            "remoteNode",
+import static org.hamcrest.Matchers.instanceOf;
+        handler.setCurrentPublishRequestToSelf(publishRequest);
+        RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
+        ClusterChangedEvent event1 = new ClusterChangedEvent(
+            CLUSTER_UUID,
+            remoteClusterStateService
+            "remoteNode2",
+            Version.CURRENT
             VERSION,
+                REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY,
+        assertThat(e.getMessage(), containsString("Publication failed as manifest was not found for"));
+    private static final String LOCAL_NODE_ID = "localNode";
+        PublicationContext publicationContext = handler.newPublicationContext(event1, false, new PersistedStateRegistry());
+import org.opensearch.cluster.ClusterState;
+            "source1",
+        assertThat(e.getMessage(), containsString("publication to self failed"));
+ * the Apache License, Version 2.0 (the "License"); you may
+    private ClusterState buildClusterStateWithMixedNodes(long term, long version) {
+        verifyNoMoreInteractions(remoteClusterStateService);
+        handler.setCurrentPublishRequestToSelf(publishRequest);
+        OpenSearchException e = expectThrows(
+        assertThrows(NullPointerException.class, () -> handler.handleIncomingRemotePublishRequest(remotePublishRequest));
+import org.opensearch.gateway.remote.ClusterMetadataManifest;
+            public void onFailure(Exception e) {}
+        IllegalStateException e = expectThrows(
+import org.junit.Before;
+import org.opensearch.cluster.metadata.Metadata;
+        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
+            VERSION,
+            NoopTracer.INSTANCE
+            handlePublishRequest,
+import org.opensearch.common.settings.Settings;
+            remoteFullDownloadStats.getExtendedFields().put(INCOMING_PUBLICATION_FAILED_COUNT, new AtomicLong(1));
+            public void onResponse(PublishWithJoinResponse publishWithJoinResponse) {}
+        PublishRequest publishRequest = new PublishRequest(clusterState);
+        );
+import org.opensearch.gateway.GatewayMetaState.RemotePersistedState;
+            buildClusterState(TERM, VERSION + 1),
+        handler.setCurrentPublishRequestToSelf(publishRequest);
+import static org.mockito.Mockito.mock;
+        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
+    private static final long VERSION = 5;
+    }
+        assertThat(capturedRequests1.length, equalTo(1));
+import static org.mockito.Mockito.doAnswer;
+        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
+ * compatible open source license.
+        );
+        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
             CLUSTER_NAME,
             CLUSTER_UUID,
-            MANIFEST_FILE
-        );
-        ClusterMetadataManifest manifest = ClusterMetadataManifest.builder().clusterTerm(TERM).stateVersion(VERSION).build();
-        when(remoteClusterStateService.getClusterMetadataManifestByFileName(CLUSTER_UUID, MANIFEST_FILE)).thenReturn(manifest);
-        when(remoteClusterStateService.getClusterStateForManifest(CLUSTER_NAME, manifest, LOCAL_NODE_ID, true)).thenReturn(
-            buildClusterState(TERM, VERSION)
-        );
-        ClusterState clusterState = buildClusterState(TERM, VERSION);
-        PublishRequest publishRequest = new PublishRequest(clusterState);
-        handler.setCurrentPublishRequestToSelf(publishRequest);
-        PublishWithJoinResponse publishWithJoinResponse = handler.handleIncomingRemotePublishRequest(remotePublishRequest);
-        assertThat(publishWithJoinResponse, is(expectedPublishResponse));
-        Mockito.verify(remoteClusterStateService, times(1)).getClusterMetadataManifestByFileName(Mockito.any(), Mockito.any());
-    }
-
-    public void testNewPublicationContext() {
-        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
-        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
-        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
-        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
-
-        // Remote publication disabled
-        ClusterChangedEvent event1 = new ClusterChangedEvent(
-            "source1",
-            buildClusterState(TERM, VERSION + 1),
-            buildClusterState(TERM, VERSION)
-        );
-        PublicationContext publicationContext = handler.newPublicationContext(event1, false, new PersistedStateRegistry());
-        assertNotNull(publicationContext);
-        assertThat(publicationContext, not(instanceOf(RemotePublicationContext.class)));
-
-        // Remote publication enabled but some nodes are remote enabled and some remote disabled
-        ClusterChangedEvent event2 = new ClusterChangedEvent(
-            "source2",
-            buildClusterStateWithMixedNodes(TERM, VERSION + 1),
-            buildClusterState(TERM, VERSION)
-        );
-        PublicationContext publicationContext2 = handler.newPublicationContext(event2, true, new PersistedStateRegistry());
-        assertNotNull(publicationContext2);
-        assertThat(publicationContext2, not(instanceOf(RemotePublicationContext.class)));
-
-        // Remote publication enabled and all nodes are remote enabled
-        ClusterChangedEvent event3 = new ClusterChangedEvent(
-            "source3",
-            buildClusterStateWithRemoteNodes(TERM, VERSION + 1),
-            buildClusterState(TERM, VERSION)
-        );
-        PublicationContext publicationContext3 = handler.newPublicationContext(event3, true, new PersistedStateRegistry());
-        assertNotNull(publicationContext3);
-        assertThat(publicationContext3, instanceOf(RemotePublicationContext.class));
-    }
-
-    public void testRemotePublicationContext() throws Exception {
-        ClusterChangedEvent event = new ClusterChangedEvent(
-            "source3",
-            buildClusterStateWithRemoteNodes(TERM, VERSION + 1),
-            buildClusterState(TERM, VERSION)
-        );
-        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
-        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
-        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
-        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
-        PersistedStateRegistry persistedStateRegistry = new PersistedStateRegistry();
-        RemotePersistedState remotePersistedState = mock(RemotePersistedState.class);
-        when(remotePersistedState.getLastUploadedManifestFile()).thenReturn("/path/to/manifest");
-        persistedStateRegistry.addPersistedState(PersistedStateType.REMOTE, remotePersistedState);
-
+import java.util.concurrent.atomic.AtomicLong;
+        return ClusterState.builder(ClusterState.EMPTY_STATE).version(version).metadata(newMetadata).nodes(nodes).build();
+import java.util.Map;
         PublicationContext publicationContext3 = handler.newPublicationContext(event, true, persistedStateRegistry);
-        ActionListener<PublishWithJoinResponse> listener = new ActionListener<>() {
-            @Override
-            public void onResponse(PublishWithJoinResponse publishWithJoinResponse) {}
-
-            @Override
-            public void onFailure(Exception e) {}
-        };
-        DiscoveryNode discoveryNode = new DiscoveryNode("node1", buildNewFakeTransportAddress(), Version.CURRENT);
-        publicationContext3.sendClusterState(discoveryNode, listener);
-        CapturedRequest[] capturedRequests1 = capturingTransport.getCapturedRequestsAndClear();
-        assertThat(capturedRequests1.length, equalTo(1));
-        CapturedRequest capturedRequest1 = capturedRequests1[0];
-        assertThat(capturedRequest1.request, instanceOf(RemotePublishRequest.class));
-    }
-
-    private PublicationTransportHandler getPublicationTransportHandler(
-        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest,
-        RemoteClusterStateService remoteClusterStateService
-    ) {
-        final PublicationTransportHandler handler = new PublicationTransportHandler(
-            transportService,
-            writableRegistry(),
-            handlePublishRequest,
-            (pu, uc, l) -> {},
-            remoteClusterStateService
+            VotingConfiguration.EMPTY_CONFIG,
+        doAnswer((i) -> {
+        RemotePersistedState remotePersistedState = mock(RemotePersistedState.class);
+        deterministicTaskQueue = new DeterministicTaskQueue(
+import org.opensearch.gateway.remote.RemoteDownloadStats;
+ * under the License.
+        verify(remoteClusterStateService, times(1)).diffIncomingPublicationFailed();
+            CLUSTER_UUID,
+        PublishRequest publishRequest = new PublishRequest(clusterState);
         );
-        transportService.start();
+        CoordinationMetadata.Builder coordMetadataBuilder = CoordinationMetadata.builder().term(term);
+        );
+    }
+        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
+        );
+import org.opensearch.cluster.node.DiscoveryNodes;
+            VERSION,
+    }
+        capturingTransport = new CapturingTransport();
+    public void testHandleIncomingRemotePublishRequestWhenNoLastSeenState() throws IOException {
+import org.opensearch.cluster.Diff;
+        PersistedStateStats remoteFullDownloadStats = new RemoteDownloadStats("dummy_full_stats");
+            Version.CURRENT
+            @Override
         transportService.acceptIncomingRequests();
+import org.opensearch.common.settings.ClusterSettings;
+    private CapturingTransport capturingTransport;
+        IllegalStateException e = expectThrows(
+import org.opensearch.Version;
+ * this file be licensed under the Apache-2.0 license or a
+        Metadata newMetadata = Metadata.builder().coordinationMetadata(coordMetadataBuilder.build()).build();
+            "source3",
+package org.opensearch.cluster.coordination;
+import org.opensearch.test.transport.CapturingTransport;
+        assertThat(e.getMessage(), containsString("publication to self failed"));
+        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
+            DiscoveryNodeRole.BUILT_IN_ROLES,
         return handler;
-    }
-
+    public void testHandleIncomingRemotePublishRequestWhenManifestNotFound() throws IOException {
+            @Override
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+            VERSION,
+        final ClusterState clusterState = CoordinationStateTests.clusterState(
     private ClusterState buildClusterState(long term, long version) {
-        CoordinationMetadata.Builder coordMetadataBuilder = CoordinationMetadata.builder().term(term);
-        Metadata newMetadata = Metadata.builder().coordinationMetadata(coordMetadataBuilder.build()).build();
-        DiscoveryNodes nodes = DiscoveryNodes.builder().add(localNode).add(secondNode).localNodeId(LOCAL_NODE_ID).build();
-        return ClusterState.builder(ClusterState.EMPTY_STATE).version(version).metadata(newMetadata).nodes(nodes).build();
-    }
-
-    private ClusterState buildClusterStateWithMixedNodes(long term, long version) {
-        CoordinationMetadata.Builder coordMetadataBuilder = CoordinationMetadata.builder().term(term);
-        Metadata newMetadata = Metadata.builder().coordinationMetadata(coordMetadataBuilder.build()).build();
-        DiscoveryNode remoteNode = new DiscoveryNode(
-            "remoteNode",
-            buildNewFakeTransportAddress(),
-            Map.of(
-                REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY,
-                "remote_state_repo",
-                REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY,
-                "remote_routing_repo"
-            ),
-            DiscoveryNodeRole.BUILT_IN_ROLES,
-            Version.CURRENT
+        PublishRequest publishRequest = new PublishRequest(clusterState);
         );
-        DiscoveryNodes nodes = DiscoveryNodes.builder().add(localNode).add(remoteNode).localNodeId(LOCAL_NODE_ID).build();
-        return ClusterState.builder(ClusterState.EMPTY_STATE).version(version).metadata(newMetadata).nodes(nodes).build();
-    }
-
-    private ClusterState buildClusterStateWithRemoteNodes(long term, long version) {
         CoordinationMetadata.Builder coordMetadataBuilder = CoordinationMetadata.builder().term(term);
-        Metadata newMetadata = Metadata.builder().coordinationMetadata(coordMetadataBuilder.build()).build();
-        DiscoveryNode remoteNode1 = new DiscoveryNode(
-            "remoteNode1",
-            buildNewFakeTransportAddress(),
+            CLUSTER_UUID,
+            clusterSettings,
+            MANIFEST_FILE
+        ClusterState clusterState = buildClusterState(TERM, VERSION);
+                    public void writeTo(StreamOutput out) throws IOException {
+            0L
+        final DiscoveryNode otherNode = new DiscoveryNode("otherNode", buildNewFakeTransportAddress(), Version.CURRENT);
             Map.of(
-                REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY,
                 "remote_state_repo",
-                REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY,
-                "remote_routing_repo"
-            ),
-            DiscoveryNodeRole.BUILT_IN_ROLES,
-            Version.CURRENT
         );
+        RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
+            buildClusterStateWithRemoteNodes(TERM, VERSION + 1),
+        when(remotePersistedState.getLastUploadedManifestFile()).thenReturn("/path/to/manifest");
+        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
+    public void testHandleIncomingRemotePublishRequestWhenNoCurrentPublishRequest() {
+import org.opensearch.cluster.node.DiscoveryNode;
+        assertThat(publishWithJoinResponse, is(expectedPublishResponse));
+        secondNode = new DiscoveryNode("secondNode", buildNewFakeTransportAddress(), Version.CURRENT);
+    }
+        IllegalStateException e = expectThrows(
+import static org.mockito.ArgumentMatchers.any;
+        RemoteClusterStateService remoteClusterStateService
+                return new Diff<ClusterState>() {
+import static org.hamcrest.Matchers.is;
         DiscoveryNode remoteNode2 = new DiscoveryNode(
-            "remoteNode2",
-            buildNewFakeTransportAddress(),
+        ClusterState clusterState = buildClusterState(TERM, VERSION);
             Map.of(
-                REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY,
-                "remote_state_repo",
-                REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY,
                 "remote_routing_repo"
-            ),
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ */
+        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
+ *
+        assertThat(publicationContext, not(instanceOf(RemotePublicationContext.class)));
+    private static final String CLUSTER_UUID = "test-cluster-UUID";
+        PublishRequest publishRequest = new PublishRequest(clusterState);
             DiscoveryNodeRole.BUILT_IN_ROLES,
-            Version.CURRENT
+                        return part;
+            Settings.EMPTY,
+        assertThat(publicationContext3, instanceOf(RemotePublicationContext.class));
         );
-        DiscoveryNodes nodes = DiscoveryNodes.builder().add(remoteNode1).add(remoteNode2).localNodeId(remoteNode1.getId()).build();
-        return ClusterState.builder(ClusterState.EMPTY_STATE).version(version).metadata(newMetadata).nodes(nodes).build();
+        final PublicationTransportHandler handler = new PublicationTransportHandler(
+        // Remote publication enabled and all nodes are remote enabled
+        publicationContext3.sendClusterState(discoveryNode, listener);
+            TERM,
+            localNode,
+        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
+        PublishRequest publishRequest = new PublishRequest(clusterState);
+        // Remote publication enabled but some nodes are remote enabled and some remote disabled
+            ),
+import static org.hamcrest.Matchers.containsString;
+        assertThat(e.getCause().getMessage(), containsString("Simulated failure of diff serialization"));
+    private static final String MANIFEST_FILE = "path/to/manifest";
+        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
+            public Diff<ClusterState> diff(ClusterState previousState) {
+        doAnswer((i) -> {
+        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
+import org.opensearch.cluster.coordination.PersistedStateRegistry.PersistedStateType;
+            () -> handler.handleIncomingRemotePublishRequest(remotePublishRequest)
+        transportService.start();
+        assertEquals(1, remoteClusterStateService.getDiffDownloadStats().getExtendedFields().get(INCOMING_PUBLICATION_FAILED_COUNT).get());
+            secondNode,
+            VERSION,
+            secondNode,
+            CLUSTER_NAME,
+        ClusterState clusterState = mock(ClusterState.class);
+                    }
+        when(remoteClusterStateService.getClusterMetadataManifestByFileName(CLUSTER_UUID, MANIFEST_FILE)).thenReturn(null);
+        Metadata newMetadata = Metadata.builder().coordinationMetadata(coordMetadataBuilder.build()).build();
+            OpenSearchException.class,
+import org.opensearch.core.action.ActionListener;
+            localNode,
+        };
+        }).when(remoteClusterStateService).diffIncomingPublicationFailed();
+            CLUSTER_NAME,
+        ClusterChangedEvent event2 = new ClusterChangedEvent(
+        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
     }
+        ClusterState clusterState = buildClusterState(TERM, VERSION);
+        persistedStateRegistry.addPersistedState(PersistedStateType.REMOTE, remotePersistedState);
+        when(clusterState.stateUUID()).thenReturn("state-uuid");
+    public void testHandleIncomingRemotePublishRequestWhenTermMismatch() {
+        ClusterState clusterState = buildClusterState(6L, VERSION);
+            MANIFEST_FILE
+                    }
+        verify(remoteClusterStateService, times(0)).fullIncomingPublicationFailed();
+        return ClusterState.builder(ClusterState.EMPTY_STATE).version(version).metadata(newMetadata).nodes(nodes).build();
+        ClusterState clusterState = buildClusterState(TERM, VERSION);
+        RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
+        when(remoteClusterStateService.getClusterMetadataManifestByFileName(CLUSTER_UUID, MANIFEST_FILE)).thenReturn(manifest);
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+        );
+            transportService,
+import static org.hamcrest.Matchers.equalTo;
+            buildClusterState(TERM, VERSION)
+        PersistedStateStats remoteDiffDownloadStats = new RemoteDownloadStats("dummy_diff_stats");
+        );
+            random()
+ * ownership. Elasticsearch licenses this file to you under
+        assertThat(publicationContext2, not(instanceOf(RemotePublicationContext.class)));
+            Collections.emptySet(),
+            VotingConfiguration.EMPTY_CONFIG,
+    public void testDownloadRemotePersistedFullStateFailedStats() throws IOException {
+        );
+            buildNewFakeTransportAddress(),
+            buildClusterStateWithRemoteNodes(TERM, VERSION + 1),
+        ActionListener<PublishWithJoinResponse> listener = new ActionListener<>() {
+            remoteDiffDownloadStats.getExtendedFields().put(INCOMING_PUBLICATION_FAILED_COUNT, new AtomicLong(1));
+        verify(remoteClusterStateService, times(0)).fullIncomingPublicationFailed();
+            buildClusterState(TERM, VERSION)
+        handler.setCurrentPublishRequestToSelf(publishRequest);
+ * this work for additional information regarding copyright
+        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
+ *
+                    public ClusterState apply(ClusterState part) {
+ * specific language governing permissions and limitations
+        when(remoteClusterStateService.getFullDownloadStats()).thenReturn(remoteFullDownloadStats);
+    private DiscoveryNode secondNode;
+import static org.mockito.Mockito.when;
+        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
+        RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
+        );
+        );
+                REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY,
+    }
+        when(remoteClusterStateService.getDiffDownloadStats()).thenReturn(remoteDiffDownloadStats);
+            localNode,
+        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
+        DiscoveryNodes nodes = DiscoveryNodes.builder().add(localNode).add(secondNode).localNodeId(LOCAL_NODE_ID).build();
+            CLUSTER_UUID,
+                "remote_routing_repo"
+    public void testDiffSerializationFailure() {
+                    @Override
+import static org.opensearch.gateway.remote.RemoteDownloadStats.INCOMING_PUBLICATION_FAILED_COUNT;
+        transportService = capturingTransport.createTransportService(
+    }
+    public void testRemotePublicationContext() throws Exception {
+        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
+            buildNewFakeTransportAddress(),
+            buildNewFakeTransportAddress(),
+        assertThat(e.getCause(), instanceOf(IOException.class));
+import static org.hamcrest.Matchers.not;
+import org.opensearch.gateway.remote.RemoteClusterStateService;
+            new ClusterStateDiffManifest.Builder().fromStateUUID("state-uuid").build()
+        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+        }).when(remoteClusterStateService).diffIncomingPublicationFailed();
+    private DeterministicTaskQueue deterministicTaskQueue;
+            }
+        final ClusterState unserializableClusterState = new ClusterState(clusterState.version(), clusterState.stateUUID(), clusterState) {
+ * You may obtain a copy of the License at
+        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
+            CLUSTER_NAME,
+            return null;
+        assertThrows(IllegalStateException.class, () -> handler.handleIncomingRemotePublishRequest(remotePublishRequest));
+                        throw new IOException("Simulated failure of diff serialization");
+import org.mockito.Mockito;
+ * Modifications Copyright OpenSearch Contributors. See
+            writableRegistry(),
+            buildClusterState(TERM, VERSION)
+            "source3",
+        CapturedRequest[] capturedRequests1 = capturingTransport.getCapturedRequestsAndClear();
+            CLUSTER_NAME,
+            secondNode,
+            TERM,
+            1L,
+import org.opensearch.cluster.ClusterChangedEvent;
+    }
+        ClusterMetadataManifest metadataManifest = new ClusterMetadataManifest.Builder().diffManifest(
+            deterministicTaskQueue.getThreadPool(),
+        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
+            TERM,
+        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
+            MANIFEST_FILE
+        verify(remoteClusterStateService, times(1)).diffIncomingPublicationFailed();
+            ),
+        );
+        assertThat(capturedRequest1.request, instanceOf(RemotePublishRequest.class));
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+        final PublicationTransportHandler handler = getPublicationTransportHandler(p -> null, null);
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_ROUTING_TABLE_REPOSITORY_NAME_ATTRIBUTE_KEY;
+            localNode,
+        clusterState = buildClusterState(TERM, VERSION);
+ */
+        assertThat(publishWithJoinResponse, is(expectedPublishResponse));
+        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
+        when(remoteClusterStateService.getClusterStateForManifest(CLUSTER_NAME, manifest, LOCAL_NODE_ID, true)).thenReturn(
+        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest,
+        handler.setCurrentPublishRequestToSelf(publishRequest);
+        handler.setCurrentPublishRequestToSelf(publishRequest);
+            TERM,
+        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
+    }
+        DiscoveryNode discoveryNode = new DiscoveryNode("node1", buildNewFakeTransportAddress(), Version.CURRENT);
+    public void testHandleIncomingRemotePublishRequestForLocalNode() throws IOException {
+            TERM,
+            (pu, uc, l) -> {},
+ * Unless required by applicable law or agreed to in writing,
+ * GitHub history for details.
+        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
+                REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY,
+        assertNotNull(publicationContext);
+        );
+    public void testHandleIncomingRemotePublishRequestWhenVersionMismatch() {
+    private static final long TERM = 5;
+    }
+                REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY,
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            return null;
+        PublicationContext publicationContext3 = handler.newPublicationContext(event3, true, new PersistedStateRegistry());
+            IllegalStateException.class,
+        Metadata newMetadata = Metadata.builder().coordinationMetadata(coordMetadataBuilder.build()).build();
+            "remoteNode1",
+        IllegalStateException e = expectThrows(
+                    @Override
+        PublishRequest publishRequest = new PublishRequest(clusterState);
+                "remote_state_repo",
+            remoteDiffDownloadStats.getExtendedFields().put(INCOMING_PUBLICATION_FAILED_COUNT, new AtomicLong(1));
+            buildClusterStateWithMixedNodes(TERM, VERSION + 1),
+        PublishRequest publishRequest = new PublishRequest(clusterState);
+        localNode = new DiscoveryNode(LOCAL_NODE_ID, buildNewFakeTransportAddress(), Version.CURRENT);
+        PublishWithJoinResponse expectedPublishResponse = new PublishWithJoinResponse(new PublishResponse(TERM, VERSION), Optional.empty());
+        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
+        );
+    public void testNewPublicationContext() {
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY;
+        when(remoteClusterStateService.getDiffDownloadStats()).thenReturn(remoteDiffDownloadStats);
+import static org.mockito.Mockito.verify;
+        );
+    @Before
+    }
+            MANIFEST_FILE
+            2L,
+        );
+    }
+import static org.mockito.Mockito.times;
+import org.opensearch.test.OpenSearchTestCase;
+        Mockito.verify(remoteClusterStateService, times(1)).getClusterMetadataManifestByFileName(Mockito.any(), Mockito.any());
+        );
+        when(remoteClusterStateService.getClusterMetadataManifestByFileName(any(), any())).thenReturn(metadataManifest);
+            IllegalStateException.class,
+import java.util.function.Function;
+import java.io.IOException;
+        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
+            TERM,
+        when(clusterState.nodes()).thenReturn(mock(DiscoveryNodes.class));
+            MANIFEST_FILE
 }
+        ClusterChangedEvent event3 = new ClusterChangedEvent(
+            return null;
+        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
+import org.opensearch.node.Node;
+    private TransportService transportService;
+            CLUSTER_NAME,
+        DiscoveryNodes nodes = DiscoveryNodes.builder().add(localNode).add(remoteNode).localNodeId(LOCAL_NODE_ID).build();
+        Mockito.verify(remoteClusterStateService, times(1)).getClusterMetadataManifestByFileName(Mockito.any(), Mockito.any());
+ * Licensed to Elasticsearch under one or more contributor
+        );
+        CapturedRequest capturedRequest1 = capturedRequests1[0];
+    public void testDownloadRemotePersistedDiffStateFailedStats() throws IOException {
+import org.opensearch.gateway.remote.ClusterStateDiffManifest;
+        PublishWithJoinResponse publishWithJoinResponse = handler.handleIncomingRemotePublishRequest(remotePublishRequest);
+        );
+        assertThat(e.getMessage(), containsString("publication to self failed"));
+            buildClusterState(TERM, VERSION)
+            CLUSTER_UUID,
+    }
+        verifyNoMoreInteractions(remoteClusterStateService);
+        PublishWithJoinResponse publishWithJoinResponse = handler.handleIncomingRemotePublishRequest(remotePublishRequest);
+ *
+    }
+        verify(remoteClusterStateService, times(1)).diffIncomingPublicationFailed();
+import org.opensearch.transport.TransportService;
+            VERSION,
+        ClusterMetadataManifest manifest = ClusterMetadataManifest.builder().clusterTerm(TERM).stateVersion(VERSION).build();
+            () -> handler.handleIncomingRemotePublishRequest(remotePublishRequest)
+ * The OpenSearch Contributors require contributions made to
+        assertEquals(0, remoteClusterStateService.getFullDownloadStats().getExtendedFields().get(INCOMING_PUBLICATION_FAILED_COUNT).get());
+                "remote_routing_repo"
+        Function<PublishRequest, PublishWithJoinResponse> handlePublishRequest = p -> expectedPublishResponse;
+            CLUSTER_NAME,
+        PublicationContext publicationContext2 = handler.newPublicationContext(event2, true, new PersistedStateRegistry());
+            Map.of(
+    }
+        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
+            x -> localNode,
+    private PublicationTransportHandler getPublicationTransportHandler(
+            MANIFEST_FILE
+        DiscoveryNode remoteNode1 = new DiscoveryNode(
+            Settings.builder().put(Node.NODE_NAME_SETTING.getKey(), "test").build(),
+import org.opensearch.cluster.coordination.PublicationTransportHandler.PublicationContext;
+        handler.setCurrentPublishRequestToSelf(publishRequest);
+        RemoteClusterStateService remoteClusterStateService = mock(RemoteClusterStateService.class);
+            () -> handler.newPublicationContext(new ClusterChangedEvent("test", unserializableClusterState, clusterState), false, null)
+    }
+        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
+        Mockito.verifyNoInteractions(remoteClusterStateService);
+/*
+        PersistedStateRegistry persistedStateRegistry = new PersistedStateRegistry();
+            CLUSTER_UUID,
+        DiscoveryNode remoteNode = new DiscoveryNode(
+import org.opensearch.test.transport.CapturingTransport.CapturedRequest;
+    private static final String CLUSTER_NAME = "test-cluster";
+            DiscoveryNodeRole.BUILT_IN_ROLES,
+            MANIFEST_FILE
+/*
+        RemotePublishRequest remotePublishRequest = new RemotePublishRequest(
+        );
+            TERM,
+            VERSION,
+            "source2",
+        final PublicationTransportHandler handler = getPublicationTransportHandler(handlePublishRequest, remoteClusterStateService);
+        verifyNoMoreInteractions(remoteClusterStateService);
+        assertNotNull(publicationContext3);

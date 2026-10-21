@@ -1,214 +1,195 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.lucene.search.uhighlight;
-
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.search.uhighlight.FieldHighlighter;
-import org.apache.lucene.search.uhighlight.FieldOffsetStrategy;
-import org.apache.lucene.search.uhighlight.OffsetsEnum;
-import org.apache.lucene.search.uhighlight.Passage;
-import org.apache.lucene.search.uhighlight.PassageFormatter;
-import org.apache.lucene.search.uhighlight.PassageScorer;
-import org.apache.lucene.util.BytesRef;
-
-import java.io.IOException;
-import java.text.BreakIterator;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.Locale;
-import java.util.PriorityQueue;
-
+                passage = passageQueue.poll();
+            return new Passage[0];
 import static org.opensearch.lucene.search.uhighlight.CustomUnifiedHighlighter.MULTIVAL_SEP_CHAR;
-
-/**
- * Custom {@link FieldHighlighter} that creates a single passage bounded to {@code noMatchSize} when
- * no highlights were found.
- */
-class CustomFieldHighlighter extends FieldHighlighter {
-    private static final Passage[] EMPTY_PASSAGE = new Passage[0];
-
-    private final Locale breakIteratorLocale;
-    private final int noMatchSize;
-    private String fieldValue;
-
-    CustomFieldHighlighter(
-        String field,
-        FieldOffsetStrategy fieldOffsetStrategy,
-        Locale breakIteratorLocale,
-        BreakIterator breakIterator,
-        PassageScorer passageScorer,
-        int maxPassages,
-        int maxNoHighlightPassages,
-        PassageFormatter passageFormatter,
-        int noMatchSize,
-        Comparator<Passage> passageSortComparator
-    ) {
-        super(
-            field,
-            fieldOffsetStrategy,
-            breakIterator,
-            passageScorer,
-            maxPassages,
+import java.util.Locale;
+            if (passageQueue.size() > maxPassages) {
+ * You may obtain a copy of the License at
+            }
+ * specific language governing permissions and limitations
+                passage.setEndOffset(Math.min(this.breakIterator.following(start), contentLength));
+    @Override
+        this.breakIteratorLocale = breakIteratorLocale;
+                int end = fieldValue.indexOf(MULTIVAL_SEP_CHAR, pos);
             maxNoHighlightPassages,
+                    if (end == BreakIterator.DONE) {
+        this.noMatchSize = noMatchSize;
+ *
+import org.apache.lucene.search.uhighlight.PassageScorer;
+        final int contentLength = this.breakIterator.getText().getEndIndex();
+import java.util.Arrays;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        } while (off.nextPosition());
+import java.text.BreakIterator;
             passageFormatter,
             passageSortComparator
-        );
-        this.breakIteratorLocale = breakIteratorLocale;
-        this.noMatchSize = noMatchSize;
-    }
-
-    @Override
-    public Object highlightFieldForDoc(LeafReader reader, int docId, String content) throws IOException {
-        this.fieldValue = content;
-        try {
-            return super.highlightFieldForDoc(reader, docId, content);
-        } finally {
-            // Clear the reference to the field value in case it is large
-            fieldValue = null;
-        }
-    }
-
-    @Override
-    protected Passage[] getSummaryPassagesNoHighlight(int maxPassages) {
-        if (noMatchSize > 0) {
-            int pos = 0;
-            while (pos < fieldValue.length() && fieldValue.charAt(pos) == MULTIVAL_SEP_CHAR) {
-                pos++;
-            }
-            if (pos < fieldValue.length()) {
-                int end = fieldValue.indexOf(MULTIVAL_SEP_CHAR, pos);
-                if (end == -1) {
-                    end = fieldValue.length();
-                }
-                if (noMatchSize + pos < end) {
-                    BreakIterator bi = BreakIterator.getWordInstance(breakIteratorLocale);
-                    bi.setText(fieldValue);
-                    // Finds the next word boundary **after** noMatchSize.
-                    end = bi.following(noMatchSize + pos);
-                    if (end == BreakIterator.DONE) {
-                        end = fieldValue.length();
-                    }
-                }
-                Passage passage = new Passage();
-                passage.setScore(Float.NaN);
-                passage.setStartOffset(pos);
-                passage.setEndOffset(end);
-                return new Passage[] { passage };
-            }
-        }
-        return EMPTY_PASSAGE;
-    }
-
-    // TODO: use FieldHighlighter::highlightOffsetsEnums and modify BoundedBreakIteratorScanner to work with it
-    // LUCENE-9093 modified how FieldHighlighter breaks texts into passages,
-    // which doesn't work well with BoundedBreakIteratorScanner
-    // This is the copy of highlightOffsetsEnums before LUCENE-9093.
-    @Override
-    protected Passage[] highlightOffsetsEnums(OffsetsEnum off) throws IOException {
-
-        final int contentLength = this.breakIterator.getText().getEndIndex();
-
-        if (off.nextPosition() == false) {
-            return new Passage[0];
-        }
-
-        PriorityQueue<Passage> passageQueue = new PriorityQueue<>(Math.min(64, maxPassages + 1), (left, right) -> {
-            if (left.getScore() < right.getScore()) {
-                return -1;
-            } else if (left.getScore() > right.getScore()) {
-                return 1;
+    private String fieldValue;
             } else {
-                return left.getStartOffset() - right.getStartOffset();
-            }
-        });
-        Passage passage = new Passage(); // the current passage in-progress. Will either get reset or added to queue.
-
-        do {
-            int start = off.startOffset();
-            if (start == -1) {
-                throw new IllegalArgumentException("field '" + field + "' was indexed without offsets, cannot highlight");
-            }
-            int end = off.endOffset();
-            if (start < contentLength && end > contentLength) {
-                continue;
-            }
-            // See if this term should be part of a new passage.
-            if (start >= passage.getEndOffset()) {
-                passage = maybeAddPassage(passageQueue, passageScorer, passage, contentLength);
-                // if we exceed limit, we are done
-                if (start >= contentLength) {
-                    break;
-                }
-                passage.setStartOffset(Math.max(this.breakIterator.preceding(start + 1), 0));
-                passage.setEndOffset(Math.min(this.breakIterator.following(start), contentLength));
-            }
-            // Add this term to the passage.
+            if (left.getScore() < right.getScore()) {
+                return 1;
+class CustomFieldHighlighter extends FieldHighlighter {
+    }
+        if (off.nextPosition() == false) {
+            breakIterator,
             BytesRef term = off.getTerm();// a reference; safe to refer to
+            } else {
+                passage.reset();
+        // sort in ascending order
+            }
+            maxPassages,
+        return passage;
+            fieldValue = null;
+ * SPDX-License-Identifier: Apache-2.0
+                return -1;
+            passageQueue.offer(passage);
+import java.io.IOException;
+    // After removing CustomFieldHighlighter::highlightOffsetsEnums, remove this method as well.
+        try {
+    // TODO: use FieldHighlighter::maybeAddPassage
+    @Override
+        Comparator<Passage> passageSortComparator
+                throw new IllegalArgumentException("field '" + field + "' was indexed without offsets, cannot highlight");
+                    BreakIterator bi = BreakIterator.getWordInstance(breakIteratorLocale);
+                passage = maybeAddPassage(passageQueue, passageScorer, passage, contentLength);
+                }
+/*
+        if (passage.getStartOffset() == -1) {
+    // LUCENE-9093 modified how FieldHighlighter breaks texts into passages,
+                if (start >= contentLength) {
+        }
+ * The OpenSearch Contributors require contributions made to
+        this.fieldValue = content;
+/*
+        maybeAddPassage(passageQueue, passageScorer, passage, contentLength);
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+import java.util.Comparator;
+    }
+ * KIND, either express or implied.  See the License for the
+        if (noMatchSize > 0) {
+                }
+        FieldOffsetStrategy fieldOffsetStrategy,
             assert term != null;
             passage.addMatch(start, end, term, off.freq());
-        } while (off.nextPosition());
-        maybeAddPassage(passageQueue, passageScorer, passage, contentLength);
-
-        Passage[] passages = passageQueue.toArray(new Passage[0]);
-        // sort in ascending order
-        Arrays.sort(passages, Comparator.comparingInt(Passage::getStartOffset));
-        return passages;
-    }
-
-    // TODO: use FieldHighlighter::maybeAddPassage
-    // After removing CustomFieldHighlighter::highlightOffsetsEnums, remove this method as well.
-    private Passage maybeAddPassage(PriorityQueue<Passage> passageQueue, PassageScorer scorer, Passage passage, int contentLength) {
-        if (passage.getStartOffset() == -1) {
-            // empty passage, we can ignore it
-            return passage;
-        }
-        passage.setScore(scorer.score(passage, contentLength));
-        // new sentence: first add 'passage' to queue
-        if (passageQueue.size() == maxPassages && passage.getScore() < passageQueue.peek().getScore()) {
-            passage.reset(); // can't compete, just reset it
-        } else {
-            passageQueue.offer(passage);
-            if (passageQueue.size() > maxPassages) {
-                passage = passageQueue.poll();
-                passage.reset();
-            } else {
-                passage = new Passage();
-            }
-        }
-        return passage;
-    }
-
-    FieldOffsetStrategy getFieldOffsetStrategy() {
+/*
         return fieldOffsetStrategy;
+        passage.setScore(scorer.score(passage, contentLength));
+            passage.reset(); // can't compete, just reset it
+import org.apache.lucene.util.BytesRef;
+        Passage[] passages = passageQueue.toArray(new Passage[0]);
+                if (end == -1) {
+        int maxPassages,
+    ) {
+import org.apache.lucene.search.uhighlight.Passage;
+ * under the License.
+            }
     }
+ */
+        );
+ * GitHub history for details.
+    public Object highlightFieldForDoc(LeafReader reader, int docId, String content) throws IOException {
+                    end = bi.following(noMatchSize + pos);
+ *
+        return EMPTY_PASSAGE;
+            fieldOffsetStrategy,
+        Passage passage = new Passage(); // the current passage in-progress. Will either get reset or added to queue.
+            }
+import org.apache.lucene.search.uhighlight.OffsetsEnum;
+    FieldOffsetStrategy getFieldOffsetStrategy() {
+            return passage;
+ * Unless required by applicable law or agreed to in writing,
+    // This is the copy of highlightOffsetsEnums before LUCENE-9093.
+                return left.getStartOffset() - right.getStartOffset();
+        return passages;
+        if (passageQueue.size() == maxPassages && passage.getScore() < passageQueue.peek().getScore()) {
+    protected Passage[] highlightOffsetsEnums(OffsetsEnum off) throws IOException {
+                // if we exceed limit, we are done
+ */
+                passage.setStartOffset(pos);
+import org.apache.lucene.index.LeafReader;
+ * this work for additional information regarding copyright
+import org.apache.lucene.search.uhighlight.PassageFormatter;
+            }
+        super(
+        }
+ * this file be licensed under the Apache-2.0 license or a
+                    end = fieldValue.length();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.apache.lucene.search.uhighlight.FieldHighlighter;
+ * software distributed under the License is distributed on an
+        Locale breakIteratorLocale,
+                if (noMatchSize + pos < end) {
+    CustomFieldHighlighter(
+            if (start == -1) {
+        PassageFormatter passageFormatter,
+        PassageScorer passageScorer,
+            } else if (left.getScore() > right.getScore()) {
+            if (start >= passage.getEndOffset()) {
+            field,
+ * no highlights were found.
+        }
+                pos++;
+    // which doesn't work well with BoundedBreakIteratorScanner
+            // See if this term should be part of a new passage.
+        String field,
+                passage.setEndOffset(end);
+    private final int noMatchSize;
+            }
+                return new Passage[] { passage };
+        Arrays.sort(passages, Comparator.comparingInt(Passage::getStartOffset));
+            // Add this term to the passage.
+            int pos = 0;
+                passage.setScore(Float.NaN);
+            return super.highlightFieldForDoc(reader, docId, content);
+                        end = fieldValue.length();
+        });
+    @Override
+            while (pos < fieldValue.length() && fieldValue.charAt(pos) == MULTIVAL_SEP_CHAR) {
+                continue;
+        int maxNoHighlightPassages,
+import java.util.PriorityQueue;
+                passage.setStartOffset(Math.max(this.breakIterator.preceding(start + 1), 0));
+        // new sentence: first add 'passage' to queue
+    }
+ */
+    private static final Passage[] EMPTY_PASSAGE = new Passage[0];
+            // empty passage, we can ignore it
+            int start = off.startOffset();
+        BreakIterator breakIterator,
+                    // Finds the next word boundary **after** noMatchSize.
+ * license agreements. See the NOTICE file distributed with
+    private Passage maybeAddPassage(PriorityQueue<Passage> passageQueue, PassageScorer scorer, Passage passage, int contentLength) {
+    private final Locale breakIteratorLocale;
+            int end = off.endOffset();
+ * not use this file except in compliance with the License.
+    // TODO: use FieldHighlighter::highlightOffsetsEnums and modify BoundedBreakIteratorScanner to work with it
+        }
+            if (start < contentLength && end > contentLength) {
+ * Licensed to Elasticsearch under one or more contributor
+    protected Passage[] getSummaryPassagesNoHighlight(int maxPassages) {
+                    bi.setText(fieldValue);
+        } finally {
+ */
+        } else {
+            }
+                Passage passage = new Passage();
+                passage = new Passage();
 }
+ * ownership. Elasticsearch licenses this file to you under
+                    }
+            passageScorer,
+    }
+        PriorityQueue<Passage> passageQueue = new PriorityQueue<>(Math.min(64, maxPassages + 1), (left, right) -> {
+ * Custom {@link FieldHighlighter} that creates a single passage bounded to {@code noMatchSize} when
+            // Clear the reference to the field value in case it is large
+                    break;
+                }
+import org.apache.lucene.search.uhighlight.FieldOffsetStrategy;
+ * Modifications Copyright OpenSearch Contributors. See
+        int noMatchSize,
+        }
+ * compatible open source license.
+            if (pos < fieldValue.length()) {
+        do {
+package org.opensearch.lucene.search.uhighlight;
+    }
+/**

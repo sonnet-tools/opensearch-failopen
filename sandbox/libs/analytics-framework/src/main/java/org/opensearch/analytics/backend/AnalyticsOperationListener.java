@@ -1,320 +1,285 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
+        public void onQueryComplete(String queryId, long totalTookInNanos, long totalRows) {
+                }
+     * subsequent delegates from being notified.
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.analytics.backend;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.index.IndexSettings;
-
-import java.util.List;
-
-/**
- * Listener for analytics query execution lifecycle events. Analogous to
- * {@link org.opensearch.index.shard.SearchOperationListener} but designed
- * for the stage-based analytics execution model.
- *
- * <p>Covers two scopes:
- * <ul>
- *   <li><b>Coordinator-side:</b> stage lifecycle events (start, success,
- *       failure, cancellation) fired by the stage execution layer.</li>
- *   <li><b>Data-node-side:</b> fragment execution events (pre-execute,
- *       success, failure) fired by {@code AnalyticsSearchService}.</li>
- * </ul>
- *
- * <p>All methods have empty default implementations so listeners can
- * override only the events they care about.
- *
- * @opensearch.internal
- */
-public interface AnalyticsOperationListener {
-
-    // ─── Coordinator-side: query lifecycle ──────────────────────────────
-
-    /**
-     * Called when a new analytics query starts execution on the coordinator.
-     *
-     * @param queryId the unique query identifier
-     * @param stageCount the number of stages in the execution graph
-     */
-    default void onQueryStart(String queryId, int stageCount) {}
-
-    /**
-     * Called when an analytics query completes successfully.
-     *
-     * @param queryId the unique query identifier
-     * @param tookInNanos wall-clock time from query start to completion
-     * @param totalRows total rows in the result set
-     */
-    default void onQuerySuccess(String queryId, long tookInNanos, long totalRows) {}
-
-    /**
-     * Called when an analytics query fails.
-     *
-     * @param queryId the unique query identifier
-     * @param cause the exception that caused the failure
-     */
-    default void onQueryFailure(String queryId, Exception cause) {}
-
-    /**
-     * Called when query planning completes on the coordinator (Calcite CBO, DAG build,
-     * fragment conversion). Fired before execution stages begin.
-     *
-     * @param queryId the unique query identifier
-     * @param tookInNanos wall-clock time for the planning phase
-     */
-    default void onPlanningComplete(String queryId, long tookInNanos) {}
-
-    /**
-     * Called when the entire query request completes, including result materialization.
-     * This is the terminal event for the full request lifecycle — analogous to
-     * {@code SearchRequestOperationsListener.onRequestEnd()} in the default search path.
-     *
-     * @param queryId the unique query identifier
-     * @param totalTookInNanos wall-clock time from query submission to completion (includes planning + execution + materialization)
-     * @param totalRows total rows in the materialized result set
-     */
-    default void onQueryComplete(String queryId, long totalTookInNanos, long totalRows) {}
-
-    // ─── Coordinator-side: stage lifecycle ──────────────────────────────
-
-    /**
-     * Called when a stage transitions to RUNNING.
-     *
-     * @param queryId the query this stage belongs to
-     * @param stageId the stage identifier
-     * @param stageType the stage execution class name
-     */
-    default void onStageStart(String queryId, int stageId, String stageType) {}
-
-    /**
-     * Called when a stage transitions to SUCCEEDED.
-     *
-     * @param queryId the query this stage belongs to
-     * @param stageId the stage identifier
-     * @param tookInNanos wall-clock time from stage start to completion
-     * @param rowsProcessed number of rows processed by this stage
-     */
-    default void onStageSuccess(String queryId, int stageId, String stageType, long tookInNanos, long rowsProcessed) {}
-
-    /**
-     * Called when a stage transitions to FAILED.
-     *
-     * @param queryId the query this stage belongs to
-     * @param stageId the stage identifier
-     * @param cause the exception that caused the failure
-     */
-    default void onStageFailure(String queryId, int stageId, Exception cause) {}
-
+                } catch (Exception e) {
     /**
      * Called when a stage transitions to CANCELLED.
-     *
-     * @param queryId the query this stage belongs to
-     * @param stageId the stage identifier
-     * @param reason the cancellation reason
-     */
-    default void onStageCancelled(String queryId, int stageId, String reason) {}
-
-    // ─── Data-node-side: fragment execution ─────────────────────────────
-
-    /**
-     * Called before a plan fragment is executed on a data node.
-     *
-     * @param queryId the query this fragment belongs to
-     * @param stageId the stage this fragment belongs to
-     * @param shardId the shard being queried
-     */
-    default void onPreFragmentExecution(String queryId, int stageId, String shardId) {}
-
-    /**
-     * Called after a plan fragment executes successfully on a data node.
-     *
-     * @param queryId the query this fragment belongs to
-     * @param stageId the stage this fragment belongs to
-     * @param shardId the shard that was queried
-     * @param tookInNanos wall-clock time for the fragment execution
-     * @param indexSettings the index settings for per-index slow log threshold lookup
-     * @param stats execution stats including rows produced, delegation info, and task headers
-     */
-    default void onFragmentSuccess(
-        String queryId,
-        int stageId,
-        String shardId,
-        long tookInNanos,
-        IndexSettings indexSettings,
-        FragmentExecutionStats stats
-    ) {}
-
-    /**
-     * Called when a plan fragment fails on a data node.
-     *
-     * @param queryId the query this fragment belongs to
-     * @param stageId the stage this fragment belongs to
-     * @param shardId the shard that was queried
-     * @param cause the exception that caused the failure
-     */
-    default void onFragmentFailure(String queryId, int stageId, String shardId, Exception cause) {}
-
-    /**
-     * Multiplexing composite that fans out each callback to a list of
-     * delegates. Exception-safe — a failing delegate does not prevent
-     * subsequent delegates from being notified.
-     */
-    class CompositeListener implements AnalyticsOperationListener {
-
-        private final List<AnalyticsOperationListener> delegates;
+ * Listener for analytics query execution lifecycle events. Analogous to
         private static final Logger logger = LogManager.getLogger(CompositeListener.class);
-
-        public CompositeListener(List<AnalyticsOperationListener> delegates) {
-            this.delegates = delegates;
         }
-
-        @Override
-        public void onQueryStart(String queryId, int stageCount) {
-            for (AnalyticsOperationListener l : delegates) {
+                }
                 try {
-                    l.onQueryStart(queryId, stageCount);
-                } catch (Exception e) {
-                    warn("onQueryStart", e);
                 }
             }
+    /**
+                    l.onQueryComplete(queryId, totalTookInNanos, totalRows);
         }
-
+     * Called when an analytics query fails.
         @Override
-        public void onPlanningComplete(String queryId, long tookInNanos) {
+                }
+    /**
+ */
+     * Called when an analytics query completes successfully.
+     */
+                }
+ * override only the events they care about.
+    default void onStageStart(String queryId, int stageId, String stageType) {}
+ * </ul>
+                    warn("onStageFailure", e);
+ * {@link org.opensearch.index.shard.SearchOperationListener} but designed
+            for (AnalyticsOperationListener l : delegates) {
+     */
+                    warn("onQueryFailure", e);
+                }
+ *
             for (AnalyticsOperationListener l : delegates) {
                 try {
+     *
+                } catch (Exception e) {
+import org.apache.logging.log4j.Logger;
+     * @param stats execution stats including rows produced, delegation info, and task headers
+     * Multiplexing composite that fans out each callback to a list of
+     * @param queryId the query this stage belongs to
+        public void onFragmentFailure(String queryId, int stageId, String shardId, Exception cause) {
+     */
+            for (AnalyticsOperationListener l : delegates) {
+     * @param stageType the stage execution class name
+                    warn("onStageSuccess", e);
+        }
+                } catch (Exception e) {
+                }
+                    warn("onPreFragmentExecution", e);
+     * @param stageId the stage this fragment belongs to
+                    l.onQueryStart(queryId, stageCount);
+import org.apache.logging.log4j.LogManager;
+                    l.onStageFailure(queryId, stageId, cause);
+     * @param queryId the unique query identifier
+    /**
+     * @param stageId the stage identifier
+            for (AnalyticsOperationListener l : delegates) {
+import org.opensearch.index.IndexSettings;
+     * @param reason the cancellation reason
+     *
+ * <p>Covers two scopes:
+     * @param tookInNanos wall-clock time for the planning phase
+        }
                     l.onPlanningComplete(queryId, tookInNanos);
+                    l.onStageSuccess(queryId, stageId, stageType, tookInNanos, rowsProcessed);
+    /**
+}
+        public void onStageFailure(String queryId, int stageId, Exception cause) {
+    /**
+    default void onQueryFailure(String queryId, Exception cause) {}
+     *
+     * @param stageId the stage this fragment belongs to
+     *
+                } catch (Exception e) {
+                try {
+     * @param queryId the query this stage belongs to
+        }
+     * @param queryId the query this fragment belongs to
+                try {
+    /**
+            for (AnalyticsOperationListener l : delegates) {
+            }
+        FragmentExecutionStats stats
+     *
+        @Override
+     * delegates. Exception-safe — a failing delegate does not prevent
+    /**
                 } catch (Exception e) {
                     warn("onPlanningComplete", e);
-                }
-            }
         }
-
+ * compatible open source license.
+    default void onStageCancelled(String queryId, int stageId, String reason) {}
+    default void onFragmentFailure(String queryId, int stageId, String shardId, Exception cause) {}
+     *
+     * @param tookInNanos wall-clock time from stage start to completion
+     * @param queryId the unique query identifier
+     * @param cause the exception that caused the failure
+            this.delegates = delegates;
         @Override
-        public void onQueryComplete(String queryId, long totalTookInNanos, long totalRows) {
-            for (AnalyticsOperationListener l : delegates) {
+        public void onFragmentSuccess(
+        IndexSettings indexSettings,
+        }
+                    l.onFragmentSuccess(queryId, stageId, shardId, tookInNanos, indexSettings, stats);
+        ) {
                 try {
-                    l.onQueryComplete(queryId, totalTookInNanos, totalRows);
-                } catch (Exception e) {
-                    warn("onQueryComplete", e);
-                }
+        public void onPreFragmentExecution(String queryId, int stageId, String shardId) {
+        public void onQueryStart(String queryId, int stageCount) {
+            for (AnalyticsOperationListener l : delegates) {
+     * Called when a stage transitions to FAILED.
+            }
+     * @param stageId the stage identifier
+        }
+     * @param queryId the query this stage belongs to
+            for (AnalyticsOperationListener l : delegates) {
             }
         }
-
         @Override
-        public void onQuerySuccess(String queryId, long tookInNanos, long totalRows) {
-            for (AnalyticsOperationListener l : delegates) {
-                try {
-                    l.onQuerySuccess(queryId, tookInNanos, totalRows);
+    // ─── Coordinator-side: stage lifecycle ──────────────────────────────
+public interface AnalyticsOperationListener {
                 } catch (Exception e) {
-                    warn("onQuerySuccess", e);
+ *       success, failure) fired by {@code AnalyticsSearchService}.</li>
+     */
+        public void onStageStart(String queryId, int stageId, String stageType) {
                 }
-            }
-        }
-
-        @Override
-        public void onQueryFailure(String queryId, Exception cause) {
-            for (AnalyticsOperationListener l : delegates) {
                 try {
                     l.onQueryFailure(queryId, cause);
                 } catch (Exception e) {
-                    warn("onQueryFailure", e);
-                }
-            }
+                try {
         }
-
+     * @param cause the exception that caused the failure
+        public void onStageCancelled(String queryId, int stageId, String reason) {
+        public void onQueryFailure(String queryId, Exception cause) {
+     * @param shardId the shard that was queried
+     * @param stageId the stage identifier
+    /**
+                    warn("onStageCancelled", e);
+     * This is the terminal event for the full request lifecycle — analogous to
+ * SPDX-License-Identifier: Apache-2.0
+    }
+     * @param shardId the shard being queried
+    // ─── Data-node-side: fragment execution ─────────────────────────────
+ * @opensearch.internal
+ * <p>All methods have empty default implementations so listeners can
+                try {
+     * Called when a stage transitions to RUNNING.
+    default void onStageSuccess(String queryId, int stageId, String stageType, long tookInNanos, long rowsProcessed) {}
+        }
+     * @param indexSettings the index settings for per-index slow log threshold lookup
+     * @param totalRows total rows in the materialized result set
+                    warn("onStageStart", e);
         @Override
-        public void onStageStart(String queryId, int stageId, String stageType) {
+            String queryId,
+     */
+     * @param queryId the query this fragment belongs to
+     *
+    default void onQueryStart(String queryId, int stageCount) {}
+                }
+                    warn("onFragmentFailure", e);
+/*
+     * @param queryId the query this fragment belongs to
+                    l.onFragmentFailure(queryId, stageId, shardId, cause);
+ *
+            }
+     * Called before a plan fragment is executed on a data node.
+     * Called when query planning completes on the coordinator (Calcite CBO, DAG build,
+        @Override
+            }
+        public void onPlanningComplete(String queryId, long tookInNanos) {
+        String queryId,
+ * for the stage-based analytics execution model.
+     * Called when a plan fragment fails on a data node.
+                    warn("onQuerySuccess", e);
             for (AnalyticsOperationListener l : delegates) {
                 try {
+                try {
+     * @param stageId the stage this fragment belongs to
+    default void onStageFailure(String queryId, int stageId, Exception cause) {}
+     */
+     */
+            FragmentExecutionStats stats
+        }
+ *       failure, cancellation) fired by the stage execution layer.</li>
+ *   <li><b>Data-node-side:</b> fragment execution events (pre-execute,
+    ) {}
+        String shardId,
+                    warn("onQueryStart", e);
+            }
+        public void onQuerySuccess(String queryId, long tookInNanos, long totalRows) {
+                    l.onQuerySuccess(queryId, tookInNanos, totalRows);
+                } catch (Exception e) {
+     * Called after a plan fragment executes successfully on a data node.
+            for (AnalyticsOperationListener l : delegates) {
+     */
+     * @param totalTookInNanos wall-clock time from query submission to completion (includes planning + execution + materialization)
+                try {
+        private final List<AnalyticsOperationListener> delegates;
+     * @param queryId the unique query identifier
+import java.util.List;
+ * The OpenSearch Contributors require contributions made to
                     l.onStageStart(queryId, stageId, stageType);
                 } catch (Exception e) {
-                    warn("onStageStart", e);
-                }
-            }
+        long tookInNanos,
+    default void onPlanningComplete(String queryId, long tookInNanos) {}
         }
-
+ *   <li><b>Coordinator-side:</b> stage lifecycle events (start, success,
+                }
         @Override
-        public void onStageSuccess(String queryId, int stageId, String stageType, long tookInNanos, long rowsProcessed) {
-            for (AnalyticsOperationListener l : delegates) {
-                try {
-                    l.onStageSuccess(queryId, stageId, stageType, tookInNanos, rowsProcessed);
+                }
+    /**
+    default void onQueryComplete(String queryId, long totalTookInNanos, long totalRows) {}
+     */
+            }
+            }
+package org.opensearch.analytics.backend;
+    /**
+     *
                 } catch (Exception e) {
-                    warn("onStageSuccess", e);
-                }
-            }
-        }
-
-        @Override
-        public void onStageFailure(String queryId, int stageId, Exception cause) {
-            for (AnalyticsOperationListener l : delegates) {
-                try {
-                    l.onStageFailure(queryId, stageId, cause);
-                } catch (Exception e) {
-                    warn("onStageFailure", e);
-                }
-            }
-        }
-
-        @Override
-        public void onStageCancelled(String queryId, int stageId, String reason) {
-            for (AnalyticsOperationListener l : delegates) {
-                try {
-                    l.onStageCancelled(queryId, stageId, reason);
-                } catch (Exception e) {
-                    warn("onStageCancelled", e);
-                }
-            }
-        }
-
-        @Override
-        public void onPreFragmentExecution(String queryId, int stageId, String shardId) {
-            for (AnalyticsOperationListener l : delegates) {
-                try {
-                    l.onPreFragmentExecution(queryId, stageId, shardId);
-                } catch (Exception e) {
-                    warn("onPreFragmentExecution", e);
-                }
-            }
-        }
-
-        @Override
-        public void onFragmentSuccess(
-            String queryId,
-            int stageId,
-            String shardId,
             long tookInNanos,
-            IndexSettings indexSettings,
-            FragmentExecutionStats stats
-        ) {
-            for (AnalyticsOperationListener l : delegates) {
-                try {
-                    l.onFragmentSuccess(queryId, stageId, shardId, tookInNanos, indexSettings, stats);
-                } catch (Exception e) {
                     warn("onFragmentSuccess", e);
-                }
-            }
-        }
-
-        @Override
-        public void onFragmentFailure(String queryId, int stageId, String shardId, Exception cause) {
-            for (AnalyticsOperationListener l : delegates) {
+                    l.onPreFragmentExecution(queryId, stageId, shardId);
+                    l.onStageCancelled(queryId, stageId, reason);
                 try {
-                    l.onFragmentFailure(queryId, stageId, shardId, cause);
-                } catch (Exception e) {
-                    warn("onFragmentFailure", e);
-                }
+            for (AnalyticsOperationListener l : delegates) {
+            int stageId,
+    // ─── Coordinator-side: query lifecycle ──────────────────────────────
+        public void onStageSuccess(String queryId, int stageId, String stageType, long tookInNanos, long rowsProcessed) {
+     */
+ *
+    default void onFragmentSuccess(
+     * @param shardId the shard that was queried
+            IndexSettings indexSettings,
+ */
+        @Override
+    class CompositeListener implements AnalyticsOperationListener {
+ * this file be licensed under the Apache-2.0 license or a
+     * @param rowsProcessed number of rows processed by this stage
+                    warn("onQueryComplete", e);
+        @Override
+     * @param cause the exception that caused the failure
+     * @param stageId the stage identifier
+     * {@code SearchRequestOperationsListener.onRequestEnd()} in the default search path.
+            String shardId,
+     * Called when the entire query request completes, including result materialization.
+ * <ul>
+     *
+     *
+        }
             }
-        }
-
-        private void warn(String method, Exception e) {
+     * @param tookInNanos wall-clock time for the fragment execution
+    /**
+        @Override
+     */
+            }
             logger.warn("[AnalyticsOperationListener.CompositeListener] {} threw {}", method, e);
-        }
-    }
-}
+     * Called when a stage transitions to SUCCEEDED.
+     * @param totalRows total rows in the result set
+    default void onPreFragmentExecution(String queryId, int stageId, String shardId) {}
+    /**
+        public CompositeListener(List<AnalyticsOperationListener> delegates) {
+     * @param tookInNanos wall-clock time from query start to completion
+    default void onQuerySuccess(String queryId, long tookInNanos, long totalRows) {}
+     * fragment conversion). Fired before execution stages begin.
+     * @param queryId the query this stage belongs to
+/**
+            for (AnalyticsOperationListener l : delegates) {
+     */
+            }
+     */
+        @Override
+     * @param queryId the unique query identifier
+                }
+     * @param queryId the unique query identifier
+     * @param stageCount the number of stages in the execution graph
+     *
+     *
+                } catch (Exception e) {
+        @Override
+            for (AnalyticsOperationListener l : delegates) {
+     * Called when a new analytics query starts execution on the coordinator.
+                } catch (Exception e) {
+        private void warn(String method, Exception e) {
+        int stageId,

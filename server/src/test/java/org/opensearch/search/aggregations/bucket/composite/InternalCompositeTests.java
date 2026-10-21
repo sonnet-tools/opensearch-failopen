@@ -1,408 +1,374 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.composite;
-
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.time.DateFormatter;
-import org.opensearch.index.mapper.DateFieldMapper;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.aggregations.ParsedAggregation;
-import org.opensearch.search.aggregations.bucket.missing.MissingOrder;
-import org.opensearch.test.InternalMultiBucketAggregationTestCase;
-import org.junit.After;
-
-import java.io.IOException;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeSet;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.emptyMap;
-import static java.util.stream.Collectors.toList;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.lessThan;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-import static com.carrotsearch.randomizedtesting.RandomizedTest.randomAsciiLettersOfLengthBetween;
-
-public class InternalCompositeTests extends InternalMultiBucketAggregationTestCase<InternalComposite> {
-    private List<String> sourceNames;
-    private List<DocValueFormat> formats;
-    private int[] reverseMuls;
-    private MissingOrder[] missingOrders;
-    private int[] types;
-    private int size;
-
-    private static DocValueFormat randomDocValueFormat(boolean isLong) {
-        if (isLong) {
-            // we use specific format only for date histogram on a long/date field
-            if (randomBoolean()) {
-                return new DocValueFormat.DateTime(
-                    DateFormatter.forPattern("epoch_second"),
-                    ZoneOffset.ofHours(1),
-                    DateFieldMapper.Resolution.MILLISECONDS
-                );
-            } else {
-                return DocValueFormat.RAW;
-            }
-        } else {
-            // and the raw format for the other types
-            return DocValueFormat.RAW;
-        }
-    }
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        int numFields = randomIntBetween(1, 10);
-        size = randomNumberOfBuckets();
-        sourceNames = new ArrayList<>();
-        formats = new ArrayList<>();
-        reverseMuls = new int[numFields];
-        missingOrders = new MissingOrder[numFields];
-        types = new int[numFields];
-        for (int i = 0; i < numFields; i++) {
-            sourceNames.add("field_" + i);
-            reverseMuls[i] = randomBoolean() ? 1 : -1;
-            missingOrders[i] = randomFrom(MissingOrder.values());
-            int type = randomIntBetween(0, 2);
-            types[i] = type;
-            formats.add(randomDocValueFormat(type == 0));
-        }
-    }
-
-    @Override
-    @After
-    public void tearDown() throws Exception {
-        super.tearDown();
-        sourceNames = null;
-        formats = null;
-        reverseMuls = null;
-        types = null;
-    }
-
-    @Override
-    protected Class<ParsedComposite> implementationClass() {
-        return ParsedComposite.class;
-    }
-
-    protected <P extends ParsedAggregation> P parseAndAssert(
-        final InternalAggregation aggregation,
-        final boolean shuffled,
-        final boolean addRandomFields
-    ) throws IOException {
-        return super.parseAndAssert(aggregation, false, false);
-    }
-
-    private CompositeKey createCompositeKey() {
-        Comparable<?>[] keys = new Comparable<?>[sourceNames.size()];
-        for (int j = 0; j < keys.length; j++) {
-            switch (types[j]) {
-                case 0:
-                    keys[j] = randomLong();
-                    break;
-                case 1:
-                    keys[j] = randomDouble();
-                    break;
-                case 2:
-                    keys[j] = new BytesRef(randomAsciiLettersOfLengthBetween(1, 20));
-                    break;
-                default:
-                    throw new AssertionError("illegal branch");
-            }
-        }
-        return new CompositeKey(keys);
-    }
-
-    @SuppressWarnings("unchecked")
-    private Comparator<CompositeKey> getKeyComparator() {
-        return (o1, o2) -> {
-            for (int i = 0; i < o1.size(); i++) {
-                int cmp = ((Comparable) o1.get(i)).compareTo(o2.get(i)) * reverseMuls[i];
-                if (cmp != 0) {
-                    return cmp;
-                }
-            }
-            return 0;
-        };
-    }
-
-    @Override
-    protected InternalComposite createTestInstance(String name, Map<String, Object> metadata, InternalAggregations aggregations) {
-        int numBuckets = randomIntBetween(0, size);
-        List<InternalComposite.InternalBucket> buckets = new ArrayList<>();
-        TreeSet<CompositeKey> keys = new TreeSet<>(getKeyComparator());
-        for (int i = 0; i < numBuckets; i++) {
-            final CompositeKey key = createCompositeKey();
-            if (keys.contains(key)) {
-                continue;
-            }
-            keys.add(key);
-            InternalComposite.InternalBucket bucket = new InternalComposite.InternalBucket(
-                sourceNames,
-                formats,
-                key,
-                reverseMuls,
-                missingOrders,
-                1L,
-                aggregations
-            );
-            buckets.add(bucket);
-        }
-        Collections.sort(buckets, (o1, o2) -> o1.compareKey(o2));
-        CompositeKey lastBucket = buckets.size() > 0 ? buckets.get(buckets.size() - 1).getRawKey() : null;
-        return new InternalComposite(
-            name,
-            size,
-            sourceNames,
-            formats,
-            buckets,
-            lastBucket,
-            reverseMuls,
-            missingOrders,
-            randomBoolean(),
-            metadata
-        );
-    }
-
-    @Override
-    protected InternalComposite mutateInstance(InternalComposite instance) throws IOException {
-        List<InternalComposite.InternalBucket> buckets = instance.getBuckets();
-        Map<String, Object> metadata = instance.getMetadata();
-        int code = randomIntBetween(0, 2);
-        int[] reverseMuls = instance.getReverseMuls();
-        switch (code) {
-            case 0:
-                int[] newReverseMuls = new int[reverseMuls.length];
-                for (int i = 0; i < reverseMuls.length; i++) {
-                    newReverseMuls[i] = reverseMuls[i] == 1 ? -1 : 1;
-                }
-                reverseMuls = newReverseMuls;
-                break;
-            case 1:
-                buckets = new ArrayList<>(buckets);
-                buckets.add(
-                    new InternalComposite.InternalBucket(
-                        sourceNames,
-                        formats,
-                        createCompositeKey(),
-                        reverseMuls,
-                        missingOrders,
-                        randomLongBetween(1, 100),
-                        InternalAggregations.EMPTY
-                    )
-                );
-                break;
-            case 2:
-                if (metadata == null) {
-                    metadata = new HashMap<>(1);
-                } else {
-                    metadata = new HashMap<>(instance.getMetadata());
-                }
-                metadata.put(randomAlphaOfLength(15), randomInt());
-                break;
-            default:
-                throw new AssertionError("illegal branch");
-        }
-        CompositeKey lastBucket = buckets.size() > 0 ? buckets.get(buckets.size() - 1).getRawKey() : null;
-        return new InternalComposite(
-            instance.getName(),
-            instance.getSize(),
-            sourceNames,
-            formats,
-            buckets,
-            lastBucket,
-            reverseMuls,
-            missingOrders,
-            randomBoolean(),
-            metadata
-        );
-    }
-
-    @Override
-    protected void assertReduced(InternalComposite reduced, List<InternalComposite> inputs) {
-        List<CompositeKey> expectedKeys = inputs.stream()
-            .flatMap((s) -> s.getBuckets().stream())
-            .map(InternalComposite.InternalBucket::getRawKey)
-            .sorted(getKeyComparator())
-            .distinct()
-            .limit(reduced.getSize())
-            .collect(Collectors.toList());
-
-        assertThat(reduced.getBuckets().size(), lessThanOrEqualTo(size));
-        assertThat(reduced.getBuckets().size(), equalTo(expectedKeys.size()));
-        Iterator<CompositeKey> expectedIt = expectedKeys.iterator();
-        for (InternalComposite.InternalBucket bucket : reduced.getBuckets()) {
-            assertTrue(expectedIt.hasNext());
-            assertThat(bucket.getRawKey(), equalTo(expectedIt.next()));
-        }
-        assertFalse(expectedIt.hasNext());
-    }
-
-    public void testReduceSame() throws IOException {
-        InternalComposite result = createTestInstance(randomAlphaOfLength(10), Collections.emptyMap(), InternalAggregations.EMPTY);
-        List<InternalAggregation> toReduce = new ArrayList<>();
-        int numSame = randomIntBetween(1, 10);
-        for (int i = 0; i < numSame; i++) {
-            toReduce.add(result);
-        }
-        InternalComposite finalReduce = (InternalComposite) result.reduce(toReduce, emptyReduceContextBuilder().forFinalReduction());
-        assertThat(finalReduce.getBuckets().size(), equalTo(result.getBuckets().size()));
-        Iterator<InternalComposite.InternalBucket> expectedIt = result.getBuckets().iterator();
-        for (InternalComposite.InternalBucket bucket : finalReduce.getBuckets()) {
-            InternalComposite.InternalBucket expectedBucket = expectedIt.next();
-            assertThat(bucket.getRawKey(), equalTo(expectedBucket.getRawKey()));
-            assertThat(bucket.getDocCount(), equalTo(expectedBucket.getDocCount() * numSame));
-        }
-    }
-
-    /**
-     * Check that reducing with an unmapped index produces useful formats.
      */
-    public void testReduceUnmapped() throws IOException {
-        InternalComposite mapped = createTestInstance(randomAlphaOfLength(10), emptyMap(), InternalAggregations.EMPTY);
-        List<DocValueFormat> rawFormats = formats.stream().map(f -> DocValueFormat.RAW).collect(toList());
-        InternalComposite unmapped = new InternalComposite(
-            mapped.getName(),
-            mapped.getSize(),
-            sourceNames,
-            rawFormats,
-            emptyList(),
-            null,
-            reverseMuls,
+        for (int i = 0; i < numBuckets; i++) {
+ * software distributed under the License is distributed on an
             missingOrders,
-            true,
-            emptyMap()
-        );
-        List<InternalAggregation> toReduce = Arrays.asList(unmapped, mapped);
-        Collections.shuffle(toReduce, random());
-        InternalComposite finalReduce = (InternalComposite) unmapped.reduce(toReduce, emptyReduceContextBuilder().forFinalReduction());
-        assertThat(finalReduce.getBuckets().size(), equalTo(mapped.getBuckets().size()));
-        if (false == mapped.getBuckets().isEmpty()) {
-            assertThat(finalReduce.getFormats(), equalTo(mapped.getFormats()));
-        }
-        Iterator<InternalComposite.InternalBucket> expectedIt = mapped.getBuckets().iterator();
-        for (InternalComposite.InternalBucket bucket : finalReduce.getBuckets()) {
-            InternalComposite.InternalBucket expectedBucket = expectedIt.next();
-            assertThat(bucket.getRawKey(), equalTo(expectedBucket.getRawKey()));
-            assertThat(bucket.getDocCount(), equalTo(expectedBucket.getDocCount()));
-            assertThat(bucket.getFormats(), equalTo(expectedBucket.getFormats()));
-        }
-    }
-
-    public void testCompareCompositeKeyBiggerFieldName() {
-        InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 1, 2 });
-        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field3", "field2"), new Comparable[] { 1, 2 });
-        assertThat(key1.compareTo(key2), lessThan(0));
-    }
-
-    public void testCompareCompositeKeySmallerFieldName() {
-        InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field3", "field2"), new Comparable[] { 1, 2 });
-        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 1, 2 });
-        assertThat(key1.compareTo(key2), greaterThan(0));
-    }
-
-    public void testCompareCompositeKeyBiggerValue() {
-        InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 1, 2 });
-        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field3", "field2"), new Comparable[] { 2, 3 });
-        assertThat(key1.compareTo(key2), lessThan(0));
-    }
-
-    public void testCompareCompositeKeySmallerValue() {
-        InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field3", "field2"), new Comparable[] { 1, 2 });
-        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 2, 3 });
-        assertThat(key1.compareTo(key2), greaterThan(0));
-    }
-
-    public void testCompareCompositeKeyNullValueIsSmaller1() {
+            formats.add(randomDocValueFormat(type == 0));
+        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { "1", 2 });
+        switch (code) {
+            missingOrders,
+    private static DocValueFormat randomDocValueFormat(boolean isLong) {
+        int numSame = randomIntBetween(1, 10);
         InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { null, 20 });
         InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 1, 2 });
+import org.opensearch.common.time.DateFormatter;
+                aggregations
+    @Override
+                    metadata = new HashMap<>(1);
+            mapped.getSize(),
+    public void testCompareCompositeKeyBiggerValue() {
+            reverseMuls,
+        Comparable<?>[] keys = new Comparable<?>[sourceNames.size()];
+        }
+            rawFormats,
+            .flatMap((s) -> s.getBuckets().stream())
+            // we use specific format only for date histogram on a long/date field
+        assertThat(key1.compareTo(key1), equalTo(0));
+import java.util.stream.IntStream;
+                continue;
+    private List<String> sourceNames;
+    public void testCompareCompositeKeyLessFieldsIsLesser() {
+                reverseMuls,
+        assertThat(exception.getMessage(), containsString("java.lang.String cannot be cast to"));
+                    break;
+    }
+            metadata
+/*
+                    throw new AssertionError("illegal branch");
+    private MissingOrder[] missingOrders;
+    /**
+            emptyList(),
+        size = randomNumberOfBuckets();
+import static org.hamcrest.Matchers.equalTo;
+        reverseMuls = new int[numFields];
+            sourceNames.add("field_" + i);
+        if (false == mapped.getBuckets().isEmpty()) {
+    public void setUp() throws Exception {
+    @Override
+import static com.carrotsearch.randomizedtesting.RandomizedTest.randomAsciiLettersOfLengthBetween;
+ * Unless required by applicable law or agreed to in writing,
+import static java.util.Collections.emptyList;
+            buckets.add(bucket);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                    break;
+                missingOrders,
+import java.util.Arrays;
+    public void testReduceSame() throws IOException {
+            switch (types[j]) {
+        int[] reverseMuls = instance.getReverseMuls();
+            assertThat(bucket.getRawKey(), equalTo(expectedBucket.getRawKey()));
+            assertThat(bucket.getDocCount(), equalTo(expectedBucket.getDocCount() * numSame));
+                if (metadata == null) {
+                );
+    }
+        return new InternalComposite(
+        formats = null;
+        for (int i = 0; i < numFields; i++) {
+        InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 1, 2 });
+            assertThat(bucket.getDocCount(), equalTo(expectedBucket.getDocCount()));
+        Collections.shuffle(toReduce, random());
+                key,
+                buckets.add(
+                }
+    @Override
+                    newReverseMuls[i] = reverseMuls[i] == 1 ? -1 : 1;
+        assertThat(key1.compareTo(key2), equalTo(0));
+            InternalComposite.InternalBucket bucket = new InternalComposite.InternalBucket(
+            final CompositeKey key = createCompositeKey();
+                } else {
+import java.util.Collections;
+        List<InternalAggregation> toReduce = Arrays.asList(unmapped, mapped);
+                }
+    }
+ * not use this file except in compliance with the License.
+                    metadata = new HashMap<>(instance.getMetadata());
+                int[] newReverseMuls = new int[reverseMuls.length];
+    }
+            .sorted(getKeyComparator())
+        int numFields = randomIntBetween(1, 10);
+            int type = randomIntBetween(0, 2);
+        InternalComposite result = createTestInstance(randomAlphaOfLength(10), Collections.emptyMap(), InternalAggregations.EMPTY);
+ * under the License.
+    }
+                        reverseMuls,
+        for (InternalComposite.InternalBucket bucket : finalReduce.getBuckets()) {
+    protected <P extends ParsedAggregation> P parseAndAssert(
+                    keys[j] = randomLong();
+                metadata.put(randomAlphaOfLength(15), randomInt());
+            size,
+        List<CompositeKey> expectedKeys = inputs.stream()
+                case 1:
+        }
+            buckets,
+                    break;
+import static org.hamcrest.Matchers.greaterThan;
+        for (InternalComposite.InternalBucket bucket : finalReduce.getBuckets()) {
+            case 0:
+                    DateFieldMapper.Resolution.MILLISECONDS
+}
+import org.apache.lucene.util.BytesRef;
+import java.util.Map;
+    }
+        CompositeKey lastBucket = buckets.size() > 0 ? buckets.get(buckets.size() - 1).getRawKey() : null;
+        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 1, 2 });
+        InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field3", "field2"), new Comparable[] { 1, 2 });
+ * license agreements. See the NOTICE file distributed with
+            true,
+import java.util.Iterator;
+    }
+ * KIND, either express or implied.  See the License for the
+        return new InternalComposite(
+        InternalComposite unmapped = new InternalComposite(
         assertThat(key1.compareTo(key2), lessThan(0));
-    }
-
-    public void testCompareCompositeKeyNullValueIsSmaller2() {
-        InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 1, 2 });
-        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { null, 20 });
-        assertThat(key1.compareTo(key2), greaterThan(0));
-    }
-
-    public void testCompareCompositeKeyMoreFieldsIsGreater() {
-        InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 1, 2 });
+    public void testCompareCompositeKeyEqual() {
+                return new DocValueFormat.DateTime(
+        reverseMuls = null;
+    @Override
+            reverseMuls[i] = randomBoolean() ? 1 : -1;
+                break;
+            );
+        for (int j = 0; j < keys.length; j++) {
+ * this file be licensed under the Apache-2.0 license or a
         InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field1", "field2", "field3"), new Comparable[] { 1, 2, null });
         assertThat(key1.compareTo(key2), lessThan(0));
+        List<DocValueFormat> formats = IntStream.range(0, fields.size()).mapToObj(i -> DocValueFormat.RAW).collect(Collectors.toList());
+            // and the raw format for the other types
+import org.opensearch.search.aggregations.InternalAggregation;
+import org.opensearch.search.aggregations.bucket.missing.MissingOrder;
+        assertThat(key1.equals(key1), is(true));
+    private Comparator<CompositeKey> getKeyComparator() {
+            InternalComposite.InternalBucket expectedBucket = expectedIt.next();
+                    return cmp;
+            case 2:
+    @Override
+ * Licensed to Elasticsearch under one or more contributor
+                        missingOrders,
+        types = new int[numFields];
+        List<InternalComposite.InternalBucket> buckets = instance.getBuckets();
+            missingOrders[i] = randomFrom(MissingOrder.values());
+        Collections.sort(buckets, (o1, o2) -> o1.compareKey(o2));
+        List<InternalAggregation> toReduce = new ArrayList<>();
     }
-
-    public void testCompareCompositeKeyLessFieldsIsLesser() {
+import org.opensearch.search.DocValueFormat;
+            formats,
+    }
+public class InternalCompositeTests extends InternalMultiBucketAggregationTestCase<InternalComposite> {
+    }
+                for (int i = 0; i < reverseMuls.length; i++) {
+        InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field3", "field2"), new Comparable[] { 1, 2 });
+            mapped.getName(),
+                );
+            sourceNames,
+        assertThat(reduced.getBuckets().size(), lessThanOrEqualTo(size));
+    }
+            .limit(reduced.getSize())
+            metadata
+import java.util.TreeSet;
+        sourceNames = new ArrayList<>();
+                return DocValueFormat.RAW;
         InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field1", "field2", "field3"), new Comparable[] { 1, 2, null });
-        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 1, 2 });
+        ClassCastException exception = expectThrows(ClassCastException.class, () -> key1.compareTo(key2));
+import org.opensearch.test.InternalMultiBucketAggregationTestCase;
+        assertThat(key1.compareTo(key2), greaterThan(0));
+ * specific language governing permissions and limitations
+        InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 1, 2 });
+                    new InternalComposite.InternalBucket(
+        assertFalse(expectedIt.hasNext());
+            .collect(Collectors.toList());
+import org.opensearch.index.mapper.DateFieldMapper;
+     * Check that reducing with an unmapped index produces useful formats.
+ * ownership. Elasticsearch licenses this file to you under
+import java.time.ZoneOffset;
+import java.util.HashMap;
+                }
+            lastBucket,
+ *
+            formats,
+        InternalComposite mapped = createTestInstance(randomAlphaOfLength(10), emptyMap(), InternalAggregations.EMPTY);
+    public void testCompareCompositeKeyNullValueIsSmaller1() {
+        assertThat(key1.compareTo(key2), lessThan(0));
+        InternalComposite finalReduce = (InternalComposite) result.reduce(toReduce, emptyReduceContextBuilder().forFinalReduction());
+        }
+            assertThat(bucket.getRawKey(), equalTo(expectedIt.next()));
+import java.util.stream.Collectors;
+        int code = randomIntBetween(0, 2);
+        for (InternalComposite.InternalBucket bucket : reduced.getBuckets()) {
+            emptyMap()
+        if (isLong) {
+        );
+    public void testCompareCompositeKeySmallerFieldName() {
+            missingOrders,
+import static java.util.Collections.emptyMap;
+import java.util.Comparator;
+        assertThat(finalReduce.getBuckets().size(), equalTo(result.getBuckets().size()));
+        List<DocValueFormat> rawFormats = formats.stream().map(f -> DocValueFormat.RAW).collect(toList());
+                        formats,
+    }
+ * SPDX-License-Identifier: Apache-2.0
+            }
+import java.util.ArrayList;
+    public void testCompareCompositeKeyNullValueIsSmaller2() {
+        List<InternalComposite.InternalBucket> buckets = new ArrayList<>();
+    }
+ *
+import org.opensearch.search.aggregations.ParsedAggregation;
+            instance.getName(),
+ * the Apache License, Version 2.0 (the "License"); you may
+        };
+    }
+        return ParsedComposite.class;
+            .distinct()
+    private int[] types;
+/*
+        Iterator<InternalComposite.InternalBucket> expectedIt = result.getBuckets().iterator();
+        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field3", "field2"), new Comparable[] { 2, 3 });
+    private List<DocValueFormat> formats;
+import java.util.List;
+            InternalComposite.InternalBucket expectedBucket = expectedIt.next();
+                    )
+ */
+    protected InternalComposite mutateInstance(InternalComposite instance) throws IOException {
+            if (randomBoolean()) {
+                throw new AssertionError("illegal branch");
+import static org.hamcrest.Matchers.containsString;
+            randomBoolean(),
+                        createCompositeKey(),
+                reverseMuls = newReverseMuls;
+import static java.util.stream.Collectors.toList;
+ * You may obtain a copy of the License at
+        }
+            }
+        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field1", "field2", "field3"), new Comparable[] { null, 1, 2 });
+    public void testCompareCompositeKeyValuesHaveDifferentTypes() {
+                int cmp = ((Comparable) o1.get(i)).compareTo(o2.get(i)) * reverseMuls[i];
+        return new CompositeKey(keys);
+ * compatible open source license.
+    @Override
+                    DateFormatter.forPattern("epoch_second"),
+            reverseMuls,
+ *
+                formats,
         assertThat(key1.compareTo(key2), greaterThan(0));
     }
-
-    public void testCompareCompositeKeyEqual() {
-        InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field1", "field2", "field3"), new Comparable[] { null, 1, 2 });
-        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field1", "field2", "field3"), new Comparable[] { null, 1, 2 });
-        assertThat(key1.compareTo(key1), equalTo(0));
-        assertThat(key1.equals(key1), is(true));
-
-        assertThat(key1.compareTo(key2), equalTo(0));
-        assertThat(key1.equals(key2), is(true));
+            name,
+        formats = new ArrayList<>();
+            types[i] = type;
+            if (keys.contains(key)) {
+        assertThat(key1.compareTo(key2), greaterThan(0));
+/*
+        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 2, 3 });
+        final boolean shuffled,
+            null,
         assertThat(key2.equals(key1), is(true));
-    }
-
-    public void testCompareCompositeKeyValuesHaveDifferentTypes() {
+            case 1:
         InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 1, 2 });
-
-        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { "1", 2 });
-
-        ClassCastException exception = expectThrows(ClassCastException.class, () -> key1.compareTo(key2));
-        assertThat(exception.getMessage(), containsString("java.lang.String cannot be cast to"));
+        int numBuckets = randomIntBetween(0, size);
+        } else {
+        final boolean addRandomFields
+package org.opensearch.search.aggregations.bucket.composite;
+        );
+        );
+        Map<String, Object> metadata = instance.getMetadata();
+        super.tearDown();
     }
-
+    public void testCompareCompositeKeyBiggerFieldName() {
+            default:
+            }
+ */
+            assertTrue(expectedIt.hasNext());
+        InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 1, 2 });
+                case 0:
+        sourceNames = null;
+                        InternalAggregations.EMPTY
+ * this work for additional information regarding copyright
+            reverseMuls,
+                if (cmp != 0) {
+        super.setUp();
+ * The OpenSearch Contributors require contributions made to
+        InternalComposite finalReduce = (InternalComposite) unmapped.reduce(toReduce, emptyReduceContextBuilder().forFinalReduction());
+                break;
+    protected void assertReduced(InternalComposite reduced, List<InternalComposite> inputs) {
     private InternalComposite.ArrayMap createMap(List<String> fields, Comparable[] values) {
-        List<DocValueFormat> formats = IntStream.range(0, fields.size()).mapToObj(i -> DocValueFormat.RAW).collect(Collectors.toList());
-        return new InternalComposite.ArrayMap(fields, formats, values);
+        }
+ * Modifications Copyright OpenSearch Contributors. See
     }
-}
+        return (o1, o2) -> {
+    private int size;
+    protected Class<ParsedComposite> implementationClass() {
+        for (int i = 0; i < numSame; i++) {
+            .map(InternalComposite.InternalBucket::getRawKey)
+        assertThat(key1.compareTo(key2), greaterThan(0));
+                1L,
+    public void tearDown() throws Exception {
+            instance.getSize(),
+                sourceNames,
+                default:
+        Iterator<CompositeKey> expectedIt = expectedKeys.iterator();
+                    keys[j] = randomDouble();
+    @SuppressWarnings("unchecked")
+            lastBucket,
+            for (int i = 0; i < o1.size(); i++) {
+        types = null;
+        return new InternalComposite.ArrayMap(fields, formats, values);
+        InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 1, 2 });
+            assertThat(bucket.getRawKey(), equalTo(expectedBucket.getRawKey()));
+                case 2:
+        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { null, 20 });
+        }
+        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field1", "field2"), new Comparable[] { 1, 2 });
+    ) throws IOException {
+            assertThat(bucket.getFormats(), equalTo(expectedBucket.getFormats()));
+        final InternalAggregation aggregation,
+        assertThat(reduced.getBuckets().size(), equalTo(expectedKeys.size()));
+    protected InternalComposite createTestInstance(String name, Map<String, Object> metadata, InternalAggregations aggregations) {
+    }
+                    keys[j] = new BytesRef(randomAsciiLettersOfLengthBetween(1, 20));
+            toReduce.add(result);
+        assertThat(key1.compareTo(key2), lessThan(0));
+    @After
+                buckets = new ArrayList<>(buckets);
+            }
+import org.junit.After;
+            return DocValueFormat.RAW;
+        InternalComposite.ArrayMap key1 = createMap(Arrays.asList("field1", "field2", "field3"), new Comparable[] { null, 1, 2 });
+import static org.hamcrest.Matchers.is;
+            keys.add(key);
+    public void testCompareCompositeKeyMoreFieldsIsGreater() {
+ */
+        missingOrders = new MissingOrder[numFields];
+            randomBoolean(),
+        TreeSet<CompositeKey> keys = new TreeSet<>(getKeyComparator());
+                    ZoneOffset.ofHours(1),
+        }
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+            } else {
+            sourceNames,
+            sourceNames,
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                        sourceNames,
+    }
+                break;
+                        randomLongBetween(1, 100),
+            return 0;
+        return super.parseAndAssert(aggregation, false, false);
+    public void testCompareCompositeKeySmallerValue() {
+    private int[] reverseMuls;
+        }
+        CompositeKey lastBucket = buckets.size() > 0 ? buckets.get(buckets.size() - 1).getRawKey() : null;
+        }
+    }
+import static org.hamcrest.Matchers.lessThan;
+        }
+        assertThat(finalReduce.getBuckets().size(), equalTo(mapped.getBuckets().size()));
+    private CompositeKey createCompositeKey() {
+import org.opensearch.search.aggregations.InternalAggregations;
+    public void testReduceUnmapped() throws IOException {
+            buckets,
+ * GitHub history for details.
+    }
+        InternalComposite.ArrayMap key2 = createMap(Arrays.asList("field3", "field2"), new Comparable[] { 1, 2 });
+        Iterator<InternalComposite.InternalBucket> expectedIt = mapped.getBuckets().iterator();
+    }
+            assertThat(finalReduce.getFormats(), equalTo(mapped.getFormats()));
+import java.io.IOException;
+        assertThat(key1.equals(key2), is(true));
+    }

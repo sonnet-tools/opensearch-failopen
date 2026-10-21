@@ -1,898 +1,802 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.cluster.stats;
-
-import org.opensearch.Version;
-import org.opensearch.action.admin.cluster.node.info.NodeInfo;
-import org.opensearch.action.admin.cluster.node.info.PluginsAndModules;
-import org.opensearch.action.admin.cluster.node.stats.NodeStats;
-import org.opensearch.action.admin.cluster.stats.ClusterStatsRequest.Metric;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.metrics.OperationStats;
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.discovery.DiscoveryModule;
-import org.opensearch.monitor.fs.FsInfo;
-import org.opensearch.monitor.jvm.JvmInfo;
-import org.opensearch.monitor.os.OsInfo;
-import org.opensearch.plugins.PluginInfo;
-import org.opensearch.transport.TransportInfo;
-
-import java.io.IOException;
-import java.net.InetAddress;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-
-/**
- * Per Node Cluster Stats
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class ClusterStatsNodes implements ToXContentFragment {
-
-    private final Counts counts;
-    private final Set<Version> versions;
-    private final OsStats os;
-    private final ProcessStats process;
-    private final JvmStats jvm;
-    private final FsInfo.Path fs;
-    private final Set<PluginInfo> plugins;
-    private final NetworkTypes networkTypes;
-    private final DiscoveryTypes discoveryTypes;
-    private final PackagingTypes packagingTypes;
-    private final IngestStats ingestStats;
-
-    public static final Set<Metric> NODE_STATS_METRICS = Set.of(
-        // Stats computed from node info and node stat
-        Metric.OS,
-        Metric.JVM,
-        // Stats computed from node stat
-        Metric.FS,
-        Metric.PROCESS,
-        Metric.INGEST,
-        // Stats computed from node info
-        Metric.PLUGINS,
-        Metric.NETWORK_TYPES,
-        Metric.DISCOVERY_TYPES,
-        Metric.PACKAGING_TYPES
-    );
-
-    ClusterStatsNodes(List<ClusterStatsNodeResponse> nodeResponses) {
-        this(Set.of(Metric.values()), nodeResponses);
-    }
-
-    ClusterStatsNodes(Set<Metric> requestedMetrics, List<ClusterStatsNodeResponse> nodeResponses) {
-        this.versions = new HashSet<>();
-        this.fs = requestedMetrics.contains(ClusterStatsRequest.Metric.FS) ? new FsInfo.Path() : null;
-        this.plugins = requestedMetrics.contains(ClusterStatsRequest.Metric.PLUGINS) ? new HashSet<>() : null;
-
-        Set<InetAddress> seenAddresses = new HashSet<>(nodeResponses.size());
-        List<NodeInfo> nodeInfos = new ArrayList<>(nodeResponses.size());
-        List<NodeStats> nodeStats = new ArrayList<>(nodeResponses.size());
-        for (ClusterStatsNodeResponse nodeResponse : nodeResponses) {
-            nodeInfos.add(nodeResponse.nodeInfo());
-            nodeStats.add(nodeResponse.nodeStats());
-            this.versions.add(nodeResponse.nodeInfo().getVersion());
-            if (requestedMetrics.contains(ClusterStatsRequest.Metric.PLUGINS)) {
-                this.plugins.addAll(nodeResponse.nodeInfo().getInfo(PluginsAndModules.class).getPluginInfos());
-            }
-
-            // now do the stats that should be deduped by hardware (implemented by ip deduping)
-            TransportAddress publishAddress = nodeResponse.nodeInfo().getInfo(TransportInfo.class).address().publishAddress();
-            final InetAddress inetAddress = publishAddress.address().getAddress();
-            if (!seenAddresses.add(inetAddress)) {
-                continue;
-            }
-            if (requestedMetrics.contains(ClusterStatsRequest.Metric.FS) && nodeResponse.nodeStats().getFs() != null) {
-                this.fs.add(nodeResponse.nodeStats().getFs().getTotal());
-            }
-        }
-
-        this.counts = new Counts(nodeInfos);
-        this.networkTypes = requestedMetrics.contains(ClusterStatsRequest.Metric.NETWORK_TYPES) ? new NetworkTypes(nodeInfos) : null;
-        this.discoveryTypes = requestedMetrics.contains(ClusterStatsRequest.Metric.DISCOVERY_TYPES) ? new DiscoveryTypes(nodeInfos) : null;
-        this.packagingTypes = requestedMetrics.contains(ClusterStatsRequest.Metric.PACKAGING_TYPES) ? new PackagingTypes(nodeInfos) : null;
-        this.ingestStats = requestedMetrics.contains(ClusterStatsRequest.Metric.INGEST) ? new IngestStats(nodeStats) : null;
-        this.process = requestedMetrics.contains(ClusterStatsRequest.Metric.PROCESS) ? new ProcessStats(nodeStats) : null;
-        this.os = requestedMetrics.contains(ClusterStatsRequest.Metric.OS) ? new OsStats(nodeInfos, nodeStats) : null;
-        this.jvm = requestedMetrics.contains(ClusterStatsRequest.Metric.JVM) ? new JvmStats(nodeInfos, nodeStats) : null;
-    }
-
-    public Counts getCounts() {
-        return this.counts;
-    }
-
-    public Set<Version> getVersions() {
-        return versions;
-    }
-
-    public OsStats getOs() {
-        return os;
-    }
-
-    public ProcessStats getProcess() {
-        return process;
-    }
-
-    public JvmStats getJvm() {
-        return jvm;
-    }
-
-    public FsInfo.Path getFs() {
-        return fs;
-    }
-
-    public Set<PluginInfo> getPlugins() {
-        return plugins;
-    }
-
-    /**
-     * Inner Fields used for creating XContent and parsing
-     *
-     * @opensearch.internal
-     */
-    static final class Fields {
-        static final String COUNT = "count";
-        static final String VERSIONS = "versions";
-        static final String OS = "os";
-        static final String PROCESS = "process";
-        static final String JVM = "jvm";
-        static final String FS = "fs";
-        static final String PLUGINS = "plugins";
-        static final String NETWORK_TYPES = "network_types";
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(Fields.COUNT);
-        counts.toXContent(builder, params);
-        builder.endObject();
-
-        builder.startArray(Fields.VERSIONS);
-        for (Version v : versions) {
-            builder.value(v.toString());
-        }
-        builder.endArray();
-
-        if (os != null) {
-            builder.startObject(Fields.OS);
-            os.toXContent(builder, params);
-            builder.endObject();
-        }
-
-        if (process != null) {
-            builder.startObject(Fields.PROCESS);
-            process.toXContent(builder, params);
-            builder.endObject();
-        }
-
-        if (jvm != null) {
-            builder.startObject(Fields.JVM);
-            jvm.toXContent(builder, params);
-            builder.endObject();
-        }
-
-        if (fs != null) {
-            builder.field(Fields.FS);
-            fs.toXContent(builder, params);
-        }
-
-        if (plugins != null) {
-            builder.startArray(Fields.PLUGINS);
-            for (PluginInfo pluginInfo : plugins) {
-                pluginInfo.toXContent(builder, params);
-            }
-            builder.endArray();
-        }
-
-        if (networkTypes != null) {
-            builder.startObject(Fields.NETWORK_TYPES);
-            networkTypes.toXContent(builder, params);
-            builder.endObject();
-        }
-
-        if (discoveryTypes != null) {
-            discoveryTypes.toXContent(builder, params);
-        }
-
-        if (packagingTypes != null) {
-            packagingTypes.toXContent(builder, params);
-        }
-
-        if (ingestStats != null) {
-            ingestStats.toXContent(builder, params);
-        }
-
-        return builder;
-    }
-
-    /**
-     * Inner Counts
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class Counts implements ToXContentFragment {
-        static final String COORDINATING_ONLY = "coordinating_only";
-
-        private final int total;
-        private final Map<String, Integer> roles;
-
-        private Counts(final List<NodeInfo> nodeInfos) {
-            // TODO: do we need to report zeros?
-            final Map<String, Integer> roles = new HashMap<>(DiscoveryNode.getPossibleRoleNames().size());
-            roles.put(COORDINATING_ONLY, 0);
-            for (final String possibleRoleName : DiscoveryNode.getPossibleRoleNames()) {
-                roles.put(possibleRoleName, 0);
-            }
-
-            int total = 0;
-            for (final NodeInfo nodeInfo : nodeInfos) {
-                total++;
-                if (nodeInfo.getNode().getRoles().isEmpty()) {
-                    roles.merge(COORDINATING_ONLY, 1, Integer::sum);
-                } else {
-                    for (DiscoveryNodeRole role : nodeInfo.getNode().getRoles()) {
-                        // TODO: Remove the 'if' condition and only keep the statement in 'else' after removing MASTER_ROLE.
-                        // As of 2.0, CLUSTER_MANAGER_ROLE is added, and it should be taken as MASTER_ROLE
-                        if (role.isClusterManager()) {
-                            roles.merge(DiscoveryNodeRole.MASTER_ROLE.roleName(), 1, Integer::sum);
-                            roles.merge(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE.roleName(), 1, Integer::sum);
-                        } else {
-                            roles.merge(role.roleName(), 1, Integer::sum);
-                        }
-                    }
-                }
-            }
-            this.total = total;
-            this.roles = Collections.unmodifiableMap(new HashMap<>(roles));
-        }
-
-        public int getTotal() {
-            return total;
-        }
-
-        public Map<String, Integer> getRoles() {
-            return roles;
-        }
-
-        /**
-         * Inner Fields used for creating XContent and parsing
-         *
          * @opensearch.internal
-         */
-        static final class Fields {
-            static final String TOTAL = "total";
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.field(Fields.TOTAL, total);
-            for (Map.Entry<String, Integer> entry : new TreeMap<>(roles).entrySet()) {
-                builder.field(entry.getKey(), entry.getValue());
-            }
-            return builder;
-        }
-    }
-
-    /**
-     * Inner Operating System Stats
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class OsStats implements ToXContentFragment {
-        final int availableProcessors;
-        final int allocatedProcessors;
-        final Map<String, Integer> names;
-        final Map<String, Integer> prettyNames;
-        final org.opensearch.monitor.os.OsStats.Mem mem;
-
-        /**
-         * Build the stats from information about each node.
-         */
-        private OsStats(List<NodeInfo> nodeInfos, List<NodeStats> nodeStatsList) {
-            final Map<String, Integer> names = new HashMap<>(nodeInfos.size());
-            final Map<String, Integer> prettyNames = new HashMap<>(nodeInfos.size());
-            int availableProcessors = 0;
-            int allocatedProcessors = 0;
-            for (NodeInfo nodeInfo : nodeInfos) {
-                availableProcessors += nodeInfo.getInfo(OsInfo.class).getAvailableProcessors();
-                allocatedProcessors += nodeInfo.getInfo(OsInfo.class).getAllocatedProcessors();
-
-                if (nodeInfo.getInfo(OsInfo.class).getName() != null) {
-                    names.merge(nodeInfo.getInfo(OsInfo.class).getName(), 1, Integer::sum);
-                }
-                if (nodeInfo.getInfo(OsInfo.class).getPrettyName() != null) {
-                    prettyNames.merge(nodeInfo.getInfo(OsInfo.class).getPrettyName(), 1, Integer::sum);
-                }
-            }
-            this.names = Collections.unmodifiableMap(names);
-            this.prettyNames = Collections.unmodifiableMap(prettyNames);
-            this.availableProcessors = availableProcessors;
-            this.allocatedProcessors = allocatedProcessors;
-
-            long totalMemory = 0;
-            long freeMemory = 0;
-            for (NodeStats nodeStats : nodeStatsList) {
-                if (nodeStats.getOs() != null) {
-                    long total = nodeStats.getOs().getMem().getTotal().getBytes();
-                    if (total > 0) {
-                        totalMemory += total;
-                    }
-                    long free = nodeStats.getOs().getMem().getFree().getBytes();
-                    if (free > 0) {
-                        freeMemory += free;
-                    }
-                }
-            }
-            this.mem = new org.opensearch.monitor.os.OsStats.Mem(totalMemory, freeMemory);
-        }
-
-        public int getAvailableProcessors() {
-            return availableProcessors;
-        }
-
-        public int getAllocatedProcessors() {
-            return allocatedProcessors;
-        }
-
-        public org.opensearch.monitor.os.OsStats.Mem getMem() {
-            return mem;
-        }
-
-        /**
-         * Inner Fields used for creating XContent and parsing
-         *
-         * @opensearch.internal
-         */
-        static final class Fields {
-            static final String AVAILABLE_PROCESSORS = "available_processors";
-            static final String ALLOCATED_PROCESSORS = "allocated_processors";
-            static final String NAME = "name";
-            static final String NAMES = "names";
-            static final String PRETTY_NAME = "pretty_name";
-            static final String PRETTY_NAMES = "pretty_names";
-            static final String COUNT = "count";
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.field(Fields.AVAILABLE_PROCESSORS, availableProcessors);
-            builder.field(Fields.ALLOCATED_PROCESSORS, allocatedProcessors);
-            builder.startArray(Fields.NAMES);
-            {
-                for (final Map.Entry<String, Integer> name : names.entrySet()) {
-                    builder.startObject();
-                    {
-                        builder.field(Fields.NAME, name.getKey());
-                        builder.field(Fields.COUNT, name.getValue());
-                    }
-                    builder.endObject();
-                }
-            }
-            builder.endArray();
-            builder.startArray(Fields.PRETTY_NAMES);
-            {
-                for (final Map.Entry<String, Integer> prettyName : prettyNames.entrySet()) {
-                    builder.startObject();
-                    {
-                        builder.field(Fields.PRETTY_NAME, prettyName.getKey());
-                        builder.field(Fields.COUNT, prettyName.getValue());
-                    }
-                    builder.endObject();
-                }
-            }
-            builder.endArray();
-            mem.toXContent(builder, params);
-            return builder;
-        }
-    }
-
-    /**
-     * Inner Process Stats
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class ProcessStats implements ToXContentFragment {
-
-        final int count;
-        final int cpuPercent;
-        final long totalOpenFileDescriptors;
-        final long minOpenFileDescriptors;
-        final long maxOpenFileDescriptors;
-
-        /**
-         * Build from looking at a list of node statistics.
-         */
-        private ProcessStats(List<NodeStats> nodeStatsList) {
-            int count = 0;
-            int cpuPercent = 0;
-            long totalOpenFileDescriptors = 0;
-            long minOpenFileDescriptors = Long.MAX_VALUE;
-            long maxOpenFileDescriptors = Long.MIN_VALUE;
-            for (NodeStats nodeStats : nodeStatsList) {
-                if (nodeStats.getProcess() == null) {
-                    continue;
-                }
-                count++;
-                if (nodeStats.getProcess().getCpu() != null) {
-                    cpuPercent += nodeStats.getProcess().getCpu().getPercent();
-                }
-                long fd = nodeStats.getProcess().getOpenFileDescriptors();
-                if (fd > 0) {
-                    // fd can be -1 if not supported on platform
                     totalOpenFileDescriptors += fd;
-                }
-                // we still do min max calc on -1, so we'll have an indication
-                // of it not being supported on one of the nodes.
-                minOpenFileDescriptors = Math.min(minOpenFileDescriptors, fd);
-                maxOpenFileDescriptors = Math.max(maxOpenFileDescriptors, fd);
-            }
-            this.count = count;
-            this.cpuPercent = cpuPercent;
-            this.totalOpenFileDescriptors = totalOpenFileDescriptors;
-            this.minOpenFileDescriptors = minOpenFileDescriptors;
-            this.maxOpenFileDescriptors = maxOpenFileDescriptors;
-        }
-
-        /**
-         * Cpu usage in percentages - 100 is 1 core.
-         */
-        public int getCpuPercent() {
-            return cpuPercent;
-        }
-
-        public long getAvgOpenFileDescriptors() {
-            if (count == 0) {
-                return -1;
-            }
-            return totalOpenFileDescriptors / count;
-        }
-
-        public long getMaxOpenFileDescriptors() {
-            if (count == 0) {
-                return -1;
-            }
-            return maxOpenFileDescriptors;
-        }
-
-        public long getMinOpenFileDescriptors() {
-            if (count == 0) {
-                return -1;
-            }
-            return minOpenFileDescriptors;
-        }
-
-        /**
-         * Inner Fields used for creating XContent and parsing
-         *
-         * @opensearch.internal
-         */
-        static final class Fields {
-            static final String CPU = "cpu";
-            static final String PERCENT = "percent";
-            static final String OPEN_FILE_DESCRIPTORS = "open_file_descriptors";
-            static final String MIN = "min";
-            static final String MAX = "max";
-            static final String AVG = "avg";
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject(Fields.CPU).field(Fields.PERCENT, cpuPercent).endObject();
-            if (count > 0) {
-                builder.startObject(Fields.OPEN_FILE_DESCRIPTORS);
-                builder.field(Fields.MIN, getMinOpenFileDescriptors());
-                builder.field(Fields.MAX, getMaxOpenFileDescriptors());
-                builder.field(Fields.AVG, getAvgOpenFileDescriptors());
-                builder.endObject();
-            }
-            return builder;
-        }
-    }
-
-    /**
-     * Inner JVM Stats
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class JvmStats implements ToXContentFragment {
-
-        private final Map<JvmVersion, Integer> versions;
-        private final long threads;
-        private final long maxUptime;
-        private final long heapUsed;
         private final long heapMax;
-
-        /**
-         * Build from lists of information about each node.
-         */
-        private JvmStats(List<NodeInfo> nodeInfos, List<NodeStats> nodeStatsList) {
-            final Map<JvmVersion, Integer> versions = new HashMap<>(nodeInfos.size());
-            long threads = 0;
-            long maxUptime = 0;
-            long heapMax = 0;
-            long heapUsed = 0;
-            for (NodeInfo nodeInfo : nodeInfos) {
-                versions.merge(new JvmVersion(nodeInfo.getInfo(JvmInfo.class)), 1, Integer::sum);
-            }
-            this.versions = Collections.unmodifiableMap(versions);
-            for (NodeStats nodeStats : nodeStatsList) {
-                org.opensearch.monitor.jvm.JvmStats js = nodeStats.getJvm();
-                if (js == null) {
-                    continue;
+        static final class Fields {
+        }
                 }
-                if (js.getThreads() != null) {
+        }
+    public static class OsStats implements ToXContentFragment {
+        this.os = requestedMetrics.contains(ClusterStatsRequest.Metric.OS) ? new OsStats(nodeInfos, nodeStats) : null;
+                        pipelineIds.add(processorStats.getKey());
+            this.minOpenFileDescriptors = minOpenFileDescriptors;
+         *
+         */
+            long heapUsed = 0;
+        @Override
+        }
+            for (final Map.Entry<String, AtomicInteger> entry : transportTypes.entrySet()) {
+                return -1;
+            for (NodeInfo nodeInfo : nodeInfos) {
+        }
+        this.jvm = requestedMetrics.contains(ClusterStatsRequest.Metric.JVM) ? new JvmStats(nodeInfos, nodeStats) : null;
+                builder.field(Fields.MIN, getMinOpenFileDescriptors());
+            static final String VM_VERSION = "vm_version";
+            this.count = count;
+            }
+            builder.field(Fields.THREADS, threads);
+                                } else {
+        static final String COORDINATING_ONLY = "coordinating_only";
+                final String type = nodeInfo.getBuild().type().displayName();
+        }
+        this(Set.of(Metric.values()), nodeResponses);
+        String vmName;
+            this.maxUptime = maxUptime;
+     */
+import java.util.Set;
+     *
+            }
+                this.plugins.addAll(nodeResponse.nodeInfo().getInfo(PluginsAndModules.class).getPluginInfos());
+                    }
+     */
+            {
+            builder.endArray();
+ * this work for additional information regarding copyright
+        @Override
+import java.net.InetAddress;
+        final long minOpenFileDescriptors;
+            static final String TOTAL = "total";
+        builder.startObject(Fields.COUNT);
+            for (NodeStats nodeStats : nodeStatsList) {
+    }
+            builder.startObject("discovery_types");
+    }
+            this.heapUsed = heapUsed;
+        builder.startArray(Fields.VERSIONS);
+     * Inner Operating System Stats
+         * Build from looking at a list of node statistics.
+                    {
+import org.opensearch.action.admin.cluster.node.info.NodeInfo;
+                if (nodeStats.getProcess() == null) {
+        if (os != null) {
+            return total;
+    private final JvmStats jvm;
+        }
+            return vmVersion.hashCode();
+        IngestStats(final List<NodeStats> nodeStats) {
+                // of it not being supported on one of the nodes.
+            for (final NodeInfo nodeInfo : nodeInfos) {
+        final Map<String, Integer> prettyNames;
+     * @opensearch.api
+            ingestStats.toXContent(builder, params);
+        // Stats computed from node stat
+         *
+    static class IngestStats implements ToXContentFragment {
+    }
+    }
+                }
+import org.opensearch.common.network.NetworkModule;
+            return allocatedProcessors;
+            builder.endObject();
+        final int count;
+     *
+     *
+        return versions;
+            nodeInfos.add(nodeResponse.nodeInfo());
+    private final Counts counts;
+        }
+            this.httpTypes = Collections.unmodifiableMap(httpTypes);
+     * Inner Counts
+                    }
+    /**
+            this.threads = threads;
+        private Counts(final List<NodeInfo> nodeInfos) {
+                    builder.field("current", statValues[2]);
+        }
+                for (final Map.Entry<String, Integer> prettyName : prettyNames.entrySet()) {
+     * Inner Discovery Types
+    private final Set<PluginInfo> plugins;
+        }
+ * compatible open source license.
+            return vmVersion.equals(jvm.vmVersion) && vmVendor.equals(jvm.vmVendor);
+         */
+        static final String NETWORK_TYPES = "network_types";
+            static final String MAX_UPTIME = "max_uptime";
+        }
+    static class NetworkTypes implements ToXContentFragment {
+     * Inner JVM Version
+            jvm.toXContent(builder, params);
+                } else {
+                        }
+            builder.endObject();
+                    long free = nodeStats.getOs().getMem().getFree().getBytes();
+import org.opensearch.common.unit.TimeValue;
+                                    return new long[] {
+        }
+            builder.startObject(Fields.CPU).field(Fields.PERCENT, cpuPercent).endObject();
+                builder.startObject();
+        final long maxOpenFileDescriptors;
+        public int getCpuPercent() {
+import org.opensearch.transport.TransportInfo;
+                }
+                                    v[1] += nodeIngestStats.getFailedCount();
+            networkTypes.toXContent(builder, params);
+        public long getMaxOpenFileDescriptors() {
+ * KIND, either express or implied.  See the License for the
+                }
+            builder.endObject();
+        /**
+import org.opensearch.action.admin.cluster.stats.ClusterStatsRequest.Metric;
+         * Inner Fields used for creating XContent and parsing
+                    builder.endObject();
+            int allocatedProcessors = 0;
+                    {
                     threads += js.getThreads().getCount();
+            for (PluginInfo pluginInfo : plugins) {
+            this.pipelineCount = pipelineIds.size();
+        builder.endArray();
+                    names.merge(nodeInfo.getInfo(OsInfo.class).getName(), 1, Integer::sum);
+     * @opensearch.internal
+            return builder;
+import java.util.TreeMap;
+                final String transportType = settings.get(
+                final Settings settings = nodeInfo.getSettings();
+            for (final NodeInfo nodeInfo : nodeInfos) {
+        public ByteSizeValue getHeapUsed() {
+            builder.startObject(Fields.MEM);
+                builder.startObject(Fields.OPEN_FILE_DESCRIPTORS);
+     */
+            final InetAddress inetAddress = publishAddress.address().getAddress();
+                                    v[0] += nodeIngestStats.getCount();
+        @Override
+            builder.startObject("ingest");
+        public long getAvgOpenFileDescriptors() {
+        String vmVersion;
+                    }
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                    for (Map.Entry<String, List<org.opensearch.ingest.IngestStats.ProcessorStat>> processorStats : nodeStat.getIngestStats()
+        static final class Fields {
+            }
+            for (final Map.Entry<JvmVersion, Integer> v : versions.entrySet()) {
+    }
+            static final String MIN = "min";
+            {
+                return -1;
+import java.util.Collections;
+            long maxUptime = 0;
+            this.totalOpenFileDescriptors = totalOpenFileDescriptors;
+        }
+            for (final String possibleRoleName : DiscoveryNode.getPossibleRoleNames()) {
+            builder.startObject(Fields.PROCESS);
+                    transportTypes.computeIfAbsent(transportType, k -> new AtomicInteger()).incrementAndGet();
+                final String httpType = settings.get(NetworkModule.HTTP_TYPE_KEY, NetworkModule.HTTP_DEFAULT_TYPE_SETTING.get(settings));
+        @Override
+            return roles;
+         */
+}
+                                }
+            static final String ALLOCATED_PROCESSORS = "allocated_processors";
+            this.transportTypes = Collections.unmodifiableMap(transportTypes);
+            version = jvmInfo.version();
+         * @opensearch.internal
+                if (nodeInfo.getInfo(OsInfo.class).getName() != null) {
+                    // fd can be -1 if not supported on platform
+    public FsInfo.Path getFs() {
+    @PublicApi(since = "1.0.0")
+        private final int total;
+            }
+            }
+            static final String COUNT = "count";
+    @PublicApi(since = "1.0.0")
+                return true;
+                final Settings settings = nodeInfo.getSettings();
+    public Set<PluginInfo> getPlugins() {
+        this.networkTypes = requestedMetrics.contains(ClusterStatsRequest.Metric.NETWORK_TYPES) ? new NetworkTypes(nodeInfos) : null;
+            builder.field(Fields.FS);
+    /**
+     *
+            for (NodeStats nodeStat : nodeStats) {
+            }
+     * Inner Fields used for creating XContent and parsing
+            this.versions.add(nodeResponse.nodeInfo().getVersion());
+        this.counts = new Counts(nodeInfos);
+            return new ByteSizeValue(heapUsed);
+            discoveryTypes.toXContent(builder, params);
+                    }
+        builder.endObject();
+        }
+                        } else {
+            this.versions = Collections.unmodifiableMap(versions);
+                // we still do min max calc on -1, so we'll have an indication
+    /**
+                }
+        }
+                        builder.field(Fields.COUNT, name.getValue());
+            return availableProcessors;
+            this.maxOpenFileDescriptors = maxOpenFileDescriptors;
+    static class PackagingTypes implements ToXContentFragment {
+        private final Map<String, AtomicInteger> transportTypes;
+ * The OpenSearch Contributors require contributions made to
+            return builder;
+     * @opensearch.internal
+                long fd = nodeStats.getProcess().getOpenFileDescriptors();
+    }
+    }
+    }
+            builder.field(Fields.AVAILABLE_PROCESSORS, availableProcessors);
+        public boolean equals(Object o) {
+        final org.opensearch.monitor.os.OsStats.Mem mem;
+        }
+import org.opensearch.common.settings.Settings;
+    static final class Fields {
+            }
+            roles.put(COORDINATING_ONLY, 0);
+         * Total heap used in the cluster
+            return maxOpenFileDescriptors;
+    }
+        String version;
+            os.toXContent(builder, params);
+/**
+        /**
+    }
+        @Override
+            static final String THREADS = "threads";
+    public static class ProcessStats implements ToXContentFragment {
+        }
+                    prettyNames.merge(nodeInfo.getInfo(OsInfo.class).getPrettyName(), 1, Integer::sum);
+        public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
                 }
                 maxUptime = Math.max(maxUptime, js.getUptime().millis());
-                if (js.getMem() != null) {
-                    heapUsed += js.getMem().getHeapUsed().getBytes();
-                    heapMax += js.getMem().getHeapMax().getBytes();
-                }
-            }
-            this.threads = threads;
-            this.maxUptime = maxUptime;
-            this.heapUsed = heapUsed;
-            this.heapMax = heapMax;
-        }
-
-        public Map<JvmVersion, Integer> getVersions() {
-            return versions;
-        }
-
-        /**
-         * The total number of threads in the cluster
-         */
-        public long getThreads() {
-            return threads;
-        }
-
-        /**
-         * The maximum uptime of a node in the cluster
-         */
-        public TimeValue getMaxUpTime() {
-            return new TimeValue(maxUptime);
-        }
-
-        /**
-         * Total heap used in the cluster
-         */
-        public ByteSizeValue getHeapUsed() {
-            return new ByteSizeValue(heapUsed);
-        }
-
-        /**
-         * Maximum total heap available to the cluster
-         */
-        public ByteSizeValue getHeapMax() {
-            return new ByteSizeValue(heapMax);
-        }
-
-        /**
-         * Inner Fields used for creating XContent and parsing
-         *
-         * @opensearch.internal
-         */
-        static final class Fields {
-            static final String VERSIONS = "versions";
-            static final String VERSION = "version";
-            static final String VM_NAME = "vm_name";
-            static final String VM_VERSION = "vm_version";
-            static final String VM_VENDOR = "vm_vendor";
-            static final String BUNDLED_JDK = "bundled_jdk";
-            static final String USING_BUNDLED_JDK = "using_bundled_jdk";
-            static final String COUNT = "count";
-            static final String THREADS = "threads";
-            static final String MAX_UPTIME = "max_uptime";
-            static final String MAX_UPTIME_IN_MILLIS = "max_uptime_in_millis";
-            static final String MEM = "mem";
-            static final String HEAP_USED = "heap_used";
-            static final String HEAP_USED_IN_BYTES = "heap_used_in_bytes";
-            static final String HEAP_MAX = "heap_max";
-            static final String HEAP_MAX_IN_BYTES = "heap_max_in_bytes";
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.humanReadableField(Fields.MAX_UPTIME_IN_MILLIS, Fields.MAX_UPTIME, new TimeValue(maxUptime));
-            builder.startArray(Fields.VERSIONS);
-            for (final Map.Entry<JvmVersion, Integer> v : versions.entrySet()) {
-                builder.startObject();
-                builder.field(Fields.VERSION, v.getKey().version);
-                builder.field(Fields.VM_NAME, v.getKey().vmName);
-                builder.field(Fields.VM_VERSION, v.getKey().vmVersion);
-                builder.field(Fields.VM_VENDOR, v.getKey().vmVendor);
-                builder.field(Fields.BUNDLED_JDK, v.getKey().bundledJdk);
-                builder.field(Fields.USING_BUNDLED_JDK, v.getKey().usingBundledJdk);
-                builder.field(Fields.COUNT, v.getValue());
-                builder.endObject();
-            }
-            builder.endArray();
-            builder.startObject(Fields.MEM);
-            builder.humanReadableField(Fields.HEAP_USED_IN_BYTES, Fields.HEAP_USED, getHeapUsed());
-            builder.humanReadableField(Fields.HEAP_MAX_IN_BYTES, Fields.HEAP_MAX, getHeapMax());
-            builder.endObject();
-
-            builder.field(Fields.THREADS, threads);
-            return builder;
-        }
-    }
-
-    /**
-     * Inner JVM Version
-     *
-     * @opensearch.api
      */
-    @PublicApi(since = "1.0.0")
-    public static class JvmVersion {
-        String version;
-        String vmName;
-        String vmVersion;
-        String vmVendor;
-        boolean bundledJdk;
-        Boolean usingBundledJdk;
-
-        JvmVersion(JvmInfo jvmInfo) {
-            version = jvmInfo.version();
-            vmName = jvmInfo.getVmName();
-            vmVersion = jvmInfo.getVmVersion();
-            vmVendor = jvmInfo.getVmVendor();
-            bundledJdk = jvmInfo.getBundledJdk();
-            usingBundledJdk = jvmInfo.getUsingBundledJdk();
-        }
-
-        @Override
-        public boolean equals(Object o) {
             if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-
-            JvmVersion jvm = (JvmVersion) o;
-
-            return vmVersion.equals(jvm.vmVersion) && vmVendor.equals(jvm.vmVendor);
-        }
-
-        @Override
-        public int hashCode() {
-            return vmVersion.hashCode();
-        }
-    }
-
-    /**
-     * Inner Network Types
-     *
-     * @opensearch.internal
-     */
-    static class NetworkTypes implements ToXContentFragment {
-
-        private final Map<String, AtomicInteger> transportTypes;
-        private final Map<String, AtomicInteger> httpTypes;
-
-        NetworkTypes(final List<NodeInfo> nodeInfos) {
-            final Map<String, AtomicInteger> transportTypes = new HashMap<>();
-            final Map<String, AtomicInteger> httpTypes = new HashMap<>();
-            for (final NodeInfo nodeInfo : nodeInfos) {
-                final Settings settings = nodeInfo.getSettings();
-                final String transportType = settings.get(
-                    NetworkModule.TRANSPORT_TYPE_KEY,
-                    NetworkModule.TRANSPORT_DEFAULT_TYPE_SETTING.get(settings)
-                );
-                final String httpType = settings.get(NetworkModule.HTTP_TYPE_KEY, NetworkModule.HTTP_DEFAULT_TYPE_SETTING.get(settings));
-                if (Strings.hasText(transportType)) {
-                    transportTypes.computeIfAbsent(transportType, k -> new AtomicInteger()).incrementAndGet();
-                }
-                if (Strings.hasText(httpType)) {
-                    httpTypes.computeIfAbsent(httpType, k -> new AtomicInteger()).incrementAndGet();
-                }
-            }
-            this.transportTypes = Collections.unmodifiableMap(transportTypes);
-            this.httpTypes = Collections.unmodifiableMap(httpTypes);
-        }
-
-        @Override
-        public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
-            builder.startObject("transport_types");
-            for (final Map.Entry<String, AtomicInteger> entry : transportTypes.entrySet()) {
                 builder.field(entry.getKey(), entry.getValue().get());
-            }
-            builder.endObject();
-            builder.startObject("http_types");
-            for (final Map.Entry<String, AtomicInteger> entry : httpTypes.entrySet()) {
-                builder.field(entry.getKey(), entry.getValue().get());
-            }
-            builder.endObject();
-            return builder;
-        }
-
-    }
-
-    /**
-     * Inner Discovery Types
-     *
-     * @opensearch.internal
-     */
-    static class DiscoveryTypes implements ToXContentFragment {
-
-        private final Map<String, AtomicInteger> discoveryTypes;
-
-        DiscoveryTypes(final List<NodeInfo> nodeInfos) {
-            final Map<String, AtomicInteger> discoveryTypes = new HashMap<>();
-            for (final NodeInfo nodeInfo : nodeInfos) {
-                final Settings settings = nodeInfo.getSettings();
-                final String discoveryType = DiscoveryModule.DISCOVERY_TYPE_SETTING.get(settings);
-                discoveryTypes.computeIfAbsent(discoveryType, k -> new AtomicInteger()).incrementAndGet();
-            }
-            this.discoveryTypes = Collections.unmodifiableMap(discoveryTypes);
-        }
-
-        @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject("discovery_types");
-            for (final Map.Entry<String, AtomicInteger> entry : discoveryTypes.entrySet()) {
-                builder.field(entry.getKey(), entry.getValue().get());
-            }
-            builder.endObject();
-            return builder;
-        }
     }
-
-    /**
-     * Inner Packaging Types
-     *
-     * @opensearch.internal
-     */
-    static class PackagingTypes implements ToXContentFragment {
-
-        private final Map<String, AtomicInteger> packagingTypes;
-
-        PackagingTypes(final List<NodeInfo> nodeInfos) {
-            final Map<String, AtomicInteger> packagingTypes = new HashMap<>();
-            for (final NodeInfo nodeInfo : nodeInfos) {
-                final String type = nodeInfo.getBuild().type().displayName();
-                packagingTypes.computeIfAbsent(type, k -> new AtomicInteger()).incrementAndGet();
-            }
-            this.packagingTypes = Collections.unmodifiableMap(packagingTypes);
-        }
-
+            static final String HEAP_USED_IN_BYTES = "heap_used_in_bytes";
+                    for (DiscoveryNodeRole role : nodeInfo.getNode().getRoles()) {
+import org.opensearch.core.common.unit.ByteSizeValue;
+         * Inner Fields used for creating XContent and parsing
+        this.versions = new HashSet<>();
+        return plugins;
+            static final String HEAP_MAX = "heap_max";
+        if (jvm != null) {
         @Override
-        public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
-            builder.startArray("packaging_types");
-            {
-                for (final Map.Entry<String, AtomicInteger> entry : packagingTypes.entrySet()) {
-                    builder.startObject();
-                    {
-                        builder.field("type", entry.getKey());
+    public OsStats getOs() {
+    private final NetworkTypes networkTypes;
+ *
                         builder.field("count", entry.getValue().get());
-                    }
-                    builder.endObject();
-                }
-            }
-            builder.endArray();
-            return builder;
-        }
-
+                final String discoveryType = DiscoveryModule.DISCOVERY_TYPE_SETTING.get(settings);
+            for (final Map.Entry<String, AtomicInteger> entry : httpTypes.entrySet()) {
+                    if (total > 0) {
+            this.roles = Collections.unmodifiableMap(new HashMap<>(roles));
+            static final String BUNDLED_JDK = "bundled_jdk";
+        if (process != null) {
+        private final long heapUsed;
+    @PublicApi(since = "1.0.0")
+                this.fs.add(nodeResponse.nodeStats().getFs().getTotal());
+    ClusterStatsNodes(Set<Metric> requestedMetrics, List<ClusterStatsNodeResponse> nodeResponses) {
+            builder.humanReadableField(Fields.HEAP_USED_IN_BYTES, Fields.HEAP_USED, getHeapUsed());
+            static final String AVAILABLE_PROCESSORS = "available_processors";
     }
-
-    /**
-     * Inner Ingest Stats
-     *
-     * @opensearch.internal
+            }
+import org.opensearch.core.common.transport.TransportAddress;
+                packagingTypes.computeIfAbsent(type, k -> new AtomicInteger()).incrementAndGet();
+            long freeMemory = 0;
+        final int cpuPercent;
+        static final String PLUGINS = "plugins";
+            static final String MAX = "max";
+        }
+            for (final Map.Entry<String, AtomicInteger> entry : discoveryTypes.entrySet()) {
      */
-    static class IngestStats implements ToXContentFragment {
-
-        final int pipelineCount;
-        final SortedMap<String, long[]> stats;
-
-        IngestStats(final List<NodeStats> nodeStats) {
-            Set<String> pipelineIds = new HashSet<>();
-            SortedMap<String, long[]> stats = new TreeMap<>();
-            for (NodeStats nodeStat : nodeStats) {
-                if (nodeStat.getIngestStats() != null) {
-                    for (Map.Entry<String, List<org.opensearch.ingest.IngestStats.ProcessorStat>> processorStats : nodeStat.getIngestStats()
-                        .getProcessorStats()
-                        .entrySet()) {
-                        pipelineIds.add(processorStats.getKey());
-                        for (org.opensearch.ingest.IngestStats.ProcessorStat stat : processorStats.getValue()) {
-                            stats.compute(stat.getType(), (k, v) -> {
-                                OperationStats nodeIngestStats = stat.getStats();
-                                if (v == null) {
-                                    return new long[] {
-                                        nodeIngestStats.getCount(),
-                                        nodeIngestStats.getFailedCount(),
-                                        nodeIngestStats.getCurrent(),
-                                        nodeIngestStats.getTotalTime() };
-                                } else {
-                                    v[0] += nodeIngestStats.getCount();
-                                    v[1] += nodeIngestStats.getFailedCount();
-                                    v[2] += nodeIngestStats.getCurrent();
-                                    v[3] += nodeIngestStats.getTotalTime();
-                                    return v;
-                                }
-                            });
+                        builder.field("type", entry.getKey());
+            static final String NAMES = "names";
+        Metric.DISCOVERY_TYPES,
+            }
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+         */
+        String vmVendor;
+                    cpuPercent += nodeStats.getProcess().getCpu().getPercent();
+         */
+         * The maximum uptime of a node in the cluster
+            }
+        }
+        private OsStats(List<NodeInfo> nodeInfos, List<NodeStats> nodeStatsList) {
+import org.opensearch.core.common.Strings;
+    public Counts getCounts() {
+        /**
+     *
+        }
+            builder.startObject(Fields.JVM);
+    ClusterStatsNodes(List<ClusterStatsNodeResponse> nodeResponses) {
                         }
-                    }
-                }
+            int cpuPercent = 0;
             }
-            this.pipelineCount = pipelineIds.size();
-            this.stats = Collections.unmodifiableSortedMap(stats);
+                return -1;
+            builder.startObject("http_types");
+        public Map<JvmVersion, Integer> getVersions() {
+        this.discoveryTypes = requestedMetrics.contains(ClusterStatsRequest.Metric.DISCOVERY_TYPES) ? new DiscoveryTypes(nodeInfos) : null;
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                builder.field(Fields.VM_VERSION, v.getKey().vmVersion);
+                allocatedProcessors += nodeInfo.getInfo(OsInfo.class).getAllocatedProcessors();
+        if (ingestStats != null) {
+        for (ClusterStatsNodeResponse nodeResponse : nodeResponses) {
+     * Inner Packaging Types
+            static final String COUNT = "count";
         }
-
-        @Override
-        public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
-            builder.startObject("ingest");
-            {
-                builder.field("number_of_pipelines", pipelineCount);
-                builder.startObject("processor_stats");
-                for (Map.Entry<String, long[]> stat : stats.entrySet()) {
-                    long[] statValues = stat.getValue();
-                    builder.startObject(stat.getKey());
-                    builder.field("count", statValues[0]);
-                    builder.field("failed", statValues[1]);
-                    builder.field("current", statValues[2]);
-                    builder.humanReadableField("time_in_millis", "time", new TimeValue(statValues[3], TimeUnit.MILLISECONDS));
-                    builder.endObject();
-                }
-                builder.endObject();
-            }
-            builder.endObject();
+            this.cpuPercent = cpuPercent;
+ */
             return builder;
-        }
-
+                builder.field(Fields.VM_NAME, v.getKey().vmName);
+            if (count == 0) {
+/*
+        return jvm;
+        this.fs = requestedMetrics.contains(ClusterStatsRequest.Metric.FS) ? new FsInfo.Path() : null;
+        // Stats computed from node info
+            builder.endObject();
+            long heapMax = 0;
+         *
+                    roles.merge(COORDINATING_ONLY, 1, Integer::sum);
+         * The total number of threads in the cluster
+                    builder.endObject();
+    public ProcessStats getProcess() {
+            this.names = Collections.unmodifiableMap(names);
+        DiscoveryTypes(final List<NodeInfo> nodeInfos) {
+         */
+            builder.value(v.toString());
+        JvmVersion(JvmInfo jvmInfo) {
     }
-
-}
+                    if (free > 0) {
+                if (nodeStat.getIngestStats() != null) {
+         * @opensearch.internal
+     * @opensearch.api
+     *
+                if (nodeStats.getOs() != null) {
+                        builder.field(Fields.NAME, name.getKey());
+        PackagingTypes(final List<NodeInfo> nodeInfos) {
+        /**
+            vmVendor = jvmInfo.getVmVendor();
+        }
+                                if (v == null) {
+                if (fd > 0) {
+     *
+    }
+        return builder;
+        Metric.PLUGINS,
+import org.opensearch.action.admin.cluster.node.stats.NodeStats;
+            return builder;
+            this.mem = new org.opensearch.monitor.os.OsStats.Mem(totalMemory, freeMemory);
+                builder.field(Fields.BUNDLED_JDK, v.getKey().bundledJdk);
+     * @opensearch.api
+        public int getAvailableProcessors() {
+            static final String CPU = "cpu";
+        static final String COUNT = "count";
+         * @opensearch.internal
+import java.util.concurrent.atomic.AtomicInteger;
+            TransportAddress publishAddress = nodeResponse.nodeInfo().getInfo(TransportInfo.class).address().publishAddress();
+            process.toXContent(builder, params);
+            }
+        if (packagingTypes != null) {
+            for (final NodeInfo nodeInfo : nodeInfos) {
+        List<NodeInfo> nodeInfos = new ArrayList<>(nodeResponses.size());
+import org.opensearch.core.xcontent.ToXContentFragment;
+    @PublicApi(since = "1.0.0")
+                    heapUsed += js.getMem().getHeapUsed().getBytes();
+                pluginInfo.toXContent(builder, params);
+        this.plugins = requestedMetrics.contains(ClusterStatsRequest.Metric.PLUGINS) ? new HashSet<>() : null;
+    }
+        if (networkTypes != null) {
+         * Build from lists of information about each node.
+        }
+/*
+            }
+            builder.field(Fields.TOTAL, total);
+        }
+        NetworkTypes(final List<NodeInfo> nodeInfos) {
+                builder.startObject("processor_stats");
+                                    v[3] += nodeIngestStats.getTotalTime();
+                if (js == null) {
+     */
+    private final DiscoveryTypes discoveryTypes;
+                    httpTypes.computeIfAbsent(httpType, k -> new AtomicInteger()).incrementAndGet();
+    /**
+                builder.field(entry.getKey(), entry.getValue().get());
+        @Override
+         * Maximum total heap available to the cluster
+            static final String MAX_UPTIME_IN_MILLIS = "max_uptime_in_millis";
+            long threads = 0;
+        }
+     * @opensearch.api
+        }
+        static final String VERSIONS = "versions";
+            }
+        }
+import java.util.HashMap;
+         * Cpu usage in percentages - 100 is 1 core.
+import org.opensearch.core.xcontent.XContentBuilder;
+                        builder.field(Fields.COUNT, prettyName.getValue());
+            return versions;
+    public static class Counts implements ToXContentFragment {
+            this.discoveryTypes = Collections.unmodifiableMap(discoveryTypes);
+     * @opensearch.api
+    }
+            return builder;
+                return false;
+        private JvmStats(List<NodeInfo> nodeInfos, List<NodeStats> nodeStatsList) {
+         */
+ * license agreements. See the NOTICE file distributed with
+            }
+            SortedMap<String, long[]> stats = new TreeMap<>();
+                for (final Map.Entry<String, AtomicInteger> entry : packagingTypes.entrySet()) {
+            static final String HEAP_USED = "heap_used";
+                if (Strings.hasText(transportType)) {
+            if (requestedMetrics.contains(ClusterStatsRequest.Metric.FS) && nodeResponse.nodeStats().getFs() != null) {
+                        builder.field(Fields.PRETTY_NAME, prettyName.getKey());
+        final int allocatedProcessors;
+            static final String NAME = "name";
+                    builder.humanReadableField("time_in_millis", "time", new TimeValue(statValues[3], TimeUnit.MILLISECONDS));
+    /**
+        final SortedMap<String, long[]> stats;
+            long minOpenFileDescriptors = Long.MAX_VALUE;
+     *
+            long totalMemory = 0;
+                                        nodeIngestStats.getFailedCount(),
+            }
+                        // As of 2.0, CLUSTER_MANAGER_ROLE is added, and it should be taken as MASTER_ROLE
+        }
+            }
+            static final String VM_VENDOR = "vm_vendor";
+        }
+            static final String USING_BUNDLED_JDK = "using_bundled_jdk";
+                            stats.compute(stat.getType(), (k, v) -> {
+        public int getTotal() {
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            bundledJdk = jvmInfo.getBundledJdk();
+                            roles.merge(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE.roleName(), 1, Integer::sum);
+                    builder.startObject();
+        }
+                builder.field(Fields.AVG, getAvgOpenFileDescriptors());
+            mem.toXContent(builder, params);
+            }
+            this.availableProcessors = availableProcessors;
+            {
+                if (nodeInfo.getInfo(OsInfo.class).getPrettyName() != null) {
+            }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                    builder.field("failed", statValues[1]);
+                availableProcessors += nodeInfo.getInfo(OsInfo.class).getAvailableProcessors();
+                    continue;
+        private final long maxUptime;
+        public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
+import org.opensearch.common.annotation.PublicApi;
+        public Map<String, Integer> getRoles() {
+         * Inner Fields used for creating XContent and parsing
+            if (count > 0) {
+            return threads;
+    /**
+            vmName = jvmInfo.getVmName();
+                }
+            final Map<String, Integer> roles = new HashMap<>(DiscoveryNode.getPossibleRoleNames().size());
+        Metric.NETWORK_TYPES,
+ * the Apache License, Version 2.0 (the "License"); you may
+                        .getProcessorStats()
+            final Map<String, Integer> names = new HashMap<>(nodeInfos.size());
+ * under the License.
+import java.util.concurrent.TimeUnit;
+    /**
+        private final Map<String, AtomicInteger> httpTypes;
+        }
+        Boolean usingBundledJdk;
+ *
+                    }
+    }
+import org.opensearch.monitor.os.OsInfo;
+            final Map<String, AtomicInteger> httpTypes = new HashMap<>();
+/*
+            builder.humanReadableField(Fields.MAX_UPTIME_IN_MILLIS, Fields.MAX_UPTIME, new TimeValue(maxUptime));
+        }
+        final Map<String, Integer> names;
+                        for (org.opensearch.ingest.IngestStats.ProcessorStat stat : processorStats.getValue()) {
+            {
+ * GitHub history for details.
+            }
+    public Set<Version> getVersions() {
+                maxOpenFileDescriptors = Math.max(maxOpenFileDescriptors, fd);
+            builder.endObject();
+            }
+import org.opensearch.cluster.node.DiscoveryNode;
+        }
+        Metric.PACKAGING_TYPES
+     * Inner Ingest Stats
+                if (Strings.hasText(httpType)) {
+            this.heapMax = heapMax;
+            usingBundledJdk = jvmInfo.getUsingBundledJdk();
+import org.opensearch.discovery.DiscoveryModule;
+            builder.endObject();
+            builder.endObject();
+        return this.counts;
+        }
+                    builder.startObject();
+ * specific language governing permissions and limitations
+        }
+        static final String OS = "os";
+            for (NodeInfo nodeInfo : nodeInfos) {
+                    builder.startObject();
+         * Inner Fields used for creating XContent and parsing
+        }
+ * software distributed under the License is distributed on an
+        public long getThreads() {
+                if (nodeStats.getProcess().getCpu() != null) {
+            long maxOpenFileDescriptors = Long.MIN_VALUE;
+                total++;
+            static final String MEM = "mem";
+                );
+            this.packagingTypes = Collections.unmodifiableMap(packagingTypes);
+                builder.endObject();
+    public static final Set<Metric> NODE_STATS_METRICS = Set.of(
+         *
+            this.allocatedProcessors = allocatedProcessors;
+        /**
+            final Map<String, AtomicInteger> discoveryTypes = new HashMap<>();
+    private final FsInfo.Path fs;
+                }
+            }
+                }
+                builder.field(Fields.COUNT, v.getValue());
+    private final ProcessStats process;
+                if (nodeInfo.getNode().getRoles().isEmpty()) {
+        }
+        boolean bundledJdk;
+import java.util.Map;
+        final long totalOpenFileDescriptors;
+                    NetworkModule.TRANSPORT_TYPE_KEY,
+        return fs;
+import org.opensearch.common.metrics.OperationStats;
+    public static class JvmStats implements ToXContentFragment {
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.plugins.PluginInfo;
+            static final String OPEN_FILE_DESCRIPTORS = "open_file_descriptors";
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     * @opensearch.internal
+         */
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+    private final OsStats os;
+            static final String PERCENT = "percent";
+    public JvmStats getJvm() {
+                org.opensearch.monitor.jvm.JvmStats js = nodeStats.getJvm();
+            return new ByteSizeValue(heapMax);
+            }
+                builder.endObject();
+                }
+            for (NodeStats nodeStats : nodeStatsList) {
+            int count = 0;
+            builder.field(Fields.ALLOCATED_PROCESSORS, allocatedProcessors);
+        /**
+                    {
+                }
+            static final String VM_NAME = "vm_name";
+                    }
+            this.prettyNames = Collections.unmodifiableMap(prettyNames);
+        @Override
+ * this file be licensed under the Apache-2.0 license or a
+            for (NodeStats nodeStats : nodeStatsList) {
+        /**
+     */
+                }
+                versions.merge(new JvmVersion(nodeInfo.getInfo(JvmInfo.class)), 1, Integer::sum);
+    private final PackagingTypes packagingTypes;
+                            roles.merge(role.roleName(), 1, Integer::sum);
+            static final String PRETTY_NAMES = "pretty_names";
+import java.util.HashSet;
+        return os;
+         */
+                builder.field(Fields.USING_BUNDLED_JDK, v.getKey().usingBundledJdk);
+         */
+                builder.field(entry.getKey(), entry.getValue());
+        if (discoveryTypes != null) {
+                            });
+            final Map<String, AtomicInteger> packagingTypes = new HashMap<>();
+     * Inner Process Stats
+        }
+package org.opensearch.action.admin.cluster.stats;
+ */
+                }
+        }
+        @Override
+        this.packagingTypes = requestedMetrics.contains(ClusterStatsRequest.Metric.PACKAGING_TYPES) ? new PackagingTypes(nodeInfos) : null;
+            if (o == null || getClass() != o.getClass()) {
+                                    return v;
+            Set<String> pipelineIds = new HashSet<>();
+                                        nodeIngestStats.getTotalTime() };
+                    builder.startObject(stat.getKey());
+        private ProcessStats(List<NodeStats> nodeStatsList) {
+    /**
+            }
+                builder.field("number_of_pipelines", pipelineCount);
+            builder.endArray();
+        }
+        Metric.INGEST,
+            static final String VERSION = "version";
+        counts.toXContent(builder, params);
+        static final String JVM = "jvm";
+     */
+                    heapMax += js.getMem().getHeapMax().getBytes();
+     */
+    private final Set<Version> versions;
+                        // TODO: Remove the 'if' condition and only keep the statement in 'else' after removing MASTER_ROLE.
+ *
+        Metric.OS,
+    /**
+                    long[] statValues = stat.getValue();
+        this.ingestStats = requestedMetrics.contains(ClusterStatsRequest.Metric.INGEST) ? new IngestStats(nodeStats) : null;
+                }
+                minOpenFileDescriptors = Math.min(minOpenFileDescriptors, fd);
+        }
+                    builder.endObject();
+            if (count == 0) {
+        /**
+        public long getMinOpenFileDescriptors() {
+            builder.startArray(Fields.VERSIONS);
+                                OperationStats nodeIngestStats = stat.getStats();
+                count++;
+public class ClusterStatsNodes implements ToXContentFragment {
+        if (fs != null) {
+            builder.startObject(Fields.NETWORK_TYPES);
+                for (Map.Entry<String, long[]> stat : stats.entrySet()) {
+ * ownership. Elasticsearch licenses this file to you under
+        public TimeValue getMaxUpTime() {
+        }
+                discoveryTypes.computeIfAbsent(discoveryType, k -> new AtomicInteger()).incrementAndGet();
+            static final String VERSIONS = "versions";
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        Metric.FS,
+ * Unless required by applicable law or agreed to in writing,
+                builder.field(Fields.VM_VENDOR, v.getKey().vmVendor);
+        this.process = requestedMetrics.contains(ClusterStatsRequest.Metric.PROCESS) ? new ProcessStats(nodeStats) : null;
+        Metric.PROCESS,
+            this.stats = Collections.unmodifiableSortedMap(stats);
+import org.opensearch.monitor.fs.FsInfo;
+            final Map<String, Integer> prettyNames = new HashMap<>(nodeInfos.size());
+                for (final Map.Entry<String, Integer> name : names.entrySet()) {
+            builder.startArray(Fields.PLUGINS);
+            builder.startObject(Fields.OS);
+        return process;
+                        if (role.isClusterManager()) {
+            static final String HEAP_MAX_IN_BYTES = "heap_max_in_bytes";
+                builder.field(Fields.VERSION, v.getKey().version);
+        public int getAllocatedProcessors() {
+                                        nodeIngestStats.getCount(),
+         */
+            builder.startArray(Fields.NAMES);
+            builder.humanReadableField(Fields.HEAP_MAX_IN_BYTES, Fields.HEAP_MAX, getHeapMax());
+ * not use this file except in compliance with the License.
+            int total = 0;
+ */
+                                    v[2] += nodeIngestStats.getCurrent();
+        final int availableProcessors;
+            }
+        if (plugins != null) {
+        Metric.JVM,
+ * SPDX-License-Identifier: Apache-2.0
+     * Inner JVM Stats
+        }
+                }
+                roles.put(possibleRoleName, 0);
+            builder.endArray();
+import org.opensearch.action.admin.cluster.node.info.PluginsAndModules;
+                builder.endObject();
+    }
+            builder.endObject();
+import java.io.IOException;
+                builder.field(entry.getKey(), entry.getValue().get());
+                            roles.merge(DiscoveryNodeRole.MASTER_ROLE.roleName(), 1, Integer::sum);
+            }
+            fs.toXContent(builder, params);
+     */
+            return builder;
+        private final long threads;
+                    NetworkModule.TRANSPORT_DEFAULT_TYPE_SETTING.get(settings)
+            JvmVersion jvm = (JvmVersion) o;
+    }
+                                        nodeIngestStats.getCurrent(),
+                        totalMemory += total;
+     * @opensearch.internal
+                builder.field(Fields.MAX, getMaxOpenFileDescriptors());
+            builder.startArray(Fields.PRETTY_NAMES);
+        /**
+                    long total = nodeStats.getOs().getMem().getTotal().getBytes();
+        static final class Fields {
+        static final String FS = "fs";
+            }
+            return totalOpenFileDescriptors / count;
+         */
+                    builder.endObject();
+                if (js.getMem() != null) {
+            return mem;
+        for (Version v : versions) {
+            builder.endObject();
+            return new TimeValue(maxUptime);
+     * Inner Network Types
+                    continue;
+        final int pipelineCount;
+            final Map<String, AtomicInteger> transportTypes = new HashMap<>();
+        public ByteSizeValue getHeapMax() {
+     *
+        }
+import java.util.ArrayList;
+            static final String PRETTY_NAME = "pretty_name";
+        /**
+            }
+        public org.opensearch.monitor.os.OsStats.Mem getMem() {
+    public static class JvmVersion {
+            }
+                if (js.getThreads() != null) {
+            builder.endArray();
+ * Per Node Cluster Stats
+            return builder;
+        public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
+                }
+            // TODO: do we need to report zeros?
+ * Licensed to Elasticsearch under one or more contributor
+     * @opensearch.internal
+    @PublicApi(since = "1.0.0")
+    /**
+            long totalOpenFileDescriptors = 0;
+            // now do the stats that should be deduped by hardware (implemented by ip deduping)
+        static final class Fields {
+        Set<InetAddress> seenAddresses = new HashSet<>(nodeResponses.size());
+            if (!seenAddresses.add(inetAddress)) {
+        }
+@PublicApi(since = "1.0.0")
+        private final Map<JvmVersion, Integer> versions;
+                }
+            static final String AVG = "avg";
+        private final Map<String, AtomicInteger> discoveryTypes;
+            return builder;
+            builder.endArray();
+                        .entrySet()) {
+        private final Map<String, AtomicInteger> packagingTypes;
+            final Map<JvmVersion, Integer> versions = new HashMap<>(nodeInfos.size());
+                    }
+        }
+            if (requestedMetrics.contains(ClusterStatsRequest.Metric.PLUGINS)) {
+            this.total = total;
+            if (count == 0) {
+                    builder.field("count", statValues[0]);
+ *
+            }
+        List<NodeStats> nodeStats = new ArrayList<>(nodeResponses.size());
+        public int hashCode() {
+    private final IngestStats ingestStats;
+        private final Map<String, Integer> roles;
+            nodeStats.add(nodeResponse.nodeStats());
+            builder.startObject("transport_types");
+        /**
+import java.util.SortedMap;
+            builder.startArray("packaging_types");
+            return cpuPercent;
+ * You may obtain a copy of the License at
+            packagingTypes.toXContent(builder, params);
+import org.opensearch.monitor.jvm.JvmInfo;
+            vmVersion = jvmInfo.getVmVersion();
+        /**
+                        freeMemory += free;
+import java.util.List;
+        }
+        }
+        static final String PROCESS = "process";
+            for (final NodeInfo nodeInfo : nodeInfos) {
+            int availableProcessors = 0;
+ * @opensearch.api
+            return minOpenFileDescriptors;
+                continue;
+import org.opensearch.Version;
+ */
+    );
+            for (Map.Entry<String, Integer> entry : new TreeMap<>(roles).entrySet()) {
+         * Build the stats from information about each node.
+    @Override
+     *
+    static class DiscoveryTypes implements ToXContentFragment {
+        @Override
+        }
+    }
+        // Stats computed from node info and node stat

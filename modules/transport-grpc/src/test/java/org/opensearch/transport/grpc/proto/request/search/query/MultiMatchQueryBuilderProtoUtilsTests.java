@@ -1,485 +1,414 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.transport.grpc.proto.request.search.query;
-
-import org.opensearch.common.unit.Fuzziness;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.query.MultiMatchQueryBuilder;
-import org.opensearch.index.query.Operator;
-import org.opensearch.index.search.MatchQuery;
-import org.opensearch.protobufs.MinimumShouldMatch;
-import org.opensearch.protobufs.MultiMatchQuery;
-import org.opensearch.protobufs.TextQueryType;
-import org.opensearch.protobufs.ZeroTermsQuery;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
-
-import static org.opensearch.transport.grpc.proto.request.search.query.MultiMatchQueryBuilderProtoUtils.fromProto;
-
-public class MultiMatchQueryBuilderProtoUtilsTests extends OpenSearchTestCase {
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        // Set up the registry with all built-in converters
-        QueryBuilderProtoTestUtils.setupRegistry();
+        // Test with ZERO_TERMS_QUERY_UNSPECIFIED to cover lines 152-154
+        assertEquals(fromXContent.zeroTermsQuery(), fromProto.zeroTermsQuery());
+            .setOperator(org.opensearch.protobufs.Operator.OPERATOR_AND)
     }
-
-    public void testFromProtoWithRequiredFieldsOnly() {
+        assertEquals(fromXContent.type(), fromProto.type());
+            + "  \"tie_breaker\": 0.5,\n"
         // Create a minimal MultiMatchQuery proto with only required fields
-        MultiMatchQuery proto = MultiMatchQuery.newBuilder().setQuery("test query").addFields("field1").build();
-
-        // Convert to MultiMatchQueryBuilder
-        MultiMatchQueryBuilder builder = fromProto(proto);
-
-        // Verify basic properties
-        assertEquals("test query", builder.value());
-        assertTrue(builder.fields().containsKey("field1"));
-        assertEquals(1.0f, builder.fields().get("field1"), 0.001f);
-        assertEquals(MultiMatchQueryBuilder.DEFAULT_TYPE, builder.type());
-        assertNull(builder.analyzer());
+            .setZeroTermsQuery(ZeroTermsQuery.ZERO_TERMS_QUERY_ALL)
+            .addFields("field2")
+            assertEquals(expectedZeroTermsQueries[i], builder.zeroTermsQuery());
+            .addFields("field1")
+                .addFields("field1")
+            .setPrefixLength(3)
+            .setType(TextQueryType.TEXT_QUERY_TYPE_BOOL_PREFIX)
         assertEquals(MultiMatchQueryBuilder.DEFAULT_PHRASE_SLOP, builder.slop());
-        assertEquals(MultiMatchQueryBuilder.DEFAULT_PREFIX_LENGTH, builder.prefixLength());
-        assertEquals(MultiMatchQueryBuilder.DEFAULT_MAX_EXPANSIONS, builder.maxExpansions());
-        assertEquals(MultiMatchQueryBuilder.DEFAULT_OPERATOR, builder.operator());
-        assertNull(builder.minimumShouldMatch());
-        assertNull(builder.fuzzyRewrite());
-        assertNull(builder.tieBreaker());
-        assertEquals(1.0f, builder.boost(), 0.001f);
-        assertNull(builder.queryName());
-    }
-
-    public void testFromProtoWithAllFields() {
+        String json = "{\n"
+            .setAnalyzer("standard")
+        // 1. Create a JSON string for XContent parsing
+            .setQuery("test")
+            .setZeroTermsQuery(ZeroTermsQuery.ZERO_TERMS_QUERY_ALL)
+            org.opensearch.protobufs.Operator.OPERATOR_AND,
+            .build();
+            .setFuzzyRewrite("top_terms_boost_10")
+            .setFuzzyRewrite("constant_score")
+        assertEquals(3, builder.prefixLength());
+            .setQuery("test query")
+            .setQuery("test query")
+        }
+        assertEquals(fromXContent.fuzzyRewrite(), fromProto.fuzzyRewrite());
+    public void testFromProtoWithBoolPrefixAndDefaultSlop() {
+        assertEquals(MultiMatchQueryBuilder.DEFAULT_ZERO_TERMS_QUERY, builder.zeroTermsQuery()); // Should keep default
+        ZeroTermsQuery[] zeroTermsQueries = { ZeroTermsQuery.ZERO_TERMS_QUERY_NONE, ZeroTermsQuery.ZERO_TERMS_QUERY_ALL };
+    public void testFromProtoWithDifferentOperators() {
+        assertEquals(Fuzziness.fromEdits(2), builderInt.fuzziness());
         // Create a complete MultiMatchQuery proto with all fields set
+            + "  \"boost\": 2.0,\n"
+            .setLenient(true)
         MultiMatchQuery proto = MultiMatchQuery.newBuilder()
             .setQuery("test query")
-            .addFields("field1")
-            .addFields("field2")
-            .setType(TextQueryType.TEXT_QUERY_TYPE_PHRASE)
-            .setAnalyzer("standard")
-            .setSlop(2)
-            .setPrefixLength(3)
-            .setMaxExpansions(10)
-            .setOperator(org.opensearch.protobufs.Operator.OPERATOR_AND)
-            .setMinimumShouldMatch(MinimumShouldMatch.newBuilder().setString("2").build())
-            .setFuzzyRewrite("constant_score")
-            .setTieBreaker(0.5f)
-            .setLenient(true)
-            .setZeroTermsQuery(ZeroTermsQuery.ZERO_TERMS_QUERY_ALL)
-            .setAutoGenerateSynonymsPhraseQuery(false)
-            .setFuzzyTranspositions(false)
-            .setBoost(2.0f)
-            .setXName("test_query")
-            .build();
-
-        // Convert to MultiMatchQueryBuilder
-        MultiMatchQueryBuilder builder = fromProto(proto);
-
-        // Verify all properties
-        assertEquals("test query", builder.value());
-        assertEquals(2, builder.fields().size());
-        assertTrue(builder.fields().containsKey("field1"));
-        assertTrue(builder.fields().containsKey("field2"));
-        assertEquals(1.0f, builder.fields().get("field1"), 0.001f);
-        assertEquals(1.0f, builder.fields().get("field2"), 0.001f);
-        assertEquals(MultiMatchQueryBuilder.Type.PHRASE, builder.type());
+        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
         assertEquals("standard", builder.analyzer());
-        assertEquals(2, builder.slop());
-        assertEquals(3, builder.prefixLength());
-        assertEquals(10, builder.maxExpansions());
-        assertEquals(Operator.AND, builder.operator());
-        assertEquals("2", builder.minimumShouldMatch());
-        assertEquals("constant_score", builder.fuzzyRewrite());
         assertEquals(0.5f, builder.tieBreaker(), 0.001f);
-        assertTrue(builder.lenient());
-        assertEquals(MatchQuery.ZeroTermsQuery.ALL, builder.zeroTermsQuery());
-        assertFalse(builder.autoGenerateSynonymsPhraseQuery());
-        assertFalse(builder.fuzzyTranspositions());
-        assertEquals(2.0f, builder.boost(), 0.001f);
+            .setMinimumShouldMatch(MinimumShouldMatch.newBuilder().setString("75%").build())
+            + "}";
+            .setMinimumShouldMatch(MinimumShouldMatch.newBuilder().setInt32(2).build())
+            .setAutoGenerateSynonymsPhraseQuery(false)
+            + "  \"analyzer\": \"standard\",\n"
+    }
+        assertEquals(1.0f, builder.boost(), 0.001f);
+            .setQuery("test")
+        assertEquals("test query", builder.value());
+            .build();
+    }
+            .setQuery("test query")
+            .addFields("field1")
+        QueryBuilderProtoTestUtils.setupRegistry();
+            .addFields("field1")
+    public void testFromProtoWithDifferentZeroTermsQuery() {
+    }
+        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
+            TextQueryType.TEXT_QUERY_TYPE_CROSS_FIELDS,
+        assertEquals(fromXContent.minimumShouldMatch(), fromProto.minimumShouldMatch());
+            .setQuery("test query")
+        assertEquals(MultiMatchQueryBuilder.DEFAULT_MAX_EXPANSIONS, builder.maxExpansions());
         assertEquals("test_query", builder.queryName());
     }
-
-    public void testFromProtoWithIntMinimumShouldMatch() {
-        // Create a proto with int32 minimum_should_match
-        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
-            .setQuery("test query")
-            .addFields("field1")
-            .setMinimumShouldMatch(MinimumShouldMatch.newBuilder().setInt32(2).build())
-            .build();
-
-        // Convert to MultiMatchQueryBuilder
-        MultiMatchQueryBuilder builder = fromProto(proto);
-
-        // Verify minimum_should_match
-        assertEquals("2", builder.minimumShouldMatch());
-    }
-
-    public void testFromProtoWithStringMinimumShouldMatch() {
-        // Create a proto with string minimum_should_match
-        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
-            .setQuery("test query")
-            .addFields("field1")
-            .setMinimumShouldMatch(MinimumShouldMatch.newBuilder().setString("75%").build())
-            .build();
-
-        // Convert to MultiMatchQueryBuilder
-        MultiMatchQueryBuilder builder = fromProto(proto);
-
-        // Verify minimum_should_match
-        assertEquals("75%", builder.minimumShouldMatch());
-    }
-
-    public void testFromProtoWithDifferentTypes() {
-        // Test all possible types
-        TextQueryType[] types = {
-            TextQueryType.TEXT_QUERY_TYPE_BEST_FIELDS,
-            TextQueryType.TEXT_QUERY_TYPE_MOST_FIELDS,
-            TextQueryType.TEXT_QUERY_TYPE_CROSS_FIELDS,
-            TextQueryType.TEXT_QUERY_TYPE_PHRASE,
-            TextQueryType.TEXT_QUERY_TYPE_PHRASE_PREFIX,
-            TextQueryType.TEXT_QUERY_TYPE_BOOL_PREFIX };
-
-        MultiMatchQueryBuilder.Type[] expectedTypes = {
-            MultiMatchQueryBuilder.Type.BEST_FIELDS,
-            MultiMatchQueryBuilder.Type.MOST_FIELDS,
-            MultiMatchQueryBuilder.Type.CROSS_FIELDS,
-            MultiMatchQueryBuilder.Type.PHRASE,
-            MultiMatchQueryBuilder.Type.PHRASE_PREFIX,
-            MultiMatchQueryBuilder.Type.BOOL_PREFIX };
-
-        for (int i = 0; i < types.length; i++) {
-            MultiMatchQuery proto = MultiMatchQuery.newBuilder().setQuery("test query").addFields("field1").setType(types[i]).build();
-
-            MultiMatchQueryBuilder builder = fromProto(proto);
-            assertEquals(expectedTypes[i], builder.type());
-        }
-    }
-
-    public void testFromProtoWithDifferentOperators() {
-        // Test all possible operators
-        org.opensearch.protobufs.Operator[] operators = {
-            org.opensearch.protobufs.Operator.OPERATOR_AND,
-            org.opensearch.protobufs.Operator.OPERATOR_OR };
-
-        Operator[] expectedOperators = { Operator.AND, Operator.OR };
-
-        for (int i = 0; i < operators.length; i++) {
-            MultiMatchQuery proto = MultiMatchQuery.newBuilder()
-                .setQuery("test query")
-                .addFields("field1")
-                .setOperator(operators[i])
-                .build();
-
-            MultiMatchQueryBuilder builder = fromProto(proto);
-            assertEquals(expectedOperators[i], builder.operator());
-        }
-    }
-
-    public void testFromProtoWithDifferentZeroTermsQuery() {
-        // Test all possible zero_terms_query values
-        ZeroTermsQuery[] zeroTermsQueries = { ZeroTermsQuery.ZERO_TERMS_QUERY_NONE, ZeroTermsQuery.ZERO_TERMS_QUERY_ALL };
-
-        MatchQuery.ZeroTermsQuery[] expectedZeroTermsQueries = { MatchQuery.ZeroTermsQuery.NONE, MatchQuery.ZeroTermsQuery.ALL };
-
-        for (int i = 0; i < zeroTermsQueries.length; i++) {
-            MultiMatchQuery proto = MultiMatchQuery.newBuilder()
-                .setQuery("test query")
-                .addFields("field1")
-                .setZeroTermsQuery(zeroTermsQueries[i])
-                .build();
-
-            MultiMatchQueryBuilder builder = fromProto(proto);
-            assertEquals(expectedZeroTermsQueries[i], builder.zeroTermsQuery());
-        }
-    }
-
-    public void testFromProtoWithMultipleFields() {
-        // Create a proto with multiple fields
-        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
-            .setQuery("test query")
-            .addFields("field1")
-            .addFields("field2")
-            .addFields("field3")
-            .build();
-
-        // Convert to MultiMatchQueryBuilder
-        MultiMatchQueryBuilder builder = fromProto(proto);
-
-        // Verify fields
-        assertEquals(3, builder.fields().size());
-        Set<String> expectedFields = new HashSet<>(Arrays.asList("field1", "field2", "field3"));
-        assertEquals(expectedFields, builder.fields().keySet());
-    }
-
-    /**
-     * Test that compares the results of fromXContent and fromProto to ensure they produce equivalent results.
-     */
-    public void testFromProtoMatchesFromXContent() throws IOException {
-        // 1. Create a JSON string for XContent parsing
-        String json = "{\n"
-            + "  \"query\": \"test query\",\n"
-            + "  \"fields\": [\"field1\", \"field2\"],\n"
-            + "  \"type\": \"phrase\",\n"
-            + "  \"analyzer\": \"standard\",\n"
-            + "  \"slop\": 2,\n"
-            + "  \"prefix_length\": 3,\n"
-            + "  \"max_expansions\": 10,\n"
-            + "  \"operator\": \"AND\",\n"
-            + "  \"minimum_should_match\": \"2\",\n"
-            + "  \"fuzzy_rewrite\": \"constant_score\",\n"
-            + "  \"tie_breaker\": 0.5,\n"
-            + "  \"lenient\": true,\n"
-            + "  \"zero_terms_query\": \"ALL\",\n"
-            + "  \"auto_generate_synonyms_phrase_query\": false,\n"
-            + "  \"fuzzy_transpositions\": false,\n"
-            + "  \"boost\": 2.0,\n"
-            + "  \"_name\": \"test_query\"\n"
-            + "}";
-
         // 2. Parse the JSON to create a MultiMatchQueryBuilder via fromXContent
-        XContentParser parser = createParser(JsonXContent.jsonXContent, json);
-        parser.nextToken(); // Move to the first token
-        MultiMatchQueryBuilder fromXContent = MultiMatchQueryBuilder.fromXContent(parser);
-
-        // 3. Create an equivalent MultiMatchQuery proto
-        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
-            .setQuery("test query")
-            .addFields("field1")
-            .addFields("field2")
-            .setType(TextQueryType.TEXT_QUERY_TYPE_PHRASE)
-            .setAnalyzer("standard")
-            .setSlop(2)
-            .setPrefixLength(3)
-            .setMaxExpansions(10)
-            .setOperator(org.opensearch.protobufs.Operator.OPERATOR_AND)
-            .setMinimumShouldMatch(MinimumShouldMatch.newBuilder().setString("2").build())
-            .setFuzzyRewrite("constant_score")
-            .setTieBreaker(0.5f)
-            .setLenient(true)
-            .setZeroTermsQuery(ZeroTermsQuery.ZERO_TERMS_QUERY_ALL)
-            .setAutoGenerateSynonymsPhraseQuery(false)
-            .setFuzzyTranspositions(false)
-            .setBoost(2.0f)
-            .setXName("test_query")
             .build();
-
-        // 4. Convert the proto to a MultiMatchQueryBuilder
-        MultiMatchQueryBuilder fromProto = MultiMatchQueryBuilderProtoUtils.fromProto(proto);
-
-        // 5. Compare the two builders
-        assertEquals(fromXContent.value(), fromProto.value());
-        assertEquals(fromXContent.fields(), fromProto.fields());
-        assertEquals(fromXContent.type(), fromProto.type());
-        assertEquals(fromXContent.analyzer(), fromProto.analyzer());
-        assertEquals(fromXContent.slop(), fromProto.slop());
-        assertEquals(fromXContent.prefixLength(), fromProto.prefixLength());
-        assertEquals(fromXContent.maxExpansions(), fromProto.maxExpansions());
-        assertEquals(fromXContent.operator(), fromProto.operator());
-        assertEquals(fromXContent.minimumShouldMatch(), fromProto.minimumShouldMatch());
-        assertEquals(fromXContent.fuzzyRewrite(), fromProto.fuzzyRewrite());
-        assertEquals(fromXContent.tieBreaker(), fromProto.tieBreaker(), 0.001f);
-        assertEquals(fromXContent.lenient(), fromProto.lenient());
-        assertEquals(fromXContent.zeroTermsQuery(), fromProto.zeroTermsQuery());
+        // Convert to MultiMatchQueryBuilder
         assertEquals(fromXContent.autoGenerateSynonymsPhraseQuery(), fromProto.autoGenerateSynonymsPhraseQuery());
-        assertEquals(fromXContent.fuzzyTranspositions(), fromProto.fuzzyTranspositions());
-        assertEquals(fromXContent.boost(), fromProto.boost(), 0.001f);
-        assertEquals(fromXContent.queryName(), fromProto.queryName());
-    }
-
-    // ========== Missing Coverage Tests ==========
-
-    public void testFromProtoWithNoFields() {
-        // Test with fieldsCount = 0 to cover line 60 branch
-        MultiMatchQuery proto = MultiMatchQuery.newBuilder().setQuery("test query").build();
-
-        MultiMatchQueryBuilder builder = fromProto(proto);
-
-        assertEquals("test query", builder.value());
-        assertTrue("Fields should be empty", builder.fields().isEmpty());
-    }
-
-    public void testFromProtoWithUnspecifiedType() {
-        // Test with TEXT_QUERY_TYPE_UNSPECIFIED to cover default case in switch
-        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
-            .setQuery("test query")
-            .addFields("field1")
-            .setType(TextQueryType.TEXT_QUERY_TYPE_UNSPECIFIED)
-            .build();
-
-        MultiMatchQueryBuilder builder = fromProto(proto);
-
-        assertEquals("test query", builder.value());
-        assertEquals(MultiMatchQueryBuilder.DEFAULT_TYPE, builder.type()); // Should keep default
-    }
-
-    public void testFromProtoWithUnspecifiedOperator() {
-        // Test with OPERATOR_UNSPECIFIED to cover default case in operator switch
-        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
-            .setQuery("test query")
-            .addFields("field1")
-            .setOperator(org.opensearch.protobufs.Operator.OPERATOR_UNSPECIFIED)
-            .build();
-
-        MultiMatchQueryBuilder builder = fromProto(proto);
-
-        assertEquals("test query", builder.value());
-        assertEquals(MultiMatchQueryBuilder.DEFAULT_OPERATOR, builder.operator()); // Should keep default
-    }
-
-    public void testFromProtoWithMinimumShouldMatchNeitherStringNorInt() {
-        // Test with MinimumShouldMatch that has neither string nor int32 to cover the else if branch
-        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
-            .setQuery("test query")
-            .addFields("field1")
-            .setMinimumShouldMatch(MinimumShouldMatch.newBuilder().build()) // Empty - no string or int32
-            .build();
-
-        MultiMatchQueryBuilder builder = fromProto(proto);
-
-        assertEquals("test query", builder.value());
-        assertNull("MinimumShouldMatch should be null when neither string nor int32 is set", builder.minimumShouldMatch());
-    }
-
-    public void testFromProtoWithZeroTermsQueryUnspecified() {
-        // Test with ZERO_TERMS_QUERY_UNSPECIFIED to cover lines 152-154
-        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
-            .setQuery("test query")
-            .addFields("field1")
-            .setZeroTermsQuery(ZeroTermsQuery.ZERO_TERMS_QUERY_UNSPECIFIED)
-            .build();
-
-        MultiMatchQueryBuilder builder = fromProto(proto);
-
-        assertEquals("test query", builder.value());
-        assertEquals(MultiMatchQueryBuilder.DEFAULT_ZERO_TERMS_QUERY, builder.zeroTermsQuery()); // Should keep default
-    }
-
-    public void testFromProtoWithSlopValidationForBoolPrefix() {
-        // Test slop validation for BOOL_PREFIX type to cover lines 172-173
-        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
-            .setQuery("test query")
-            .addFields("field1")
-            .setType(TextQueryType.TEXT_QUERY_TYPE_BOOL_PREFIX)
-            .setSlop(2) // Non-default slop with BOOL_PREFIX should throw exception
-            .build();
-
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> fromProto(proto));
-        assertTrue("Exception message should mention slop not allowed", exception.getMessage().contains("slop not allowed for type"));
+            + "  \"slop\": 2,\n"
         assertTrue("Exception message should mention BOOL_PREFIX", exception.getMessage().contains("BOOL_PREFIX"));
     }
-
-    public void testFromProtoWithBoolPrefixAndDefaultSlop() {
-        // Test BOOL_PREFIX with default slop (should work fine)
-        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
-            .setQuery("test query")
             .addFields("field1")
-            .setType(TextQueryType.TEXT_QUERY_TYPE_BOOL_PREFIX)
             // No slop set - should use default
-            .build();
-
         MultiMatchQueryBuilder builder = fromProto(proto);
-
-        assertEquals("test query", builder.value());
-        assertEquals(MultiMatchQueryBuilder.Type.BOOL_PREFIX, builder.type());
-        assertEquals(MultiMatchQueryBuilder.DEFAULT_PHRASE_SLOP, builder.slop());
-    }
-
-    public void testFromProtoWithFuzziness() {
-        // Test 1: Fuzziness with string value
-        MultiMatchQuery protoString = MultiMatchQuery.newBuilder()
             .setQuery("test query")
-            .addFields("field1")
-            .setFuzziness(org.opensearch.protobufs.Fuzziness.newBuilder().setString("AUTO").build())
-            .build();
-        MultiMatchQueryBuilder builderString = fromProto(protoString);
-        assertEquals("test query", builderString.value());
-        assertNotNull("Fuzziness should not be null (STRING)", builderString.fuzziness());
+     * Test that compares the results of fromXContent and fromProto to ensure they produce equivalent results.
+    }
+                .setOperator(operators[i])
+        }
+        assertEquals("2", builder.minimumShouldMatch());
+        // Verify minimum_should_match
+        MultiMatchQuery proto = MultiMatchQuery.newBuilder().setQuery("test query").addFields("field1").build();
+ */
+        // Test with TEXT_QUERY_TYPE_UNSPECIFIED to cover default case in switch
+        // Verify minimum_should_match
+        // Test slop validation for BOOL_PREFIX type to cover lines 172-173
+     */
         assertEquals(Fuzziness.build("AUTO"), builderString.fuzziness());
-
-        MultiMatchQuery protoInt = MultiMatchQuery.newBuilder()
-            .setQuery("test query")
+        assertEquals(3, builder.fields().size());
+        assertEquals(MultiMatchQueryBuilder.DEFAULT_PHRASE_SLOP, builder.slop());
+        // Set up the registry with all built-in converters
+            .setLenient(true)
             .addFields("field1")
-            .setFuzziness(org.opensearch.protobufs.Fuzziness.newBuilder().setInt32(2).build())
+            .setMinimumShouldMatch(MinimumShouldMatch.newBuilder().build()) // Empty - no string or int32
+        assertNull(builder.tieBreaker());
             .build();
-        MultiMatchQueryBuilder builderInt = fromProto(protoInt);
-        assertEquals("test query", builderInt.value());
-        assertNotNull("Fuzziness should not be null (INT32)", builderInt.fuzziness());
-        assertEquals(Fuzziness.fromEdits(2), builderInt.fuzziness());
-
-        // Test 3: Fuzziness with empty/neither string nor int32
-        MultiMatchQuery protoEmpty = MultiMatchQuery.newBuilder()
-            .setQuery("test query")
+            .build();
+        // 5. Compare the two builders
             .addFields("field1")
-            .setFuzziness(org.opensearch.protobufs.Fuzziness.newBuilder().build())
+import org.opensearch.common.unit.Fuzziness;
+        // Test with fieldsCount = 0 to cover line 60 branch
+            MultiMatchQueryBuilder.Type.CROSS_FIELDS,
             .build();
-        MultiMatchQueryBuilder builderEmpty = fromProto(protoEmpty);
-        assertEquals("test query", builderEmpty.value());
-        assertNull("Fuzziness should be null (EMPTY)", builderEmpty.fuzziness());
+        assertEquals("constant_score", builder.fuzzyRewrite());
+        assertEquals(fromXContent.boost(), fromProto.boost(), 0.001f);
+        MultiMatchQuery protoConstantScoreBoolean = MultiMatchQuery.newBuilder()
+            .setTieBreaker(0.5f)
+        // Verify basic properties
+        assertNotNull("Fuzziness should not be null (STRING)", builderString.fuzziness());
+            .addFields("field1")
+            .addFields("field1")
+        // Test all possible operators
+            MultiMatchQuery proto = MultiMatchQuery.newBuilder()
+        // Test all possible zero_terms_query values
+            .addFields("field2")
+        assertEquals(MultiMatchQueryBuilder.DEFAULT_TYPE, builder.type());
+        assertTrue(builder.fields().containsKey("field1"));
+        MultiMatchQueryBuilder fromProto = MultiMatchQueryBuilderProtoUtils.fromProto(proto);
+        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
+        MultiMatchQuery protoTopTermsBoost = MultiMatchQuery.newBuilder()
+        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
+        org.opensearch.protobufs.Operator[] operators = {
+            .setAnalyzer("standard")
+        assertEquals(MultiMatchQueryBuilder.DEFAULT_OPERATOR, builder.operator());
+        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
+        XContentParser parser = createParser(JsonXContent.jsonXContent, json);
+            .setQuery("test query")
     }
-
-    public void testFromProtoWithAllFuzzyRewriteValues() {
+            .setFuzziness(org.opensearch.protobufs.Fuzziness.newBuilder().build())
+            + "  \"fuzzy_rewrite\": \"constant_score\",\n"
+/*
+import org.opensearch.common.xcontent.json.JsonXContent;
+        for (int i = 0; i < zeroTermsQueries.length; i++) {
+    }
+        MultiMatchQueryBuilder builder = fromProto(proto);
+            .setOperator(org.opensearch.protobufs.Operator.OPERATOR_AND)
+import org.opensearch.protobufs.MinimumShouldMatch;
+            .addFields("field2")
+            .build();
+            assertEquals(expectedTypes[i], builder.type());
+            .addFields("field1")
+            .setTieBreaker(0.5f)
+        MultiMatchQueryBuilder builderEmpty = fromProto(protoEmpty);
+            MultiMatchQueryBuilder.Type.PHRASE,
+            MultiMatchQueryBuilder builder = fromProto(proto);
         // Test all MultiTermQueryRewrite enum values
-        MultiMatchQuery protoConstantScore = MultiMatchQuery.newBuilder()
+            .setQuery("test query")
+            .setMaxExpansions(10)
+        // Convert to MultiMatchQueryBuilder
+            .setMinimumShouldMatch(MinimumShouldMatch.newBuilder().setString("2").build())
+    public void testFromProtoWithAllFuzzyRewriteValues() {
+    }
             .setQuery("test")
+                .build();
+        // 4. Convert the proto to a MultiMatchQueryBuilder
+            .setFuzzyTranspositions(false)
+    public void testFromProtoWithoutFuzzyRewrite() {
+        assertNull("FuzzyRewrite should be null when not set", builder.fuzzyRewrite());
+    public void testFromProtoWithRequiredFieldsOnly() {
+        assertNull(builder.fuzzyRewrite());
+        Set<String> expectedFields = new HashSet<>(Arrays.asList("field1", "field2", "field3"));
+        assertNull("Fuzziness should be null (EMPTY)", builderEmpty.fuzziness());
+        assertEquals("test query", builderInt.value());
+        assertFalse(builder.autoGenerateSynonymsPhraseQuery());
+            MultiMatchQueryBuilder builder = fromProto(proto);
+        assertEquals(fromXContent.fuzzyTranspositions(), fromProto.fuzzyTranspositions());
+    }
+import org.opensearch.protobufs.TextQueryType;
+            TextQueryType.TEXT_QUERY_TYPE_BEST_FIELDS,
+import static org.opensearch.transport.grpc.proto.request.search.query.MultiMatchQueryBuilderProtoUtils.fromProto;
+            .setQuery("test query")
+    }
+            .addFields("field1")
+            .setType(TextQueryType.TEXT_QUERY_TYPE_UNSPECIFIED)
+            MultiMatchQueryBuilder.Type.MOST_FIELDS,
+        assertEquals(MultiMatchQueryBuilder.DEFAULT_OPERATOR, builder.operator()); // Should keep default
+            .setFuzzyRewrite("top_terms_blended_freqs_10")
+            .setQuery("test query")
+            .addFields("field1")
+    }
+        super.setUp();
+        assertEquals(1.0f, builder.fields().get("field1"), 0.001f);
+                .build();
+        assertNull(builder.minimumShouldMatch());
+            .setXName("test_query")
+        assertNull(builder.queryName());
+        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
+import org.opensearch.index.query.Operator;
+        assertEquals("2", builder.minimumShouldMatch());
+        assertTrue(builder.lenient());
+            .addFields("field1")
+        MatchQuery.ZeroTermsQuery[] expectedZeroTermsQueries = { MatchQuery.ZeroTermsQuery.NONE, MatchQuery.ZeroTermsQuery.ALL };
+            .setFuzziness(org.opensearch.protobufs.Fuzziness.newBuilder().setInt32(2).build())
+        assertEquals(fromXContent.lenient(), fromProto.lenient());
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.HashSet;
+        MultiMatchQueryBuilder builder = fromProto(proto);
+            TextQueryType.TEXT_QUERY_TYPE_MOST_FIELDS,
+    @Override
+        MultiMatchQueryBuilder builder = fromProto(proto);
+            .setFuzzyTranspositions(false)
+        MultiMatchQuery protoString = MultiMatchQuery.newBuilder()
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> fromProto(proto));
+            MultiMatchQuery proto = MultiMatchQuery.newBuilder().setQuery("test query").addFields("field1").setType(types[i]).build();
+        MultiMatchQueryBuilder builder = fromProto(proto);
+            .setFuzzyRewrite("constant_score_boolean")
+        assertEquals("constant_score", fromProto(protoConstantScore).fuzzyRewrite());
+            .setSlop(2) // Non-default slop with BOOL_PREFIX should throw exception
+public class MultiMatchQueryBuilderProtoUtilsTests extends OpenSearchTestCase {
+        parser.nextToken(); // Move to the first token
+        assertEquals(fromXContent.value(), fromProto.value());
+        assertFalse(builder.fuzzyTranspositions());
+    }
+            .setQuery("test")
+            .build();
+        MultiMatchQuery protoScoringBoolean = MultiMatchQuery.newBuilder()
+        for (int i = 0; i < types.length; i++) {
+ * The OpenSearch Contributors require contributions made to
+        // Create a proto with int32 minimum_should_match
+        assertEquals("constant_score_boolean", fromProto(protoConstantScoreBoolean).fuzzyRewrite());
+        // Verify all properties
+        MultiMatchQueryBuilder builder = fromProto(proto);
+ *
+    public void testFromProtoWithNoFields() {
+            MultiMatchQueryBuilder.Type.BEST_FIELDS,
+        assertEquals("test query", builderEmpty.value());
+ * compatible open source license.
+        assertTrue(builder.fields().containsKey("field2"));
+    }
+            .setType(TextQueryType.TEXT_QUERY_TYPE_PHRASE)
+        for (int i = 0; i < operators.length; i++) {
+    public void testFromProtoWithDifferentTypes() {
+            + "  \"zero_terms_query\": \"ALL\",\n"
+import org.opensearch.protobufs.MultiMatchQuery;
+            + "  \"type\": \"phrase\",\n"
             .addFields("field1")
             .setFuzzyRewrite("constant_score")
-            .build();
-        assertEquals("constant_score", fromProto(protoConstantScore).fuzzyRewrite());
-
-        MultiMatchQuery protoConstantScoreBoolean = MultiMatchQuery.newBuilder()
-            .setQuery("test")
-            .addFields("field1")
-            .setFuzzyRewrite("constant_score_boolean")
-            .build();
-        assertEquals("constant_score_boolean", fromProto(protoConstantScoreBoolean).fuzzyRewrite());
-
-        MultiMatchQuery protoScoringBoolean = MultiMatchQuery.newBuilder()
-            .setQuery("test")
-            .addFields("field1")
-            .setFuzzyRewrite("scoring_boolean")
-            .build();
-        assertEquals("scoring_boolean", fromProto(protoScoringBoolean).fuzzyRewrite());
-
-        MultiMatchQuery protoTopTermsN = MultiMatchQuery.newBuilder()
-            .setQuery("test")
-            .addFields("field1")
-            .setFuzzyRewrite("top_terms_10")
-            .build();
-        assertEquals("top_terms_10", fromProto(protoTopTermsN).fuzzyRewrite());
-
-        MultiMatchQuery protoTopTermsBlended = MultiMatchQuery.newBuilder()
-            .setQuery("test")
-            .addFields("field1")
-            .setFuzzyRewrite("top_terms_blended_freqs_10")
-            .build();
-        assertEquals("top_terms_blended_freqs_10", fromProto(protoTopTermsBlended).fuzzyRewrite());
-
-        MultiMatchQuery protoTopTermsBoost = MultiMatchQuery.newBuilder()
-            .setQuery("test")
-            .addFields("field1")
-            .setFuzzyRewrite("top_terms_boost_10")
-            .build();
-        assertEquals("top_terms_boost_10", fromProto(protoTopTermsBoost).fuzzyRewrite());
-    }
-
-    public void testFromProtoWithoutFuzzyRewrite() {
-        // Test that missing fuzzyRewrite field results in null
-        MultiMatchQuery proto = MultiMatchQuery.newBuilder().setQuery("test query").addFields("field1").build();
-
+        MultiMatchQuery proto = MultiMatchQuery.newBuilder().setQuery("test query").build();
+            + "  \"query\": \"test query\",\n"
         MultiMatchQueryBuilder builder = fromProto(proto);
-
+    /**
+            .setType(TextQueryType.TEXT_QUERY_TYPE_PHRASE)
+        MultiMatchQuery protoConstantScore = MultiMatchQuery.newBuilder()
+        MultiMatchQueryBuilder builder = fromProto(proto);
+import java.io.IOException;
         // Verify fuzzyRewrite is null when not set
-        assertNull("FuzzyRewrite should be null when not set", builder.fuzzyRewrite());
     }
+        // Test all possible types
+        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
+        assertEquals("top_terms_boost_10", fromProto(protoTopTermsBoost).fuzzyRewrite());
+        // Convert to MultiMatchQueryBuilder
+        // Convert to MultiMatchQueryBuilder
+        assertEquals("test query", builder.value());
+            .addFields("field1")
+        assertTrue("Fields should be empty", builder.fields().isEmpty());
+            .build();
+        assertNull("MinimumShouldMatch should be null when neither string nor int32 is set", builder.minimumShouldMatch());
+        assertEquals("test query", builderString.value());
+    public void testFromProtoWithUnspecifiedOperator() {
+        assertTrue("Exception message should mention slop not allowed", exception.getMessage().contains("slop not allowed for type"));
+            TextQueryType.TEXT_QUERY_TYPE_PHRASE,
+            .build();
+        // Create a proto with multiple fields
+        assertEquals(MultiMatchQueryBuilder.Type.PHRASE, builder.type());
+                .addFields("field1")
+        assertEquals(fromXContent.tieBreaker(), fromProto.tieBreaker(), 0.001f);
+        assertEquals("top_terms_10", fromProto(protoTopTermsN).fuzzyRewrite());
+            .setSlop(2)
+                .setZeroTermsQuery(zeroTermsQueries[i])
+            .addFields("field1")
+        assertEquals(expectedFields, builder.fields().keySet());
+        MultiMatchQuery protoEmpty = MultiMatchQuery.newBuilder()
+        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
+        assertEquals(fromXContent.fields(), fromProto.fields());
+            + "  \"auto_generate_synonyms_phrase_query\": false,\n"
+            .build();
+        MultiMatchQuery protoTopTermsBlended = MultiMatchQuery.newBuilder()
+            .setOperator(org.opensearch.protobufs.Operator.OPERATOR_UNSPECIFIED)
+            MultiMatchQueryBuilder.Type.BOOL_PREFIX };
+        assertEquals(2, builder.fields().size());
+            .addFields("field1")
+            .build();
+            + "  \"lenient\": true,\n"
+            assertEquals(expectedOperators[i], builder.operator());
+            .setQuery("test")
+    public void testFromProtoWithIntMinimumShouldMatch() {
+            .addFields("field1")
+        assertEquals(fromXContent.analyzer(), fromProto.analyzer());
+            + "  \"fuzzy_transpositions\": false,\n"
+        assertEquals(fromXContent.slop(), fromProto.slop());
+            + "  \"fields\": [\"field1\", \"field2\"],\n"
+        // Test with OPERATOR_UNSPECIFIED to cover default case in operator switch
+            .setQuery("test")
+        assertEquals(MultiMatchQueryBuilder.DEFAULT_PREFIX_LENGTH, builder.prefixLength());
+            .addFields("field3")
+            .setBoost(2.0f)
+            .build();
 }
+import java.util.Set;
+        MultiMatchQueryBuilder builder = fromProto(proto);
+            .build();
+        MultiMatchQueryBuilder.Type[] expectedTypes = {
+        // Verify fields
+        assertEquals(2.0f, builder.boost(), 0.001f);
+        assertEquals(fromXContent.queryName(), fromProto.queryName());
+    public void testFromProtoWithUnspecifiedType() {
+        assertEquals(1.0f, builder.fields().get("field2"), 0.001f);
+        assertEquals(Operator.AND, builder.operator());
+            + "  \"prefix_length\": 3,\n"
+        MultiMatchQueryBuilder builder = fromProto(proto);
+            .build();
+        // Test BOOL_PREFIX with default slop (should work fine)
+            MultiMatchQueryBuilder builder = fromProto(proto);
+        // Test 3: Fuzziness with empty/neither string nor int32
+    public void testFromProtoWithSlopValidationForBoolPrefix() {
+            TextQueryType.TEXT_QUERY_TYPE_BOOL_PREFIX };
+import java.util.Arrays;
+        MultiMatchQueryBuilder fromXContent = MultiMatchQueryBuilder.fromXContent(parser);
+    // ========== Missing Coverage Tests ==========
+                .setQuery("test query")
+        assertEquals(fromXContent.prefixLength(), fromProto.prefixLength());
+            .setType(TextQueryType.TEXT_QUERY_TYPE_BOOL_PREFIX)
+            .addFields("field1")
+        // Test with MinimumShouldMatch that has neither string nor int32 to cover the else if branch
+            .setMaxExpansions(10)
+            .setFuzzyRewrite("constant_score")
+        assertEquals(fromXContent.maxExpansions(), fromProto.maxExpansions());
+            .build();
+                .setQuery("test query")
+    }
+        assertEquals("test query", builder.value());
+        TextQueryType[] types = {
+        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
+import org.opensearch.index.query.MultiMatchQueryBuilder;
+            MultiMatchQuery proto = MultiMatchQuery.newBuilder()
+    public void testFromProtoMatchesFromXContent() throws IOException {
+        assertEquals(MatchQuery.ZeroTermsQuery.ALL, builder.zeroTermsQuery());
+        assertEquals(fromXContent.operator(), fromProto.operator());
+        // 3. Create an equivalent MultiMatchQuery proto
+        MultiMatchQuery proto = MultiMatchQuery.newBuilder().setQuery("test query").addFields("field1").build();
+import org.opensearch.protobufs.ZeroTermsQuery;
+        assertEquals("scoring_boolean", fromProto(protoScoringBoolean).fuzzyRewrite());
+        MultiMatchQuery proto = MultiMatchQuery.newBuilder()
+package org.opensearch.transport.grpc.proto.request.search.query;
+    public void testFromProtoWithAllFields() {
+        assertEquals(2, builder.slop());
+            .setFuzzyRewrite("top_terms_10")
+            MultiMatchQueryBuilder.Type.PHRASE_PREFIX,
+        assertTrue(builder.fields().containsKey("field1"));
+    }
+            .build();
+            .setAutoGenerateSynonymsPhraseQuery(false)
+        assertEquals("test query", builder.value());
+            .build();
+            .setQuery("test query")
+            org.opensearch.protobufs.Operator.OPERATOR_OR };
+            .setFuzziness(org.opensearch.protobufs.Fuzziness.newBuilder().setString("AUTO").build())
+        assertEquals("top_terms_blended_freqs_10", fromProto(protoTopTermsBlended).fuzzyRewrite());
+        assertEquals(MultiMatchQueryBuilder.Type.BOOL_PREFIX, builder.type());
+        // Convert to MultiMatchQueryBuilder
+    public void testFromProtoWithZeroTermsQueryUnspecified() {
+    }
+        MultiMatchQuery protoInt = MultiMatchQuery.newBuilder()
+            .setPrefixLength(3)
+    public void testFromProtoWithMinimumShouldMatchNeitherStringNorInt() {
+    public void setUp() throws Exception {
+            .setSlop(2)
+            .setQuery("test query")
+            .setMinimumShouldMatch(MinimumShouldMatch.newBuilder().setString("2").build())
+        MultiMatchQueryBuilder builder = fromProto(proto);
+        MultiMatchQueryBuilder builderInt = fromProto(protoInt);
+        // Create a proto with string minimum_should_match
+        // Test 1: Fuzziness with string value
+    public void testFromProtoWithStringMinimumShouldMatch() {
+        Operator[] expectedOperators = { Operator.AND, Operator.OR };
+        }
+            .setQuery("test query")
+        assertNull(builder.analyzer());
+            + "  \"max_expansions\": 10,\n"
+            TextQueryType.TEXT_QUERY_TYPE_PHRASE_PREFIX,
+        MultiMatchQueryBuilder builder = fromProto(proto);
+        assertEquals("test query", builder.value());
+            .build();
+            + "  \"minimum_should_match\": \"2\",\n"
+            .setBoost(2.0f)
+            .addFields("field1")
+        assertEquals(1.0f, builder.fields().get("field1"), 0.001f);
+import org.opensearch.test.OpenSearchTestCase;
+            + "  \"_name\": \"test_query\"\n"
+        assertEquals("test query", builder.value());
+        assertEquals(MultiMatchQueryBuilder.DEFAULT_TYPE, builder.type()); // Should keep default
+            .setZeroTermsQuery(ZeroTermsQuery.ZERO_TERMS_QUERY_UNSPECIFIED)
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals("test query", builder.value());
+            .setQuery("test query")
+import org.opensearch.index.search.MatchQuery;
+        assertEquals("75%", builder.minimumShouldMatch());
+import org.opensearch.core.xcontent.XContentParser;
+    public void testFromProtoWithMultipleFields() {
+        assertEquals("test query", builder.value());
+        assertEquals(10, builder.maxExpansions());
+        MultiMatchQueryBuilder builderString = fromProto(protoString);
+            .addFields("field1")
+        assertNotNull("Fuzziness should not be null (INT32)", builderInt.fuzziness());
+            .setFuzzyRewrite("scoring_boolean")
+        MultiMatchQuery protoTopTermsN = MultiMatchQuery.newBuilder()
+    public void testFromProtoWithFuzziness() {
+        // Test that missing fuzzyRewrite field results in null
+            .build();
+            + "  \"operator\": \"AND\",\n"
+    }
+            .setXName("test_query")

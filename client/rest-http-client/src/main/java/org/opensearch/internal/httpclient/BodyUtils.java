@@ -1,268 +1,238 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.internal.httpclient;
-
-import java.io.EOFException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.UncheckedIOException;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
-import java.nio.channels.WritableByteChannel;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.Flow;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
-
-import reactor.adapter.JdkFlowAdapter;
-import reactor.core.publisher.Mono;
-
-/**
- * Helper class to deal with request / response bodies.
- */
-final class BodyUtils {
-    static Mono<?> getBody(HttpRequest httpRequest) {
-        return httpRequest.bodyPublisher().map(JdkFlowAdapter::flowPublisherToFlux).map(Mono::from).orElseGet(Mono::empty);
-    }
-
-    static String getBodyAsString(Response response) {
-        return getBodyAsString(response.entity());
-    }
-
-    static Mono<String> getBodyAsString(HttpRequest httpRequest) {
-        return httpRequest.bodyPublisher().map(p -> {
-            var bodySubscriber = HttpResponse.BodySubscribers.ofString(StandardCharsets.UTF_8);
-            var flowSubscriber = new StringSubscriber(bodySubscriber);
-            p.subscribe(flowSubscriber);
-            return Mono.fromCompletionStage(bodySubscriber.getBody());
-        }).orElseGet(Mono::empty);
-    }
-
-    static String getBodyAsString(List<ByteBuffer> body) {
-        final StringBuilder builder = new StringBuilder();
-        if (body != null && body.isEmpty() == false) {
-            for (ByteBuffer chunk : body) {
-                chunk.mark();
-                builder.append(StandardCharsets.UTF_8.decode(chunk).toString());
-                chunk.reset();
-            }
-        }
-        return builder.toString();
-    }
-
-    static List<ByteBuffer> compress(List<ByteBuffer> body) {
-        if (body == null || body.isEmpty()) {
-            return body;
-        } else {
-            body.stream().forEach(ByteBuffer::mark);
-            try (ByteBufferOutputStream bbout = new ByteBufferOutputStream(); OutputStream out = new GZIPOutputStream(bbout)) {
-                try (WritableByteChannel channel = Channels.newChannel(out)) {
-                    for (ByteBuffer buffer : body) {
-                        channel.write(buffer);
-                    }
-                    out.flush();
-                }
-                return bbout.getBufferList();
-            } catch (final IOException ex) {
-                throw new UncheckedIOException(ex);
-            } finally {
-                body.stream().forEach(ByteBuffer::reset);
-            }
-        }
-    }
-
-    static ByteBuffer compress(ByteBuffer body) {
-        if (body == null) {
-            return body;
-        } else {
-            body.mark();
-            try (ByteBufferOutputStream bbout = new ByteBufferOutputStream(); OutputStream out = new GZIPOutputStream(bbout)) {
-                try (WritableByteChannel channel = Channels.newChannel(out)) {
-                    channel.write(body);
-                    out.flush();
-                }
-
-                final List<ByteBuffer> bufferList = bbout.getBufferList();
-                if (bufferList.isEmpty() == false) {
-                    return bufferList.get(0);
-                } else {
-                    // We should never end up here
-                    return ByteBuffer.allocate(0); /* empty byte buffer */
-                }
-            } catch (final IOException ex) {
-                throw new UncheckedIOException(ex);
-            } finally {
-                body.reset();
-            }
-        }
-    }
-
-    static ByteBuffer decompress(ByteBuffer body) {
-        if (body == null) {
-            return body;
-        } else {
-            body.mark();
-
-            try (ByteBufferInputStream bbin = new ByteBufferInputStream(List.of(body)); InputStream in = new GZIPInputStream(bbin)) {
-                return ByteBuffer.wrap(in.readAllBytes());
-            } catch (final IOException ex) {
-                throw new UncheckedIOException(ex);
-            } finally {
-                body.reset();
-            }
-        }
-    }
-
-    static List<ByteBuffer> decompress(List<ByteBuffer> body) {
-        if (body == null || body.isEmpty()) {
-            return body;
-        } else {
-            body.stream().forEach(ByteBuffer::mark);
-            try (ByteBufferInputStream bbin = new ByteBufferInputStream(body); InputStream in = new GZIPInputStream(bbin)) {
-                return List.of(ByteBuffer.wrap(in.readAllBytes()));
-            } catch (final IOException ex) {
-                throw new UncheckedIOException(ex);
-            } finally {
-                body.stream().forEach(ByteBuffer::reset);
-            }
-        }
-    }
-
-    /**
-     * See please https://github.com/justinsb/avro/blob/master/src/java/org/apache/avro/ipc/ByteBufferOutputStream.java
-     */
-    private final static class ByteBufferOutputStream extends OutputStream {
-        private static final int BUFFER_SIZE = 8192;
-        private List<ByteBuffer> buffers;
-
-        ByteBufferOutputStream() {
-            reset();
-        }
-
-        /** Returns all data written and resets the stream to be empty. */
-        List<ByteBuffer> getBufferList() {
-            List<ByteBuffer> result = buffers;
-            reset();
-            for (ByteBuffer buffer : result) {
-                buffer.flip();
-            }
-            return result;
-        }
-
         private void reset() {
-            buffers = new ArrayList<ByteBuffer>(1);
-            buffers.add(ByteBuffer.allocate(BUFFER_SIZE));
-        }
-
-        @Override
-        public void write(int b) {
-            ByteBuffer buffer = buffers.get(buffers.size() - 1);
-            if (buffer.remaining() < 1) {
-                buffer = ByteBuffer.allocate(BUFFER_SIZE);
-                buffers.add(buffer);
             }
-            buffer.put((byte) b);
+import java.io.IOException;
+    static String getBodyAsString(Response response) {
+            } else {
+            }
+            delegate.onComplete();
+ * this file be licensed under the Apache-2.0 license or a
+            return body;
+                final List<ByteBuffer> bufferList = bbout.getBufferList();
+    }
+            }
+        public int read() throws IOException {
+        } else {
+                        channel.write(buffer);
+            } catch (final IOException ex) {
+            ByteBuffer buffer = getBuffer();
         }
-
-        @Override
-        public void write(byte[] b, int off, int len) {
-            ByteBuffer buffer = buffers.get(buffers.size() - 1);
-            int remaining = buffer.remaining();
+            }
+    static Mono<?> getBody(HttpRequest httpRequest) {
+     */
+        }
             while (len > remaining) {
-                buffer.put(b, off, remaining);
-                len -= remaining;
-                off += remaining;
-                buffer = ByteBuffer.allocate(BUFFER_SIZE);
                 buffers.add(buffer);
-                remaining = buffer.remaining();
+            int remaining = buffer.remaining();
+            ByteBuffer buffer = buffers.get(buffers.size() - 1);
+        }
+            return Mono.fromCompletionStage(bodySubscriber.getBody());
+                try (WritableByteChannel channel = Channels.newChannel(out)) {
+ * SPDX-License-Identifier: Apache-2.0
+            throw new EOFException();
             }
-            buffer.put(b, off, len);
+    }
+        private List<ByteBuffer> buffers;
         }
     }
-
-    /**
-     * See please https://github.com/justinsb/avro/blob/master/src/java/org/apache/avro/ipc/ByteBufferInputStream.java
-     */
-    private static final class ByteBufferInputStream extends InputStream {
-        private List<ByteBuffer> buffers;
-        private int current;
-
+ * compatible open source license.
+        public void onError(Throwable throwable) {
+            } finally {
+                    return ByteBuffer.allocate(0); /* empty byte buffer */
+import java.io.InputStream;
+        List<ByteBuffer> getBufferList() {
+    static ByteBuffer decompress(ByteBuffer body) {
+        StringSubscriber(HttpResponse.BodySubscriber<String> delegate) {
+    static List<ByteBuffer> decompress(List<ByteBuffer> body) {
+        return httpRequest.bodyPublisher().map(JdkFlowAdapter::flowPublisherToFlux).map(Mono::from).orElseGet(Mono::empty);
+import java.io.UncheckedIOException;
         ByteBufferInputStream(List<ByteBuffer> buffers) {
+        /** @see InputStream#read()
             this.buffers = buffers;
         }
-
-        /** @see InputStream#read()
-         * @throws EOFException if EOF is reached. */
+import java.net.http.HttpResponse;
+                buffer.put(b, off, remaining);
+        }
         @Override
-        public int read() throws IOException {
-            return getBuffer().get() & 0xff;
+}
+import reactor.adapter.JdkFlowAdapter;
         }
-
-        /** @see InputStream#read(byte[], int, int)
-         * @throws EOFException if EOF is reached before reading all the bytes. */
-        @Override
-        public int read(byte[] b, int off, int len) throws IOException {
-            if (len == 0) return 0;
-            ByteBuffer buffer = getBuffer();
-            int remaining = buffer.remaining();
-            if (len > remaining) {
-                buffer.get(b, off, remaining);
-                return remaining;
-            } else {
-                buffer.get(b, off, len);
-                return len;
-            }
-        }
-
-        /** Returns the next non-empty buffer.
-         * @throws EOFException if EOF is reached before reading all the bytes.
-         */
-        private ByteBuffer getBuffer() throws IOException {
-            while (current < buffers.size()) {
-                ByteBuffer buffer = buffers.get(current);
-                if (buffer.hasRemaining()) return buffer;
-                current++;
-            }
-            throw new EOFException();
-        }
+    static Mono<String> getBodyAsString(HttpRequest httpRequest) {
     }
-
-    private static final class StringSubscriber implements Flow.Subscriber<ByteBuffer> {
-        final HttpResponse.BodySubscriber<String> delegate;
-
-        StringSubscriber(HttpResponse.BodySubscriber<String> delegate) {
+    private static final class ByteBufferInputStream extends InputStream {
+                body.reset();
+        } else {
+            p.subscribe(flowSubscriber);
+            } finally {
+        /** Returns all data written and resets the stream to be empty. */
+        @Override
+                    return bufferList.get(0);
+            }
+            body.stream().forEach(ByteBuffer::mark);
+            }
+            } catch (final IOException ex) {
+        }
+                }
+            body.mark();
+                buffers.add(buffer);
+        } else {
+import java.util.concurrent.Flow;
+            reset();
+ * The OpenSearch Contributors require contributions made to
+                remaining = buffer.remaining();
             this.delegate = delegate;
         }
-
-        @Override
-        public void onSubscribe(Flow.Subscription subscription) {
-            delegate.onSubscribe(subscription);
-        }
-
-        @Override
-        public void onNext(ByteBuffer item) {
+            for (ByteBuffer buffer : result) {
+            reset();
+import java.nio.channels.Channels;
+        return builder.toString();
+                throw new UncheckedIOException(ex);
+     */
+ * Helper class to deal with request / response bodies.
+    }
+                len -= remaining;
+                throw new UncheckedIOException(ex);
+        public void write(int b) {
+            } catch (final IOException ex) {
             delegate.onNext(List.of(item));
-        }
-
-        @Override
-        public void onError(Throwable throwable) {
-            delegate.onError(throwable);
-        }
-
-        @Override
+            for (ByteBuffer chunk : body) {
+                    out.flush();
+        final StringBuilder builder = new StringBuilder();
+    /**
         public void onComplete() {
-            delegate.onComplete();
+            buffers.add(ByteBuffer.allocate(BUFFER_SIZE));
+        }
+                buffer = ByteBuffer.allocate(BUFFER_SIZE);
+            return body;
+import java.net.http.HttpRequest;
+                }
+            } catch (final IOException ex) {
+/**
+final class BodyUtils {
+        }
+            }
+                if (buffer.hasRemaining()) return buffer;
+            while (current < buffers.size()) {
+                ByteBuffer buffer = buffers.get(current);
+                body.stream().forEach(ByteBuffer::reset);
+            try (ByteBufferOutputStream bbout = new ByteBufferOutputStream(); OutputStream out = new GZIPOutputStream(bbout)) {
+                throw new UncheckedIOException(ex);
+            buffers = new ArrayList<ByteBuffer>(1);
+        }).orElseGet(Mono::empty);
+        if (body == null || body.isEmpty()) {
+    private final static class ByteBufferOutputStream extends OutputStream {
+                return List.of(ByteBuffer.wrap(in.readAllBytes()));
+                chunk.mark();
+import java.nio.charset.StandardCharsets;
         }
     }
-}
+            body.stream().forEach(ByteBuffer::mark);
+                if (bufferList.isEmpty() == false) {
+                    channel.write(body);
+import java.util.zip.GZIPOutputStream;
+            body.mark();
+        public void onSubscribe(Flow.Subscription subscription) {
+                buffer = ByteBuffer.allocate(BUFFER_SIZE);
+        }
+        } else {
+            return body;
+        private List<ByteBuffer> buffers;
+         * @throws EOFException if EOF is reached before reading all the bytes. */
+                throw new UncheckedIOException(ex);
+        final HttpResponse.BodySubscriber<String> delegate;
+            List<ByteBuffer> result = buffers;
+import java.util.zip.GZIPInputStream;
+                body.reset();
+            var flowSubscriber = new StringSubscriber(bodySubscriber);
+                buffer.get(b, off, len);
+                buffer.flip();
+ */
+        if (body != null && body.isEmpty() == false) {
+    static List<ByteBuffer> compress(List<ByteBuffer> body) {
+import java.util.List;
+        }
+    }
+        @Override
+        return httpRequest.bodyPublisher().map(p -> {
+     * See please https://github.com/justinsb/avro/blob/master/src/java/org/apache/avro/ipc/ByteBufferInputStream.java
+    }
+            } finally {
+                    }
+            if (len > remaining) {
+        }
+ */
+                builder.append(StandardCharsets.UTF_8.decode(chunk).toString());
+/*
+import java.util.ArrayList;
+        @Override
+            }
+        return getBodyAsString(response.entity());
+        @Override
+import java.nio.ByteBuffer;
+                try (WritableByteChannel channel = Channels.newChannel(out)) {
+        if (body == null) {
+                    out.flush();
+            ByteBuffer buffer = buffers.get(buffers.size() - 1);
+    /**
+        @Override
+        if (body == null || body.isEmpty()) {
+                current++;
+                } else {
+            delegate.onError(throwable);
+            return getBuffer().get() & 0xff;
+        private int current;
+    static ByteBuffer compress(ByteBuffer body) {
+import java.nio.channels.WritableByteChannel;
+package org.opensearch.internal.httpclient;
+                return len;
+                return ByteBuffer.wrap(in.readAllBytes());
+        private ByteBuffer getBuffer() throws IOException {
+        public void onNext(ByteBuffer item) {
+            if (buffer.remaining() < 1) {
+                return remaining;
+        }
+         */
+            } finally {
+        if (body == null) {
+                    // We should never end up here
+            delegate.onSubscribe(subscription);
+                off += remaining;
+import java.io.EOFException;
+        @Override
+                buffer.get(b, off, remaining);
+        @Override
+            buffer.put((byte) b);
+        public int read(byte[] b, int off, int len) throws IOException {
+        /** Returns the next non-empty buffer.
+         * @throws EOFException if EOF is reached before reading all the bytes.
+ *
+            if (len == 0) return 0;
+    }
+            try (ByteBufferInputStream bbin = new ByteBufferInputStream(body); InputStream in = new GZIPInputStream(bbin)) {
+        }
+    }
+            int remaining = buffer.remaining();
+            return body;
+            try (ByteBufferInputStream bbin = new ByteBufferInputStream(List.of(body)); InputStream in = new GZIPInputStream(bbin)) {
+        private static final int BUFFER_SIZE = 8192;
+    static String getBodyAsString(List<ByteBuffer> body) {
+import java.io.OutputStream;
+                    for (ByteBuffer buffer : body) {
+        }
+            buffer.put(b, off, len);
+        /** @see InputStream#read(byte[], int, int)
+        }
+        ByteBufferOutputStream() {
+            }
+    }
+                }
+import reactor.core.publisher.Mono;
+                body.stream().forEach(ByteBuffer::reset);
+     * See please https://github.com/justinsb/avro/blob/master/src/java/org/apache/avro/ipc/ByteBufferOutputStream.java
+                chunk.reset();
+                return bbout.getBufferList();
+         * @throws EOFException if EOF is reached. */
+            try (ByteBufferOutputStream bbout = new ByteBufferOutputStream(); OutputStream out = new GZIPOutputStream(bbout)) {
+            var bodySubscriber = HttpResponse.BodySubscribers.ofString(StandardCharsets.UTF_8);
+        public void write(byte[] b, int off, int len) {
+    private static final class StringSubscriber implements Flow.Subscriber<ByteBuffer> {
+            return result;

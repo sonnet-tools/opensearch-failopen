@@ -1,391 +1,352 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.indices;
-
-import org.opensearch.index.mapper.DataStreamFieldMapper;
-import org.opensearch.index.mapper.DocCountFieldMapper;
-import org.opensearch.index.mapper.FieldNamesFieldMapper;
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.IgnoredFieldMapper;
-import org.opensearch.index.mapper.IndexFieldMapper;
-import org.opensearch.index.mapper.Mapper;
-import org.opensearch.index.mapper.MapperParsingException;
-import org.opensearch.index.mapper.MetadataFieldMapper;
-import org.opensearch.index.mapper.NestedPathFieldMapper;
-import org.opensearch.index.mapper.RoutingFieldMapper;
-import org.opensearch.index.mapper.SeqNoFieldMapper;
-import org.opensearch.index.mapper.SourceFieldMapper;
-import org.opensearch.index.mapper.TextFieldMapper;
-import org.opensearch.index.mapper.VersionFieldMapper;
-import org.opensearch.indices.mapper.MapperRegistry;
-import org.opensearch.plugins.MapperPlugin;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.function.Predicate;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.greaterThan;
-
-public class IndicesModuleTests extends OpenSearchTestCase {
-
-    private static class FakeMapperParser implements Mapper.TypeParser {
-        @Override
-        public Mapper.Builder<?> parse(String name, Map<String, Object> node, ParserContext parserContext) throws MapperParsingException {
-            return null;
-        }
+        assertFalse(fieldFilter.apply(randomAlphaOfLengthBetween(3, 5)).test("hidden_field"));
     }
-
-    private static final MetadataFieldMapper.TypeParser PARSER = new MetadataFieldMapper.ConfigurableTypeParser(c -> null, c -> null);
-
-    private final List<MapperPlugin> fakePlugins = Arrays.asList(new MapperPlugin() {
-        @Override
-        public Map<String, Mapper.TypeParser> getMappers() {
-            return Collections.singletonMap("fake-mapper", new FakeMapperParser());
-        }
-
-        @Override
-        public Map<String, MetadataFieldMapper.TypeParser> getMetadataMappers() {
-            return Collections.singletonMap("fake-metadata-mapper", PARSER);
-        }
-    });
-
-    private static String[] EXPECTED_METADATA_FIELDS = new String[] {
-        IgnoredFieldMapper.NAME,
-        IdFieldMapper.NAME,
         RoutingFieldMapper.NAME,
-        IndexFieldMapper.NAME,
-        DataStreamFieldMapper.NAME,
-        SourceFieldMapper.NAME,
-        NestedPathFieldMapper.NAME,
-        VersionFieldMapper.NAME,
-        SeqNoFieldMapper.NAME,
-        DocCountFieldMapper.NAME,
-        FieldNamesFieldMapper.NAME };
-
-    public void testBuiltinMappers() {
-        IndicesModule module = new IndicesModule(Collections.emptyList());
-        {
-            assertFalse(module.getMapperRegistry().getMapperParsers().isEmpty());
-            assertFalse(module.getMapperRegistry().getMetadataMapperParsers().isEmpty());
-            Map<String, MetadataFieldMapper.TypeParser> metadataMapperParsers = module.getMapperRegistry().getMetadataMapperParsers();
-            assertEquals(EXPECTED_METADATA_FIELDS.length, metadataMapperParsers.size());
-            int i = 0;
-            for (String field : metadataMapperParsers.keySet()) {
-                assertEquals(EXPECTED_METADATA_FIELDS[i++], field);
-            }
-        }
-        {
-            assertEquals(EXPECTED_METADATA_FIELDS.length, module.getMapperRegistry().getMetadataMapperParsers().size());
-        }
-    }
-
-    public void testBuiltinWithPlugins() {
-        IndicesModule noPluginsModule = new IndicesModule(Collections.emptyList());
-        IndicesModule module = new IndicesModule(fakePlugins);
-        MapperRegistry registry = module.getMapperRegistry();
-        assertThat(registry.getMapperParsers().size(), greaterThan(noPluginsModule.getMapperRegistry().getMapperParsers().size()));
-        assertThat(
-            registry.getMetadataMapperParsers().size(),
-            greaterThan(noPluginsModule.getMapperRegistry().getMetadataMapperParsers().size())
-        );
-        Map<String, MetadataFieldMapper.TypeParser> metadataMapperParsers = module.getMapperRegistry().getMetadataMapperParsers();
-        Iterator<String> iterator = metadataMapperParsers.keySet().iterator();
-        assertEquals(IgnoredFieldMapper.NAME, iterator.next());
-        String last = null;
-        while (iterator.hasNext()) {
-            last = iterator.next();
-        }
-        assertEquals(FieldNamesFieldMapper.NAME, last);
-    }
-
-    public void testGetBuiltInMetadataFields() {
-        Set<String> builtInMetadataFields = IndicesModule.getBuiltInMetadataFields();
-        int i = 0;
-        for (String field : builtInMetadataFields) {
-            assertEquals(EXPECTED_METADATA_FIELDS[i++], field);
-        }
-    }
-
-    public void testDuplicateBuiltinMapper() {
-        List<MapperPlugin> plugins = Arrays.asList(new MapperPlugin() {
-            @Override
-            public Map<String, Mapper.TypeParser> getMappers() {
-                return Collections.singletonMap(TextFieldMapper.CONTENT_TYPE, new FakeMapperParser());
-            }
-        });
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
-        assertThat(e.getMessage(), containsString("already registered"));
-    }
-
-    public void testDuplicateOtherPluginMapper() {
-        MapperPlugin plugin = new MapperPlugin() {
-            @Override
-            public Map<String, Mapper.TypeParser> getMappers() {
-                return Collections.singletonMap("foo", new FakeMapperParser());
-            }
-        };
-        List<MapperPlugin> plugins = Arrays.asList(plugin, plugin);
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
-        assertThat(e.getMessage(), containsString("already registered"));
-    }
-
-    public void testDuplicateBuiltinMetadataMapper() {
-        List<MapperPlugin> plugins = Arrays.asList(new MapperPlugin() {
-            @Override
-            public Map<String, MetadataFieldMapper.TypeParser> getMetadataMappers() {
-                return Collections.singletonMap(IdFieldMapper.NAME, PARSER);
-            }
-        });
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
-        assertThat(e.getMessage(), containsString("already registered"));
-    }
-
-    public void testDuplicateOtherPluginMetadataMapper() {
-        MapperPlugin plugin = new MapperPlugin() {
-            @Override
-            public Map<String, MetadataFieldMapper.TypeParser> getMetadataMappers() {
-                return Collections.singletonMap("foo", PARSER);
-            }
-        };
-        List<MapperPlugin> plugins = Arrays.asList(plugin, plugin);
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
-        assertThat(e.getMessage(), containsString("already registered"));
-    }
-
-    public void testDuplicateFieldNamesMapper() {
-        List<MapperPlugin> plugins = Arrays.asList(new MapperPlugin() {
-            @Override
-            public Map<String, MetadataFieldMapper.TypeParser> getMetadataMappers() {
-                return Collections.singletonMap(FieldNamesFieldMapper.NAME, PARSER);
-            }
-        });
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
-        assertThat(e.getMessage(), containsString("cannot contain metadata mapper [_field_names]"));
-    }
-
-    public void testFieldNamesIsLast() {
-        IndicesModule module = new IndicesModule(Collections.emptyList());
-        List<String> fieldNames = new ArrayList<>(module.getMapperRegistry().getMetadataMapperParsers().keySet());
-        assertEquals(FieldNamesFieldMapper.NAME, fieldNames.get(fieldNames.size() - 1));
-    }
-
-    public void testFieldNamesIsLastWithPlugins() {
-        IndicesModule module = new IndicesModule(fakePlugins);
-        List<String> fieldNames = new ArrayList<>(module.getMapperRegistry().getMetadataMapperParsers().keySet());
-        assertEquals(FieldNamesFieldMapper.NAME, fieldNames.get(fieldNames.size() - 1));
-    }
-
-    public void testGetFieldFilter() {
+        assertSame(MapperPlugin.NOOP_FIELD_FILTER, fieldFilter);
+                return index -> field -> field.equals("hidden_field") == false;
         List<MapperPlugin> mapperPlugins = Arrays.asList(new MapperPlugin() {
+        for (int i = 0; i < numPlugins; i++) {
+ * You may obtain a copy of the License at
+        }
             @Override
-            public Function<String, Predicate<String>> getFieldFilter() {
-                return MapperPlugin.NOOP_FIELD_FILTER;
-            }
-        }, new MapperPlugin() {
-            @Override
-            public Function<String, Predicate<String>> getFieldFilter() {
+                org.opensearch.index.mapper.FieldValueParserSupplier fieldValueParser
+import org.opensearch.index.mapper.NestedPathFieldMapper;
+    public void testFieldNamesIsLastWithPlugins() {
+        assertEquals(FieldNamesFieldMapper.NAME, last);
                 return index -> index.equals("hidden_index") ? field -> false : MapperPlugin.NOOP_FIELD_PREDICATE;
             }
-        }, new MapperPlugin() {
-            @Override
+    public void testDefaultFieldFilterIsNoOp() {
+    public void testBuiltinMappers() {
+        NestedPathFieldMapper.NAME,
+ * Unless required by applicable law or agreed to in writing,
+                return Collections.singletonMap("dup_type", noopHandler());
+import static org.hamcrest.Matchers.greaterThan;
             public Function<String, Predicate<String>> getFieldFilter() {
-                return index -> field -> field.equals("hidden_field") == false;
-            }
-        }, new MapperPlugin() {
-            @Override
-            public Function<String, Predicate<String>> getFieldFilter() {
-                return index -> index.equals("filtered") ? field -> field.equals("visible") : MapperPlugin.NOOP_FIELD_PREDICATE;
-            }
-        });
-
-        IndicesModule indicesModule = new IndicesModule(mapperPlugins);
+        assertThat(e.getMessage(), containsString("does not register via getMappers()"));
+        IndexFieldMapper.NAME,
+            Map<String, MetadataFieldMapper.TypeParser> metadataMapperParsers = module.getMapperRegistry().getMetadataMapperParsers();
+    private static class FakeMapperParser implements Mapper.TypeParser {
+/*
+                return Collections.singletonMap("my_type", (name, node, parserContext) -> { throw new UnsupportedOperationException(); });
         MapperRegistry mapperRegistry = indicesModule.getMapperRegistry();
-        Function<String, Predicate<String>> fieldFilter = mapperRegistry.getFieldFilter();
-        assertNotSame(MapperPlugin.NOOP_FIELD_FILTER, fieldFilter);
-
-        assertFalse(fieldFilter.apply("hidden_index").test(randomAlphaOfLengthBetween(3, 5)));
-        assertTrue(fieldFilter.apply(randomAlphaOfLengthBetween(3, 5)).test(randomAlphaOfLengthBetween(3, 5)));
-
-        assertFalse(fieldFilter.apply(randomAlphaOfLengthBetween(3, 5)).test("hidden_field"));
-        assertFalse(fieldFilter.apply("filtered").test(randomAlphaOfLengthBetween(3, 5)));
-        assertFalse(fieldFilter.apply("filtered").test("hidden_field"));
+            public Map<String, MetadataFieldMapper.TypeParser> getMetadataMappers() {
+    }
+                Map<String, Object> mappingConfig,
+            }
+import org.opensearch.plugins.MapperPlugin;
+            assertEquals(EXPECTED_METADATA_FIELDS.length, module.getMapperRegistry().getMetadataMapperParsers().size());
+        IgnoredFieldMapper.NAME,
+import org.opensearch.indices.mapper.MapperRegistry;
+    public void testDuplicateBuiltinMetadataMapper() {
+            public Map<String, org.opensearch.index.mapper.DynamicTemplateTypeHandler> getDynamicTemplateTypes() {
+        assertTrue(registry.getDynamicFieldTypeInferencers().isEmpty());
+        assertThat(e.getMessage(), containsString("already registered"));
+        }
+    }
+            });
+    public void testFieldNamesIsLast() {
+                return index -> index.equals("filtered") ? field -> field.equals("visible") : MapperPlugin.NOOP_FIELD_PREDICATE;
+            assertFalse(module.getMapperRegistry().getMapperParsers().isEmpty());
+                return index -> index.equals("hidden_index") ? field -> false : MapperPlugin.NOOP_FIELD_PREDICATE;
+ * not use this file except in compliance with the License.
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
+        List<MapperPlugin> plugins = Collections.singletonList(new MapperPlugin() {
+ */
+    public void testNoDynamicInferencersOrTemplateTypesByDefault() {
+            public Map<String, org.opensearch.index.mapper.DynamicTemplateTypeHandler> getDynamicTemplateTypes() {
+                return Collections.singletonMap("foo", new FakeMapperParser());
+                return MapperPlugin.NOOP_FIELD_FILTER;
+ * The OpenSearch Contributors require contributions made to
+            }
+                return Collections.singletonMap("foo", PARSER);
+    }
+        });
+        assertTrue(registry.getDynamicTemplateTypes().containsKey("my_type"));
+ * GitHub history for details.
+        }
+            }
+            }
         assertTrue(fieldFilter.apply("filtered").test("visible"));
-        assertFalse(fieldFilter.apply("hidden_index").test("visible"));
+        assertFalse(fieldFilter.apply("filtered").test(randomAlphaOfLengthBetween(3, 5)));
+        List<String> fieldNames = new ArrayList<>(module.getMapperRegistry().getMetadataMapperParsers().keySet());
+    /** A no-op inferencer declaring the given supported type for registration tests. */
+public class IndicesModuleTests extends OpenSearchTestCase {
+        List<MapperPlugin> plugins = Arrays.asList(new MapperPlugin() {
+        });
+/*
+        FieldNamesFieldMapper.NAME };
+            public List<org.opensearch.index.mapper.DynamicFieldTypeInferencer> getDynamicFieldTypeInferencers() {
+        public Mapper.Builder<?> parse(String name, Map<String, Object> node, ParserContext parserContext) throws MapperParsingException {
+    public void testBuiltinWithPlugins() {
+        assertSame(MapperPlugin.NOOP_FIELD_PREDICATE, fieldFilter.apply(randomAlphaOfLengthBetween(3, 7)));
+        }, new MapperPlugin() {
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
+        List<MapperPlugin> mapperPlugins = new ArrayList<>(numPlugins);
+import java.util.function.Function;
+            @Override
+        IndicesModule module = new IndicesModule(fakePlugins);
+ * specific language governing permissions and limitations
+        assertFalse(fieldFilter.apply("filtered").test("hidden_field"));
+import org.opensearch.index.mapper.DataStreamFieldMapper;
+ * ownership. Elasticsearch licenses this file to you under
+import org.opensearch.index.mapper.Mapper;
+import java.util.List;
+    private static org.opensearch.index.mapper.DynamicTemplateTypeHandler noopHandler() {
+        @Override
+            @Override
+            @Override
+import java.util.Iterator;
+        IndicesModule module = new IndicesModule(fakePlugins);
+        MapperRegistry mapperRegistry = indicesModule.getMapperRegistry();
+ * this file be licensed under the Apache-2.0 license or a
+        IdFieldMapper.NAME,
+ * the Apache License, Version 2.0 (the "License"); you may
+                return Collections.singletonMap(FieldNamesFieldMapper.NAME, PARSER);
+            return null;
+        IndicesModule indicesModule = new IndicesModule(mapperPlugins);
+            return Collections.singletonMap("fake-metadata-mapper", PARSER);
+        Function<String, Predicate<String>> fieldFilter = mapperRegistry.getFieldFilter();
+            }
+}
+            @Override
+        }
+        Function<String, Predicate<String>> fieldFilter = indicesModule.getMapperRegistry().getFieldFilter();
+    }
         assertTrue(fieldFilter.apply(randomAlphaOfLengthBetween(3, 5)).test("visible"));
+            }
+    public void testInferencersAndTemplateTypesRegisteredFromPlugins() {
+    private static org.opensearch.index.mapper.DynamicFieldTypeInferencer noopInferencer(String supportedType) {
+        {
+        MapperRegistry registry = new IndicesModule(plugins).getMapperRegistry();
+                assertEquals(EXPECTED_METADATA_FIELDS[i++], field);
+            public Map<String, Mapper.TypeParser> getMappers() {
+        }, new MapperPlugin() {
+        }, new MapperPlugin() {
+ * SPDX-License-Identifier: Apache-2.0
+        }
+            public Function<String, Predicate<String>> getFieldFilter() {
+            }
+        assertEquals(1, registry.getDynamicFieldTypeInferencers().size());
+        };
+                // Default supportedTypes() is empty — a configuration error.
+    }
+    public void testDuplicateOtherPluginMetadataMapper() {
+ * license agreements. See the NOTICE file distributed with
+            @Override
+import org.opensearch.index.mapper.RoutingFieldMapper;
+        };
+import static org.hamcrest.Matchers.containsString;
+            public Function<String, Predicate<String>> getFieldFilter() {
+            @Override
+        assertEquals(FieldNamesFieldMapper.NAME, fieldNames.get(fieldNames.size() - 1));
+import java.util.Map;
+            @Override
+        IndicesModule noPluginsModule = new IndicesModule(Collections.emptyList());
+        return new org.opensearch.index.mapper.DynamicFieldTypeInferencer() {
+    public void testNoOpFieldPredicate() {
+            @Override
+import java.util.ArrayList;
+            public Map<String, Mapper.TypeParser> getMappers() {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            for (String field : metadataMapperParsers.keySet()) {
+    }
+        });
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
+import org.opensearch.index.mapper.IdFieldMapper;
+    }
+    }
+    public void testInferencerWithNoSupportedTypesRejectedAtStartup() {
+            @Override
+            public List<org.opensearch.index.mapper.DynamicFieldTypeInferencer> getDynamicFieldTypeInferencers() {
+            public Map<String, Object> inferFieldType(org.opensearch.index.mapper.FieldValueParserSupplier fieldValueParser) {
+        Iterator<String> iterator = metadataMapperParsers.keySet().iterator();
+import org.opensearch.index.mapper.SourceFieldMapper;
+import org.opensearch.index.mapper.VersionFieldMapper;
+        });
+            ) {}
+            int i = 0;
+import org.opensearch.index.mapper.MetadataFieldMapper;
+                return MapperPlugin.NOOP_FIELD_FILTER;
+                return null;
+        assertNotSame(MapperPlugin.NOOP_FIELD_PREDICATE, fieldFilter.apply("filtered"));
+        assertFalse(fieldFilter.apply("hidden_index").test("visible"));
+ */
+        IndicesModule module = new IndicesModule(Collections.emptyList());
+        List<MapperPlugin> plugins = Arrays.asList(new MapperPlugin() {
+    public void testDuplicateOtherPluginMapper() {
+ */
+import org.opensearch.index.mapper.FieldNamesFieldMapper;
+            @Override
+        assertThat(e.getMessage(), containsString("already registered"));
+            public Map<String, MetadataFieldMapper.TypeParser> getMetadataMappers() {
+        public Map<String, MetadataFieldMapper.TypeParser> getMetadataMappers() {
+            @Override
+        int i = 0;
+            }
+            }
+        assertThat(e.getMessage(), containsString("cannot contain metadata mapper [_field_names]"));
+                return Collections.singletonList(noopInferencer("unregistered_type"));
+        int numPlugins = randomIntBetween(0, 10);
+        Function<String, Predicate<String>> fieldFilter = mapperRegistry.getFieldFilter();
+        List<String> fieldNames = new ArrayList<>(module.getMapperRegistry().getMetadataMapperParsers().keySet());
+        MapperRegistry registry = module.getMapperRegistry();
+            @Override
+                // Declares a supported type the plugin does not register via getMappers().
+        });
+        MapperPlugin plugin = new MapperPlugin() {
+ * this work for additional information regarding copyright
+            }
+        List<MapperPlugin> plugins = Arrays.asList(new MapperPlugin() {
+import java.util.function.Predicate;
+            @Override
+        IndicesModule indicesModule = new IndicesModule(mapperPlugins);
+        }, new MapperPlugin() {
+            }
+            }
+                return Collections.singletonMap("dup_type", noopHandler());
+        return new org.opensearch.index.mapper.DynamicTemplateTypeHandler() {
+        MapperPlugin plugin = new MapperPlugin() {
+    private static String[] EXPECTED_METADATA_FIELDS = new String[] {
+        MapperRegistry registry = new IndicesModule(Collections.emptyList()).getMapperRegistry();
+            return Collections.singletonMap("fake-mapper", new FakeMapperParser());
+/*
+        // The message names both colliding plugins so the misconfiguration is easy to trace.
+package org.opensearch.indices;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        List<MapperPlugin> plugins = Collections.singletonList(new MapperPlugin() {
+            greaterThan(noPluginsModule.getMapperRegistry().getMetadataMapperParsers().size())
+            @Override
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
+                return Collections.singletonMap("my_type", noopHandler());
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
+        List<MapperPlugin> plugins = Arrays.asList(plugin, plugin);
+        DataStreamFieldMapper.NAME,
+    });
+        public Map<String, Mapper.TypeParser> getMappers() {
+            public Map<String, Mapper.TypeParser> getMappers() {
+        assertThat(e.getMessage(), containsString(plugins.get(1).getClass().getName()));
+    private final List<MapperPlugin> fakePlugins = Arrays.asList(new MapperPlugin() {
+        {
+    }
+import org.opensearch.index.mapper.IgnoredFieldMapper;
+        });
+            }
+        for (String field : builtInMetadataFields) {
+        List<MapperPlugin> mapperPlugins = Arrays.asList(new MapperPlugin() {
+            public Function<String, Predicate<String>> getFieldFilter() {
+            @Override
+        @Override
+            }
+        List<MapperPlugin> plugins = Arrays.asList(plugin, plugin);
+import java.util.Collections;
+        @Override
+            }
+import java.util.Set;
+    }
+            }
+            assertEquals(EXPECTED_METADATA_FIELDS.length, metadataMapperParsers.size());
+            }
+    }
+        assertTrue(registry.getDynamicTemplateTypes().isEmpty());
+import java.util.Arrays;
+        });
+    }
+            public Function<String, Predicate<String>> getFieldFilter() {
+        assertThat(e.getMessage(), containsString("already registered"));
+        }, new MapperPlugin() {
+ *
+            mapperPlugins.add(new MapperPlugin() {
+    public void testGetFieldFilter() {
+ * under the License.
+        assertThat(registry.getMapperParsers().size(), greaterThan(noPluginsModule.getMapperRegistry().getMapperParsers().size()));
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
+ *
+        assertEquals(IgnoredFieldMapper.NAME, iterator.next());
+    }
+import org.opensearch.index.mapper.SeqNoFieldMapper;
+        );
+        assertThat(
+    public void testInferencerSupportedTypeNotRegisteredRejectedAtStartup() {
+            public Function<String, Predicate<String>> getFieldFilter() {
+ * KIND, either express or implied.  See the License for the
+            @Override
+        }, new MapperPlugin() {
+            }
+        assertThat(e.getMessage(), containsString("already registered"));
+        String last = null;
+            public Function<String, Predicate<String>> getFieldFilter() {
+            @Override
+        };
+                return Collections.singletonList(fieldValueParser -> null);
+        assertThat(e.getMessage(), containsString("dynamic template type [dup_type] is registered by both"));
+            public Map<String, org.opensearch.index.mapper.DynamicTemplateTypeHandler> getDynamicTemplateTypes() {
+            public Set<String> supportedTypes() {
+            last = iterator.next();
+        assertTrue(fieldFilter.apply(randomAlphaOfLengthBetween(3, 5)).test(randomAlphaOfLengthBetween(3, 5)));
+        Set<String> builtInMetadataFields = IndicesModule.getBuiltInMetadataFields();
+        assertEquals(FieldNamesFieldMapper.NAME, fieldNames.get(fieldNames.size() - 1));
+            @Override
+            @Override
+            registry.getMetadataMapperParsers().size(),
+    private static final MetadataFieldMapper.TypeParser PARSER = new MetadataFieldMapper.ConfigurableTypeParser(c -> null, c -> null);
+        });
+        assertThat(e.getMessage(), containsString(plugins.get(0).getClass().getName()));
+        });
+    }
+        }
+        List<MapperPlugin> plugins = Collections.singletonList(new MapperPlugin() {
+    }
         assertFalse(fieldFilter.apply("hidden_index").test("hidden_field"));
     }
-
-    public void testDefaultFieldFilterIsNoOp() {
-        int numPlugins = randomIntBetween(0, 10);
-        List<MapperPlugin> mapperPlugins = new ArrayList<>(numPlugins);
-        for (int i = 0; i < numPlugins; i++) {
-            mapperPlugins.add(new MapperPlugin() {
-            });
-        }
-        IndicesModule indicesModule = new IndicesModule(mapperPlugins);
-        Function<String, Predicate<String>> fieldFilter = indicesModule.getMapperRegistry().getFieldFilter();
-        assertSame(MapperPlugin.NOOP_FIELD_FILTER, fieldFilter);
-    }
-
-    public void testNoOpFieldPredicate() {
-        List<MapperPlugin> mapperPlugins = Arrays.asList(new MapperPlugin() {
-            @Override
-            public Function<String, Predicate<String>> getFieldFilter() {
-                return MapperPlugin.NOOP_FIELD_FILTER;
-            }
-        }, new MapperPlugin() {
-            @Override
-            public Function<String, Predicate<String>> getFieldFilter() {
-                return index -> index.equals("hidden_index") ? field -> false : MapperPlugin.NOOP_FIELD_PREDICATE;
-            }
-        }, new MapperPlugin() {
-            @Override
-            public Function<String, Predicate<String>> getFieldFilter() {
-                return index -> index.equals("filtered") ? field -> field.equals("visible") : MapperPlugin.NOOP_FIELD_PREDICATE;
-            }
-        });
-
-        IndicesModule indicesModule = new IndicesModule(mapperPlugins);
-        MapperRegistry mapperRegistry = indicesModule.getMapperRegistry();
-        Function<String, Predicate<String>> fieldFilter = mapperRegistry.getFieldFilter();
-        assertSame(MapperPlugin.NOOP_FIELD_PREDICATE, fieldFilter.apply(randomAlphaOfLengthBetween(3, 7)));
-        assertNotSame(MapperPlugin.NOOP_FIELD_PREDICATE, fieldFilter.apply("hidden_index"));
-        assertNotSame(MapperPlugin.NOOP_FIELD_PREDICATE, fieldFilter.apply("filtered"));
-    }
-
-    /** A no-op dynamic template type handler for registration tests. */
-    private static org.opensearch.index.mapper.DynamicTemplateTypeHandler noopHandler() {
-        return new org.opensearch.index.mapper.DynamicTemplateTypeHandler() {
-            @Override
-            public void adjustMappingConfig(
-                Map<String, Object> mappingConfig,
-                org.opensearch.index.mapper.FieldValueParserSupplier fieldValueParser
-            ) {}
-        };
-    }
-
-    /** A no-op inferencer declaring the given supported type for registration tests. */
-    private static org.opensearch.index.mapper.DynamicFieldTypeInferencer noopInferencer(String supportedType) {
-        return new org.opensearch.index.mapper.DynamicFieldTypeInferencer() {
-            @Override
-            public Set<String> supportedTypes() {
-                return Collections.singleton(supportedType);
-            }
-
-            @Override
-            public Map<String, Object> inferFieldType(org.opensearch.index.mapper.FieldValueParserSupplier fieldValueParser) {
-                return null;
-            }
-        };
-    }
-
-    public void testInferencersAndTemplateTypesRegisteredFromPlugins() {
-        List<MapperPlugin> plugins = Collections.singletonList(new MapperPlugin() {
-            @Override
-            public List<org.opensearch.index.mapper.DynamicFieldTypeInferencer> getDynamicFieldTypeInferencers() {
+ * software distributed under the License is distributed on an
+        assertFalse(fieldFilter.apply("hidden_index").test(randomAlphaOfLengthBetween(3, 5)));
+        assertNotSame(MapperPlugin.NOOP_FIELD_FILTER, fieldFilter);
                 return Collections.singletonList(noopInferencer("my_type"));
-            }
-
+        }
             @Override
-            public Map<String, Mapper.TypeParser> getMappers() {
-                return Collections.singletonMap("my_type", (name, node, parserContext) -> { throw new UnsupportedOperationException(); });
-            }
-
-            @Override
-            public Map<String, org.opensearch.index.mapper.DynamicTemplateTypeHandler> getDynamicTemplateTypes() {
-                return Collections.singletonMap("my_type", noopHandler());
-            }
-        });
-        MapperRegistry registry = new IndicesModule(plugins).getMapperRegistry();
-        assertEquals(1, registry.getDynamicFieldTypeInferencers().size());
-        assertTrue(registry.getDynamicTemplateTypes().containsKey("my_type"));
+                return Collections.singletonMap(IdFieldMapper.NAME, PARSER);
+                return index -> index.equals("filtered") ? field -> field.equals("visible") : MapperPlugin.NOOP_FIELD_PREDICATE;
+import org.opensearch.index.mapper.TextFieldMapper;
+        IndicesModule indicesModule = new IndicesModule(mapperPlugins);
+import org.opensearch.index.mapper.DocCountFieldMapper;
     }
-
-    public void testInferencerWithNoSupportedTypesRejectedAtStartup() {
-        List<MapperPlugin> plugins = Collections.singletonList(new MapperPlugin() {
-            @Override
-            public List<org.opensearch.index.mapper.DynamicFieldTypeInferencer> getDynamicFieldTypeInferencers() {
-                // Default supportedTypes() is empty — a configuration error.
-                return Collections.singletonList(fieldValueParser -> null);
-            }
-        });
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
-        assertThat(e.getMessage(), containsString("declares no supported types"));
+        SeqNoFieldMapper.NAME,
     }
-
-    public void testInferencerSupportedTypeNotRegisteredRejectedAtStartup() {
-        List<MapperPlugin> plugins = Collections.singletonList(new MapperPlugin() {
-            @Override
-            public List<org.opensearch.index.mapper.DynamicFieldTypeInferencer> getDynamicFieldTypeInferencers() {
-                // Declares a supported type the plugin does not register via getMappers().
-                return Collections.singletonList(noopInferencer("unregistered_type"));
-            }
-        });
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
+    public void testDuplicateFieldNamesMapper() {
+            public Map<String, MetadataFieldMapper.TypeParser> getMetadataMappers() {
+            public List<org.opensearch.index.mapper.DynamicFieldTypeInferencer> getDynamicFieldTypeInferencers() {
+                return Collections.singleton(supportedType);
+        Map<String, MetadataFieldMapper.TypeParser> metadataMapperParsers = module.getMapperRegistry().getMetadataMapperParsers();
         assertThat(e.getMessage(), containsString("declares supported type [unregistered_type]"));
-        assertThat(e.getMessage(), containsString("does not register via getMappers()"));
-    }
-
-    public void testDuplicateTemplateTypeAcrossPluginsRejectedAtStartup() {
+            }
+import org.opensearch.index.mapper.IndexFieldMapper;
+        assertNotSame(MapperPlugin.NOOP_FIELD_PREDICATE, fieldFilter.apply("hidden_index"));
+import org.opensearch.index.mapper.MapperParsingException;
+ * compatible open source license.
+                return Collections.singletonMap(TextFieldMapper.CONTENT_TYPE, new FakeMapperParser());
+        VersionFieldMapper.NAME,
+            assertFalse(module.getMapperRegistry().getMetadataMapperParsers().isEmpty());
+ * Modifications Copyright OpenSearch Contributors. See
+ * Licensed to Elasticsearch under one or more contributor
+    public void testGetBuiltInMetadataFields() {
+        assertThat(e.getMessage(), containsString("declares no supported types"));
+        }
         List<MapperPlugin> plugins = Arrays.asList(new MapperPlugin() {
-            @Override
-            public Map<String, org.opensearch.index.mapper.DynamicTemplateTypeHandler> getDynamicTemplateTypes() {
-                return Collections.singletonMap("dup_type", noopHandler());
+        while (iterator.hasNext()) {
+import org.opensearch.test.OpenSearchTestCase;
+        SourceFieldMapper.NAME,
+        IndicesModule module = new IndicesModule(Collections.emptyList());
+ *
+        };
             }
-        }, new MapperPlugin() {
+        DocCountFieldMapper.NAME,
+            assertEquals(EXPECTED_METADATA_FIELDS[i++], field);
+    /** A no-op dynamic template type handler for registration tests. */
+    }
+            public void adjustMappingConfig(
+    }
             @Override
-            public Map<String, org.opensearch.index.mapper.DynamicTemplateTypeHandler> getDynamicTemplateTypes() {
-                return Collections.singletonMap("dup_type", noopHandler());
             }
-        });
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndicesModule(plugins));
-        assertThat(e.getMessage(), containsString("dynamic template type [dup_type] is registered by both"));
-        // The message names both colliding plugins so the misconfiguration is easy to trace.
-        assertThat(e.getMessage(), containsString(plugins.get(0).getClass().getName()));
-        assertThat(e.getMessage(), containsString(plugins.get(1).getClass().getName()));
-    }
-
-    public void testNoDynamicInferencersOrTemplateTypesByDefault() {
-        MapperRegistry registry = new IndicesModule(Collections.emptyList()).getMapperRegistry();
-        assertTrue(registry.getDynamicFieldTypeInferencers().isEmpty());
-        assertTrue(registry.getDynamicTemplateTypes().isEmpty());
-    }
-}
+    public void testDuplicateBuiltinMapper() {
+    public void testDuplicateTemplateTypeAcrossPluginsRejectedAtStartup() {

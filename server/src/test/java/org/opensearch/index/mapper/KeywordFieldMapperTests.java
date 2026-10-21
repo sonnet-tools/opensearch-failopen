@@ -1,903 +1,794 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.core.LowerCaseFilter;
-import org.apache.lucene.analysis.core.WhitespaceTokenizer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.FieldType;
-import org.apache.lucene.document.SortedSetDocValuesField;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.DocValuesType;
-import org.apache.lucene.index.IndexOptions;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.index.IndexableFieldType;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.analysis.MockLowerCaseFilter;
-import org.apache.lucene.tests.analysis.MockTokenizer;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.CheckedConsumer;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.AnalyzerScope;
-import org.opensearch.index.analysis.CharFilterFactory;
-import org.opensearch.index.analysis.CustomAnalyzer;
-import org.opensearch.index.analysis.IndexAnalyzers;
-import org.opensearch.index.analysis.LowercaseNormalizer;
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.index.analysis.PreConfiguredTokenFilter;
-import org.opensearch.index.analysis.TokenFilterFactory;
-import org.opensearch.index.analysis.TokenizerFactory;
-import org.opensearch.index.termvectors.TermVectorsService;
-import org.opensearch.indices.analysis.AnalysisModule;
-import org.opensearch.plugins.AnalysisPlugin;
-import org.opensearch.plugins.Plugin;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-
-import static java.util.Collections.singletonList;
-import static java.util.Collections.singletonMap;
-import static org.opensearch.index.mapper.KeywordFieldMapper.normalizeValue;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.apache.lucene.tests.analysis.BaseTokenStreamTestCase.assertTokenStreamContents;
-
-public class KeywordFieldMapperTests extends MapperTestCase {
-
-    private static final String FIELD_NAME = "field";
-
-    /**
-     * Creates a copy of the lowercase token filter which we use for testing merge errors.
-     */
-    public static class MockAnalysisPlugin extends Plugin implements AnalysisPlugin {
-        @Override
-        public List<PreConfiguredTokenFilter> getPreConfiguredTokenFilters() {
-            return singletonList(PreConfiguredTokenFilter.singleton("mock_other_lowercase", true, MockLowerCaseFilter::new));
-        }
-
-        @Override
-        public Map<String, AnalysisModule.AnalysisProvider<TokenizerFactory>> getTokenizers() {
-            return singletonMap(
-                "keyword",
-                (indexSettings, environment, name, settings) -> TokenizerFactory.newFactory(
-                    name,
-                    () -> new MockTokenizer(MockTokenizer.KEYWORD, false)
-                )
-            );
-        }
-
-    }
-
-    @Override
-    protected void writeFieldValue(XContentBuilder builder) throws IOException {
-        builder.value("value");
-    }
-
-    public final void testExistsQueryDocValuesDisabled() throws IOException {
-        MapperService mapperService = createMapperService(fieldMapping(b -> {
-            minimalMapping(b);
-            b.field("doc_values", false);
-            if (randomBoolean()) {
-                b.field("norms", false);
-            }
-        }));
-        assertExistsQuery(mapperService);
-        assertParseMinimalWarnings();
-    }
-
-    public final void testExistsQueryDocValuesDisabledWithNorms() throws IOException {
-        MapperService mapperService = createMapperService(fieldMapping(b -> {
-            minimalMapping(b);
-            b.field("doc_values", false);
-            b.field("norms", true);
-        }));
-        assertExistsQuery(mapperService);
-        assertParseMinimalWarnings();
-    }
-
-    @Override
-    protected Collection<? extends Plugin> getPlugins() {
-        return singletonList(new MockAnalysisPlugin());
-    }
-
-    @Override
-    protected IndexAnalyzers createIndexAnalyzers(IndexSettings indexSettings) {
-        return new IndexAnalyzers(
-            singletonMap("default", new NamedAnalyzer("default", AnalyzerScope.INDEX, new StandardAnalyzer())),
-            Map.of(
-                "lowercase",
-                new NamedAnalyzer("lowercase", AnalyzerScope.INDEX, new LowercaseNormalizer()),
-                "other_lowercase",
-                new NamedAnalyzer("other_lowercase", AnalyzerScope.INDEX, new LowercaseNormalizer())
-            ),
-            singletonMap(
-                "lowercase",
-                new NamedAnalyzer(
-                    "lowercase",
-                    AnalyzerScope.INDEX,
-                    new CustomAnalyzer(
-                        TokenizerFactory.newFactory("lowercase", WhitespaceTokenizer::new),
-                        new CharFilterFactory[0],
-                        new TokenFilterFactory[] { new TokenFilterFactory() {
-
-                            @Override
-                            public String name() {
-                                return "lowercase";
-                            }
-
-                            @Override
-                            public TokenStream create(TokenStream tokenStream) {
-                                return new LowerCaseFilter(tokenStream);
-                            }
-                        } }
-                    )
-                )
-            )
-        );
-    }
-
-    @Override
-    protected void minimalMapping(XContentBuilder b) throws IOException {
-        b.field("type", "keyword");
-    }
-
-    @Override
-    protected void assertParseMaximalWarnings() {
-        assertWarnings("Parameter [boost] on field [field] is deprecated and will be removed in 3.0");
-    }
-
-    protected void registerParameters(ParameterChecker checker) throws IOException {
-        checker.registerConflictCheck("doc_values", b -> b.field("doc_values", false));
-        checker.registerConflictCheck("index", b -> b.field("index", false));
-        checker.registerConflictCheck("store", b -> b.field("store", true));
-        checker.registerConflictCheck("index_options", b -> b.field("index_options", "freqs"));
-        checker.registerConflictCheck("null_value", b -> b.field("null_value", "foo"));
-        checker.registerConflictCheck("similarity", b -> b.field("similarity", "boolean"));
-        checker.registerConflictCheck("normalizer", b -> b.field("normalizer", "lowercase"));
-        checker.registerUpdateCheck(b -> b.field("multi_value", true), m -> assertTrue(m.fieldType().isMultiValued()));
-
-        checker.registerUpdateCheck(b -> b.field("eager_global_ordinals", true), m -> assertTrue(m.fieldType().eagerGlobalOrdinals()));
-        checker.registerUpdateCheck(b -> b.field("ignore_above", 256), m -> assertEquals(256, ((KeywordFieldMapper) m).ignoreAbove()));
-        checker.registerUpdateCheck(
-            b -> b.field("split_queries_on_whitespace", true),
-            m -> assertEquals("_whitespace", m.fieldType().getTextSearchInfo().getSearchAnalyzer().name())
-        );
-
-        // norms can be set from true to false, but not vice versa
-        checker.registerConflictCheck("norms", b -> b.field("norms", true));
-        checker.registerUpdateCheck(b -> {
-            b.field("type", "keyword");
-            b.field("norms", true);
-        }, b -> {
-            b.field("type", "keyword");
-            b.field("norms", false);
-        }, m -> assertFalse(m.fieldType().getTextSearchInfo().hasNorms()));
-
-        checker.registerUpdateCheck(b -> b.field("boost", 2.0), m -> assertEquals(m.fieldType().boost(), 2.0, 0));
-    }
-
-    public void testDefaults() throws Exception {
-        XContentBuilder mapping = fieldMapping(this::minimalMapping);
-        DocumentMapper mapper = createDocumentMapper(mapping);
-        assertEquals(mapping.toString(), mapper.mappingSource().toString());
-
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(2, fields.length);
-
-        assertEquals(new BytesRef("1234"), fields[0].binaryValue());
-        IndexableFieldType fieldType = fields[0].fieldType();
-        assertThat(fieldType.omitNorms(), equalTo(true));
-        assertFalse(fieldType.tokenized());
-        assertFalse(fieldType.stored());
-        assertThat(fieldType.indexOptions(), equalTo(IndexOptions.DOCS));
-        assertThat(fieldType.storeTermVectors(), equalTo(false));
-        assertThat(fieldType.storeTermVectorOffsets(), equalTo(false));
-        assertThat(fieldType.storeTermVectorPositions(), equalTo(false));
-        assertThat(fieldType.storeTermVectorPayloads(), equalTo(false));
-        assertEquals(DocValuesType.NONE, fieldType.docValuesType());
-
-        assertEquals(new BytesRef("1234"), fields[1].binaryValue());
-        fieldType = fields[1].fieldType();
-        assertThat(fieldType.indexOptions(), equalTo(IndexOptions.NONE));
-        assertEquals(DocValuesType.SORTED_SET, fieldType.docValuesType());
-
-        // used by TermVectorsService
-        assertArrayEquals(new String[] { "1234" }, TermVectorsService.getValues(doc.rootDoc().getFields("field")));
-    }
-
-    public void testIgnoreAbove() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword").field("ignore_above", 5)));
-
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "elk")));
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(2, fields.length);
-
-        doc = mapper.parse(source(b -> b.field("field", "opensearch")));
-        fields = doc.rootDoc().getFields("field");
-        assertEquals(0, fields.length);
-    }
-
-    public void testNullValue() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        ParsedDocument doc = mapper.parse(source(b -> b.nullField("field")));
-        assertArrayEquals(new IndexableField[0], doc.rootDoc().getFields("field"));
-
-        mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword").field("null_value", "uri")));
-        doc = mapper.parse(source(b -> {}));
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(0, fields.length);
-        doc = mapper.parse(source(b -> b.nullField("field")));
-        fields = doc.rootDoc().getFields("field");
-        assertEquals(2, fields.length);
-        assertEquals(new BytesRef("uri"), fields[0].binaryValue());
-    }
-
-    public void testEnableStore() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword").field("store", true)));
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(2, fields.length);
-        assertTrue(fields[0].fieldType().stored());
-    }
-
-    public void testDisableIndex() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword").field("index", false)));
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(1, fields.length);
-        assertEquals(IndexOptions.NONE, fields[0].fieldType().indexOptions());
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
         assertEquals(DocValuesType.SORTED_SET, fields[0].fieldType().docValuesType());
-    }
-
-    public void testDisableDocValues() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword").field("doc_values", false)));
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(1, fields.length);
-        assertEquals(DocValuesType.NONE, fields[0].fieldType().docValuesType());
-    }
-
-    public void testIndexOptions() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword").field("index_options", "freqs")));
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(2, fields.length);
-        assertEquals(IndexOptions.DOCS_AND_FREQS, fields[0].fieldType().indexOptions());
-
-        for (String indexOptions : Arrays.asList("positions", "offsets")) {
-            MapperParsingException e = expectThrows(
-                MapperParsingException.class,
-                () -> createMapperService(fieldMapping(b -> b.field("type", "keyword").field("index_options", indexOptions)))
-            );
-            assertThat(
-                e.getMessage(),
-                containsString("Unknown value [" + indexOptions + "] for field [index_options] - accepted values are [docs, freqs]")
-            );
-        }
-    }
-
-    public void testBoost() throws IOException {
-        MapperService mapperService = createMapperService(fieldMapping(b -> b.field("type", "keyword").field("boost", 2f)));
-        assertThat(mapperService.fieldType("field").boost(), equalTo(2f));
-        assertWarnings("Parameter [boost] on field [field] is deprecated and will be removed in 3.0");
-    }
-
-    public void testEnableNorms() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(
-            fieldMapping(b -> b.field("type", "keyword").field("doc_values", false).field("norms", true))
-        );
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(1, fields.length);
-        assertFalse(fields[0].fieldType().omitNorms());
-
-        IndexableField[] fieldNamesFields = doc.rootDoc().getFields(FieldNamesFieldMapper.NAME);
-        assertEquals(0, fieldNamesFields.length);
-    }
-
-    public void testMultiValueCanPromoteButCannotDowngrade() throws IOException {
-        MapperService mapperService = createMapperService(fieldMapping(b -> b.field("type", "keyword")));
-
-        merge(mapperService, fieldMapping(b -> b.field("type", "keyword").field("multi_value", true)));
-        assertTrue(mapperService.fieldType("field").isMultiValued());
-
-        IllegalArgumentException error = expectThrows(
-            IllegalArgumentException.class,
-            () -> merge(mapperService, fieldMapping(b -> b.field("type", "keyword").field("multi_value", false)))
-        );
-        assertThat(error.getMessage(), containsString("Cannot update parameter [multi_value] from [true] to [false]"));
-    }
-
-    public void testConfigureSimilarity() throws IOException {
-        MapperService mapperService = createMapperService(fieldMapping(b -> b.field("type", "keyword").field("similarity", "boolean")));
-        MappedFieldType ft = mapperService.documentMapper().fieldTypes().get("field");
-        assertEquals("boolean", ft.getTextSearchInfo().getSimilarity().name());
-
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> merge(mapperService, fieldMapping(b -> b.field("type", "keyword").field("similarity", "BM25")))
-        );
-        assertThat(e.getMessage(), containsString("Cannot update parameter [similarity] from [boolean] to [BM25]"));
-    }
-
-    public void testNormalizer() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword").field("normalizer", "lowercase")));
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "AbC")));
-
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(2, fields.length);
-
-        assertEquals(new BytesRef("abc"), fields[0].binaryValue());
-        IndexableFieldType fieldType = fields[0].fieldType();
-        assertThat(fieldType.omitNorms(), equalTo(true));
-        assertFalse(fieldType.tokenized());
-        assertFalse(fieldType.stored());
-        assertThat(fieldType.indexOptions(), equalTo(IndexOptions.DOCS));
-        assertThat(fieldType.storeTermVectors(), equalTo(false));
-        assertThat(fieldType.storeTermVectorOffsets(), equalTo(false));
-        assertThat(fieldType.storeTermVectorPositions(), equalTo(false));
-        assertThat(fieldType.storeTermVectorPayloads(), equalTo(false));
-        assertEquals(DocValuesType.NONE, fieldType.docValuesType());
-
-        assertEquals(new BytesRef("abc"), fields[1].binaryValue());
-        fieldType = fields[1].fieldType();
-        assertThat(fieldType.indexOptions(), equalTo(IndexOptions.NONE));
-        assertEquals(DocValuesType.SORTED_SET, fieldType.docValuesType());
-    }
-
-    public void testDefaultNormalizerSkipsTokenStream() throws IOException {
-        for (String value : new String[] { "", "AbC", " leading and trailing ", "multi\nline", randomUnicodeOfLength(between(1, 512)) }) {
-            assertSame(value, normalizeValue(Lucene.KEYWORD_ANALYZER, FIELD_NAME, value));
-        }
-
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword")));
-        IndexableField[] fields = mapper.parse(source(b -> b.field("field", "AbC"))).rootDoc().getFields("field");
-        assertEquals(2, fields.length);
-        assertEquals(new BytesRef("AbC"), fields[0].binaryValue());
-        assertEquals(new BytesRef("AbC"), fields[1].binaryValue());
-    }
-
-    public void testParsesKeywordNestedEmptyObjectStrict() throws IOException {
-        DocumentMapper defaultMapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> defaultMapper.parse(source(b -> b.startObject("field").endObject()))
-        );
-        assertEquals(
-            "failed to parse field [field] of type [keyword] in document with id '1'. " + "Preview of field's value: '{}'",
-            ex.getMessage()
-        );
-    }
-
-    public void testParsesKeywordNestedListStrict() throws IOException {
-        DocumentMapper defaultMapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        MapperParsingException ex = expectThrows(MapperParsingException.class, () -> defaultMapper.parse(source(b -> {
-            b.startArray("field");
-            {
-                b.startObject();
-                {
-                    b.startArray("array_name").value("inner_field_first").value("inner_field_second").endArray();
-                }
-                b.endObject();
-            }
-            b.endArray();
-        })));
-        assertEquals(
-            "failed to parse field [field] of type [keyword] in document with id '1'. "
-                + "Preview of field's value: '{array_name=[inner_field_first, inner_field_second]}'",
-            ex.getMessage()
-        );
-    }
-
-    public void testParsesKeywordNullStrict() throws IOException {
-        DocumentMapper defaultMapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        Exception e = expectThrows(
-            MapperParsingException.class,
-            () -> defaultMapper.parse(source(b -> b.startObject("field").nullField("field_name").endObject()))
-        );
-        assertEquals(
-            "failed to parse field [field] of type [keyword] in document with id '1'. " + "Preview of field's value: '{field_name=null}'",
-            e.getMessage()
-        );
-    }
-
-    public void testUpdateNormalizer() throws IOException {
-        MapperService mapperService = createMapperService(fieldMapping(b -> b.field("type", "keyword").field("normalizer", "lowercase")));
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> merge(mapperService, fieldMapping(b -> b.field("type", "keyword").field("normalizer", "other_lowercase")))
-        );
-        assertEquals(
-            "Mapper for [field] conflicts with existing mapper:\n"
-                + "\tCannot update parameter [normalizer] from [lowercase] to [other_lowercase]",
-            e.getMessage()
-        );
-    }
-
-    public void testSplitQueriesOnWhitespace() throws IOException {
-        MapperService mapperService = createMapperService(mapping(b -> {
-            b.startObject("field").field("type", "keyword").endObject();
-            b.startObject("field_with_normalizer");
-            {
-                b.field("type", "keyword");
-                b.field("normalizer", "lowercase");
-                b.field("split_queries_on_whitespace", true);
-            }
-            b.endObject();
-        }));
-
-        MappedFieldType fieldType = mapperService.fieldType("field");
-        assertThat(fieldType, instanceOf(KeywordFieldMapper.KeywordFieldType.class));
-        KeywordFieldMapper.KeywordFieldType ft = (KeywordFieldMapper.KeywordFieldType) fieldType;
-        Analyzer a = ft.getTextSearchInfo().getSearchAnalyzer();
-        assertTokenStreamContents(a.tokenStream("", "Hello World"), new String[] { "Hello World" });
-
-        fieldType = mapperService.fieldType("field_with_normalizer");
-        assertThat(fieldType, instanceOf(KeywordFieldMapper.KeywordFieldType.class));
-        ft = (KeywordFieldMapper.KeywordFieldType) fieldType;
-        assertThat(ft.getTextSearchInfo().getSearchAnalyzer().name(), equalTo("lowercase"));
-        assertTokenStreamContents(
-            ft.getTextSearchInfo().getSearchAnalyzer().analyzer().tokenStream("", "Hello World"),
-            new String[] { "hello", "world" }
-        );
-
-        mapperService = createMapperService(mapping(b -> {
-            b.startObject("field").field("type", "keyword").field("split_queries_on_whitespace", true).endObject();
-            b.startObject("field_with_normalizer");
-            {
-                b.field("type", "keyword");
-                b.field("normalizer", "lowercase");
-                b.field("split_queries_on_whitespace", false);
-            }
-            b.endObject();
-        }));
-
-        fieldType = mapperService.fieldType("field");
-        assertThat(fieldType, instanceOf(KeywordFieldMapper.KeywordFieldType.class));
-        ft = (KeywordFieldMapper.KeywordFieldType) fieldType;
-        assertTokenStreamContents(
-            ft.getTextSearchInfo().getSearchAnalyzer().analyzer().tokenStream("", "Hello World"),
-            new String[] { "Hello", "World" }
-        );
-
-        fieldType = mapperService.fieldType("field_with_normalizer");
-        assertThat(fieldType, instanceOf(KeywordFieldMapper.KeywordFieldType.class));
-        ft = (KeywordFieldMapper.KeywordFieldType) fieldType;
-        assertThat(ft.getTextSearchInfo().getSearchAnalyzer().name(), equalTo("lowercase"));
-        assertTokenStreamContents(
-            ft.getTextSearchInfo().getSearchAnalyzer().analyzer().tokenStream("", "Hello World"),
-            new String[] { "hello world" }
-        );
-    }
-
-    public void testPossibleToDeriveSource_WhenCopyToPresent() throws IOException {
-        FieldMapper.CopyTo copyTo = new FieldMapper.CopyTo.Builder().add("copy_to_field").build();
-        KeywordFieldMapper mapper = getMapper(copyTo, Integer.MAX_VALUE, "default", true, false);
-        assertThrows(UnsupportedOperationException.class, mapper::canDeriveSource);
-    }
-
-    public void testPossibleToDeriveSource_WhenIgnoreAbovePresent() throws IOException {
-        KeywordFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), 100, "default", true, false);
-        assertThrows(UnsupportedOperationException.class, mapper::canDeriveSource);
-    }
-
-    public void testPossibleToDeriveSource_WhenNormalizerPresent() throws IOException {
-        KeywordFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), 100, "lowercase", true, false);
-        assertThrows(UnsupportedOperationException.class, mapper::canDeriveSource);
-    }
-
-    public void testPossibleToDeriveSource_WhenDocValuesAndStoredDisabled() throws IOException {
-        KeywordFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), Integer.MAX_VALUE, "default", false, false);
-        assertThrows(UnsupportedOperationException.class, mapper::canDeriveSource);
-    }
-
-    public void testDerivedValueFetching_DocValues() throws IOException {
-        try (Directory directory = newDirectory()) {
-            KeywordFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), Integer.MAX_VALUE, "default", true, false);
-            String value = "keyword_value";
-            try (IndexWriter iw = new IndexWriter(directory, new IndexWriterConfig())) {
-                iw.addDocument(createDocument(mapper, value, true));
-            }
-
-            try (DirectoryReader reader = DirectoryReader.open(directory)) {
-                XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
-                mapper.deriveSource(builder, reader.leaves().get(0).reader(), 0);
-                builder.endObject();
-                String source = builder.toString();
-                assertEquals("{\"" + FIELD_NAME + "\":" + "\"" + value + "\"" + "}", source);
-            }
-        }
-    }
-
-    public void testDerivedValueFetching_StoredField() throws IOException {
-        try (Directory directory = newDirectory()) {
-            KeywordFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), Integer.MAX_VALUE, "default", false, true);
-            String value = "keyword_value";
-            try (IndexWriter iw = new IndexWriter(directory, new IndexWriterConfig())) {
-                iw.addDocument(createDocument(mapper, value, false));
-            }
-
-            try (DirectoryReader reader = DirectoryReader.open(directory)) {
-                XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
-                mapper.deriveSource(builder, reader.leaves().get(0).reader(), 0);
-                builder.endObject();
-                String source = builder.toString();
-                assertEquals("{\"" + FIELD_NAME + "\":" + "\"" + value + "\"" + "}", source);
-            }
-        }
-    }
-
-    private KeywordFieldMapper getMapper(
-        FieldMapper.CopyTo copyTo,
-        int ignoreAbove,
-        String normalizerName,
-        boolean hasDocValues,
-        boolean isStored
-    ) throws IOException {
-        MapperService mapperService = createMapperService(
-            fieldMapping(
-                b -> b.field("type", "keyword")
-                    .field("store", isStored)
-                    .field("doc_values", hasDocValues)
-                    .field("normalizer", normalizerName)
-                    .field("ignore_above", ignoreAbove)
-            )
-        );
-        KeywordFieldMapper mapper = (KeywordFieldMapper) mapperService.documentMapper().mappers().getMapper(FIELD_NAME);
-        mapper.copyTo = copyTo;
-        return mapper;
-    }
-
-    /**
-     * Helper method to create a document with both doc values and stored fields
-     */
-    private Document createDocument(KeywordFieldMapper mapper, String value, boolean hasDocValues) throws IOException {
-        Document doc = new Document();
-        FieldType fieldType = new FieldType(KeywordFieldMapper.Defaults.FIELD_TYPE);
-        fieldType.setStored(!hasDocValues);
-        fieldType.setIndexOptions(IndexOptions.DOCS_AND_FREQS);
-        NamedAnalyzer normalizer = mapper.fieldType().normalizer();
-        value = normalizeValue(normalizer, FIELD_NAME, value);
-        final BytesRef binaryValue = new BytesRef(value);
-        if (hasDocValues) {
-            doc.add(new SortedSetDocValuesField(FIELD_NAME, binaryValue));
-        } else {
+    public void testNullValue() throws IOException {
+ * compatible open source license.
+                "lowercase",
             doc.add(new KeywordFieldMapper.KeywordField(FIELD_NAME, binaryValue, fieldType));
-        }
-        return doc;
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatDefaultKeyword() throws IOException {
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-        DocumentMapper mapper = createDocumentMapper(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "keyword").endObject())
+import org.opensearch.common.settings.Settings;
+            b -> b.nullField("field"),
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        assertThat(fieldType, instanceOf(KeywordFieldMapper.KeywordFieldType.class));
+        fields = doc.rootDoc().getFields("field");
+                    .field("normalizer", normalizerName)
+    public void testIndexOptions() throws IOException {
+        assertThat(fieldType.indexOptions(), equalTo(IndexOptions.NONE));
+            // Pluggable path should capture the same value
         );
-        CapturingDocumentInput docInput = new CapturingDocumentInput();
-        mapper.parse(source(b -> b.field("field", "test_value")), docInput);
-
-        boolean found = docInput.getCapturedFields()
-            .stream()
-            .anyMatch(e -> e.getKey().name().equals("field") && e.getValue().equals("test_value"));
-        assertTrue("Expected keyword field captured with value 'test_value'", found);
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testRawSourceCompanionSupportsDynamicPromotion() throws IOException {
-        Settings settings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-        DocumentMapper mapper = createDocumentMapper(
-            settings,
-            mapping(b -> b.startObject("field").field("type", "keyword").field("normalizer", "lowercase").endObject())
-        );
-        KeywordFieldMapper fieldMapper = (KeywordFieldMapper) mapper.mappers().getMapper("field");
-
-        assertNotNull(fieldMapper.getRawValueFieldType());
-        assertTrue(fieldMapper.getRawValueFieldType().isMultiValueSupported());
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatSingletonArrayRemainsScalar() throws IOException {
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-        DocumentMapper mapper = createDocumentMapper(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "keyword").endObject())
-        );
-        CapturingDocumentInput docInput = new CapturingDocumentInput();
-        ParsedDocument parsed = mapper.parse(source(b -> b.array("field", "one")), docInput);
-
-        assertEquals(1L, docInput.getFieldCount("field"));
-        assertNull(parsed.dynamicMappingsUpdate());
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatEmptyArrayPromotesKeyword() throws IOException {
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-        DocumentMapper mapper = createDocumentMapper(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "keyword").endObject())
-        );
-        CapturingDocumentInput docInput = new CapturingDocumentInput();
-        ParsedDocument parsed = mapper.parse(source(b -> b.startArray("field").endArray()), docInput);
-
-        assertNotNull(parsed.dynamicMappingsUpdate());
-        Mapper update = parsed.dynamicMappingsUpdate().root().getMapper("field");
-        assertThat(update, instanceOf(KeywordFieldMapper.class));
-        assertTrue(((KeywordFieldMapper) update).fieldType().isMultiValued());
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatPromotesKeywordOnSecondValue() throws IOException {
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-        DocumentMapper mapper = createDocumentMapper(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "keyword").endObject())
-        );
-        CapturingDocumentInput docInput = new CapturingDocumentInput();
-        ParsedDocument parsed = mapper.parse(source(b -> b.array("field", "one", "two")), docInput);
-
-        assertEquals(2L, docInput.getFieldCount("field"));
-        assertNotNull(parsed.dynamicMappingsUpdate());
-        Mapper update = parsed.dynamicMappingsUpdate().root().getMapper("field");
-        assertThat(update, instanceOf(KeywordFieldMapper.class));
-        assertTrue(((KeywordFieldMapper) update).fieldType().isMultiValued());
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatNullValueSkipped() throws IOException {
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-        DocumentMapper mapper = createDocumentMapper(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "keyword").endObject())
-        );
-        CapturingDocumentInput docInput = new CapturingDocumentInput();
-        mapper.parse(source(b -> b.nullField("field")), docInput);
-
-        boolean hasField = docInput.getCapturedFields().stream().anyMatch(e -> e.getKey().name().equals("field"));
-        assertFalse("Expected no captured field for null value", hasField);
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatNullValueConfigured() throws IOException {
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-        DocumentMapper mapper = createDocumentMapper(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "keyword").field("null_value", "default_val").endObject())
-        );
-        CapturingDocumentInput docInput = new CapturingDocumentInput();
-        mapper.parse(source(b -> b.nullField("field")), docInput);
-
-        boolean found = docInput.getCapturedFields()
-            .stream()
-            .anyMatch(e -> e.getKey().name().equals("field") && e.getValue().equals("default_val"));
-        assertTrue("Expected keyword field captured with null_value 'default_val'", found);
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatIgnoreAbove() throws IOException {
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-        DocumentMapper mapper = createDocumentMapper(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "keyword").field("ignore_above", 5).endObject())
-        );
-        CapturingDocumentInput docInput = new CapturingDocumentInput();
-        mapper.parse(source(b -> b.field("field", "opensearch")), docInput);
-
-        boolean hasField = docInput.getCapturedFields().stream().anyMatch(e -> e.getKey().name().equals("field"));
-        assertFalse("Expected no captured field when value exceeds ignore_above", hasField);
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatIgnoreAboveWithinLimit() throws IOException {
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-        DocumentMapper mapper = createDocumentMapper(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "keyword").field("ignore_above", 5).endObject())
-        );
-        CapturingDocumentInput docInput = new CapturingDocumentInput();
-        mapper.parse(source(b -> b.field("field", "elk")), docInput);
-
-        boolean found = docInput.getCapturedFields()
-            .stream()
-            .anyMatch(e -> e.getKey().name().equals("field") && e.getValue().equals("elk"));
-        assertTrue("Expected keyword field captured with value 'elk' within ignore_above limit", found);
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatWithNormalizer() throws IOException {
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-        DocumentMapper mapper = createDocumentMapper(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "keyword").field("normalizer", "lowercase").endObject())
-        );
-        CapturingDocumentInput docInput = new CapturingDocumentInput();
-        mapper.parse(source(b -> b.field("field", "AbC")), docInput);
-
-        boolean found = docInput.getCapturedFields()
-            .stream()
-            .anyMatch(e -> e.getKey().name().equals("field") && e.getValue().equals("abc"));
-        assertTrue("Expected keyword field captured with normalized value 'abc'", found);
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatWithExternalValue() throws IOException {
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-        DocumentMapper mapper = createDocumentMapper(pluggableSettings, mapping(b -> {
-            b.startObject("text_field");
-            b.field("type", "text");
-            b.startObject("fields");
-            b.startObject("kw").field("type", "keyword").endObject();
-            b.endObject();
-            b.endObject();
-        }));
-        CapturingDocumentInput docInput = new CapturingDocumentInput();
-        mapper.parse(source(b -> b.field("text_field", "external_keyword")), docInput);
-
-        boolean found = docInput.getCapturedFields()
-            .stream()
-            .anyMatch(e -> e.getKey().name().equals("text_field.kw") && e.getValue().equals("external_keyword"));
-        assertTrue("Expected keyword sub-field captured with external value 'external_keyword'", found);
-    }
-
-    public void testDefaultsDoNotUseDocumentInput() throws Exception {
-        XContentBuilder mapping = fieldMapping(this::minimalMapping);
-        DocumentMapper mapper = createDocumentMapper(mapping);
-
         ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertEquals(2, fields.length);
-        assertEquals(new BytesRef("1234"), fields[0].binaryValue());
-        assertEquals(new BytesRef("1234"), fields[1].binaryValue());
-    }
-
-    /**
-     * Cross-path equivalence test: verifies that the pluggable DocumentInput path
-     * captures the same field values as the Lucene Document path for all common
-     * keyword scenarios (default, null_value, ignore_above, normalizer, multi-field).
-     */
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggablePathEquivalenceWithLucenePath() throws IOException {
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-
-        // Scenario 1: default keyword
-        assertLuceneAndPluggablePathsEquivalent(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "keyword").endObject()),
-            b -> b.field("field", "1234"),
-            "field",
-            "1234"
-        );
-
-        // Scenario 2: null value — no field produced
-        assertLuceneAndPluggablePathsEquivalent(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "keyword").endObject()),
-            b -> b.nullField("field"),
-            "field",
-            null
-        );
-
-        // Scenario 3: null_value configured — substitution kicks in
-        assertLuceneAndPluggablePathsEquivalent(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "keyword").field("null_value", "uri").endObject()),
-            b -> b.nullField("field"),
-            "field",
+import org.opensearch.index.analysis.NamedAnalyzer;
+            mapping(b -> b.startObject("field").field("type", "keyword").endObject())
+        mapper.copyTo = copyTo;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        fieldType = fields[1].fieldType();
+        assertThat(fieldType.storeTermVectorPositions(), equalTo(false));
+        assertNotNull(parsed.dynamicMappingsUpdate());
+        assertTrue(((KeywordFieldMapper) update).fieldType().isMultiValued());
+            assertTrue("Pluggable path should capture field '" + fieldName + "' with value '" + expectedValue + "'", pluggableFound);
+        // norms can be set from true to false, but not vice versa
+            {
             "uri"
+        assertLuceneAndPluggablePathsEquivalent(
+        ParsedDocument doc = mapper.parse(source(b -> b.nullField("field")));
+        String fieldName,
+import org.opensearch.index.IndexSettings;
+                            public String name() {
+            return singletonMap(
+        b.field("type", "keyword");
+        } else {
+        assertThat(fieldType.storeTermVectorOffsets(), equalTo(false));
+    }
+            }
+                builder.endObject();
+        IllegalArgumentException e = expectThrows(
+        DocumentMapper mapper = createDocumentMapper(mapping);
+        CapturingDocumentInput docInput = new CapturingDocumentInput();
+        }));
         );
-
+            "field",
+    }
+        );
+        }));
+        assertEquals(IndexOptions.DOCS_AND_FREQS, fields[0].fieldType().indexOptions());
+            settings,
+        IndexableField[] fields = doc.rootDoc().getFields("field");
         // Scenario 4: ignore_above — value exceeds limit, no field produced
+    }
+    }
+                new NamedAnalyzer("lowercase", AnalyzerScope.INDEX, new LowercaseNormalizer()),
+        DocumentMapper defaultMapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+     *
+            new String[] { "hello world" }
+    }
         assertLuceneAndPluggablePathsEquivalent(
+    }
+                MapperParsingException.class,
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+        // Scenario 6: normalizer
+            () -> merge(mapperService, fieldMapping(b -> b.field("type", "keyword").field("multi_value", false)))
+    public void testConfigureSimilarity() throws IOException {
+                {
+    }
+    }
+        return mapper;
+    public void testPluggableDataFormatPromotesKeywordOnSecondValue() throws IOException {
+            doc.add(new SortedSetDocValuesField(FIELD_NAME, binaryValue));
             pluggableSettings,
+ */
+ * specific language governing permissions and limitations
             mapping(b -> b.startObject("field").field("type", "keyword").field("ignore_above", 5).endObject()),
-            b -> b.field("field", "opensearch"),
-            "field",
-            null
+    /**
+        IllegalArgumentException error = expectThrows(
+    }
+            pluggableSettings,
+    ) throws IOException {
+        checker.registerConflictCheck("store", b -> b.field("store", true));
+            pluggableSettings,
+            "failed to parse field [field] of type [keyword] in document with id '1'. "
+        checker.registerUpdateCheck(b -> {
+                b.field("split_queries_on_whitespace", false);
         );
-
-        // Scenario 5: ignore_above — value within limit
-        assertLuceneAndPluggablePathsEquivalent(
+            mapping(b -> b.startObject("field").field("type", "keyword").endObject())
+        return new IndexAnalyzers(
+        IllegalArgumentException e = expectThrows(
+            b.field("type", "keyword");
+            b.field("type", "text");
+import org.apache.lucene.analysis.core.LowerCaseFilter;
+        assertThat(update, instanceOf(KeywordFieldMapper.class));
+                )
+        MappedFieldType ft = mapperService.documentMapper().fieldTypes().get("field");
+                String source = builder.toString();
+            mapping(b -> b.startObject("field").field("type", "keyword").field("ignore_above", 5).endObject())
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword").field("index_options", "freqs")));
+        public Map<String, AnalysisModule.AnalysisProvider<TokenizerFactory>> getTokenizers() {
+        MapperService mapperService = createMapperService(
+            ),
+    protected void minimalMapping(XContentBuilder b) throws IOException {
+            .stream()
+        );
+        assertEquals(new BytesRef("1234"), fields[1].binaryValue());
             pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "keyword").field("ignore_above", 5).endObject()),
-            b -> b.field("field", "elk"),
-            "field",
+ * SPDX-License-Identifier: Apache-2.0
+        assertThat(fieldType.omitNorms(), equalTo(true));
+    }
+import static org.hamcrest.Matchers.equalTo;
+        Mapper update = parsed.dynamicMappingsUpdate().root().getMapper("field");
+     * Cross-path equivalence test: verifies that the pluggable DocumentInput path
+    protected IndexAnalyzers createIndexAnalyzers(IndexSettings indexSettings) {
+        assertParseMinimalWarnings();
+    }
+        assertFalse(fields[0].fieldType().omitNorms());
+ */
+        assertNotNull(parsed.dynamicMappingsUpdate());
+            }
+        NamedAnalyzer normalizer = mapper.fieldType().normalizer();
+    }
+    public void testPluggableDataFormatEmptyArrayPromotesKeyword() throws IOException {
+                new NamedAnalyzer("other_lowercase", AnalyzerScope.INDEX, new LowercaseNormalizer())
+        boolean isStored
+        );
+        boolean found = docInput.getCapturedFields()
+        assertEquals(
+        checker.registerUpdateCheck(b -> b.field("ignore_above", 256), m -> assertEquals(256, ((KeywordFieldMapper) m).ignoreAbove()));
+        );
+                (indexSettings, environment, name, settings) -> TokenizerFactory.newFactory(
+ * You may obtain a copy of the License at
+        fields = doc.rootDoc().getFields("field");
+            // Both paths should produce no field
             "elk"
         );
-
-        // Scenario 6: normalizer
-        assertLuceneAndPluggablePathsEquivalent(
-            pluggableSettings,
-            mapping(b -> b.startObject("field").field("type", "keyword").field("normalizer", "lowercase").endObject()),
-            b -> b.field("field", "AbC"),
-            "field",
-            "abc"
-        );
-    }
-
-    /**
-     * Parses the same source through both the Lucene path and the pluggable DocumentInput path,
-     * then asserts they agree on the produced field value (or absence thereof).
-     *
-     * @param expectedValue the expected value, or null if no field should be produced
-     */
-    private void assertLuceneAndPluggablePathsEquivalent(
-        Settings pluggableSettings,
-        XContentBuilder mappingBuilder,
-        CheckedConsumer<XContentBuilder, IOException> sourceBuilder,
-        String fieldName,
-        String expectedValue
-    ) throws IOException {
-        // Lucene path (default, no pluggable setting)
-        DocumentMapper luceneMapper = createDocumentMapper(mappingBuilder);
-        ParsedDocument luceneDoc = luceneMapper.parse(source(sourceBuilder));
-        IndexableField[] luceneFields = luceneDoc.rootDoc().getFields(fieldName);
-
-        // Pluggable path
-        DocumentMapper pluggableMapper = createDocumentMapper(pluggableSettings, mappingBuilder);
-        CapturingDocumentInput docInput = new CapturingDocumentInput();
-        pluggableMapper.parse(source(sourceBuilder), docInput);
-
-        if (expectedValue == null) {
-            // Both paths should produce no field
-            assertEquals("Lucene path should produce no field for '" + fieldName + "'", 0, luceneFields.length);
-            boolean pluggableHasField = docInput.getCapturedFields().stream().anyMatch(e -> e.getKey().name().equals(fieldName));
-            assertFalse("Pluggable path should produce no field for '" + fieldName + "'", pluggableHasField);
-        } else {
-            // Lucene path should have produced the field with the expected value
-            assertTrue("Lucene path should produce field '" + fieldName + "'", luceneFields.length > 0);
-            assertEquals(new BytesRef(expectedValue), luceneFields[0].binaryValue());
-
-            // Pluggable path should capture the same value
-            boolean pluggableFound = docInput.getCapturedFields()
-                .stream()
-                .anyMatch(e -> e.getKey().name().equals(fieldName) && e.getValue().equals(expectedValue));
-            assertTrue("Pluggable path should capture field '" + fieldName + "' with value '" + expectedValue + "'", pluggableFound);
+            "failed to parse field [field] of type [keyword] in document with id '1'. " + "Preview of field's value: '{field_name=null}'",
+        public List<PreConfiguredTokenFilter> getPreConfiguredTokenFilters() {
+    public void testDisableDocValues() throws IOException {
         }
+        assertThat(fieldType, instanceOf(KeywordFieldMapper.KeywordFieldType.class));
+        Analyzer a = ft.getTextSearchInfo().getSearchAnalyzer();
+    public void testParsesKeywordNullStrict() throws IOException {
+            }
     }
+            assertThat(
+        KeywordFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), 100, "lowercase", true, false);
+            b.endObject();
+            pluggableSettings,
+        assertThat(ft.getTextSearchInfo().getSearchAnalyzer().name(), equalTo("lowercase"));
+        assertTrue(((KeywordFieldMapper) update).fieldType().isMultiValued());
+        assertThat(error.getMessage(), containsString("Cannot update parameter [multi_value] from [true] to [false]"));
+ * the Apache License, Version 2.0 (the "License"); you may
+        );
+            mapping(b -> b.startObject("field").field("type", "keyword").field("normalizer", "lowercase").endObject())
+            }
+        }
+        mapper.parse(source(b -> b.field("field", "elk")), docInput);
+            }
+            ft.getTextSearchInfo().getSearchAnalyzer().analyzer().tokenStream("", "Hello World"),
+import org.opensearch.index.termvectors.TermVectorsService;
+            try (DirectoryReader reader = DirectoryReader.open(directory)) {
+import org.apache.lucene.analysis.Analyzer;
+    private static final String FIELD_NAME = "field";
+        DocumentMapper mapper = createDocumentMapper(
+        KeywordFieldMapper fieldMapper = (KeywordFieldMapper) mapper.mappers().getMapper("field");
+import org.apache.lucene.util.BytesRef;
+        assertTrue(fieldMapper.getRawValueFieldType().isMultiValueSupported());
+    }
+                iw.addDocument(createDocument(mapper, value, true));
+        assertEquals(1, fields.length);
+ *
+        assertEquals(2, fields.length);
+    @Override
+            // Lucene path should have produced the field with the expected value
+        assertThat(ft.getTextSearchInfo().getSearchAnalyzer().name(), equalTo("lowercase"));
+                                return new LowerCaseFilter(tokenStream);
+        DocumentMapper mapper = createDocumentMapper(
+        })));
+        assertThrows(UnsupportedOperationException.class, mapper::canDeriveSource);
+                iw.addDocument(createDocument(mapper, value, false));
+        boolean hasDocValues,
+        XContentBuilder mapping = fieldMapping(this::minimalMapping);
+        DocumentMapper defaultMapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+            "field",
+            b.startObject("text_field");
+    }
+    }
+    public void testPossibleToDeriveSource_WhenIgnoreAbovePresent() throws IOException {
+        assertThat(e.getMessage(), containsString("Cannot update parameter [similarity] from [boolean] to [BM25]"));
+            .stream()
+            b.startObject("field").field("type", "keyword").field("split_queries_on_whitespace", true).endObject();
+            b.endObject();
+    }
+            b.startObject("kw").field("type", "keyword").endObject();
+        assertEquals(IndexOptions.NONE, fields[0].fieldType().indexOptions());
+                        } }
+        XContentBuilder mapping = fieldMapping(this::minimalMapping);
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword").field("doc_values", false)));
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword").field("ignore_above", 5)));
+        );
+        assertThat(fieldType.storeTermVectorPayloads(), equalTo(false));
+    }
+            .anyMatch(e -> e.getKey().name().equals("field") && e.getValue().equals("abc"));
+    public void testDerivedValueFetching_DocValues() throws IOException {
+        );
+            b.startObject("fields");
+    public void testPossibleToDeriveSource_WhenNormalizerPresent() throws IOException {
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+        checker.registerConflictCheck("similarity", b -> b.field("similarity", "boolean"));
+ * GitHub history for details.
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword").field("store", true)));
+            try (IndexWriter iw = new IndexWriter(directory, new IndexWriterConfig())) {
+    }
+        // Scenario 2: null value — no field produced
+        IndexableField[] fields = mapper.parse(source(b -> b.field("field", "AbC"))).rootDoc().getFields("field");
+            "Mapper for [field] conflicts with existing mapper:\n"
+            assertTrue("Lucene path should produce field '" + fieldName + "'", luceneFields.length > 0);
+        assertTrue("Expected keyword field captured with null_value 'default_val'", found);
+            b.endArray();
+        assertThat(fieldType, instanceOf(KeywordFieldMapper.KeywordFieldType.class));
+        }
+            b.field("norms", true);
+ * Licensed to Elasticsearch under one or more contributor
+            pluggableSettings,
+        mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword").field("null_value", "uri")));
+        pluggableMapper.parse(source(sourceBuilder), docInput);
+        Mapper update = parsed.dynamicMappingsUpdate().root().getMapper("field");
+        assertFalse(fieldType.stored());
+                b.field("normalizer", "lowercase");
+    }
+            assertFalse("Pluggable path should produce no field for '" + fieldName + "'", pluggableHasField);
+        FieldMapper.CopyTo copyTo,
+            boolean pluggableFound = docInput.getCapturedFields()
+        CapturingDocumentInput docInput = new CapturingDocumentInput();
+        assertEquals(0, fields.length);
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+import org.opensearch.common.CheckedConsumer;
+        assertNull(parsed.dynamicMappingsUpdate());
+            .stream()
+    }
+                b.startObject();
+        assertEquals(mapping.toString(), mapper.mappingSource().toString());
+    public void testDefaultsDoNotUseDocumentInput() throws Exception {
+import org.opensearch.index.analysis.LowercaseNormalizer;
+import org.apache.lucene.index.IndexableField;
+            mapping(b -> b.startObject("field").field("type", "keyword").field("ignore_above", 5).endObject()),
+                    .field("doc_values", hasDocValues)
+    /**
+        MapperService mapperService = createMapperService(fieldMapping(b -> b.field("type", "keyword").field("boost", 2f)));
+        IndexableFieldType fieldType = fields[0].fieldType();
+import org.apache.lucene.document.SortedSetDocValuesField;
+            minimalMapping(b);
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+        assertEquals("boolean", ft.getTextSearchInfo().getSimilarity().name());
+    public void testBoost() throws IOException {
+            .anyMatch(e -> e.getKey().name().equals("field") && e.getValue().equals("test_value"));
+            pluggableSettings,
+            "field",
+                            }
+    public void testNormalizer() throws IOException {
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+    }
+        CapturingDocumentInput docInput = new CapturingDocumentInput();
+    private void assertLuceneAndPluggablePathsEquivalent(
+            b -> b.field("split_queries_on_whitespace", true),
+        IndexableFieldType fieldType = fields[0].fieldType();
+        ft = (KeywordFieldMapper.KeywordFieldType) fieldType;
+        );
+        assertEquals(DocValuesType.NONE, fieldType.docValuesType());
+    }
+            pluggableSettings,
+import java.util.Map;
+    public void testDerivedValueFetching_StoredField() throws IOException {
+        assertThat(fieldType.storeTermVectorPositions(), equalTo(false));
+        assertTrue(mapperService.fieldType("field").isMultiValued());
+        CapturingDocumentInput docInput = new CapturingDocumentInput();
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+ * this file be licensed under the Apache-2.0 license or a
+        CapturingDocumentInput docInput = new CapturingDocumentInput();
+            try (IndexWriter iw = new IndexWriter(directory, new IndexWriterConfig())) {
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+        }
+            if (randomBoolean()) {
+ *
+        DocumentMapper mapper = createDocumentMapper(
+ * license agreements. See the NOTICE file distributed with
+import static java.util.Collections.singletonList;
+        );
+        assertTrue(fields[0].fieldType().stored());
+            )
+                    name,
+        final BytesRef binaryValue = new BytesRef(value);
+        );
+        assertEquals(new BytesRef("AbC"), fields[1].binaryValue());
+                () -> createMapperService(fieldMapping(b -> b.field("type", "keyword").field("index_options", indexOptions)))
+import static java.util.Collections.singletonMap;
+                mapper.deriveSource(builder, reader.leaves().get(0).reader(), 0);
+        assertEquals(new BytesRef("1234"), fields[0].binaryValue());
+        fieldType = mapperService.fieldType("field_with_normalizer");
+            )
+                            @Override
+            m -> assertEquals("_whitespace", m.fieldType().getTextSearchInfo().getSearchAnalyzer().name())
+        CapturingDocumentInput docInput = new CapturingDocumentInput();
+import static org.hamcrest.Matchers.containsString;
+            pluggableSettings,
+        CapturingDocumentInput docInput = new CapturingDocumentInput();
+        try (Directory directory = newDirectory()) {
+    public void testPluggableDataFormatIgnoreAbove() throws IOException {
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
+        DocumentMapper mapper = createDocumentMapper(
+        assertExistsQuery(mapperService);
+        assertFalse("Expected no captured field when value exceeds ignore_above", hasField);
+        );
+        assertTokenStreamContents(
+        mapper.parse(source(b -> b.field("field", "opensearch")), docInput);
+        MapperService mapperService = createMapperService(mapping(b -> {
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+ */
+        @Override
+        fieldType = mapperService.fieldType("field");
+        );
+        assertEquals(new BytesRef("1234"), fields[1].binaryValue());
+     * keyword scenarios (default, null_value, ignore_above, normalizer, multi-field).
+        // used by TermVectorsService
+        IndexableField[] fieldNamesFields = doc.rootDoc().getFields(FieldNamesFieldMapper.NAME);
+import org.apache.lucene.tests.analysis.MockLowerCaseFilter;
+        );
+        assertEquals(2, fields.length);
+        Document doc = new Document();
+import org.apache.lucene.document.Document;
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+     * captures the same field values as the Lucene Document path for all common
+    }
+            assertSame(value, normalizeValue(Lucene.KEYWORD_ANALYZER, FIELD_NAME, value));
+        DocumentMapper mapper = createDocumentMapper(
+        );
+        Settings pluggableSettings,
+                "lowercase",
+import org.opensearch.plugins.Plugin;
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "AbC")));
+        assertThat(fieldType, instanceOf(KeywordFieldMapper.KeywordFieldType.class));
+import org.opensearch.common.xcontent.XContentFactory;
+        ParsedDocument luceneDoc = luceneMapper.parse(source(sourceBuilder));
+    public void testDefaults() throws Exception {
+    public void testIgnoreAbove() throws IOException {
+            () -> defaultMapper.parse(source(b -> b.startObject("field").endObject()))
+        ft = (KeywordFieldMapper.KeywordFieldType) fieldType;
+                + "\tCannot update parameter [normalizer] from [lowercase] to [other_lowercase]",
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
+        boolean found = docInput.getCapturedFields()
+                XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
+    }
+ * KIND, either express or implied.  See the License for the
+        assertThat(mapperService.fieldType("field").boost(), equalTo(2f));
+        assertEquals(2, fields.length);
+            mapping(b -> b.startObject("field").field("type", "keyword").field("normalizer", "lowercase").endObject()),
+            .anyMatch(e -> e.getKey().name().equals("field") && e.getValue().equals("elk"));
+        CheckedConsumer<XContentBuilder, IOException> sourceBuilder,
+                    () -> new MockTokenizer(MockTokenizer.KEYWORD, false)
+ * software distributed under the License is distributed on an
+                .stream()
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+        fieldType.setIndexOptions(IndexOptions.DOCS_AND_FREQS);
+    @Override
+            mapping(b -> b.startObject("field").field("type", "keyword").field("null_value", "uri").endObject()),
+        assertEquals(2, fields.length);
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+                    b.startArray("array_name").value("inner_field_first").value("inner_field_second").endArray();
+        KeywordFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), Integer.MAX_VALUE, "default", false, false);
+            String value = "keyword_value";
+        assertTokenStreamContents(
+import org.opensearch.indices.analysis.AnalysisModule;
+            {
+            .anyMatch(e -> e.getKey().name().equals("text_field.kw") && e.getValue().equals("external_keyword"));
+        assertEquals(new BytesRef("abc"), fields[1].binaryValue());
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+        MapperService mapperService = createMapperService(fieldMapping(b -> b.field("type", "keyword").field("normalizer", "lowercase")));
+            mapping(b -> b.startObject("field").field("type", "keyword").endObject())
+    }
+            "abc"
+    public void testDefaultNormalizerSkipsTokenStream() throws IOException {
+        CapturingDocumentInput docInput = new CapturingDocumentInput();
+            b.startObject("field_with_normalizer");
+    @Override
+            assertEquals(new BytesRef(expectedValue), luceneFields[0].binaryValue());
+ *
+    public void testRawSourceCompanionSupportsDynamicPromotion() throws IOException {
+        DocumentMapper mapper = createDocumentMapper(
+        assertThat(fieldType.storeTermVectorOffsets(), equalTo(false));
+import org.apache.lucene.index.IndexWriter;
+        }));
+            fieldMapping(
+            );
+        XContentBuilder mappingBuilder,
+        assertThat(fieldType.indexOptions(), equalTo(IndexOptions.DOCS));
+                + "Preview of field's value: '{array_name=[inner_field_first, inner_field_second]}'",
+     */
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            mapping(b -> b.startObject("field").field("type", "keyword").endObject()),
+    public void testPluggableDataFormatDefaultKeyword() throws IOException {
+        assertEquals(
+        assertThat(fieldType.storeTermVectors(), equalTo(false));
+     */
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+        try (Directory directory = newDirectory()) {
+import static org.opensearch.index.mapper.KeywordFieldMapper.normalizeValue;
+        assertThrows(UnsupportedOperationException.class, mapper::canDeriveSource);
+            pluggableSettings,
+        assertEquals(
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+    protected void registerParameters(ParameterChecker checker) throws IOException {
+        }, m -> assertFalse(m.fieldType().getTextSearchInfo().hasNorms()));
+        checker.registerUpdateCheck(b -> b.field("boost", 2.0), m -> assertEquals(m.fieldType().boost(), 2.0, 0));
+                b.endObject();
+                builder.endObject();
+        assertFalse(fieldType.stored());
+        );
+import java.util.Arrays;
+        );
+                new NamedAnalyzer(
+                e.getMessage(),
+import org.apache.lucene.analysis.core.WhitespaceTokenizer;
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
+            "field",
+    protected Collection<? extends Plugin> getPlugins() {
+        checker.registerConflictCheck("normalizer", b -> b.field("normalizer", "lowercase"));
+            mapping(b -> b.startObject("field").field("type", "keyword").endObject())
+            try (DirectoryReader reader = DirectoryReader.open(directory)) {
+            MapperParsingException e = expectThrows(
+        assertEquals(new BytesRef("AbC"), fields[0].binaryValue());
+            () -> merge(mapperService, fieldMapping(b -> b.field("type", "keyword").field("similarity", "BM25")))
+        merge(mapperService, fieldMapping(b -> b.field("type", "keyword").field("multi_value", true)));
+import static org.apache.lucene.tests.analysis.BaseTokenStreamTestCase.assertTokenStreamContents;
+        assertTrue("Expected keyword field captured with normalized value 'abc'", found);
+    }
+    private KeywordFieldMapper getMapper(
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+                    "lowercase",
+            pluggableSettings,
+     * Creates a copy of the lowercase token filter which we use for testing merge errors.
+        checker.registerConflictCheck("doc_values", b -> b.field("doc_values", false));
+        assertLuceneAndPluggablePathsEquivalent(
+        DocumentMapper luceneMapper = createDocumentMapper(mappingBuilder);
+        DocumentMapper mapper = createDocumentMapper(pluggableSettings, mapping(b -> {
+    protected void writeFieldValue(XContentBuilder builder) throws IOException {
+            pluggableSettings,
+    public void testMultiValueCanPromoteButCannotDowngrade() throws IOException {
+                "keyword",
+            "1234"
+            () -> merge(mapperService, fieldMapping(b -> b.field("type", "keyword").field("normalizer", "other_lowercase")))
+            pluggableSettings,
+                        new TokenFilterFactory[] { new TokenFilterFactory() {
+            KeywordFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), Integer.MAX_VALUE, "default", false, true);
+    /**
+    @Override
+        }
+        assertEquals(2, fields.length);
+            pluggableSettings,
+            boolean pluggableHasField = docInput.getCapturedFields().stream().anyMatch(e -> e.getKey().name().equals(fieldName));
+            }
+            IllegalArgumentException.class,
+    }
+    public static class MockAnalysisPlugin extends Plugin implements AnalysisPlugin {
+        assertArrayEquals(new IndexableField[0], doc.rootDoc().getFields("field"));
+        fieldType.setStored(!hasDocValues);
+    public void testPluggableDataFormatIgnoreAboveWithinLimit() throws IOException {
+        assertThat(fieldType.storeTermVectorPayloads(), equalTo(false));
+        int ignoreAbove,
+        Settings settings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+     * then asserts they agree on the produced field value (or absence thereof).
+        mapperService = createMapperService(mapping(b -> {
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+        doc = mapper.parse(source(b -> b.field("field", "opensearch")));
+    }
+import java.io.IOException;
+        KeywordFieldMapper mapper = getMapper(copyTo, Integer.MAX_VALUE, "default", true, false);
+        MapperParsingException ex = expectThrows(
+        checker.registerUpdateCheck(b -> b.field("eager_global_ordinals", true), m -> assertTrue(m.fieldType().eagerGlobalOrdinals()));
+        } else {
+        assertEquals(new BytesRef("1234"), fields[0].binaryValue());
+        // Scenario 5: ignore_above — value within limit
+                b.field("type", "keyword");
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+            b.field("norms", true);
+            assertEquals("Lucene path should produce no field for '" + fieldName + "'", 0, luceneFields.length);
 }
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+            ft.getTextSearchInfo().getSearchAnalyzer().analyzer().tokenStream("", "Hello World"),
+ * Unless required by applicable law or agreed to in writing,
+ * The OpenSearch Contributors require contributions made to
+    public void testDisableIndex() throws IOException {
+        CapturingDocumentInput docInput = new CapturingDocumentInput();
+        assertEquals(DocValuesType.NONE, fieldType.docValuesType());
+        }, b -> {
+        mapper.parse(source(b -> b.field("field", "test_value")), docInput);
+                    .field("ignore_above", ignoreAbove)
+    }
+        );
+            .stream()
+        assertNotNull(fieldMapper.getRawValueFieldType());
+        FieldMapper.CopyTo copyTo = new FieldMapper.CopyTo.Builder().add("copy_to_field").build();
+            .stream()
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword").field("index", false)));
+                    .field("store", isStored)
+/*
+        );
+                        TokenizerFactory.newFactory("lowercase", WhitespaceTokenizer::new),
+/*
+    }
+            MapperParsingException.class,
+        );
+     */
+                XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
+        CapturingDocumentInput docInput = new CapturingDocumentInput();
+            "field",
+        assertLuceneAndPluggablePathsEquivalent(
+        MapperService mapperService = createMapperService(fieldMapping(b -> {
+        ParsedDocument parsed = mapper.parse(source(b -> b.startArray("field").endArray()), docInput);
+        String expectedValue
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+                    new CustomAnalyzer(
+        ft = (KeywordFieldMapper.KeywordFieldType) fieldType;
+import org.apache.lucene.index.IndexableFieldType;
+        assertFalse("Expected no captured field for null value", hasField);
+        DocumentMapper mapper = createDocumentMapper(
+    public void testPluggableDataFormatSingletonArrayRemainsScalar() throws IOException {
+            singletonMap(
+        }));
+        assertThat(fieldType.omitNorms(), equalTo(true));
+            b -> b.nullField("field"),
+import java.util.List;
+        assertEquals(2, fields.length);
+            "field",
+            b -> b.field("field", "opensearch"),
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+        fieldType = mapperService.fieldType("field_with_normalizer");
+        DocumentMapper mapper = createDocumentMapper(
+            e.getMessage()
+            () -> defaultMapper.parse(source(b -> b.startObject("field").nullField("field_name").endObject()))
+        }
+        mapper.parse(source(b -> b.field("text_field", "external_keyword")), docInput);
+        boolean found = docInput.getCapturedFields()
+     * Parses the same source through both the Lucene path and the pluggable DocumentInput path,
+        checker.registerUpdateCheck(b -> b.field("multi_value", true), m -> assertTrue(m.fieldType().isMultiValued()));
+                            }
+import org.apache.lucene.index.IndexOptions;
+            minimalMapping(b);
+        );
+        checker.registerConflictCheck("norms", b -> b.field("norms", true));
+    }
+        // Scenario 3: null_value configured — substitution kicks in
+        return singletonList(new MockAnalysisPlugin());
+    public void testPluggableDataFormatNullValueConfigured() throws IOException {
+        // Lucene path (default, no pluggable setting)
+        assertWarnings("Parameter [boost] on field [field] is deprecated and will be removed in 3.0");
+            MapperParsingException.class,
+        DocumentMapper mapper = createDocumentMapper(mapping);
+                assertEquals("{\"" + FIELD_NAME + "\":" + "\"" + value + "\"" + "}", source);
+import org.opensearch.common.lucene.Lucene;
+        IndexableField[] luceneFields = luceneDoc.rootDoc().getFields(fieldName);
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword").field("normalizer", "lowercase")));
+        checker.registerConflictCheck("index_options", b -> b.field("index_options", "freqs"));
+    public final void testExistsQueryDocValuesDisabled() throws IOException {
+        assertEquals(2, fields.length);
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+import org.apache.lucene.index.DirectoryReader;
+        }
+        checker.registerConflictCheck("index", b -> b.field("index", false));
+        assertLuceneAndPluggablePathsEquivalent(
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+import org.apache.lucene.document.FieldType;
+        assertEquals(0, fieldNamesFields.length);
+ * ownership. Elasticsearch licenses this file to you under
+        assertEquals(0, fields.length);
+            ex.getMessage()
+    }
+            );
+import org.opensearch.index.analysis.IndexAnalyzers;
+    private Document createDocument(KeywordFieldMapper mapper, String value, boolean hasDocValues) throws IOException {
+import org.apache.lucene.analysis.TokenStream;
+        );
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+    }
+public class KeywordFieldMapperTests extends MapperTestCase {
+    }
+        DocumentMapper mapper = createDocumentMapper(
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+import org.opensearch.plugins.AnalysisPlugin;
+        MapperService mapperService = createMapperService(fieldMapping(b -> {
+        KeywordFieldMapper mapper = (KeywordFieldMapper) mapperService.documentMapper().mappers().getMapper(FIELD_NAME);
+        boolean found = docInput.getCapturedFields()
+        assertEquals(1, fields.length);
+        MapperService mapperService = createMapperService(fieldMapping(b -> b.field("type", "keyword").field("similarity", "boolean")));
+        MapperParsingException ex = expectThrows(MapperParsingException.class, () -> defaultMapper.parse(source(b -> {
+                    )
+                b.field("norms", false);
+            .anyMatch(e -> e.getKey().name().equals("field") && e.getValue().equals("default_val"));
+            b.field("doc_values", false);
+     * Helper method to create a document with both doc values and stored fields
+        );
+        MapperService mapperService = createMapperService(fieldMapping(b -> b.field("type", "keyword")));
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+        assertThrows(UnsupportedOperationException.class, mapper::canDeriveSource);
+        }
+        if (expectedValue == null) {
+        // Scenario 1: default keyword
+        assertFalse(fieldType.tokenized());
+        DocumentMapper defaultMapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+import org.apache.lucene.tests.analysis.MockTokenizer;
+import org.opensearch.core.xcontent.XContentBuilder;
+        assertEquals(2, fields.length);
+import org.opensearch.index.analysis.CustomAnalyzer;
+                .anyMatch(e -> e.getKey().name().equals(fieldName) && e.getValue().equals(expectedValue));
+        KeywordFieldMapper.KeywordFieldType ft = (KeywordFieldMapper.KeywordFieldType) fieldType;
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+            mapping(b -> b.startObject("field").field("type", "keyword").field("ignore_above", 5).endObject())
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+    public void testParsesKeywordNestedListStrict() throws IOException {
+                }
+        assertTrue("Expected keyword field captured with value 'test_value'", found);
+        assertEquals(2L, docInput.getFieldCount("field"));
+        DocumentMapper pluggableMapper = createDocumentMapper(pluggableSettings, mappingBuilder);
+        assertThrows(UnsupportedOperationException.class, mapper::canDeriveSource);
+            );
+    }
+    public void testPluggableDataFormatWithNormalizer() throws IOException {
+            b.startArray("field");
+        assertThat(update, instanceOf(KeywordFieldMapper.class));
+    }
+import java.util.Collection;
+    }
+                "other_lowercase",
+    }
+            pluggableSettings,
+        );
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "elk")));
+    }
+        doc = mapper.parse(source(b -> {}));
+        checker.registerConflictCheck("null_value", b -> b.field("null_value", "foo"));
+        assertParseMinimalWarnings();
+    protected void assertParseMaximalWarnings() {
+            mapping(b -> b.startObject("field").field("type", "keyword").field("normalizer", "lowercase").endObject())
+        for (String indexOptions : Arrays.asList("positions", "offsets")) {
+    @Override
+    public void testPluggableDataFormatWithExternalValue() throws IOException {
+        assertEquals(
+            ex.getMessage()
+            b.startObject("field").field("type", "keyword").endObject();
+        @Override
+            e.getMessage()
+                    AnalyzerScope.INDEX,
+        mapper.parse(source(b -> b.nullField("field")), docInput);
+        }));
+        CapturingDocumentInput docInput = new CapturingDocumentInput();
+ * not use this file except in compliance with the License.
+                containsString("Unknown value [" + indexOptions + "] for field [index_options] - accepted values are [docs, freqs]")
+package org.opensearch.index.mapper;
+        assertEquals(new BytesRef("uri"), fields[0].binaryValue());
+        DocumentMapper mapper = createDocumentMapper(
+     */
+        assertLuceneAndPluggablePathsEquivalent(
+        ParsedDocument parsed = mapper.parse(source(b -> b.array("field", "one")), docInput);
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
+        // Pluggable path
+        assertEquals(DocValuesType.SORTED_SET, fieldType.docValuesType());
+            mapping(b -> b.startObject("field").field("type", "keyword").endObject())
+        assertExistsQuery(mapperService);
+            b.endObject();
+    public void testParsesKeywordNestedEmptyObjectStrict() throws IOException {
+    public final void testExistsQueryDocValuesDisabledWithNorms() throws IOException {
+            b.endObject();
+            b.field("type", "keyword");
+        builder.value("value");
+            KeywordFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), Integer.MAX_VALUE, "default", true, false);
+        Exception e = expectThrows(
+        boolean hasField = docInput.getCapturedFields().stream().anyMatch(e -> e.getKey().name().equals("field"));
+    public void testPluggableDataFormatNullValueSkipped() throws IOException {
+                b -> b.field("type", "keyword")
+        assertEquals(1L, docInput.getFieldCount("field"));
+            b -> b.field("field", "elk"),
+        assertFalse(fieldType.tokenized());
+        assertThat(fieldType.indexOptions(), equalTo(IndexOptions.NONE));
+                b.field("type", "keyword");
+    }
+            null
+        assertTrue("Expected keyword sub-field captured with external value 'external_keyword'", found);
+    }
+import org.opensearch.index.analysis.CharFilterFactory;
+        );
+        assertThat(fieldType.indexOptions(), equalTo(IndexOptions.DOCS));
+                mapper.deriveSource(builder, reader.leaves().get(0).reader(), 0);
+    ) throws IOException {
+        FieldType fieldType = new FieldType(KeywordFieldMapper.Defaults.FIELD_TYPE);
+            b -> b.field("field", "1234"),
+    public void testPluggablePathEquivalenceWithLucenePath() throws IOException {
+        if (hasDocValues) {
+        assertThat(fieldType.storeTermVectors(), equalTo(false));
+import org.apache.lucene.store.Directory;
+    }
+            new String[] { "hello", "world" }
+        doc = mapper.parse(source(b -> b.nullField("field")));
+    }
+        );
+            {
+     * @param expectedValue the expected value, or null if no field should be produced
+    public void testPossibleToDeriveSource_WhenDocValuesAndStoredDisabled() throws IOException {
+                b.field("normalizer", "lowercase");
+    }
+                        new CharFilterFactory[0],
+        checker.registerUpdateCheck(
+            IllegalArgumentException.class,
+                )
+        );
+                b.field("split_queries_on_whitespace", true);
+    }
+                            @Override
+    }
+            return singletonList(PreConfiguredTokenFilter.singleton("mock_other_lowercase", true, MockLowerCaseFilter::new));
+            b.startObject("field_with_normalizer");
+                String source = builder.toString();
+        );
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1234")));
+            Map.of(
+ * under the License.
+            "failed to parse field [field] of type [keyword] in document with id '1'. " + "Preview of field's value: '{}'",
+ * this work for additional information regarding copyright
+            singletonMap("default", new NamedAnalyzer("default", AnalyzerScope.INDEX, new StandardAnalyzer())),
+import org.opensearch.index.analysis.TokenFilterFactory;
+            fieldMapping(b -> b.field("type", "keyword").field("doc_values", false).field("norms", true))
+    public void testSplitQueriesOnWhitespace() throws IOException {
+        boolean found = docInput.getCapturedFields()
+        mapper.parse(source(b -> b.field("field", "AbC")), docInput);
+        );
+        for (String value : new String[] { "", "AbC", " leading and trailing ", "multi\nline", randomUnicodeOfLength(between(1, 512)) }) {
+import org.apache.lucene.index.DocValuesType;
+        return doc;
+        assertEquals(DocValuesType.SORTED_SET, fieldType.docValuesType());
+        DocumentMapper mapper = createDocumentMapper(
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+import org.opensearch.index.analysis.PreConfiguredTokenFilter;
+        boolean hasField = docInput.getCapturedFields().stream().anyMatch(e -> e.getKey().name().equals("field"));
+    public void testEnableStore() throws IOException {
+        assertArrayEquals(new String[] { "1234" }, TermVectorsService.getValues(doc.rootDoc().getFields("field")));
+                            public TokenStream create(TokenStream tokenStream) {
+/*
+        ParsedDocument parsed = mapper.parse(source(b -> b.array("field", "one", "two")), docInput);
+    public void testUpdateNormalizer() throws IOException {
+            mapping(b -> b.startObject("field").field("type", "keyword").endObject()),
+            new String[] { "Hello", "World" }
+        String normalizerName,
+            }
+            b.field("doc_values", false);
+        MappedFieldType fieldType = mapperService.fieldType("field");
+            IllegalArgumentException.class,
+        KeywordFieldMapper mapper = getMapper(FieldMapper.CopyTo.empty(), 100, "default", true, false);
+import org.opensearch.index.analysis.AnalyzerScope;
+        fieldType = fields[1].fieldType();
+            }
+import org.opensearch.common.util.FeatureFlags;
+            null
+    public void testPossibleToDeriveSource_WhenCopyToPresent() throws IOException {
+import org.apache.lucene.index.IndexWriterConfig;
+            b.field("norms", false);
+        assertEquals(1, fields.length);
+        mapper.parse(source(b -> b.nullField("field")), docInput);
+    }
+        assertEquals(DocValuesType.NONE, fields[0].fieldType().docValuesType());
+                assertEquals("{\"" + FIELD_NAME + "\":" + "\"" + value + "\"" + "}", source);
+    public void testEnableNorms() throws IOException {
+    /**
+        value = normalizeValue(normalizer, FIELD_NAME, value);
+            mapping(b -> b.startObject("field").field("type", "keyword").field("null_value", "default_val").endObject())
+            b -> b.field("field", "AbC"),
+import static org.hamcrest.Matchers.instanceOf;
+            String value = "keyword_value";
+        assertTokenStreamContents(
+        assertTrue("Expected keyword field captured with value 'elk' within ignore_above limit", found);
+ * Modifications Copyright OpenSearch Contributors. See
+        assertWarnings("Parameter [boost] on field [field] is deprecated and will be removed in 3.0");
+    }
+                                return "lowercase";
+import org.opensearch.index.analysis.TokenizerFactory;
+        assertTokenStreamContents(a.tokenStream("", "Hello World"), new String[] { "Hello World" });
+            ft.getTextSearchInfo().getSearchAnalyzer().analyzer().tokenStream("", "Hello World"),
+        assertEquals(new BytesRef("abc"), fields[0].binaryValue());
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "keyword")));

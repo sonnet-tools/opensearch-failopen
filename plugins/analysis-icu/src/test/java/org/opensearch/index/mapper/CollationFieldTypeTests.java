@@ -1,193 +1,166 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import com.carrotsearch.randomizedtesting.generators.RandomStrings;
-
-import com.ibm.icu.text.Collator;
-import com.ibm.icu.text.RawCollationKey;
-import com.ibm.icu.util.ULocale;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.MultiTermQuery;
-import org.apache.lucene.search.TermInSetQuery;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TermRangeQuery;
 import org.apache.lucene.util.BytesRef;
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.unit.Fuzziness;
-import org.opensearch.index.mapper.ICUCollationKeywordFieldMapper.CollationFieldType;
-import org.opensearch.index.mapper.MappedFieldType.Relation;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
-public class CollationFieldTypeTests extends FieldTypeTestCase {
-
-    private static final Collator DEFAULT_COLLATOR = Collator.getInstance(ULocale.ROOT).freeze();
-
-    private static CollationFieldType createFieldType() {
-        return new CollationFieldType("field", DEFAULT_COLLATOR);
-    }
-
-    public void testIsFieldWithinQuery() throws IOException {
-        CollationFieldType ft = createFieldType();
-        // current impl ignores args and shourd always return INTERSECTS
-        assertEquals(
-            Relation.INTERSECTS,
-            ft.isFieldWithinQuery(
-                null,
-                RandomStrings.randomAsciiOfLengthBetween(random(), 0, 5),
-                RandomStrings.randomAsciiOfLengthBetween(random(), 0, 5),
-                randomBoolean(),
-                randomBoolean(),
-                null,
-                null,
-                null
             )
+ * Unless required by applicable law or agreed to in writing,
+            new BytesRef(bKey.bytes, 0, bKey.size),
+ * not use this file except in compliance with the License.
+                MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE,
+        RawCollationKey aKey = DEFAULT_COLLATOR.getRawCollationKey("a", null);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        MappedFieldType unsearchable = new CollationFieldType("field", false, DEFAULT_COLLATOR);
+ * this work for additional information regarding copyright
+import com.ibm.icu.util.ULocale;
         );
-    }
-
-    public void testTermQuery() {
-        Collator collator = Collator.getInstance(new ULocale("tr"));
-        collator.setStrength(Collator.PRIMARY);
-        collator.freeze();
-        MappedFieldType ft = new CollationFieldType("field", collator);
-
-        RawCollationKey key = collator.getRawCollationKey("ı will use turkish casıng", null);
-        BytesRef expected = new BytesRef(key.bytes, 0, key.size);
-
-        assertEquals(new TermQuery(new Term("field", expected)), ft.termQuery("I WİLL USE TURKİSH CASING", null));
-
-        MappedFieldType unsearchable = new CollationFieldType("field", false, collator);
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> unsearchable.termQuery("bar", null));
-        assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());
-    }
-
+            UnsupportedOperationException.class,
+        );
+        RawCollationKey fooKey = collator.getRawCollationKey("foo", null);
+ *    http://www.apache.org/licenses/LICENSE-2.0
     public void testTermsQuery() {
+                null
+        );
+        List<BytesRef> terms = new ArrayList<>();
+        assertEquals("[prefix] queries are not supported on [icu_collation_keyword] fields.", e.getMessage());
+        terms.add(new BytesRef(fooKey.bytes, 0, fooKey.size));
+        assertEquals("[wildcard] queries are not supported on [icu_collation_keyword] fields.", e.getMessage());
+        RawCollationKey key = collator.getRawCollationKey("ı will use turkish casıng", null);
+import org.opensearch.index.mapper.ICUCollationKeywordFieldMapper.CollationFieldType;
+ */
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> unsearchable.termQuery("bar", null));
+        assertEquals(
+        MappedFieldType ft = createFieldType();
+            ee.getMessage()
+ *
+    public void testRegexpQuery() {
+    public void testWildcardQuery() {
+/*
+            "field",
+        );
+/*
+        IllegalArgumentException e = expectThrows(
+    public void testRangeQuery() {
+            false,
+    public void testIsFieldWithinQuery() throws IOException {
+package org.opensearch.index.mapper;
+                true,
+        Collator collator = Collator.getInstance(new ULocale("tr"));
+ * compatible open source license.
+            () -> ft.rangeQuery("a", "b", true, true, null, null, null, MOCK_QSC_DISALLOW_EXPENSIVE)
+ * license agreements. See the NOTICE file distributed with
+                randomMockShardContext()
+            ft.isFieldWithinQuery(
+        );
+            () -> ft.fuzzyQuery(
+        MappedFieldType unsearchable = new CollationFieldType("field", false, collator);
+}
+        MappedFieldType ft = createFieldType();
+                1,
+ */
+                Fuzziness.fromEdits(2),
+            UnsupportedOperationException.class,
+        MappedFieldType ft = createFieldType();
+import org.apache.lucene.index.Term;
+        assertEquals(
+        // current impl ignores args and shourd always return INTERSECTS
+    }
+import org.apache.lucene.search.MultiTermQuery;
+        UnsupportedOperationException e = expectThrows(
+    }
+import java.io.IOException;
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.ArrayList;
+        return new CollationFieldType("field", DEFAULT_COLLATOR);
+        collator.setStrength(Collator.PRIMARY);
+        RawCollationKey bKey = DEFAULT_COLLATOR.getRawCollationKey("b", null);
+                randomBoolean(),
+        );
+ * Modifications Copyright OpenSearch Contributors. See
+        OpenSearchException ee = expectThrows(
         Collator collator = DEFAULT_COLLATOR;
         MappedFieldType ft = new CollationFieldType("field", collator);
-
-        RawCollationKey fooKey = collator.getRawCollationKey("foo", null);
-        RawCollationKey barKey = collator.getRawCollationKey("bar", null);
-
-        List<BytesRef> terms = new ArrayList<>();
-        terms.add(new BytesRef(fooKey.bytes, 0, fooKey.size));
-        terms.add(new BytesRef(barKey.bytes, 0, barKey.size));
-
-        assertEquals(new TermInSetQuery("field", terms), ft.termsQuery(Arrays.asList("foo", "bar"), null));
-
-        MappedFieldType unsearchable = new CollationFieldType("field", false, collator);
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
             () -> unsearchable.termsQuery(Arrays.asList("foo", "bar"), null)
+                "foo",
         );
+        UnsupportedOperationException e = expectThrows(
+            new BytesRef(aKey.bytes, 0, aKey.size),
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.unit.Fuzziness;
+            UnsupportedOperationException.class,
+ * KIND, either express or implied.  See the License for the
+ * ownership. Elasticsearch licenses this file to you under
+        assertEquals(expected, ft.rangeQuery("a", "b", false, false, null, null, null, MOCK_QSC));
+            Relation.INTERSECTS,
+import org.apache.lucene.search.TermInSetQuery;
+public class CollationFieldTypeTests extends FieldTypeTestCase {
+    }
+ * The OpenSearch Contributors require contributions made to
+    private static CollationFieldType createFieldType() {
+import com.ibm.icu.text.Collator;
+            () -> unsearchable.rangeQuery("a", "b", false, false, null, null, null, MOCK_QSC)
+ *
+    }
+            () -> ft.regexpQuery("foo.*", 0, 0, 10, null, randomMockShardContext())
+ * under the License.
+            () -> ft.wildcardQuery("foo*", null, randomMockShardContext())
+import java.util.List;
+import java.util.Arrays;
         assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());
     }
-
-    public void testRegexpQuery() {
-        MappedFieldType ft = createFieldType();
+import org.opensearch.OpenSearchException;
+ *
         UnsupportedOperationException e = expectThrows(
-            UnsupportedOperationException.class,
-            () -> ft.regexpQuery("foo.*", 0, 0, 10, null, randomMockShardContext())
+ * the Apache License, Version 2.0 (the "License"); you may
+        TermRangeQuery expected = new TermRangeQuery(
+import org.opensearch.index.mapper.MappedFieldType.Relation;
+            () -> ft.prefixQuery("prefix", null, randomMockShardContext())
+        assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());
+        CollationFieldType ft = createFieldType();
+        assertEquals(new TermQuery(new Term("field", expected)), ft.termQuery("I WİLL USE TURKİSH CASING", null));
         );
-        assertEquals("[regexp] queries are not supported on [icu_collation_keyword] fields.", e.getMessage());
-    }
-
-    public void testFuzzyQuery() {
-        MappedFieldType ft = createFieldType();
-        UnsupportedOperationException e = expectThrows(
-            UnsupportedOperationException.class,
-            () -> ft.fuzzyQuery(
-                "foo",
-                Fuzziness.fromEdits(2),
-                1,
-                50,
-                true,
-                MultiTermQuery.CONSTANT_SCORE_BLENDED_REWRITE,
-                randomMockShardContext()
-            )
-        );
+    public void testTermQuery() {
+        assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());
+            OpenSearchException.class,
         assertEquals("[fuzzy] queries are not supported on [icu_collation_keyword] fields.", e.getMessage());
     }
-
+import org.apache.lucene.search.TermRangeQuery;
+    private static final Collator DEFAULT_COLLATOR = Collator.getInstance(ULocale.ROOT).freeze();
+    }
+        MappedFieldType ft = new CollationFieldType("field", collator);
+    public void testFuzzyQuery() {
+ * You may obtain a copy of the License at
+    }
+        );
+            UnsupportedOperationException.class,
+ */
+        RawCollationKey barKey = collator.getRawCollationKey("bar", null);
+        BytesRef expected = new BytesRef(key.bytes, 0, key.size);
+    }
+        terms.add(new BytesRef(barKey.bytes, 0, barKey.size));
+        MappedFieldType ft = createFieldType();
+            )
+        assertEquals(new TermInSetQuery("field", terms), ft.termsQuery(Arrays.asList("foo", "bar"), null));
+ * software distributed under the License is distributed on an
+import com.carrotsearch.randomizedtesting.generators.RandomStrings;
+                null,
+        assertEquals("[regexp] queries are not supported on [icu_collation_keyword] fields.", e.getMessage());
+ * specific language governing permissions and limitations
+                null,
+                RandomStrings.randomAsciiOfLengthBetween(random(), 0, 5),
+                RandomStrings.randomAsciiOfLengthBetween(random(), 0, 5),
     public void testPrefixQuery() {
         MappedFieldType ft = createFieldType();
         UnsupportedOperationException e = expectThrows(
-            UnsupportedOperationException.class,
-            () -> ft.prefixQuery("prefix", null, randomMockShardContext())
-        );
-        assertEquals("[prefix] queries are not supported on [icu_collation_keyword] fields.", e.getMessage());
-    }
-
-    public void testWildcardQuery() {
-        MappedFieldType ft = createFieldType();
-        UnsupportedOperationException e = expectThrows(
-            UnsupportedOperationException.class,
-            () -> ft.wildcardQuery("foo*", null, randomMockShardContext())
-        );
-        assertEquals("[wildcard] queries are not supported on [icu_collation_keyword] fields.", e.getMessage());
-    }
-
-    public void testRangeQuery() {
-        MappedFieldType ft = createFieldType();
-        RawCollationKey aKey = DEFAULT_COLLATOR.getRawCollationKey("a", null);
-        RawCollationKey bKey = DEFAULT_COLLATOR.getRawCollationKey("b", null);
-
-        TermRangeQuery expected = new TermRangeQuery(
-            "field",
-            new BytesRef(aKey.bytes, 0, aKey.size),
-            new BytesRef(bKey.bytes, 0, bKey.size),
-            false,
             false
-        );
-
-        assertEquals(expected, ft.rangeQuery("a", "b", false, false, null, null, null, MOCK_QSC));
-
-        OpenSearchException ee = expectThrows(
-            OpenSearchException.class,
-            () -> ft.rangeQuery("a", "b", true, true, null, null, null, MOCK_QSC_DISALLOW_EXPENSIVE)
-        );
-        assertEquals(
             "[range] queries on [text] or [keyword] fields cannot be executed when " + "'search.allow_expensive_queries' is set to false.",
-            ee.getMessage()
+import com.ibm.icu.text.RawCollationKey;
+/*
+                null,
+import org.apache.lucene.search.TermQuery;
+                50,
         );
-
-        MappedFieldType unsearchable = new CollationFieldType("field", false, DEFAULT_COLLATOR);
-        IllegalArgumentException e = expectThrows(
+ * GitHub history for details.
             IllegalArgumentException.class,
-            () -> unsearchable.rangeQuery("a", "b", false, false, null, null, null, MOCK_QSC)
-        );
-        assertEquals("Cannot search on field [field] since it is not indexed.", e.getMessage());
-    }
-}
+        IllegalArgumentException e = expectThrows(
+        collator.freeze();
+            IllegalArgumentException.class,
+ * Licensed to Elasticsearch under one or more contributor
+                randomBoolean(),
+        MappedFieldType unsearchable = new CollationFieldType("field", false, collator);

@@ -1,297 +1,269 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.reindex;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-
-import static java.util.Collections.unmodifiableMap;
-import static java.util.Objects.requireNonNull;
-import static org.opensearch.common.unit.TimeValue.timeValueSeconds;
-import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
-
-/**
- * Encapsulates informatoin for remote resources
- *
- * @opensearch.internal
- */
+        if (headers.size() > 0) {
 public class RemoteInfo implements Writeable, ToXContentObject {
-    /**
-     * Default {@link #socketTimeout} for requests that don't have one set.
-     */
-    public static final TimeValue DEFAULT_SOCKET_TIMEOUT = timeValueSeconds(30);
-    /**
-     * Default {@link #connectTimeout} for requests that don't have one set.
-     */
-    public static final TimeValue DEFAULT_CONNECT_TIMEOUT = timeValueSeconds(30);
-
-    public static final XContent QUERY_CONTENT_TYPE = JsonXContent.jsonXContent;
-
-    private final String scheme;
-    private final String host;
+    }
+            && Objects.equals(password, that.password)
+ *
     private final int port;
+            return BytesReference.bytes(matchAllQuery().toXContent(builder, ToXContent.EMPTY_PARAMS));
+ */
     private final String pathPrefix;
-    private final BytesReference query;
-    private final String username;
-    private final String password;
-    private final Map<String, String> headers;
-    /**
-     * Time to wait for a response from each request.
-     */
-    private final TimeValue socketTimeout;
-    /**
-     * Time to wait for a connecting to the remote cluster.
-     */
-    private final TimeValue connectTimeout;
-
-    public RemoteInfo(
-        String scheme,
-        String host,
-        int port,
-        String pathPrefix,
-        BytesReference query,
-        String username,
-        String password,
-        Map<String, String> headers,
-        TimeValue socketTimeout,
-        TimeValue connectTimeout
-    ) {
-        assert isQueryJson(query) : "Query does not appear to be JSON";
-        this.scheme = requireNonNull(scheme, "[scheme] must be specified to reindex from a remote cluster");
-        this.host = requireNonNull(host, "[host] must be specified to reindex from a remote cluster");
+        scheme = in.readString();
+            // http is the default so it isn't worth taking up space if it is the scheme
         this.port = port;
-        this.pathPrefix = pathPrefix;
-        this.query = requireNonNull(query, "[query] must be specified to reindex from a remote cluster");
-        this.username = username;
-        this.password = password;
-        this.headers = unmodifiableMap(requireNonNull(headers, "[headers] is required"));
+        if (false == "http".equals(scheme)) {
+ * under the License.
+import org.opensearch.core.common.io.stream.StreamInput;
+            && Objects.equals(pathPrefix, that.pathPrefix)
+    }
+        }
+ */
+    ) {
+    public String getHost() {
+            throw new IllegalArgumentException("Expected [query] to be an object but was [" + query + "]");
+import org.opensearch.core.common.bytes.BytesReference;
+ * the Apache License, Version 2.0 (the "License"); you may
+            )
+                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+import org.opensearch.common.xcontent.json.JsonXContent;
+/*
+            && Objects.equals(connectTimeout, that.connectTimeout);
+        builder.field("host", scheme + "://" + host + ":" + port + (pathPrefix == null ? "" : "/" + pathPrefix));
+    private static boolean isQueryJson(BytesReference bytesReference) {
+            && Objects.equals(query, that.query)
         this.socketTimeout = requireNonNull(socketTimeout, "[socketTimeout] must be specified");
+    }
+     * Time to wait to connect to the external cluster.
+import org.opensearch.core.xcontent.XContent;
+        out.writeVInt(headers.size());
+        String scheme,
+     * Default {@link #connectTimeout} for requests that don't have one set.
+        }
+ * Unless required by applicable law or agreed to in writing,
+        out.writeOptionalString(pathPrefix);
+        }
+import org.opensearch.common.Nullable;
+    /**
+        assert isQueryJson(query) : "Query does not appear to be JSON";
+/*
+    public Map<String, String> getHeaders() {
+    }
+ * Licensed to Elasticsearch under one or more contributor
+        this.headers = unmodifiableMap(headers);
+import org.opensearch.core.xcontent.ToXContent;
+    public String getUsername() {
+    }
+package org.opensearch.index.reindex;
+    public TimeValue getConnectTimeout() {
+import org.opensearch.core.xcontent.ToXContentObject;
+        }
+        pathPrefix = in.readOptionalString();
+        out.writeTimeValue(connectTimeout);
+        }
+            builder.field("headers", headers);
+    }
+            headers.put(in.readString(), in.readString());
+        socketTimeout = in.readTimeValue();
+ * @opensearch.internal
+     */
+    public String toString() {
+        builder.field("socket_timeout", socketTimeout.getStringRep());
+    public String getPassword() {
+        query = in.readBytesReference();
+    private final String host;
+    private final TimeValue connectTimeout;
         this.connectTimeout = requireNonNull(connectTimeout, "[connectTimeout] must be specified");
     }
-
-    /**
-     * Read from a stream.
-     */
-    public RemoteInfo(StreamInput in) throws IOException {
-        scheme = in.readString();
-        host = in.readString();
-        port = in.readVInt();
-        query = in.readBytesReference();
-        username = in.readOptionalString();
-        password = in.readOptionalString();
-        int headersLength = in.readVInt();
-        Map<String, String> headers = new HashMap<>(headersLength);
-        for (int i = 0; i < headersLength; i++) {
-            headers.put(in.readString(), in.readString());
-        }
-        this.headers = unmodifiableMap(headers);
-        socketTimeout = in.readTimeValue();
-        connectTimeout = in.readTimeValue();
-        pathPrefix = in.readOptionalString();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(scheme);
-        out.writeString(host);
-        out.writeVInt(port);
-        out.writeBytesReference(query);
-        out.writeOptionalString(username);
-        out.writeOptionalString(password);
-        out.writeVInt(headers.size());
-        for (Map.Entry<String, String> header : headers.entrySet()) {
-            out.writeString(header.getKey());
-            out.writeString(header.getValue());
-        }
-        out.writeTimeValue(socketTimeout);
-        out.writeTimeValue(connectTimeout);
-        out.writeOptionalString(pathPrefix);
-    }
-
-    public String getScheme() {
-        return scheme;
-    }
-
-    public String getHost() {
-        return host;
-    }
-
-    public int getPort() {
-        return port;
-    }
-
-    @Nullable
-    public String getPathPrefix() {
-        return pathPrefix;
-    }
-
-    public BytesReference getQuery() {
-        return query;
-    }
-
-    @Nullable
-    public String getUsername() {
-        return username;
-    }
-
-    @Nullable
-    public String getPassword() {
-        return password;
-    }
-
-    public Map<String, String> getHeaders() {
-        return headers;
-    }
-
-    /**
-     * Time to wait for a response from each request.
-     */
-    public TimeValue getSocketTimeout() {
-        return socketTimeout;
-    }
-
-    /**
-     * Time to wait to connect to the external cluster.
-     */
-    public TimeValue getConnectTimeout() {
-        return connectTimeout;
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder b = new StringBuilder();
-        if (false == "http".equals(scheme)) {
-            // http is the default so it isn't worth taking up space if it is the scheme
-            b.append("scheme=").append(scheme).append(' ');
-        }
-        b.append("host=").append(host).append(" port=").append(port);
-        if (pathPrefix != null) {
-            b.append(" pathPrefix=").append(pathPrefix);
-        }
-        b.append(" query=").append(query.utf8ToString());
-        if (username != null) {
-            b.append(" username=").append(username);
-        }
-        if (password != null) {
-            b.append(" password=<<>>");
-        }
-        return b.toString();
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        if (username != null) {
-            builder.field("username", username);
-        }
-        if (password != null) {
-            builder.field("password", password);
-        }
-        builder.field("host", scheme + "://" + host + ":" + port + (pathPrefix == null ? "" : "/" + pathPrefix));
-        if (headers.size() > 0) {
-            builder.field("headers", headers);
-        }
-        builder.field("socket_timeout", socketTimeout.getStringRep());
-        builder.field("connect_timeout", connectTimeout.getStringRep());
-        builder.endObject();
-        return builder;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        RemoteInfo that = (RemoteInfo) o;
-        return port == that.port
-            && Objects.equals(scheme, that.scheme)
-            && Objects.equals(host, that.host)
-            && Objects.equals(pathPrefix, that.pathPrefix)
-            && Objects.equals(query, that.query)
-            && Objects.equals(username, that.username)
-            && Objects.equals(password, that.password)
-            && Objects.equals(headers, that.headers)
-            && Objects.equals(socketTimeout, that.socketTimeout)
-            && Objects.equals(connectTimeout, that.connectTimeout);
-    }
-
-    @Override
-    public int hashCode() {
         return Objects.hash(scheme, host, port, pathPrefix, query, username, password, headers, socketTimeout, connectTimeout);
+        out.writeString(scheme);
+     * Read from a stream.
+            return true;
+ * ownership. Elasticsearch licenses this file to you under
+            b.append(" pathPrefix=").append(pathPrefix);
+        return port == that.port
+        @SuppressWarnings("unchecked")
     }
-
-    static BytesReference queryForRemote(Map<String, Object> source) throws IOException {
-        XContentBuilder builder = XContentBuilder.builder(QUERY_CONTENT_TYPE).prettyPrint();
-        Object query = source.remove("query");
-        if (query == null) {
-            return BytesReference.bytes(matchAllQuery().toXContent(builder, ToXContent.EMPTY_PARAMS));
+/*
+ *
+     */
+    private final TimeValue socketTimeout;
+ * this file be licensed under the Apache-2.0 license or a
+            && Objects.equals(username, that.username)
+        } catch (IOException e) {
+    }
+        }
+ * GitHub history for details.
+ * license agreements. See the NOTICE file distributed with
+        port = in.readVInt();
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         }
         if (!(query instanceof Map<?, ?>)) {
-            throw new IllegalArgumentException("Expected [query] to be an object but was [" + query + "]");
-        }
-        @SuppressWarnings("unchecked")
-        Map<String, Object> map = (Map<String, Object>) query;
-        return BytesReference.bytes(builder.map(map));
-    }
-
-    private static boolean isQueryJson(BytesReference bytesReference) {
-        try (
+    static BytesReference queryForRemote(Map<String, Object> source) throws IOException {
+    public TimeValue getSocketTimeout() {
+    private final String username;
+    public int hashCode() {
+        return username;
+        if (username != null) {
+    /**
+    public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.core.xcontent.XContentBuilder;
+        out.writeBytesReference(query);
             XContentParser parser = QUERY_CONTENT_TYPE.createParser(
-                NamedXContentRegistry.EMPTY,
-                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                bytesReference.streamInput()
-            )
-        ) {
-            Map<String, Object> query = parser.map();
-            return true;
-        } catch (IOException e) {
-            throw new AssertionError("Could not parse JSON", e);
-        }
-    }
+ */
+            b.append("scheme=").append(scheme).append(' ');
+        out.writeString(host);
+import java.util.Objects;
+        this.pathPrefix = pathPrefix;
+            && Objects.equals(socketTimeout, that.socketTimeout)
+        for (int i = 0; i < headersLength; i++) {
+     * Default {@link #socketTimeout} for requests that don't have one set.
+        this.password = password;
+        return pathPrefix;
 }
+     * Time to wait for a response from each request.
+    /**
+ * specific language governing permissions and limitations
+        this.scheme = requireNonNull(scheme, "[scheme] must be specified to reindex from a remote cluster");
+        if (password != null) {
+        if (pathPrefix != null) {
+            && Objects.equals(scheme, that.scheme)
+import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
+        b.append("host=").append(host).append(" port=").append(port);
+        BytesReference query,
+ * compatible open source license.
+        int headersLength = in.readVInt();
+    public String getPathPrefix() {
+        this.headers = unmodifiableMap(requireNonNull(headers, "[headers] is required"));
+            b.append(" username=").append(username);
+ * not use this file except in compliance with the License.
+    @Nullable
+        b.append(" query=").append(query.utf8ToString());
+        int port,
+    }
+        Object query = source.remove("query");
+import org.opensearch.core.common.io.stream.Writeable;
+        return port;
+ * this work for additional information regarding copyright
+        builder.startObject();
+    /**
+        return query;
+    public RemoteInfo(
+            Map<String, Object> query = parser.map();
+        }
+    /**
+        return BytesReference.bytes(builder.map(map));
+        return connectTimeout;
+            throw new AssertionError("Could not parse JSON", e);
+    public static final TimeValue DEFAULT_CONNECT_TIMEOUT = timeValueSeconds(30);
+        connectTimeout = in.readTimeValue();
+    @Override
+    }
+        out.writeVInt(port);
+        if (query == null) {
+    }
+            b.append(" password=<<>>");
+        }
+     */
+ * SPDX-License-Identifier: Apache-2.0
+    /**
+            builder.field("username", username);
+    public int getPort() {
+ * Encapsulates informatoin for remote resources
+    private final String scheme;
+        String password,
+import java.util.Map;
+import java.util.HashMap;
+        Map<String, Object> map = (Map<String, Object>) query;
+        return b.toString();
+    /**
+                NamedXContentRegistry.EMPTY,
+        TimeValue socketTimeout,
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    private final Map<String, String> headers;
+    public static final XContent QUERY_CONTENT_TYPE = JsonXContent.jsonXContent;
+    }
+        builder.field("connect_timeout", connectTimeout.getStringRep());
+    public String getScheme() {
+import static java.util.Collections.unmodifiableMap;
+    public BytesReference getQuery() {
+     * Time to wait for a connecting to the remote cluster.
+        out.writeTimeValue(socketTimeout);
+        if (this == o) return true;
+    }
+        return socketTimeout;
+        XContentBuilder builder = XContentBuilder.builder(QUERY_CONTENT_TYPE).prettyPrint();
+        if (o == null || getClass() != o.getClass()) return false;
+        host = in.readString();
+/**
+     */
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
+        return password;
+    }
+        String pathPrefix,
+        if (username != null) {
+import org.opensearch.common.unit.TimeValue;
+        ) {
+            out.writeString(header.getKey());
+        }
+        return scheme;
+    @Override
+ *
+     */
+        out.writeOptionalString(password);
+        return builder;
+        Map<String, String> headers = new HashMap<>(headersLength);
+            && Objects.equals(host, that.host)
+        for (Map.Entry<String, String> header : headers.entrySet()) {
+        StringBuilder b = new StringBuilder();
+                bytesReference.streamInput()
+        this.username = username;
+        Map<String, String> headers,
+ * software distributed under the License is distributed on an
+        }
+ * You may obtain a copy of the License at
+     */
+        String host,
+import static org.opensearch.common.unit.TimeValue.timeValueSeconds;
+    public static final TimeValue DEFAULT_SOCKET_TIMEOUT = timeValueSeconds(30);
+    }
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+            && Objects.equals(headers, that.headers)
+    private final BytesReference query;
+        TimeValue connectTimeout
+        RemoteInfo that = (RemoteInfo) o;
+        return host;
+ * KIND, either express or implied.  See the License for the
+ *
+import org.opensearch.core.xcontent.XContentParser;
+        try (
+    @Override
+     */
+ */
+    @Nullable
+import static java.util.Objects.requireNonNull;
+import java.io.IOException;
+    @Override
+import org.opensearch.core.xcontent.DeprecationHandler;
+            builder.field("password", password);
+        password = in.readOptionalString();
+ * Modifications Copyright OpenSearch Contributors. See
+ * The OpenSearch Contributors require contributions made to
+        this.query = requireNonNull(query, "[query] must be specified to reindex from a remote cluster");
+        String username,
+    public boolean equals(Object o) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        out.writeOptionalString(username);
+    }
+    public RemoteInfo(StreamInput in) throws IOException {
+        if (password != null) {
+        return headers;
+        username = in.readOptionalString();
+    @Override
+        this.host = requireNonNull(host, "[host] must be specified to reindex from a remote cluster");
+    @Nullable
+    private final String password;
+    }
+        builder.endObject();
+            out.writeString(header.getValue());
+     * Time to wait for a response from each request.

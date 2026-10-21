@@ -1,411 +1,368 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.ssl;
-
-import org.opensearch.common.Nullable;
-
-import javax.net.ssl.SSLSession;
-
-import java.security.cert.CertificateEncodingException;
-import java.security.cert.CertificateParsingException;
-import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
-
-public class SslDiagnostics {
-
-    public static List<String> describeValidHostnames(X509Certificate certificate) {
-        try {
-            final Collection<List<?>> names = certificate.getSubjectAlternativeNames();
-            if (names == null || names.isEmpty()) {
-                return Collections.emptyList();
-            }
-            final List<String> description = new ArrayList<>(names.size());
-            for (List<?> pair : names) {
-                if (pair == null || pair.size() != 2) {
-                    continue;
-                }
-                if ((pair.get(0) instanceof Integer) == false || (pair.get(1) instanceof String) == false) {
-                    continue;
-                }
-                final int type = ((Integer) pair.get(0)).intValue();
-                final String name = (String) pair.get(1);
-                if (type == 2) {
-                    description.add("DNS:" + name);
-                } else if (type == 7) {
-                    description.add("IP:" + name);
-                }
-            }
-            return description;
-        } catch (CertificateParsingException e) {
-            return Collections.emptyList();
-        }
-    }
-
-    public enum PeerType {
-        CLIENT,
-        SERVER
-    }
-
-    private static class IssuerTrust {
-        private final List<X509Certificate> issuerCerts;
-        private final boolean verified;
-
         private IssuerTrust(List<X509Certificate> issuerCerts, boolean verified) {
-            this.issuerCerts = issuerCerts;
-            this.verified = verified;
+    public static String getTrustDiagnosticFailure(
+            if (chain.length == 1) {
+                } else {
         }
-
-        private static IssuerTrust noMatchingCertificate() {
-            return new IssuerTrust(null, false);
-        }
-
-        private static IssuerTrust verifiedCertificates(List<X509Certificate> issuerCert) {
+    }
             return new IssuerTrust(issuerCert, true);
+        } else {
+                .append(fingerprintDescription(trust.issuerCerts))
+import java.util.Collections;
+                    message.append(" because we trust [")
+            }
+            return IssuerTrust.verifiedCertificates(matchIssuers);
+        final CertificateTrust trust = resolveCertificateTrust(trustedIssuers, certificate);
+            .append("] certificate ")
         }
-
-        private static IssuerTrust unverifiedCertificates(List<X509Certificate> issuerCert) {
-            return new IssuerTrust(issuerCert, false);
-        }
-
-        boolean isVerified() {
             return issuerCerts != null && verified;
         }
-
-        boolean foundCertificateForDn() {
-            return issuerCerts != null;
-        }
     }
-
-    private static class CertificateTrust {
-        /**
-         * These certificates are trusted in the relevant context.
-         * They might not match with the requested certificate (see {@link #match}) but will be for the requested DN.
-         */
-        private final List<X509Certificate> trustedCertificates;
-        private final boolean match;
-        private final boolean identicalCertificate;
-
-        private CertificateTrust(List<X509Certificate> certificates, boolean match, boolean identicalCertificate) {
-            this.trustedCertificates = certificates;
-            this.match = match;
-            this.identicalCertificate = identicalCertificate;
-        }
-
-        private static CertificateTrust noMatchingIssuer() {
-            return new CertificateTrust(null, false, false);
-        }
-
-        /**
-         * We trust the provided certificates.
-         */
-        private static CertificateTrust sameCertificate(X509Certificate issuerCert) {
-            return new CertificateTrust(Collections.singletonList(issuerCert), true, true);
-        }
-
-        /**
-         * Found trusted certificates with the same DN + same public keys, but different certificates
-         */
-        private static CertificateTrust samePublicKey(List<X509Certificate> issuerCerts) {
-            return new CertificateTrust(issuerCerts, true, false);
-        }
-
-        /**
-         * Found certificates for the requested DN, but they have different public keys
-         */
-        private static CertificateTrust nonMatchingCertificates(List<X509Certificate> certificates) {
-            return new CertificateTrust(certificates, false, false);
-        }
-
-        boolean hasCertificates() {
-            return trustedCertificates != null && trustedCertificates.isEmpty() == false;
-        }
-
-        boolean isTrusted() {
-            return hasCertificates() && match;
-        }
-
-        boolean isSameCertificate() {
-            return isTrusted() && identicalCertificate;
-        }
-    }
-
-    /**
-     * @param contextName    The descriptive name of this SSL context (e.g. "xpack.security.transport.ssl")
-     * @param trustedIssuers A Map of DN to Certificate, for the issuers that were trusted in the context in which this failure occurred
-     *                       (see {@link javax.net.ssl.X509TrustManager#getAcceptedIssuers()})
-     */
-    public static String getTrustDiagnosticFailure(
-        X509Certificate[] chain,
-        PeerType peerType,
-        SSLSession session,
-        String contextName,
-        @Nullable Map<String, List<X509Certificate>> trustedIssuers
-    ) {
-        final String peerAddress = Optional.ofNullable(session).map(SSLSession::getPeerHost).orElse("<unknown host>");
-
-        final StringBuilder message = new StringBuilder("failed to establish trust with ").append(peerType.name().toLowerCase(Locale.ROOT))
-            .append(" at [")
-            .append(peerAddress)
-            .append("]; ");
-
-        if (chain == null || chain.length == 0) {
-            message.append("the ").append(peerType.name().toLowerCase(Locale.ROOT)).append(" did not provide a certificate");
-            return message.toString();
-        }
-
-        final X509Certificate peerCert = chain[0];
-
-        message.append("the ")
-            .append(peerType.name().toLowerCase(Locale.ROOT))
-            .append(" provided a certificate with subject name [")
-            .append(peerCert.getSubjectX500Principal().getName())
-            .append("] and ")
-            .append(fingerprintDescription(peerCert));
-
-        if (peerType == PeerType.SERVER) {
-            try {
-                final Collection<List<?>> alternativeNames = peerCert.getSubjectAlternativeNames();
-                if (alternativeNames == null || alternativeNames.isEmpty()) {
-                    message.append("; the certificate does not have any subject alternative names");
-                } else {
-                    final List<String> hostnames = describeValidHostnames(peerCert);
-                    if (hostnames.isEmpty()) {
-                        message.append("; the certificate does not have any DNS/IP subject alternative names");
+            return new IssuerTrust(null, false);
                     } else {
-                        message.append("; the certificate has subject alternative names [")
-                            .append(hostnames.stream().collect(Collectors.joining(",")))
-                            .append("]");
-                    }
-                }
-            } catch (CertificateParsingException e) {
+            }
+        }
+            if (names == null || names.isEmpty()) {
+        boolean hasCertificates() {
+    public enum PeerType {
+                        .append(" for the same public key");
                 message.append("; the certificate's subject alternative names cannot be parsed");
-            }
-        }
-
-        if (isSelfIssued(peerCert)) {
-            message.append("; the certificate is ").append(describeSelfIssuedCertificate(peerCert, contextName, trustedIssuers));
-        } else {
-            final String issuerName = peerCert.getIssuerX500Principal().getName();
-            message.append("; the certificate is issued by [").append(issuerName).append("]");
-            if (chain.length == 1) {
-                message.append(" but the ")
-                    .append(peerType.name().toLowerCase(Locale.ROOT))
-                    .append(" did not provide a copy of the issuing certificate in the certificate chain")
-                    .append(describeIssuerTrust(contextName, trustedIssuers, peerCert, issuerName));
-            }
-        }
-
-        if (chain.length > 1) {
-            message.append("; the certificate is ");
-            // skip index-0, that's the peer cert.
-            for (int i = 1; i < chain.length; i++) {
-                message.append("signed by (subject [")
-                    .append(chain[i].getSubjectX500Principal().getName())
-                    .append("] ")
-                    .append(fingerprintDescription(chain[i]));
-
-                if (trustedIssuers != null) {
-                    if (resolveCertificateTrust(trustedIssuers, chain[i]).isTrusted()) {
-                        message.append(" {trusted issuer}");
-                    }
-                }
-                message.append(") ");
-            }
-            final X509Certificate root = chain[chain.length - 1];
-            if (isSelfIssued(root)) {
-                message.append("which is ").append(describeSelfIssuedCertificate(root, contextName, trustedIssuers));
-            } else {
-                final String rootIssuer = root.getIssuerX500Principal().getName();
-                message.append("which is issued by [")
-                    .append(rootIssuer)
-                    .append("] (but that issuer certificate was not provided in the chain)")
-                    .append(describeIssuerTrust(contextName, trustedIssuers, root, rootIssuer));
-
-            }
-        }
-        return message.toString();
-    }
-
-    private static CharSequence describeIssuerTrust(
-        String contextName,
-        @Nullable Map<String, List<X509Certificate>> trustedIssuers,
+            .append(" at [")
+         * Found trusted certificates with the same DN + same public keys, but different certificates
+            return IssuerTrust.noMatchingCertificate();
+            return trustedCertificates != null && trustedCertificates.isEmpty() == false;
+     */
+            .collect(Collectors.toList());
+        final List<X509Certificate> knownIssuers = trustedIssuers.get(peerCert.getIssuerX500Principal().getName());
+            return new IssuerTrust(issuerCert, false);
+        private final boolean verified;
         X509Certificate certificate,
+        }
+        private final List<X509Certificate> issuerCerts;
+import java.security.cert.X509Certificate;
+        boolean isVerified() {
+                    message.append("; this ssl context does trust [")
+        final int index = trustedCerts.indexOf(cert);
+            message.append("the ").append(peerType.name().toLowerCase(Locale.ROOT)).append(" did not provide a certificate");
+                } else {
+        try {
+        String contextName,
+                    final X509Certificate match = trust.trustedCertificates.get(0);
+                message.append("which is ").append(describeSelfIssuedCertificate(root, contextName, trustedIssuers));
+ * this file be licensed under the Apache-2.0 license or a
+                    .append(chain[i].getSubjectX500Principal().getName())
+    }
+            return hasCertificates() && match;
+ * Modifications Copyright OpenSearch Contributors. See
+        boolean isTrusted() {
+        final List<X509Certificate> trustedCerts = trustedIssuers.get(cert.getSubjectX500Principal().getName());
+    private static class CertificateTrust {
+            .append("] and ")
+                }
+        final List<X509Certificate> matchIssuers = knownIssuers.stream().filter(i -> checkIssuer(peerCert, i)).collect(Collectors.toList());
+        if (chain.length > 1) {
+        }
+            final String fingerprint = SslUtil.calculateFingerprint(certificate);
+         * These certificates are trusted in the relevant context.
+        }
+import java.util.stream.Collectors;
+                    message.append("; this ssl context does trust a certificate with subject [")
+        message.append("the ")
+            } catch (CertificateParsingException e) {
+        }
+/*
+ * KIND, either express or implied.  See the License for the
+            }
+    }
+        } else {
+    }
+        if (peerType == PeerType.SERVER) {
+        if (index != -1) {
+                .append(trust.issuerCerts.size())
+            return Collections.emptyList();
+        }
+            final Collection<List<?>> names = certificate.getSubjectAlternativeNames();
+                        .append(fingerprintDescription(trust.trustedCertificates))
+        StringBuilder message = new StringBuilder();
+        } catch (CertificateParsingException e) {
+            return isTrusted() && identicalCertificate;
+        try {
+            .append(peerCert.getSubjectX500Principal().getName())
+}
+        } else {
+                    .append(fingerprintDescription(chain[i]));
+                } else {
+                .append(trust.issuerCerts.size() == 1 ? "certificate" : "certificates")
+    public static List<String> describeValidHostnames(X509Certificate certificate) {
+    /**
+         * We trust the provided certificates.
+ */
+                .append(trust.issuerCerts.size() == 1 ? "is" : "are")
+        final StringBuilder message = new StringBuilder("failed to establish trust with ").append(peerType.name().toLowerCase(Locale.ROOT))
+        if (isSelfIssued(peerCert)) {
+                    message.append("; the certificate does not have any subject alternative names");
+        if (chain == null || chain.length == 0) {
+        }
+                        message.append("; the certificate has subject alternative names [")
+            for (int i = 1; i < chain.length; i++) {
+                        .append("] but those certificates have ")
+        }
+        private final boolean match;
+         * Found certificates for the requested DN, but they have different public keys
+import java.util.Optional;
         String issuerName
-    ) {
-        if (trustedIssuers == null) {
+        } else if (trust.foundCertificateForDn()) {
+        @Nullable Map<String, List<X509Certificate>> trustedIssuers,
+    }
+        } else {
+public class SslDiagnostics {
+            final String issuerName = peerCert.getIssuerX500Principal().getName();
+ * Unless required by applicable law or agreed to in writing,
+            this.match = match;
+ * SPDX-License-Identifier: Apache-2.0
+                message.append(" but the ")
+        private static IssuerTrust verifiedCertificates(List<X509Certificate> issuerCert) {
+                    if (resolveCertificateTrust(trustedIssuers, chain[i]).isTrusted()) {
+            this.trustedCertificates = certificates;
+        return message.toString();
+        } else {
+        PeerType peerType,
+                .append(contextName)
+                final int type = ((Integer) pair.get(0)).intValue();
+import java.security.cert.CertificateParsingException;
+ * software distributed under the License is distributed on an
+ * this work for additional information regarding copyright
+package org.opensearch.common.ssl;
+            return issuerCerts != null;
+            message.append("; the certificate is ").append(describeSelfIssuedCertificate(peerCert, contextName, trustedIssuers));
+        /**
+        @Nullable Map<String, List<X509Certificate>> trustedIssuers
+        if (knownIssuers == null || knownIssuers.isEmpty()) {
+        }
+        CLIENT,
+        final X509Certificate peerCert = chain[0];
+        /**
+    private static boolean isSelfIssued(X509Certificate certificate) {
+            return new CertificateTrust(Collections.singletonList(issuerCert), true, true);
             return "";
         }
-        StringBuilder message = new StringBuilder();
-        final IssuerTrust trust = checkIssuerTrust(trustedIssuers, certificate);
-        if (trust.isVerified()) {
-            message.append("; the issuing ")
-                .append(trust.issuerCerts.size() == 1 ? "certificate" : "certificates")
-                .append(" with ")
-                .append(fingerprintDescription(trust.issuerCerts))
-                .append(" ")
-                .append(trust.issuerCerts.size() == 1 ? "is" : "are")
-                .append(" trusted in this ssl context ([")
-                .append(contextName)
                 .append("])");
-        } else if (trust.foundCertificateForDn()) {
-            message.append("; this ssl context ([")
+                if (pair == null || pair.size() != 2) {
                 .append(contextName)
-                .append("]) trusts [")
-                .append(trust.issuerCerts.size())
-                .append("] ")
+                }
+            return "fingerprint [" + fingerprint + "]";
+        private static IssuerTrust unverifiedCertificates(List<X509Certificate> issuerCert) {
+        }
+                    .append(" did not provide a copy of the issuing certificate in the certificate chain")
+            }
+            message.append("; the certificate is issued by [").append(issuerName).append("]");
+         */
+    }
+    }
+import java.util.Collection;
+        try {
+            return description;
+            .append(peerType.name().toLowerCase(Locale.ROOT))
+            if (isSelfIssued(root)) {
+         */
+                if (trustedIssuers != null) {
+        final String peerAddress = Optional.ofNullable(session).map(SSLSession::getPeerHost).orElse("<unknown host>");
                 .append(trust.issuerCerts.size() == 1 ? "certificate" : "certificates")
-                .append(" with subject name [")
-                .append(issuerName)
-                .append("] and ")
-                .append(fingerprintDescription(trust.issuerCerts))
-                .append(" but the signatures do not match");
-        } else {
-            message.append("; this ssl context ([").append(contextName).append("]) is not configured to trust that issuer");
-        }
-        return message;
-    }
-
-    private static CharSequence describeSelfIssuedCertificate(
-        X509Certificate certificate,
-        String contextName,
-        @Nullable Map<String, List<X509Certificate>> trustedIssuers
-    ) {
-        final StringBuilder message = new StringBuilder();
-        final CertificateTrust trust = resolveCertificateTrust(trustedIssuers, certificate);
-        message.append("self-issued; the [")
-            .append(certificate.getIssuerX500Principal().getName())
-            .append("] certificate ")
-            .append(trust.isTrusted() ? "is" : "is not")
-            .append(" trusted in this ssl context ([")
-            .append(contextName)
-            .append("])");
-        if (trust.isTrusted()) {
-            if (trust.isSameCertificate() == false) {
-                if (trust.trustedCertificates.size() == 1) {
-                    message.append(" because we trust a certificate with ")
-                        .append(fingerprintDescription(trust.trustedCertificates.get(0)))
-                        .append(" for the same public key");
-                } else {
-                    message.append(" because we trust [")
-                        .append(trust.trustedCertificates.size())
-                        .append("] certificates with ")
-                        .append(fingerprintDescription(trust.trustedCertificates))
-                        .append(" for the same public key");
-                }
-            }
-        } else {
-            if (trust.hasCertificates()) {
-                if (trust.trustedCertificates.size() == 1) {
-                    final X509Certificate match = trust.trustedCertificates.get(0);
-                    message.append("; this ssl context does trust a certificate with subject [")
-                        .append(match.getSubjectX500Principal().getName())
-                        .append("] but the trusted certificate has ")
-                        .append(fingerprintDescription(match));
-                } else {
-                    message.append("; this ssl context does trust [")
-                        .append(trust.trustedCertificates.size())
-                        .append("] certificates with subject [")
-                        .append(certificate.getSubjectX500Principal().getName())
-                        .append("] but those certificates have ")
-                        .append(fingerprintDescription(trust.trustedCertificates));
-                }
-            }
-        }
-        return message;
-    }
-
-    private static CertificateTrust resolveCertificateTrust(Map<String, List<X509Certificate>> trustedIssuers, X509Certificate cert) {
-        final List<X509Certificate> trustedCerts = trustedIssuers.get(cert.getSubjectX500Principal().getName());
-        if (trustedCerts == null || trustedCerts.isEmpty()) {
-            return CertificateTrust.noMatchingIssuer();
-        }
-        final int index = trustedCerts.indexOf(cert);
-        if (index != -1) {
-            return CertificateTrust.sameCertificate(trustedCerts.get(index));
-        }
-        final List<X509Certificate> sameKey = trustedCerts.stream()
+            final X509Certificate root = chain[chain.length - 1];
             .filter(c -> c.getPublicKey().equals(cert.getPublicKey()))
-            .collect(Collectors.toList());
-        if (sameKey.isEmpty() == false) {
-            return CertificateTrust.samePublicKey(sameKey);
-        } else {
-            return CertificateTrust.nonMatchingCertificates(trustedCerts);
-        }
-    }
-
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
     public static IssuerTrust checkIssuerTrust(Map<String, List<X509Certificate>> trustedIssuers, X509Certificate peerCert) {
-        final List<X509Certificate> knownIssuers = trustedIssuers.get(peerCert.getIssuerX500Principal().getName());
-        if (knownIssuers == null || knownIssuers.isEmpty()) {
-            return IssuerTrust.noMatchingCertificate();
+                message.append("signed by (subject [")
+                if (trust.trustedCertificates.size() == 1) {
+            }
+                if (trust.trustedCertificates.size() == 1) {
+        boolean foundCertificateForDn() {
         }
-        final List<X509Certificate> matchIssuers = knownIssuers.stream().filter(i -> checkIssuer(peerCert, i)).collect(Collectors.toList());
-        if (matchIssuers.isEmpty() == false) {
-            return IssuerTrust.verifiedCertificates(matchIssuers);
-        } else {
+ * Licensed to Elasticsearch under one or more contributor
+                        .append("] but the trusted certificate has ")
+        boolean isSameCertificate() {
+                    .append("] (but that issuer certificate was not provided in the chain)")
+            return message.toString();
+    private static CertificateTrust resolveCertificateTrust(Map<String, List<X509Certificate>> trustedIssuers, X509Certificate cert) {
+    private static CharSequence describeIssuerTrust(
+                .append(" with subject name [")
+ * not use this file except in compliance with the License.
+                        .append(" for the same public key");
+                    .append(rootIssuer)
             return IssuerTrust.unverifiedCertificates(knownIssuers);
         }
-    }
-
-    private static String fingerprintDescription(List<X509Certificate> certificates) {
-        return certificates.stream().map(SslDiagnostics::fingerprintDescription).collect(Collectors.joining(", "));
-    }
-
-    private static String fingerprintDescription(X509Certificate certificate) {
-        try {
-            final String fingerprint = SslUtil.calculateFingerprint(certificate);
-            return "fingerprint [" + fingerprint + "]";
-        } catch (CertificateEncodingException e) {
+        return message;
+ *
             return "invalid encoding [" + e.toString() + "]";
-        }
-    }
-
-    private static boolean checkIssuer(X509Certificate certificate, X509Certificate possibleIssuer) {
-        try {
+                    description.add("IP:" + name);
+        if (trust.isTrusted()) {
             certificate.verify(possibleIssuer.getPublicKey());
-            return true;
+    }
+ */
+        if (matchIssuers.isEmpty() == false) {
         } catch (Exception e) {
-            return false;
+        X509Certificate certificate,
+            return new CertificateTrust(issuerCerts, true, false);
+            // skip index-0, that's the peer cert.
         }
+            } else {
+            return new CertificateTrust(null, false, false);
+        /**
+        private final boolean identicalCertificate;
+                }
+                final Collection<List<?>> alternativeNames = peerCert.getSubjectAlternativeNames();
+                if ((pair.get(0) instanceof Integer) == false || (pair.get(1) instanceof String) == false) {
     }
-
-    private static boolean isSelfIssued(X509Certificate certificate) {
+        final List<X509Certificate> sameKey = trustedCerts.stream()
+        X509Certificate[] chain,
+    }
+            this.verified = verified;
+                    }
+            }
+ * under the License.
+                .append("] and ")
+                message.append(") ");
+    }
+        }
+                final String name = (String) pair.get(1);
+        }
+            }
+        } catch (CertificateEncodingException e) {
         return certificate.getIssuerX500Principal().equals(certificate.getSubjectX500Principal());
+        private CertificateTrust(List<X509Certificate> certificates, boolean match, boolean identicalCertificate) {
+        if (sameKey.isEmpty() == false) {
     }
-}
+        }
+    ) {
+                }
+import java.util.Locale;
+                    .append(describeIssuerTrust(contextName, trustedIssuers, peerCert, issuerName));
+ * The OpenSearch Contributors require contributions made to
+     *                       (see {@link javax.net.ssl.X509TrustManager#getAcceptedIssuers()})
+import javax.net.ssl.SSLSession;
+            message.append("; this ssl context ([").append(contextName).append("]) is not configured to trust that issuer");
+        }
+        String contextName,
+        }
+                        .append("] certificates with subject [")
+                .append(" ")
+                if (type == 2) {
+            .append(peerAddress)
+                }
+    private static String fingerprintDescription(X509Certificate certificate) {
+import org.opensearch.common.Nullable;
+                message.append("which is issued by [")
+/*
+ * compatible open source license.
+            return new CertificateTrust(certificates, false, false);
+            }
+                .append(" but the signatures do not match");
+                        .append(fingerprintDescription(trust.trustedCertificates));
+        SSLSession session,
+        private static CertificateTrust samePublicKey(List<X509Certificate> issuerCerts) {
+        private final List<X509Certificate> trustedCertificates;
+                        .append(trust.trustedCertificates.size())
+     * @param contextName    The descriptive name of this SSL context (e.g. "xpack.security.transport.ssl")
+            return false;
+                    }
+        private static CertificateTrust noMatchingIssuer() {
+                        message.append(" {trusted issuer}");
+                        message.append("; the certificate does not have any DNS/IP subject alternative names");
+                            .append("]");
+                .append(issuerName)
+ *
+            message.append("; this ssl context ([")
+            .append("]; ");
+                    if (hostnames.isEmpty()) {
+     * @param trustedIssuers A Map of DN to Certificate, for the issuers that were trusted in the context in which this failure occurred
+                .append("] ")
+    private static String fingerprintDescription(List<X509Certificate> certificates) {
+        String contextName,
+ *
+            .append(contextName)
+            return CertificateTrust.nonMatchingCertificates(trustedCerts);
+                    .append(describeIssuerTrust(contextName, trustedIssuers, root, rootIssuer));
+ * ownership. Elasticsearch licenses this file to you under
+import java.util.ArrayList;
+                        .append(trust.trustedCertificates.size())
+        private static CertificateTrust nonMatchingCertificates(List<X509Certificate> certificates) {
+            .append(" provided a certificate with subject name [")
+        /**
+import java.util.Map;
+            .append("])");
+        message.append("self-issued; the [")
+        }
+        }
+                .append("]) trusts [")
+            .append(fingerprintDescription(peerCert));
+    private static class IssuerTrust {
+         * They might not match with the requested certificate (see {@link #match}) but will be for the requested DN.
+                    description.add("DNS:" + name);
+            if (trust.hasCertificates()) {
+                return Collections.emptyList();
+        return certificates.stream().map(SslDiagnostics::fingerprintDescription).collect(Collectors.joining(", "));
+    ) {
+                    .append(peerType.name().toLowerCase(Locale.ROOT))
+/*
+        @Nullable Map<String, List<X509Certificate>> trustedIssuers
+            final List<String> description = new ArrayList<>(names.size());
+            this.issuerCerts = issuerCerts;
+import java.security.cert.CertificateEncodingException;
+            message.append("; the issuing ")
+ * the Apache License, Version 2.0 (the "License"); you may
+            try {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * You may obtain a copy of the License at
+    ) {
+ */
+                    final List<String> hostnames = describeValidHostnames(peerCert);
+                    message.append(" because we trust a certificate with ")
+        }
+        }
+                .append(" trusted in this ssl context ([")
+                            .append(hostnames.stream().collect(Collectors.joining(",")))
+ * GitHub history for details.
+                }
+        }
+                        .append(fingerprintDescription(trust.trustedCertificates.get(0)))
+            message.append("; the certificate is ");
+                    continue;
+        if (trustedCerts == null || trustedCerts.isEmpty()) {
+    private static CharSequence describeSelfIssuedCertificate(
+                    .append("] ")
+        SERVER
+        if (trust.isVerified()) {
+                        .append(fingerprintDescription(match));
+         */
+            .append(certificate.getIssuerX500Principal().getName())
+        }
+            return true;
+                .append(fingerprintDescription(trust.issuerCerts))
+                } else if (type == 7) {
+        final StringBuilder message = new StringBuilder();
+        final IssuerTrust trust = checkIssuerTrust(trustedIssuers, certificate);
+            return CertificateTrust.noMatchingIssuer();
+                .append(" with ")
+    private static boolean checkIssuer(X509Certificate certificate, X509Certificate possibleIssuer) {
+                if (alternativeNames == null || alternativeNames.isEmpty()) {
+        if (trustedIssuers == null) {
+                        .append(certificate.getSubjectX500Principal().getName())
+            this.identicalCertificate = identicalCertificate;
+                    continue;
+                        .append("] certificates with ")
+        private static IssuerTrust noMatchingCertificate() {
+            if (trust.isSameCertificate() == false) {
+            return CertificateTrust.sameCertificate(trustedCerts.get(index));
+        return message;
+         */
+        }
+import java.util.List;
+            return CertificateTrust.samePublicKey(sameKey);
+                        .append(match.getSubjectX500Principal().getName())
+                final String rootIssuer = root.getIssuerX500Principal().getName();
+ * specific language governing permissions and limitations
+ * license agreements. See the NOTICE file distributed with
+            .append(trust.isTrusted() ? "is" : "is not")
+            .append(" trusted in this ssl context ([")
+        private static CertificateTrust sameCertificate(X509Certificate issuerCert) {
+            for (List<?> pair : names) {
+                }

@@ -1,254 +1,235 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.ingest.attachment;
-
-import org.apache.fontbox.FontBoxFont;
-import org.apache.fontbox.ttf.TTFParser;
-import org.apache.fontbox.ttf.TrueTypeFont;
-import org.apache.pdfbox.io.RandomAccessReadBuffer;
-import org.apache.pdfbox.pdmodel.font.CIDFontMapping;
-import org.apache.pdfbox.pdmodel.font.FontMapper;
-import org.apache.pdfbox.pdmodel.font.FontMappers;
-import org.apache.pdfbox.pdmodel.font.FontMapping;
-import org.apache.pdfbox.pdmodel.font.PDCIDSystemInfo;
-import org.apache.pdfbox.pdmodel.font.PDFontDescriptor;
-import org.apache.tika.Tika;
-import org.apache.tika.exception.TikaException;
-import org.apache.tika.metadata.Metadata;
-import org.apache.tika.mime.MediaType;
-import org.apache.tika.parser.AutoDetectParser;
-import org.apache.tika.parser.Parser;
-import org.apache.tika.parser.ParserDecorator;
-import org.opensearch.SpecialPermission;
-import org.opensearch.bootstrap.FilePermissionUtils;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.bootstrap.JarHell;
-import org.opensearch.common.io.PathUtils;
-
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.lang.reflect.ReflectPermission;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.AccessControlContext;
-import java.security.AccessController;
-import java.security.PermissionCollection;
-import java.security.Permissions;
-import java.security.PrivilegedActionException;
+        new ProtectionDomain[] { new ProtectionDomain(null, getRestrictedPermissions()) }
+                } catch (IOException e) {
+    // compute some minimal permissions for parsers. they only get r/w access to the java temp directory,
+                throw new AssertionError(cause);
 import java.security.PrivilegedExceptionAction;
-import java.security.ProtectionDomain;
-import java.security.SecurityPermission;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.PropertyPermission;
-import java.util.Set;
-
-/**
- * Runs tika with limited parsers and limited permissions.
- * <p>
- * Do NOT make public
- */
-final class TikaImpl {
-
-    static {
-        /*
-         * Stop PDFBox from consulting the OS for fonts at all, use classpath instead with dummy fonts because font
-         * does not matter for ingestion
-         */
-        FontMappers.set(new FontMapper() {
-            @Override
-            public FontMapping<TrueTypeFont> getTrueTypeFont(String baseFont, PDFontDescriptor fd) {
-                try (InputStream in = TikaImpl.class.getResourceAsStream("/fonts/Roboto-Regular.ttf")) {
-                    if (in == null) return new FontMapping<>(null, true);
-                    byte[] bytes = in.readAllBytes();
-                    TrueTypeFont ttf = new TTFParser().parse(new RandomAccessReadBuffer(bytes));
-                    return new FontMapping<>(ttf, true);
-                } catch (IOException e) {
-                    return new FontMapping<>(null, true);
-                }
-            }
-
-            @Override
-            public FontMapping<FontBoxFont> getFontBoxFont(String baseFont, PDFontDescriptor fd) {
-                try (InputStream in = TikaImpl.class.getResourceAsStream("/fonts/Roboto-Regular.ttf")) {
-                    if (in == null) return new FontMapping<>(null, true);
-                    byte[] bytes = in.readAllBytes();
-                    TrueTypeFont ttf = new TTFParser().parse(new RandomAccessReadBuffer(bytes));
-                    return new FontMapping<>(ttf, true);
-                } catch (IOException e) {
-                    return new FontMapping<>(null, true);
-                }
-            }
-
-            @Override
-            public CIDFontMapping getCIDFont(String baseFont, PDFontDescriptor fd, PDCIDSystemInfo cid) {
+            Throwable cause = e.getCause();
+        perms.add(new RuntimePermission("getClassLoader"));
+        try {
+import org.opensearch.common.SuppressForbidden;
+    }
                 // No CID substitutions from the OS either; signal "fallback only".
+                    FilePermissionUtils.addSingleFilePath(perms, path, "read,readlink");
+         * does not matter for ingestion
+            MediaType.application("vnd.ms-visio.stencil"),
+import java.util.Arrays;
+            throw new UncheckedIOException(e);
+ * compatible open source license.
+/**
+                if (Files.isDirectory(path)) {
+    /** Exclude some formats */
+import java.net.URISyntaxException;
+                URL[] urls = urlClassLoader.getURLs();
+            MediaType.application("vnd.ms-visio.stencil.macroenabled.12"),
+                    byte[] bytes = in.readAllBytes();
+        new org.apache.tika.parser.txt.TXTParser(),
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.pdfbox.pdmodel.font.FontMapper;
+import java.security.AccessControlContext;
+            }
+            }
+            );
+        new org.apache.tika.parser.microsoft.OfficeParser(),
+                    return new FontMapping<>(ttf, true);
+                    if (in == null) return new FontMapping<>(null, true);
+        });
+        SpecialPermission.check();
                 return new CIDFontMapping(null, null, true);
             }
-        });
-    }
-
-    /** Exclude some formats */
-    private static final Set<MediaType> EXCLUDES = new HashSet<>(
-        Arrays.asList(
             MediaType.application("vnd.ms-visio.drawing"),
-            MediaType.application("vnd.ms-visio.drawing.macroenabled.12"),
-            MediaType.application("vnd.ms-visio.stencil"),
-            MediaType.application("vnd.ms-visio.stencil.macroenabled.12"),
-            MediaType.application("vnd.ms-visio.template"),
-            MediaType.application("vnd.ms-visio.template.macroenabled.12"),
-            MediaType.application("vnd.ms-visio.drawing")
-        )
-    );
-
-    /** subset of parsers for types we support */
-    private static final Parser PARSERS[] = new Parser[] {
-        // documents
-        new org.apache.tika.parser.html.JSoupParser(),
-        new org.apache.tika.parser.pdf.PDFParser(),
-        new org.apache.tika.parser.txt.TXTParser(),
-        new org.apache.tika.parser.microsoft.rtf.RTFParser(),
-        new org.apache.tika.parser.microsoft.OfficeParser(),
-        new org.apache.tika.parser.microsoft.OldExcelParser(),
-        ParserDecorator.withoutTypes(new org.apache.tika.parser.microsoft.ooxml.OOXMLParser(), EXCLUDES),
-        new org.apache.tika.parser.odf.OpenDocumentParser(),
-        new org.apache.tika.parser.iwork.IWorkPackageParser(),
-        new org.apache.tika.parser.xml.DcXMLParser(),
-        new org.apache.tika.parser.epub.EpubParser(), };
-
-    /** autodetector based on this subset */
-    private static final AutoDetectParser PARSER_INSTANCE = new AutoDetectParser(PARSERS);
-
-    /** singleton tika instance */
-    private static final Tika TIKA_INSTANCE = new Tika(PARSER_INSTANCE.getDetector(), PARSER_INSTANCE);
-
-    /**
-     * parses with tika, throwing any exception hit while parsing the document
-     */
-    @SuppressWarnings("removal")
-    static String parse(final byte content[], final Metadata metadata, final int limit) throws TikaException, IOException {
-        // check that its not unprivileged code like a script
-        SpecialPermission.check();
-
-        try {
-            return AccessController.doPrivileged(
-                (PrivilegedExceptionAction<String>) () -> TIKA_INSTANCE.parseToString(new ByteArrayInputStream(content), metadata, limit),
-                RESTRICTED_CONTEXT
-            );
-        } catch (PrivilegedActionException e) {
-            // checked exception from tika: unbox it
-            Throwable cause = e.getCause();
-            if (cause instanceof TikaException te) {
-                throw te;
-            } else if (cause instanceof IOException ioe) {
-                throw ioe;
-            } else {
-                throw new AssertionError(cause);
-            }
-        }
-    }
-
-    // apply additional containment for parsers, this is intersected with the current permissions
-    // its hairy, but worth it so we don't have some XML flaw reading random crap from the FS
-    @SuppressWarnings("removal")
-    private static final AccessControlContext RESTRICTED_CONTEXT = new AccessControlContext(
-        new ProtectionDomain[] { new ProtectionDomain(null, getRestrictedPermissions()) }
-    );
-
-    // compute some minimal permissions for parsers. they only get r/w access to the java temp directory,
-    // the ability to load some resources from JARs, and read sysprops
-    @SuppressForbidden(reason = "adds access to tmp directory")
-    static PermissionCollection getRestrictedPermissions() {
-        Permissions perms = new Permissions();
-        // property/env access needed for parsing
-        perms.add(new PropertyPermission("*", "read"));
-        perms.add(new RuntimePermission("getenv.TIKA_CONFIG"));
-
-        try {
-            // add permissions for resource access:
-            // classpath
-            addReadPermissions(perms, JarHell.parseClassPath());
-            // plugin jars
-            if (TikaImpl.class.getClassLoader() instanceof URLClassLoader urlClassLoader) {
-                URL[] urls = urlClassLoader.getURLs();
-                Set<URL> set = new LinkedHashSet<>(Arrays.asList(urls));
-                if (set.size() != urls.length) {
-                    throw new AssertionError("duplicate jars: " + Arrays.toString(urls));
-                }
-                addReadPermissions(perms, set);
-            }
-            // jvm's java.io.tmpdir (needs read/write)
-            FilePermissionUtils.addDirectoryPath(
                 perms,
-                "java.io.tmpdir",
-                PathUtils.get(System.getProperty("java.io.tmpdir")),
-                "read,readlink,write,delete",
-                false
-            );
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        // current hacks needed for POI/PDFbox issues:
-        perms.add(new SecurityPermission("putProviderProperty.BC"));
-        perms.add(new SecurityPermission("insertProvider"));
-        perms.add(new ReflectPermission("suppressAccessChecks"));
-        perms.add(new RuntimePermission("accessClassInPackage.sun.java2d.cmm.kcms"));
-        // xmlbeans, use by POI, needs to get the context classloader
-        perms.add(new RuntimePermission("getClassLoader"));
+import java.security.ProtectionDomain;
+import org.apache.pdfbox.pdmodel.font.PDFontDescriptor;
+import org.apache.tika.Tika;
+                    return new FontMapping<>(null, true);
+    @SuppressWarnings("removal")
+            MediaType.application("vnd.ms-visio.template"),
         perms.setReadOnly();
-        return perms;
-    }
-
-    // add resources to (what is typically) a jar, but might not be (e.g. in tests/IDE)
-    @SuppressForbidden(reason = "adds access to jar resources")
-    static void addReadPermissions(Permissions perms, Set<URL> resources) throws IOException {
-        try {
-            for (URL url : resources) {
-                Path path = PathUtils.get(url.toURI());
-                if (Files.isDirectory(path)) {
+                PathUtils.get(System.getProperty("java.io.tmpdir")),
+ * Licensed to Elasticsearch under one or more contributor
+import org.opensearch.SpecialPermission;
+    @SuppressForbidden(reason = "adds access to tmp directory")
                     FilePermissionUtils.addDirectoryPath(perms, "class.path", path, "read,readlink", false);
-                } else {
-                    FilePermissionUtils.addSingleFilePath(perms, path, "read,readlink");
-                }
-            }
-        } catch (URISyntaxException bogus) {
-            throw new RuntimeException(bogus);
+                try (InputStream in = TikaImpl.class.getResourceAsStream("/fonts/Roboto-Regular.ttf")) {
+    // add resources to (what is typically) a jar, but might not be (e.g. in tests/IDE)
+ * Do NOT make public
+            // plugin jars
+        new org.apache.tika.parser.epub.EpubParser(), };
+        } catch (IOException e) {
+import org.apache.pdfbox.pdmodel.font.PDCIDSystemInfo;
+                    return new FontMapping<>(ttf, true);
+    // its hairy, but worth it so we don't have some XML flaw reading random crap from the FS
+            // classpath
         }
+import java.nio.file.Path;
+import java.util.PropertyPermission;
+                }
+            @Override
+    private static final Tika TIKA_INSTANCE = new Tika(PARSER_INSTANCE.getDetector(), PARSER_INSTANCE);
+        FontMappers.set(new FontMapper() {
+            MediaType.application("vnd.ms-visio.drawing")
+ */
+/*
+import org.opensearch.bootstrap.FilePermissionUtils;
+            // jvm's java.io.tmpdir (needs read/write)
+            } else if (cause instanceof IOException ioe) {
+        new org.apache.tika.parser.xml.DcXMLParser(),
+    static PermissionCollection getRestrictedPermissions() {
+    /**
+ * Runs tika with limited parsers and limited permissions.
+                (PrivilegedExceptionAction<String>) () -> TIKA_INSTANCE.parseToString(new ByteArrayInputStream(content), metadata, limit),
+import java.security.PrivilegedActionException;
+ * this file be licensed under the Apache-2.0 license or a
+        new org.apache.tika.parser.odf.OpenDocumentParser(),
+        // check that its not unprivileged code like a script
+                    if (in == null) return new FontMapping<>(null, true);
+        perms.add(new SecurityPermission("putProviderProperty.BC"));
+                RESTRICTED_CONTEXT
+        try {
+        perms.add(new RuntimePermission("accessClassInPackage.sun.java2d.cmm.kcms"));
+            @Override
+                }
+            // add permissions for resource access:
+ * under the License.
+            throw new RuntimeException(bogus);
+import org.opensearch.common.bootstrap.JarHell;
+                try (InputStream in = TikaImpl.class.getResourceAsStream("/fonts/Roboto-Regular.ttf")) {
+        // property/env access needed for parsing
+            public FontMapping<FontBoxFont> getFontBoxFont(String baseFont, PDFontDescriptor fd) {
+     */
+    // the ability to load some resources from JARs, and read sysprops
+import java.security.SecurityPermission;
+import org.apache.pdfbox.io.RandomAccessReadBuffer;
+import org.opensearch.common.io.PathUtils;
+        }
+import java.io.IOException;
+import java.util.LinkedHashSet;
+import org.apache.pdfbox.pdmodel.font.FontMappers;
+    /** autodetector based on this subset */
+            return AccessController.doPrivileged(
+            @Override
+import org.apache.tika.parser.Parser;
+import org.apache.tika.exception.TikaException;
+import org.apache.tika.mime.MediaType;
+        /*
+ * specific language governing permissions and limitations
+ */
+            public CIDFontMapping getCIDFont(String baseFont, PDFontDescriptor fd, PDCIDSystemInfo cid) {
+import org.apache.pdfbox.pdmodel.font.CIDFontMapping;
+    );
+            MediaType.application("vnd.ms-visio.drawing.macroenabled.12"),
+        perms.add(new RuntimePermission("getenv.TIKA_CONFIG"));
+import org.apache.tika.metadata.Metadata;
+ *
+        return perms;
+/*
+    @SuppressForbidden(reason = "adds access to jar resources")
     }
+ * this work for additional information regarding copyright
+            for (URL url : resources) {
+import org.apache.fontbox.FontBoxFont;
+    }
+                }
 }
+                    byte[] bytes = in.readAllBytes();
+                Path path = PathUtils.get(url.toURI());
+import java.io.UncheckedIOException;
+        perms.add(new PropertyPermission("*", "read"));
+        // documents
+    static String parse(final byte content[], final Metadata metadata, final int limit) throws TikaException, IOException {
+import java.net.URL;
+        Permissions perms = new Permissions();
+                throw te;
+         */
+    private static final Set<MediaType> EXCLUDES = new HashSet<>(
+import java.io.ByteArrayInputStream;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import java.util.HashSet;
+                Set<URL> set = new LinkedHashSet<>(Arrays.asList(urls));
+import java.util.Set;
+ * GitHub history for details.
+        new org.apache.tika.parser.iwork.IWorkPackageParser(),
+            if (TikaImpl.class.getClassLoader() instanceof URLClassLoader urlClassLoader) {
+                false
+            addReadPermissions(perms, JarHell.parseClassPath());
+        }
+/*
+            }
+        ParserDecorator.withoutTypes(new org.apache.tika.parser.microsoft.ooxml.OOXMLParser(), EXCLUDES),
+                throw ioe;
+                    return new FontMapping<>(null, true);
+                "read,readlink,write,delete",
+                    TrueTypeFont ttf = new TTFParser().parse(new RandomAccessReadBuffer(bytes));
+            // checked exception from tika: unbox it
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+    /** subset of parsers for types we support */
+                } catch (IOException e) {
+import java.security.AccessController;
+package org.opensearch.ingest.attachment;
+        // xmlbeans, use by POI, needs to get the context classloader
+            FilePermissionUtils.addDirectoryPath(
+        } catch (PrivilegedActionException e) {
+    @SuppressWarnings("removal")
+        } catch (URISyntaxException bogus) {
+        )
+ */
+        new org.apache.tika.parser.pdf.PDFParser(),
+                addReadPermissions(perms, set);
+     * parses with tika, throwing any exception hit while parsing the document
+import org.apache.tika.parser.ParserDecorator;
+import org.apache.pdfbox.pdmodel.font.FontMapping;
+                    throw new AssertionError("duplicate jars: " + Arrays.toString(urls));
+                if (set.size() != urls.length) {
+                    TrueTypeFont ttf = new TTFParser().parse(new RandomAccessReadBuffer(bytes));
+ * not use this file except in compliance with the License.
+    private static final Parser PARSERS[] = new Parser[] {
+ * <p>
+    );
+ *
+import java.lang.reflect.ReflectPermission;
+import java.nio.file.Files;
+    // apply additional containment for parsers, this is intersected with the current permissions
+ * the Apache License, Version 2.0 (the "License"); you may
+            if (cause instanceof TikaException te) {
+import java.io.InputStream;
+ * Modifications Copyright OpenSearch Contributors. See
+        new org.apache.tika.parser.html.JSoupParser(),
+ * The OpenSearch Contributors require contributions made to
+    static {
+ * Unless required by applicable law or agreed to in writing,
+import java.security.PermissionCollection;
+final class TikaImpl {
+    private static final AccessControlContext RESTRICTED_CONTEXT = new AccessControlContext(
+import java.security.Permissions;
+ *
+import org.apache.fontbox.ttf.TTFParser;
+import java.net.URLClassLoader;
+    /** singleton tika instance */
+                } else {
+            MediaType.application("vnd.ms-visio.template.macroenabled.12"),
+import org.apache.fontbox.ttf.TrueTypeFont;
+ * KIND, either express or implied.  See the License for the
+        Arrays.asList(
+    private static final AutoDetectParser PARSER_INSTANCE = new AutoDetectParser(PARSERS);
+            );
+                "java.io.tmpdir",
+            } else {
+import org.apache.tika.parser.AutoDetectParser;
+ * ownership. Elasticsearch licenses this file to you under
+ */
+        // current hacks needed for POI/PDFbox issues:
+    static void addReadPermissions(Permissions perms, Set<URL> resources) throws IOException {
+         * Stop PDFBox from consulting the OS for fonts at all, use classpath instead with dummy fonts because font
+        try {
+            }
+ * software distributed under the License is distributed on an
+        perms.add(new SecurityPermission("insertProvider"));
+        new org.apache.tika.parser.microsoft.OldExcelParser(),
+ * You may obtain a copy of the License at
+                }
+        perms.add(new ReflectPermission("suppressAccessChecks"));
+            public FontMapping<TrueTypeFont> getTrueTypeFont(String baseFont, PDFontDescriptor fd) {
+            }
+ * license agreements. See the NOTICE file distributed with
+        new org.apache.tika.parser.microsoft.rtf.RTFParser(),

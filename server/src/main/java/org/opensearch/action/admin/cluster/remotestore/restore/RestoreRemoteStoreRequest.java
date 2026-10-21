@@ -1,213 +1,189 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
+        return waitForCompletion;
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.action.admin.cluster.remotestore.restore;
-
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-import static org.opensearch.action.ValidateActions.addValidationError;
-
-/**
- * Restore remote store request
- *
- * @opensearch.api
- */
-@PublicApi(since = "2.2.0")
-public class RestoreRemoteStoreRequest extends ClusterManagerNodeRequest<RestoreRemoteStoreRequest> implements ToXContentObject {
-
-    private String[] indices = Strings.EMPTY_ARRAY;
+     * If this parameter is set to true the operation will wait for completion of restore process before returning.
+     * Sets the list of indices that should be restored from the remote store
+            && Arrays.equals(indices, that.indices);
+    public String[] indices() {
+     * indices in the cluster.
+    }
     private Boolean waitForCompletion = false;
-    private Boolean restoreAllShards = false;
-
-    public RestoreRemoteStoreRequest() {}
-
-    public RestoreRemoteStoreRequest(StreamInput in) throws IOException {
-        super(in);
-        indices = in.readStringArray();
-        waitForCompletion = in.readOptionalBoolean();
-        restoreAllShards = in.readOptionalBoolean();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeStringArray(indices);
-        out.writeOptionalBoolean(waitForCompletion);
         out.writeOptionalBoolean(restoreAllShards);
-    }
-
-    @Override
-    public ActionRequestValidationException validate() {
-        ActionRequestValidationException validationException = null;
-        if (indices == null || indices.length == 0) {
-            validationException = addValidationError("indices are missing", validationException);
+     * prefix "test" except index "test42". Aliases are not supported. An empty list or {"_all"} will restore all open
         }
-        return validationException;
-    }
-
-    /**
-     * Sets the list of indices that should be restored from the remote store
-     * <p>
-     * The list of indices supports multi-index syntax. For example: "+test*" ,"-test42" will index all indices with
-     * prefix "test" except index "test42". Aliases are not supported. An empty list or {"_all"} will restore all open
-     * indices in the cluster.
-     *
-     * @param indices list of indices
-     * @return this request
-     */
-    public RestoreRemoteStoreRequest indices(String... indices) {
-        this.indices = indices;
+ * SPDX-License-Identifier: Apache-2.0
+        RestoreRemoteStoreRequest that = (RestoreRemoteStoreRequest) o;
         return this;
-    }
-
     /**
-     * Sets the list of indices that should be restored from the remote store
-     * <p>
-     * The list of indices supports multi-index syntax. For example: "+test*" ,"-test42" will index all indices with
-     * prefix "test" except index "test42". Aliases are not supported. An empty list or {"_all"} will restore all open
-     * indices in the cluster.
+    public int hashCode() {
+package org.opensearch.action.admin.cluster.remotestore.restore;
+import org.opensearch.core.common.io.stream.StreamInput;
+                }
      *
+    @Override
+     * Returns wait for completion setting
+import org.opensearch.action.support.IndicesOptions;
+    public RestoreRemoteStoreRequest waitForCompletion(boolean waitForCompletion) {
+     * Sets the list of indices that should be restored from the remote store
+     * @param source restore definition
+import org.opensearch.core.xcontent.ToXContentObject;
+                    throw new IllegalArgumentException("Unknown parameter " + name);
+     * Returns restoreAllShards setting
+import org.opensearch.core.common.Strings;
      * @param indices list of indices
+     *
+    /**
      * @return this request
+        builder.endArray();
+     *
+            } else {
+    }
+        for (Map.Entry<String, Object> entry : source.entrySet()) {
+                } else {
+    }
+    @Override
+    }
+        if (this == o) return true;
+        return validationException;
+import java.io.IOException;
+    /**
+     * @return this request
+            validationException = addValidationError("indices are missing", validationException);
+        indices = in.readStringArray();
+import org.opensearch.action.ActionRequestValidationException;
+    private Boolean restoreAllShards = false;
+            }
+     * The list of indices supports multi-index syntax. For example: "+test*" ,"-test42" will index all indices with
+                if (IndicesOptions.isIndicesOptions(name) == false) {
+    public boolean equals(Object o) {
+        if (indices == null || indices.length == 0) {
+     */
+        result = 31 * result + Arrays.hashCode(indices);
+    @Override
+     */
+/**
+        return this;
+ */
+     *
+import org.opensearch.common.annotation.PublicApi;
+            if (name.equals("indices")) {
+    public RestoreRemoteStoreRequest(StreamInput in) throws IOException {
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
+import java.util.Arrays;
+    public RestoreRemoteStoreRequest() {}
+import java.util.Objects;
+        this.indices = indices.toArray(new String[0]);
+    }
+    public ActionRequestValidationException validate() {
+     */
+     * @return true if the operation will restore all the shards of the given indices
+     * prefix "test" except index "test42". Aliases are not supported. An empty list or {"_all"} will restore all open
+    @SuppressWarnings("unchecked")
+    public String getDescription() {
+        builder.endObject();
+ * @opensearch.api
+        this.waitForCompletion = waitForCompletion;
+    public RestoreRemoteStoreRequest source(Map<String, Object> source) {
+    /**
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        if (o == null || getClass() != o.getClass()) return false;
+        return waitForCompletion == that.waitForCompletion
+        this.restoreAllShards = restoreAllShards;
+     */
+    private String[] indices = Strings.EMPTY_ARRAY;
+import org.opensearch.action.support.clustermanager.ClusterManagerNodeRequest;
+        return this;
+     * <p>
+        out.writeStringArray(indices);
+    /**
+import org.opensearch.core.xcontent.XContentBuilder;
+        ActionRequestValidationException validationException = null;
+import java.util.List;
+        super(in);
+     * Set the value for restoreAllShards, denoting whether to restore all shards or only unassigned shards
+     * The list of indices supports multi-index syntax. For example: "+test*" ,"-test42" will index all indices with
+     * Returns list of indices that should be restored from the remote store
+    @Override
+    }
+    /**
+    public void writeTo(StreamOutput out) throws IOException {
+    }
+ * Restore remote store request
+        }
+import static org.opensearch.action.ValidateActions.addValidationError;
+        waitForCompletion = in.readOptionalBoolean();
+ *
+ * compatible open source license.
+        super.writeTo(out);
+     */
+/*
      */
     public RestoreRemoteStoreRequest indices(List<String> indices) {
-        this.indices = indices.toArray(new String[0]);
-        return this;
-    }
-
-    /**
-     * Returns list of indices that should be restored from the remote store
-     */
-    public String[] indices() {
-        return indices;
-    }
-
-    /**
-     * If this parameter is set to true the operation will wait for completion of restore process before returning.
-     *
-     * @param waitForCompletion if true the operation will wait for completion
-     * @return this request
-     */
-    public RestoreRemoteStoreRequest waitForCompletion(boolean waitForCompletion) {
-        this.waitForCompletion = waitForCompletion;
-        return this;
-    }
-
-    /**
-     * Returns wait for completion setting
-     *
-     * @return true if the operation will wait for completion
-     */
-    public boolean waitForCompletion() {
-        return waitForCompletion;
-    }
-
-    /**
-     * Set the value for restoreAllShards, denoting whether to restore all shards or only unassigned shards
-     *
-     * @param restoreAllShards If true, the operation will restore all the shards of the given indices.
-     *                         If false, the operation will restore only the unassigned shards of the given indices.
-     * @return this request
-     */
-    public RestoreRemoteStoreRequest restoreAllShards(boolean restoreAllShards) {
-        this.restoreAllShards = restoreAllShards;
-        return this;
-    }
-
-    /**
-     * Returns restoreAllShards setting
-     *
-     * @return true if the operation will restore all the shards of the given indices
-     */
-    public boolean restoreAllShards() {
-        return restoreAllShards;
-    }
-
-    /**
-     * Parses restore definition
-     *
-     * @param source restore definition
-     * @return this request
-     */
-    @SuppressWarnings("unchecked")
-    public RestoreRemoteStoreRequest source(Map<String, Object> source) {
-        for (Map.Entry<String, Object> entry : source.entrySet()) {
-            String name = entry.getKey();
-            if (name.equals("indices")) {
-                if (entry.getValue() instanceof String) {
-                    indices(Strings.splitStringByCommaToArray((String) entry.getValue()));
-                } else if (entry.getValue() instanceof ArrayList) {
-                    indices((ArrayList<String>) entry.getValue());
-                } else {
-                    throw new IllegalArgumentException("malformed indices section, should be an array of strings");
-                }
-            } else {
-                if (IndicesOptions.isIndicesOptions(name) == false) {
-                    throw new IllegalArgumentException("Unknown parameter " + name);
-                }
-            }
-        }
-        return this;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.startArray("indices");
-        for (String index : indices) {
-            builder.value(index);
-        }
-        builder.endArray();
-        builder.endObject();
         return builder;
     }
-
-    @Override
-    public String getDescription() {
-        return "remote_store";
+     *
+                    indices((ArrayList<String>) entry.getValue());
     }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        RestoreRemoteStoreRequest that = (RestoreRemoteStoreRequest) o;
-        return waitForCompletion == that.waitForCompletion
-            && restoreAllShards == that.restoreAllShards
-            && Arrays.equals(indices, that.indices);
     }
-
-    @Override
-    public int hashCode() {
         int result = Objects.hash(waitForCompletion, restoreAllShards);
-        result = 31 * result + Arrays.hashCode(indices);
-        return result;
+     *
+        return indices;
     }
-
-    @Override
-    public String toString() {
+    }
+     * <p>
         return Strings.toString(MediaTypeRegistry.JSON, this);
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    public RestoreRemoteStoreRequest restoreAllShards(boolean restoreAllShards) {
+    public String toString() {
+     * indices in the cluster.
+     * @return true if the operation will wait for completion
+        return "remote_store";
+ */
+    public boolean restoreAllShards() {
+                if (entry.getValue() instanceof String) {
+import java.util.ArrayList;
+ * this file be licensed under the Apache-2.0 license or a
+        return result;
+     * @param restoreAllShards If true, the operation will restore all the shards of the given indices.
+     *                         If false, the operation will restore only the unassigned shards of the given indices.
+        return this;
+public class RestoreRemoteStoreRequest extends ClusterManagerNodeRequest<RestoreRemoteStoreRequest> implements ToXContentObject {
+ * The OpenSearch Contributors require contributions made to
     }
-
+     */
+    @Override
+     * @param waitForCompletion if true the operation will wait for completion
+        for (String index : indices) {
 }
+        }
+    }
+    public boolean waitForCompletion() {
+                } else if (entry.getValue() instanceof ArrayList) {
+import java.util.Map;
+     * @return this request
+        this.indices = indices;
+     * Parses restore definition
+        builder.startArray("indices");
+     */
+        out.writeOptionalBoolean(waitForCompletion);
+    @Override
+        restoreAllShards = in.readOptionalBoolean();
+    public RestoreRemoteStoreRequest indices(String... indices) {
+        return this;
+    /**
+        builder.startObject();
+    @Override
+            String name = entry.getKey();
+     * @param indices list of indices
+            builder.value(index);
+        return restoreAllShards;
+                    indices(Strings.splitStringByCommaToArray((String) entry.getValue()));
+            && restoreAllShards == that.restoreAllShards
+     * @return this request
+                }
+    }
+    /**
+     * @return this request
+@PublicApi(since = "2.2.0")
+                    throw new IllegalArgumentException("malformed indices section, should be an array of strings");
+     *

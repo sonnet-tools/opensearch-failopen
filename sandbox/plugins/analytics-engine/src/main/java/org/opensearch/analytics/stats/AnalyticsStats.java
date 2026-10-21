@@ -1,225 +1,196 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.analytics.stats;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.Map;
-import java.util.TreeMap;
-
-/**
- * Snapshot of node-local analytics-engine counters and timers. Built by
+    public record Queries(LatencyStats elapsedMs, LatencyStats planningMs) implements ToXContentFragment, Writeable {
  * {@link AnalyticsStatsCollector#snapshot()} and rendered as a JSON fragment
- * by the stats REST handler.
- *
- * <p>Field naming aligns with PR #21660's {@code StageProfile} ({@code elapsed_ms},
- * {@code rows_processed}, {@code tasks_completed}) so dashboards can ingest
- * either API without translating field names.
- *
- * <p>Latency buckets carry only raw cumulative {@code count} and {@code sum_ms}
- * — mirroring the analytics DataFusion backend's stats contract. Averages,
- * percentiles, and rates are derived by the metrics backend (Tumbler /
- * Prometheus / etc.) from interval diffs.
- *
- * <p>Marked {@link ExperimentalApi} — field shapes and the bucket layout may
- * change in subsequent revisions.
- */
-@ExperimentalApi
-public final class AnalyticsStats implements ToXContentFragment, Writeable {
-
-    private final Queries queries;
-    private final Map<String, StageBucket> stagesByType;
-    private final Fragments fragments;
-
-    public AnalyticsStats(Queries queries, Map<String, StageBucket> stagesByType, Fragments fragments) {
-        this.queries = queries;
-        this.stagesByType = stagesByType;
-        this.fragments = fragments;
-    }
-
-    public AnalyticsStats(StreamInput in) throws IOException {
-        this.queries = new Queries(in);
-        int size = in.readVInt();
-        // TreeMap preserves the deterministic alphabetical ordering used by snapshot().
-        Map<String, StageBucket> map = new TreeMap<>();
-        for (int i = 0; i < size; i++) {
-            String key = in.readString();
-            map.put(key, new StageBucket(in));
-        }
-        this.stagesByType = map;
-        this.fragments = new Fragments(in);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        queries.writeTo(out);
-        out.writeVInt(stagesByType.size());
-        for (Map.Entry<String, StageBucket> e : stagesByType.entrySet()) {
-            out.writeString(e.getKey());
-            e.getValue().writeTo(out);
-        }
-        fragments.writeTo(out);
-    }
-
-    public Queries queries() {
-        return queries;
-    }
-
-    public Map<String, StageBucket> stagesByType() {
-        return stagesByType;
-    }
-
-    public Fragments fragments() {
-        return fragments;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject("analytics");
-        queries.toXContent(builder, params);
-        builder.startObject("stages_by_type");
-        for (Map.Entry<String, StageBucket> e : stagesByType.entrySet()) {
-            builder.field(e.getKey());
-            e.getValue().toXContent(builder, params);
-        }
-        builder.endObject();
-        fragments.toXContent(builder, params);
-        builder.endObject();
-        return builder;
-    }
-
-    /**
-     * Cumulative latency totals: {@code count} of recordings and {@code sum_ms}
-     * of their elapsed times. Both monotonically increasing since node start.
-     */
-    public record LatencyStats(long count, long sumMs) implements ToXContentFragment, Writeable {
-
         public static final LatencyStats EMPTY = new LatencyStats(0, 0);
-
-        public LatencyStats(StreamInput in) throws IOException {
-            this(in.readVLong(), in.readVLong());
+    /**
+            out.writeVLong(succeeded);
         }
-
-        @Override
+     * elapsed and Calcite planning time.
+            builder.field("elapsed_ms");
+    }
+    /** Per-fragment (task) rollup. */
+    public Map<String, StageBucket> stagesByType() {
+            builder.endObject();
+        }
+import java.util.Map;
+        fragments.toXContent(builder, params);
         public void writeTo(StreamOutput out) throws IOException {
-            out.writeVLong(count);
-            out.writeVLong(sumMs);
+     */
+/**
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
+        out.writeVInt(stagesByType.size());
+            this(in.readVLong(), in.readVLong());
+    /** Per-stage-type rollup, keyed by {@link org.opensearch.analytics.planner.dag.StageExecutionType} name. */
+        builder.endObject();
+import org.opensearch.common.annotation.ExperimentalApi;
+            builder.endObject();
+            builder.field("failed", failed);
+ * {@code rows_processed}, {@code tasks_completed}) so dashboards can ingest
         }
-
+    public Fragments fragments() {
+        @Override
         @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            builder.field("count", count);
-            builder.field("sum_ms", sumMs);
             builder.endObject();
+ *
+@ExperimentalApi
+            builder.field("succeeded", succeeded);
+     * extension point. This bucket carries analytics-engine-specific timing
+import java.io.IOException;
+            builder.field("elapsed_ms");
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            builder.startObject();
+            ToXContentFragment,
+            builder.field(e.getKey());
+package org.opensearch.analytics.stats;
+    }
+        builder.startObject("analytics");
+     * intentionally <strong>not</strong> exposed here — those are covered by
+    }
+    }
+    public record Fragments(long total, long succeeded, long failed, LatencyStats elapsedMs) implements ToXContentFragment, Writeable {
+        return builder;
+ * change in subsequent revisions.
+        public void writeTo(StreamOutput out) throws IOException {
+        return queries;
+ * by the stats REST handler.
+        public StageBucket(StreamInput in) throws IOException {
+import org.opensearch.core.xcontent.XContentBuilder;
+            builder.field("cancelled", cancelled);
+            Writeable {
+    private final Fragments fragments;
+import java.util.TreeMap;
+            elapsedMs.toXContent(builder, params);
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+ * — mirroring the analytics DataFusion backend's stats contract. Averages,
+        int size = in.readVInt();
+            out.writeVLong(failed);
+            out.writeString(e.getKey());
+        }
+        @Override
+     * of their elapsed times. Both monotonically increasing since node start.
+    public Queries queries() {
+        this.queries = new Queries(in);
+            builder.field("count", count);
+        }
+        }
+            builder.field("planning_ms");
+        @Override
+            builder.field("rows_processed_total", rowsProcessedTotal);
+            out.writeVLong(succeeded);
+ *
+        }
+import org.opensearch.core.common.io.stream.StreamInput;
+ */
+        this.stagesByType = map;
+            String key = in.readString();
+ * Snapshot of node-local analytics-engine counters and timers. Built by
+            elapsedMs.writeTo(out);
+        // TreeMap preserves the deterministic alphabetical ordering used by snapshot().
+            e.getValue().writeTo(out);
+import org.opensearch.core.xcontent.ToXContentFragment;
+        for (Map.Entry<String, StageBucket> e : stagesByType.entrySet()) {
+     * analytics-engine integration with the existing {@code _nodes/stats}
+ *
+    public AnalyticsStats(StreamInput in) throws IOException {
+        return fragments;
+    public record LatencyStats(long count, long sumMs) implements ToXContentFragment, Writeable {
+    private final Map<String, StageBucket> stagesByType;
+    }
+        public Fragments(StreamInput in) throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+        }
+        this.fragments = fragments;
+import org.opensearch.core.common.io.stream.Writeable;
+            this(in.readVLong(), in.readVLong(), in.readVLong(), new LatencyStats(in));
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+/*
+ *
+    public AnalyticsStats(Queries queries, Map<String, StageBucket> stagesByType, Fragments fragments) {
             return builder;
+    @Override
+            out.writeVLong(total);
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+     * Cumulative latency totals: {@code count} of recordings and {@code sum_ms}
+        this.queries = queries;
+    @Override
+        builder.endObject();
+            builder.field("sum_ms", sumMs);
+        return stagesByType;
+        @Override
+            elapsedMs.writeTo(out);
+            elapsedMs.writeTo(out);
+            elapsedMs.toXContent(builder, params);
+        }
+    public void writeTo(StreamOutput out) throws IOException {
+        public void writeTo(StreamOutput out) throws IOException {
+}
+            builder.field("failed", failed);
+        }
+            builder.field("succeeded", succeeded);
+    }
+ */
+ * either API without translating field names.
+            map.put(key, new StageBucket(in));
+            out.writeVLong(started);
+            out.writeVLong(count);
+            return builder;
+ * <p>Marked {@link ExperimentalApi} — field shapes and the bucket layout may
+        builder.startObject("stages_by_type");
+public final class AnalyticsStats implements ToXContentFragment, Writeable {
+        for (int i = 0; i < size; i++) {
+ * Prometheus / etc.) from interval diffs.
+        for (Map.Entry<String, StageBucket> e : stagesByType.entrySet()) {
+        public Queries(StreamInput in) throws IOException {
+    private final Queries queries;
+    }
+        this.stagesByType = stagesByType;
+        this.fragments = new Fragments(in);
+ * <p>Latency buckets carry only raw cumulative {@code count} and {@code sum_ms}
         }
     }
-
-    /**
-     * Per-query latency rollup. Counters like total / succeeded / failed are
-     * intentionally <strong>not</strong> exposed here — those are covered by
-     * analytics-engine integration with the existing {@code _nodes/stats}
-     * extension point. This bucket carries analytics-engine-specific timing
-     * totals that don't have a home in core node stats: end-to-end query
-     * elapsed and Calcite planning time.
-     */
-    public record Queries(LatencyStats elapsedMs, LatencyStats planningMs) implements ToXContentFragment, Writeable {
-
-        public Queries(StreamInput in) throws IOException {
-            this(new LatencyStats(in), new LatencyStats(in));
-        }
-
+        queries.toXContent(builder, params);
+        implements
+            builder.startObject();
+            return builder;
+    }
+            out.writeVLong(cancelled);
         @Override
+            e.getValue().toXContent(builder, params);
+            builder.field("started", started);
+        fragments.writeTo(out);
+            builder.endObject();
         public void writeTo(StreamOutput out) throws IOException {
-            elapsedMs.writeTo(out);
+            elapsedMs.toXContent(builder, params);
+        }
+        Map<String, StageBucket> map = new TreeMap<>();
+            out.writeVLong(rowsProcessedTotal);
+ * percentiles, and rates are derived by the metrics backend (Tumbler /
+            builder.field("elapsed_ms");
+            builder.startObject("queries");
+            return builder;
+        public LatencyStats(StreamInput in) throws IOException {
+     */
+ * compatible open source license.
+    /**
+        queries.writeTo(out);
+            planningMs.toXContent(builder, params);
+        @Override
+        }
             planningMs.writeTo(out);
         }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject("queries");
-            builder.field("elapsed_ms");
-            elapsedMs.toXContent(builder, params);
-            builder.field("planning_ms");
-            planningMs.toXContent(builder, params);
-            builder.endObject();
-            return builder;
-        }
+            out.writeVLong(failed);
+ * The OpenSearch Contributors require contributions made to
+            builder.field("total", total);
     }
-
-    /** Per-stage-type rollup, keyed by {@link org.opensearch.analytics.planner.dag.StageExecutionType} name. */
+     * totals that don't have a home in core node stats: end-to-end query
     public record StageBucket(long started, long succeeded, long failed, long cancelled, long rowsProcessedTotal, LatencyStats elapsedMs)
-        implements
-            ToXContentFragment,
-            Writeable {
-
-        public StageBucket(StreamInput in) throws IOException {
+        @Override
+ * <p>Field naming aligns with PR #21660's {@code StageProfile} ({@code elapsed_ms},
+            builder.startObject("fragments");
+     * Per-query latency rollup. Counters like total / succeeded / failed are
+            this(new LatencyStats(in), new LatencyStats(in));
+            out.writeVLong(sumMs);
             this(in.readVLong(), in.readVLong(), in.readVLong(), in.readVLong(), in.readVLong(), new LatencyStats(in));
         }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeVLong(started);
-            out.writeVLong(succeeded);
-            out.writeVLong(failed);
-            out.writeVLong(cancelled);
-            out.writeVLong(rowsProcessedTotal);
-            elapsedMs.writeTo(out);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            builder.field("started", started);
-            builder.field("succeeded", succeeded);
-            builder.field("failed", failed);
-            builder.field("cancelled", cancelled);
-            builder.field("rows_processed_total", rowsProcessedTotal);
-            builder.field("elapsed_ms");
-            elapsedMs.toXContent(builder, params);
-            builder.endObject();
-            return builder;
-        }
-    }
-
-    /** Per-fragment (task) rollup. */
-    public record Fragments(long total, long succeeded, long failed, LatencyStats elapsedMs) implements ToXContentFragment, Writeable {
-
-        public Fragments(StreamInput in) throws IOException {
-            this(in.readVLong(), in.readVLong(), in.readVLong(), new LatencyStats(in));
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeVLong(total);
-            out.writeVLong(succeeded);
-            out.writeVLong(failed);
-            elapsedMs.writeTo(out);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject("fragments");
-            builder.field("total", total);
-            builder.field("succeeded", succeeded);
-            builder.field("failed", failed);
-            builder.field("elapsed_ms");
-            elapsedMs.toXContent(builder, params);
-            builder.endObject();
-            return builder;
-        }
-    }
-}
+ * SPDX-License-Identifier: Apache-2.0

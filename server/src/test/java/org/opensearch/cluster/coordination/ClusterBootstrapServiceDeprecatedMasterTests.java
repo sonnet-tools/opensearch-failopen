@@ -1,317 +1,285 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.coordination;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.discovery.DiscoveryModule;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.transport.MockTransport;
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportService;
-import org.junit.Before;
-
-import java.util.Collections;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;
-import static org.opensearch.cluster.coordination.ClusterBootstrapService.INITIAL_MASTER_NODES_SETTING;
-import static org.opensearch.cluster.coordination.ClusterBootstrapService.UNCONFIGURED_BOOTSTRAP_TIMEOUT_SETTING;
-import static org.opensearch.common.settings.Settings.builder;
-import static org.opensearch.node.Node.NODE_NAME_SETTING;
 import static org.opensearch.test.NodeRoles.nonClusterManagerNode;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.not;
-
-/*
- * As of 2.0, MASTER_ROLE and setting 'cluster.initial_master_nodes' is deprecated to promote inclusive language.
- * This class is a partial copy of ClusterBootstrapServiceTests
- * to validate ClusterBootstrapService works correctly with the deprecated node role and cluster setting.
- * Remove the class after the deprecated node role and cluster setting is removed.
- */
-public class ClusterBootstrapServiceDeprecatedMasterTests extends OpenSearchTestCase {
-
-    private DiscoveryNode localNode, otherNode1, otherNode2;
-    private DeterministicTaskQueue deterministicTaskQueue;
-    private TransportService transportService;
-    private static final String CLUSTER_SETTING_DEPRECATED_MESSAGE =
-        "[cluster.initial_master_nodes] setting was deprecated in OpenSearch and will be removed in a future release! "
-            + "See the breaking changes documentation for the next major version.";
-
-    @Before
-    public void createServices() {
-        localNode = newDiscoveryNode("local");
-        otherNode1 = newDiscoveryNode("other1");
-        otherNode2 = newDiscoveryNode("other2");
-
+            () -> Stream.of(localNode, otherNode1, otherNode2).collect(Collectors.toList()),
         deterministicTaskQueue = new DeterministicTaskQueue(builder().put(NODE_NAME_SETTING.getKey(), "node").build(), random());
-
-        final MockTransport transport = new MockTransport() {
-            @Override
-            protected void onSendRequest(long requestId, String action, TransportRequest request, DiscoveryNode node) {
-                throw new AssertionError("unexpected " + action);
-            }
-        };
-
-        transportService = transport.createTransportService(
-            Settings.EMPTY,
-            deterministicTaskQueue.getThreadPool(),
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            boundTransportAddress -> localNode,
-            null,
-            Collections.emptySet(),
-            NoopTracer.INSTANCE
-        );
-    }
-
-    private DiscoveryNode newDiscoveryNode(String nodeName) {
-        return new DiscoveryNode(
-            nodeName,
-            randomAlphaOfLength(10),
-            buildNewFakeTransportAddress(),
-            emptyMap(),
-            Collections.singleton(DiscoveryNodeRole.MASTER_ROLE),
-            Version.CURRENT
-        );
-    }
-
-    public void testBootstrapsAutomaticallyWithDefaultConfiguration() {
-        final Settings.Builder settings = Settings.builder();
-        final long timeout;
-        if (randomBoolean()) {
-            timeout = UNCONFIGURED_BOOTSTRAP_TIMEOUT_SETTING.get(Settings.EMPTY).millis();
-        } else {
-            timeout = randomLongBetween(1, 10000);
-            settings.put(UNCONFIGURED_BOOTSTRAP_TIMEOUT_SETTING.getKey(), timeout + "ms");
-        }
-
         final AtomicReference<Supplier<Iterable<DiscoveryNode>>> discoveredNodesSupplier = new AtomicReference<>(() -> {
-            throw new AssertionError("should not be called yet");
-        });
-
-        final AtomicBoolean bootstrapped = new AtomicBoolean();
-        ClusterBootstrapService clusterBootstrapService = new ClusterBootstrapService(
-            settings.build(),
             transportService,
-            () -> discoveredNodesSupplier.get().get(),
-            () -> false,
-            vc -> {
-                assertTrue(bootstrapped.compareAndSet(false, true));
-                assertThat(
-                    vc.getNodeIds(),
-                    equalTo(Stream.of(localNode, otherNode1, otherNode2).map(DiscoveryNode::getId).collect(Collectors.toSet()))
-                );
-                assertThat(deterministicTaskQueue.getCurrentTimeMillis(), greaterThanOrEqualTo(timeout));
-            }
-        );
-
-        deterministicTaskQueue.scheduleAt(
-            timeout - 1,
-            () -> discoveredNodesSupplier.set(() -> Stream.of(localNode, otherNode1, otherNode2).collect(Collectors.toSet()))
-        );
-
-        transportService.start();
-        clusterBootstrapService.scheduleUnconfiguredBootstrap();
-        deterministicTaskQueue.runAllTasksInTimeOrder();
-        assertTrue(bootstrapped.get());
+import java.util.stream.Collectors;
+ */
     }
-
-    // Validate the deprecated setting is still valid during the cluster bootstrap.
-    public void testDoesNothingByDefaultIfMasterNodesConfigured() {
         testDoesNothingWithSettings(builder().putList(INITIAL_MASTER_NODES_SETTING.getKey()));
-        assertWarnings(CLUSTER_SETTING_DEPRECATED_MESSAGE);
     }
-
     private void testDoesNothingWithSettings(Settings.Builder builder) {
-        ClusterBootstrapService clusterBootstrapService = new ClusterBootstrapService(builder.build(), transportService, () -> {
-            throw new AssertionError("should not be called");
-        }, () -> false, vc -> { throw new AssertionError("should not be called"); });
-        transportService.start();
-        clusterBootstrapService.scheduleUnconfiguredBootstrap();
-        deterministicTaskQueue.runAllTasks();
-    }
-
-    public void testThrowsExceptionOnDuplicates() {
-        final IllegalArgumentException illegalArgumentException = expectThrows(IllegalArgumentException.class, () -> {
-            new ClusterBootstrapService(
-                builder().putList(INITIAL_MASTER_NODES_SETTING.getKey(), "duplicate-requirement", "duplicate-requirement").build(),
-                transportService,
-                Collections::emptyList,
-                () -> false,
-                vc -> {
-                    throw new AssertionError("should not be called");
-                }
-            );
-        });
-
-        assertThat(illegalArgumentException.getMessage(), containsString(INITIAL_MASTER_NODES_SETTING.getKey()));
-        assertThat(illegalArgumentException.getMessage(), containsString("duplicate-requirement"));
-        assertWarnings(CLUSTER_SETTING_DEPRECATED_MESSAGE);
-    }
-
-    public void testBootstrapsOnDiscoveryOfAllRequiredNodes() {
-        final AtomicBoolean bootstrapped = new AtomicBoolean();
-
-        ClusterBootstrapService clusterBootstrapService = new ClusterBootstrapService(
-            Settings.builder()
-                .putList(INITIAL_MASTER_NODES_SETTING.getKey(), localNode.getName(), otherNode1.getName(), otherNode2.getName())
-                .build(),
-            transportService,
-            () -> Stream.of(otherNode1, otherNode2).collect(Collectors.toList()),
-            () -> false,
-            vc -> {
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+        }
+        final MockTransport transport = new MockTransport() {
+ * compatible open source license.
+            .put(NODE_NAME_SETTING.getKey(), localNode.getName())
+import static org.opensearch.common.settings.Settings.builder;
+            Collections.emptySet(),
                 assertTrue(bootstrapped.compareAndSet(false, true));
-                assertThat(vc.getNodeIds(), containsInAnyOrder(localNode.getId(), otherNode1.getId(), otherNode2.getId()));
-                assertThat(vc.getNodeIds(), not(hasItem(containsString("placeholder"))));
-            }
-        );
+import org.opensearch.test.transport.MockTransport;
+ *     http://www.apache.org/licenses/LICENSE-2.0
         assertWarnings(CLUSTER_SETTING_DEPRECATED_MESSAGE);
-
-        transportService.start();
-        clusterBootstrapService.onFoundPeersUpdated();
-        deterministicTaskQueue.runAllTasks();
-        assertTrue(bootstrapped.get());
-
-        bootstrapped.set(false);
-        clusterBootstrapService.onFoundPeersUpdated();
-        deterministicTaskQueue.runAllTasks();
-        assertFalse(bootstrapped.get()); // should only bootstrap once
+            containsString(
     }
-
+            timeout = UNCONFIGURED_BOOTSTRAP_TIMEOUT_SETTING.get(Settings.EMPTY).millis();
+            containsString("node with [discovery.type] set to [single-node] must be cluster-manager-eligible")
+            settings.build(),
+        assertWarnings(CLUSTER_SETTING_DEPRECATED_MESSAGE);
+            boundTransportAddress -> localNode,
+                () -> new ClusterBootstrapService(settings.build(), transportService, () -> emptyList(), () -> false, vc -> fail())
+    public void createServices() {
+        } else {
+ *
+        assertTrue(bootstrapped.get());
+    }
+        transportService.start();
+                IllegalArgumentException.class,
+    private DeterministicTaskQueue deterministicTaskQueue;
+        "[cluster.initial_master_nodes] setting was deprecated in OpenSearch and will be removed in a future release! "
+        final IllegalArgumentException illegalArgumentException = expectThrows(IllegalArgumentException.class, () -> {
+            }
+        ClusterBootstrapService clusterBootstrapService = new ClusterBootstrapService(builder.build(), transportService, () -> {
+        deterministicTaskQueue.runAllTasks();
+            settings.put(UNCONFIGURED_BOOTSTRAP_TIMEOUT_SETTING.getKey(), timeout + "ms");
+                .build(),
+    }
+import java.util.function.Supplier;
+        final AtomicBoolean bootstrapped = new AtomicBoolean();
+        ClusterBootstrapService clusterBootstrapService = new ClusterBootstrapService(
+    public void testBootstrapsOnDiscoveryOfAllRequiredNodes() {
+                    throw new AssertionError("should not be called");
+ * the Apache License, Version 2.0 (the "License"); you may
+            vc -> {
+            transportService,
+    }
+            () -> false,
+            timeout - 1,
+ *
+    public void testDoesNothingByDefaultIfMasterNodesConfigured() {
     public void testDoesNotBootstrapsOnNonMasterNode() {
+            Settings.builder().putList(INITIAL_MASTER_NODES_SETTING.getKey(), otherNode1.getName(), otherNode2.getName()).build(),
+            .put(INITIAL_MASTER_NODES_SETTING.getKey(), "test");
+        deterministicTaskQueue.runAllTasksInTimeOrder();
+            () -> discoveredNodesSupplier.set(() -> Stream.of(localNode, otherNode1, otherNode2).collect(Collectors.toSet()))
+        };
+                }
+            throw new AssertionError("should not be called");
+    /**
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+            }
+                    vc.getNodeIds(),
+ * The OpenSearch Contributors require contributions made to
         localNode = new DiscoveryNode(
+        clusterBootstrapService.onFoundPeersUpdated();
+import java.util.concurrent.atomic.AtomicReference;
+        assertThat(illegalArgumentException.getMessage(), containsString("duplicate-requirement"));
+    public void testDoesNotBootstrapsIfNotConfigured() {
+import static org.hamcrest.Matchers.not;
+            Version.CURRENT
+        clusterBootstrapService.scheduleUnconfiguredBootstrap();
+package org.opensearch.cluster.coordination;
+ * software distributed under the License is distributed on an
+                );
+    }
+                assertThat(vc.getNodeIds(), not(hasItem(containsString("placeholder"))));
+        transportService.start();
+    private TransportService transportService;
+        });
+        );
+            vc -> {
+ * this work for additional information regarding copyright
+        );
+import static org.hamcrest.Matchers.equalTo;
+import org.opensearch.transport.TransportService;
+        deterministicTaskQueue.runAllTasks();
+ * to validate ClusterBootstrapService works correctly with the deprecated node role and cluster setting.
+ * You may obtain a copy of the License at
+        final Settings.Builder settings = Settings.builder()
+            ).getMessage(),
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.settings.Settings;
+            buildNewFakeTransportAddress(),
+ */
+        assertWarnings(CLUSTER_SETTING_DEPRECATED_MESSAGE);
+    }
+import java.util.Collections;
+            () -> false,
+        ClusterBootstrapService clusterBootstrapService = new ClusterBootstrapService(
+            () -> discoveredNodesSupplier.get().get(),
+import static org.hamcrest.Matchers.containsString;
+        assertTrue(bootstrapped.get());
+            () -> Stream.of(otherNode1, otherNode2).collect(Collectors.toList()),
+                IllegalArgumentException.class,
+/*
+ * This class is a partial copy of ClusterBootstrapServiceTests
+            () -> false,
+        assertWarnings(CLUSTER_SETTING_DEPRECATED_MESSAGE);
+                    equalTo(Stream.of(localNode, otherNode1, otherNode2).map(DiscoveryNode::getId).collect(Collectors.toSet()))
+            emptySet(),
+                vc -> {
+                Collections::emptyList,
+        transportService.start();
+        ClusterBootstrapService clusterBootstrapService = new ClusterBootstrapService(
+            Version.CURRENT
+        clusterBootstrapService.onFoundPeersUpdated();
+}
+                .putList(INITIAL_MASTER_NODES_SETTING.getKey(), localNode.getName(), otherNode1.getName(), otherNode2.getName())
+        otherNode1 = newDiscoveryNode("other1");
+        clusterBootstrapService.onFoundPeersUpdated();
+            }
+    private static final String CLUSTER_SETTING_DEPRECATED_MESSAGE =
+            buildNewFakeTransportAddress(),
+        ClusterBootstrapService clusterBootstrapService = new ClusterBootstrapService(
+                builder().putList(INITIAL_MASTER_NODES_SETTING.getKey(), "duplicate-requirement", "duplicate-requirement").build(),
+import org.opensearch.Version;
+        transportService.start();
+                () -> new ClusterBootstrapService(settings.build(), transportService, () -> emptyList(), () -> false, vc -> fail())
+        return new DiscoveryNode(
+ * As of 2.0, MASTER_ROLE and setting 'cluster.initial_master_nodes' is deprecated to promote inclusive language.
+     */
+        ClusterBootstrapService clusterBootstrapService = new ClusterBootstrapService(
+            ).getMessage(),
+        final Settings.Builder settings = Settings.builder();
+import java.util.concurrent.atomic.AtomicBoolean;
+            throw new AssertionError("should not be called yet");
+        localNode = newDiscoveryNode("local");
+    private DiscoveryNode newDiscoveryNode(String nodeName) {
+            transportService,
+ * ownership. Elasticsearch licenses this file to you under
+            nodeName,
+            () -> false,
+    }
+import static java.util.Collections.emptyList;
+ * license agreements. See the NOTICE file distributed with
+        transportService = transport.createTransportService(
+            .put(nonClusterManagerNode());
+            vc -> {
+            @Override
+    public void testThrowsExceptionOnDuplicates() {
+                .putList(INITIAL_MASTER_NODES_SETTING.getKey(), localNode.getName(), otherNode1.getName(), otherNode2.getName())
+ * KIND, either express or implied.  See the License for the
+    public void testDoesNotBootstrapsIfLocalNodeNotInInitialMasterNodes() {
+ */
+ * Unless required by applicable law or agreed to in writing,
+        clusterBootstrapService.scheduleUnconfiguredBootstrap();
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+ * Licensed to Elasticsearch under one or more contributor
+            protected void onSendRequest(long requestId, String action, TransportRequest request, DiscoveryNode node) {
+import org.junit.Before;
+        );
+    @Before
+        assertFalse(bootstrapped.get()); // should only bootstrap once
+        final long timeout;
+            vc -> {
+        deterministicTaskQueue.runAllTasks();
+import static java.util.Collections.emptyMap;
+    public void testBootstrapsAutomaticallyWithDefaultConfiguration() {
+import org.opensearch.discovery.DiscoveryModule;
+        );
+        final Settings.Builder settings = Settings.builder()
+        );
+            Collections.singleton(DiscoveryNodeRole.MASTER_ROLE),
+     * when discovery type is single-node.
+        assertWarnings(CLUSTER_SETTING_DEPRECATED_MESSAGE);
+        );
+import static org.opensearch.node.Node.NODE_NAME_SETTING;
+            null,
+                assertThat(deterministicTaskQueue.getCurrentTimeMillis(), greaterThanOrEqualTo(timeout));
+        assertThat(
+        if (randomBoolean()) {
+import org.opensearch.transport.TransportRequest;
+            }
+        assertThat(illegalArgumentException.getMessage(), containsString(INITIAL_MASTER_NODES_SETTING.getKey()));
+        clusterBootstrapService.onFoundPeersUpdated();
+            .put(DiscoveryModule.DISCOVERY_TYPE_SETTING.getKey(), DiscoveryModule.SINGLE_NODE_DISCOVERY_TYPE)
+        deterministicTaskQueue.runAllTasks();
+    }
+        });
+        bootstrapped.set(false);
+            transportService,
+ * SPDX-License-Identifier: Apache-2.0
+                assertThat(
+            );
+                transportService,
+import org.opensearch.test.OpenSearchTestCase;
+    }
+        );
+        transportService.start();
+            emptyMap(),
+ * GitHub history for details.
+            emptyMap(),
+    public void testFailBootstrapNonMasterEligibleNodeWithSingleNodeDiscovery() {
+        deterministicTaskQueue.runAllTasks();
+ * specific language governing permissions and limitations
+            expectThrows(
+            transportService,
+        );
+        clusterBootstrapService.scheduleUnconfiguredBootstrap();
+            deterministicTaskQueue.getThreadPool(),
+ * under the License.
+            NoopTracer.INSTANCE
+                throw new AssertionError("should not be called");
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    private DiscoveryNode localNode, otherNode1, otherNode2;
+        }, () -> false, vc -> { throw new AssertionError("should not be called"); });
+        );
+    }
+            Settings.builder().putList(INITIAL_MASTER_NODES_SETTING.getKey()).build(),
+    public void testFailBootstrapWithBothSingleNodeDiscoveryAndInitialMasterNodes() {
+            timeout = randomLongBetween(1, 10000);
+            vc -> {
+            new ClusterBootstrapService(
+                throw new AssertionError("should not be called");
+        final AtomicBoolean bootstrapped = new AtomicBoolean();
+            () -> Stream.of(localNode, otherNode1, otherNode2).collect(Collectors.toList()),
+            .put(DiscoveryModule.DISCOVERY_TYPE_SETTING.getKey(), DiscoveryModule.SINGLE_NODE_DISCOVERY_TYPE)
+import org.opensearch.cluster.node.DiscoveryNode;
+            Settings.EMPTY,
+                "setting [" + INITIAL_MASTER_NODES_SETTING.getKey() + "] is not allowed when [discovery.type] is set " + "to [single-node]"
+        deterministicTaskQueue.runAllTasks();
+                .build(),
+            .put(NODE_NAME_SETTING.getKey(), localNode.getName())
+            expectThrows(
+ * not use this file except in compliance with the License.
+     * Validate the correct deprecated setting name of cluster.initial_master_nodes is shown in the exception,
+                throw new AssertionError("should not be called");
+public class ClusterBootstrapServiceDeprecatedMasterTests extends OpenSearchTestCase {
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+        );
+                () -> false,
+import static org.opensearch.cluster.coordination.ClusterBootstrapService.UNCONFIGURED_BOOTSTRAP_TIMEOUT_SETTING;
+import java.util.stream.Stream;
+                throw new AssertionError("unexpected " + action);
+            () -> false,
+        assertThat(
+import static org.hamcrest.Matchers.hasItem;
+ */
+            () -> Stream.of(localNode, otherNode1, otherNode2).collect(Collectors.toList()),
+import static org.hamcrest.Matchers.containsInAnyOrder;
+                assertTrue(bootstrapped.compareAndSet(false, true));
+        deterministicTaskQueue.scheduleAt(
+import static org.opensearch.cluster.coordination.ClusterBootstrapService.INITIAL_MASTER_NODES_SETTING;
+                assertThat(vc.getNodeIds(), containsInAnyOrder(localNode.getId(), otherNode1.getId(), otherNode2.getId()));
+            Settings.builder()
+import static java.util.Collections.emptySet;
+        clusterBootstrapService.onFoundPeersUpdated();
+        assertWarnings(CLUSTER_SETTING_DEPRECATED_MESSAGE);
+/*
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+            }
+            + "See the breaking changes documentation for the next major version.";
+            Settings.builder()
+        otherNode2 = newDiscoveryNode("other2");
+            )
+            randomAlphaOfLength(10),
+/*
+        transportService.start();
+        );
+            }
+/*
             "local",
             randomAlphaOfLength(10),
-            buildNewFakeTransportAddress(),
-            emptyMap(),
-            emptySet(),
-            Version.CURRENT
-        );
-        ClusterBootstrapService clusterBootstrapService = new ClusterBootstrapService(
-            Settings.builder()
-                .putList(INITIAL_MASTER_NODES_SETTING.getKey(), localNode.getName(), otherNode1.getName(), otherNode2.getName())
-                .build(),
-            transportService,
-            () -> Stream.of(localNode, otherNode1, otherNode2).collect(Collectors.toList()),
-            () -> false,
-            vc -> {
-                throw new AssertionError("should not be called");
-            }
-        );
-        assertWarnings(CLUSTER_SETTING_DEPRECATED_MESSAGE);
-        transportService.start();
-        clusterBootstrapService.onFoundPeersUpdated();
-        deterministicTaskQueue.runAllTasks();
-    }
-
-    public void testDoesNotBootstrapsIfLocalNodeNotInInitialMasterNodes() {
-        ClusterBootstrapService clusterBootstrapService = new ClusterBootstrapService(
-            Settings.builder().putList(INITIAL_MASTER_NODES_SETTING.getKey(), otherNode1.getName(), otherNode2.getName()).build(),
-            transportService,
-            () -> Stream.of(localNode, otherNode1, otherNode2).collect(Collectors.toList()),
-            () -> false,
-            vc -> {
-                throw new AssertionError("should not be called");
-            }
-        );
-        assertWarnings(CLUSTER_SETTING_DEPRECATED_MESSAGE);
-        transportService.start();
-        clusterBootstrapService.onFoundPeersUpdated();
-        deterministicTaskQueue.runAllTasks();
-    }
-
-    public void testDoesNotBootstrapsIfNotConfigured() {
-        ClusterBootstrapService clusterBootstrapService = new ClusterBootstrapService(
-            Settings.builder().putList(INITIAL_MASTER_NODES_SETTING.getKey()).build(),
-            transportService,
-            () -> Stream.of(localNode, otherNode1, otherNode2).collect(Collectors.toList()),
-            () -> false,
-            vc -> {
-                throw new AssertionError("should not be called");
-            }
-        );
-        assertWarnings(CLUSTER_SETTING_DEPRECATED_MESSAGE);
-        transportService.start();
-        clusterBootstrapService.scheduleUnconfiguredBootstrap();
-        clusterBootstrapService.onFoundPeersUpdated();
-        deterministicTaskQueue.runAllTasks();
-    }
-
-    /**
-     * Validate the correct deprecated setting name of cluster.initial_master_nodes is shown in the exception,
-     * when discovery type is single-node.
-     */
-    public void testFailBootstrapWithBothSingleNodeDiscoveryAndInitialMasterNodes() {
-        final Settings.Builder settings = Settings.builder()
-            .put(DiscoveryModule.DISCOVERY_TYPE_SETTING.getKey(), DiscoveryModule.SINGLE_NODE_DISCOVERY_TYPE)
-            .put(NODE_NAME_SETTING.getKey(), localNode.getName())
-            .put(INITIAL_MASTER_NODES_SETTING.getKey(), "test");
-
-        assertThat(
-            expectThrows(
-                IllegalArgumentException.class,
-                () -> new ClusterBootstrapService(settings.build(), transportService, () -> emptyList(), () -> false, vc -> fail())
-            ).getMessage(),
-            containsString(
-                "setting [" + INITIAL_MASTER_NODES_SETTING.getKey() + "] is not allowed when [discovery.type] is set " + "to [single-node]"
-            )
-        );
-    }
-
-    public void testFailBootstrapNonMasterEligibleNodeWithSingleNodeDiscovery() {
-        final Settings.Builder settings = Settings.builder()
-            .put(DiscoveryModule.DISCOVERY_TYPE_SETTING.getKey(), DiscoveryModule.SINGLE_NODE_DISCOVERY_TYPE)
-            .put(NODE_NAME_SETTING.getKey(), localNode.getName())
-            .put(nonClusterManagerNode());
-
-        assertThat(
-            expectThrows(
-                IllegalArgumentException.class,
-                () -> new ClusterBootstrapService(settings.build(), transportService, () -> emptyList(), () -> false, vc -> fail())
-            ).getMessage(),
-            containsString("node with [discovery.type] set to [single-node] must be cluster-manager-eligible")
-        );
-    }
-}
+    // Validate the deprecated setting is still valid during the cluster bootstrap.
+ * Remove the class after the deprecated node role and cluster setting is removed.

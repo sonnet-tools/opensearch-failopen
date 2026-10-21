@@ -1,323 +1,268 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.ingest.useragent;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-final class UserAgentParser {
-
-    private final UserAgentCache cache;
-    private final List<UserAgentSubpattern> uaPatterns = new ArrayList<>();
-    private final List<UserAgentSubpattern> osPatterns = new ArrayList<>();
-    private final List<UserAgentSubpattern> devicePatterns = new ArrayList<>();
-    private final String name;
-
-    UserAgentParser(String name, InputStream regexStream, UserAgentCache cache) {
-        this.name = name;
-        this.cache = cache;
-
-        try {
-            init(regexStream);
-        } catch (IOException e) {
-            throw new OpenSearchParseException("error parsing regular expression file", e);
-        }
-    }
-
-    private void init(InputStream regexStream) throws IOException {
         // EMPTY is safe here because we don't use namedObject
-        XContentParser yamlParser = XContentType.YAML.xContent()
-            .createParser(NamedXContentRegistry.EMPTY, LoggingDeprecationHandler.INSTANCE, regexStream);
-
-        XContentParser.Token token = yamlParser.nextToken();
-
-        if (token == XContentParser.Token.START_OBJECT) {
-            token = yamlParser.nextToken();
-
-            for (; token != null; token = yamlParser.nextToken()) {
-                if (token == XContentParser.Token.FIELD_NAME && yamlParser.currentName().equals("user_agent_parsers")) {
-                    List<Map<String, String>> parserConfigurations = readParserConfigurations(yamlParser);
-
-                    for (Map<String, String> map : parserConfigurations) {
-                        uaPatterns.add(
-                            new UserAgentSubpattern(
-                                compilePattern(map.get("regex"), map.get("regex_flag")),
-                                map.get("family_replacement"),
-                                map.get("v1_replacement"),
-                                map.get("v2_replacement"),
-                                map.get("v3_replacement"),
-                                map.get("v4_replacement")
-                            )
-                        );
-                    }
-                } else if (token == XContentParser.Token.FIELD_NAME && yamlParser.currentName().equals("os_parsers")) {
-                    List<Map<String, String>> parserConfigurations = readParserConfigurations(yamlParser);
-
-                    for (Map<String, String> map : parserConfigurations) {
-                        osPatterns.add(
-                            new UserAgentSubpattern(
-                                compilePattern(map.get("regex"), map.get("regex_flag")),
-                                map.get("os_replacement"),
-                                map.get("os_v1_replacement"),
-                                map.get("os_v2_replacement"),
-                                map.get("os_v3_replacement"),
-                                map.get("os_v4_replacement")
-                            )
-                        );
-                    }
-                } else if (token == XContentParser.Token.FIELD_NAME && yamlParser.currentName().equals("device_parsers")) {
-                    List<Map<String, String>> parserConfigurations = readParserConfigurations(yamlParser);
-
-                    for (Map<String, String> map : parserConfigurations) {
-                        devicePatterns.add(
-                            new UserAgentSubpattern(
-                                compilePattern(map.get("regex"), map.get("regex_flag")),
-                                map.get("device_replacement"),
-                                null,
-                                null,
-                                null,
-                                null
-                            )
-                        );
-                    }
-                }
-            }
-        }
-
-        if (uaPatterns.isEmpty() && osPatterns.isEmpty() && devicePatterns.isEmpty()) {
-            throw new OpenSearchParseException("not a valid regular expression file");
-        }
-    }
-
-    private Pattern compilePattern(String regex, String regex_flag) {
-        // Only flag present in the current default regexes.yaml
-        if (regex_flag != null && regex_flag.equals("i")) {
-            return Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
-        } else {
-            return Pattern.compile(regex);
-        }
-    }
-
-    private List<Map<String, String>> readParserConfigurations(XContentParser yamlParser) throws IOException {
-        List<Map<String, String>> patternList = new ArrayList<>();
-
-        XContentParser.Token token = yamlParser.nextToken();
-        if (token != XContentParser.Token.START_ARRAY) {
-            throw new OpenSearchParseException("malformed regular expression file, should continue with 'array' after 'object'");
-        }
-
-        token = yamlParser.nextToken();
-        if (token != XContentParser.Token.START_OBJECT) {
-            throw new OpenSearchParseException("malformed regular expression file, expecting 'object'");
-        }
-
-        while (token == XContentParser.Token.START_OBJECT) {
-            token = yamlParser.nextToken();
-
-            if (token != XContentParser.Token.FIELD_NAME) {
-                throw new OpenSearchParseException("malformed regular expression file, should continue with 'field_name' after 'array'");
-            }
-
-            Map<String, String> regexMap = new HashMap<>();
-            for (; token == XContentParser.Token.FIELD_NAME; token = yamlParser.nextToken()) {
-                String fieldName = yamlParser.currentName();
-
-                token = yamlParser.nextToken();
-                String fieldValue = yamlParser.text();
-                regexMap.put(fieldName, fieldValue);
-            }
-
-            patternList.add(regexMap);
-
-            token = yamlParser.nextToken();
-        }
-
-        return patternList;
-    }
-
-    List<UserAgentSubpattern> getUaPatterns() {
-        return uaPatterns;
-    }
-
-    List<UserAgentSubpattern> getOsPatterns() {
-        return osPatterns;
-    }
-
-    List<UserAgentSubpattern> getDevicePatterns() {
-        return devicePatterns;
-    }
-
-    String getName() {
-        return name;
-    }
-
-    public Details parse(String agentString) {
-        Details details = cache.get(name, agentString);
-
-        if (details == null) {
-            VersionedName userAgent = findMatch(uaPatterns, agentString);
-            VersionedName operatingSystem = findMatch(osPatterns, agentString);
-            VersionedName device = findMatch(devicePatterns, agentString);
-
-            details = new Details(userAgent, operatingSystem, device);
-
-            cache.put(name, agentString, details);
-        }
-
-        return details;
-    }
-
-    private VersionedName findMatch(List<UserAgentSubpattern> possiblePatterns, String agentString) {
-        VersionedName name;
-        for (UserAgentSubpattern pattern : possiblePatterns) {
-            name = pattern.match(agentString);
-
-            if (name != null) {
-                return name;
-            }
-        }
-
-        return null;
-    }
-
-    static final class Details {
-        public final VersionedName userAgent;
-        public final VersionedName operatingSystem;
-        public final VersionedName device;
-
-        Details(VersionedName userAgent, VersionedName operatingSystem, VersionedName device) {
-            this.userAgent = userAgent;
-            this.operatingSystem = operatingSystem;
-            this.device = device;
-        }
-    }
-
-    static final class VersionedName {
-        public final String name;
-        public final String major;
-        public final String minor;
-        public final String patch;
-        public final String build;
-
-        VersionedName(String name, String major, String minor, String patch, String build) {
-            this.name = name;
-            this.major = major;
-            this.minor = minor;
-            this.patch = patch;
-            this.build = build;
-        }
-    }
-
-    /**
-     * One of: user agent, operating system, device
-     */
-    static final class UserAgentSubpattern {
-        private final Pattern pattern;
         private final String nameReplacement, v1Replacement, v2Replacement, v3Replacement, v4Replacement;
-
-        UserAgentSubpattern(
-            Pattern pattern,
-            String nameReplacement,
+        }
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
             String v1Replacement,
-            String v2Replacement,
-            String v3Replacement,
-            String v4Replacement
-        ) {
-            this.pattern = pattern;
-            this.nameReplacement = nameReplacement;
-            this.v1Replacement = v1Replacement;
+/*
+        return osPatterns;
             this.v2Replacement = v2Replacement;
+                patch = matcher.group(4);
+            token = yamlParser.nextToken();
+        XContentParser.Token token = yamlParser.nextToken();
+            String nameReplacement,
+    }
+            this.device = device;
+ * compatible open source license.
+                String fieldValue = yamlParser.text();
+            for (; token != null; token = yamlParser.nextToken()) {
+            if (v4Replacement != null) {
+     * One of: user agent, operating system, device
+                                compilePattern(map.get("regex"), map.get("regex_flag")),
+                        );
+                }
+            cache.put(name, agentString, details);
+ * software distributed under the License is distributed on an
+                                map.get("family_replacement"),
+            } else if (groupCount >= 5) {
+                } else if (token == XContentParser.Token.FIELD_NAME && yamlParser.currentName().equals("os_parsers")) {
+ *
+            } else if (groupCount >= 1) {
+                patch = v3Replacement;
+        }
+            details = new Details(userAgent, operatingSystem, device);
+                    for (Map<String, String> map : parserConfigurations) {
+import java.io.IOException;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                                map.get("os_v2_replacement"),
+    }
+        Details details = cache.get(name, agentString);
+            patternList.add(regexMap);
+                if (nameReplacement.contains("$1") && groupCount >= 1 && matcher.group(1) != null) {
+import org.opensearch.OpenSearchParseException;
+            token = yamlParser.nextToken();
+            } else if (groupCount >= 2) {
+ * SPDX-License-Identifier: Apache-2.0
+ * You may obtain a copy of the License at
+     */
+            if (name != null) {
+}
+            }
+ * GitHub history for details.
+                                map.get("os_replacement"),
+            }
+                } else {
+        }
+        } else {
+                } else if (token == XContentParser.Token.FIELD_NAME && yamlParser.currentName().equals("device_parsers")) {
+                                map.get("device_replacement"),
+            }
+ */
+            this.pattern = pattern;
+            } else if (groupCount >= 4) {
+                minor = v2Replacement;
+        }
+    private void init(InputStream regexStream) throws IOException {
+        private final Pattern pattern;
+            VersionedName userAgent = findMatch(uaPatterns, agentString);
+        token = yamlParser.nextToken();
+        // Only flag present in the current default regexes.yaml
+    private Pattern compilePattern(String regex, String regex_flag) {
+            String v2Replacement,
+                    List<Map<String, String>> parserConfigurations = readParserConfigurations(yamlParser);
+    public Details parse(String agentString) {
+            this.major = major;
+        }
+                            new UserAgentSubpattern(
+    private final List<UserAgentSubpattern> uaPatterns = new ArrayList<>();
+            .createParser(NamedXContentRegistry.EMPTY, LoggingDeprecationHandler.INSTANCE, regexStream);
+    }
+        public VersionedName match(String agentString) {
+            }
+        }
+import java.util.regex.Pattern;
+    }
+    }
+                    name = nameReplacement.replaceFirst("\\$1", Matcher.quoteReplacement(matcher.group(1)));
+    }
+            token = yamlParser.nextToken();
+    }
+            }
+                                map.get("v1_replacement"),
+ */
+ *
+        public final String minor;
+    static final class Details {
+            this.operatingSystem = operatingSystem;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+            throw new OpenSearchParseException("not a valid regular expression file");
+    }
+/*
+        Details(VersionedName userAgent, VersionedName operatingSystem, VersionedName device) {
+import java.util.regex.Matcher;
+        public final VersionedName userAgent;
+                String fieldName = yamlParser.currentName();
+package org.opensearch.ingest.useragent;
+        if (uaPatterns.isEmpty() && osPatterns.isEmpty() && devicePatterns.isEmpty()) {
+            Matcher matcher = pattern.matcher(agentString);
+ * Unless required by applicable law or agreed to in writing,
+                build = v4Replacement;
+    private final UserAgentCache cache;
+            this.name = name;
+                        );
+/*
             this.v3Replacement = v3Replacement;
+            if (token != XContentParser.Token.FIELD_NAME) {
+ * Modifications Copyright OpenSearch Contributors. See
+    String getName() {
+ * ownership. Elasticsearch licenses this file to you under
+        }
+            if (v1Replacement != null) {
+        this.cache = cache;
+            if (nameReplacement != null) {
+                                null
+        this.name = name;
+            } else if (groupCount >= 3) {
+                            new UserAgentSubpattern(
+            String name = null, major = null, minor = null, patch = null, build = null;
+                }
+        } catch (IOException e) {
+import java.util.HashMap;
+    List<UserAgentSubpattern> getDevicePatterns() {
+                                map.get("os_v4_replacement")
+        if (regex_flag != null && regex_flag.equals("i")) {
+        ) {
+ */
+                return name;
+            this.minor = minor;
+                            )
+ * KIND, either express or implied.  See the License for the
+        if (token != XContentParser.Token.START_ARRAY) {
+            throw new OpenSearchParseException("error parsing regular expression file", e);
+                                null,
+ * this file be licensed under the Apache-2.0 license or a
+            this.build = build;
+                return null;
+                                map.get("os_v1_replacement"),
+                                map.get("v3_replacement"),
+ * this work for additional information regarding copyright
+        XContentParser yamlParser = XContentType.YAML.xContent()
+                                null,
+                                null,
+        UserAgentSubpattern(
             this.v4Replacement = v4Replacement;
         }
-
-        public VersionedName match(String agentString) {
-            String name = null, major = null, minor = null, patch = null, build = null;
-            Matcher matcher = pattern.matcher(agentString);
-
-            if (!matcher.find()) {
-                return null;
-            }
-
-            int groupCount = matcher.groupCount();
-
-            if (nameReplacement != null) {
-                if (nameReplacement.contains("$1") && groupCount >= 1 && matcher.group(1) != null) {
-                    name = nameReplacement.replaceFirst("\\$1", Matcher.quoteReplacement(matcher.group(1)));
-                } else {
-                    name = nameReplacement;
-                }
-            } else if (groupCount >= 1) {
-                name = matcher.group(1);
-            }
-
-            if (v1Replacement != null) {
-                major = v1Replacement;
-            } else if (groupCount >= 2) {
-                major = matcher.group(2);
-            }
-
-            if (v2Replacement != null) {
-                minor = v2Replacement;
-            } else if (groupCount >= 3) {
-                minor = matcher.group(3);
-            }
-
-            if (v3Replacement != null) {
-                patch = v3Replacement;
-            } else if (groupCount >= 4) {
-                patch = matcher.group(4);
-            }
-
-            if (v4Replacement != null) {
-                build = v4Replacement;
-            } else if (groupCount >= 5) {
-                build = matcher.group(5);
-            }
-
-            return name == null ? null : new VersionedName(name, major, minor, patch, build);
-        }
+            Pattern pattern,
+    private final List<UserAgentSubpattern> devicePatterns = new ArrayList<>();
+            this.userAgent = userAgent;
+        try {
+            String v3Replacement,
+                            )
+ * license agreements. See the NOTICE file distributed with
+        return uaPatterns;
+            this.v1Replacement = v1Replacement;
+                throw new OpenSearchParseException("malformed regular expression file, should continue with 'field_name' after 'array'");
+            this.nameReplacement = nameReplacement;
     }
-}
+                            new UserAgentSubpattern(
+            }
+            return Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
+        XContentParser.Token token = yamlParser.nextToken();
+            }
+        return details;
+            }
+            throw new OpenSearchParseException("malformed regular expression file, expecting 'object'");
+        return patternList;
+        }
+        public final VersionedName device;
+        if (token != XContentParser.Token.START_OBJECT) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        public final String name;
+                                compilePattern(map.get("regex"), map.get("regex_flag")),
+                if (token == XContentParser.Token.FIELD_NAME && yamlParser.currentName().equals("user_agent_parsers")) {
+    private final String name;
+ * the Apache License, Version 2.0 (the "License"); you may
+    private List<Map<String, String>> readParserConfigurations(XContentParser yamlParser) throws IOException {
+        while (token == XContentParser.Token.START_OBJECT) {
+    List<UserAgentSubpattern> getUaPatterns() {
+                        uaPatterns.add(
+        return name;
+        public final String build;
+                    name = nameReplacement;
+                    for (Map<String, String> map : parserConfigurations) {
+            throw new OpenSearchParseException("malformed regular expression file, should continue with 'array' after 'object'");
+                    for (Map<String, String> map : parserConfigurations) {
+        return devicePatterns;
+import org.opensearch.common.xcontent.XContentType;
+            this.patch = patch;
+                                map.get("os_v3_replacement"),
+ * specific language governing permissions and limitations
+            Map<String, String> regexMap = new HashMap<>();
+        }
+        return null;
+            if (!matcher.find()) {
+import java.util.ArrayList;
+            if (v2Replacement != null) {
+        for (UserAgentSubpattern pattern : possiblePatterns) {
+            if (v3Replacement != null) {
+ * under the License.
+final class UserAgentParser {
+                minor = matcher.group(3);
+                                map.get("v2_replacement"),
+            String v4Replacement
+    static final class UserAgentSubpattern {
+                                compilePattern(map.get("regex"), map.get("regex_flag")),
+    private VersionedName findMatch(List<UserAgentSubpattern> possiblePatterns, String agentString) {
+    List<UserAgentSubpattern> getOsPatterns() {
+    /**
+                    }
+                        );
+            }
+        }
+                major = matcher.group(2);
+                major = v1Replacement;
+                        osPatterns.add(
+import org.opensearch.core.xcontent.XContentParser;
+    UserAgentParser(String name, InputStream regexStream, UserAgentCache cache) {
+                    List<Map<String, String>> parserConfigurations = readParserConfigurations(yamlParser);
+    }
+            return Pattern.compile(regex);
+            init(regexStream);
+                    }
+            return name == null ? null : new VersionedName(name, major, minor, patch, build);
+                token = yamlParser.nextToken();
+        public final String major;
+    static final class VersionedName {
+                        devicePatterns.add(
+    }
+            VersionedName operatingSystem = findMatch(osPatterns, agentString);
+                                map.get("v4_replacement")
+        }
+ * not use this file except in compliance with the License.
+    private final List<UserAgentSubpattern> osPatterns = new ArrayList<>();
+            VersionedName device = findMatch(devicePatterns, agentString);
+                build = matcher.group(5);
+            name = pattern.match(agentString);
+                regexMap.put(fieldName, fieldValue);
+            }
+        VersionedName name;
+        VersionedName(String name, String major, String minor, String patch, String build) {
+    }
+        List<Map<String, String>> patternList = new ArrayList<>();
+                    List<Map<String, String>> parserConfigurations = readParserConfigurations(yamlParser);
+ *
+import java.util.Map;
+            for (; token == XContentParser.Token.FIELD_NAME; token = yamlParser.nextToken()) {
+        if (token == XContentParser.Token.START_OBJECT) {
+        public final VersionedName operatingSystem;
+        public final String patch;
+ * Licensed to Elasticsearch under one or more contributor
+        if (details == null) {
+                            )
+                    }
+ * The OpenSearch Contributors require contributions made to
+            int groupCount = matcher.groupCount();
+    }
+                name = matcher.group(1);
+        }
+import java.util.List;
+import java.io.InputStream;

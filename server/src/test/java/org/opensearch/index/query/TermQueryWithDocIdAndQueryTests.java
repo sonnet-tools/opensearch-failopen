@@ -1,461 +1,385 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TotalHits;
-import org.opensearch.action.get.GetRequest;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.NumberFieldMapper;
-import org.opensearch.indices.TermsLookup;
-import org.opensearch.search.SearchHit;
-import org.opensearch.search.SearchHits;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.client.AdminClient;
-import org.opensearch.transport.client.Client;
-import org.opensearch.transport.client.IndicesAdminClient;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiConsumer;
-
-import static org.opensearch.Version.MASK;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class TermQueryWithDocIdAndQueryTests extends OpenSearchTestCase {
-
-    private IndexSettings newTestIndexSettings(int maxTermsCount, int maxResultWindow) {
-        Settings settings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, 2000099 ^ MASK)
-            .put("index.max_terms_count", maxTermsCount)
-            .put("index.max_result_window", maxResultWindow)
-            .build();
-        IndexMetadata meta = IndexMetadata.builder("test").settings(settings).numberOfShards(1).numberOfReplicas(0).build();
-        return new IndexSettings(meta, settings);
-    }
-
-    private IndexSettings newTestIndexSettings() {
-        return newTestIndexSettings(2048, 10000);
-    }
-
-    public void testTermsQueryWithValuesOnly() throws Exception {
-        List<Object> values = Arrays.asList("111", "222");
-        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", values, null);
-
-        QueryShardContext context = mock(QueryShardContext.class);
-        when(context.getIndexSettings()).thenReturn(newTestIndexSettings());
-        MappedFieldType fieldType = mock(MappedFieldType.class);
-        when(context.fieldMapper("student_id")).thenReturn(fieldType);
-        Query mockQuery = mock(Query.class);
-        when(fieldType.termsQuery(anyList(), eq(context))).thenReturn(mockQuery);
-
-        Query result = builder.doToQuery(context);
-        assertNotNull(result);
-        assertEquals(mockQuery, result);
-    }
-
-    public void testTermsQueryWithBitmapValueType() throws Exception {
-        List<Object> values = Collections.singletonList(new BytesArray(new byte[] { 1, 2, 3 }));
-        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", values, null).valueType(TermsQueryBuilder.ValueType.BITMAP);
-
-        QueryShardContext context = mock(QueryShardContext.class);
-        when(context.getIndexSettings()).thenReturn(newTestIndexSettings());
-        NumberFieldMapper.NumberFieldType numberFieldType = mock(NumberFieldMapper.NumberFieldType.class);
-        when(context.fieldMapper("student_id")).thenReturn(numberFieldType);
-        when(numberFieldType.unwrap()).thenReturn(numberFieldType);
-        Query bitmapQuery = mock(Query.class);
-        when(numberFieldType.bitmapQuery(any(BytesArray.class))).thenReturn(bitmapQuery);
-
-        Query result = builder.doToQuery(context);
-        assertNotNull(result);
-        assertEquals(bitmapQuery, result);
-    }
-
-    public void testDoToQueryThrowsForEmptyValues() {
-        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", Collections.emptyList(), null);
-        QueryShardContext context = mock(QueryShardContext.class);
-        when(context.getIndexSettings()).thenReturn(newTestIndexSettings());
-        when(context.fieldMapper(any())).thenReturn(mock(MappedFieldType.class));
-        Exception ex = expectThrows(UnsupportedOperationException.class, () -> builder.doToQuery(context));
-        assertEquals("query must be rewritten first", ex.getMessage());
-    }
-
-    public void testDoToQueryTooManyTerms() {
-        List<Object> values = new ArrayList<>();
-        for (int i = 0; i < 3000; i++) {
-            values.add(String.valueOf(i));
-        }
-        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", values, null);
-
-        QueryShardContext context = mock(QueryShardContext.class);
-        when(context.getIndexSettings()).thenReturn(newTestIndexSettings(1024, 10000));
-        MappedFieldType fieldType = mock(MappedFieldType.class);
-        when(context.fieldMapper("student_id")).thenReturn(fieldType);
-
-        Exception ex = expectThrows(IllegalArgumentException.class, () -> builder.doToQuery(context));
-        assertTrue(ex.getMessage().contains("has exceeded the allowed maximum"));
-    }
-
-    public void testDoToQueryUnknownFieldType() {
-        List<Object> values = Arrays.asList("111", "222");
-        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", values, null);
-
-        QueryShardContext context = mock(QueryShardContext.class);
-        when(context.getIndexSettings()).thenReturn(newTestIndexSettings());
-        when(context.fieldMapper("student_id")).thenReturn(null);
-
-        Exception ex = expectThrows(IllegalStateException.class, () -> builder.doToQuery(context));
-        assertTrue(ex.getMessage().contains("Rewrite first"));
-    }
-
-    // Forbidden reflection-based test removed. Instead, test the normal cache population path.
-    public void testTermsLookupWithIdFetchSimulated() throws Exception {
-        TermsLookup termsLookup = new TermsLookup("classes", "101", "enrolled");
-        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", null, termsLookup);
-
-        // Setup mock client and QueryRewriteContext
-        Client mockClient = mock(Client.class);
-        QueryRewriteContext mockRewriteContext = mock(QueryRewriteContext.class);
-
-        // Intercept the lambda registered as async action
-        doAnswer(invocation -> {
-            Object asyncAction = invocation.getArguments()[0];
-            @SuppressWarnings("unchecked")
-            BiConsumer<Client, ActionListener<List<Object>>> lambda = (BiConsumer<Client, ActionListener<List<Object>>>) asyncAction;
-            // Simulate the fetch logic -- respond with terms
-            lambda.accept(mockClient, ActionListener.wrap(list -> {}, ex -> fail("Should not throw")));
-            return null;
-        }).when(mockRewriteContext).registerAsyncAction(any());
-
-        builder.doRewrite(mockRewriteContext);
-
-        verify(mockClient, atLeastOnce()).get(any(GetRequest.class), any());
-    }
-
-    // Forbidden reflection-based test removed. Instead, test the normal cache population path.
-    public void testTermsLookupWithQueryFetchSimulated() throws Exception {
-        QueryBuilder subQuery = mock(QueryBuilder.class);
-        TermsLookup termsLookup = new TermsLookup("classes", null, "enrolled", subQuery);
-        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", null, termsLookup);
-
-        // Setup mock client and its admin/indices chain
-        Client mockClient = mock(Client.class);
-        AdminClient mockAdminClient = mock(AdminClient.class);
-        IndicesAdminClient mockIndicesAdminClient = mock(IndicesAdminClient.class);
-
-        // Stub the chain: client.admin().indices()
-        when(mockClient.admin()).thenReturn(mockAdminClient);
-        when(mockAdminClient.indices()).thenReturn(mockIndicesAdminClient);
-
-        QueryRewriteContext mockRewriteContext = mock(QueryRewriteContext.class);
-
-        // Intercept the lambda registered as async action
-        doAnswer(invocation -> {
-            Object asyncAction = invocation.getArguments()[0];
-            @SuppressWarnings("unchecked")
-            BiConsumer<Client, ActionListener<List<Object>>> lambda = (BiConsumer<Client, ActionListener<List<Object>>>) asyncAction;
-            // Simulate the fetch logic -- respond with terms
-            lambda.accept(mockClient, ActionListener.wrap(list -> {}, ex -> fail("Should not throw")));
-            return null;
-        }).when(mockRewriteContext).registerAsyncAction(any());
-
-        builder.doRewrite(mockRewriteContext);
-
-        // For query-based lookup, verify admin() and indices() are called
-        verify(mockClient).admin();
-        verify(mockAdminClient).indices();
-    }
-
-    public void testDoToQueryThrowsWhenTermsNotFetched() {
-        QueryBuilder subQuery = mock(QueryBuilder.class);
-        TermsLookup termsLookup = new TermsLookup("classes", null, "enrolled", subQuery);
-        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", null, termsLookup);
-
-        QueryShardContext context = mock(QueryShardContext.class);
-        when(context.getIndexSettings()).thenReturn(newTestIndexSettings());
-        when(context.fieldMapper(any())).thenReturn(mock(MappedFieldType.class));
-
-        Exception ex = expectThrows(UnsupportedOperationException.class, () -> builder.doToQuery(context));
-        assertTrue(ex.getMessage().contains("query must be rewritten first"));
-    }
-
-    public void testRewriteWithValuesPresentReturnsSelf() throws Exception {
-        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", Arrays.asList("111", "222"), null);
-        QueryRewriteContext rewriteContext = mock(QueryRewriteContext.class);
-        QueryBuilder rewritten = builder.doRewrite(rewriteContext);
-        assertEquals(builder, rewritten);
-    }
-
-    public void testRewriteWithEmptyValuesReturnsMatchNone() throws Exception {
-        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", new ArrayList<>(), null);
-        QueryRewriteContext rewriteContext = mock(QueryRewriteContext.class);
-        QueryBuilder rewritten = builder.doRewrite(rewriteContext);
-        assertTrue(rewritten instanceof MatchNoneQueryBuilder);
-    }
-
-    public void testEqualsAndHashCode() {
-        TermsQueryBuilder builderA = new TermsQueryBuilder("student_id", Arrays.asList("a", "b"), null);
-        TermsQueryBuilder builderB = new TermsQueryBuilder("student_id", Arrays.asList("a", "b"), null);
-        assertEquals(builderA, builderB);
-        assertEquals(builderA.hashCode(), builderB.hashCode());
-    }
-
-    public void testValueTypeEnum() {
-        assertEquals(TermsQueryBuilder.ValueType.DEFAULT, TermsQueryBuilder.ValueType.fromString("default"));
-        assertEquals(TermsQueryBuilder.ValueType.BITMAP, TermsQueryBuilder.ValueType.fromString("bitmap"));
-        Exception ex = expectThrows(IllegalArgumentException.class, () -> TermsQueryBuilder.ValueType.fromString("unknown"));
-        assertTrue(ex.getMessage().contains("is not valid"));
-    }
-
-    public void testFetchIsCoveredWithTermsLookupId() throws Exception {
-        TermsLookup termsLookup = new TermsLookup("classes", "101", "enrolled");
-        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", termsLookup);
-
-        // Mock client and QueryRewriteContext
-        Client mockClient = mock(Client.class);
-        QueryRewriteContext mockRewriteContext = mock(QueryRewriteContext.class);
-
-        // Intercept the lambda registered as async action
-        doAnswer(invocation -> {
-            Object asyncAction = invocation.getArguments()[0];
-            @SuppressWarnings("unchecked")
-            BiConsumer<Client, ActionListener<List<Object>>> lambda = (BiConsumer<Client, ActionListener<List<Object>>>) asyncAction;
-            lambda.accept(mockClient, ActionListener.wrap(list -> {}, ex -> fail("Should not throw")));
-            return null;
-        }).when(mockRewriteContext).registerAsyncAction(any());
-
-        builder.doRewrite(mockRewriteContext);
-
-        verify(mockClient, atLeastOnce()).get(any(GetRequest.class), any());
-    }
-
-    public void testFetchIsCoveredWithTermsLookupQuery() throws Exception {
-        QueryBuilder subQuery = mock(QueryBuilder.class);
-        TermsLookup termsLookup = new TermsLookup("classes", null, "enrolled", subQuery);
-        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", termsLookup);
-
-        Client client = mock(Client.class);
-        AdminClient adminClient = mock(AdminClient.class);
-        IndicesAdminClient indicesAdminClient = mock(IndicesAdminClient.class);
-
-        doAnswer(invocation -> adminClient).when(client).admin();
-        doAnswer(invocation -> indicesAdminClient).when(adminClient).indices();
-
-        QueryRewriteContext rewriteContext = mock(QueryRewriteContext.class);
-
-        doAnswer(invocation -> {
-            Object asyncAction = invocation.getArgument(0);
-            @SuppressWarnings("unchecked")
-            BiConsumer<Client, ActionListener<List<Object>>> lambda = (BiConsumer<Client, ActionListener<List<Object>>>) asyncAction;
-            lambda.accept(client, ActionListener.wrap(list -> {}, ex -> fail("Should not throw")));
-            return null;
-        }).when(rewriteContext).registerAsyncAction(any());
-
-        builder.doRewrite(rewriteContext);
-
-        verify(client).admin();
-        verify(adminClient).indices();
-    }
-
-    public void testTermsLookupWithQueryAsyncFetch() throws Exception {
-        TermsLookup termsLookup = new TermsLookup("classes", null, "enrolled", QueryBuilders.matchAllQuery());
-        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", null, termsLookup);
-
-        Client mockClient = mock(Client.class);
-        AdminClient mockAdminClient = mock(AdminClient.class);
-        IndicesAdminClient mockIndicesAdminClient = mock(IndicesAdminClient.class);
-
-        when(mockClient.admin()).thenReturn(mockAdminClient);
-        when(mockAdminClient.indices()).thenReturn(mockIndicesAdminClient);
-
-        doAnswer(invocation -> {
-            ActionListener<org.opensearch.action.admin.indices.settings.get.GetSettingsResponse> listener = invocation.getArgument(1);
-            org.opensearch.action.admin.indices.settings.get.GetSettingsResponse settingsResponse = mock(
-                org.opensearch.action.admin.indices.settings.get.GetSettingsResponse.class
-            );
-            when(settingsResponse.getIndexToSettings()).thenReturn(
                 Collections.singletonMap("classes", org.opensearch.common.settings.Settings.EMPTY)
-            );
-            listener.onResponse(settingsResponse);
-            return null;
-        }).when(mockIndicesAdminClient).getSettings(any(), any());
-
-        doAnswer(invocation -> {
-            ActionListener<org.opensearch.action.search.SearchResponse> listener = invocation.getArgument(1);
-
-            SearchHit hit = new SearchHit(0);
-            String json = "{\"enrolled\":[\"111\",\"222\"]}";
-            hit.sourceRef(new org.opensearch.core.common.bytes.BytesArray(json));
-
-            TotalHits totalHits = new TotalHits(1, TotalHits.Relation.EQUAL_TO);
-
-            SearchHits searchHits = new SearchHits(new SearchHit[] { hit }, totalHits, 1.0f);
-            org.opensearch.action.search.SearchResponseSections sections = new org.opensearch.action.search.SearchResponseSections(
-                searchHits,
-                null,
-                null,
-                false,
-                null,
-                null,
-                1
-            );
-            org.opensearch.action.search.SearchResponse searchResponse = new org.opensearch.action.search.SearchResponse(
-                sections,
-                "",
-                1,
-                1,
-                0,
-                1,
-                null,
-                null
-            );
-            listener.onResponse(searchResponse);
-            return null;
-        }).when(mockClient).search(any(org.opensearch.action.search.SearchRequest.class), any());
-
-        QueryRewriteContext mockRewriteContext = mock(QueryRewriteContext.class);
-
-        final boolean[] called = { false };
-
-        doAnswer(invocation -> {
-            Object asyncAction = invocation.getArgument(0);
-            @SuppressWarnings("unchecked")
-            java.util.function.BiConsumer<Client, ActionListener<List<Object>>> lambda = (java.util.function.BiConsumer<
-                Client,
-                ActionListener<List<Object>>>) asyncAction;
-            called[0] = true;
-            // Instead of asserting on result, just call onResponse with null or empty list.
-            lambda.accept(mockClient, org.opensearch.core.action.ActionListener.wrap(list -> {
-                // We cannot assert the values due to static method, so just print for visibility.
-            }, ex -> { fail("Should not throw: " + (ex != null ? ex.getMessage() : "")); }));
-            return null;
-        }).when(mockRewriteContext).registerAsyncAction(any());
-
-        builder.doRewrite(mockRewriteContext);
-
-        assertTrue("Async action should have been invoked", called[0]);
-        // NOTE: Cannot assert on output list contents due to inability to mock static extractRawValues.
-    }
-
-    public void testTermsLookupSubqueryTotalHitsExceedsFetchSize() throws Exception {
-        // Setup a TermsLookup with a subquery
-        QueryBuilder subQuery = mock(QueryBuilder.class);
-        TermsLookup termsLookup = new TermsLookup("classes", null, "enrolled", subQuery);
-        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", null, termsLookup);
-
-        // Mock the client, admin, indices, and search response chain
-        Client mockClient = mock(Client.class);
-        AdminClient mockAdminClient = mock(AdminClient.class);
-        IndicesAdminClient mockIndicesAdminClient = mock(IndicesAdminClient.class);
-
-        when(mockClient.admin()).thenReturn(mockAdminClient);
-        when(mockAdminClient.indices()).thenReturn(mockIndicesAdminClient);
-
-        // Set maxTermsCount and maxResultWindow high so maxClauseCount (3) is the limiting factor
-        Settings idxSettings = Settings.builder()
-            .put(IndexSettings.MAX_TERMS_COUNT_SETTING.getKey(), 100)
-            .put(IndexSettings.MAX_RESULT_WINDOW_SETTING.getKey(), 100)
-            .build();
-
-        // Simulate settings response
-        doAnswer(invocation -> {
-            ActionListener<org.opensearch.action.admin.indices.settings.get.GetSettingsResponse> listener = invocation.getArgument(1);
-            org.opensearch.action.admin.indices.settings.get.GetSettingsResponse settingsResponse = mock(
+        verify(mockClient).admin();
+import java.util.Collections;
+import org.opensearch.index.mapper.NumberFieldMapper;
+        assertEquals(builder, rewritten);
+        when(context.fieldMapper(any())).thenReturn(mock(MappedFieldType.class));
                 org.opensearch.action.admin.indices.settings.get.GetSettingsResponse.class
-            );
-            when(settingsResponse.getIndexToSettings()).thenReturn(Collections.singletonMap("classes", idxSettings));
-            listener.onResponse(settingsResponse);
-            return null;
-        }).when(mockIndicesAdminClient).getSettings(any(), any());
-
-        // Simulate a search response with more total hits than maxClauseCount (3)
-        doAnswer(invocation -> {
-            ActionListener<org.opensearch.action.search.SearchResponse> listener = invocation.getArgument(1);
-
-            SearchHit[] hits = new SearchHit[5];
-            for (int i = 0; i < 5; i++)
-                hits[i] = new SearchHit(i);
-            org.apache.lucene.search.TotalHits totalHits = new org.apache.lucene.search.TotalHits(
-                10,
-                org.apache.lucene.search.TotalHits.Relation.EQUAL_TO
-            );
-
-            SearchHits searchHits = new SearchHits(hits, totalHits, 1.0f);
-            org.opensearch.action.search.SearchResponseSections sections = new org.opensearch.action.search.SearchResponseSections(
-                searchHits,
-                null,
-                null,
-                false,
-                null,
-                null,
-                1
-            );
-            org.opensearch.action.search.SearchResponse searchResponse = new org.opensearch.action.search.SearchResponse(
+    }
+import static org.mockito.Mockito.atLeastOnce;
                 sections,
+    }
+        // Simulate a search response with more total hits than maxClauseCount (3)
+            when(settingsResponse.getIndexToSettings()).thenReturn(
+                null,
                 "",
                 1,
-                1,
-                0,
-                1,
-                null,
-                null
-            );
-            listener.onResponse(searchResponse);
-            return null;
-        }).when(mockClient).search(any(org.opensearch.action.search.SearchRequest.class), any());
-
-        QueryRewriteContext mockRewriteContext = mock(QueryRewriteContext.class);
-
+        return newTestIndexSettings(2048, 10000);
         doAnswer(invocation -> {
-            Object asyncAction = invocation.getArgument(0);
-            @SuppressWarnings("unchecked")
-            java.util.function.BiConsumer<Client, ActionListener<List<Object>>> lambda = (java.util.function.BiConsumer<
-                Client,
-                ActionListener<List<Object>>>) asyncAction;
-            AtomicReference<Throwable> exceptionRef = new AtomicReference<>();
-            lambda.accept(mockClient, ActionListener.wrap(list -> { /* success not expected */ }, e -> exceptionRef.set(e)));
-            if (exceptionRef.get() != null) {
-                throw exceptionRef.get();
-            }
+    public void testFetchIsCoveredWithTermsLookupQuery() throws Exception {
+        assertEquals(mockQuery, result);
+import org.opensearch.core.common.bytes.BytesArray;
+        List<Object> values = Arrays.asList("111", "222");
+                1
+        // Stub the chain: client.admin().indices()
+    }
+ *
+        IndexMetadata meta = IndexMetadata.builder("test").settings(settings).numberOfShards(1).numberOfReplicas(0).build();
+        assertTrue(ex.getMessage().contains("Rewrite first"));
             return null;
+    public void testTermsLookupWithIdFetchSimulated() throws Exception {
         }).when(mockRewriteContext).registerAsyncAction(any());
-
-        // Set maxClauseCount to 3 so it becomes the actual limiting factor via IndexSearcher
-        int originalMaxClauseCount = IndexSearcher.getMaxClauseCount();
-        try {
-            IndexSearcher.setMaxClauseCount(3);
-            IllegalArgumentException ex = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(mockRewriteContext));
-            assertTrue(ex.getMessage().contains("exceed fetch limit"));
-        } finally {
-            IndexSearcher.setMaxClauseCount(originalMaxClauseCount);
-        }
-    }
-
-    public void testMaxTermsCountSettingGetterConsistency() {
-        Settings settings = Settings.builder().put("index.max_terms_count", 1234).build();
-        assertEquals(1234, IndexSettings.MAX_TERMS_COUNT_SETTING.get(settings).intValue());
-        assertEquals(1234, settings.getAsInt(IndexSettings.MAX_TERMS_COUNT_SETTING.getKey(), -1).intValue());
-    }
+            SearchHits searchHits = new SearchHits(hits, totalHits, 1.0f);
+        Exception ex = expectThrows(IllegalArgumentException.class, () -> builder.doToQuery(context));
+        Query result = builder.doToQuery(context);
+        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", Arrays.asList("111", "222"), null);
+    public void testTermsLookupSubqueryTotalHitsExceedsFetchSize() throws Exception {
+                10,
+            org.opensearch.action.search.SearchResponse searchResponse = new org.opensearch.action.search.SearchResponse(
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.when;
+        when(context.fieldMapper("student_id")).thenReturn(null);
+            .put("index.max_terms_count", maxTermsCount)
+        }).when(rewriteContext).registerAsyncAction(any());
+        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", values, null);
 }
+            .put("index.max_result_window", maxResultWindow)
+        assertEquals(builderA.hashCode(), builderB.hashCode());
+ * this file be licensed under the Apache-2.0 license or a
+        AdminClient mockAdminClient = mock(AdminClient.class);
+            org.opensearch.action.search.SearchResponseSections sections = new org.opensearch.action.search.SearchResponseSections(
+        TermsLookup termsLookup = new TermsLookup("classes", null, "enrolled", subQuery);
+            hit.sourceRef(new org.opensearch.core.common.bytes.BytesArray(json));
+import org.opensearch.search.SearchHits;
+        // Set maxClauseCount to 3 so it becomes the actual limiting factor via IndexSearcher
+    public void testRewriteWithEmptyValuesReturnsMatchNone() throws Exception {
+        doAnswer(invocation -> indicesAdminClient).when(adminClient).indices();
+        List<Object> values = Arrays.asList("111", "222");
+        assertTrue("Async action should have been invoked", called[0]);
+        assertEquals(bitmapQuery, result);
+            // Simulate the fetch logic -- respond with terms
+        verify(mockClient, atLeastOnce()).get(any(GetRequest.class), any());
+            return null;
+import java.util.List;
+import org.opensearch.indices.TermsLookup;
+import org.apache.lucene.search.TotalHits;
+        builder.doRewrite(rewriteContext);
+                null
+            .build();
+                1,
+        QueryBuilder subQuery = mock(QueryBuilder.class);
+        when(mockClient.admin()).thenReturn(mockAdminClient);
+        Exception ex = expectThrows(IllegalStateException.class, () -> builder.doToQuery(context));
+                null,
+        QueryBuilder rewritten = builder.doRewrite(rewriteContext);
+            );
+    public void testTermsQueryWithValuesOnly() throws Exception {
+    }
+                null,
+                searchHits,
+            return null;
+        MappedFieldType fieldType = mock(MappedFieldType.class);
+        for (int i = 0; i < 3000; i++) {
+        when(context.getIndexSettings()).thenReturn(newTestIndexSettings());
+            lambda.accept(mockClient, ActionListener.wrap(list -> {}, ex -> fail("Should not throw")));
+        final boolean[] called = { false };
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.transport.client.Client;
+            // Simulate the fetch logic -- respond with terms
+import org.apache.lucene.search.Query;
+            .put(IndexSettings.MAX_RESULT_WINDOW_SETTING.getKey(), 100)
+        // Setup mock client and QueryRewriteContext
+                null,
+        when(context.getIndexSettings()).thenReturn(newTestIndexSettings());
+        verify(client).admin();
+                false,
+        when(context.getIndexSettings()).thenReturn(newTestIndexSettings());
+import static org.mockito.Mockito.verify;
+        when(context.fieldMapper("student_id")).thenReturn(fieldType);
+package org.opensearch.index.query;
+            return null;
+                null
+        Exception ex = expectThrows(UnsupportedOperationException.class, () -> builder.doToQuery(context));
+        builder.doRewrite(mockRewriteContext);
+        QueryRewriteContext rewriteContext = mock(QueryRewriteContext.class);
+    public void testTermsLookupWithQueryAsyncFetch() throws Exception {
+        }).when(mockIndicesAdminClient).getSettings(any(), any());
+                0,
+        when(context.getIndexSettings()).thenReturn(newTestIndexSettings());
+            Object asyncAction = invocation.getArgument(0);
+        doAnswer(invocation -> {
+        // Intercept the lambda registered as async action
+        // Setup a TermsLookup with a subquery
+        // Intercept the lambda registered as async action
+        // Mock the client, admin, indices, and search response chain
+        TermsLookup termsLookup = new TermsLookup("classes", null, "enrolled", QueryBuilders.matchAllQuery());
+        }).when(mockRewriteContext).registerAsyncAction(any());
+        when(mockAdminClient.indices()).thenReturn(mockIndicesAdminClient);
+            org.apache.lucene.search.TotalHits totalHits = new org.apache.lucene.search.TotalHits(
+    public void testValueTypeEnum() {
+    }
+        return new IndexSettings(meta, settings);
+                null,
+import org.opensearch.core.action.ActionListener;
+    }
+    }
+                throw exceptionRef.get();
+    public void testEqualsAndHashCode() {
+    }
+        AdminClient adminClient = mock(AdminClient.class);
+            @SuppressWarnings("unchecked")
+        // For query-based lookup, verify admin() and indices() are called
+            return null;
+        // Intercept the lambda registered as async action
+        doAnswer(invocation -> {
+        QueryBuilder subQuery = mock(QueryBuilder.class);
+ * The OpenSearch Contributors require contributions made to
+        when(mockClient.admin()).thenReturn(mockAdminClient);
+    public void testTermsQueryWithBitmapValueType() throws Exception {
+        doAnswer(invocation -> {
+        assertEquals(TermsQueryBuilder.ValueType.BITMAP, TermsQueryBuilder.ValueType.fromString("bitmap"));
+            BiConsumer<Client, ActionListener<List<Object>>> lambda = (BiConsumer<Client, ActionListener<List<Object>>>) asyncAction;
+            IllegalArgumentException ex = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(mockRewriteContext));
+    }
+            return null;
+import org.opensearch.index.IndexSettings;
+            // Instead of asserting on result, just call onResponse with null or empty list.
+        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", values, null).valueType(TermsQueryBuilder.ValueType.BITMAP);
+        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", null, termsLookup);
+            assertTrue(ex.getMessage().contains("exceed fetch limit"));
+                ActionListener<List<Object>>>) asyncAction;
+            if (exceptionRef.get() != null) {
+        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", termsLookup);
+    }
+                hits[i] = new SearchHit(i);
+                Client,
+            Object asyncAction = invocation.getArgument(0);
+        QueryBuilder subQuery = mock(QueryBuilder.class);
+import org.opensearch.index.mapper.MappedFieldType;
+            @SuppressWarnings("unchecked")
+        QueryShardContext context = mock(QueryShardContext.class);
+        when(fieldType.termsQuery(anyList(), eq(context))).thenReturn(mockQuery);
+        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", null, termsLookup);
+        when(mockAdminClient.indices()).thenReturn(mockIndicesAdminClient);
+        TermsLookup termsLookup = new TermsLookup("classes", null, "enrolled", subQuery);
+        // Simulate settings response
+        }).when(mockRewriteContext).registerAsyncAction(any());
+        }
+        IndicesAdminClient mockIndicesAdminClient = mock(IndicesAdminClient.class);
+            .put(IndexMetadata.SETTING_VERSION_CREATED, 2000099 ^ MASK)
+        int originalMaxClauseCount = IndexSearcher.getMaxClauseCount();
+                0,
+                null,
+        Settings settings = Settings.builder()
+    // Forbidden reflection-based test removed. Instead, test the normal cache population path.
+            return null;
+            );
+    public void testMaxTermsCountSettingGetterConsistency() {
+        NumberFieldMapper.NumberFieldType numberFieldType = mock(NumberFieldMapper.NumberFieldType.class);
+        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", null, termsLookup);
+                1,
+            }
+    private IndexSettings newTestIndexSettings() {
+                1
+        }).when(mockRewriteContext).registerAsyncAction(any());
+        QueryRewriteContext rewriteContext = mock(QueryRewriteContext.class);
+        builder.doRewrite(mockRewriteContext);
+        verify(mockClient, atLeastOnce()).get(any(GetRequest.class), any());
+        List<Object> values = Collections.singletonList(new BytesArray(new byte[] { 1, 2, 3 }));
+            org.opensearch.action.admin.indices.settings.get.GetSettingsResponse settingsResponse = mock(
+        // NOTE: Cannot assert on output list contents due to inability to mock static extractRawValues.
+        when(context.getIndexSettings()).thenReturn(newTestIndexSettings());
+            );
+            ActionListener<org.opensearch.action.admin.indices.settings.get.GetSettingsResponse> listener = invocation.getArgument(1);
+            IndexSearcher.setMaxClauseCount(originalMaxClauseCount);
+                Client,
+            for (int i = 0; i < 5; i++)
+                null,
+            return null;
+    }
+            listener.onResponse(settingsResponse);
+        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", null, termsLookup);
+        }).when(mockClient).search(any(org.opensearch.action.search.SearchRequest.class), any());
+                null,
+    public void testDoToQueryUnknownFieldType() {
+            Object asyncAction = invocation.getArguments()[0];
+    }
+            listener.onResponse(searchResponse);
+        builder.doRewrite(mockRewriteContext);
+        Query result = builder.doToQuery(context);
+        List<Object> values = new ArrayList<>();
+        // Mock client and QueryRewriteContext
+        when(context.fieldMapper(any())).thenReturn(mock(MappedFieldType.class));
+            java.util.function.BiConsumer<Client, ActionListener<List<Object>>> lambda = (java.util.function.BiConsumer<
+import org.opensearch.common.settings.Settings;
+        when(mockAdminClient.indices()).thenReturn(mockIndicesAdminClient);
+        Client mockClient = mock(Client.class);
+        assertTrue(ex.getMessage().contains("query must be rewritten first"));
+        Client client = mock(Client.class);
+            Object asyncAction = invocation.getArguments()[0];
+        TermsLookup termsLookup = new TermsLookup("classes", null, "enrolled", subQuery);
+        TermsQueryBuilder builderA = new TermsQueryBuilder("student_id", Arrays.asList("a", "b"), null);
+        when(context.getIndexSettings()).thenReturn(newTestIndexSettings(1024, 10000));
+        doAnswer(invocation -> {
+    }
+        doAnswer(invocation -> {
+import org.opensearch.search.SearchHit;
+import java.util.ArrayList;
+            @SuppressWarnings("unchecked")
+            lambda.accept(mockClient, org.opensearch.core.action.ActionListener.wrap(list -> {
+    }
+        QueryRewriteContext mockRewriteContext = mock(QueryRewriteContext.class);
+            .put(IndexSettings.MAX_TERMS_COUNT_SETTING.getKey(), 100)
+    }
+        assertEquals(1234, settings.getAsInt(IndexSettings.MAX_TERMS_COUNT_SETTING.getKey(), -1).intValue());
+    public void testDoToQueryTooManyTerms() {
+        Settings settings = Settings.builder().put("index.max_terms_count", 1234).build();
+        verify(mockAdminClient).indices();
+        // Setup mock client and its admin/indices chain
+            );
+import org.apache.lucene.search.IndexSearcher;
+            IndexSearcher.setMaxClauseCount(3);
+        AdminClient mockAdminClient = mock(AdminClient.class);
+            );
+                org.apache.lucene.search.TotalHits.Relation.EQUAL_TO
+        }
+import org.opensearch.action.get.GetRequest;
+        assertEquals("query must be rewritten first", ex.getMessage());
+        doAnswer(invocation -> {
+        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", null, termsLookup);
+    }
+        verify(adminClient).indices();
+    public void testRewriteWithValuesPresentReturnsSelf() throws Exception {
+        TermsLookup termsLookup = new TermsLookup("classes", null, "enrolled", subQuery);
+    public void testDoToQueryThrowsForEmptyValues() {
+    // Forbidden reflection-based test removed. Instead, test the normal cache population path.
+        when(mockClient.admin()).thenReturn(mockAdminClient);
+            SearchHits searchHits = new SearchHits(new SearchHit[] { hit }, totalHits, 1.0f);
+        QueryShardContext context = mock(QueryShardContext.class);
+        try {
+        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", values, null);
+            org.opensearch.action.admin.indices.settings.get.GetSettingsResponse settingsResponse = mock(
+import org.opensearch.transport.client.IndicesAdminClient;
+            lambda.accept(client, ActionListener.wrap(list -> {}, ex -> fail("Should not throw")));
+        Query mockQuery = mock(Query.class);
+        TermsQueryBuilder builderB = new TermsQueryBuilder("student_id", Arrays.asList("a", "b"), null);
+            }, ex -> { fail("Should not throw: " + (ex != null ? ex.getMessage() : "")); }));
+            lambda.accept(mockClient, ActionListener.wrap(list -> {}, ex -> fail("Should not throw")));
+        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", new ArrayList<>(), null);
+ */
+            listener.onResponse(searchResponse);
+import org.opensearch.cluster.metadata.IndexMetadata;
+            Object asyncAction = invocation.getArguments()[0];
+        Exception ex = expectThrows(IllegalArgumentException.class, () -> TermsQueryBuilder.ValueType.fromString("unknown"));
+                1,
+        assertEquals(TermsQueryBuilder.ValueType.DEFAULT, TermsQueryBuilder.ValueType.fromString("default"));
+            );
+        doAnswer(invocation -> {
+import static org.mockito.ArgumentMatchers.anyList;
+            lambda.accept(mockClient, ActionListener.wrap(list -> {}, ex -> fail("Should not throw")));
+        Client mockClient = mock(Client.class);
+            org.opensearch.action.search.SearchResponse searchResponse = new org.opensearch.action.search.SearchResponse(
+        QueryRewriteContext rewriteContext = mock(QueryRewriteContext.class);
+            TotalHits totalHits = new TotalHits(1, TotalHits.Relation.EQUAL_TO);
+            @SuppressWarnings("unchecked")
+    }
+    }
+            ActionListener<org.opensearch.action.search.SearchResponse> listener = invocation.getArgument(1);
+        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", values, null);
+            );
+import static org.mockito.ArgumentMatchers.eq;
+        assertEquals(1234, IndexSettings.MAX_TERMS_COUNT_SETTING.get(settings).intValue());
+            SearchHit[] hits = new SearchHit[5];
+        builder.doRewrite(mockRewriteContext);
+            );
+    public void testDoToQueryThrowsWhenTermsNotFetched() {
+    private IndexSettings newTestIndexSettings(int maxTermsCount, int maxResultWindow) {
+        when(context.fieldMapper("student_id")).thenReturn(fieldType);
+                sections,
+        assertTrue(ex.getMessage().contains("has exceeded the allowed maximum"));
+        assertNotNull(result);
+            return null;
+        MappedFieldType fieldType = mock(MappedFieldType.class);
+import java.util.Arrays;
+            Object asyncAction = invocation.getArgument(0);
+ * compatible open source license.
+            ActionListener<org.opensearch.action.admin.indices.settings.get.GetSettingsResponse> listener = invocation.getArgument(1);
+        QueryRewriteContext mockRewriteContext = mock(QueryRewriteContext.class);
+/*
+        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", termsLookup);
+        TermsLookup termsLookup = new TermsLookup("classes", "101", "enrolled");
+        doAnswer(invocation -> {
+                1,
+        QueryRewriteContext mockRewriteContext = mock(QueryRewriteContext.class);
+    public void testTermsLookupWithQueryFetchSimulated() throws Exception {
+        QueryShardContext context = mock(QueryShardContext.class);
+        assertTrue(ex.getMessage().contains("is not valid"));
+        Settings idxSettings = Settings.builder()
+        QueryShardContext context = mock(QueryShardContext.class);
+        doAnswer(invocation -> adminClient).when(client).admin();
+                null,
+            BiConsumer<Client, ActionListener<List<Object>>> lambda = (BiConsumer<Client, ActionListener<List<Object>>>) asyncAction;
+        Client mockClient = mock(Client.class);
+import java.util.function.BiConsumer;
+        assertEquals(builderA, builderB);
+        doAnswer(invocation -> {
+        Query bitmapQuery = mock(Query.class);
+        }).when(mockRewriteContext).registerAsyncAction(any());
+                org.opensearch.action.admin.indices.settings.get.GetSettingsResponse.class
+        Client mockClient = mock(Client.class);
+ * SPDX-License-Identifier: Apache-2.0
+        assertNotNull(result);
+import static org.opensearch.Version.MASK;
+            BiConsumer<Client, ActionListener<List<Object>>> lambda = (BiConsumer<Client, ActionListener<List<Object>>>) asyncAction;
+        IndicesAdminClient indicesAdminClient = mock(IndicesAdminClient.class);
+            SearchHit hit = new SearchHit(0);
+import java.util.concurrent.atomic.AtomicReference;
+        }).when(mockIndicesAdminClient).getSettings(any(), any());
+        } finally {
+            AtomicReference<Throwable> exceptionRef = new AtomicReference<>();
+        IndicesAdminClient mockIndicesAdminClient = mock(IndicesAdminClient.class);
+        Client mockClient = mock(Client.class);
+        when(numberFieldType.unwrap()).thenReturn(numberFieldType);
+        assertTrue(rewritten instanceof MatchNoneQueryBuilder);
+                ActionListener<List<Object>>>) asyncAction;
+    public void testFetchIsCoveredWithTermsLookupId() throws Exception {
+        IndicesAdminClient mockIndicesAdminClient = mock(IndicesAdminClient.class);
+            called[0] = true;
+        QueryRewriteContext mockRewriteContext = mock(QueryRewriteContext.class);
+        QueryBuilder subQuery = mock(QueryBuilder.class);
+            java.util.function.BiConsumer<Client, ActionListener<List<Object>>> lambda = (java.util.function.BiConsumer<
+        when(context.fieldMapper("student_id")).thenReturn(numberFieldType);
+            @SuppressWarnings("unchecked")
+            BiConsumer<Client, ActionListener<List<Object>>> lambda = (BiConsumer<Client, ActionListener<List<Object>>>) asyncAction;
+        QueryBuilder rewritten = builder.doRewrite(rewriteContext);
+        QueryShardContext context = mock(QueryShardContext.class);
+    }
+        Exception ex = expectThrows(UnsupportedOperationException.class, () -> builder.doToQuery(context));
+import static org.mockito.Mockito.mock;
+                null,
+        TermsLookup termsLookup = new TermsLookup("classes", "101", "enrolled");
+            return null;
+            @SuppressWarnings("unchecked")
+            when(settingsResponse.getIndexToSettings()).thenReturn(Collections.singletonMap("classes", idxSettings));
+        when(numberFieldType.bitmapQuery(any(BytesArray.class))).thenReturn(bitmapQuery);
+            .build();
+        // Set maxTermsCount and maxResultWindow high so maxClauseCount (3) is the limiting factor
+                "",
+            values.add(String.valueOf(i));
+import org.opensearch.transport.client.AdminClient;
+            org.opensearch.action.search.SearchResponseSections sections = new org.opensearch.action.search.SearchResponseSections(
+                searchHits,
+        AdminClient mockAdminClient = mock(AdminClient.class);
+        QueryShardContext context = mock(QueryShardContext.class);
+        }).when(mockClient).search(any(org.opensearch.action.search.SearchRequest.class), any());
+            String json = "{\"enrolled\":[\"111\",\"222\"]}";
+            lambda.accept(mockClient, ActionListener.wrap(list -> { /* success not expected */ }, e -> exceptionRef.set(e)));
+            listener.onResponse(settingsResponse);
+            ActionListener<org.opensearch.action.search.SearchResponse> listener = invocation.getArgument(1);
+        QueryRewriteContext mockRewriteContext = mock(QueryRewriteContext.class);
+import static org.mockito.ArgumentMatchers.any;
+                // We cannot assert the values due to static method, so just print for visibility.
+                1,
+        TermsQueryBuilder builder = new TermsQueryBuilder("student_id", Collections.emptyList(), null);
+public class TermQueryWithDocIdAndQueryTests extends OpenSearchTestCase {
+                false,

@@ -1,386 +1,347 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.get;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.AliasMetadata;
-import org.opensearch.cluster.metadata.Context;
-import org.opensearch.cluster.metadata.MappingMetadata;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.mapper.MapperService;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * A response for a get index action.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class GetIndexResponse extends ActionResponse implements ToXContentObject {
-
-    private Map<String, MappingMetadata> mappings = Map.of();
-    private Map<String, List<AliasMetadata>> aliases = Map.of();
-    private Map<String, Settings> settings = Map.of();
-    private Map<String, Settings> defaultSettings = Map.of();
-    private Map<String, String> dataStreams = Map.of();
-    private Map<String, Context> contexts = Map.of();
-    private final String[] indices;
-
-    public GetIndexResponse(
-        String[] indices,
-        Map<String, MappingMetadata> mappings,
-        final Map<String, List<AliasMetadata>> aliases,
-        final Map<String, Settings> settings,
-        final Map<String, Settings> defaultSettings,
-        final Map<String, String> dataStreams,
-        final Map<String, Context> contexts
-    ) {
-        this.indices = indices;
-        // to have deterministic order
-        Arrays.sort(indices);
-        if (mappings != null) {
+    @Override
+                contextMapBuilder.put(in.readString(), in.readOptionalWriteable(Context::new));
+                        builder.field("mappings", indexMappings.sourceAsMap());
+        settings = Collections.unmodifiableMap(settingsMapBuilder);
             this.mappings = mappings;
+    public String getSetting(String index, String setting) {
+ * You may obtain a copy of the License at
+     * If the originating {@link GetIndexRequest} object was configured to include
+        return Objects.hash(Arrays.hashCode(indices), aliases, mappings, settings, defaultSettings, dataStreams, contexts);
+                    throw new IllegalStateException("Expected 0 or 1 mappings but got: " + numMappings);
+     * defaults, this will contain a mapping of index name to {@link Settings} objects.
+            out.writeOptionalString(indexEntry.getValue());
+                    builder.startObject("aliases");
+        return mappings();
+public class GetIndexResponse extends ActionResponse implements ToXContentObject {
+            Settings.writeSettingsToStream(indexEntry.getValue(), out);
+        if (in.getVersion().onOrAfter(Version.V_2_17_0)) {
+        builder.startObject();
+import java.util.Arrays;
+    private final String[] indices;
+                    String type = in.readString();
+        final Map<String, Settings> defaultSettings,
+ * compatible open source license.
+            String key = in.readString();
+     * effect as defaults.  Any settings explicitly set on the index will be available
+                    List<AliasMetadata> indexAliases = aliases.get(index);
+    ) {
+                    mappingsMapBuilder.put(index, new MappingMetadata(in));
+                    MappingMetadata indexMappings = mappings.get(index);
+import org.opensearch.common.annotation.PublicApi;
+                    builder.endObject();
+    }
         }
-        if (aliases != null) {
-            this.aliases = Collections.unmodifiableMap(aliases);
-        }
-        if (settings != null) {
-            this.settings = Collections.unmodifiableMap(settings);
-        }
-        if (defaultSettings != null) {
-            this.defaultSettings = Collections.unmodifiableMap(defaultSettings);
+ * ownership. Elasticsearch licenses this file to you under
         }
         if (dataStreams != null) {
-            this.dataStreams = Collections.unmodifiableMap(dataStreams);
-        }
-        if (contexts != null) {
-            this.contexts = Collections.unmodifiableMap(contexts);
-        }
-    }
-
-    GetIndexResponse(StreamInput in) throws IOException {
-        super(in);
-        this.indices = in.readStringArray();
-
-        int mappingsSize = in.readVInt();
-        Map<String, MappingMetadata> mappingsMapBuilder = new HashMap<>();
-        for (int i = 0; i < mappingsSize; i++) {
-            String index = in.readString();
-            if (in.getVersion().before(Version.V_2_0_0)) {
-                int numMappings = in.readVInt();
-                if (numMappings == 0) {
-                    mappingsMapBuilder.put(index, MappingMetadata.EMPTY_MAPPINGS);
-                } else if (numMappings == 1) {
-                    String type = in.readString();
-                    if (MapperService.SINGLE_MAPPING_NAME.equals(type) == false) {
-                        throw new IllegalStateException("Expected " + MapperService.SINGLE_MAPPING_NAME + " but got [" + type + "]");
-                    }
-                    mappingsMapBuilder.put(index, new MappingMetadata(in));
-                } else {
-                    throw new IllegalStateException("Expected 0 or 1 mappings but got: " + numMappings);
-                }
-            } else {
-                final MappingMetadata metadata = in.readOptionalWriteable(MappingMetadata::new);
-                mappingsMapBuilder.put(index, metadata != null ? metadata : MappingMetadata.EMPTY_MAPPINGS);
-            }
-        }
-        mappings = Collections.unmodifiableMap(mappingsMapBuilder);
-
-        int aliasesSize = in.readVInt();
-        final Map<String, List<AliasMetadata>> aliasesMapBuilder = new HashMap<>();
-        for (int i = 0; i < aliasesSize; i++) {
-            String key = in.readString();
-            int valueSize = in.readVInt();
-            List<AliasMetadata> aliasEntryBuilder = new ArrayList<>(valueSize);
-            for (int j = 0; j < valueSize; j++) {
-                aliasEntryBuilder.add(new AliasMetadata(in));
-            }
-            aliasesMapBuilder.put(key, Collections.unmodifiableList(aliasEntryBuilder));
-        }
-        aliases = Collections.unmodifiableMap(aliasesMapBuilder);
-
-        int settingsSize = in.readVInt();
-        final Map<String, Settings> settingsMapBuilder = new HashMap<>();
-        for (int i = 0; i < settingsSize; i++) {
-            String key = in.readString();
-            settingsMapBuilder.put(key, Settings.readSettingsFromStream(in));
-        }
-        settings = Collections.unmodifiableMap(settingsMapBuilder);
-
-        final Map<String, Settings> defaultSettingsMapBuilder = new HashMap<>();
-        int defaultSettingsSize = in.readVInt();
-        for (int i = 0; i < defaultSettingsSize; i++) {
-            defaultSettingsMapBuilder.put(in.readString(), Settings.readSettingsFromStream(in));
-        }
-        defaultSettings = Collections.unmodifiableMap(defaultSettingsMapBuilder);
-
-        final Map<String, String> dataStreamsMapBuilder = new HashMap<>();
-        int dataStreamsSize = in.readVInt();
-        for (int i = 0; i < dataStreamsSize; i++) {
-            dataStreamsMapBuilder.put(in.readString(), in.readOptionalString());
-        }
-        dataStreams = Collections.unmodifiableMap(dataStreamsMapBuilder);
-
-        if (in.getVersion().onOrAfter(Version.V_2_17_0)) {
-            final Map<String, Context> contextMapBuilder = new HashMap<>();
-            int contextSize = in.readVInt();
-            for (int i = 0; i < contextSize; i++) {
-                contextMapBuilder.put(in.readString(), in.readOptionalWriteable(Context::new));
-            }
-            contexts = Collections.unmodifiableMap(contextMapBuilder);
-        }
-    }
-
-    public String[] indices() {
-        return indices;
-    }
-
-    public String[] getIndices() {
-        return indices();
-    }
-
+@PublicApi(since = "1.0.0")
     public Map<String, MappingMetadata> mappings() {
-        return mappings;
-    }
-
-    public Map<String, MappingMetadata> getMappings() {
-        return mappings();
-    }
-
-    public Map<String, List<AliasMetadata>> aliases() {
-        return aliases;
-    }
-
-    public Map<String, List<AliasMetadata>> getAliases() {
-        return aliases();
-    }
-
-    public Map<String, Settings> settings() {
-        return settings;
-    }
-
-    public Map<String, String> dataStreams() {
-        return dataStreams;
-    }
-
-    public Map<String, String> getDataStreams() {
-        return dataStreams();
-    }
-
-    /**
-     * If the originating {@link GetIndexRequest} object was configured to include
-     * defaults, this will contain a mapping of index name to {@link Settings} objects.
-     * The returned {@link Settings} objects will contain only those settings taking
-     * effect as defaults.  Any settings explicitly set on the index will be available
-     * via {@link #settings()}.
-     * See also {@link GetIndexRequest#includeDefaults(boolean)}
-     */
-    public Map<String, Settings> defaultSettings() {
-        return defaultSettings;
-    }
-
-    public Map<String, Settings> getSettings() {
-        return settings();
-    }
-
-    public Map<String, Context> contexts() {
-        return contexts;
-    }
-
-    /**
-     * Returns the string value for the specified index and setting.  If the includeDefaults flag was not set or set to
-     * false on the {@link GetIndexRequest}, this method will only return a value where the setting was explicitly set
-     * on the index.  If the includeDefaults flag was set to true on the {@link GetIndexRequest}, this method will fall
-     * back to return the default value if the setting was not explicitly set.
-     */
-    public String getSetting(String index, String setting) {
-        Settings indexSettings = settings.get(index);
-        if (setting != null) {
-            if (indexSettings != null && indexSettings.hasValue(setting)) {
-                return indexSettings.get(setting);
-            } else {
-                Settings defaultIndexSettings = defaultSettings.get(index);
-                if (defaultIndexSettings != null) {
-                    return defaultIndexSettings.get(setting);
-                } else {
-                    return null;
-                }
-            }
-        } else {
-            return null;
         }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeStringArray(indices);
-        out.writeVInt(mappings.size());
-        for (final Map.Entry<String, MappingMetadata> indexEntry : mappings.entrySet()) {
-            out.writeString(indexEntry.getKey());
+ * this work for additional information regarding copyright
+import org.opensearch.cluster.metadata.MappingMetadata;
             if (out.getVersion().before(Version.V_2_0_0)) {
-                out.writeVInt(indexEntry.getValue() == MappingMetadata.EMPTY_MAPPINGS ? 0 : 1);
-                if (indexEntry.getValue() != MappingMetadata.EMPTY_MAPPINGS) {
-                    out.writeString(MapperService.SINGLE_MAPPING_NAME);
-                    indexEntry.getValue().writeTo(out);
-                }
-            } else {
-                out.writeOptionalWriteable(indexEntry.getValue());
-            }
-        }
-        out.writeVInt(aliases.size());
-        for (final Map.Entry<String, List<AliasMetadata>> indexEntry : aliases.entrySet()) {
-            out.writeString(indexEntry.getKey());
-            out.writeVInt(indexEntry.getValue().size());
-            for (AliasMetadata aliasEntry : indexEntry.getValue()) {
-                aliasEntry.writeTo(out);
-            }
-        }
-        out.writeVInt(settings.size());
-        for (final Map.Entry<String, Settings> indexEntry : settings.entrySet()) {
-            out.writeString(indexEntry.getKey());
-            Settings.writeSettingsToStream(indexEntry.getValue(), out);
-        }
-        out.writeVInt(defaultSettings.size());
-        for (final Map.Entry<String, Settings> indexEntry : defaultSettings.entrySet()) {
-            out.writeString(indexEntry.getKey());
-            Settings.writeSettingsToStream(indexEntry.getValue(), out);
-        }
-        out.writeVInt(dataStreams.size());
-        for (final Map.Entry<String, String> indexEntry : dataStreams.entrySet()) {
-            out.writeString(indexEntry.getKey());
-            out.writeOptionalString(indexEntry.getValue());
-        }
-
-        if (out.getVersion().onOrAfter(Version.V_2_17_0)) {
-            out.writeVInt(contexts.size());
-            for (final Map.Entry<String, Context> indexEntry : contexts.entrySet()) {
-                out.writeString(indexEntry.getKey());
-                out.writeOptionalWriteable(indexEntry.getValue());
-            }
-        }
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        {
-            for (final String index : indices) {
-                builder.startObject(index);
-                {
-                    builder.startObject("aliases");
-                    List<AliasMetadata> indexAliases = aliases.get(index);
-                    if (indexAliases != null) {
-                        for (final AliasMetadata alias : indexAliases) {
-                            AliasMetadata.Builder.toXContent(alias, builder, params);
-                        }
-                    }
-                    builder.endObject();
-
-                    MappingMetadata indexMappings = mappings.get(index);
-                    if (indexMappings == null) {
-                        builder.startObject("mappings").endObject();
-                    } else {
-                        builder.field("mappings", indexMappings.sourceAsMap());
-                    }
-
-                    builder.startObject("settings");
-                    Settings indexSettings = settings.get(index);
-                    if (indexSettings != null) {
-                        indexSettings.toXContent(builder, params);
-                    }
-                    builder.endObject();
-
-                    Settings defaultIndexSettings = defaultSettings.get(index);
-                    if (defaultIndexSettings != null && defaultIndexSettings.isEmpty() == false) {
-                        builder.startObject("defaults");
-                        defaultIndexSettings.toXContent(builder, params);
-                        builder.endObject();
-                    }
-
-                    String dataStream = dataStreams.get(index);
-                    if (dataStream != null) {
-                        builder.field("data_stream", dataStream);
-                    }
-
-                    Context context = contexts.get(index);
-                    if (context != null) {
-                        builder.field("context", context);
-                    }
-                }
-                builder.endObject();
-            }
+        defaultSettings = Collections.unmodifiableMap(defaultSettingsMapBuilder);
+        final Map<String, Context> contexts
         }
         builder.endObject();
-        return builder;
-    }
-
-    @Override
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        GetIndexResponse that = (GetIndexResponse) o;
+ * not use this file except in compliance with the License.
+                Settings defaultIndexSettings = defaultSettings.get(index);
+            if (indexSettings != null && indexSettings.hasValue(setting)) {
         return Arrays.equals(indices, that.indices)
-            && Objects.equals(aliases, that.aliases)
-            && Objects.equals(mappings, that.mappings)
+                if (indexEntry.getValue() != MappingMetadata.EMPTY_MAPPINGS) {
+    }
+                    return null;
+ *
+     */
+    }
+        }
+                {
+import java.util.Map;
             && Objects.equals(settings, that.settings)
-            && Objects.equals(defaultSettings, that.defaultSettings)
-            && Objects.equals(dataStreams, that.dataStreams)
-            && Objects.equals(contexts, that.contexts);
-    }
-
+        return contexts;
+            } else {
     @Override
-    public int hashCode() {
-        return Objects.hash(Arrays.hashCode(indices), aliases, mappings, settings, defaultSettings, dataStreams, contexts);
+        }
+        final Map<String, List<AliasMetadata>> aliasesMapBuilder = new HashMap<>();
+        // to have deterministic order
+import org.opensearch.core.xcontent.ToXContentObject;
     }
+        if (setting != null) {
+            for (int i = 0; i < contextSize; i++) {
+ * A response for a get index action.
+            out.writeString(indexEntry.getKey());
+    }
+        return settings();
+        for (final Map.Entry<String, Settings> indexEntry : settings.entrySet()) {
+import org.opensearch.core.common.Strings;
+        int settingsSize = in.readVInt();
+import org.opensearch.cluster.metadata.AliasMetadata;
+import java.util.HashMap;
+        return defaultSettings;
+        GetIndexResponse that = (GetIndexResponse) o;
+    public Map<String, List<AliasMetadata>> getAliases() {
+        return dataStreams;
+            Settings.writeSettingsToStream(indexEntry.getValue(), out);
+import org.opensearch.cluster.metadata.Context;
+        out.writeVInt(mappings.size());
+        return dataStreams();
+                out.writeVInt(indexEntry.getValue() == MappingMetadata.EMPTY_MAPPINGS ? 0 : 1);
+        out.writeVInt(aliases.size());
+/*
+            defaultSettingsMapBuilder.put(in.readString(), Settings.readSettingsFromStream(in));
+        if (this == o) return true;
+                    if (indexAliases != null) {
+                    out.writeString(MapperService.SINGLE_MAPPING_NAME);
+    }
+            out.writeString(indexEntry.getKey());
+import java.io.IOException;
+        }
+                if (defaultIndexSettings != null) {
+                } else {
+            settingsMapBuilder.put(key, Settings.readSettingsFromStream(in));
+            && Objects.equals(dataStreams, that.dataStreams)
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            && Objects.equals(contexts, that.contexts);
+     * Returns the string value for the specified index and setting.  If the includeDefaults flag was not set or set to
+        int mappingsSize = in.readVInt();
+     * via {@link #settings()}.
+                    }
+        } else {
+    @Override
+ */
+ * under the License.
+    }
+ * @opensearch.api
+                aliasEntry.writeTo(out);
+            out.writeString(indexEntry.getKey());
+    }
+            this.contexts = Collections.unmodifiableMap(contexts);
+        }
+     * on the index.  If the includeDefaults flag was set to true on the {@link GetIndexRequest}, this method will fall
+            && Objects.equals(mappings, that.mappings)
+            out.writeVInt(indexEntry.getValue().size());
+    GetIndexResponse(StreamInput in) throws IOException {
+        mappings = Collections.unmodifiableMap(mappingsMapBuilder);
+                    }
+    private Map<String, List<AliasMetadata>> aliases = Map.of();
+        return Strings.toString(MediaTypeRegistry.JSON, this);
+            this.defaultSettings = Collections.unmodifiableMap(defaultSettings);
+                    Settings defaultIndexSettings = defaultSettings.get(index);
+        Arrays.sort(indices);
+ *
+    /**
+                out.writeOptionalWriteable(indexEntry.getValue());
+        }
+     * false on the {@link GetIndexRequest}, this method will only return a value where the setting was explicitly set
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                if (numMappings == 0) {
+/*
+                    if (context != null) {
+            List<AliasMetadata> aliasEntryBuilder = new ArrayList<>(valueSize);
+                mappingsMapBuilder.put(index, metadata != null ? metadata : MappingMetadata.EMPTY_MAPPINGS);
+package org.opensearch.action.admin.indices.get;
+        aliases = Collections.unmodifiableMap(aliasesMapBuilder);
+ */
+    }
+            if (in.getVersion().before(Version.V_2_0_0)) {
+        final Map<String, List<AliasMetadata>> aliases,
+        for (final Map.Entry<String, String> indexEntry : dataStreams.entrySet()) {
+        }
+                out.writeString(indexEntry.getKey());
+ */
+            }
+                        defaultIndexSettings.toXContent(builder, params);
+    }
+    public Map<String, Settings> getSettings() {
+            int contextSize = in.readVInt();
+            for (AliasMetadata aliasEntry : indexEntry.getValue()) {
+            this.settings = Collections.unmodifiableMap(settings);
+            int valueSize = in.readVInt();
+    private Map<String, String> dataStreams = Map.of();
+    public String[] getIndices() {
+                    builder.endObject();
+import org.opensearch.core.action.ActionResponse;
+                } else {
+    /**
+            }
+    public Map<String, Context> contexts() {
+        this.indices = in.readStringArray();
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                    if (indexMappings == null) {
+        }
+    public Map<String, List<AliasMetadata>> aliases() {
+import org.opensearch.core.common.io.stream.StreamOutput;
+        int defaultSettingsSize = in.readVInt();
+                        builder.startObject("mappings").endObject();
+        for (int i = 0; i < dataStreamsSize; i++) {
+     * See also {@link GetIndexRequest#includeDefaults(boolean)}
+        final Map<String, String> dataStreamsMapBuilder = new HashMap<>();
+                return indexSettings.get(setting);
+ * GitHub history for details.
+                builder.endObject();
+                aliasEntryBuilder.add(new AliasMetadata(in));
+/**
+import org.opensearch.Version;
+        return builder;
+            }
+        if (out.getVersion().onOrAfter(Version.V_2_17_0)) {
+        super(in);
+        for (final Map.Entry<String, MappingMetadata> indexEntry : mappings.entrySet()) {
+            } else {
+                    String dataStream = dataStreams.get(index);
+ * this file be licensed under the Apache-2.0 license or a
+ */
+        {
+            && Objects.equals(aliases, that.aliases)
+                        builder.field("context", context);
+            }
+        Map<String, MappingMetadata> mappingsMapBuilder = new HashMap<>();
+    public GetIndexResponse(
+                final MappingMetadata metadata = in.readOptionalWriteable(MappingMetadata::new);
+    private Map<String, MappingMetadata> mappings = Map.of();
+     * The returned {@link Settings} objects will contain only those settings taking
+                    Context context = contexts.get(index);
+                    indexEntry.getValue().writeTo(out);
+                        builder.field("data_stream", dataStream);
+                    return defaultIndexSettings.get(setting);
+    }
+    }
+                builder.startObject(index);
+ * The OpenSearch Contributors require contributions made to
+        out.writeVInt(dataStreams.size());
+            for (int j = 0; j < valueSize; j++) {
+                    }
+    public Map<String, String> dataStreams() {
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            }
+    public void writeTo(StreamOutput out) throws IOException {
+import java.util.ArrayList;
+        out.writeVInt(defaultSettings.size());
+    public int hashCode() {
+                    builder.startObject("settings");
+    public String toString() {
+        }
+            for (final Map.Entry<String, Context> indexEntry : contexts.entrySet()) {
+    }
+     */
+        }
+import org.opensearch.core.xcontent.XContentBuilder;
+        return mappings;
+    public Map<String, Settings> defaultSettings() {
+        if (defaultSettings != null) {
+        if (mappings != null) {
+                        builder.endObject();
+                        for (final AliasMetadata alias : indexAliases) {
+                            AliasMetadata.Builder.toXContent(alias, builder, params);
+                    }
+ * Modifications Copyright OpenSearch Contributors. See
+ *
+                int numMappings = in.readVInt();
+        return aliases;
+        out.writeVInt(settings.size());
+        for (int i = 0; i < defaultSettingsSize; i++) {
+    }
+            String index = in.readString();
+        }
+    }
+        }
+            return null;
+                    if (defaultIndexSettings != null && defaultIndexSettings.isEmpty() == false) {
+    @Override
+                    } else {
+        for (int i = 0; i < aliasesSize; i++) {
+        final Map<String, Settings> defaultSettingsMapBuilder = new HashMap<>();
+import org.opensearch.index.mapper.MapperService;
+/*
+        dataStreams = Collections.unmodifiableMap(dataStreamsMapBuilder);
+        for (final Map.Entry<String, Settings> indexEntry : defaultSettings.entrySet()) {
+    }
+            contexts = Collections.unmodifiableMap(contextMapBuilder);
+        }
+                    if (dataStream != null) {
+    }
+    private Map<String, Context> contexts = Map.of();
+                }
+import java.util.List;
+            aliasesMapBuilder.put(key, Collections.unmodifiableList(aliasEntryBuilder));
+                    if (indexSettings != null) {
+                    if (MapperService.SINGLE_MAPPING_NAME.equals(type) == false) {
+                    mappingsMapBuilder.put(index, MappingMetadata.EMPTY_MAPPINGS);
+        Settings indexSettings = settings.get(index);
+        String[] indices,
+                        throw new IllegalStateException("Expected " + MapperService.SINGLE_MAPPING_NAME + " but got [" + type + "]");
+        int aliasesSize = in.readVInt();
+        for (int i = 0; i < mappingsSize; i++) {
+        if (settings != null) {
+                    }
+        this.indices = indices;
+    public String[] indices() {
+    public Map<String, Settings> settings() {
+            }
+import java.util.Collections;
+            out.writeString(indexEntry.getKey());
+        if (contexts != null) {
+                } else if (numMappings == 1) {
+        if (aliases != null) {
+                out.writeOptionalWriteable(indexEntry.getValue());
+        }
+                }
+    @Override
+        final Map<String, Settings> settingsMapBuilder = new HashMap<>();
+                }
+            }
+        return settings;
+import org.opensearch.common.settings.Settings;
+        return aliases();
+            && Objects.equals(defaultSettings, that.defaultSettings)
+import org.opensearch.core.common.io.stream.StreamInput;
+                        builder.startObject("defaults");
+        final Map<String, String> dataStreams,
+            out.writeVInt(contexts.size());
+        }
+                        indexSettings.toXContent(builder, params);
+                }
+    public boolean equals(Object o) {
+        }
+ * software distributed under the License is distributed on an
+ * the Apache License, Version 2.0 (the "License"); you may
+    private Map<String, Settings> defaultSettings = Map.of();
+     * back to return the default value if the setting was not explicitly set.
+ * license agreements. See the NOTICE file distributed with
+    }
+        if (o == null || getClass() != o.getClass()) return false;
+ * KIND, either express or implied.  See the License for the
+ *
+    }
+                    Settings indexSettings = settings.get(index);
+ * SPDX-License-Identifier: Apache-2.0
+        for (final Map.Entry<String, List<AliasMetadata>> indexEntry : aliases.entrySet()) {
+    private Map<String, Settings> settings = Map.of();
+            } else {
+    public Map<String, MappingMetadata> getMappings() {
+            String key = in.readString();
+        return indices;
+            }
+                        }
+    public Map<String, String> getDataStreams() {
+            out.writeString(indexEntry.getKey());
+        return indices();
+                    }
+            this.aliases = Collections.unmodifiableMap(aliases);
+        int dataStreamsSize = in.readVInt();
+        Map<String, MappingMetadata> mappings,
 }
+            for (final String index : indices) {
+        final Map<String, Settings> settings,
+import java.util.Objects;
+        out.writeStringArray(indices);
+                    }
+ * Licensed to Elasticsearch under one or more contributor
+            dataStreamsMapBuilder.put(in.readString(), in.readOptionalString());
+    }
+            this.dataStreams = Collections.unmodifiableMap(dataStreams);
+        for (int i = 0; i < settingsSize; i++) {
+            final Map<String, Context> contextMapBuilder = new HashMap<>();
+ * Unless required by applicable law or agreed to in writing,

@@ -1,183 +1,162 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.service;
-
-import org.opensearch.Version;
-import org.opensearch.action.support.replication.ClusterStateCreationUtils;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateUpdateTask;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-
+        assertNotNull(publishingCallback.get());
+        });
+            }
 import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasToString;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class FakeThreadPoolClusterManagerServiceTests extends OpenSearchTestCase {
-
-    public void testFakeClusterManagerService() {
-        List<Runnable> runnableTasks = new ArrayList<>();
-        AtomicReference<ClusterState> lastClusterStateRef = new AtomicReference<>();
-        DiscoveryNode discoveryNode = new DiscoveryNode(
-            "node",
-            OpenSearchTestCase.buildNewFakeTransportAddress(),
-            Collections.emptyMap(),
-            new HashSet<>(DiscoveryNodeRole.BUILT_IN_ROLES),
-            Version.CURRENT
-        );
-        lastClusterStateRef.set(ClusterStateCreationUtils.state(discoveryNode, discoveryNode));
-        long firstClusterStateVersion = lastClusterStateRef.get().version();
-        AtomicReference<ActionListener<Void>> publishingCallback = new AtomicReference<>();
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            lastClusterStateRef.set(event.state());
+        assertThat(scheduleTask, hasToString("cluster-manager service scheduling next task"));
+        assertThat(lastClusterStateRef.get().version(), equalTo(firstClusterStateVersion));
+    }
+import org.opensearch.common.settings.Settings;
+ * KIND, either express or implied.  See the License for the
+        when(mockThreadPool.generic()).thenReturn(executorService);
+            @Override
+        assertThat(runnableTasks.size(), equalTo(0)); // check that no more tasks are queued
+        clusterManagerService.setClusterStateSupplier(lastClusterStateRef::get);
         final ThreadContext context = new ThreadContext(Settings.EMPTY);
+import static org.mockito.Mockito.any;
+import java.util.ArrayList;
+            public void onFailure(String source, Exception e) {
+        assertThat(runnableTasks.size(), equalTo(0));
+            @Override
+        assertNull(publishingCallback.get());
+import org.opensearch.common.util.concurrent.ThreadContext;
+}
+ * GitHub history for details.
+        final Runnable publishTask = runnableTasks.remove(0);
+import java.util.concurrent.ExecutorService;
+        assertThat(publishTask, hasToString(containsString("publish change of cluster state")));
+import org.opensearch.cluster.node.DiscoveryNode;
+                throw new AssertionError();
+        assertThat(lastClusterStateRef.get().version(), equalTo(firstClusterStateVersion + 2));
+            public ClusterState execute(ClusterState currentState) {
+import static org.mockito.Mockito.when;
+import java.util.HashSet;
+        scheduleTask.run();
+import java.util.Collections;
+ * specific language governing permissions and limitations
+ *
+        assertThat(runnableTasks.size(), equalTo(1)); // check that new task gets queued
+ *
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.cluster.metadata.Metadata;
+                    .build();
+                assertFalse(firstTaskCompleted.get());
+                secondTaskCompleted.set(true);
+            mockThreadPool,
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+            }
+            "test_node",
+        clusterManagerService.start();
+ * not use this file except in compliance with the License.
+            "test",
+import org.opensearch.threadpool.ThreadPool;
+                assertFalse(secondTaskCompleted.get());
+import static org.hamcrest.Matchers.equalTo;
+        assertThat(lastClusterStateRef.get().metadata().indices().size(), equalTo(1));
+            publishingCallback.set(publishListener);
+            @Override
+        );
+        assertThat(lastClusterStateRef.get().metadata().indices().size(), equalTo(0));
+        );
+                    .build();
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.core.action.ActionListener;
+ * ownership. Elasticsearch licenses this file to you under
+import static org.mockito.Mockito.doAnswer;
+        doAnswer(invocationOnMock -> runnableTasks.add((Runnable) invocationOnMock.getArguments()[0])).when(executorService).execute(any());
+package org.opensearch.cluster.service;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.opensearch.Version;
+/*
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+/*
+            );
+        AtomicReference<ActionListener<Void>> publishingCallback = new AtomicReference<>();
+import org.opensearch.cluster.ClusterState;
+        lastClusterStateRef.set(ClusterStateCreationUtils.state(discoveryNode, discoveryNode));
+        AtomicBoolean secondTaskCompleted = new AtomicBoolean();
+    public void testFakeClusterManagerService() {
+            OpenSearchTestCase.buildNewFakeTransportAddress(),
+ * the Apache License, Version 2.0 (the "License"); you may
+public class FakeThreadPoolClusterManagerServiceTests extends OpenSearchTestCase {
+import org.opensearch.action.support.replication.ClusterStateCreationUtils;
+import org.opensearch.cluster.ClusterStateUpdateTask;
+            Collections.emptyMap(),
+    private static IndexMetadata.Builder indexBuilder(String index) {
+        FakeThreadPoolClusterManagerService clusterManagerService = new FakeThreadPoolClusterManagerService(
+        assertThat(runnableTasks.size(), equalTo(1));
+            }
+import org.opensearch.cluster.metadata.IndexMetadata;
+        DiscoveryNode discoveryNode = new DiscoveryNode(
+            new HashSet<>(DiscoveryNodeRole.BUILT_IN_ROLES),
+            @Override
+import java.util.concurrent.atomic.AtomicBoolean;
+            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+                    .metadata(Metadata.builder(currentState.metadata()).put(indexBuilder("test2")))
+ * SPDX-License-Identifier: Apache-2.0
+        clusterManagerService.setClusterStatePublisher((event, publishListener, ackListener) -> {
+        runnableTasks.remove(0).run(); // schedule again
+                    .metadata(Metadata.builder(currentState.metadata()).put(indexBuilder("test1")))
+        assertThat(lastClusterStateRef.get().version(), equalTo(firstClusterStateVersion + 1));
+ */
+ * under the License.
+/*
+                firstTaskCompleted.set(true);
+ * Unless required by applicable law or agreed to in writing,
+ * Licensed to Elasticsearch under one or more contributor
+        final ExecutorService executorService = mock(ExecutorService.class);
+import java.util.List;
+    }
+ */
+ * software distributed under the License is distributed on an
+        publishingCallback.getAndSet(null).onResponse(null);
+        runnableTasks.remove(0).run(); // publish again
+            }
+            runnableTasks::add
+        assertNotNull(publishingCallback.get());
+            public ClusterState execute(ClusterState currentState) {
+            Version.CURRENT
+        clusterManagerService.submitStateUpdateTask("test1", new ClusterStateUpdateTask() {
+                settings(Version.CURRENT).put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+            public void onFailure(String source, Exception e) {
+                return ClusterState.builder(currentState)
+        List<Runnable> runnableTasks = new ArrayList<>();
+        assertTrue(firstTaskCompleted.get());
+        assertFalse(secondTaskCompleted.get());
+ * The OpenSearch Contributors require contributions made to
+            @Override
+ */
+ * You may obtain a copy of the License at
+        assertTrue(secondTaskCompleted.get());
+        });
+            }
+                throw new AssertionError();
+        assertThat(lastClusterStateRef.get().metadata().indices().size(), equalTo(2));
+        clusterManagerService.submitStateUpdateTask("test2", new ClusterStateUpdateTask() {
+ * this work for additional information regarding copyright
+ * this file be licensed under the Apache-2.0 license or a
+import static org.mockito.Mockito.mock;
+        assertFalse(firstTaskCompleted.get());
+ * Modifications Copyright OpenSearch Contributors. See
+import java.util.concurrent.atomic.AtomicReference;
+            @Override
+        publishTask.run();
         final ThreadPool mockThreadPool = mock(ThreadPool.class);
         when(mockThreadPool.getThreadContext()).thenReturn(context);
-
-        final ExecutorService executorService = mock(ExecutorService.class);
-        doAnswer(invocationOnMock -> runnableTasks.add((Runnable) invocationOnMock.getArguments()[0])).when(executorService).execute(any());
-        when(mockThreadPool.generic()).thenReturn(executorService);
-
-        FakeThreadPoolClusterManagerService clusterManagerService = new FakeThreadPoolClusterManagerService(
-            "test_node",
-            "test",
-            mockThreadPool,
-            runnableTasks::add
-        );
-        clusterManagerService.setClusterStateSupplier(lastClusterStateRef::get);
-        clusterManagerService.setClusterStatePublisher((event, publishListener, ackListener) -> {
-            lastClusterStateRef.set(event.state());
-            publishingCallback.set(publishListener);
+        long firstClusterStateVersion = lastClusterStateRef.get().version();
+import static org.hamcrest.Matchers.hasToString;
         });
-        clusterManagerService.start();
-
         AtomicBoolean firstTaskCompleted = new AtomicBoolean();
-        clusterManagerService.submitStateUpdateTask("test1", new ClusterStateUpdateTask() {
-            @Override
-            public ClusterState execute(ClusterState currentState) {
+        AtomicReference<ClusterState> lastClusterStateRef = new AtomicReference<>();
                 return ClusterState.builder(currentState)
-                    .metadata(Metadata.builder(currentState.metadata()).put(indexBuilder("test1")))
-                    .build();
-            }
-
-            @Override
-            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                assertFalse(firstTaskCompleted.get());
-                firstTaskCompleted.set(true);
-            }
-
-            @Override
-            public void onFailure(String source, Exception e) {
-                throw new AssertionError();
-            }
-        });
-        assertThat(runnableTasks.size(), equalTo(1));
-        assertThat(lastClusterStateRef.get().metadata().indices().size(), equalTo(0));
-        assertThat(lastClusterStateRef.get().version(), equalTo(firstClusterStateVersion));
-        assertNull(publishingCallback.get());
-        assertFalse(firstTaskCompleted.get());
-
-        final Runnable scheduleTask = runnableTasks.remove(0);
-        assertThat(scheduleTask, hasToString("cluster-manager service scheduling next task"));
-        scheduleTask.run();
-
-        final Runnable publishTask = runnableTasks.remove(0);
-        assertThat(publishTask, hasToString(containsString("publish change of cluster state")));
-        publishTask.run();
-
-        assertThat(lastClusterStateRef.get().metadata().indices().size(), equalTo(1));
-        assertThat(lastClusterStateRef.get().version(), equalTo(firstClusterStateVersion + 1));
-        assertNotNull(publishingCallback.get());
-        assertFalse(firstTaskCompleted.get());
-        assertThat(runnableTasks.size(), equalTo(0));
-
-        AtomicBoolean secondTaskCompleted = new AtomicBoolean();
-        clusterManagerService.submitStateUpdateTask("test2", new ClusterStateUpdateTask() {
-            @Override
-            public ClusterState execute(ClusterState currentState) {
-                return ClusterState.builder(currentState)
-                    .metadata(Metadata.builder(currentState.metadata()).put(indexBuilder("test2")))
-                    .build();
-            }
-
-            @Override
-            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                assertFalse(secondTaskCompleted.get());
-                secondTaskCompleted.set(true);
-            }
-
-            @Override
-            public void onFailure(String source, Exception e) {
-                throw new AssertionError();
-            }
-        });
-        assertThat(runnableTasks.size(), equalTo(0));
-
-        publishingCallback.getAndSet(null).onResponse(null);
-        assertTrue(firstTaskCompleted.get());
-        assertThat(runnableTasks.size(), equalTo(1)); // check that new task gets queued
-
-        runnableTasks.remove(0).run(); // schedule again
-        runnableTasks.remove(0).run(); // publish again
-        assertThat(lastClusterStateRef.get().metadata().indices().size(), equalTo(2));
-        assertThat(lastClusterStateRef.get().version(), equalTo(firstClusterStateVersion + 2));
-        assertNotNull(publishingCallback.get());
-        assertFalse(secondTaskCompleted.get());
-        publishingCallback.getAndSet(null).onResponse(null);
-        assertTrue(secondTaskCompleted.get());
-        assertThat(runnableTasks.size(), equalTo(0)); // check that no more tasks are queued
-    }
-
-    private static IndexMetadata.Builder indexBuilder(String index) {
-        return IndexMetadata.builder(index)
             .settings(
-                settings(Version.CURRENT).put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            );
-    }
-}
+            }
+        assertThat(runnableTasks.size(), equalTo(0));
+        final Runnable scheduleTask = runnableTasks.remove(0);
+        assertFalse(firstTaskCompleted.get());
+        publishingCallback.getAndSet(null).onResponse(null);
+        return IndexMetadata.builder(index)
+ * compatible open source license.
+            "node",
