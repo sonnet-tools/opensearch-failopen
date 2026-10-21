@@ -1,7087 +1,6571 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.shard;
-
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.apache.lucene.codecs.CodecUtil;
-import org.apache.lucene.index.CheckIndex;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.FieldInfos;
-import org.apache.lucene.index.FilterDirectoryReader;
-import org.apache.lucene.index.IndexCommit;
-import org.apache.lucene.index.IndexFileNames;
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.SegmentCommitInfo;
-import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryCache;
-import org.apache.lucene.search.QueryCachingPolicy;
-import org.apache.lucene.search.ReferenceManager;
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.store.AlreadyClosedException;
-import org.apache.lucene.store.BufferedChecksumIndexInput;
-import org.apache.lucene.store.ChecksumIndexInput;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FilterDirectory;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.IndexInput;
-import org.apache.lucene.util.ThreadInterruptedException;
-import org.apache.lucene.util.Version;
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.OpenSearchException;
-import org.opensearch.action.ActionRunnable;
-import org.opensearch.action.admin.indices.flush.FlushRequest;
-import org.opensearch.action.admin.indices.forcemerge.ForceMergeRequest;
-import org.opensearch.action.admin.indices.streamingingestion.state.ShardIngestionState;
-import org.opensearch.action.admin.indices.upgrade.post.UpgradeRequest;
-import org.opensearch.action.support.ListenerTimeouts;
-import org.opensearch.action.support.replication.PendingReplicationActions;
-import org.opensearch.action.support.replication.ReplicationResponse;
-import org.opensearch.cluster.metadata.DataStream;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.MappingMetadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.RecoverySource;
-import org.opensearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.service.ClusterApplierService;
-import org.opensearch.common.Booleans;
-import org.opensearch.common.CheckedConsumer;
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.CheckedRunnable;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.annotation.InternalApi;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.concurrent.GatedCloseable;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.lucene.index.DerivedSourceDirectoryReader;
-import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
-import org.opensearch.common.metrics.CounterMetric;
-import org.opensearch.common.metrics.MeanMetric;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.CancellableThreads;
-import org.opensearch.common.util.concurrent.AbstractAsyncTask;
-import org.opensearch.common.util.concurrent.AbstractRunnable;
-import org.opensearch.common.util.concurrent.AsyncIOProcessor;
-import org.opensearch.common.util.concurrent.BufferedAsyncIOProcessor;
-import org.opensearch.common.util.concurrent.FutureUtils;
-import org.opensearch.common.util.concurrent.RunOnce;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.common.util.set.Sets;
-import org.opensearch.core.Assertions;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.gateway.WriteStateException;
-import org.opensearch.index.IndexModule;
-import org.opensearch.index.IndexNotFoundException;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.ReplicationStats;
-import org.opensearch.index.SegmentReplicationShardStats;
-import org.opensearch.index.VersionType;
-import org.opensearch.index.cache.IndexCache;
-import org.opensearch.index.cache.bitset.ShardBitsetFilterCache;
-import org.opensearch.index.cache.request.ShardRequestCache;
-import org.opensearch.index.codec.CodecService;
-import org.opensearch.index.engine.CommitStats;
-import org.opensearch.index.engine.DataFormatAwareEngine;
-import org.opensearch.index.engine.DataFormatAwareReadOnlyEngine;
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.engine.Engine.GetResult;
-import org.opensearch.index.engine.EngineBackedIndexer;
-import org.opensearch.index.engine.EngineConfig;
-import org.opensearch.index.engine.EngineConfigFactory;
-import org.opensearch.index.engine.EngineException;
-import org.opensearch.index.engine.IngestionEngine;
-import org.opensearch.index.engine.MergedSegmentWarmerFactory;
-import org.opensearch.index.engine.NRTReplicationEngine;
-import org.opensearch.index.engine.PrimaryOperationPolicy;
-import org.opensearch.index.engine.ReadOnlyEngine;
-import org.opensearch.index.engine.RefreshFailedEngineException;
-import org.opensearch.index.engine.SafeCommitInfo;
-import org.opensearch.index.engine.Segment;
-import org.opensearch.index.engine.SegmentsStats;
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;
-import org.opensearch.index.engine.exec.IndexReaderProvider;
-import org.opensearch.index.engine.exec.Indexer;
-import org.opensearch.index.engine.exec.IndexerFactory;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
-import org.opensearch.index.engine.exec.coord.SegmentInfosCatalogSnapshot;
-import org.opensearch.index.fielddata.FieldDataStats;
-import org.opensearch.index.fielddata.ShardFieldData;
-import org.opensearch.index.flush.FlushStats;
-import org.opensearch.index.get.GetStats;
-import org.opensearch.index.get.ShardGetService;
-import org.opensearch.index.mapper.DocumentMapper;
-import org.opensearch.index.mapper.DocumentMapperForType;
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.Mapping;
-import org.opensearch.index.mapper.ParsedDocument;
-import org.opensearch.index.mapper.RootObjectMapper;
-import org.opensearch.index.mapper.SourceToParse;
-import org.opensearch.index.mapper.Uid;
-import org.opensearch.index.merge.MergeStats;
-import org.opensearch.index.merge.MergedSegmentTransferTracker;
-import org.opensearch.index.recovery.RecoveryStats;
-import org.opensearch.index.refresh.RefreshStats;
-import org.opensearch.index.remote.RemoteSegmentStats;
-import org.opensearch.index.remote.RemoteStorePathStrategy;
-import org.opensearch.index.remote.RemoteStoreStatsTrackerFactory;
-import org.opensearch.index.remote.RemoteStoreUtils;
-import org.opensearch.index.search.stats.SearchStats;
-import org.opensearch.index.search.stats.ShardSearchStats;
-import org.opensearch.index.seqno.ReplicationTracker;
-import org.opensearch.index.seqno.RetentionLease;
-import org.opensearch.index.seqno.RetentionLeaseStats;
-import org.opensearch.index.seqno.RetentionLeaseSyncer;
-import org.opensearch.index.seqno.RetentionLeases;
-import org.opensearch.index.seqno.SeqNoStats;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.shard.PrimaryReplicaSyncer.ResyncTask;
-import org.opensearch.index.similarity.SimilarityService;
-import org.opensearch.index.store.DataFormatAwareStoreDirectory;
-import org.opensearch.index.store.FormatChecksumStrategy;
-import org.opensearch.index.store.RemoteSegmentStoreDirectory;
-import org.opensearch.index.store.RemoteSegmentStoreDirectory.UploadedSegmentMetadata;
-import org.opensearch.index.store.RemoteStoreFileDownloader;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.store.Store.MetadataSnapshot;
-import org.opensearch.index.store.StoreFileMetadata;
-import org.opensearch.index.store.StoreStats;
-import org.opensearch.index.store.remote.metadata.RemoteSegmentMetadata;
-import org.opensearch.index.translog.RemoteBlobStoreInternalTranslogFactory;
-import org.opensearch.index.translog.RemoteFsTranslog;
-import org.opensearch.index.translog.RemoteStoreFenceOwnership;
-import org.opensearch.index.translog.RemoteTranslogStats;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.index.translog.TranslogConfig;
-import org.opensearch.index.translog.TranslogCorruptedException;
-import org.opensearch.index.translog.TranslogFactory;
-import org.opensearch.index.translog.TranslogRecoveryRunner;
-import org.opensearch.index.translog.TranslogStats;
-import org.opensearch.index.warmer.ShardIndexWarmerService;
-import org.opensearch.index.warmer.WarmerStats;
-import org.opensearch.indices.IndexingMemoryController;
-import org.opensearch.indices.IndicesQueryCache;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.indices.RemoteStoreSettings;
-import org.opensearch.indices.cluster.IndicesClusterStateService;
-import org.opensearch.indices.pollingingest.IngestionSettings;
-import org.opensearch.indices.pollingingest.PollingIngestStats;
-import org.opensearch.indices.recovery.PeerRecoveryTargetService;
-import org.opensearch.indices.recovery.RecoveryFailedException;
-import org.opensearch.indices.recovery.RecoveryListener;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.indices.recovery.RecoveryState;
-import org.opensearch.indices.recovery.RecoveryTarget;
-import org.opensearch.indices.replication.checkpoint.MergedSegmentCheckpoint;
-import org.opensearch.indices.replication.checkpoint.MergedSegmentPublisher;
-import org.opensearch.indices.replication.checkpoint.ReferencedSegmentsCheckpoint;
-import org.opensearch.indices.replication.checkpoint.ReferencedSegmentsPublisher;
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
-import org.opensearch.indices.replication.checkpoint.SegmentReplicationCheckpointPublisher;
-import org.opensearch.indices.replication.common.ReplicationTimer;
-import org.opensearch.node.remotestore.RemoteStoreNodeAttribute;
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.repositories.Repository;
-import org.opensearch.search.suggest.completion.CompletionStats;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.Closeable;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.PrintStream;
-import java.nio.channels.ClosedByInterruptException;
-import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.NoSuchFileException;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.CompletionService;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorCompletionService;
-import java.util.concurrent.Future;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.LongSupplier;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
-
-import static org.opensearch.index.seqno.RetentionLeaseActions.RETAIN_ALL;
-import static org.opensearch.index.seqno.SequenceNumbers.LOCAL_CHECKPOINT_KEY;
-import static org.opensearch.index.seqno.SequenceNumbers.MAX_SEQ_NO;
-import static org.opensearch.index.seqno.SequenceNumbers.NO_OPS_PERFORMED;
-import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
-import static org.opensearch.index.shard.IndexShard.ShardMigrationState.REMOTE_MIGRATING_SEEDED;
-import static org.opensearch.index.shard.IndexShard.ShardMigrationState.REMOTE_MIGRATING_UNSEEDED;
-import static org.opensearch.index.shard.IndexShard.ShardMigrationState.REMOTE_NON_MIGRATING;
-import static org.opensearch.index.translog.Translog.Durability;
-import static org.opensearch.index.translog.Translog.TRANSLOG_UUID_KEY;
-
-/**
- * An OpenSearch index shard
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class IndexShard extends AbstractIndexShardComponent implements IndicesClusterStateService.Shard {
-
-    private final ThreadPool threadPool;
-    private final MapperService mapperService;
-    private final IndexCache indexCache;
-    private final Store store;
-    private final InternalIndexingStats internalIndexingStats;
-    private final ShardSearchStats searchStats = new ShardSearchStats();
-    private final ShardGetService getService;
-    private final ShardIndexWarmerService shardWarmerService;
-    private final ShardRequestCache requestCacheStats;
-    private final ShardFieldData shardFieldData;
-    private final ShardBitsetFilterCache shardBitsetFilterCache;
-    private final Object mutex = new Object();
-    private final String checkIndexOnStartup;
-    private final CodecService codecService;
-    private final Engine.Warmer warmer;
-    private final SimilarityService similarityService;
-    private final TranslogConfig translogConfig;
-    private final IndexEventListener indexEventListener;
-    private final QueryCachingPolicy cachingPolicy;
-    private final Supplier<Sort> indexSortSupplier;
-    // Package visible for testing
-    final CircuitBreakerService circuitBreakerService;
-
-    private final SearchOperationListener searchOperationListener;
-
-    private final GlobalCheckpointListeners globalCheckpointListeners;
-    private final PendingReplicationActions pendingReplicationActions;
-    private final ReplicationTracker replicationTracker;
-    private final SegmentReplicationCheckpointPublisher checkpointPublisher;
-
-    protected volatile ShardRouting shardRouting;
-    protected volatile IndexShardState state;
-    // ensure happens-before relation between addRefreshListener() and postRecovery()
-    private final Object postRecoveryMutex = new Object();
-    private volatile long pendingPrimaryTerm; // see JavaDocs for getPendingPrimaryTerm
-    private final Object engineMutex = new Object(); // lock ordering: engineMutex -> mutex
-    private final AtomicReference<Indexer> currentEngineReference = new AtomicReference<>();
-    /**
-     * The remote store hydration a recovery is currently running (segment and translog downloads that precede the engine
-     * open), so that {@link #close} can abort it. Registered and cleared under {@link #mutex} by
-     * {@link #hydrateFromRemoteStore}; cancelled by {@link #close} once the state has moved to CLOSED.
+                "syncSegmentsFromRemoteSegmentStore success={} elapsedTime={}",
      */
-    private final AtomicReference<CancellableThreads> remoteStoreHydration = new AtomicReference<>();
-    final IndexerFactory indexerFactory;
-    final EngineConfigFactory engineConfigFactory;
-
-    private final IndexingOperationListener indexingOperationListeners;
-    private final Runnable globalCheckpointSyncer;
-
-    Runnable getGlobalCheckpointSyncer() {
-        return globalCheckpointSyncer;
-    }
-
-    private final RetentionLeaseSyncer retentionLeaseSyncer;
-
-    @Nullable
-    private volatile RecoveryState recoveryState;
-
-    private final RecoveryStats recoveryStats = new RecoveryStats();
-    private final MeanMetric refreshMetric = new MeanMetric();
-    private final MeanMetric externalRefreshMetric = new MeanMetric();
-    private final MeanMetric flushMetric = new MeanMetric();
-    private final CounterMetric periodicFlushMetric = new CounterMetric();
-
-    private final ShardEventListener shardEventListener = new ShardEventListener();
-
-    private final ShardPath path;
-
-    private final IndexShardOperationPermits indexShardOperationPermits;
-
-    private static final EnumSet<IndexShardState> readAllowedStates = EnumSet.of(IndexShardState.STARTED, IndexShardState.POST_RECOVERY);
-    // for primaries, we only allow to write when actually started (so the cluster has decided we started)
-    // in case we have a relocation of a primary, we also allow to write after phase 2 completed, where the shard may be
-    // in state RECOVERING or POST_RECOVERY.
-    // for replicas, replication is also allowed while recovering, since we index also during recovery to replicas and rely on
-    // version checks to make sure its consistent a relocated shard can also be target of a replication if the relocation target has not
-    // been marked as active yet and is syncing it's changes back to the relocation source
-    private static final EnumSet<IndexShardState> writeAllowedStates = EnumSet.of(
-        IndexShardState.RECOVERING,
-        IndexShardState.POST_RECOVERY,
-        IndexShardState.STARTED
-    );
-
-    private final CheckedFunction<DirectoryReader, DirectoryReader, IOException> readerWrapper;
-
-    /**
-     * True if this shard is still indexing (recently) and false if we've been idle for long enough (as periodically checked by {@link
-     * IndexingMemoryController}).
-     */
-    private final AtomicBoolean active = new AtomicBoolean();
-    /**
-     * Allows for the registration of listeners that are called when a change becomes visible for search.
-     */
-    private final RefreshListeners refreshListeners;
-
-    private final AtomicLong lastSearcherAccess = new AtomicLong();
-    private final AtomicReference<Translog.Location> pendingRefreshLocation = new AtomicReference<>();
-    private final RefreshPendingLocationListener refreshPendingLocationListener;
-    private volatile boolean useRetentionLeasesInPeerRecovery;
-    /**
-     * Set once this copy has claimed the remote store fence ({@link #sealRemoteStoreFence()}); consulted only by
-     * {@link #assertRemoteStoreFenceSealedBeforeRestore()} to assert seal-before-restore ordering.
-     */
-    private volatile boolean remoteStoreFenceSealed;
-    private final Store remoteStore;
-    private final BiFunction<IndexSettings, ShardRouting, TranslogFactory> translogFactorySupplier;
-    private final boolean isTimeSeriesIndex;
-    private final RemoteStoreStatsTrackerFactory remoteStoreStatsTrackerFactory;
-
-    private final List<ReferenceManager.RefreshListener> internalRefreshListener = new ArrayList<>();
-    private final RemoteStoreFileDownloader fileDownloader;
-    private final RecoverySettings recoverySettings;
-    private final RemoteStoreSettings remoteStoreSettings;
-    /*
-     On source doc rep node,  It will be DOCREP_NON_MIGRATING.
-     On source remote node , it will be REMOTE_MIGRATING_SEEDED when relocating from remote node
-     On source remote node , it will be REMOTE_MIGRATING_UNSEEDED when relocating from docrep node
-     */
-    private final ShardMigrationState shardMigrationState;
-    private DiscoveryNodes discoveryNodes;
-    private final Function<ShardId, ReplicationStats> segmentReplicationStatsProvider;
-    private final MergedSegmentWarmerFactory mergedSegmentWarmerFactory;
-    private final Supplier<Boolean> fixedRefreshIntervalSchedulingEnabled;
-    private final Supplier<TimeValue> refreshInterval;
-    private final Object refreshMutex;
-    private volatile AsyncShardRefreshTask refreshTask;
-    private final Object periodicFlushMutex = new Object();
-    private volatile AsyncShardFlushTask periodicFlushTask;
-    private final ClusterApplierService clusterApplierService;
-    private final MergedSegmentPublisher mergedSegmentPublisher;
-    private final ReferencedSegmentsPublisher referencedSegmentsPublisher;
-    private final Set<MergedSegmentCheckpoint> pendingMergedSegmentCheckpoints = Sets.newConcurrentHashSet();
-    private final MergedSegmentTransferTracker mergedSegmentTransferTracker;
-
-    // Used to limit the number of concurrent translog tasks. When the semaphore is exhausted, serial recovery is used.
-    private static final Semaphore translogConcurrentRecoverySemaphore = new Semaphore(1000);
-
-    private static final long REPLICA_SYNC_POLL_INTERVAL_MS = 500;
-
-    private final DataFormatRegistry dataFormatRegistry;
-
-    private final Map<String, FormatChecksumStrategy> checksumStrategies;
-
-    @InternalApi
-    public IndexShard(
-        final ShardRouting shardRouting,
-        final IndexSettings indexSettings,
-        final ShardPath path,
-        final Store store,
-        final Supplier<Sort> indexSortSupplier,
-        final IndexCache indexCache,
-        final MapperService mapperService,
-        final SimilarityService similarityService,
-        final IndexerFactory indexerFactory,
-        final EngineConfigFactory engineConfigFactory,
-        final IndexEventListener indexEventListener,
-        final CheckedFunction<DirectoryReader, DirectoryReader, IOException> indexReaderWrapper,
-        final ThreadPool threadPool,
-        final BigArrays bigArrays,
-        final Engine.Warmer warmer,
-        final List<SearchOperationListener> searchOperationListener,
-        final List<IndexingOperationListener> listeners,
-        final Runnable globalCheckpointSyncer,
-        final RetentionLeaseSyncer retentionLeaseSyncer,
-        final CircuitBreakerService circuitBreakerService,
-        final BiFunction<IndexSettings, ShardRouting, TranslogFactory> translogFactorySupplier,
-        @Nullable final SegmentReplicationCheckpointPublisher checkpointPublisher,
-        @Nullable final Store remoteStore,
-        final RemoteStoreStatsTrackerFactory remoteStoreStatsTrackerFactory,
-        final String nodeId,
-        final RecoverySettings recoverySettings,
-        final RemoteStoreSettings remoteStoreSettings,
-        boolean seedRemote,
-        final DiscoveryNodes discoveryNodes,
-        final Function<ShardId, ReplicationStats> segmentReplicationStatsProvider,
-        final MergedSegmentWarmerFactory mergedSegmentWarmerFactory,
-        final boolean shardLevelRefreshEnabled,
-        final Supplier<Boolean> fixedRefreshIntervalSchedulingEnabled,
-        final Supplier<TimeValue> refreshInterval,
-        final Object refreshMutex,
-        final ClusterApplierService clusterApplierService,
-        @Nullable final MergedSegmentPublisher mergedSegmentPublisher,
-        @Nullable final ReferencedSegmentsPublisher referencedSegmentsPublisher,
-        final Map<String, FormatChecksumStrategy> checksumStrategies,
-        @Nullable final DataFormatRegistry dataFormatRegistry
-    ) throws IOException {
-        super(shardRouting.shardId(), indexSettings);
-        assert shardRouting.initializing();
-        this.shardRouting = shardRouting;
-        final Settings settings = indexSettings.getSettings();
-        this.warmer = warmer;
-        this.similarityService = similarityService;
-        Objects.requireNonNull(store, "Store must be provided to the index shard");
-        this.indexerFactory = Objects.requireNonNull(indexerFactory);
-        this.engineConfigFactory = Objects.requireNonNull(engineConfigFactory);
-        this.codecService = engineConfigFactory.newDefaultCodecService(indexSettings, mapperService, logger);
-        this.store = store;
-        this.indexSortSupplier = indexSortSupplier;
-        this.indexEventListener = indexEventListener;
-        this.threadPool = threadPool;
-        this.translogSyncProcessor = createTranslogSyncProcessor(
-            logger,
-            threadPool,
-            this::getIndexer,
-            indexSettings.isAssignedOnRemoteNode(),
-            () -> getRemoteTranslogUploadBufferInterval(remoteStoreSettings::getClusterRemoteTranslogBufferInterval)
-        );
-        this.mergedSegmentTransferTracker = new MergedSegmentTransferTracker();
-        this.mapperService = mapperService;
-        this.indexCache = indexCache;
-        this.internalIndexingStats = new InternalIndexingStats(threadPool);
-        final List<IndexingOperationListener> listenersList = new ArrayList<>(listeners);
-        listenersList.add(internalIndexingStats);
-        this.indexingOperationListeners = new IndexingOperationListener.CompositeListener(listenersList, logger);
-        this.globalCheckpointSyncer = globalCheckpointSyncer;
-        this.retentionLeaseSyncer = Objects.requireNonNull(retentionLeaseSyncer);
-        final List<SearchOperationListener> searchListenersList = new ArrayList<>(searchOperationListener);
-        searchListenersList.add(searchStats);
-        this.searchOperationListener = new SearchOperationListener.CompositeListener(searchListenersList, logger);
-        this.getService = new ShardGetService(indexSettings, this, mapperService);
-        this.shardWarmerService = new ShardIndexWarmerService(shardId, indexSettings);
-        this.requestCacheStats = new ShardRequestCache();
-        this.shardFieldData = new ShardFieldData();
-        this.shardBitsetFilterCache = new ShardBitsetFilterCache(shardId, indexSettings);
-        state = IndexShardState.CREATED;
-        this.path = path;
-        this.circuitBreakerService = circuitBreakerService;
-        /* create engine config */
-        logger.debug("state: [CREATED]");
-
-        this.checkIndexOnStartup = indexSettings.getValue(IndexSettings.INDEX_CHECK_ON_STARTUP);
-        final String aId = shardRouting.allocationId().getId();
-        this.translogConfig = new TranslogConfig(shardId, shardPath().resolveTranslog(), indexSettings, bigArrays, nodeId, aId, seedRemote);
-        final long primaryTerm = indexSettings.getIndexMetadata().primaryTerm(shardId.id());
-        this.pendingPrimaryTerm = primaryTerm;
-        this.globalCheckpointListeners = new GlobalCheckpointListeners(shardId, threadPool.scheduler(), logger);
-        this.pendingReplicationActions = new PendingReplicationActions(shardId, threadPool);
-        this.replicationTracker = new ReplicationTracker(
-            shardId,
-            aId,
-            indexSettings,
-            primaryTerm,
-            getInitialGlobalCheckpointForShard(indexSettings),
-            globalCheckpointListeners::globalCheckpointUpdated,
-            threadPool::absoluteTimeInMillis,
-            (retentionLeases, listener) -> retentionLeaseSyncer.sync(shardId, aId, getPendingPrimaryTerm(), retentionLeases, listener),
-            this::getSafeCommitInfo,
-            pendingReplicationActions,
-            isShardOnRemoteEnabledNode
-        );
-
-        // the query cache is a node-level thing, however we want the most popular filters
-        // to be computed on a per-shard basis
-        if (IndexModule.INDEX_QUERY_CACHE_EVERYTHING_SETTING.get(settings)) {
-            cachingPolicy = new QueryCachingPolicy() {
-                @Override
-                public void onUse(Query query) {
-
-                }
-
-                @Override
-                public boolean shouldCache(Query query) {
-                    return true;
-                }
-            };
-        } else {
-            cachingPolicy = new IndicesQueryCache.OpenseachUsageTrackingQueryCachingPolicy(clusterApplierService.clusterSettings());
-        }
-        indexShardOperationPermits = new IndexShardOperationPermits(shardId, threadPool);
-        if (indexSettings.isDerivedSourceEnabled()) {
-            readerWrapper = reader -> {
-                final DirectoryReader wrappedReader = indexReaderWrapper == null ? reader : indexReaderWrapper.apply(reader);
-                return DerivedSourceDirectoryReader.wrap(
-                    wrappedReader,
-                    getIndexer().config().getDocumentMapperForTypeSupplier().get().getDocumentMapper().root()::deriveSource
-                );
-            };
-        } else {
-            readerWrapper = indexReaderWrapper;
-        }
-        refreshListeners = buildRefreshListeners();
-        lastSearcherAccess.set(threadPool.relativeTimeInMillis());
-        persistMetadata(path, indexSettings, shardRouting, null, logger);
-        this.useRetentionLeasesInPeerRecovery = replicationTracker.hasAllPeerRecoveryRetentionLeases();
-        this.refreshPendingLocationListener = new RefreshPendingLocationListener();
-        this.checkpointPublisher = checkpointPublisher;
-        this.remoteStore = remoteStore;
-        this.translogFactorySupplier = translogFactorySupplier;
-        this.isTimeSeriesIndex = (mapperService == null || mapperService.documentMapper() == null)
-            ? false
-            : mapperService.documentMapper().mappers().containsTimeStampField();
-        this.remoteStoreStatsTrackerFactory = remoteStoreStatsTrackerFactory;
-        this.recoverySettings = recoverySettings;
-        this.remoteStoreSettings = remoteStoreSettings;
-        this.fileDownloader = new RemoteStoreFileDownloader(shardRouting.shardId(), threadPool, recoverySettings);
-        this.shardMigrationState = getShardMigrationState(indexSettings, seedRemote);
-        this.discoveryNodes = discoveryNodes;
-        this.segmentReplicationStatsProvider = segmentReplicationStatsProvider;
-        this.mergedSegmentWarmerFactory = mergedSegmentWarmerFactory;
-        this.fixedRefreshIntervalSchedulingEnabled = fixedRefreshIntervalSchedulingEnabled;
-        this.refreshInterval = refreshInterval;
-        this.refreshMutex = Objects.requireNonNull(refreshMutex);
-        this.clusterApplierService = clusterApplierService;
-        this.mergedSegmentPublisher = mergedSegmentPublisher;
-        this.referencedSegmentsPublisher = referencedSegmentsPublisher;
-        synchronized (this.refreshMutex) {
-            if (shardLevelRefreshEnabled) {
-                startRefreshTask();
-            }
-        }
-        this.dataFormatRegistry = dataFormatRegistry;
-        this.checksumStrategies = checksumStrategies;
-    }
-
-    /**
-     * By default, UNASSIGNED_SEQ_NO is used as the initial global checkpoint for new shard initialization. Ingestion
-     * source does not track sequence numbers explicitly and hence defaults to NO_OPS_PERFORMED for compatibility.
-     *
-     */
-    private long getInitialGlobalCheckpointForShard(IndexSettings indexSettings) {
-        if (indexSettings.getIndexMetadata().useIngestionSource()) {
-            return NO_OPS_PERFORMED;
-        }
-
-        return UNASSIGNED_SEQ_NO;
-    }
-
-    public ThreadPool getThreadPool() {
-        return this.threadPool;
-    }
-
-    public Store store() {
-        return this.store;
-    }
-
-    public Map<String, FormatChecksumStrategy> getChecksumStrategies() {
-        return checksumStrategies;
-    }
-
-    public boolean isMigratingToRemote() {
-        // set it true only if shard is remote, but index setting doesn't say so
-        return shardMigrationState == REMOTE_MIGRATING_UNSEEDED || shardMigrationState == REMOTE_MIGRATING_SEEDED;
-    }
-
-    public boolean shouldSeedRemoteStore() {
-        // set it true only if relocating from docrep to remote store
-        return shardMigrationState == REMOTE_MIGRATING_UNSEEDED;
-    }
-
-    /**
-     * To be delegated to {@link ReplicationTracker} so that relevant remote store based
-     * operations can be ignored during engine migration
-     * <p>
-     * This tracks the remote translog specifically, because the tracker uses it to decide whether a replica can be
-     * excluded from the replication group. A shard on a {@code segments_only} node keeps its translog locally, so it
-     * must stay in the replication group even though its segments live in a remote store.
-     * <p>
-     * Has explicit null checks to ensure that the {@link ReplicationTracker#invariant()}
-     * checks does not fail during a cluster manager state update when the latest replication group
-     * calculation is not yet done and the cached replication group details are available
-     */
-    public Function<String, Boolean> isShardOnRemoteEnabledNode = nodeId -> {
-        DiscoveryNode node = discoveryNodes.get(nodeId);
-        if (node != null) {
-            return node.isRemoteTranslogStoreNode();
-        }
-        return false;
-    };
-
-    public boolean isRemoteSeeded() {
-        return shardMigrationState == REMOTE_MIGRATING_SEEDED;
-    }
-
-    /**
-     * Whether this shard's translog has an authoritative copy in the remote store, so that the local translog directory
-     * is a cache of that copy: a remote-store index, or a docrep index whose shard was seeded into the remote store by a
-     * remote source while migrating ({@link ShardMigrationState#REMOTE_MIGRATING_SEEDED}). Every decision that reads the
-     * remote translog during recovery ({@link #hydrateFromRemoteStore}, {@link #resetEngineToGlobalCheckpoint}) and the
-     * one that discards a local copy proven corrupt ({@link #discardCorruptLocalRemoteTranslog}) must agree on this, so
-     * they all go through here. An unseeded migrating shard has no remote copy yet, and its local translog is the only one.
-     */
-    boolean isTranslogBackedByRemoteStore() {
-        return isTranslogBackedByRemoteStore(indexSettings, shardMigrationState);
-    }
-
-    static boolean isTranslogBackedByRemoteStore(IndexSettings indexSettings, ShardMigrationState shardMigrationState) {
-        return indexSettings.isRemoteTranslogStoreEnabled() || shardMigrationState == REMOTE_MIGRATING_SEEDED;
-    }
-
-    public Store remoteStore() {
-        return this.remoteStore;
-    }
-
-    /**
-     * Return the sort order of this index, or null if the index has no sort.
-     */
-    public Sort getIndexSort() {
-        return indexSortSupplier.get();
-    }
-
-    public ShardGetService getService() {
-        return this.getService;
-    }
-
-    public ShardBitsetFilterCache shardBitsetFilterCache() {
-        return shardBitsetFilterCache;
-    }
-
-    public MapperService mapperService() {
-        return mapperService;
-    }
-
-    public SearchOperationListener getSearchOperationListener() {
-        return this.searchOperationListener;
-    }
-
-    public ShardIndexWarmerService warmerService() {
-        return this.shardWarmerService;
-    }
-
-    public ShardRequestCache requestCache() {
-        return this.requestCacheStats;
-    }
-
-    public ShardFieldData fieldData() {
-        return this.shardFieldData;
-    }
-
-    public boolean isSystem() {
-        return indexSettings.getIndexMetadata().isSystem();
-    }
-
-    /**
-     * Returns the name of the default codec in codecService
-     */
-    public String getDefaultCodecName() {
-        return codecService.codec(CodecService.DEFAULT_CODEC).getName();
-    }
-
-    /**
-     * USE THIS METHOD WITH CARE!
-     * Returns the primary term the index shard is supposed to be on. In case of primary promotion or when a replica learns about
-     * a new term due to a new primary, the term that's exposed here will not be the term that the shard internally uses to assign
-     * to operations. The shard will auto-correct its internal operation term, but this might take time.
-     * See {@link org.opensearch.cluster.metadata.IndexMetadata#primaryTerm(int)}
-     */
-    public long getPendingPrimaryTerm() {
-        return this.pendingPrimaryTerm;
-    }
-
-    /** Returns the primary term that is currently being used to assign to operations */
-    public long getOperationPrimaryTerm() {
-        return replicationTracker.getOperationPrimaryTerm();
-    }
-
-    /**
-     * Returns the latest cluster routing entry received with this shard.
-     */
-    @Override
-    public ShardRouting routingEntry() {
-        return this.shardRouting;
-    }
-
-    public QueryCachingPolicy getQueryCachingPolicy() {
-        return cachingPolicy;
-    }
-
-    public QueryCache getQueryCache() {
-        return indexCache != null ? indexCache.query() : null;
-    }
-
-    /** Only used for testing **/
-    protected RemoteStoreStatsTrackerFactory getRemoteStoreStatsTrackerFactory() {
-        return remoteStoreStatsTrackerFactory;
-    }
-
-    public String getNodeId() {
-        return translogConfig.getNodeId();
-    }
-
-    public RecoverySettings getRecoverySettings() {
-        return recoverySettings;
-    }
-
-    public RemoteStoreSettings getRemoteStoreSettings() {
-        return remoteStoreSettings;
-    }
-
-    public RemoteStoreFileDownloader getFileDownloader() {
-        return fileDownloader;
-    }
-
-    @Override
-    public void updateShardState(
-        final ShardRouting newRouting,
-        final long newPrimaryTerm,
-        final BiConsumer<IndexShard, ActionListener<ResyncTask>> primaryReplicaSyncer,
-        final long applyingClusterStateVersion,
-        final Set<String> inSyncAllocationIds,
-        final IndexShardRoutingTable routingTable,
-        DiscoveryNodes discoveryNodes
-    ) throws IOException {
-        this.discoveryNodes = discoveryNodes;
-        final ShardRouting currentRouting;
-        synchronized (mutex) {
-            currentRouting = this.shardRouting;
-            assert currentRouting != null;
-
-            if (!newRouting.shardId().equals(shardId())) {
-                throw new IllegalArgumentException(
-                    "Trying to set a routing entry with shardId " + newRouting.shardId() + " on a shard with shardId " + shardId()
-                );
-            }
-            if (newRouting.isSameAllocation(currentRouting) == false) {
-                throw new IllegalArgumentException(
-                    "Trying to set a routing entry with a different allocation. Current " + currentRouting + ", new " + newRouting
-                );
-            }
-            if (currentRouting.primary() && newRouting.primary() == false) {
-                throw new IllegalArgumentException(
-                    "illegal state: trying to move shard from primary mode to replica mode. Current "
-                        + currentRouting
-                        + ", new "
-                        + newRouting
-                );
-            }
-
-            if (newRouting.primary()) {
-                replicationTracker.updateFromClusterManager(applyingClusterStateVersion, inSyncAllocationIds, routingTable);
-            }
-
-            if (state == IndexShardState.POST_RECOVERY && newRouting.active()) {
-                assert currentRouting.active() == false : "we are in POST_RECOVERY, but our shard routing is active " + currentRouting;
-                assert currentRouting.isRelocationTarget() == false
-                    || currentRouting.primary() == false
-                    || replicationTracker.isPrimaryMode()
-                    : "a primary relocation is completed by the cluster-managerr, but primary mode is not active " + currentRouting;
-
-                changeState(IndexShardState.STARTED, "global state is [" + newRouting.state() + "]");
-
-                // Flush here after relocation of primary, so that replica get all changes from new primary rather than waiting for more
-                // docs to get indexed.
-                if (indexSettings.isSegRepEnabledOrRemoteNode()) {
-                    flush(new FlushRequest().waitIfOngoing(true).force(true));
-                }
-            } else if (currentRouting.primary()
-                && currentRouting.relocating()
-                && replicationTracker.isRelocated()
-                && (newRouting.relocating() == false || newRouting.equalsIgnoringMetadata(currentRouting) == false)) {
-                    // if the shard is not in primary mode anymore (after primary relocation) we have to fail when any changes in shard
-                    // routing occur (e.g. due to recovery failure / cancellation). The reason is that at the moment we cannot safely
-                    // reactivate primary mode without risking two active primaries.
-                    throw new IndexShardRelocatedException(
-                        shardId(),
-                        "Shard is marked as relocated, cannot safely move to state " + newRouting.state()
-                    );
-                }
-            assert newRouting.active() == false || state == IndexShardState.STARTED || state == IndexShardState.CLOSED
-                : "routing is active, but local shard state isn't. routing: " + newRouting + ", local state: " + state;
-            persistMetadata(path, indexSettings, newRouting, currentRouting, logger);
-            final CountDownLatch shardStateUpdated = new CountDownLatch(1);
-
-            if (newRouting.primary()) {
-                if (newPrimaryTerm == pendingPrimaryTerm) {
-                    if (currentRouting.initializing() && currentRouting.isRelocationTarget() == false && newRouting.active()) {
-                        // Refresh the primary operation policy in case it has changed since the start of recovery.
-                        // No primary-origin operation can have run yet, so this is safe without blocking operations.
-                        getIndexer().refreshPrimaryOperationPolicy();
-                        // the cluster-manager started a recovering primary, activate primary mode.
-                        replicationTracker.activatePrimaryMode(getLocalCheckpoint());
-                        // DFA warm primaries: skip postActivatePrimaryMode (no remote translog upload
-                        // needed) but still ensure peer recovery retention leases exist for replicas.
-                        // Reset hasAllPeerRecoveryRetentionLeases to false first to prevent assertion
-                        // failures in renewPeerRecoveryRetentionLeases() during the async window.
-                        if (getIndexer() instanceof DataFormatAwareReadOnlyEngine == false) {
-                            postActivatePrimaryMode();
-                        } else {
-                            replicationTracker.resetHasAllPeerRecoveryRetentionLeases();
-                            ensurePeerRecoveryRetentionLeasesExist();
-                        }
-                    }
-                } else {
-                    assert currentRouting.primary() == false : "term is only increased as part of primary promotion";
-                    /* Note that due to cluster state batching an initializing primary shard term can failed and re-assigned
-                     * in one state causing it's term to be incremented. Note that if both current shard state and new
-                     * shard state are initializing, we could replace the current shard and reinitialize it. It is however
-                     * possible that this shard is being started. This can happen if:
-                     * 1) Shard is post recovery and sends shard started to the cluster-manager
-                     * 2) Node gets disconnected and rejoins
-                     * 3) Cluster-manager assigns the shard back to the node
-                     * 4) Cluster-manager processes the shard started and starts the shard
-                     * 5) The node process the cluster state where the shard is both started and primary term is incremented.
-                     *
-                     * We could fail the shard in that case, but this will cause it to be removed from the insync allocations list
-                     * potentially preventing re-allocation.
-                     */
-                    assert newRouting.initializing() == false : "a started primary shard should never update its term; "
-                        + "shard "
-                        + newRouting
-                        + ", "
-                        + "current term ["
-                        + pendingPrimaryTerm
-                        + "], "
-                        + "new term ["
-                        + newPrimaryTerm
-                        + "]";
-                    assert newPrimaryTerm > pendingPrimaryTerm : "primary terms can only go up; current term ["
-                        + pendingPrimaryTerm
-                        + "], new term ["
-                        + newPrimaryTerm
-                        + "]";
-                    /*
-                     * Before this call returns, we are guaranteed that all future operations are delayed and so this happens before we
-                     * increment the primary term. The latch is needed to ensure that we do not unblock operations before the primary
-                     * term is incremented.
-                     */
-                    // to prevent primary relocation handoff while resync is not completed
-                    boolean resyncStarted = primaryReplicaResyncInProgress.compareAndSet(false, true);
-                    if (resyncStarted == false) {
-                        throw new IllegalStateException("cannot start resync while it's already in progress");
-                    }
-                    bumpPrimaryTerm(newPrimaryTerm, () -> {
-                        shardStateUpdated.await();
-                        assert pendingPrimaryTerm == newPrimaryTerm : "shard term changed on primary. expected ["
-                            + newPrimaryTerm
-                            + "] but was ["
-                            + pendingPrimaryTerm
-                            + "]"
-                            + ", current routing: "
-                            + currentRouting
-                            + ", new routing: "
-                            + newRouting;
-                        assert getOperationPrimaryTerm() == newPrimaryTerm;
-                        try {
-                            if (indexSettings.isSegRepEnabledOrRemoteNode()) {
-                                // this Shard's engine was read only, we need to update its engine before restoring local history from xlog.
-                                assert newRouting.primary() && currentRouting.primary() == false;
-                                ReplicationTimer timer = new ReplicationTimer();
-                                timer.start();
-                                logger.debug(
-                                    "Resetting engine on promotion of shard [{}] to primary, startTime {}\n",
-                                    shardId,
-                                    timer.startTime()
-                                );
-                                resetEngineToGlobalCheckpoint();
-                                timer.stop();
-                                logger.info("Completed engine failover for shard [{}] in: {} ms", shardId, timer.time());
-                                // It is possible an engine can open with a SegmentInfos on a higher gen but the reader does not refresh to
-                                // trigger our refresh listener.
-                                // Force update the checkpoint post engine reset.
-                                updateReplicationCheckpoint();
-                            }
-                            // This shard is about to start serving primary-origin operations, so the primary operation
-                            // policy has to match the index settings as they are now so refresh the policy.
-                            getIndexer().refreshPrimaryOperationPolicy();
-                            replicationTracker.activatePrimaryMode(getLocalCheckpoint());
-                            if (indexSettings.isSegRepEnabledOrRemoteNode()) {
-                                // force publish a checkpoint once in primary mode so that replicas not caught up to previous primary
-                                // are brought up to date.
-                                checkpointPublisher.publish(this, getLatestReplicationCheckpoint());
-                            }
-                            // DFA warm primaries: activate primary mode (needed for initiateTracking
-                            // during replica recovery) but skip postActivatePrimaryMode (no remote
-                            // translog upload). Reset hasAllPeerRecoveryRetentionLeases and ensure
-                            // retention leases exist for replicas.
-                            if (getIndexer() instanceof DataFormatAwareReadOnlyEngine == false) {
-                                postActivatePrimaryMode();
-                            } else {
-                                replicationTracker.resetHasAllPeerRecoveryRetentionLeases();
-                                ensurePeerRecoveryRetentionLeasesExist();
-                            }
-                            /*
-                             * If this shard was serving as a replica shard when another shard was promoted to primary then
-                             * its Lucene index was reset during the primary term transition. In particular, the Lucene index
-                             * on this shard was reset to the global checkpoint and the operations above the local checkpoint
-                             * were reverted. If the other shard that was promoted to primary subsequently fails before the
-                             * primary/replica re-sync completes successfully and we are now being promoted, we have to restore
-                             * the reverted operations on this shard by replaying the translog to avoid losing acknowledged writes.
-                             */
-                            final Indexer engine = getIndexer();
-                            engine.translogManager()
-                                .restoreLocalHistoryFromTranslog(
-                                    engine.getProcessedLocalCheckpoint(),
-                                    (snapshot) -> runTranslogRecovery(engine, snapshot, Engine.Operation.Origin.LOCAL_RESET, () -> {})
-                                );
-                            /* Rolling the translog generation is not strictly needed here (as we will never have collisions between
-                             * sequence numbers in a translog generation in a new primary as it takes the last known sequence number
-                             * as a starting point), but it simplifies reasoning about the relationship between primary terms and
-                             * translog generations.
-                             */
-                            engine.translogManager().rollTranslogGeneration();
-                            engine.fillSeqNoGaps(newPrimaryTerm);
-                            replicationTracker.updateLocalCheckpoint(currentRouting.allocationId().getId(), getLocalCheckpoint());
-
-                            final TimeValue resyncTimeout = recoverySettings.getPrimaryResyncTimeout();
-                            // The listener below is wrapped by ListenerTimeouts.wrapWithTimeout, which uses a single
-                            // fire-once guard: exactly one of onResponse, onFailure, or the timeout consumer ever runs for
-                            // a given promotion. Because the resync is dispatched only after primaryReplicaResyncInProgress
-                            // was set to true, whichever of these three runs first always observes the flag as true, so the
-                            // compareAndSet(true, false) below is guaranteed to succeed and the assert holds.
-                            final ActionListener<ResyncTask> resyncListener = new ActionListener<>() {
-                                @Override
-                                public void onResponse(ResyncTask resyncTask) {
-                                    boolean resyncCompleted = primaryReplicaResyncInProgress.compareAndSet(true, false);
-                                    assert resyncCompleted : "primary-replica resync finished but was not started";
-                                    logger.info("primary-replica resync completed with {} operations", resyncTask.getResyncedOperations());
-                                }
-
-                                @Override
-                                public void onFailure(Exception e) {
-                                    boolean resyncCompleted = primaryReplicaResyncInProgress.compareAndSet(true, false);
-                                    assert resyncCompleted : "primary-replica resync finished but was not started";
-                                    if (state == IndexShardState.CLOSED) {
-                                        // ignore, shutting down
-                                    } else {
-                                        failShard("exception during primary-replica resync", e);
-                                    }
-                                }
-                            };
-
-                            // Watchdog for a lost resync response: if neither onResponse nor onFailure fires within
-                            // resyncTimeout, clear the flag so this promoted primary can still be relocated instead of being
-                            // stuck forever. Trade-off: because wrapWithTimeout shares one fire-once guard between the real
-                            // listener and the timeout, a genuine resync failure that only arrives after the timeout has
-                            // fired is swallowed here rather than failing the shard. This is accepted deliberately: failing a
-                            // primary that has otherwise served traffic healthily for the full timeout is worse than keeping
-                            // it, and in the common case a real failure completes well before the timeout and still fails the
-                            // shard via onFailure above.
-                            final ActionListener<ResyncTask> timeoutListener = ListenerTimeouts.wrapWithTimeout(
-                                threadPool,
-                                resyncTimeout,
-                                ThreadPool.Names.GENERIC,
-                                resyncListener,
-                                (l) -> {
-                                    if (primaryReplicaResyncInProgress.compareAndSet(true, false)) {
-                                        logger.error(
-                                            "[{}] primary-replica resync timed out after [{}], forcibly clearing "
-                                                + "primaryReplicaResyncInProgress flag to unblock primary relocation",
-                                            shardId,
-                                            resyncTimeout
-                                        );
-                                    }
-                                }
-                            );
-                            primaryReplicaSyncer.accept(this, timeoutListener);
-
-                        } catch (final AlreadyClosedException e) {
-                            // okay, the index was deleted
-                        }
-                    }, null);
-                }
-            }
-            // set this last, once we finished updating all internal state.
-            this.shardRouting = newRouting;
-
-            assert this.shardRouting.primary() == false || this.shardRouting.started() == false || // note that we use started and not
-            // active to avoid relocating shards
-                this.indexShardOperationPermits.isBlocked() || // if permits are blocked, we are still transitioning
-                this.replicationTracker.isPrimaryMode() : "a started primary with non-pending operation term must be in primary mode "
-                    + this.shardRouting;
-            shardStateUpdated.countDown();
-        }
-        if (currentRouting.active() == false && newRouting.active()) {
-            indexEventListener.afterIndexShardStarted(this);
-        }
-        if (newRouting.equals(currentRouting) == false) {
-            indexEventListener.shardRoutingChanged(this, currentRouting, newRouting);
-        }
-
-        if (indexSettings.isSoftDeleteEnabled() && useRetentionLeasesInPeerRecovery == false && state() == IndexShardState.STARTED) {
-            final RetentionLeases retentionLeases = replicationTracker.getRetentionLeases();
-            final Set<ShardRouting> shardRoutings = new HashSet<>(routingTable.getShards());
-            shardRoutings.addAll(routingTable.assignedShards()); // include relocation targets
-            if (shardRoutings.stream()
-                .allMatch(
-                    shr -> shr.assignedToNode() && retentionLeases.contains(ReplicationTracker.getPeerRecoveryRetentionLeaseId(shr))
-                )) {
-                useRetentionLeasesInPeerRecovery = true;
-                turnOffTranslogRetention();
-            }
-        }
-    }
-
-    /**
-     * Marks the shard as recovering based on a recovery state, fails with exception is recovering is not allowed to be set.
-     */
-    public IndexShardState markAsRecovering(String reason, RecoveryState recoveryState) throws IndexShardStartedException,
-        IndexShardRelocatedException, IndexShardRecoveringException, IndexShardClosedException {
-        synchronized (mutex) {
-            if (state == IndexShardState.CLOSED) {
-                throw new IndexShardClosedException(shardId);
-            }
-            if (state == IndexShardState.STARTED) {
-                throw new IndexShardStartedException(shardId);
-            }
-            if (state == IndexShardState.RECOVERING) {
-                throw new IndexShardRecoveringException(shardId);
-            }
-            if (state == IndexShardState.POST_RECOVERY) {
-                throw new IndexShardRecoveringException(shardId);
-            }
-            this.recoveryState = recoveryState;
-            return changeState(IndexShardState.RECOVERING, reason);
-        }
-    }
-
-    private final AtomicBoolean primaryReplicaResyncInProgress = new AtomicBoolean();
-
-    /**
-     * Returns whether a primary-replica resync is currently in progress on this shard.
-     */
-    boolean isPrimaryReplicaResyncInProgress() {
-        return primaryReplicaResyncInProgress.get();
-    }
-
-    /**
-     * Completes the relocation. Operations are blocked and current operations are drained before changing state to
-     * relocated. After all operations are successfully blocked, performSegRep is executed followed by target relocation
-     * handoff.
-     *
-     * @param consumer      a {@link Runnable} that is executed after performSegRep
-     * @param performSegRep a {@link Runnable} that is executed after operations are blocked
-     * @throws IllegalIndexShardStateException if the shard is not relocating due to concurrent cancellation
-     * @throws IllegalStateException           if the relocation target is no longer part of the replication group
-     * @throws InterruptedException            if blocking operations is interrupted
-     */
-    public void relocated(
-        final String targetAllocationId,
-        final Consumer<ReplicationTracker.PrimaryContext> consumer,
-        final Runnable performSegRep
-    ) throws IllegalIndexShardStateException, IllegalStateException, InterruptedException {
-        assert shardRouting.primary() : "only primaries can be marked as relocated: " + shardRouting;
-        // The below list of releasable ensures that if the relocation does not happen, we undo the activity of close and
-        // acquire all permits. This will ensure that the remote store uploads can still be done by the existing primary shard.
-        List<Releasable> releasablesOnHandoffFailures = new ArrayList<>(2);
-        try (Releasable forceRefreshes = refreshListeners.forceRefreshes()) {
-            indexShardOperationPermits.blockOperations(30, TimeUnit.MINUTES, () -> {
-                forceRefreshes.close();
-
-                boolean syncTranslog = (isRemoteTranslogEnabled() || this.isMigratingToRemote())
-                    && (Durability.ASYNC == indexSettings.getTranslogDurability() || indexSettings.isPluggableDataFormatEnabled());
-                // Force a final, blocking translog upload to remote for ALL remote-backed indexes before draining
-                // uploads below. This must run for REQUEST durability too, not just ASYNC: with REQUEST the freshest
-                // acked ops may still be in the buffered upload path and not yet on remote. If we drained without
-                // this sync, the pending upload would hit the drained syncPermit, no-op (TLOG-SKIP), and those acked
-                // ops would never reach remote, silently lost on handoff since the target recovers from remote.
-                if (syncTranslog) {
-                    maybeSync();
-                }
-
-                // Ensures all in-flight remote store refreshes drain, before we perform the performSegRep.
-                for (ReferenceManager.RefreshListener refreshListener : internalRefreshListener) {
-                    if (refreshListener instanceof ReleasableRetryableRefreshListener releasableListener) {
-                        releasablesOnHandoffFailures.add(releasableListener.drainRefreshes());
-                    }
-                }
-
-                // Ensure all in-flight remote store translog upload drains, before we perform the performSegRep.
-                releasablesOnHandoffFailures.add(getIndexer().translogManager().drainSync());
-
-                // no shard operation permits are being held here, move state from started to relocated
-                assert indexShardOperationPermits.getActiveOperationsCount() == OPERATIONS_BLOCKED
-                    : "in-flight operations in progress while moving shard state to relocated";
-
-                performSegRep.run();
-
-                /*
-                 * We should not invoke the runnable under the mutex as the expected implementation is to handoff the primary context via a
-                 * network operation. Doing this under the mutex can implicitly block the cluster state update thread on network operations.
-                 */
-                verifyRelocatingState();
-                // Everything from here on - INCLUDING the ownership handover itself - must reclaim fence ownership if
-                // it fails: the cluster keeps this copy as primary on any failure and releases its upload drains
-                // below, so a copy left with a stale token would fail the shard for no reason. The handover is inside
-                // this scope because its own failure can be ambiguous - the write may have landed with only the
-                // response lost - and the reclaim path is what resolves that: a successful revert proves the target
-                // never took over, and a failed one stands this copy down instead of letting it serve on a stale
-                // token until its next upload.
-                try {
-                    // Hand remote store fence ownership to the target while our uploads are drained, so the transfer
-                    // is uncontested. The target may only take the fence over once it observes this, which is what
-                    // stops it fencing us if the handoff below aborts; the token retained here is what lets the abort
-                    // path tell a target that took over from one that never wrote.
-                    try {
-                        transferRemoteStoreFenceOwnership(targetAllocationId);
-                    } catch (IOException e) {
-                        throw new IllegalStateException("failed to hand remote store fence ownership to " + targetAllocationId, e);
-                    }
-                    final ReplicationTracker.PrimaryContext primaryContext = replicationTracker.startRelocationHandoff(targetAllocationId);
-                    try {
-                        consumer.accept(primaryContext);
-                        synchronized (mutex) {
-                            verifyRelocatingState();
-                            replicationTracker.completeRelocationHandoff(); // make changes to primaryMode and relocated flag only under
-                            // mutex
-                        }
-                    } catch (final Exception e) {
-                        try {
-                            replicationTracker.abortRelocationHandoff();
-                        } catch (final Exception inner) {
-                            e.addSuppressed(inner);
-                        }
-                        throw e;
-                    }
-                } catch (final Exception e) {
-                    reclaimRemoteStoreFenceOwnership(e);
-                    throw e;
-                }
-            });
-        } catch (TimeoutException e) {
-            logger.warn("timed out waiting for relocation hand-off to complete");
-            // This is really bad as ongoing replication operations are preventing this shard from completing relocation hand-off.
-            // Fail primary relocation source and target shards.
-            failShard("timed out waiting for relocation hand-off to complete", null);
-            throw new IndexShardClosedException(shardId(), "timed out waiting for relocation hand-off to complete");
-        } catch (Exception ex) {
-            assert replicationTracker.isPrimaryMode();
-            // If the primary mode is still true after the end of handoff attempt, it basically means that the relocation
-            // failed. The existing primary will continue to be the primary, so we need to allow the segments and translog
-            // upload to resume.
-            Releasables.close(releasablesOnHandoffFailures);
-            throw ex;
-        }
-    }
-
-    /**
-     * The fence-ownership view of this shard's translog, or {@code null} when there is none to act on - either fencing
-     * is disabled for this index, or the translog is not remote-backed and so has no fence. Consolidating both checks
-     * here is what lets {@code TranslogManager} stay free of fence surface: the capability is narrowed once, at the only
-     * boundary that needs it, instead of every translog manager inheriting defaults it cannot honour.
-     */
-    @Nullable
-    private RemoteStoreFenceOwnership remoteStoreFenceOwnership() {
-        if (indexSettings.isRemoteStoreFencingEnabled() == false) {
-            return null;
-        }
-        return getIndexer().translogManager() instanceof RemoteStoreFenceOwnership ownership ? ownership : null;
-    }
-
-    /**
-     * Hands remote store fence ownership to a primary relocation target. Relocation happens at a constant primary term,
-     * so source and target share one fence object and the term cannot arbitrate between them: the source's recorded
-     * handover is what authorizes the target.
-     */
-    private void transferRemoteStoreFenceOwnership(String targetAllocationId) throws IOException {
-        RemoteStoreFenceOwnership fenceOwnership = remoteStoreFenceOwnership();
-        if (fenceOwnership != null) {
-            fenceOwnership.transferFenceOwnership(targetAllocationId);
-        }
-    }
-
-    /**
-     * Whether a strictly higher primary term has taken the remote store fence, i.e. this copy has been superseded.
-     * <p>
-     * Gates operations that mutate shared remote state without being on the acknowledgement path - publishing segment
-     * metadata, and garbage collection. Those are not covered by the fence CAS, which sits on the translog upload, yet a
-     * superseded copy performing either can break a legitimate owner: an unfenced segment metadata publish moves the
-     * reference set that garbage collection prunes to, so the owner's own collection then deletes files it is still
-     * hydrating. {@code FenceSegmentFlow.tla} measures each gate: either one alone suffices to hold
-     * {@code HydrationIntegrity}, so keeping both is defence in depth rather than two independently required checks.
-     * <p>
-     * Fails OPEN - an unreadable fence reports "not superseded" - because that is the safe direction here: permitting
-     * one more publish at our own term produces an orphan, which is the pre-existing harmless case, whereas failing
-     * closed would silence a healthy shard whenever the repository hiccups. The garbage collection paths make the
-     * opposite choice and fail closed, since a wrongly permitted delete is not recoverable.
-     */
-    public boolean isRemoteStoreFenceSuperseded() {
-        RemoteStoreFenceOwnership fenceOwnership = remoteStoreFenceOwnership();
-        if (fenceOwnership == null) {
-            return false;
-        }
-        try {
-            return fenceOwnership.isRemoteStoreFenceSuperseded();
-        } catch (Exception e) {
-            logger.warn("Could not determine whether the remote store fence was superseded; proceeding", e);
-            return false;
-        }
-    }
-
-    /**
-     * The fail-CLOSED twin of {@link #isRemoteStoreFenceSuperseded()}, for the garbage collection paths: an
-     * unreadable fence reports "superseded", so the caller skips the deletion. A wrongly permitted delete is not
-     * recoverable, whereas a skipped collection cycle is retried on the next one - the opposite trade to the publish
-     * gate. Keeping the two directions on separate methods is what makes them genuinely independent: a single
-     * unreadable-fence event must never relax the publication gate and a collection gate at once, which is exactly
-     * the combination {@code FenceSegmentFlow.tla} measures as unsafe.
-     */
-    public boolean isRemoteStoreFenceSupersededFailingClosed() {
-        RemoteStoreFenceOwnership fenceOwnership = remoteStoreFenceOwnership();
-        if (fenceOwnership == null) {
-            return false;
-        }
-        try {
-            return fenceOwnership.isRemoteStoreFenceSuperseded();
-        } catch (Exception e) {
-            logger.warn("Could not determine whether the remote store fence was superseded; treating as superseded (fail closed)", e);
-            return true;
-        }
-    }
-
-    /**
-     * Reclaims remote store fence ownership after an aborted handoff, so that a source the cluster is about to keep as
-     * primary is not left fenced. If the target had already taken the fence up, the handoff effectively completed and
-     * this copy stands down instead - a failure that has to remain fatal, since the target owns the chain now.
-     */
-    private void reclaimRemoteStoreFenceOwnership(Exception handoffFailure) {
-        RemoteStoreFenceOwnership fenceOwnership = remoteStoreFenceOwnership();
-        if (fenceOwnership == null) {
-            return;
-        }
-        try {
-            if (fenceOwnership.revertFenceOwnership()) {
-                logger.info("Reclaimed remote store fence ownership after the relocation handoff failed");
-            } else {
-                // The target took the chain up, so the handoff effectively completed even though this copy saw it fail.
-                // The cluster will otherwise keep this copy as primary on the rethrown failure, and it would serve
-                // until its next upload lost the CAS - so fail it here instead of leaving it to discover that on the
-                // write path. Standing down is not optional: the target owns the chain now.
-                final String reason = "relocation handoff completed at the target, which now owns the remote store fence";
-                logger.warn("{}; failing this copy", reason);
-                failShard(reason, null);
-            }
-        } catch (Exception e) {
-            handoffFailure.addSuppressed(e);
-        }
-    }
-
-    private void maybeSync() {
-        try {
-            if (isSyncNeeded()) {
-                sync();
-            }
-        } catch (IOException e) {
-            logger.warn("failed to sync translog", e);
-        }
-    }
-
-    private void verifyRelocatingState() {
-        if (state != IndexShardState.STARTED) {
-            throw new IndexShardNotStartedException(shardId, state);
-        }
-        /*
-         * If the cluster-manager cancelled recovery, the target will be removed and the recovery will be cancelled. However, it is still possible
-         * that we concurrently end up here and therefore have to protect that we do not mark the shard as relocated when its shard routing
-         * says otherwise.
-         */
-
-        if (shardRouting.relocating() == false) {
-            throw new IllegalIndexShardStateException(shardId, IndexShardState.STARTED, ": shard is no longer relocating " + shardRouting);
-        }
-
-        if (primaryReplicaResyncInProgress.get()) {
-            throw new IllegalIndexShardStateException(
-                shardId,
-                IndexShardState.STARTED,
-                ": primary relocation is forbidden while primary-replica resync is in progress " + shardRouting
-            );
-        }
-    }
-
-    @Override
-    public IndexShardState state() {
-        return state;
-    }
-
-    /**
-     * Changes the state of the current shard
-     *
-     * @param newState the new shard state
-     * @param reason   the reason for the state change
-     * @return the previous shard state
-     */
-    private IndexShardState changeState(IndexShardState newState, String reason) {
-        assert Thread.holdsLock(mutex);
-        logger.debug("state: [{}]->[{}], reason [{}]", state, newState, reason);
-        IndexShardState previousState = state;
-        state = newState;
-        this.indexEventListener.indexShardStateChanged(this, previousState, newState, reason);
-        return previousState;
-    }
-
-    /**
-     * Begin a translog batch for the current thread on this shard's indexer. The caller (the primary bulk path) must
-     * flush and close the returned batch on the same thread. Indexers that do not opt in return a no-op batch (the
-     * {@link org.opensearch.index.engine.exec.Indexer#beginTranslogBatch()} default), so the bulk loop runs unchanged.
-     */
-    public Engine.TranslogBatch beginTranslogBatch() {
-        return getIndexer().beginTranslogBatch();
-    }
-
-    public Engine.IndexResult applyIndexOperationOnPrimary(
-        long version,
-        VersionType versionType,
-        SourceToParse sourceToParse,
-        long ifSeqNo,
-        long ifPrimaryTerm,
-        long autoGeneratedTimestamp,
-        boolean isRetry
-    ) throws IOException {
-        assert versionType.validateVersionForWrites(version);
-        return applyIndexOperation(
-            getIndexer(),
-            UNASSIGNED_SEQ_NO,
-            getOperationPrimaryTerm(),
-            version,
-            versionType,
-            ifSeqNo,
-            ifPrimaryTerm,
-            autoGeneratedTimestamp,
-            isRetry,
-            Engine.Operation.Origin.PRIMARY,
-            sourceToParse,
-            null
-        );
-    }
-
-    public Engine.IndexResult applyIndexOperationOnReplica(
-        String id,
-        long seqNo,
-        long opPrimaryTerm,
-        long version,
-        long autoGeneratedTimeStamp,
-        boolean isRetry,
-        SourceToParse sourceToParse
-    ) throws IOException {
-        return applyIndexOperation(
-            getIndexer(),
-            seqNo,
-            opPrimaryTerm,
-            version,
-            null,
-            UNASSIGNED_SEQ_NO,
-            0,
-            autoGeneratedTimeStamp,
-            isRetry,
-            Engine.Operation.Origin.REPLICA,
-            sourceToParse,
-            id
-        );
-    }
-
-    private Engine.IndexResult applyIndexOperation(
-        Indexer indexer,
-        long seqNo,
-        long opPrimaryTerm,
-        long version,
-        @Nullable VersionType versionType,
-        long ifSeqNo,
-        long ifPrimaryTerm,
-        long autoGeneratedTimeStamp,
-        boolean isRetry,
-        Engine.Operation.Origin origin,
-        SourceToParse sourceToParse,
-        String id
-    ) throws IOException {
-
-        // For Segment Replication enabled replica shards we can be skip parsing the documents as we directly copy segments from primary
-        // shard.
-        if (indexSettings.isSegRepEnabledOrRemoteNode() && routingEntry().primary() == false) {
-            Engine.Index index = new Engine.Index(
-                new Term(IdFieldMapper.NAME, Uid.encodeId(id)),
-                new ParsedDocument(null, null, id, null, null, sourceToParse.source(), sourceToParse.getMediaType(), null),
-                seqNo,
-                opPrimaryTerm,
-                version,
-                null,
-                Engine.Operation.Origin.REPLICA,
-                System.nanoTime(),
-                autoGeneratedTimeStamp,
-                isRetry,
-                UNASSIGNED_SEQ_NO,
-                0
-            );
-            return getIndexer().index(index);
-        }
-        assert opPrimaryTerm <= getOperationPrimaryTerm() : "op term [ "
-            + opPrimaryTerm
-            + " ] > shard term ["
-            + getOperationPrimaryTerm()
-            + "]";
-        ensureWriteAllowed(origin);
-        Engine.Index operation;
-        try {
-            operation = indexer.prepareIndex(
-                docMapper(),
-                sourceToParse,
-                seqNo,
-                opPrimaryTerm,
-                version,
-                versionType,
-                origin,
-                autoGeneratedTimeStamp,
-                isRetry,
-                ifSeqNo,
-                ifPrimaryTerm
-            );
-            Mapping update = operation.parsedDoc().dynamicMappingsUpdate();
-            if (update != null) {
-                return new Engine.IndexResult(update);
-            }
-        } catch (Exception e) {
-            // We treat any exception during parsing and or mapping update as a document level failure
-            // with the exception side effects of closing the shard. Since we don't have the shard, we
-            // can not raise an exception that may block any replication of previous operations to the
-            // replicas
-            verifyNotClosed(e);
-            return new Engine.IndexResult(e, version, opPrimaryTerm, seqNo);
-        }
-
-        return index(indexer, operation);
-    }
-
-    /**
-     * Prepares an index operation by parsing the source document and creating an Engine.Index operation.
-     *
-     * @deprecated This static method has been moved to {@link Engine#prepareIndex} as an instance method.
-     */
-    @Deprecated(since = "3.4.0", forRemoval = true)
-    public static Engine.Index prepareIndex(
-        DocumentMapperForType docMapper,
-        SourceToParse source,
-        long seqNo,
-        long primaryTerm,
-        long version,
-        VersionType versionType,
-        Engine.Operation.Origin origin,
-        long autoGeneratedIdTimestamp,
-        boolean isRetry,
-        long ifSeqNo,
-        long ifPrimaryTerm
-    ) {
-        long startTime = System.nanoTime();
-        ParsedDocument doc = docMapper.getDocumentMapper().parse(source);
-        if (docMapper.getMapping() != null) {
-            doc.addDynamicMappingsUpdate(docMapper.getMapping());
-        }
-        Term uid = new Term(IdFieldMapper.NAME, Uid.encodeId(doc.id()));
-        return new Engine.Index(
-            uid,
-            doc,
-            seqNo,
-            primaryTerm,
-            version,
-            versionType,
-            origin,
-            startTime,
-            autoGeneratedIdTimestamp,
-            isRetry,
-            ifSeqNo,
-            ifPrimaryTerm
-        );
-    }
-
-    private Engine.IndexResult index(Indexer indexer, Engine.Index index) throws IOException {
-        active.set(true);
-        final Engine.IndexResult result;
-        index = indexingOperationListeners.preIndex(shardId, index);
-        try {
-            if (logger.isTraceEnabled()) {
-                // don't use index.source().utf8ToString() here source might not be valid UTF-8
-                logger.trace(
-                    "index [{}] seq# [{}] allocation-id [{}] primaryTerm [{}] operationPrimaryTerm [{}] origin [{}]",
-                    index.id(),
-                    index.seqNo(),
-                    routingEntry().allocationId(),
-                    index.primaryTerm(),
-                    getOperationPrimaryTerm(),
-                    index.origin()
-                );
-            }
-            result = indexer.index(index);
-            if (logger.isTraceEnabled()) {
-                logger.trace(
-                    "index-done [{}] seq# [{}] allocation-id [{}] primaryTerm [{}] operationPrimaryTerm [{}] origin [{}] "
-                        + "result-seq# [{}] result-term [{}] failure [{}]",
-                    index.id(),
-                    index.seqNo(),
-                    routingEntry().allocationId(),
-                    index.primaryTerm(),
-                    getOperationPrimaryTerm(),
-                    index.origin(),
-                    result.getSeqNo(),
-                    result.getTerm(),
-                    result.getFailure()
-                );
-            }
-        } catch (Exception e) {
-            if (logger.isTraceEnabled()) {
-                logger.trace(
-                    new ParameterizedMessage(
-                        "index-fail [{}] seq# [{}] allocation-id [{}] primaryTerm [{}] operationPrimaryTerm [{}] origin [{}]",
-                        index.id(),
-                        index.seqNo(),
-                        routingEntry().allocationId(),
-                        index.primaryTerm(),
-                        getOperationPrimaryTerm(),
-                        index.origin()
-                    ),
-                    e
-                );
-            }
-            indexingOperationListeners.postIndex(shardId, index, e);
-            throw e;
-        }
-        indexingOperationListeners.postIndex(shardId, index, result);
-        return result;
-    }
-
-    public Engine.NoOpResult markSeqNoAsNoop(long seqNo, long opPrimaryTerm, String reason) throws IOException {
-        return markSeqNoAsNoop(getIndexer(), seqNo, opPrimaryTerm, reason, Engine.Operation.Origin.REPLICA);
-    }
-
-    private Engine.NoOpResult markSeqNoAsNoop(Indexer engine, long seqNo, long opPrimaryTerm, String reason, Engine.Operation.Origin origin)
-        throws IOException {
-        assert opPrimaryTerm <= getOperationPrimaryTerm() : "op term [ "
-            + opPrimaryTerm
-            + " ] > shard term ["
-            + getOperationPrimaryTerm()
-            + "]";
-        long startTime = System.nanoTime();
-        ensureWriteAllowed(origin);
-        final Engine.NoOp noOp = new Engine.NoOp(seqNo, opPrimaryTerm, origin, startTime, reason);
-        return noOp(engine, noOp);
-    }
-
-    private Engine.NoOpResult noOp(Indexer engine, Engine.NoOp noOp) throws IOException {
-        active.set(true);
-        if (logger.isTraceEnabled()) {
-            logger.trace("noop (seq# [{}])", noOp.seqNo());
-        }
-        return engine.noOp(noOp);
-    }
-
-    public Engine.IndexResult getFailedIndexResult(Exception e, long version) {
-        return new Engine.IndexResult(e, version);
-    }
-
-    public Engine.DeleteResult getFailedDeleteResult(Exception e, long version) {
-        return new Engine.DeleteResult(e, version, getOperationPrimaryTerm());
-    }
-
-    public Engine.DeleteResult applyDeleteOperationOnPrimary(
-        long version,
-        String id,
-        @Nullable String routing,
-        VersionType versionType,
-        long ifSeqNo,
-        long ifPrimaryTerm
-    ) throws IOException {
-        assert versionType.validateVersionForWrites(version);
-        return applyDeleteOperation(
-            getIndexer(),
-            UNASSIGNED_SEQ_NO,
-            getOperationPrimaryTerm(),
-            version,
-            id,
-            routing,
-            versionType,
-            ifSeqNo,
-            ifPrimaryTerm,
-            Engine.Operation.Origin.PRIMARY
-        );
-    }
-
-    /**
-     * @deprecated Use {@link #applyDeleteOperationOnPrimary(long, String, String, VersionType, long, long)} instead.
-     */
-    @Deprecated
-    public Engine.DeleteResult applyDeleteOperationOnPrimary(
-        long version,
-        String id,
-        VersionType versionType,
-        long ifSeqNo,
-        long ifPrimaryTerm
-    ) throws IOException {
-        return applyDeleteOperationOnPrimary(version, id, null, versionType, ifSeqNo, ifPrimaryTerm);
-    }
-
-    public Engine.DeleteResult applyDeleteOperationOnReplica(
-        long seqNo,
-        long opPrimaryTerm,
-        long version,
-        String id,
-        @Nullable String routing
-    ) throws IOException {
-        if (indexSettings.isSegRepEnabledOrRemoteNode()) {
-            final Engine.Delete delete = new Engine.Delete(
-                id,
-                new Term(IdFieldMapper.NAME, Uid.encodeId(id)),
-                seqNo,
-                opPrimaryTerm,
-                version,
-                null,
-                Engine.Operation.Origin.REPLICA,
-                System.nanoTime(),
-                UNASSIGNED_SEQ_NO,
-                0,
-                routing
-            );
-            return getIndexer().delete(delete);
-        }
-        return applyDeleteOperation(
-            getIndexer(),
-            seqNo,
-            opPrimaryTerm,
-            version,
-            id,
-            routing,
-            null,
-            UNASSIGNED_SEQ_NO,
-            0,
-            Engine.Operation.Origin.REPLICA
-        );
-    }
-
-    /**
-     * @deprecated Use {@link #applyDeleteOperationOnReplica(long, long, long, String, String)} instead.
-     */
-    @Deprecated
-    public Engine.DeleteResult applyDeleteOperationOnReplica(long seqNo, long opPrimaryTerm, long version, String id) throws IOException {
-        return applyDeleteOperationOnReplica(seqNo, opPrimaryTerm, version, id, null);
-    }
-
-    private Engine.DeleteResult applyDeleteOperation(
-        Indexer engine,
-        long seqNo,
-        long opPrimaryTerm,
-        long version,
-        String id,
-        @Nullable String routing,
-        @Nullable VersionType versionType,
-        long ifSeqNo,
-        long ifPrimaryTerm,
-        Engine.Operation.Origin origin
-    ) throws IOException {
-        assert opPrimaryTerm <= getOperationPrimaryTerm() : "op term [ "
-            + opPrimaryTerm
-            + " ] > shard term ["
-            + getOperationPrimaryTerm()
-            + "]";
-        ensureWriteAllowed(origin);
-        final Engine.Delete delete = engine.prepareDelete(
-            id,
-            routing,
-            seqNo,
-            opPrimaryTerm,
-            version,
-            versionType,
-            origin,
-            ifSeqNo,
-            ifPrimaryTerm
-        );
-        return delete(engine, delete);
-    }
-
-    /**
-     * Prepares a delete operation by creating an Engine.Delete operation.
-     *
-     * @deprecated This static method has been moved to {@link Engine#prepareDelete} as an instance method.
-     */
-    @Deprecated(since = "3.4.0", forRemoval = true)
-    public static Engine.Delete prepareDelete(
-        String id,
-        long seqNo,
-        long primaryTerm,
-        long version,
-        VersionType versionType,
-        Engine.Operation.Origin origin,
-        long ifSeqNo,
-        long ifPrimaryTerm
-    ) {
-        return prepareDelete(id, null, seqNo, primaryTerm, version, versionType, origin, ifSeqNo, ifPrimaryTerm);
-    }
-
-    @Deprecated(since = "3.4.0", forRemoval = true)
-    public static Engine.Delete prepareDelete(
-        String id,
-        @Nullable String routing,
-        long seqNo,
-        long primaryTerm,
-        long version,
-        VersionType versionType,
-        Engine.Operation.Origin origin,
-        long ifSeqNo,
-        long ifPrimaryTerm
-    ) {
-        long startTime = System.nanoTime();
-        final Term uid = new Term(IdFieldMapper.NAME, Uid.encodeId(id));
-        return new Engine.Delete(id, uid, seqNo, primaryTerm, version, versionType, origin, startTime, ifSeqNo, ifPrimaryTerm, routing);
-    }
-
-    private Engine.DeleteResult delete(Indexer engine, Engine.Delete delete) throws IOException {
-        active.set(true);
-        final Engine.DeleteResult result;
-        delete = indexingOperationListeners.preDelete(shardId, delete);
-        try {
-            if (logger.isTraceEnabled()) {
-                logger.trace("delete [{}] (seq no [{}])", delete.uid().text(), delete.seqNo());
-            }
-            result = engine.delete(delete);
-        } catch (Exception e) {
-            indexingOperationListeners.postDelete(shardId, delete, e);
-            throw e;
-        }
-        indexingOperationListeners.postDelete(shardId, delete, result);
-        return result;
-    }
-
-    public Engine.GetResult get(Engine.Get get) {
-        readAllowed();
-        DocumentMapper mapper = mapperService.documentMapper();
-        if (mapper == null) {
-            return GetResult.NOT_EXISTS;
-        }
-        try {
-            return getIndexer().getById(get, this::acquireSearcher);
-        } catch (IOException e) {
-            throw new OpenSearchException("get-by-id failed for id [" + get.id() + "]", e);
-        }
-    }
-
-    /**
-     * Writes all indexing changes to disk and opens a new searcher reflecting all changes.  This can throw {@link AlreadyClosedException}.
-     */
-    public void refresh(String source) {
-        verifyNotClosed();
-        if (logger.isTraceEnabled()) {
-            logger.trace("refresh with source [{}]", source);
-        }
-        getIndexer().refresh(source);
-    }
-
-    /**
-     * Returns how many bytes we are currently moving from heap to disk
-     */
-    public long getWritingBytes() {
-        Indexer engine = getIndexerOrNull();
-        if (engine == null) {
-            return 0;
-        }
-        return engine.getWritingBytes();
-    }
-
-    public RefreshStats refreshStats() {
-        int listeners = refreshListeners.pendingCount();
-        return new RefreshStats.Builder().total(refreshMetric.count())
-            .totalTimeInMillis(TimeUnit.NANOSECONDS.toMillis(refreshMetric.sum()))
-            .externalTotal(externalRefreshMetric.count())
-            .externalTotalTimeInMillis(TimeUnit.NANOSECONDS.toMillis(externalRefreshMetric.sum()))
-            .listeners(listeners)
-            .build();
-    }
-
-    public FlushStats flushStats() {
-        return new FlushStats.Builder().total(flushMetric.count())
-            .periodic(periodicFlushMetric.count())
-            .totalTimeInMillis(TimeUnit.NANOSECONDS.toMillis(flushMetric.sum()))
-            .build();
-    }
-
-    public DocsStats docStats() {
-        readAllowed();
-        return getIndexer().docStats();
-    }
-
-    /**
-     * @return {@link CommitStats}
-     * @throws AlreadyClosedException if shard is closed
-     */
-    public CommitStats commitStats() {
-        return getIndexer().commitStats();
-    }
-
-    /**
-     * @return {@link SeqNoStats}
-     * @throws AlreadyClosedException if shard is closed
-     */
-    public SeqNoStats seqNoStats() {
-        return getIndexer().getSeqNoStats(replicationTracker.getGlobalCheckpoint());
-    }
-
-    public IndexingStats indexingStats() {
-        Indexer engine = getIndexerOrNull();
-        final boolean throttled;
-        final long throttleTimeInMillis;
-        if (engine == null) {
-            throttled = false;
-            throttleTimeInMillis = 0;
-        } else {
-            throttled = engine.isThrottled();
-            throttleTimeInMillis = engine.getIndexThrottleTimeInMillis();
-        }
-        return internalIndexingStats.stats(throttled, throttleTimeInMillis);
-    }
-
-    public SearchStats searchStats(String... groups) {
-        return searchStats.stats(groups);
-    }
-
-    public GetStats getStats() {
-        return getService.stats();
-    }
-
-    public StoreStats storeStats() {
-        try {
-            final RecoveryState recoveryState = this.recoveryState;
-            final long bytesStillToRecover = recoveryState == null ? -1L : recoveryState.getIndex().bytesStillToRecover();
-            return store.stats(bytesStillToRecover == -1 ? StoreStats.UNKNOWN_RESERVED_BYTES : bytesStillToRecover);
-        } catch (IOException e) {
-            failShard("Failing shard because of exception during storeStats", e);
-            throw new OpenSearchException("io exception while building 'store stats'", e);
-        }
-    }
-
-    public MergeStats mergeStats() {
-        final Indexer engine = getIndexerOrNull();
-        if (engine == null) {
-            return new MergeStats();
-        }
-        final MergeStats mergeStats = engine.getMergeStats();
-        mergeStats.addUnreferencedFileCleanUpStats(engine.unreferencedFileCleanUpsPerformed());
-        return mergeStats;
-    }
-
-    /**
-     * Explicitly freezes the engine for tiering. Closes the race window where the
-     * cluster state with HOT_TO_WARM hasn't propagated to this data node yet.
-     * After this call, no new merges can start and in-flight merges are drained.
-     * <p>
-     * Throws {@link UnsupportedOperationException} when the indexer does not support
-     * tiering (Lucene-backed primaries, replicas, read-only engines). Callers must
-     * gate on the index being tier-eligible before invoking. No-op when the shard's
-     * indexer is not yet initialised.
-     */
-    public void freezeForTiering() {
-        assert routingEntry().primary() : "freezeForTiering should only be called on primary shards";
-        final Indexer engine = getIndexerOrNull();
-        if (engine != null) {
-            engine.freezeForTiering();
-        }
-    }
-
-    /**
-     * Registers a listener that fires when all in-flight merge operations have completed.
-     * If merges are already drained (none active, none pending), fires the listener
-     * immediately inline. Otherwise, the listener will be invoked on the merge thread
-     * when the last merge finishes.
-     * <p>
-     * Throws {@link UnsupportedOperationException} when the indexer does not maintain
-     * a drainable merge queue (Lucene-backed primaries, replicas, read-only engines).
-     * Callers must gate on the index being tier-eligible before invoking. No-op when
-     * the shard's indexer is not yet initialised.
-     *
-     * @param listener the callback to fire when merges are drained
-     */
-    public void onMergesDrained(Runnable listener) {
-        assert routingEntry().primary() : "onMergesDrained should only be called on primary shards";
-        final Indexer engine = getIndexerOrNull();
-        if (engine != null) {
-            engine.onMergesDrained(listener);
-        }
-    }
-
-    /**
-     * Returns the number of currently active (in-flight) merge tasks. Returns the live
-     * count from the underlying merge scheduler — {@link DataFormatAwareEngine} reports
-     * its internal counter; Lucene-backed engines report
-     * {@code MergeStats.getCurrent()}; replica / read-only engines report {@code 0}.
-     * Returns {@code 0} when the shard's indexer is not yet initialised.
-     *
-     * @return the active merge count
-     */
-    public int getActiveMergeCount() {
-        final Indexer engine = getIndexerOrNull();
-        return engine == null ? 0 : engine.getActiveMergeCount();
-    }
-
-    /**
-     * Returns whether any merges are queued but not yet started. Reports orthogonally from
-     * {@link #getActiveMergeCount()} — {@code true} only when merges are queued, regardless
-     * of how many are currently running. Returns {@code false} when the shard's indexer is
-     * not yet initialised.
-     */
-    public boolean hasPendingMerges() {
-        final Indexer engine = getIndexerOrNull();
-        return engine != null && engine.hasPendingMerges();
-    }
-
-    public SegmentsStats segmentStats(boolean includeSegmentFileSizes, boolean includeUnloadedSegments) {
-        SegmentsStats segmentsStats = getIndexer().segmentsStats(includeSegmentFileSizes, includeUnloadedSegments);
-        segmentsStats.addBitsetMemoryInBytes(shardBitsetFilterCache.getMemorySizeInBytes());
-        // Populate remote_store stats only if the index is remote store backed
-        if (indexSettings().isAssignedOnRemoteNode()) {
-            segmentsStats.addRemoteSegmentStats(
-                new RemoteSegmentStats(remoteStoreStatsTrackerFactory.getRemoteSegmentTransferTracker(shardId).stats())
-            );
-        }
-        if (indexSettings.isSegRepEnabledOrRemoteNode()) {
-            segmentsStats.addReplicationStats(getReplicationStats());
-        }
-        return segmentsStats;
-    }
-
-    public WarmerStats warmerStats() {
-        return shardWarmerService.stats();
-    }
-
-    public FieldDataStats fieldDataStats(String... fields) {
-        return shardFieldData.stats(fields);
-    }
-
-    public TranslogStats translogStats() {
-        TranslogStats translogStats = getIndexer().translogManager().getTranslogStats();
-        // Populate remote_store stats only if the index is remote store backed
-        if (indexSettings.isAssignedOnRemoteNode()) {
-            translogStats.addRemoteTranslogStats(
-                new RemoteTranslogStats(remoteStoreStatsTrackerFactory.getRemoteTranslogTransferTracker(shardId).stats())
-            );
-        }
-
-        return translogStats;
-    }
-
-    public CompletionStats completionStats(String... fields) {
-        readAllowed();
-        return getIndexer().completionStats(fields);
-    }
-
-    public PollingIngestStats pollingIngestStats() {
-        return getIndexer().pollingIngestStats();
-    }
-
-    /**
-     * Executes the given flush request against the engine.
-     *
-     * @param request the flush request
-     */
-    public void flush(FlushRequest request) {
-        final boolean waitIfOngoing = request.waitIfOngoing();
-        final boolean force = request.force();
-        logger.trace("flush with {}", request);
-        /*
-         * We allow flushes while recovery since we allow operations to happen while recovering and we want to keep the translog under
-         * control (up to deletes, which we do not GC). Yet, we do not use flush internally to clear deletes and flush the index writer
-         * since we use Engine#writeIndexingBuffer for this now.
-         */
-        verifyNotClosed();
-        final long time = System.nanoTime();
-        getIndexer().flush(force, waitIfOngoing);
-        flushMetric.inc(System.nanoTime() - time);
-    }
-
-    /**
-     * checks and removes translog files that no longer need to be retained. See
-     * {@link org.opensearch.index.translog.TranslogDeletionPolicy} for details
-     */
-    public void trimTranslog() {
-        if (indexSettings.isAssignedOnRemoteNode()) {
-            return;
-        }
-        verifyNotClosed();
-        final Indexer engine = getIndexer();
-        engine.translogManager().trimUnreferencedTranslogFiles();
-    }
-
-    /**
-     * Rolls the tranlog generation and cleans unneeded.
-     */
-    public void rollTranslogGeneration() throws IOException {
-        final Indexer engine = getIndexer();
-        engine.translogManager().rollTranslogGeneration();
-    }
-
-    public void forceMerge(ForceMergeRequest forceMerge) throws IOException {
-        verifyActive();
-        if (logger.isTraceEnabled()) {
-            logger.trace("force merge with {}", forceMerge);
-        }
-        Indexer engine = getIndexer();
-        engine.forceMerge(
-            forceMerge.flush(),
-            forceMerge.maxNumSegments(),
-            forceMerge.onlyExpungeDeletes(),
-            false,
-            false,
-            forceMerge.forceMergeUUID()
-        );
-    }
-
-    /**
-     * Upgrades the shard to the current version of Lucene and returns the minimum segment version
-     */
-    public org.apache.lucene.util.Version upgrade(UpgradeRequest upgrade) throws IOException {
-        verifyActive();
-        if (logger.isTraceEnabled()) {
-            logger.trace("upgrade with {}", upgrade);
-        }
-        org.apache.lucene.util.Version previousVersion = minimumCompatibleVersion();
-        // we just want to upgrade the segments, not actually forge merge to a single segment
-        final Indexer engine = getIndexer();
-        engine.forceMerge(
-            true,  // we need to flush at the end to make sure the upgrade is durable
-            Integer.MAX_VALUE, // we just want to upgrade the segments, not actually optimize to a single segment
-            false,
-            true,
-            upgrade.upgradeOnlyAncientSegments(),
-            null
-        );
-        org.apache.lucene.util.Version version = minimumCompatibleVersion();
-        if (logger.isTraceEnabled()) {
-            logger.trace("upgraded segments for {} from version {} to version {}", shardId, previousVersion, version);
-        }
-
-        return version;
-    }
-
-    public org.apache.lucene.util.Version minimumCompatibleVersion() {
-        org.apache.lucene.util.Version luceneVersion = null;
-        for (Segment segment : getIndexer().segments(false)) {
-            if (segment.getVersion() == null) continue; // DFAE segments have no Lucene version
-            if (luceneVersion == null || luceneVersion.onOrAfter(segment.getVersion())) {
-                luceneVersion = segment.getVersion();
-            }
-        }
-        return luceneVersion == null ? indexSettings.getIndexVersionCreated().luceneVersion : luceneVersion;
-    }
-
-    /**
-     * Fetches the last remote uploaded segment metadata file
-     * @return {@link RemoteSegmentMetadata}
-     * @throws IOException
-     */
-    public RemoteSegmentMetadata fetchLastRemoteUploadedSegmentMetadata() throws IOException {
-        if (!indexSettings.isAssignedOnRemoteNode()) {
-            throw new IllegalStateException("Index is not assigned on Remote Node");
-        }
-        RemoteSegmentMetadata lastUploadedMetadata = getRemoteDirectory().readLatestMetadataFile();
-        if (lastUploadedMetadata == null) {
-            throw new FileNotFoundException("No metadata file found in remote store");
-        }
-        return lastUploadedMetadata;
-    }
-
-    /**
-     * Creates a new {@link IndexCommit} snapshot from the currently running engine. All resources referenced by this
-     * commit won't be freed until the commit / snapshot is closed.
-     *
-     * @param flushFirst <code>true</code> if the index should first be flushed to disk / a low level lucene commit should be executed
-     */
-    @Deprecated
-    public GatedCloseable<IndexCommit> acquireLastIndexCommit(boolean flushFirst) throws EngineException {
-        final IndexShardState state = this.state; // one time volatile read
-        // we allow snapshot on closed index shard, since we want to do one after we close the shard and before we close the engine
-        if (state == IndexShardState.STARTED || state == IndexShardState.CLOSED) {
-            return applyOnEngine(getIndexer(), engine -> engine.acquireLastIndexCommit(flushFirst));
-        } else {
-            throw new IllegalIndexShardStateException(shardId, state, "snapshot is not allowed");
-        }
-    }
-
-    @Deprecated
-    public GatedCloseable<IndexCommit> acquireLastIndexCommitAndRefresh(boolean flushFirst) throws EngineException {
-        GatedCloseable<IndexCommit> indexCommit = acquireLastIndexCommit(flushFirst);
-        getIndexer().refresh("Snapshot for Remote Store based Shard");
-        return indexCommit;
-    }
-
-    /**
-     *
-     * @param snapshotId Snapshot UUID.
-     * @param primaryTerm current primary term.
-     * @param generation Snapshot Commit Generation.
-     * @throws IOException if there is some failure in acquiring lock in remote store.
-     */
-    public void acquireLockOnCommitData(String snapshotId, long primaryTerm, long generation) throws IOException {
-        RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = getRemoteDirectory();
-        remoteSegmentStoreDirectory.acquireLock(primaryTerm, generation, snapshotId);
-    }
-
-    /**
-     *
-     * @param snapshotId Snapshot UUID.
-     * @param primaryTerm current primary term.
-     * @param generation Snapshot Commit Generation.
-     * @throws IOException if there is some failure in releasing lock in remote store.
-     */
-    public void releaseLockOnCommitData(String snapshotId, long primaryTerm, long generation) throws IOException {
-        RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = getRemoteDirectory();
-        remoteSegmentStoreDirectory.releaseLock(primaryTerm, generation, snapshotId);
-    }
-
-    public Optional<NRTReplicationEngine> getReplicationEngine() {
-        try {
-            if (getIndexer() instanceof EngineBackedIndexer indexer && indexer.getEngine() instanceof NRTReplicationEngine nrtEngine) {
-                return Optional.of(nrtEngine);
-            } else {
-                return Optional.empty();
-            }
-        } catch (AlreadyClosedException e) {
-            // If shard already closed, return empty. The logic related to segment replication will not continue to execute after judging
-            // that the return value is empty, and there will be no side effects.
-            logger.debug("failed to get ReplicationEngine", e);
-            return Optional.empty();
-        }
-    }
-
-    /**
-     * Returns true if the current indexer is a replica engine that supports segment replication.
-     * Delegates to {@link Indexer#isReplicaIndexer()} so callers don't need to know concrete
-     * engine types (Lucene NRT vs DFA NRT).
-     */
-    @ExperimentalApi
-    public boolean isReplicationTarget() {
-        try {
-            return getIndexer().isReplicaIndexer();
-        } catch (AlreadyClosedException e) {
-            return false;
-        }
-    }
-
-    @Deprecated
-    public void finalizeReplication(SegmentInfos infos) throws IOException {
-        finalizeReplication(new SegmentInfosCatalogSnapshot(infos));
-    }
-
-    /**
-     * Finalizes replication with a {@link CatalogSnapshot}. Delegates engine-level segment state
-     * updates to the {@link Indexer} (polymorphic: Lucene vs data-format-aware), then performs
-     * shard-level cleanup of {@code pendingMergedSegmentCheckpoints} and of the precomputed
-     * checksum cache (so it stays bounded to the active snapshot on the replica, mirroring
-     * the primary's {@code evictUploadedChecksums} behavior). If the engine is closed
-     * ({@link AlreadyClosedException}), the method is a no-op and no cleanup is performed.
-     */
-    @ExperimentalApi
-    public void finalizeReplication(CatalogSnapshot catalogSnapshot) throws IOException {
-        try {
-            assert getIndexer().isReplicaIndexer() : "finalizeReplication called on non-replica indexer";
-            getIndexer().finalizeReplication(catalogSnapshot);
-        } catch (AlreadyClosedException e) {
-            logger.debug("finalizeReplication skipped, indexer already closed", e);
-            return;
-        }
-        cleanupPendingMergedSegments(catalogSnapshot);
-        evictStaleDownloadedChecksums(catalogSnapshot);
-    }
-
-    /**
-     * Best-effort eviction of checksum entries for files no longer referenced by the active
-     * catalog snapshot. Keeps the replica's cache bounded in size across replication cycles,
-     * mirroring the primary's post-upload eviction in {@code RemoteStoreRefreshListener}.
-     * Failures here are logged and swallowed — cache eviction is optimization, not correctness.
-     */
-    private void evictStaleDownloadedChecksums(CatalogSnapshot catalogSnapshot) {
-        try {
-            DataFormatAwareStoreDirectory dfasd = DataFormatAwareStoreDirectory.unwrap(store.directory());
-            if (dfasd == null) {
-                return; // non-DFA index — no precomputed cache to evict from
-            }
-            dfasd.evictStaleChecksums(catalogSnapshot.getFiles(true));
-        } catch (AlreadyClosedException | IOException e) {
-            logger.debug("skipped precomputed checksum eviction on replica", e);
-        }
-    }
-
-    /**
-     * Removes entries from {@code pendingMergedSegmentCheckpoints} whose segment names now appear
-     * in the finalized snapshot. Only applies to Lucene-backed snapshots; merged-segment pre-copy
-     * (see {@link org.opensearch.indices.replication.MergedSegmentReplicationTarget}) produces checkpoints keyed by Lucene segment
-     * names, which only match {@link SegmentInfosCatalogSnapshot}.
-     */
-    private void cleanupPendingMergedSegments(CatalogSnapshot catalogSnapshot) {
-        if (catalogSnapshot instanceof SegmentInfosCatalogSnapshot siSnapshot) {
-            for (SegmentCommitInfo segmentCommitInfo : siSnapshot.getSegmentInfos()) {
-                String segmentCommitInfoName = segmentCommitInfo.info.name;
-                logger.trace(
-                    () -> new ParameterizedMessage(
-                        "segment replication complete, remove segment {} from pending merged segments",
-                        segmentCommitInfoName
-                    )
-                );
-                pendingMergedSegmentCheckpoints.removeIf(s -> s.getSegmentName().equals(segmentCommitInfoName));
-            }
-        }
-    }
-
-    /**
-     * The replica shard cleans up redundant pending merged segments based on the referenced segments of the primary shard.
-     * Here, an example of generating redundant pending merged segments will be provided.
-     * At time1, the primary shard merges _1.si and _2.si into segment _3.si. _3.si is pre-copied to the replica shard, which completed at time4.
-     * At time2, the primary shard generated _4.si, and _1.si, _2.si, _4.si were copied to the replica shard via segment replication, which completed at time5.
-     * At time3, the primary shard merges _3.si and _4.si into segment _5.si. _5.si is pre-copied to the replica shard, which completed at time6.
-     * At time4, the replica completed the pre-copy of _3.si, but _3.si is not searchable.
-     * At time5, the reference counts of _1.si and _2.si in the primary shard decreased to 0 and were deleted.
-     * At time6, _5.si on the primary shard becomes searchable. The reference counts of _3.si and _4.si in the primary shard decreased to 0 and were deleted.
-     *           _5.si were copied to the replica shard via segment replication, which completed at time7 (This process is fast because it has already performed pre-copy).
-     * At time7, _5.si on the replica shard becomes searchable. The reference counts of _1.si, _2.si and _4.si in the replica shard decreased to 0 and were deleted.
-     * After time7, _3.si on the replica is the redundant pending merged segment.
-     * ------------------------------------------------------------------------------
-     *       |               primary             |              replica
-     * ------------------------------------------------------------------------------
-     * time1 | _1.si, _2.si, _3.si               |
-     * ------------------------------------------------------------------------------
-     * time2 | _1.si, _2.si, _3.si, _4.si        |
-     * ------------------------------------------------------------------------------
-     * time3 | _1.si, _2.si, _3.si, _4.si, _5.si |
-     * ------------------------------------------------------------------------------
-     * time4 | _1.si, _2.si, _3.si, _4.si, _5.si | _3.si
-     * ------------------------------------------------------------------------------
-     * time5 | _3.si, _4.si, _5.si               | _1.si, _2.si, _3.si, _4.si
-     * ------------------------------------------------------------------------------
-     * time6 | _5.si                             | _1.si, _2.si, _3.si, _4.si, _5.si
-     * ------------------------------------------------------------------------------
-     * time7 | _5.si                             | _3.si, _5.si
-     * ------------------------------------------------------------------------------
-     * Cleanup strategy:
-     * When the following conditions are met, we will consider the pending merge segment to be redundant and can be deleted.
-     * 1. The current primary term of the primary shard is greater than the primary term when the pending merge segment was generated,
-     *    or the primary terms are identical but the segmentInfosVersion of the primary shard is greater than the segmentInfosVersion
-     *    when the pending merge segment was generated.
-     * 2. The pending merge segment no longer exists in the primary shard.
-     *
-     * @param referencedSegmentsCheckpoint primary referenced segments
-     */
-    public void cleanupRedundantPendingMergeSegment(ReferencedSegmentsCheckpoint referencedSegmentsCheckpoint) {
-        List<MergedSegmentCheckpoint> pendingDeleteCheckpoints = new ArrayList<>();
-        for (MergedSegmentCheckpoint mergedSegmentCheckpoint : pendingMergedSegmentCheckpoints) {
-            if (false == referencedSegmentsCheckpoint.getSegmentNames().contains(mergedSegmentCheckpoint.getSegmentName())
-                && referencedSegmentsCheckpoint.isAheadOf(mergedSegmentCheckpoint)) {
-                logger.trace(
-                    "cleanup pending mergedSegmentCheckpoint={}, primary referencedSegmentsCheckpoint={}",
-                    mergedSegmentCheckpoint,
-                    referencedSegmentsCheckpoint
-                );
-                pendingDeleteCheckpoints.add(mergedSegmentCheckpoint);
-            }
-        }
-        for (MergedSegmentCheckpoint mergedSegmentCheckpoint : pendingDeleteCheckpoints) {
-            store.deleteQuiet(mergedSegmentCheckpoint.getMetadataMap().keySet().toArray(new String[0]));
-            pendingMergedSegmentCheckpoints.remove(mergedSegmentCheckpoint);
-        }
-    }
-
-    public void addPendingMergeSegmentCheckpoint(MergedSegmentCheckpoint mergedSegmentCheckpoint) {
-        pendingMergedSegmentCheckpoints.add(mergedSegmentCheckpoint);
-    }
-
-    // for tests
-    public Set<MergedSegmentCheckpoint> getPendingMergedSegmentCheckpoints() {
-        return pendingMergedSegmentCheckpoints;
-    }
-
-    /**
-     * Snapshots the most recent safe index commit from the currently running engine.
-     * All index files referenced by this index commit won't be freed until the commit/snapshot is closed.
-     *
-     * @deprecated Use {@link #acquireSafeCatalogSnapshot()} which avoids the extra
-     *             {@code segments_N} disk read required to materialize an {@link IndexCommit}.
-     */
-    @Deprecated
-    public GatedCloseable<IndexCommit> acquireSafeIndexCommit() throws EngineException {
-        final IndexShardState state = this.state; // one time volatile read
-        // we allow snapshot on closed index shard, since we want to do one after we close the shard and before we close the engine
-        if (state == IndexShardState.STARTED || state == IndexShardState.CLOSED) {
-            return getIndexer().acquireSafeIndexCommit();
-        } else {
-            throw new IllegalIndexShardStateException(shardId, state, "snapshot is not allowed");
-        }
-    }
-
-    /**
-     * Snapshots the most recent safe {@link CatalogSnapshot} from the currently running engine.
-     * Preferred over {@link #acquireSafeIndexCommit()} because it does not require re-reading
-     * {@code segments_N} to materialize an {@link IndexCommit}.
-     */
-    @ExperimentalApi
-    public GatedCloseable<CatalogSnapshot> acquireSafeCatalogSnapshot() throws EngineException {
-        final IndexShardState state = this.state; // one time volatile read
-        if (state == IndexShardState.STARTED || state == IndexShardState.CLOSED) {
-            return getIndexer().acquireSafeCatalogSnapshot();
-        } else {
-            throw new IllegalIndexShardStateException(shardId, state, "snapshot is not allowed");
-        }
-    }
-
-    /**
-     * return the most recently computed ReplicationCheckpoint for a particular shard.
-     * The checkpoint is updated inside a refresh listener and may lag behind the SegmentInfos on the reader.
-     * To guarantee the checkpoint is upto date with the latest on-reader infos, use `getLatestSegmentInfosAndCheckpoint` instead.
-     *
-     * @return {@link ReplicationCheckpoint} - The most recently computed ReplicationCheckpoint.
-     */
-    public ReplicationCheckpoint getLatestReplicationCheckpoint() {
-        return replicationTracker.getLatestReplicationCheckpoint();
-    }
-
-    /**
-     * Compute and return the latest ReplicationCheckpoint for a shard and a GatedCloseable containing the corresponding SegmentInfos.
-     * The segments referenced by the SegmentInfos will remain on disk until the GatedCloseable is closed.
-     * <p>
-     * Primary shards compute the seqNo used in the replication checkpoint from the fetched SegmentInfos.
-     * Replica shards compute the seqNo from its latest processed checkpoint, which only increases when refreshing on new segments.
-     *
-     * @return A {@link Tuple} containing SegmentInfos wrapped in a {@link GatedCloseable} and the {@link ReplicationCheckpoint} computed from the infos.
-     *
-     */
-    public Tuple<GatedCloseable<SegmentInfos>, ReplicationCheckpoint> getLatestSegmentInfosAndCheckpoint() {
-        assert indexSettings.isSegRepEnabledOrRemoteNode();
-
-        // do not close the snapshot - caller will close it.
-        GatedCloseable<SegmentInfos> snapshot = null;
-        try {
-            snapshot = getSegmentInfosSnapshot();
-            final SegmentInfos segmentInfos = snapshot.get();
-            return new Tuple<>(snapshot, computeReplicationCheckpoint(segmentInfos));
-        } catch (IOException | AlreadyClosedException e) {
-            logger.error("Error Fetching SegmentInfos and latest checkpoint", e);
-            if (snapshot != null) {
-                try {
-                    snapshot.close();
-                } catch (IOException ex) {
-                    throw new OpenSearchException("Error Closing SegmentInfos Snapshot", e);
-                }
-            }
-        }
-        return new Tuple<>(new GatedCloseable<>(null, () -> {}), getLatestReplicationCheckpoint());
-    }
-
-    /**
-     * Compute the latest {@link ReplicationCheckpoint} from a SegmentInfos.
-     * This function fetches a metadata snapshot from the store that comes with an IO cost.
-     * We will reuse the existing stored checkpoint if it is at the same SI version.
-     *
-     * @param segmentInfos {@link SegmentInfos} infos to use to compute.
-     * @return {@link ReplicationCheckpoint} Checkpoint computed from the infos.
-     * @throws IOException When there is an error computing segment metadata from the store.
-     */
-    ReplicationCheckpoint computeReplicationCheckpoint(SegmentInfos segmentInfos) throws IOException {
-        if (segmentInfos == null) {
-            return ReplicationCheckpoint.empty(shardId);
-        }
-        final ReplicationCheckpoint latestReplicationCheckpoint = getLatestReplicationCheckpoint();
-        if (latestReplicationCheckpoint.getSegmentInfosVersion() == segmentInfos.getVersion()
-            && latestReplicationCheckpoint.getSegmentsGen() == segmentInfos.getGeneration()
-            && latestReplicationCheckpoint.getPrimaryTerm() == getOperationPrimaryTerm()) {
-            return latestReplicationCheckpoint;
-        }
-        final Map<String, StoreFileMetadata> metadataMap = store.getSegmentMetadataMap(segmentInfos);
-        final ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(
-            this.shardId,
-            getOperationPrimaryTerm(),
-            segmentInfos.getGeneration(),
-            segmentInfos.getVersion(),
-            metadataMap.values().stream().mapToLong(StoreFileMetadata::length).sum(),
-            getIndexer().config().getCodec().getName(),
-            metadataMap
-        );
-        logger.trace("Recomputed ReplicationCheckpoint for shard {}", checkpoint);
-        return checkpoint;
-    }
-
-    /**
-     * Compute the latest {@link ReplicationCheckpoint} from a CatalogSnapshot.
-     * This function fetches a metadata snapshot from the store that comes with an IO cost.
-     * We will reuse the existing stored checkpoint if it is at the same SI version.
-     *
-     * @param catalogSnapshot {@link CatalogSnapshot} infos to use to compute.
-     * @return {@link ReplicationCheckpoint} Checkpoint computed from the infos.
-     * @throws IOException When there is an error computing segment metadata from the store.
-     */
-    ReplicationCheckpoint computeReplicationCheckpoint(CatalogSnapshot catalogSnapshot) throws IOException {
-        if (catalogSnapshot == null) {
-            return ReplicationCheckpoint.empty(shardId);
-        }
-        // DFA snapshots use the Lucene segments_N generation (parsed from segmentsFileName)
-        // so the replica's SegmentInfos.readCommit(bytes, segmentsGen) and commitCatalogSnapshot
-        // write the correct segments_N file. Falls back to the DFA catalog generation when
-        // segmentsFileName is not yet set.
-        final long segmentsGen = catalogSnapshot.getLastCommitGeneration();
-        final ReplicationCheckpoint latestReplicationCheckpoint = getLatestReplicationCheckpoint();
-        if (latestReplicationCheckpoint.getSegmentInfosVersion() == catalogSnapshot.getVersion()
-            && latestReplicationCheckpoint.getSegmentsGen() == segmentsGen
-            && latestReplicationCheckpoint.getPrimaryTerm() == getOperationPrimaryTerm()) {
-            return latestReplicationCheckpoint;
-        }
-        final Map<String, StoreFileMetadata> metadataMap = store.getSegmentMetadataMap(catalogSnapshot);
-        final ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(
-            this.shardId,
-            getOperationPrimaryTerm(),
-            segmentsGen,
-            catalogSnapshot.getVersion(),
-            metadataMap.values().stream().mapToLong(StoreFileMetadata::length).sum(),
-            getIndexer().config().getCodec().getName(),
-            metadataMap
-        );
-        logger.trace("Recomputed ReplicationCheckpoint from CatalogSnapshot for shard {}", checkpoint);
-        return checkpoint;
-    }
-
-    public void publishReferencedSegments() throws IOException {
-        assert referencedSegmentsPublisher != null;
-        referencedSegmentsPublisher.publish(this, computeReferencedSegmentsCheckpoint());
-    }
-
-    /**
-     * Compute {@link ReferencedSegmentsCheckpoint} over the active catalog snapshot.
-     *
-     * <p>The set of referenced segment names is derived from {@code .si} files present in the
-     * shard directory. This method is only invoked for non-DFA (Lucene) indices — DFA indices
-     * skip the periodic publish-referenced-segments task entirely.</p>
-     *
-     * @return {@link ReferencedSegmentsCheckpoint}.
-     * @throws IOException When there is an error computing referenced segments.
-     * @throws UnsupportedOperationException if the catalog snapshot is not Lucene-backed (DFA).
-     */
-    public ReferencedSegmentsCheckpoint computeReferencedSegmentsCheckpoint() throws IOException {
-        try (GatedCloseable<CatalogSnapshot> closeable = acquireSafeCatalogSnapshot()) {
-            CatalogSnapshot snapshot = closeable.get();
-            if (snapshot instanceof SegmentInfosCatalogSnapshot == false) {
-                throw new UnsupportedOperationException("computeReferencedSegmentsCheckpoint is not supported for DataFormatAware indices");
-            }
-            Set<String> segmentNames = Sets.newHashSet();
-            for (String file : store.directory().listAll()) {
-                if (file.endsWith(".si")) {
-                    segmentNames.add(IndexFileNames.parseSegmentName(file));
-                }
-            }
-            return new ReferencedSegmentsCheckpoint(
-                shardId,
-                getOperationPrimaryTerm(),
-                snapshot.getVersion(),
-                -1,
-                getIndexer().config().getCodec().getName(),
-                Collections.emptyMap(),
-                segmentNames
-            );
-        }
-    }
-
-    public void publishMergedSegment(SegmentCommitInfo segmentCommitInfo) throws IOException {
-        assert mergedSegmentPublisher != null;
-        mergedSegmentPublisher.publish(this, computeMergeSegmentCheckpoint(segmentCommitInfo));
-    }
-
-    /**
-     * Compute {@link MergedSegmentCheckpoint} from a SegmentCommitInfo.
-     * This function fetches a metadata snapshot from the store that comes with an IO cost.
-     *
-     * @param segmentCommitInfo {@link SegmentCommitInfo} segmentCommitInfo to use to compute.
-     * @return {@link MergedSegmentCheckpoint} Checkpoint computed from the segmentCommitInfo.
-     * @throws IOException When there is an error computing segment metadata from the store.
-     */
-    public MergedSegmentCheckpoint computeMergeSegmentCheckpoint(SegmentCommitInfo segmentCommitInfo) throws IOException {
-        // Only need to get the file metadata information in segmentCommitInfo and reuse Store#getSegmentMetadataMap.
-        try (GatedCloseable<SegmentInfos> segmentInfosGatedCloseable = getSegmentInfosSnapshot()) {
-            SegmentInfos segmentInfos = new SegmentInfos(Version.LATEST.major);
-            segmentInfos.add(segmentCommitInfo);
-            Map<String, StoreFileMetadata> segmentMetadataMap = store.getSegmentMetadataMap(segmentInfos);
-            return new MergedSegmentCheckpoint(
-                shardId,
-                getOperationPrimaryTerm(),
-                segmentInfosGatedCloseable.get().getVersion(),
-                segmentMetadataMap.values().stream().mapToLong(StoreFileMetadata::length).sum(),
-                getIndexer().config().getCodec().getName(),
-                segmentMetadataMap,
-                segmentCommitInfo.info.name
-            );
-        }
-    }
-
-    /**
-     * Checks if this target shard should start a round of segment replication.
-     * @return - True if the shard is able to perform segment replication.
-     */
-    public boolean isSegmentReplicationAllowed() {
-        if (indexSettings.isSegRepEnabledOrRemoteNode() == false) {
-            logger.trace("Attempting to perform segment replication when it is not enabled on the index");
-            return false;
-        }
-        if (getReplicationTracker().isPrimaryMode()) {
-            logger.trace("Shard is in primary mode and cannot perform segment replication as a replica.");
-            return false;
-        }
-        if (this.routingEntry().primary()) {
-            logger.trace("Shard routing is marked primary thus cannot perform segment replication as replica");
-            return false;
-        }
-        if (state().equals(IndexShardState.STARTED) == false
-            && (state() == IndexShardState.POST_RECOVERY && shardRouting.state() == ShardRoutingState.INITIALIZING) == false) {
-            logger.trace(
-                () -> new ParameterizedMessage(
-                    "Shard is not started or recovering {} {} and cannot perform segment replication as a replica",
-                    state(),
-                    shardRouting.state()
-                )
-            );
-            return false;
-        }
-        if (getReplicationEngine().isEmpty() && isReplicationTarget() == false) {
-            logger.trace(
-                () -> new ParameterizedMessage(
-                    "Shard does not have the correct engine type to perform segment replication {}.",
-                    getIndexer().getClass()
-                )
-            );
-            return false;
-        }
-        return true;
-    }
-
-    /**
-     * Checks if checkpoint should be processed
-     *
-     * @param requestCheckpoint       received checkpoint that is checked for processing
-     * @return true if checkpoint should be processed
-     */
-    public final boolean shouldProcessCheckpoint(ReplicationCheckpoint requestCheckpoint) {
-        if (isSegmentReplicationAllowed() == false) {
-            return false;
-        }
-        final ReplicationCheckpoint localCheckpoint = getLatestReplicationCheckpoint();
-        if (requestCheckpoint.isAheadOf(localCheckpoint) == false) {
-            logger.trace(
-                () -> new ParameterizedMessage(
-                    "Ignoring new replication checkpoint - Shard is already on checkpoint {} that is ahead of {}",
-                    localCheckpoint,
-                    requestCheckpoint
-                )
-            );
-            return false;
-        }
-        return true;
-    }
-
-    /**
-     * Checks if segment checkpoint should be processed
-     *
-     * @param requestCheckpoint       received segment checkpoint that is checked for processing
-     * @return true if segment checkpoint should be processed
-     */
-    public final boolean shouldProcessMergedSegmentCheckpoint(ReplicationCheckpoint requestCheckpoint) {
-        return isSegmentReplicationAllowed() && requestCheckpoint.getPrimaryTerm() >= getOperationPrimaryTerm();
-    }
-
-    /**
-     * gets a {@link Store.MetadataSnapshot} for the current directory. This method is safe to call in all lifecycle of the index shard,
-     * without having to worry about the current state of the engine and concurrent flushes.
-     *
-     * @throws org.apache.lucene.index.IndexNotFoundException     if no index is found in the current directory
-     * @throws org.apache.lucene.index.CorruptIndexException      if the lucene index is corrupted. This can be caused by a checksum
-     *                                                            mismatch or an unexpected exception when opening the index reading the
-     *                                                            segments file.
-     * @throws org.apache.lucene.index.IndexFormatTooOldException if the lucene index is too old to be opened.
-     * @throws org.apache.lucene.index.IndexFormatTooNewException if the lucene index is too new to be opened.
-     * @throws java.io.FileNotFoundException                      if one or more files referenced by a commit are not present.
-     * @throws java.nio.file.NoSuchFileException                  if one or more files referenced by a commit are not present.
-     */
-    public Store.MetadataSnapshot snapshotStoreMetadata() throws IOException {
-        assert Thread.holdsLock(mutex) == false : "snapshotting store metadata under mutex";
-        GatedCloseable<CatalogSnapshot> wrappedCatalogSnapshot = null;
-        store.incRef();
-        try {
-            synchronized (engineMutex) {
-                // if the engine is not running, we can access the store directly, but we need to make sure no one starts
-                // the engine on us. If the engine is running, we can get a snapshot via the deletion policy of the engine.
-                final Indexer indexer = getIndexerOrNull();
-                if (indexer != null) {
-                    wrappedCatalogSnapshot = indexer.acquireLastCommittedSnapshot(false);
-                }
-                if (wrappedCatalogSnapshot == null) {
-                    Store.MetadataSnapshot ms = store.getMetadata(null, true);
-                    logSnapshotStoreMetadataSummary(ms, "null-engine");
-                    return ms;
-                }
-            }
-            Store.MetadataSnapshot ms = store.getMetadata(wrappedCatalogSnapshot.get());
-            logSnapshotStoreMetadataSummary(ms, "catalog");
-            return ms;
-        } finally {
-            store.decRef();
-            IOUtils.close(wrappedCatalogSnapshot);
-        }
-    }
-
-    /**
-     * Logs a one-line summary of the {@link Store.MetadataSnapshot} produced by
-     * {@link #snapshotStoreMetadata()}, including total file count, DFA-format file count
-     * (names containing a {@code "/"} path separator indicate a non-Lucene format),
-     * and a small sample of filenames. Intended for validating that DFA files are included
-     * during phase-1 peer recovery.
-     */
-    private void logSnapshotStoreMetadataSummary(Store.MetadataSnapshot metadataSnapshot, String source) {
-        if (logger.isInfoEnabled() == false) {
-            return;
-        }
-        int total = metadataSnapshot.size();
-        java.util.List<String> dfaFiles = metadataSnapshot.asMap()
-            .keySet()
-            .stream()
-            .filter(name -> name.contains("/"))
-            .sorted()
-            .collect(java.util.stream.Collectors.toList());
-        String luceneSample = metadataSnapshot.asMap()
-            .keySet()
-            .stream()
-            .filter(name -> name.contains("/") == false)
-            .sorted()
-            .limit(5)
-            .collect(java.util.stream.Collectors.joining(", "));
-        logger.debug(
-            "[DFA-RECOVERY] snapshotStoreMetadata shardId={} source={} totalFiles={} dfaFiles={} dfaList=[{}] luceneSample=[{}]",
-            shardId,
-            source,
-            total,
-            dfaFiles.size(),
-            String.join(", ", dfaFiles),
-            luceneSample
-        );
-    }
-
-    /**
-     * Fetch a map of StoreFileMetadata for each segment from the latest SegmentInfos.
-     * This is used to compute diffs for segment replication.
-     *
-     * @return - Map of Segment Filename to its {@link StoreFileMetadata}
-     * @throws IOException - When there is an error loading metadata from the store.
-     */
-    public Map<String, StoreFileMetadata> getSegmentMetadataMap() throws IOException {
-        try (GatedCloseable<CatalogSnapshot> snapshot = getCatalogSnapshot()) {
-            return store.getSegmentMetadataMap(snapshot.get());
-        }
-    }
-
-    /**
-     * Fails the shard and marks the shard store as corrupted if
-     * <code>e</code> is caused by index corruption
-     */
-    public void failShard(String reason, @Nullable Exception e) {
-        // fail the engine. This will cause this shard to also be removed from the node's index service.
-        getIndexer().failEngine(reason, e);
-    }
-
-    /**
-     * Acquires a point-in-time reader that can be used to create {@link Engine.Searcher}s on demand.
-     */
-    public Engine.SearcherSupplier acquireSearcherSupplier() {
-        return acquireSearcherSupplier(Engine.SearcherScope.EXTERNAL);
-    }
-
-    /**
-     * Acquires a point-in-time reader that can be used to create {@link Engine.Searcher}s on demand.
-     * TODO: Mark this as deprecated once new searcher interface is integrated into the IndexShard
-     */
-    public Engine.SearcherSupplier acquireSearcherSupplier(Engine.SearcherScope scope) {
-        readAllowed();
-        markSearcherAccessed();
-        final Indexer engine = getIndexer();
-        return applyOnEngine(engine, eng -> eng.acquireSearcherSupplier(this::wrapSearcher, scope));
-    }
-
-    public Engine.Searcher acquireSearcher(String source) {
-        return acquireSearcher(source, Engine.SearcherScope.EXTERNAL);
-    }
-
-    private void markSearcherAccessed() {
-        lastSearcherAccess.lazySet(threadPool.relativeTimeInMillis());
-    }
-
-    /**
-     * TODO: Mark this as deprecated once new searcher interface is integrated into the IndexShard
-     */
-    private Engine.Searcher acquireSearcher(String source, Engine.SearcherScope scope) {
-        readAllowed();
-        markSearcherAccessed();
-        final Indexer indexer = getIndexer();
-        return applyOnEngine(indexer, engine -> engine.acquireSearcher(source, scope, this::wrapSearcher));
-    }
-
-    /**
-     * TODO: Mark this as deprecated once new searcher interface is integrated into the IndexShard
-     */
-    private Engine.Searcher wrapSearcher(Engine.Searcher searcher) {
-        assert OpenSearchDirectoryReader.unwrap(searcher.getDirectoryReader()) != null
-            : "DirectoryReader must be an instance or OpenSearchDirectoryReader";
-        boolean success = false;
-        try {
-            final Engine.Searcher newSearcher = readerWrapper == null ? searcher : wrapSearcher(searcher, readerWrapper);
-            assert newSearcher != null;
-            success = true;
-            return newSearcher;
-        } catch (IOException ex) {
-            throw new OpenSearchException("failed to wrap searcher", ex);
-        } finally {
-            if (success == false) {
-                Releasables.close(success, searcher);
-            }
-        }
-    }
-
-    /**
-     * TODO: Mark this as deprecated once new searcher interface is integrated into the IndexShard
-     */
-    public static Engine.Searcher wrapSearcher(
-        Engine.Searcher engineSearcher,
-        CheckedFunction<DirectoryReader, DirectoryReader, IOException> readerWrapper
-    ) throws IOException {
-        assert readerWrapper != null;
-        final OpenSearchDirectoryReader openSearchDirectoryReader = OpenSearchDirectoryReader.getOpenSearchDirectoryReader(
-            engineSearcher.getDirectoryReader()
-        );
-        if (openSearchDirectoryReader == null) {
-            throw new IllegalStateException("Can't wrap non opensearch directory reader");
-        }
-        NonClosingReaderWrapper nonClosingReaderWrapper = new NonClosingReaderWrapper(engineSearcher.getDirectoryReader());
-        DirectoryReader reader = readerWrapper.apply(nonClosingReaderWrapper);
-        if (reader != nonClosingReaderWrapper) {
-            if (reader.getReaderCacheHelper() != openSearchDirectoryReader.getReaderCacheHelper()) {
-                throw new IllegalStateException(
-                    "wrapped directory reader doesn't delegate IndexReader#getCoreCacheKey,"
-                        + " wrappers must override this method and delegate to the original readers core cache key. Wrapped readers can't be "
-                        + "used as cache keys since their are used only per request which would lead to subtle bugs"
-                );
-            }
-            if (OpenSearchDirectoryReader.getOpenSearchDirectoryReader(reader) != openSearchDirectoryReader) {
-                // prevent that somebody wraps with a non-filter reader
-                throw new IllegalStateException("wrapped directory reader hides actual OpenSearchDirectoryReader but shouldn't");
-            }
-        }
-
-        if (reader == nonClosingReaderWrapper) {
-            return engineSearcher;
-        } else {
-            // we close the reader to make sure wrappers can release resources if needed....
-            // our NonClosingReaderWrapper makes sure that our reader is not closed
-            return new Engine.Searcher(
-                engineSearcher.source(),
-                reader,
-                engineSearcher.getSimilarity(),
-                engineSearcher.getQueryCache(),
-                engineSearcher.getQueryCachingPolicy(),
-                () -> IOUtils.close(
-                    reader, // this will close the wrappers excluding the NonClosingReaderWrapper
-                    engineSearcher
-                )
-            ); // this will run the closeable on the wrapped engine reader
-        }
-    }
-
-    public void onCheckpointPublished(ReplicationCheckpoint checkpoint) {
-        replicationTracker.startReplicationLagTimers(checkpoint);
-    }
-
-    /**
-     * Used with segment replication during relocation handoff, this method updates current read only engine to global
-     * checkpoint followed by changing to writeable engine
-     *
-     * @throws IOException if communication failed
-     * @throws InterruptedException if calling thread is interrupted
-     * @throws TimeoutException if timed out waiting for in-flight operations to finish
-     *
-     * @opensearch.internal
-     */
-    public void resetToWriteableEngine() throws IOException, InterruptedException, TimeoutException {
-        indexShardOperationPermits.blockOperations(30, TimeUnit.MINUTES, () -> { resetEngineToGlobalCheckpoint(); });
-    }
-
-    /**
-     * Re-resolves this shard's primary operation policy against the current index settings, blocking
-     * operations for the duration so that no operation observes a policy change mid-flight. This is the
-     * cheap alternative to {@link #resetToWriteableEngine()} for a plugin whose policy is keyed off an
-     * updatable setting and that has nothing else to rebuild when that setting changes.
-     *
-     * @throws InterruptedException if the calling thread is interrupted
-     * @throws TimeoutException if timed out waiting for in-flight operations to finish
-     *
-     * @opensearch.internal
-     */
-    @ExperimentalApi
-    public void refreshPrimaryOperationPolicy() throws InterruptedException, TimeoutException {
-        indexShardOperationPermits.blockOperations(30, TimeUnit.MINUTES, () -> getIndexer().refreshPrimaryOperationPolicy());
-    }
-
-    /**
-     * Returns the {@link PrimaryOperationPolicy} in effect for this shard.
-     *
-     * @throws AlreadyClosedException if the shard's engine is closed
-     */
-    @ExperimentalApi
-    public PrimaryOperationPolicy getPrimaryOperationPolicy() {
-        return getIndexer().getPrimaryOperationPolicy();
-    }
-
-    public MergedSegmentTransferTracker mergedSegmentTransferTracker() {
-        return mergedSegmentTransferTracker;
-    }
-
-    /**
-     * Wrapper for a non-closing reader
-     *
-     * @opensearch.internal
-     */
-    private static final class NonClosingReaderWrapper extends FilterDirectoryReader {
-
-        private NonClosingReaderWrapper(DirectoryReader in) throws IOException {
-            super(in, new SubReaderWrapper() {
-                @Override
-                public LeafReader wrap(LeafReader reader) {
-                    return reader;
-                }
-            });
-        }
-
-        @Override
-        protected DirectoryReader doWrapDirectoryReader(DirectoryReader in) throws IOException {
-            return new NonClosingReaderWrapper(in);
-        }
-
-        @Override
-        protected void doClose() throws IOException {
-            // don't close here - mimic the MultiReader#doClose = false behavior that FilterDirectoryReader doesn't have
-        }
-
-        @Override
-        public CacheHelper getReaderCacheHelper() {
-            return in.getReaderCacheHelper();
-        }
-
-    }
-
-    public void close(String reason, boolean flushEngine, boolean deleted) throws IOException {
-        synchronized (engineMutex) {
-            try {
-                synchronized (mutex) {
-                    changeState(IndexShardState.CLOSED, reason);
-                }
-                // A recovery hydrating this shard from the remote store runs outside engineMutex, so it did not hold
-                // this thread up; it now either observes CLOSED before it registers (it checks under mutex), or is
-                // registered and is interrupted here. Either way it stops writing and its engine open is refused.
-                cancelRemoteStoreHydration(reason);
-            } finally {
-                final Indexer engine = this.currentEngineReference.getAndSet(null);
-                try {
-                    if (engine != null && flushEngine) {
-                        engine.flushAndClose();
-                    }
-                } finally {
-                    // playing safe here and close the engine even if the above succeeds - close can be called multiple times
-                    // Also closing refreshListeners to prevent us from accumulating any more listeners
-                    IOUtils.close(
-                        engine,
-                        globalCheckpointListeners,
-                        refreshListeners,
-                        pendingReplicationActions,
-                        refreshTask,
-                        periodicFlushTask
-                    );
-
-                    if (deleted && engine != null && isPrimaryMode()) {
-                        // Translog Clean up
-                        engine.translogManager().onDelete();
-                    }
-
-                    indexShardOperationPermits.close();
-                }
-            }
-        }
-    }
-
-    /*
-    ToDo : Fix this https://github.com/opensearch-project/OpenSearch/issues/8003
-     */
-    public RemoteSegmentStoreDirectory getRemoteDirectory() {
-        assert indexSettings.isAssignedOnRemoteNode();
-        assert remoteStore.directory() instanceof FilterDirectory : "Store.directory is not an instance of FilterDirectory";
-        FilterDirectory remoteStoreDirectory = (FilterDirectory) remoteStore.directory();
-        FilterDirectory byteSizeCachingStoreDirectory = (FilterDirectory) remoteStoreDirectory.getDelegate();
-        final Directory remoteDirectory = byteSizeCachingStoreDirectory.getDelegate();
-        return ((RemoteSegmentStoreDirectory) remoteDirectory);
-    }
-
-    /**
-     * Returns true iff it is able to verify that remote segment store
-     * is in sync with local
-     */
-    public boolean isRemoteSegmentStoreInSync() {
-        assert indexSettings.isAssignedOnRemoteNode();
-        try {
-            RemoteSegmentStoreDirectory directory = getRemoteDirectory();
-            if (directory.readLatestMetadataFile() != null) {
-                Collection<String> uploadFiles = directory.getSegmentsUploadedToRemoteStore().keySet();
-                Set<String> localFiles;
-                try (GatedCloseable<CatalogSnapshot> catalogSnapshotRef = getCatalogSnapshot()) {
-                    localFiles = new HashSet<>(catalogSnapshotRef.get().getFiles(true));
-                }
-                // verifying that all files except EXCLUDE_FILES are uploaded to the remote
-                localFiles.removeAll(RemoteStoreRefreshListener.EXCLUDE_FILES);
-                if (uploadFiles.containsAll(localFiles)) {
-                    return true;
-                }
-                logger.debug(
-                    () -> new ParameterizedMessage(
-                        "RemoteSegmentStoreSyncStatus localSize={} remoteSize={}",
-                        localFiles.size(),
-                        uploadFiles.size()
-                    )
-                );
-            }
-        } catch (AlreadyClosedException e) {
-            throw e;
-        } catch (Throwable e) {
-            logger.error("Exception while reading latest metadata", e);
-        }
-        return false;
-    }
-
-    public void waitForRemoteStoreSync() throws IOException {
-        waitForRemoteStoreSync(() -> {});
-    }
-
-    /*
-    Blocks the calling thread,  waiting for the remote store to get synced till internal Remote Upload Timeout
-    Calls onProgress on seeing an increased file count on remote
-    Throws IOException if the remote store is not synced within the timeout
-    */
-    public void waitForRemoteStoreSync(Runnable onProgress) throws IOException {
-        assert indexSettings.isAssignedOnRemoteNode();
-        RemoteSegmentStoreDirectory directory = getRemoteDirectory();
-        int segmentUploadeCount = 0;
-        if (shardRouting.primary() == false) {
-            return;
-        }
-        long startNanos = System.nanoTime();
-
-        while (System.nanoTime() - startNanos < getRecoverySettings().internalRemoteUploadTimeout().nanos()) {
-            try {
-                if (isRemoteSegmentStoreInSync()) {
-                    return;
-                } else {
-                    if (directory.getSegmentsUploadedToRemoteStore().size() > segmentUploadeCount) {
-                        onProgress.run();
-                        logger.debug("Uploaded segment count {}", directory.getSegmentsUploadedToRemoteStore().size());
-                        segmentUploadeCount = directory.getSegmentsUploadedToRemoteStore().size();
-                    }
-                    try {
-                        Thread.sleep(TimeValue.timeValueSeconds(30).millis());
-                    } catch (InterruptedException ie) {
-                        throw new OpenSearchException("Interrupted waiting for completion of [{}]", ie);
-                    }
-                }
-            } catch (AlreadyClosedException e) {
-                // There is no point in waiting as shard is now closed .
-                return;
-            }
-        }
-        throw new IOException(
-            "Failed to upload to remote segment store within remote upload timeout of "
-                + getRecoverySettings().internalRemoteUploadTimeout().getMinutes()
-                + " minutes"
-        );
-    }
-
-    public void preRecovery() {
-        final IndexShardState currentState = this.state; // single volatile read
-        if (currentState == IndexShardState.CLOSED) {
-            throw new IndexShardNotRecoveringException(shardId, currentState);
-        }
-        assert currentState == IndexShardState.RECOVERING : "expected a recovering shard " + shardId + " but got " + currentState;
-        indexEventListener.beforeIndexShardRecovery(this, indexSettings);
-    }
-
-    public void postRecovery(String reason) throws IndexShardStartedException, IndexShardRelocatedException, IndexShardClosedException {
-        synchronized (postRecoveryMutex) {
-            // we need to refresh again to expose all operations that were index until now. Otherwise
-            // we may not expose operations that were indexed with a refresh listener that was immediately
-            // responded to in addRefreshListener. The refresh must happen under the same mutex used in addRefreshListener
-            // and before moving this shard to POST_RECOVERY state (i.e., allow to read from this shard).
-            getIndexer().refresh("post_recovery");
-
-            // Wait for ingestion warmup if enabled (pull-based ingestion only)
-            handlePullBasedIngestionWarmup(getIndexer());
-
-            synchronized (mutex) {
-                if (state == IndexShardState.CLOSED) {
-                    throw new IndexShardClosedException(shardId);
-                }
-                if (state == IndexShardState.STARTED) {
-                    throw new IndexShardStartedException(shardId);
-                }
-                recoveryState.setStage(RecoveryState.Stage.DONE);
-                changeState(IndexShardState.POST_RECOVERY, reason);
-            }
-        }
-    }
-
-    /**
-     * Handles warmup for pull-based ingestion (PBI) engines.
-     * When warmup is enabled, this method blocks until the shard has caught up with the streaming source
-     * or until the configured timeout is reached.
-     *
-     * @param indexer the indexer to check for warmup
-     */
-    private void handlePullBasedIngestionWarmup(Indexer indexer) {
-        if (!(indexer instanceof EngineBackedIndexer)) {
-            return;
-        }
-        Engine engine = ((EngineBackedIndexer) indexer).getEngine();
-        if (engine instanceof IngestionEngine) {
-            IngestionEngine ingestionEngine = (IngestionEngine) engine;
-            try {
-                ingestionEngine.awaitWarmupComplete();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new OpenSearchException("Interrupted waiting for ingestion warmup", e);
-            }
-        }
-    }
-
-    /**
-     * called before starting to copy index files over
-     */
-    public void prepareForIndexRecovery() {
-        if (state != IndexShardState.RECOVERING) {
-            throw new IndexShardNotRecoveringException(shardId, state);
-        }
-        recoveryState.setStage(RecoveryState.Stage.INDEX);
-        assert currentEngineReference.get() == null;
-    }
-
-    /**
-     * A best effort to bring up this shard to the global checkpoint using the local translog before performing a peer recovery.
-     *
-     * @return a sequence number that an operation-based peer recovery can start with.
-     * This is the first operation after the local checkpoint of the safe commit if exists.
-     */
-    private long recoverLocallyUpToGlobalCheckpoint() {
-        validateLocalRecoveryState();
-        final Optional<SequenceNumbers.CommitInfo> safeCommit;
-        final long globalCheckpoint;
-        try {
-            final String translogUUID = store.readLastCommittedSegmentsInfo().getUserData().get(TRANSLOG_UUID_KEY);
-            globalCheckpoint = Translog.readGlobalCheckpoint(translogConfig.getTranslogPath(), translogUUID);
-            safeCommit = store.findSafeIndexCommit(globalCheckpoint);
-        } catch (org.apache.lucene.index.IndexNotFoundException e) {
-            logger.trace("skip local recovery as no index commit found");
-            return UNASSIGNED_SEQ_NO;
-        } catch (Exception e) {
-            logger.debug("skip local recovery as failed to find the safe commit", e);
-            return UNASSIGNED_SEQ_NO;
-        }
-        try {
-            maybeCheckIndex(); // check index here and won't do it again if ops-based recovery occurs
-            recoveryState.setStage(RecoveryState.Stage.TRANSLOG);
-            if (safeCommit.isPresent() == false) {
-                logger.trace("skip local recovery as no safe commit found");
-                return UNASSIGNED_SEQ_NO;
-            }
-            assert safeCommit.get().localCheckpoint <= globalCheckpoint : safeCommit.get().localCheckpoint + " > " + globalCheckpoint;
-            if (safeCommit.get().localCheckpoint == globalCheckpoint) {
-                logger.trace(
-                    "skip local recovery as the safe commit is up to date; safe commit {} global checkpoint {}",
-                    safeCommit.get(),
-                    globalCheckpoint
-                );
-                recoveryState.getTranslog().totalLocal(0);
-                return globalCheckpoint + 1;
-            }
-            if (indexSettings.getIndexMetadata().getState() == IndexMetadata.State.CLOSE
-                || IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.get(indexSettings.getSettings())) {
-                logger.trace(
-                    "skip local recovery as the index was closed or not allowed to write; safe commit {} global checkpoint {}",
-                    safeCommit.get(),
-                    globalCheckpoint
-                );
-                recoveryState.getTranslog().totalLocal(0);
-                return safeCommit.get().localCheckpoint + 1;
-            }
-            try {
-                final TranslogRecoveryRunner translogRecoveryRunner = (snapshot) -> {
-                    recoveryState.getTranslog().totalLocal(snapshot.totalOperations());
-                    final int recoveredOps = runTranslogRecovery(
-                        getIndexer(),
-                        snapshot,
-                        Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY,
-                        recoveryState.getTranslog()::incrementRecoveredOperations
-                    );
-                    recoveryState.getTranslog().totalLocal(recoveredOps); // adjust the total local to reflect the actual count
-                    return recoveredOps;
-                };
-                innerOpenEngineAndTranslog(() -> globalCheckpoint);
-                getIndexer().translogManager()
-                    .recoverFromTranslog(translogRecoveryRunner, getIndexer().getProcessedLocalCheckpoint(), globalCheckpoint);
-                logger.trace("shard locally recovered up to {}", getIndexer().getSeqNoStats(globalCheckpoint));
-            } finally {
-                synchronized (engineMutex) {
-                    IOUtils.close(currentEngineReference.getAndSet(null));
-                }
-            }
-        } catch (Exception e) {
-            logger.debug(new ParameterizedMessage("failed to recover shard locally up to global checkpoint {}", globalCheckpoint), e);
-            return UNASSIGNED_SEQ_NO;
-        }
-        try {
-            // we need to find the safe commit again as we should have created a new one during the local recovery
-            final Optional<SequenceNumbers.CommitInfo> newSafeCommit = store.findSafeIndexCommit(globalCheckpoint);
-            assert newSafeCommit.isPresent() : "no safe commit found after local recovery";
-            return newSafeCommit.get().localCheckpoint + 1;
-        } catch (Exception e) {
-            logger.debug(
-                new ParameterizedMessage(
-                    "failed to find the safe commit after recovering shard locally up to global checkpoint {}",
-                    globalCheckpoint
-                ),
-                e
-            );
-            return UNASSIGNED_SEQ_NO;
-        }
-    }
-
-    public long recoverLocallyAndFetchStartSeqNo(boolean localTranslog) {
-        if (localTranslog) {
-            return recoverLocallyUpToGlobalCheckpoint();
-        } else {
-            return recoverLocallyUptoLastCommit();
-        }
-    }
-
-    /**
-     * The method figures out the sequence number basis the last commit.
-     *
-     * @return the starting sequence number from which the recovery should start.
-     */
-    private long recoverLocallyUptoLastCommit() {
-        assert indexSettings.isAssignedOnRemoteNode() : "Remote translog store is not enabled";
-        long seqNo;
-        validateLocalRecoveryState();
-
-        try {
-            seqNo = Long.parseLong(store.readLastCommittedSegmentsInfo().getUserData().get(MAX_SEQ_NO));
-        } catch (org.apache.lucene.index.IndexNotFoundException e) {
-            logger.error("skip local recovery as no index commit found");
-            return UNASSIGNED_SEQ_NO;
-        } catch (Exception e) {
-            logger.error("skip local recovery as failed to find the safe commit", e);
-            return UNASSIGNED_SEQ_NO;
-        }
-
-        try {
-            maybeCheckIndex();
-            recoveryState.setStage(RecoveryState.Stage.TRANSLOG);
-            recoveryState.getTranslog().totalLocal(0);
-        } catch (Exception e) {
-            logger.error("check index failed during fetch seqNo", e);
-            return UNASSIGNED_SEQ_NO;
-        }
-        return seqNo;
-    }
-
-    private void validateLocalRecoveryState() {
-        assert Thread.holdsLock(mutex) == false : "recover locally under mutex";
-        if (state != IndexShardState.RECOVERING) {
-            throw new IndexShardNotRecoveringException(shardId, state);
-        }
-        recoveryState.validateCurrentStage(RecoveryState.Stage.INDEX);
-        assert routingEntry().recoverySource().getType() == RecoverySource.Type.PEER : "not a peer recovery [" + routingEntry() + "]";
-    }
-
-    public void trimOperationOfPreviousPrimaryTerms(long aboveSeqNo) {
-        getIndexer().translogManager().trimOperationsFromTranslog(getOperationPrimaryTerm(), aboveSeqNo);
-    }
-
-    /**
-     * Returns the maximum auto_id_timestamp of all append-only requests have been processed by this shard or the auto_id_timestamp received
-     * from the primary via {@link #updateMaxUnsafeAutoIdTimestamp(long)} at the beginning of a peer-recovery or a primary-replica resync.
-     *
-     * @see #updateMaxUnsafeAutoIdTimestamp(long)
-     */
-    public long getMaxSeenAutoIdTimestamp() {
-        return getIndexer().getMaxSeenAutoIdTimestamp();
-    }
-
-    /**
-     * Since operations stored in soft-deletes do not have max_auto_id_timestamp, the primary has to propagate its max_auto_id_timestamp
-     * (via {@link #getMaxSeenAutoIdTimestamp()} of all processed append-only requests to replicas at the beginning of a peer-recovery
-     * or a primary-replica resync to force a replica to disable optimization for all append-only requests which are replicated via
-     * replication while its retry variants are replicated via recovery without auto_id_timestamp.
-     * <p>
-     * Without this force-update, a replica can generate duplicate documents (for the same id) if it first receives
-     * a retry append-only (without timestamp) via recovery, then an original append-only (with timestamp) via replication.
-     */
-    public void updateMaxUnsafeAutoIdTimestamp(long maxSeenAutoIdTimestampFromPrimary) {
-        getIndexer().updateMaxUnsafeAutoIdTimestamp(maxSeenAutoIdTimestampFromPrimary);
-    }
-
-    public Engine.Result applyTranslogOperation(Translog.Operation operation, Engine.Operation.Origin origin) throws IOException {
-        return applyTranslogOperation(getIndexer(), operation, origin);
-    }
-
-    private Engine.Result applyTranslogOperation(Indexer engine, Translog.Operation operation, Engine.Operation.Origin origin)
-        throws IOException {
-        // If a translog op is replayed on the primary (eg. ccr), we need to use external instead of null for its version type.
-        final VersionType versionType = (origin == Engine.Operation.Origin.PRIMARY) ? VersionType.EXTERNAL : null;
-        final Engine.Result result;
-        switch (operation.opType()) {
-            case INDEX:
-                final Translog.Index index = (Translog.Index) operation;
-                // we set canHaveDuplicates to true all the time such that we de-optimze the translog case and ensure that all
-                // autoGeneratedID docs that are coming from the primary are updated correctly.
-                result = applyIndexOperation(
-                    engine,
-                    index.seqNo(),
-                    index.primaryTerm(),
-                    index.version(),
-                    versionType,
-                    UNASSIGNED_SEQ_NO,
-                    0,
-                    index.getAutoGeneratedIdTimestamp(),
-                    true,
-                    origin,
-                    new SourceToParse(
-                        shardId.getIndexName(),
-                        index.id(),
-                        index.source(),
-                        MediaTypeRegistry.xContentType(index.source()),
-                        index.routing()
-                    ),
-                    index.id()
-                );
-                break;
-            case DELETE:
-                final Translog.Delete delete = (Translog.Delete) operation;
-                result = applyDeleteOperation(
-                    engine,
-                    delete.seqNo(),
-                    delete.primaryTerm(),
-                    delete.version(),
-                    delete.id(),
-                    delete.routing(),
-                    versionType,
-                    UNASSIGNED_SEQ_NO,
-                    0,
-                    origin
-                );
-                break;
-            case NO_OP:
-                final Translog.NoOp noOp = (Translog.NoOp) operation;
-                result = markSeqNoAsNoop(engine, noOp.seqNo(), noOp.primaryTerm(), noOp.reason(), origin);
-                break;
-            default:
-                throw new IllegalStateException("No operation defined for [" + operation + "]");
-        }
-        return result;
-    }
-
-    /**
-     * Replays translog operations from the provided translog {@code snapshot} to the current engine using the given {@code origin}.
-     * The callback {@code onOperationRecovered} is notified after each translog operation is replayed successfully.
-     */
-    int runTranslogRecovery(Indexer engine, Translog.Snapshot snapshot, Engine.Operation.Origin origin, Runnable onOperationRecovered)
-        throws IOException {
-        int opsRecovered = 0;
-        Translog.Operation operation;
-        while ((operation = snapshot.next()) != null) {
-            try {
-                logger.trace("[translog] recover op {}", operation);
-                Engine.Result result = applyTranslogOperation(engine, operation, origin);
-                switch (result.getResultType()) {
-                    case FAILURE:
-                        throw result.getFailure();
-                    case MAPPING_UPDATE_REQUIRED:
-                        throw new IllegalArgumentException("unexpected mapping update: " + result.getRequiredMappingUpdate());
-                    case SUCCESS:
-                        break;
-                    default:
-                        throw new AssertionError("Unknown result type [" + result.getResultType() + "]");
-                }
-
-                opsRecovered++;
-                onOperationRecovered.run();
-            } catch (Exception e) {
-                // TODO: Don't enable this leniency unless users explicitly opt-in
-                if (origin == Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY && ExceptionsHelper.status(e) == RestStatus.BAD_REQUEST) {
-                    // mainly for MapperParsingException and Failure to detect xcontent
-                    logger.info("ignoring recovery of a corrupt translog entry", e);
-                } else {
-                    throw ExceptionsHelper.convertToRuntime(e);
-                }
-            }
-        }
-        return opsRecovered;
-    }
-
-    private void loadGlobalCheckpointToReplicationTracker() throws IOException {
-        // we have to set it before we open an engine and recover from the translog because
-        // acquiring a snapshot from the translog causes a sync which causes the global checkpoint to be pulled in,
-        // and an engine can be forced to close in ctor which also causes the global checkpoint to be pulled in.
-        final String translogUUID = store.readLastCommittedSegmentsInfo().getUserData().get(TRANSLOG_UUID_KEY);
-        final long globalCheckpoint = Translog.readGlobalCheckpoint(translogConfig.getTranslogPath(), translogUUID);
-        replicationTracker.updateGlobalCheckpointOnReplica(globalCheckpoint, "read from translog checkpoint");
-    }
-
-    /**
-     * opens the engine on top of the existing lucene engine and translog.
-     * Operations from the translog will be replayed to bring lucene up to date.
-     **/
-    public void openEngineAndRecoverFromTranslog() throws IOException {
-        openEngineAndRecoverFromTranslog(true);
-    }
-
-    public void openEngineAndRecoverFromTranslog(boolean syncFromRemote) throws IOException {
-        recoveryState.validateCurrentStage(RecoveryState.Stage.INDEX);
-        maybeCheckIndex();
-        recoveryState.setStage(RecoveryState.Stage.TRANSLOG);
-        final RecoveryState.Translog translogRecoveryStats = recoveryState.getTranslog();
-        final TranslogRecoveryRunner translogRecoveryRunner = (snapshot) -> {
-            translogRecoveryStats.totalOperations(snapshot.totalOperations());
-            translogRecoveryStats.totalOperationsOnStart(snapshot.totalOperations());
-            return runTranslogRecovery(
-                getIndexer(),
-                snapshot,
-                Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY,
-                translogRecoveryStats::incrementRecoveredOperations
-            );
-        };
-
-        // Do not load the global checkpoint if this is a remote snapshot index or using ingestion source
-        if (indexSettings.isRemoteSnapshot() == false
-            && indexSettings.isRemoteTranslogStoreEnabled() == false
-            && !indexSettings.getIndexMetadata().useIngestionSource()) {
-            loadGlobalCheckpointToReplicationTracker();
-        }
-
-        try {
-            innerOpenEngineAndTranslog(replicationTracker, syncFromRemote);
-
-            getIndexer().translogManager()
-                .recoverFromTranslog(translogRecoveryRunner, getIndexer().getProcessedLocalCheckpoint(), Long.MAX_VALUE);
-        } catch (Exception e) {
-            discardCorruptLocalRemoteTranslog(e);
-            throw e;
-        }
-    }
-
-    /**
-     * On a remote-store shard the local translog directory is a cache of the remote copy, and the download that fills it
-     * reuses a local generation whose footer matches the checksum the remote advertises. If such a generation turns out
-     * to be corrupt inside its operations - rot that an intact footer cannot reveal - opening or replaying the translog
-     * throws {@link TranslogCorruptedException}, the shard fails, and the next recovery would reuse the very same bytes
-     * and fail the same way until {@code index.allocation.max_retries} leaves the shard unassigned.
-     * <p>
-     * Since the remote store holds an intact copy, delete the local directory so that the next attempt starts from the
-     * remote store instead. This is what a recovery did unconditionally before local generations were reused; it is now
-     * done only once the local copy has been proven wrong. The decision uses the same predicate as the download that
-     * reused the generation ({@link #isTranslogBackedByRemoteStore()}), so a shard whose translog came from the remote
-     * store - a remote-store index, or a migrating docrep shard seeded by a remote source - always gets the retry, and a
-     * shard without a remote translog is left alone: its local translog is the only copy, and discarding it would lose data.
-     */
-    private void discardCorruptLocalRemoteTranslog(Exception failure) {
-        if (isTranslogBackedByRemoteStore() == false || ExceptionsHelper.unwrap(failure, TranslogCorruptedException.class) == null) {
-            return;
-        }
-        final Path translogLocation = shardPath().resolveTranslog();
-        logger.warn(
-            () -> new ParameterizedMessage(
-                "local translog at [{}] is corrupt; deleting it so that the next recovery downloads it from the remote store",
-                translogLocation
-            ),
-            failure
-        );
-        try {
-            IOUtils.rm(translogLocation);
-        } catch (IOException e) {
-            failure.addSuppressed(e);
-        }
-    }
-
-    /**
-     * Opens the engine on top of the existing lucene engine and translog.
-     * The translog is kept but its operations won't be replayed.
-     */
-    public void openEngineAndSkipTranslogRecovery() throws IOException {
-        assert routingEntry().recoverySource().getType() == RecoverySource.Type.PEER : "not a peer recovery [" + routingEntry() + "]";
-        openEngineAndSkipTranslogRecovery(true);
-    }
-
-    public void openEngineAndSkipTranslogRecoveryFromSnapshot() throws IOException {
-        assert routingEntry().isSearchOnly() || routingEntry().recoverySource().getType() == RecoverySource.Type.SNAPSHOT
-            : "not a snapshot recovery [" + routingEntry() + "]";
-        recoveryState.validateCurrentStage(RecoveryState.Stage.INDEX);
-        maybeCheckIndex();
-        recoveryState.setStage(RecoveryState.Stage.TRANSLOG);
-        openEngineAndSkipTranslogRecovery(routingEntry().isSearchOnly());
-    }
-
-    void openEngineAndSkipTranslogRecovery(boolean syncFromRemote) throws IOException {
-        recoveryState.validateCurrentStage(RecoveryState.Stage.TRANSLOG);
-        loadGlobalCheckpointToReplicationTracker();
-        try {
-            innerOpenEngineAndTranslog(replicationTracker, syncFromRemote);
-        } catch (Exception e) {
-            discardCorruptLocalRemoteTranslog(e);
-            throw e;
-        }
-        assert routingEntry().isSearchOnly() == false || translogStats().estimatedNumberOfOperations() == 0
-            : "Translog is expected to be empty but holds " + translogStats().estimatedNumberOfOperations() + "Operations.";
-        getIndexer().translogManager().skipTranslogRecovery();
-    }
-
-    private void innerOpenEngineAndTranslog(LongSupplier globalCheckpointSupplier) throws IOException {
-        innerOpenEngineAndTranslog(globalCheckpointSupplier, true);
-    }
-
-    /**
-     * Whether this shard rebuilds its translog from the primary instead of from a remote store. This is the case for a
-     * write replica of an index whose segments live in a remote store but whose translog does not, as happens when the
-     * cluster runs in {@code segments_only} mode. Such a replica receives operations through node-to-node replication,
-     * so restoring it from the remote store would discard a translog that is the only durable copy of those operations.
-     * Search-only replicas never receive operations and so are excluded.
-     */
-    private boolean recoversTranslogFromPeer() {
-        return shardRouting.primary() == false
-            && shardRouting.isSearchOnly() == false
-            && indexSettings.isRemoteTranslogStoreEnabled() == false
-            && RemoteStoreNodeAttribute.isTranslogRepoConfigured(indexSettings.getNodeSettings()) == false;
-    }
-
-    private void innerOpenEngineAndTranslog(LongSupplier globalCheckpointSupplier, boolean syncFromRemote) throws IOException {
-        syncFromRemote = syncFromRemote && indexSettings.isRemoteSnapshot() == false;
-        assert Thread.holdsLock(mutex) == false : "opening engine under mutex";
-        if (state != IndexShardState.RECOVERING) {
-            throw new IndexShardNotRecoveringException(shardId, state);
-        }
-        final EngineConfig config = newEngineConfig(globalCheckpointSupplier);
-
-        // we disable deletes since we allow for operations to be executed against the shard while recovering
-        // but we need to make sure we don't loose deletes until we are done recovering
-        config.setEnableGcDeletes(false);
-        updateRetentionLeasesOnReplica(loadRetentionLeases());
-        assert recoveryState.getRecoverySource().expectEmptyRetentionLeases() == false || getRetentionLeases().leases().isEmpty()
-            : "expected empty set of retention leases with recovery source ["
-                + recoveryState.getRecoverySource()
-                + "] but got "
-                + getRetentionLeases();
-        final boolean hydrateFromRemote = (indexSettings.isRemoteStoreEnabled() || this.isRemoteSeeded())
-            && recoversTranslogFromPeer() == false;
-        if (hydrateFromRemote) {
-            hydrateFromRemoteStore(syncFromRemote);
-        }
-
-        synchronized (engineMutex) {
-            assert currentEngineReference.get() == null : "engine is running";
-            verifyNotClosed();
-            // Snapshot V2 has already downloaded the translog for its pinned timestamp from the source repository.
-            // Preserve that point-in-time copy; other remote recoveries perform the normal incremental reconciliation.
-            final boolean downloadRemoteTranslogOnInit = translogConfig.downloadRemoteTranslogOnInit();
-            if (isSnapshotV2Restore()) {
-                translogConfig.setDownloadRemoteTranslogOnInit(false);
-            }
-            try {
-                // we must create a new engine under mutex (see IndexShard#snapshotStoreMetadata).
-                // TODO: For composite engine, this would be replaced by a separate factory.
-                final Indexer newEngine = indexerFactory.createIndexer(config);
-                onNewEngine(newEngine);
-                currentEngineReference.set(newEngine);
-
-                if (indexSettings.isSegRepEnabledOrRemoteNode()) {
-                    // set initial replication checkpoints into tracker.
-                    updateReplicationCheckpoint();
-                }
-                // We set active because we are now writing operations to the engine; this way,
-                // we can flush if we go idle after some time and become inactive.
-                active.set(true);
-            } finally {
-                translogConfig.setDownloadRemoteTranslogOnInit(downloadRemoteTranslogOnInit);
-            }
-        }
-        // time elapses after the engine is created above (pulling the config settings) until we set the engine reference, during
-        // which settings changes could possibly have happened, so here we forcefully push any config changes to the new engine.
-        onSettingsChanged();
-        if (indexSettings.getIndexMetadata().useIngestionSource()) {
-            return;
-        }
-        assert indexSettings.isPluggableDataFormatEnabled() || assertSequenceNumbersInCommit();
-        recoveryState.validateCurrentStage(RecoveryState.Stage.TRANSLOG);
-    }
-
-    private boolean isSnapshotV2Restore() {
-        return routingEntry().recoverySource().getType() == RecoverySource.Type.SNAPSHOT
-            && ((SnapshotRecoverySource) routingEntry().recoverySource()).pinnedTimestamp() > 0;
-    }
-
-    /**
-     * Hydrates remote segments and translog before engine construction. Remote I/O runs outside {@link #engineMutex};
-     * a store reference keeps the shard path alive, and {@link #close} cancels the registered operation. Registration
-     * and the CLOSED transition are serialized by {@link #mutex}, then engine construction rechecks CLOSED under
-     * engineMutex.
-     */
-    private void hydrateFromRemoteStore(boolean syncFromRemote) throws IOException {
-        assert Thread.holdsLock(engineMutex) == false : "hydrating from the remote store under engineMutex";
-        assert Thread.holdsLock(mutex) == false : "hydrating from the remote store under mutex";
-        assert indexSettings.isRemoteStoreEnabled() || this.isRemoteSeeded();
-        final CancellableThreads cancellableThreads = new CancellableThreads();
-        store.incRef();
-        try {
-            synchronized (mutex) {
-                verifyNotClosed();
-                if (remoteStoreHydration.compareAndSet(null, cancellableThreads) == false) {
-                    throw new IllegalIndexShardStateException(shardId, state, "remote store hydration is already running");
-                }
-            }
-            try {
-                cancellableThreads.executeIO(() -> {
-                    // A primary must claim the fence before reading either remote flow. Peer-recovery relocation targets
-                    // deliberately skip the seal inside sealRemoteStoreFenceForRecovery.
-                    if (shardRouting.primary() && isTranslogBackedByRemoteStore()) {
-                        sealRemoteStoreFenceForRecovery();
-                    }
-                    if (syncFromRemote) {
-                        syncSegmentsFromRemoteSegmentStore(false);
-                    }
-                    if (shardRouting.primary() && isTranslogBackedByRemoteStore()) {
-                        if (syncFromRemote) {
-                            syncRemoteTranslogAndUpdateGlobalCheckpoint();
-                        } else if (isSnapshotV2Restore() == false) {
-                            deleteTranslogFilesFromRemoteTranslog();
-                        }
-                    } else if (shardRouting.primary() == false && syncFromRemote) {
-                        // For replicas, when we download segments from remote segment store, we need to make sure that local
-                        // translog is having the same UUID that is referred by the segments. If they are different, engine open
-                        // fails with TranslogCorruptedException. It is safe to create empty translog for remote store enabled
-                        // indices as replica would only need to read translog in failover scenario and we always fetch data
-                        // from remote translog at the time of failover.
-                        final SegmentInfos lastCommittedSegmentInfos = store().readLastCommittedSegmentsInfo();
-                        final String translogUUID = lastCommittedSegmentInfos.userData.get(TRANSLOG_UUID_KEY);
-                        final long checkpoint = Long.parseLong(
-                            lastCommittedSegmentInfos.userData.get(SequenceNumbers.LOCAL_CHECKPOINT_KEY)
-                        );
-                        Translog.createEmptyTranslog(
-                            shardPath().resolveTranslog(),
-                            shardId(),
-                            checkpoint,
-                            getPendingPrimaryTerm(),
-                            translogUUID,
-                            FileChannel::open
-                        );
-                    }
-                });
-            } catch (CancellableThreads.ExecutionCancelledException e) {
-                // Only close() cancels this, so the shard is closed; report it as such, the way any other operation on
-                // a closed shard would, and keep the interrupted download's own failure for the log.
-                final IndexShardClosedException closed = new IndexShardClosedException(
-                    shardId,
-                    "shard closed while hydrating from the remote store"
-                );
-                closed.addSuppressed(e);
-                throw closed;
-            } finally {
-                remoteStoreHydration.compareAndSet(cancellableThreads, null);
-            }
-        } finally {
-            store.decRef();
-        }
-    }
-
-    /**
-     * Aborts the remote store hydration that a recovery of this shard is running, if any. Called by {@link #close} once
-     * the state is CLOSED. Interrupts the hydrating thread, whose in-flight file write fails with
-     * {@link java.nio.channels.ClosedByInterruptException}; the recovery then fails with {@link IndexShardClosedException}.
-     */
-    private void cancelRemoteStoreHydration(String reason) {
-        final CancellableThreads hydration = remoteStoreHydration.get();
-        if (hydration != null) {
-            hydration.cancel("shard closed: " + reason);
-        }
-    }
-
-    private boolean assertSequenceNumbersInCommit() throws IOException {
-        final Map<String, String> userData = fetchUserData();
-        assert userData.containsKey(SequenceNumbers.LOCAL_CHECKPOINT_KEY) : "commit point doesn't contains a local checkpoint";
-        assert userData.containsKey(MAX_SEQ_NO) : "commit point doesn't contains a maximum sequence number";
-        assert userData.containsKey(Engine.HISTORY_UUID_KEY) : "commit point doesn't contains a history uuid";
-        assert userData.get(Engine.HISTORY_UUID_KEY).equals(getHistoryUUID()) : "commit point history uuid ["
-            + userData.get(Engine.HISTORY_UUID_KEY)
-            + "] is different than engine ["
-            + getHistoryUUID()
-            + "]";
-        assert userData.containsKey(Engine.MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID) : "opening index which was created post 5.5.0 but "
-            + Engine.MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID
-            + " is not found in commit";
-        return true;
-    }
-
-    private Map<String, String> fetchUserData() throws IOException {
-        return SegmentInfos.readLatestCommit(store.directory()).getUserData();
-    }
-
-    private void onNewEngine(Indexer newEngine) {
-        assert Thread.holdsLock(engineMutex);
-        refreshListeners.setCurrentRefreshLocationSupplier(newEngine.translogManager()::getTranslogLastWriteLocation);
-
-        // Start periodic flush task for this shard
-        startPeriodicFlushTask();
-    }
-
-    /**
-     * called if recovery has to be restarted after network error / delay **
-     */
-    public void performRecoveryRestart() throws IOException {
-        assert Thread.holdsLock(mutex) == false : "restart recovery under mutex";
-        synchronized (engineMutex) {
-            assert refreshListeners.pendingCount() == 0 : "we can't restart with pending listeners";
-            IOUtils.close(currentEngineReference.getAndSet(null));
-            resetRecoveryStage();
-        }
-    }
-
-    /**
-     * If a file-based recovery occurs, a recovery target calls this method to reset the recovery stage.
-     */
-    public void resetRecoveryStage() {
-        assert routingEntry().recoverySource().getType() == RecoverySource.Type.PEER : "not a peer recovery [" + routingEntry() + "]";
-        assert currentEngineReference.get() == null;
-        if (state != IndexShardState.RECOVERING) {
-            throw new IndexShardNotRecoveringException(shardId, state);
-        }
-        recoveryState().setStage(RecoveryState.Stage.INIT);
-    }
-
-    /**
-     * returns stats about ongoing recoveries, both source and target
-     */
-    public RecoveryStats recoveryStats() {
-        return recoveryStats;
-    }
-
-    /**
-     * Returns the current {@link RecoveryState} if this shard is recovering or has been recovering.
-     * Returns null if the recovery has not yet started or shard was not recovered (created via an API).
-     */
-    @Override
-    public RecoveryState recoveryState() {
-        return this.recoveryState;
-    }
-
-    /**
-     * perform the last stages of recovery once all translog operations are done.
-     * note that you should still call {@link #postRecovery(String)}.
-     */
-    public void finalizeRecovery() {
-        recoveryState().setStage(RecoveryState.Stage.FINALIZE);
-        Indexer engine = getIndexer();
-        engine.refresh("recovery_finalization");
-        engine.config().setEnableGcDeletes(true);
-    }
-
-    /**
-     * Returns {@code true} if this shard can ignore a recovery attempt made to it (since the already doing/done it)
-     */
-    public boolean ignoreRecoveryAttempt() {
-        IndexShardState state = state(); // one time volatile read
-        return state == IndexShardState.POST_RECOVERY
-            || state == IndexShardState.RECOVERING
-            || state == IndexShardState.STARTED
-            || state == IndexShardState.CLOSED;
-    }
-
-    public void readAllowed() throws IllegalIndexShardStateException {
-        IndexShardState state = this.state; // one time volatile read
-        if (readAllowedStates.contains(state) == false) {
-            throw new IllegalIndexShardStateException(
-                shardId,
-                state,
-                "operations only allowed when shard state is one of " + readAllowedStates.toString()
-            );
-        }
-    }
-
-    /** returns true if the {@link IndexShardState} allows reading */
-    public boolean isReadAllowed() {
-        return readAllowedStates.contains(state);
-    }
-
-    private void ensureWriteAllowed(Engine.Operation.Origin origin) throws IllegalIndexShardStateException {
-        IndexShardState state = this.state; // one time volatile read
-
-        if (origin.isRecovery()) {
-            if (state != IndexShardState.RECOVERING) {
-                throw new IllegalIndexShardStateException(
-                    shardId,
-                    state,
-                    "operation only allowed when recovering, origin [" + origin + "]"
-                );
-            }
-        } else {
-            if (origin == Engine.Operation.Origin.PRIMARY) {
-                assert assertPrimaryMode();
-            } else if (origin == Engine.Operation.Origin.REPLICA) {
-                assert assertReplicationTarget();
-            } else {
-                assert origin == Engine.Operation.Origin.LOCAL_RESET;
-                assert getActiveOperationsCount() == OPERATIONS_BLOCKED
-                    : "locally resetting without blocking operations, active operations are [" + getActiveOperations() + "]";
-            }
-            if (writeAllowedStates.contains(state) == false) {
-                throw new IllegalIndexShardStateException(
-                    shardId,
-                    state,
-                    "operation only allowed when shard state is one of " + writeAllowedStates + ", origin [" + origin + "]"
-                );
-            }
-        }
-    }
-
-    private boolean assertPrimaryMode() {
-        assert shardRouting.primary() && replicationTracker.isPrimaryMode() : "shard "
-            + shardRouting
-            + " is not a primary shard in primary mode";
-        return true;
-    }
-
-    // Returns true if shard routing is primary & replication tracker is in primary mode.
-    public boolean isPrimaryMode() {
-        return shardRouting.primary() && replicationTracker.isPrimaryMode();
-    }
-
-    private boolean assertReplicationTarget() {
-        assert replicationTracker.isPrimaryMode() == false : "shard " + shardRouting + " in primary mode cannot be a replication target";
-        return true;
-    }
-
     private void verifyNotClosed() throws IllegalIndexShardStateException {
-        verifyNotClosed(null);
-    }
-
-    private void verifyNotClosed(Exception suppressed) throws IllegalIndexShardStateException {
-        IndexShardState state = this.state; // one time volatile read
-        if (state == IndexShardState.CLOSED) {
-            final IllegalIndexShardStateException exc = new IndexShardClosedException(shardId, "operation only allowed when not closed");
-            if (suppressed != null) {
-                exc.addSuppressed(suppressed);
-            }
-            throw exc;
-        }
-    }
-
-    protected final void verifyActive() throws IllegalIndexShardStateException {
-        IndexShardState state = this.state; // one time volatile read
-        if (state != IndexShardState.STARTED) {
-            throw new IllegalIndexShardStateException(shardId, state, "operation only allowed when shard is active");
-        }
-    }
-
-    /**
-     * Returns number of heap bytes used by the indexing buffer for this shard, or 0 if the shard is closed
-     */
-    public long getIndexBufferRAMBytesUsed() {
-        Indexer engine = getIndexerOrNull();
-        if (engine == null) {
-            return 0;
-        }
-        try {
-            return engine.getHeapBytesUsed();
-        } catch (AlreadyClosedException ex) {
-            return 0;
-        }
-    }
-
-    /** Returns native (off-heap) bytes used by indexing buffers for this shard, or 0 if closed. */
-    public long getNativeBytesUsed() {
-        Indexer engine = getIndexerOrNull();
-        if (engine == null) {
-            return 0;
-        }
-        try {
-            return engine.getNativeBytesUsed();
-        } catch (AlreadyClosedException ex) {
-            return 0;
-        }
-    }
-
-    public void addShardFailureCallback(Consumer<ShardFailure> onShardFailure) {
-        this.shardEventListener.delegates.add(onShardFailure);
-    }
-
-    /**
-     * Called by {@link IndexingMemoryController} to check whether more than {@code inactiveTimeNS} has passed since the last
-     * indexing operation, so we can flush the index.
-     */
-    public void flushOnIdle(long inactiveTimeNS) {
-        Indexer engineOrNull = getIndexerOrNull();
-        if (engineOrNull != null && System.nanoTime() - engineOrNull.getLastWriteNanos() >= inactiveTimeNS) {
-            boolean wasActive = active.getAndSet(false);
-            if (wasActive) {
-                logger.debug("flushing shard on inactive");
-                threadPool.executor(ThreadPool.Names.FLUSH).execute(new AbstractRunnable() {
-                    @Override
-                    public void onFailure(Exception e) {
-                        if (state != IndexShardState.CLOSED) {
-                            logger.warn("failed to flush shard on inactive", e);
-                        }
-                    }
-
-                    @Override
-                    protected void doRun() {
-                        flush(new FlushRequest().waitIfOngoing(false).force(false));
-                        periodicFlushMetric.inc();
-                    }
-                });
-            }
-        }
-    }
-
-    public boolean isActive() {
-        return active.get();
-    }
-
-    public ShardPath shardPath() {
-        return path;
-    }
-
-    public void recoverFromLocalShards(
-        Consumer<MappingMetadata> mappingUpdateConsumer,
-        List<IndexShard> localShards,
-        ActionListener<Boolean> listener
-    ) throws IOException {
-        assert shardRouting.primary() : "recover from local shards only makes sense if the shard is a primary shard";
-        assert recoveryState.getRecoverySource().getType() == RecoverySource.Type.LOCAL_SHARDS : "invalid recovery type: "
-            + recoveryState.getRecoverySource();
-        final List<LocalShardSnapshot> snapshots = new ArrayList<>();
-        final ActionListener<Boolean> recoveryListener = ActionListener.runBefore(listener, () -> IOUtils.close(snapshots));
-        boolean success = false;
-        try {
-            for (IndexShard shard : localShards) {
-                snapshots.add(new LocalShardSnapshot(shard));
-            }
-            // we are the first primary, recover from the gateway
-            // if its post api allocation, the index should exists
-            assert shardRouting.primary() : "recover from local shards only makes sense if the shard is a primary shard";
-            StoreRecovery storeRecovery = new StoreRecovery(shardId, logger);
-            storeRecovery.recoverFromLocalShards(mappingUpdateConsumer, this, snapshots, recoveryListener);
-            success = true;
-        } finally {
-            if (success == false) {
-                IOUtils.close(snapshots);
-            }
-        }
-    }
-
-    public void recoverFromStore(ActionListener<Boolean> listener) {
-        // we are the first primary, recover from the gateway
-        // if its post api allocation, the index should exists
-        assert shardRouting.primary() || shardRouting.isSearchOnly()
-            : "recover from store only makes sense if the shard is a primary shard or an untracked search only replica";
-        assert shardRouting.initializing() : "can only start recovery on initializing shard";
-        StoreRecovery storeRecovery = new StoreRecovery(shardId, logger);
-        storeRecovery.recoverFromStore(this, listener);
-    }
-
-    public void restoreFromRemoteStore(ActionListener<Boolean> listener) {
-        assert shardRouting.primary() : "recover from store only makes sense if the shard is a primary shard";
-        StoreRecovery storeRecovery = new StoreRecovery(shardId, logger);
-        storeRecovery.recoverFromRemoteStore(this, listener);
-    }
-
-    public void restoreFromSnapshotAndRemoteStore(
-        Repository repository,
-        RepositoriesService repositoriesService,
-        ActionListener<Boolean> listener
-    ) {
-        try {
-            assert shardRouting.primary() : "recover from store only makes sense if the shard is a primary shard";
-            assert recoveryState.getRecoverySource().getType() == RecoverySource.Type.SNAPSHOT : "invalid recovery type: "
-                + recoveryState.getRecoverySource();
-            StoreRecovery storeRecovery = new StoreRecovery(shardId, logger);
-            SnapshotRecoverySource recoverySource = (SnapshotRecoverySource) recoveryState().getRecoverySource();
-            if (recoverySource.pinnedTimestamp() != 0) {
-                storeRecovery.recoverShallowSnapshotV2(
-                    this,
-                    repository,
-                    repositoriesService,
-                    listener,
                     remoteStoreSettings.getSegmentsPathFixedPrefix(),
-                    threadPool
-                );
-            } else {
-                storeRecovery.recoverFromSnapshotAndRemoteStore(
-                    this,
-                    repository,
-                    repositoriesService,
-                    listener,
-                    remoteStoreSettings.getSegmentsPathFixedPrefix(),
-                    threadPool
-                );
-            }
-        } catch (Exception e) {
-            listener.onFailure(e);
-        }
+            getIndexer(),
+                }
+        this.shardFieldData = new ShardFieldData();
+        @Nullable String routing
+        long autoGeneratedTimeStamp,
     }
-
-    public void restoreFromRepository(Repository repository, ActionListener<Boolean> listener) {
-        try {
-            assert shardRouting.primary() : "recover from store only makes sense if the shard is a primary shard";
-            assert recoveryState.getRecoverySource().getType() == RecoverySource.Type.SNAPSHOT : "invalid recovery type: "
-                + recoveryState.getRecoverySource();
-            StoreRecovery storeRecovery = new StoreRecovery(shardId, logger);
-            storeRecovery.recoverFromRepository(this, repository, listener);
-        } catch (Exception e) {
-            listener.onFailure(e);
-        }
-    }
-
-    /**
-     * Tests whether or not the engine should be flushed periodically.
-     * This test is based on the current size of the translog compared to the configured flush threshold size.
-     *
-     * @return {@code true} if the engine should be flushed
-     */
-    public boolean shouldPeriodicallyFlush() {
-        final Indexer engine = getIndexerOrNull();
-        if (engine != null) {
-            try {
-                return engine.shouldPeriodicallyFlush();
-            } catch (final AlreadyClosedException e) {
-                // we are already closed, no need to flush or roll
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Tests whether or not the translog generation should be rolled to a new generation. This test is based on the size of the current
-     * generation compared to the configured generation threshold size.
-     *
-     * @return {@code true} if the current generation should be rolled to a new generation
-     */
-    boolean shouldRollTranslogGeneration() {
-        final Indexer engine = getIndexerOrNull();
-        if (engine != null) {
-            try {
-                return engine.translogManager().shouldRollTranslogGeneration();
-            } catch (final AlreadyClosedException e) {
-                // we are already closed, no need to flush or roll
-            }
-        }
-        return false;
-    }
-
-    public void onSettingsChanged() {
-        Indexer engineOrNull = getIndexerOrNull();
-        if (engineOrNull != null) {
-            final boolean disableTranslogRetention = indexSettings.isSoftDeleteEnabled() && useRetentionLeasesInPeerRecovery;
-            engineOrNull.onSettingsChanged(
-                disableTranslogRetention ? TimeValue.MINUS_ONE : indexSettings.getTranslogRetentionAge(),
-                disableTranslogRetention ? new ByteSizeValue(-1) : indexSettings.getTranslogRetentionSize(),
-                indexSettings.getSoftDeleteRetentionOperations()
-            );
-        }
-        // index.periodic_flush_interval is dynamic: start, reschedule or stop the periodic flush task to match the current value.
-        updatePeriodicFlushTask(engineOrNull != null);
-    }
-
-    private void turnOffTranslogRetention() {
+                final Indexer newEngine = indexerFactory.createIndexer(config);
+                } else {
+     * @param reason   the reason for the state change
+                        "Shard is marked as relocated, cannot safely move to state " + newRouting.state()
+            segmentInfos.getVersion(),
+            globalCheckpoint,
+    private void innerOpenEngineAndTranslog(LongSupplier globalCheckpointSupplier) throws IOException {
         logger.debug(
-            "turn off the translog retention for the replication group {} "
-                + "as it starts using retention leases exclusively in peer recoveries",
-            shardId
-        );
-        // Off to the generic threadPool as pruning the delete tombstones can be expensive.
-        threadPool.generic().execute(new AbstractRunnable() {
-            @Override
-            public void onFailure(Exception e) {
-                if (state != IndexShardState.CLOSED) {
-                    logger.warn("failed to turn off translog retention", e);
-                }
-            }
-
-            @Override
-            protected void doRun() {
-                onSettingsChanged();
-                trimTranslog();
-            }
-        });
-    }
-
-    /**
-     * Acquires a lock on the translog files and Lucene soft-deleted documents to prevent them from being trimmed
-     */
-    public Closeable acquireHistoryRetentionLock() {
-        return getIndexer().acquireHistoryRetentionLock();
-    }
-
-    /**
-     * Creates a new history snapshot for reading operations since
-     * the provided starting seqno (inclusive) and ending seqno (inclusive)
-     * The returned snapshot can be retrieved from either Lucene index or translog files.
-     */
-    public Translog.Snapshot getHistoryOperations(String reason, long startingSeqNo, long endSeqNo, boolean accurateCount)
-        throws IOException {
-        return getIndexer().newChangesSnapshot(reason, startingSeqNo, endSeqNo, true, accurateCount);
-    }
-
-    /**
-     * Creates a new history snapshot from the translog instead of the lucene index. Required for cross cluster replication.
-     * Use the recommended {@link #getHistoryOperations(String, long, long, boolean)} method for other cases.
-     * This method should only be invoked if Segment Replication or Remote Store is not enabled.
-     */
-    public Translog.Snapshot getHistoryOperationsFromTranslog(long startingSeqNo, long endSeqNo) throws IOException {
-        assert indexSettings.isSegRepEnabledOrRemoteNode() == false
-            : "unsupported operation for segment replication enabled indices or remote store backed indices";
-        return getIndexer().translogManager().newChangesSnapshot(startingSeqNo, endSeqNo, true);
-    }
-
-    /**
-     * Checks if we have a completed history of operations since the given starting seqno (inclusive).
-     * This method should be called after acquiring the retention lock; See {@link #acquireHistoryRetentionLock()}
-     */
-    public boolean hasCompleteHistoryOperations(String reason, long startingSeqNo) {
-        return getIndexer().hasCompleteOperationHistory(reason, startingSeqNo);
-    }
-
-    /**
-     * Gets the minimum retained sequence number for this engine.
-     *
-     * @return the minimum retained sequence number
-     */
-    public long getMinRetainedSeqNo() {
-        return getIndexer().getMinRetainedSeqNo();
-    }
-
-    /**
-     * Counts the number of history operations within the provided sequence numbers
-     * @param source     source of the requester (e.g., peer-recovery)
-     * @param fromSeqNo  from sequence number, included
-     * @param toSeqNo    to sequence number, included
-     * @return           number of history operations in the sequence number range
-     */
-    public int countNumberOfHistoryOperations(String source, long fromSeqNo, long toSeqNo) throws IOException {
-        return getIndexer().countNumberOfHistoryOperations(source, fromSeqNo, toSeqNo);
-    }
-
-    /**
-     * Creates a new changes snapshot for reading operations whose seq_no are between {@code fromSeqNo}(inclusive)
-     * and {@code toSeqNo}(inclusive). The caller has to close the returned snapshot after finishing the reading.
-     *
-     * @param source            the source of the request
-     * @param fromSeqNo         the from seq_no (inclusive) to read
-     * @param toSeqNo           the to seq_no (inclusive) to read
-     * @param requiredFullRange if {@code true} then {@link Translog.Snapshot#next()} will throw {@link IllegalStateException}
-     *                          if any operation between {@code fromSeqNo} and {@code toSeqNo} is missing.
-     *                          This parameter should be only enabled when the entire requesting range is below the global checkpoint.
-     */
-    public Translog.Snapshot newChangesSnapshot(
-        String source,
-        long fromSeqNo,
-        long toSeqNo,
-        boolean requiredFullRange,
-        boolean accurateCount
-    ) throws IOException {
-        return getIndexer().newChangesSnapshot(source, fromSeqNo, toSeqNo, requiredFullRange, accurateCount);
-    }
-
-    public List<Segment> segments(boolean verbose) {
-        return getIndexer().segments(verbose);
-    }
-
-    public String getHistoryUUID() {
-        return getIndexer().getHistoryUUID();
-    }
-
-    public IndexEventListener getIndexEventListener() {
-        return indexEventListener;
-    }
-
-    public void activateThrottling() {
-        try {
-            getIndexer().activateThrottling();
-        } catch (AlreadyClosedException ex) {
-            // ignore
-        }
-    }
-
-    public void deactivateThrottling() {
-        try {
-            getIndexer().deactivateThrottling();
-        } catch (AlreadyClosedException ex) {
-            // ignore
-        }
-    }
-
-    private void handleRefreshException(Exception e) {
-        if (e instanceof AlreadyClosedException) {
-            // ignore
-        } else if (e instanceof RefreshFailedEngineException rfee) {
-            if (rfee.getCause() instanceof InterruptedException) {
-                // ignore, we are being shutdown
-            } else if (rfee.getCause() instanceof ClosedByInterruptException) {
-                // ignore, we are being shutdown
-            } else if (rfee.getCause() instanceof ThreadInterruptedException) {
-                // ignore, we are being shutdown
-            } else {
-                if (state != IndexShardState.CLOSED) {
-                    logger.warn("Failed to perform engine refresh", e);
-                }
-            }
-        } else {
-            if (state != IndexShardState.CLOSED) {
-                logger.warn("Failed to perform engine refresh", e);
-            }
-        }
-    }
-
-    /**
-     * Called when our shard is using too much heap and should move buffered indexed/deleted documents to disk.
-     */
-    public void writeIndexingBuffer() {
-        try {
-            Indexer engine = getIndexer();
-            engine.writeIndexingBuffer();
-        } catch (Exception e) {
-            handleRefreshException(e);
-        }
-    }
-
-    /**
-     * Notifies the service to update the local checkpoint for the shard with the provided allocation ID. See
-     * {@link ReplicationTracker#updateLocalCheckpoint(String, long)} for
-     * details.
-     *
-     * @param allocationId the allocation ID of the shard to update the local checkpoint for
-     * @param checkpoint   the local checkpoint for the shard
-     */
-    public void updateLocalCheckpointForShard(final String allocationId, final long checkpoint) {
-        assert assertPrimaryMode();
-        verifyNotClosed();
-        replicationTracker.updateLocalCheckpoint(allocationId, checkpoint);
-    }
-
-    /**
-     * Update the local knowledge of the persisted global checkpoint for the specified allocation ID.
-     *
-     * @param allocationId     the allocation ID to update the global checkpoint for
-     * @param globalCheckpoint the global checkpoint
-     */
-    public void updateGlobalCheckpointForShard(final String allocationId, final long globalCheckpoint) {
-        assert assertPrimaryMode();
-        verifyNotClosed();
-        replicationTracker.updateGlobalCheckpointForShard(allocationId, globalCheckpoint);
-    }
-
-    /**
-     * Update the local knowledge of the visible global checkpoint for the specified allocation ID.
-     *
-     * @param allocationId     the allocation ID to update the global checkpoint for
-     * @param visibleCheckpoint the visible checkpoint
-     */
-    public void updateVisibleCheckpointForShard(final String allocationId, final ReplicationCheckpoint visibleCheckpoint) {
-        // Update target replication checkpoint only when in active primary mode
-        if (this.isPrimaryMode()) {
-            verifyNotClosed();
-            replicationTracker.updateVisibleCheckpointForShard(allocationId, visibleCheckpoint);
-        }
-    }
-
-    /**
-     * Fetch stats on segment replication.
-     * @return {@link Tuple} V1 - TimeValue in ms - mean replication lag for this primary to its entire group,
-     * V2 - Set of {@link SegmentReplicationShardStats} per shard in this primary's replication group.
-     */
-    public Set<SegmentReplicationShardStats> getReplicationStatsForTrackedReplicas() {
-        return replicationTracker.getSegmentReplicationStats();
-    }
-
-    /**
-     * Stable marker substring embedded in every replica-sync-timeout message. Used for detection
-     * in mixed-version clusters or log parsing, analogous to
-     * {@link org.opensearch.storage.action.tiering.MergeDrainTimeoutException#MERGE_DRAIN_TIMEOUT_MARKER}.
-     */
-    public static final String REPLICA_SYNC_TIMEOUT_MARKER = "[REPLICA_SYNC_TIMEOUT]";
-
-    /**
-     * Waits for all tracked replicas to be in sync with the primary's latest checkpoint.
-     * Polls every 500ms until either all replicas report {@code checkpointsBehindCount == 0}
-     * or the timeout is exceeded.
-     * <p>
-     * Used during tiering preparation to verify replicas are in sync after
-     * {@code waitForRemoteStoreSync()} — ensures replicas have downloaded the latest
-     * segments before shard relocation begins.
-     *
-     * @param timeout maximum time to wait for replicas to sync
-     * @throws IOException if replicas fail to sync within the timeout
-     */
-    public void waitForReplicaSync(TimeValue timeout) throws IOException {
-        if (!indexSettings.isSegRepEnabledOrRemoteNode()) {
-            return;
-        }
-        long startNanos = System.nanoTime();
-        Set<SegmentReplicationShardStats> stats = Set.of();
-        while (System.nanoTime() - startNanos < timeout.nanos()) {
-            stats = getReplicationStatsForTrackedReplicas();
-            if (stats.isEmpty()
-                || stats.stream()
-                    .allMatch(
-                        s -> s.getCheckpointsBehindCount() == 0 && s.getBytesBehindCount() == 0 && s.getCurrentReplicationTimeMillis() == 0
-                    )) {
-                logger.debug("All replicas in sync for shard [{}]", shardId);
-                return;
-            }
-            long behindReplicas = stats.stream().filter(s -> s.getCheckpointsBehindCount() > 0 || s.getBytesBehindCount() > 0).count();
-            long maxCheckpointsBehind = stats.stream().mapToLong(SegmentReplicationShardStats::getCheckpointsBehindCount).max().orElse(0);
-            long maxBytesBehind = stats.stream().mapToLong(SegmentReplicationShardStats::getBytesBehindCount).max().orElse(0);
-            logger.debug(
-                "Waiting for replica sync on shard [{}]: {} replica(s) still behind, max checkpoints behind: {}, max bytes behind: {}",
-                shardId,
-                behindReplicas,
-                maxCheckpointsBehind,
-                maxBytesBehind
-            );
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new OpenSearchException("Interrupted waiting for replica sync on shard [" + shardId + "]", e);
-            }
-        }
-        // Build diagnostic message with per-replica details
-        long behindCount = stats.stream().filter(s -> s.getCheckpointsBehindCount() > 0 || s.getBytesBehindCount() > 0).count();
-        long maxBehind = stats.stream().mapToLong(SegmentReplicationShardStats::getCheckpointsBehindCount).max().orElse(0);
-        long maxBytes = stats.stream().mapToLong(SegmentReplicationShardStats::getBytesBehindCount).max().orElse(0);
-        throw new IOException(
-            REPLICA_SYNC_TIMEOUT_MARKER
-                + " Shard ["
-                + shardId
-                + "] replicas failed to sync within "
-                + timeout
-                + ". Replicas still behind: "
-                + behindCount
-                + ", max checkpoints behind: "
-                + maxBehind
-                + ", max bytes behind: "
-                + maxBytes
-        );
-    }
-
-    public ReplicationStats getReplicationStats() {
-        if (indexSettings.isSegRepEnabledOrRemoteNode() && !routingEntry().primary()) {
-            return segmentReplicationStatsProvider.apply(shardId);
-        }
-        return ReplicationStats.empty();
-    }
-
-    /**
-     * Add a global checkpoint listener. If the global checkpoint is equal to or above the global checkpoint the listener is waiting for,
-     * then the listener will be notified immediately via an executor (so possibly not on the current thread). If the specified timeout
-     * elapses before the listener is notified, the listener will be notified with an {@link TimeoutException}. A caller may pass null to
-     * specify no timeout.
-     *
-     * @param waitingForGlobalCheckpoint the global checkpoint the listener is waiting for
-     * @param listener                   the listener
-     * @param timeout                    the timeout
-     */
-    public void addGlobalCheckpointListener(
-        final long waitingForGlobalCheckpoint,
-        final GlobalCheckpointListeners.GlobalCheckpointListener listener,
-        final TimeValue timeout
-    ) {
-        this.globalCheckpointListeners.add(waitingForGlobalCheckpoint, listener, timeout);
-    }
-
-    private void ensureSoftDeletesEnabled(String feature) {
-        if (indexSettings.isSoftDeleteEnabled() == false) {
-            String message = feature + " requires soft deletes but " + indexSettings.getIndex() + " does not have soft deletes enabled";
-            assert false : message;
-            throw new IllegalStateException(message);
-        }
-    }
-
-    /**
-     * Get all retention leases tracked on this shard.
-     *
-     * @return the retention leases
-     */
-    public RetentionLeases getRetentionLeases() {
-        return getRetentionLeases(false).v2();
-    }
-
-    /**
-     * If the expire leases parameter is false, gets all retention leases tracked on this shard and otherwise first calculates
-     * expiration of existing retention leases, and then gets all non-expired retention leases tracked on this shard. Note that only the
-     * primary shard calculates which leases are expired, and if any have expired, syncs the retention leases to any replicas. If the
-     * expire leases parameter is true, this replication tracker must be in primary mode.
-     *
-     * @return a tuple indicating whether or not any retention leases were expired, and the non-expired retention leases
-     */
-    public Tuple<Boolean, RetentionLeases> getRetentionLeases(final boolean expireLeases) {
-        assert expireLeases == false || assertPrimaryMode();
-        verifyNotClosed();
-        return replicationTracker.getRetentionLeases(expireLeases);
-    }
-
-    public RetentionLeaseStats getRetentionLeaseStats() {
-        verifyNotClosed();
-        return new RetentionLeaseStats(getRetentionLeases());
-    }
-
-    /**
-     * Adds a new retention lease.
-     *
-     * @param id                      the identifier of the retention lease
-     * @param retainingSequenceNumber the retaining sequence number
-     * @param source                  the source of the retention lease
-     * @param listener                the callback when the retention lease is successfully added and synced to replicas
-     * @return the new retention lease
-     * @throws IllegalArgumentException if the specified retention lease already exists
-     */
-    public RetentionLease addRetentionLease(
-        final String id,
-        final long retainingSequenceNumber,
-        final String source,
-        final ActionListener<ReplicationResponse> listener
-    ) {
-        Objects.requireNonNull(listener);
-        assert assertPrimaryMode();
-        verifyNotClosed();
-        ensureSoftDeletesEnabled("retention leases");
-        try (Closeable ignore = acquireHistoryRetentionLock()) {
-            final long actualRetainingSequenceNumber = retainingSequenceNumber == RETAIN_ALL
-                ? getMinRetainedSeqNo()
-                : retainingSequenceNumber;
-            return replicationTracker.addRetentionLease(id, actualRetainingSequenceNumber, source, listener);
-        } catch (final IOException e) {
-            throw new AssertionError(e);
-        }
-    }
-
-    /**
-     * Renews an existing retention lease.
-     *
-     * @param id                      the identifier of the retention lease
-     * @param retainingSequenceNumber the retaining sequence number
-     * @param source                  the source of the retention lease
-     * @return the renewed retention lease
-     * @throws IllegalArgumentException if the specified retention lease does not exist
-     */
-    public RetentionLease renewRetentionLease(final String id, final long retainingSequenceNumber, final String source) {
-        assert assertPrimaryMode();
-        verifyNotClosed();
-        ensureSoftDeletesEnabled("retention leases");
-        try (Closeable ignore = acquireHistoryRetentionLock()) {
-            final long actualRetainingSequenceNumber = retainingSequenceNumber == RETAIN_ALL
-                ? getMinRetainedSeqNo()
-                : retainingSequenceNumber;
-            return replicationTracker.renewRetentionLease(id, actualRetainingSequenceNumber, source);
-        } catch (final IOException e) {
-            throw new AssertionError(e);
-        }
-    }
-
-    /**
-     * Removes an existing retention lease.
-     *
-     * @param id       the identifier of the retention lease
-     * @param listener the callback when the retention lease is successfully removed and synced to replicas
-     */
-    public void removeRetentionLease(final String id, final ActionListener<ReplicationResponse> listener) {
-        Objects.requireNonNull(listener);
-        assert assertPrimaryMode();
-        verifyNotClosed();
-        ensureSoftDeletesEnabled("retention leases");
-        replicationTracker.removeRetentionLease(id, listener);
-    }
-
-    /**
-     * Updates retention leases on a replica.
-     *
-     * @param retentionLeases the retention leases
-     */
-    public void updateRetentionLeasesOnReplica(final RetentionLeases retentionLeases) {
-        assert assertReplicationTarget();
-        verifyNotClosed();
-        replicationTracker.updateRetentionLeasesOnReplica(retentionLeases);
-    }
-
-    /**
-     * Loads the latest retention leases from their dedicated state file.
-     *
-     * @return the retention leases
-     * @throws IOException if an I/O exception occurs reading the retention leases
-     */
-    public RetentionLeases loadRetentionLeases() throws IOException {
-        verifyNotClosed();
-        return replicationTracker.loadRetentionLeases(path.getShardStatePath());
-    }
-
-    /**
-     * Persists the current retention leases to their dedicated state file.
-     *
-     * @throws WriteStateException if an exception occurs writing the state file
-     */
-    public void persistRetentionLeases() throws WriteStateException {
-        verifyNotClosed();
-        replicationTracker.persistRetentionLeases(path.getShardStatePath());
-    }
-
-    public boolean assertRetentionLeasesPersisted() throws IOException {
-        return replicationTracker.assertRetentionLeasesPersisted(path.getShardStatePath());
-    }
-
-    /**
-     * Syncs the current retention leases to all replicas.
-     */
-    public void syncRetentionLeases() {
-        assert assertPrimaryMode();
-        verifyNotClosed();
-        replicationTracker.renewPeerRecoveryRetentionLeases();
-        final Tuple<Boolean, RetentionLeases> retentionLeases = getRetentionLeases(true);
-        if (retentionLeases.v1()) {
-            logger.trace("syncing retention leases [{}] after expiration check", retentionLeases.v2());
-            retentionLeaseSyncer.sync(
-                shardId,
-                shardRouting.allocationId().getId(),
-                getPendingPrimaryTerm(),
-                retentionLeases.v2(),
-                ActionListener.wrap(
-                    r -> {},
-                    e -> logger.warn(
-                        new ParameterizedMessage("failed to sync retention leases [{}] after expiration check", retentionLeases),
-                        e
-                    )
-                )
-            );
-        } else {
-            logger.trace("background syncing retention leases [{}] after expiration check", retentionLeases.v2());
-            retentionLeaseSyncer.backgroundSync(
-                shardId,
-                shardRouting.allocationId().getId(),
-                getPendingPrimaryTerm(),
-                retentionLeases.v2()
-            );
-        }
-    }
-
-    /**
-     * Called when the recovery process for a shard has opened the engine on the target shard. Ensures that the right data structures
-     * have been set up locally to track local checkpoint information for the shard and that the shard is added to the replication group.
-     *
-     * @param allocationId  the allocation ID of the shard for which recovery was initiated
-     */
-    public void initiateTracking(final String allocationId) {
-        assert assertPrimaryMode();
-        replicationTracker.initiateTracking(allocationId);
-    }
-
-    /**
-     * Marks the shard with the provided allocation ID as in-sync with the primary shard. See
-     * {@link ReplicationTracker#markAllocationIdAsInSync(String, long)}
-     * for additional details.
-     *
-     * @param allocationId    the allocation ID of the shard to mark as in-sync
-     * @param localCheckpoint the current local checkpoint on the shard
-     */
-    public void markAllocationIdAsInSync(final String allocationId, final long localCheckpoint) throws InterruptedException {
-        assert assertPrimaryMode();
-        replicationTracker.markAllocationIdAsInSync(allocationId, localCheckpoint);
-    }
-
-    /**
-     * Returns the persisted local checkpoint for the shard.
-     *
-     * @return the local checkpoint
-     */
-    public long getLocalCheckpoint() {
-        return getIndexer().getPersistedLocalCheckpoint();
-    }
-
-    /**
-     * Fetch the latest checkpoint that has been processed but not necessarily persisted.
-     * Also see {@link #getLocalCheckpoint()}.
-     */
-    public long getProcessedLocalCheckpoint() {
-        return getIndexer().getProcessedLocalCheckpoint();
-    }
-
-    /**
-     * Returns the global checkpoint for the shard.
-     *
-     * @return the global checkpoint
-     */
-    public long getLastKnownGlobalCheckpoint() {
-        return replicationTracker.getGlobalCheckpoint();
-    }
-
-    /**
-     * Returns the latest global checkpoint value that has been persisted in the underlying storage (i.e. translog's checkpoint)
-     */
-    public long getLastSyncedGlobalCheckpoint() {
-        return getIndexer().getLastSyncedGlobalCheckpoint();
-    }
-
-    /**
-     * Get the local knowledge of the global checkpoints for all in-sync allocation IDs.
-     *
-     * @return a map from allocation ID to the local knowledge of the global checkpoint for that allocation ID
-     */
-    public Map<String, Long> getInSyncGlobalCheckpoints() {
-        assert assertPrimaryMode();
-        verifyNotClosed();
-        return replicationTracker.getInSyncGlobalCheckpoints();
-    }
-
-    /**
-     * Syncs the global checkpoint to the replicas if the global checkpoint on at least one replica is behind the global checkpoint on the
-     * primary.
-     */
-    public void maybeSyncGlobalCheckpoint(final String reason) {
-        verifyNotClosed();
-        assert shardRouting.primary() : "only call maybeSyncGlobalCheckpoint on primary shard";
-        if (replicationTracker.isPrimaryMode() == false) {
-            return;
-        }
-        assert assertPrimaryMode();
-        // only sync if there are no operations in flight, or when using async durability
-        final SeqNoStats stats = getIndexer().getSeqNoStats(replicationTracker.getGlobalCheckpoint());
-        final boolean asyncDurability = indexSettings().getTranslogDurability() == Durability.ASYNC;
-        if (stats.getMaxSeqNo() == stats.getGlobalCheckpoint() || asyncDurability) {
-            final Map<String, Long> globalCheckpoints = getInSyncGlobalCheckpoints();
-            final long globalCheckpoint = replicationTracker.getGlobalCheckpoint();
-            // async durability means that the local checkpoint might lag (as it is only advanced on fsync)
-            // periodically ask for the newest local checkpoint by syncing the global checkpoint, so that ultimately the global
-            // checkpoint can be synced. Also take into account that a shard might be pending sync, which means that it isn't
-            // in the in-sync set just yet but might be blocked on waiting for its persisted local checkpoint to catch up to
-            // the global checkpoint.
-            final boolean syncNeeded = (asyncDurability
-                && (stats.getGlobalCheckpoint() < stats.getMaxSeqNo() || replicationTracker.pendingInSync()))
-                // check if the persisted global checkpoint
-                || StreamSupport.stream(globalCheckpoints.values().spliterator(), false).anyMatch(v -> v < globalCheckpoint);
-            // only sync if index is not closed and there is a shard lagging the primary
-            if (syncNeeded && indexSettings.getIndexMetadata().getState() == IndexMetadata.State.OPEN) {
-                logger.trace("syncing global checkpoint for [{}]", reason);
-                globalCheckpointSyncer.run();
-            }
-        }
-    }
-
-    /**
-     * Returns the current replication group for the shard.
-     *
-     * @return the replication group
-     */
-    public ReplicationGroup getReplicationGroup() {
-        assert assertPrimaryMode();
-        verifyNotClosed();
-        ReplicationGroup replicationGroup = replicationTracker.getReplicationGroup();
-        // PendingReplicationActions is dependent on ReplicationGroup. Every time we expose ReplicationGroup,
-        // ensure PendingReplicationActions is updated with the newest version to prevent races.
-        pendingReplicationActions.accept(replicationGroup);
-        return replicationGroup;
-    }
-
-    /**
-     * Returns the pending replication actions for the shard.
-     *
-     * @return the pending replication actions
-     */
-    public PendingReplicationActions getPendingReplicationActions() {
-        assert assertPrimaryMode();
-        verifyNotClosed();
-        return pendingReplicationActions;
-    }
-
-    /**
-     * Updates the global checkpoint on a replica shard after it has been updated by the primary.
-     *
-     * @param globalCheckpoint the global checkpoint
-     * @param reason           the reason the global checkpoint was updated
-     */
-    public void updateGlobalCheckpointOnReplica(final long globalCheckpoint, final String reason) {
-        assert assertReplicationTarget();
-        final long localCheckpoint = getLocalCheckpoint();
-        if (globalCheckpoint > localCheckpoint) {
-            /*
-             * This can happen during recovery when the shard has started its engine but recovery is not finalized and is receiving global
-             * checkpoint updates. However, since this shard is not yet contributing to calculating the global checkpoint, it can be the
-             * case that the global checkpoint update from the primary is ahead of the local checkpoint on this shard. In this case, we
-             * ignore the global checkpoint update. This can happen if we are in the translog stage of recovery. Prior to this, the engine
-             * is not opened and this shard will not receive global checkpoint updates, and after this the shard will be contributing to
-             * calculations of the global checkpoint. However, we can not assert that we are in the translog stage of recovery here as
-             * while the global checkpoint update may have emanated from the primary when we were in that state, we could subsequently move
-             * to recovery finalization, or even finished recovery before the update arrives here.
-             * When remote translog is enabled for an index, replication operation is limited to primary term validation and does not
-             * update local checkpoint at replica, so the local checkpoint at replica can be less than globalCheckpoint.
-             */
-            assert (state() != IndexShardState.POST_RECOVERY && state() != IndexShardState.STARTED)
-                || indexSettings.isAssignedOnRemoteNode() : "supposedly in-sync shard copy received a global checkpoint ["
-                    + globalCheckpoint
-                    + "] "
-                    + "that is higher than its local checkpoint ["
-                    + localCheckpoint
-                    + "]";
-            return;
-        }
-        replicationTracker.updateGlobalCheckpointOnReplica(globalCheckpoint, reason);
-    }
-
-    /**
-     * Updates the known allocation IDs and the local checkpoints for the corresponding allocations from a primary relocation source.
-     *
-     * @param primaryContext the sequence number context
-     */
-    public void activateWithPrimaryContext(final ReplicationTracker.PrimaryContext primaryContext) {
-        assert shardRouting.primary() && shardRouting.isRelocationTarget()
-            : "only primary relocation target can update allocation IDs from primary context: " + shardRouting;
-        assert primaryContext.getCheckpointStates().containsKey(routingEntry().allocationId().getId()) : "primary context ["
-            + primaryContext
-            + "] does not contain relocation target ["
-            + routingEntry()
-            + "]";
-        String allocationId = routingEntry().allocationId().getId();
-        if (isRemoteStoreEnabled() || isMigratingToRemote()) {
-            // For remote backed indexes, old primary may not have updated value of local checkpoint of new primary.
-            // But the new primary is always updated with data in remote sore and is at par with old primary.
-            // So, we can use a stricter check where local checkpoint of new primary is checked against that of old primary.
-            allocationId = primaryContext.getRoutingTable().primaryShard().allocationId().getId();
-        }
-
-        // DFA warm primaries: relax checkpoint assertion. During hot-to-warm relocation after cancel+bulk+retry,
-        // the old primary's checkpoint may be ahead of the warm target which recovered from an earlier remote
-        // store state. The warm primary is read-only and will serve all data from remote store regardless of
-        // local checkpoint value.
-        assert getLocalCheckpoint() == primaryContext.getCheckpointStates().get(allocationId).getLocalCheckpoint()
-            || indexSettings().getTranslogDurability() == Durability.ASYNC
-            || (getIndexer() instanceof DataFormatAwareReadOnlyEngine) : "local checkpoint ["
-                + getLocalCheckpoint()
-                + "] does not match checkpoint from primary context ["
-                + primaryContext
-                + "]";
-
-        // The target's engine was built at the start of the recovery; refresh so the relocated primary uses the
-        // policy matching the settings as they are now
-        getIndexer().refreshPrimaryOperationPolicy();
-        synchronized (mutex) {
-            replicationTracker.activateWithPrimaryContext(primaryContext); // make changes to primaryMode flag only under mutex
-        }
-        // DFA warm primaries: skip postActivatePrimaryMode (no remote translog upload needed).
-        // Reset hasAllPeerRecoveryRetentionLeases and ensure retention leases exist for replicas.
-        if (getIndexer() instanceof DataFormatAwareReadOnlyEngine == false) {
-            postActivatePrimaryMode();
-        } else {
-            replicationTracker.resetHasAllPeerRecoveryRetentionLeases();
-            ensurePeerRecoveryRetentionLeasesExist();
-        }
-    }
-
-    private void postActivatePrimaryMode() {
-        if (indexSettings.isAssignedOnRemoteNode()) {
-            // We make sure to upload translog (even if it does not contain any operations) to remote translog.
-            // This helps to get a consistent state in remote store where both remote segment store and remote
-            // translog contains data.
-            try {
-                getIndexer().translogManager().syncTranslog();
-            } catch (IOException e) {
-                logger.error("Failed to sync translog to remote from new primary", e);
-            }
-        }
-        ensurePeerRecoveryRetentionLeasesExist();
-    }
-
-    private void ensurePeerRecoveryRetentionLeasesExist() {
-        threadPool.generic()
-            .execute(
-                () -> replicationTracker.createMissingPeerRecoveryRetentionLeases(
-                    ActionListener.wrap(
-                        r -> logger.trace("created missing peer recovery retention leases"),
-                        e -> logger.debug("failed creating missing peer recovery retention leases", e)
-                    )
-                )
-            );
-    }
-
-    /**
-     * Check if there are any recoveries pending in-sync.
-     *
-     * @return {@code true} if there is at least one shard pending in-sync, otherwise false
-     */
-    public boolean pendingInSync() {
-        assert assertPrimaryMode();
-        return replicationTracker.pendingInSync();
-    }
-
-    /**
-     * Should be called for each no-op update operation to increment relevant statistics.
-     */
-    public void noopUpdate() {
-        internalIndexingStats.noopUpdate();
-    }
-
-    public void maybeCheckIndex() {
-        recoveryState.setStage(RecoveryState.Stage.VERIFY_INDEX);
-        if (Booleans.isTrue(checkIndexOnStartup) || "checksum".equals(checkIndexOnStartup)) {
-            try {
-                checkIndex();
-            } catch (IOException ex) {
-                throw new RecoveryFailedException(recoveryState, "check index failed", ex);
-            }
-        }
-    }
-
-    void checkIndex() throws IOException {
-        if (store.tryIncRef()) {
-            try {
-                doCheckIndex();
-            } catch (IOException e) {
-                store.markStoreCorrupted(e);
-                throw e;
-            } finally {
-                store.decRef();
-            }
-        }
-    }
-
-    private void doCheckIndex() throws IOException {
-        long timeNS = System.nanoTime();
-        if (!Lucene.indexExists(store.directory())) {
-            return;
-        }
-
-        try (BytesStreamOutput os = new BytesStreamOutput(); PrintStream out = new PrintStream(os, false, StandardCharsets.UTF_8.name())) {
-            if ("checksum".equals(checkIndexOnStartup)) {
-                // physical verification only: verify all checksums for the latest commit
-                IOException corrupt = null;
-                MetadataSnapshot metadata = snapshotStoreMetadata();
-                for (Map.Entry<String, StoreFileMetadata> entry : metadata.asMap().entrySet()) {
-                    try {
-                        Store.checkIntegrity(entry.getValue(), store.directory());
-                        out.println("checksum passed: " + entry.getKey());
-                    } catch (IOException exc) {
-                        out.println("checksum failed: " + entry.getKey());
-                        exc.printStackTrace(out);
-                        corrupt = exc;
-                    }
-                }
-                out.flush();
-                if (corrupt != null) {
-                    logger.warn("check index [failure]\n{}", os.bytes().utf8ToString());
-                    throw corrupt;
-                }
-            } else {
-                // full checkindex
-                final CheckIndex.Status status = store.checkIndex(out);
-                out.flush();
-                if (!status.clean) {
-                    if (state == IndexShardState.CLOSED) {
-                        // ignore if closed....
-                        return;
-                    }
-                    logger.warn("check index [failure]\n{}", os.bytes().utf8ToString());
-                    throw new IOException("index check failure");
-                }
-            }
-
-            if (logger.isDebugEnabled()) {
-                logger.debug("check index [success]\n{}", os.bytes().utf8ToString());
-            }
-        }
-
-        recoveryState.getVerifyIndex().checkIndexTime(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - timeNS)));
-    }
-
-    Indexer getIndexer() {
-        Indexer engine = getIndexerOrNull();
-        if (engine == null) {
-            throw new AlreadyClosedException("engine is closed");
-        }
-        return engine;
-    }
-
-    /**
-     * NOTE: returns null if engine is not yet started (e.g. recovery phase 1, copying over index files, is still running), or if engine is
-     * closed.
-     */
-    protected Indexer getIndexerOrNull() {
-        return this.currentEngineReference.get();
-    }
-
-    // Only used for initializing segment replication CopyState
-    public long getLastRefreshedCheckpoint() {
-        Indexer engine = getIndexer();
-        return engine.lastRefreshedCheckpoint();
-    }
-
-    public void startRecovery(
-        RecoveryState recoveryState,
-        PeerRecoveryTargetService recoveryTargetService,
-        RecoveryListener recoveryListener,
-        RepositoriesService repositoriesService,
-        Consumer<MappingMetadata> mappingUpdateConsumer,
-        IndicesService indicesService
-    ) {
-        // TODO: Create a proper object to encapsulate the recovery context
-        // all of the current methods here follow a pattern of:
-        // resolve context which isn't really dependent on the local shards and then async
-        // call some external method with this pointer.
-        // with a proper recovery context object we can simply change this to:
-        // startRecovery(RecoveryState recoveryState, ShardRecoverySource source ) {
-        // markAsRecovery("from " + source.getShortDescription(), recoveryState);
-        // threadPool.generic().execute() {
-        // onFailure () { listener.failure() };
-        // doRun() {
-        // if (source.recover(this)) {
-        // recoveryListener.onRecoveryDone(recoveryState);
-        // }
-        // }
-        // }}
-        // }
-        logger.debug("startRecovery type={}", recoveryState.getRecoverySource().getType());
-        assert recoveryState.getRecoverySource().equals(shardRouting.recoverySource());
-        switch (recoveryState.getRecoverySource().getType()) {
-            case EMPTY_STORE:
-            case EXISTING_STORE:
-                executeRecovery("from store", recoveryState, recoveryListener, this::recoverFromStore);
-                break;
-            case REMOTE_STORE:
-                executeRecovery("from remote store", recoveryState, recoveryListener, l -> restoreFromRemoteStore(l));
-                break;
-            case PEER:
-                try {
-                    markAsRecovering("from " + recoveryState.getSourceNode(), recoveryState);
-                    recoveryTargetService.startRecovery(this, recoveryState.getSourceNode(), recoveryListener);
-                } catch (Exception e) {
-                    failShard("corrupted preexisting index", e);
-                    recoveryListener.onFailure(recoveryState, new RecoveryFailedException(recoveryState, null, e), true);
-                }
-                break;
-            case SNAPSHOT:
-                final SnapshotRecoverySource recoverySource = (SnapshotRecoverySource) recoveryState.getRecoverySource();
-                if (recoverySource.isSearchableSnapshot()) {
-                    executeRecovery("from snapshot (remote)", recoveryState, recoveryListener, this::recoverFromStore);
-                } else if (recoverySource.remoteStoreIndexShallowCopy()) {
-                    final String repo = recoverySource.snapshot().getRepository();
-                    executeRecovery(
-                        "from snapshot and remote store",
-                        recoveryState,
-                        recoveryListener,
-                        l -> restoreFromSnapshotAndRemoteStore(repositoriesService.repository(repo), repositoriesService, l)
-                    );
-                    // indicesService.indexService(shardRouting.shardId().getIndex()).addMetadataListener();
-                } else {
-                    final String repo = recoverySource.snapshot().getRepository();
-                    executeRecovery(
-                        "from snapshot",
-                        recoveryState,
-                        recoveryListener,
-                        l -> restoreFromRepository(repositoriesService.repository(repo), l)
-                    );
-                }
-                break;
-            case LOCAL_SHARDS:
-                final IndexMetadata indexMetadata = indexSettings().getIndexMetadata();
-                final Index resizeSourceIndex = indexMetadata.getResizeSourceIndex();
-                final List<IndexShard> startedShards = new ArrayList<>();
-                final IndexService sourceIndexService = indicesService.indexService(resizeSourceIndex);
-                final Set<ShardId> requiredShards;
-                final int numShards;
-                if (sourceIndexService != null) {
-                    requiredShards = IndexMetadata.selectRecoverFromShards(
-                        shardId().id(),
-                        sourceIndexService.getMetadata(),
-                        indexMetadata.getNumberOfShards()
-                    );
-                    for (IndexShard shard : sourceIndexService) {
-                        if (shard.state() == IndexShardState.STARTED && requiredShards.contains(shard.shardId())) {
-                            startedShards.add(shard);
                         }
-                    }
-                    numShards = requiredShards.size();
-                } else {
-                    numShards = -1;
-                    requiredShards = Collections.emptySet();
-                }
-
-                if (numShards == startedShards.size()) {
-                    assert requiredShards.isEmpty() == false;
-                    executeRecovery(
-                        "from local shards",
-                        recoveryState,
-                        recoveryListener,
-                        l -> recoverFromLocalShards(
-                            mappingUpdateConsumer,
-                            startedShards.stream().filter((s) -> requiredShards.contains(s.shardId())).collect(Collectors.toList()),
-                            l
-                        )
-                    );
-                } else {
-                    final RuntimeException e;
-                    if (numShards == -1) {
-                        e = new IndexNotFoundException(resizeSourceIndex);
-                    } else {
-                        e = new IllegalStateException(
-                            "not all required shards of index "
-                                + resizeSourceIndex
-                                + " are started yet, expected "
-                                + numShards
-                                + " found "
-                                + startedShards.size()
-                                + " can't recover shard "
-                                + shardId()
-                        );
-                    }
-                    throw e;
-                }
-                break;
-            default:
-                throw new IllegalArgumentException("Unknown recovery source " + recoveryState.getRecoverySource());
-        }
-    }
-
-    private void executeRecovery(
-        String reason,
-        RecoveryState recoveryState,
-        RecoveryListener recoveryListener,
-        CheckedConsumer<ActionListener<Boolean>, Exception> action
-    ) {
-        markAsRecovering(reason, recoveryState); // mark the shard as recovering on the cluster state thread
-        threadPool.generic().execute(ActionRunnable.wrap(ActionListener.wrap(r -> {
-            if (r) {
-                recoveryListener.onDone(recoveryState);
             }
-        }, e -> recoveryListener.onFailure(recoveryState, new RecoveryFailedException(recoveryState, null, e), true)), action));
     }
-
-    /**
-     * Returns whether the shard is a relocated primary, i.e. not in charge anymore of replicating changes (see {@link ReplicationTracker}).
-     */
-    public boolean isRelocatedPrimary() {
-        assert shardRouting.primary() : "only call isRelocatedPrimary on primary shard";
-        return replicationTracker.isRelocated();
-    }
-
-    public RetentionLease addPeerRecoveryRetentionLease(
-        String nodeId,
-        long globalCheckpoint,
-        ActionListener<ReplicationResponse> listener
-    ) {
-        assert assertPrimaryMode();
-        // only needed for BWC reasons involving rolling upgrades from versions that do not support PRRLs:
-        assert indexSettings.isSoftDeleteEnabled() == false;
-        return replicationTracker.addPeerRecoveryRetentionLease(nodeId, globalCheckpoint, listener);
-    }
-
-    public RetentionLease cloneLocalPeerRecoveryRetentionLease(String nodeId, ActionListener<ReplicationResponse> listener) {
-        assert assertPrimaryMode();
-        return replicationTracker.cloneLocalPeerRecoveryRetentionLease(nodeId, listener);
-    }
-
-    public void removePeerRecoveryRetentionLease(String nodeId, ActionListener<ReplicationResponse> listener) {
-        assert assertPrimaryMode();
-        replicationTracker.removePeerRecoveryRetentionLease(nodeId, listener);
-    }
-
-    /**
-     * Returns a list of retention leases for peer recovery installed in this shard copy.
-     */
-    public List<RetentionLease> getPeerRecoveryRetentionLeases() {
-        return replicationTracker.getPeerRecoveryRetentionLeases();
-    }
-
-    public boolean useRetentionLeasesInPeerRecovery() {
-        return useRetentionLeasesInPeerRecovery;
-    }
-
-    private SafeCommitInfo getSafeCommitInfo() {
-        final Indexer engine = getIndexerOrNull();
-        return engine == null ? SafeCommitInfo.EMPTY : engine.getSafeCommitInfo();
-    }
-
-    class ShardEventListener implements Engine.EventListener {
-        private final CopyOnWriteArrayList<Consumer<ShardFailure>> delegates = new CopyOnWriteArrayList<>();
-
-        // called by the current engine
-        @Override
-        public void onFailedEngine(String reason, @Nullable Exception failure) {
-            final ShardFailure shardFailure = new ShardFailure(shardRouting, reason, failure);
-            for (Consumer<ShardFailure> listener : delegates) {
-                try {
-                    listener.accept(shardFailure);
-                } catch (Exception inner) {
-                    inner.addSuppressed(failure);
-                    logger.warn("exception while notifying engine failure", inner);
-                }
             }
-        }
-    }
-
-    private static void persistMetadata(
-        final ShardPath shardPath,
-        final IndexSettings indexSettings,
-        final ShardRouting newRouting,
-        final @Nullable ShardRouting currentRouting,
-        final Logger logger
-    ) throws IOException {
-        assert newRouting != null : "newRouting must not be null";
-
-        // only persist metadata if routing information that is persisted in shard state metadata actually changed
-        final ShardId shardId = newRouting.shardId();
-        if (currentRouting == null
-            || currentRouting.primary() != newRouting.primary()
+                            // fired is swallowed here rather than failing the shard. This is accepted deliberately: failing a
             || currentRouting.allocationId().equals(newRouting.allocationId()) == false) {
-            assert currentRouting == null || currentRouting.isSameAllocation(newRouting);
-            final String writeReason;
-            if (currentRouting == null) {
-                writeReason = "initial state with allocation id [" + newRouting.allocationId() + "]";
-            } else {
-                writeReason = "routing changed from " + currentRouting + " to " + newRouting;
-            }
-            logger.trace("{} writing shard state, reason [{}]", shardId, writeReason);
-
-            final ShardStateMetadata.IndexDataLocation indexDataLocation = IndexSettings.SEARCHABLE_SNAPSHOT_REPOSITORY.exists(
-                indexSettings.getSettings()
-            ) ? ShardStateMetadata.IndexDataLocation.REMOTE : ShardStateMetadata.IndexDataLocation.LOCAL;
-            final ShardStateMetadata newShardStateMetadata = new ShardStateMetadata(
-                newRouting.primary(),
-                indexSettings.getUUID(),
-                newRouting.allocationId(),
-                indexDataLocation
-            );
-            ShardStateMetadata.FORMAT.writeAndCleanup(newShardStateMetadata, shardPath.getShardStatePath());
-        } else {
-            logger.trace("{} skip writing shard state, has been written before", shardId);
-        }
-    }
-
-    private DocumentMapperForType docMapper() {
-        return mapperService.documentMapperWithAutoCreate();
-    }
-
-    private EngineConfig newEngineConfig(LongSupplier globalCheckpointSupplier) throws IOException {
-        final Sort indexSort = indexSortSupplier.get();
-        final Engine.Warmer warmer = reader -> {
-            assert Thread.holdsLock(mutex) == false : "warming engine under mutex";
-            assert reader != null;
-            if (this.warmer != null) {
-                this.warmer.warm(reader);
-            }
-        };
-
-        internalRefreshListener.clear();
-        internalRefreshListener.add(new RefreshMetricUpdater(refreshMetric));
-        if (indexSettings.isSegRepEnabledOrRemoteNode()) {
-            internalRefreshListener.add(new ReplicationCheckpointUpdater());
-        }
-        if (this.checkpointPublisher != null && shardRouting.primary() && indexSettings.isSegRepLocalEnabled()) {
-            internalRefreshListener.add(new CheckpointRefreshListener(this, this.checkpointPublisher));
-        }
-
-        // After each internal refresh, update the LuceneFieldTracker with merged FieldInfos from
-        // the reader. This lets DocumentParser enforce the per-shard Lucene field-count limit for
-        // dynamic_properties without requiring access to the IndexWriter directly.
-        if (mapperService != null && indexSettings.isPluggableDataFormatEnabled() == false) {
-            internalRefreshListener.add(new ReferenceManager.RefreshListener() {
-                @Override
-                public void beforeRefresh() {}
-
-                @Override
-                public void afterRefresh(boolean didRefresh) {
-                    if (!didRefresh) return;
-                    // Use the engine directly (not IndexShard.acquireSearcher) so that we do NOT
-                    // go through IndexShard.wrapSearcher.
-                    try (
-                        Engine.Searcher searcher = applyOnEngine(
-                            getIndexer(),
-                            engine -> engine.acquireSearcher("lucene_field_count", Engine.SearcherScope.INTERNAL)
-                        )
-                    ) {
-                        FieldInfos fieldInfos = FieldInfos.getMergedFieldInfos(searcher.getIndexReader());
-                        mapperService.getLuceneFieldTracker().setFieldInfos(fieldInfos);
-                    } catch (AlreadyClosedException | IllegalIndexShardStateException e) {
-                        // Shard is closing or not yet readable — skip this refresh cycle.
-                    }
-                }
-            });
-        }
-
-        if (isRemoteStoreEnabled() || isMigratingToRemote()) {
-            internalRefreshListener.add(
-                new RemoteStoreRefreshListener(
-                    this,
-                    this.checkpointPublisher,
-                    remoteStoreStatsTrackerFactory.getRemoteSegmentTransferTracker(shardId()),
-                    remoteStoreSettings
+     *
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+            throttleTimeInMillis = engine.getIndexThrottleTimeInMillis();
+                throw new IndexShardStartedException(shardId);
+        synchronized (mutex) {
+     */
+                        e = new IllegalStateException(
+            source,
+        return searchStats.stats(groups);
+                    "illegal state: trying to move shard from primary mode to replica mode. Current "
+                final IndexShardClosedException closed = new IndexShardClosedException(
+    public org.apache.lucene.util.Version upgrade(UpgradeRequest upgrade) throws IOException {
+    public List<String> getActiveOperations() {
+            replicationTracker.updateVisibleCheckpointForShard(allocationId, visibleCheckpoint);
                 )
-            );
-        }
-
-        /*
-          With segment replication enabled for primary relocation, recover replica shard initially as read only and
-          change to a writeable engine during relocation handoff after a round of segment replication.
-         */
-        boolean isReadOnlyReplica = indexSettings.isSegRepEnabledOrRemoteNode()
-            && (shardRouting.primary() == false
-                || (shardRouting.isRelocationTarget() && recoveryState.getStage() != RecoveryState.Stage.FINALIZE));
-
-        // For mixed mode, when relocating from doc rep to remote node, we use a writeable engine
-        if (shouldSeedRemoteStore()) {
-            isReadOnlyReplica = false;
-        }
-
-        return this.engineConfigFactory.newEngineConfig(
-            shardId,
-            threadPool,
-            indexSettings,
-            warmer,
-            store,
-            indexSettings.getMergePolicy(isTimeSeriesIndex),
-            mapperService != null ? mapperService.indexAnalyzer() : null,
-            similarityService.similarity(mapperService),
-            engineConfigFactory.newCodecServiceOrDefault(indexSettings, mapperService, logger, codecService),
-            shardEventListener,
-            indexCache != null ? indexCache.query() : null,
-            cachingPolicy,
-            translogConfig,
-            IndexingMemoryController.SHARD_INACTIVE_TIME_SETTING.get(indexSettings.getSettings()),
-            Arrays.asList(refreshListeners, refreshPendingLocationListener),
-            internalRefreshListener,
-            indexSort,
-            circuitBreakerService,
-            globalCheckpointSupplier,
-            replicationTracker::getRetentionLeases,
-            this::getOperationPrimaryTerm,
-            tombstoneDocSupplier(),
-            isReadOnlyReplica,
-            this::enableUploadToRemoteTranslog,
-            translogFactorySupplier.apply(indexSettings, shardRouting),
-            isTimeSeriesDescSortOptimizationEnabled() ? DataStream.TIMESERIES_LEAF_SORTER : null, // DESC @timestamp default order for
-            // timeseries
-            () -> docMapper(),
-            mergedSegmentWarmerFactory.get(this),
-            clusterApplierService,
-            mergedSegmentTransferTracker,
-            dataFormatRegistry,
-            mapperService,
-            checksumStrategies
-        );
-    }
-
-    private boolean isRemoteStoreEnabled() {
-        return (remoteStore != null && shardRouting.primary());
-    }
-
-    public boolean isRemoteTranslogEnabled() {
+                                    if (false == translogRecoveryFuture.isCancelled()) {
         return indexSettings() != null && (indexSettings().isRemoteTranslogStoreEnabled());
-    }
-
-    /**
-     * This checks if we are in state to upload to remote store. Until the cluster-manager informs the shard through
-     * cluster state, the shard will not be in STARTED state. This method is used to prevent pre-emptive segment or
-     * translog uploads.
-     */
-    public boolean isStartedPrimary() {
-        return (getReplicationTracker().isPrimaryMode() && state() == IndexShardState.STARTED);
-    }
-
-    public boolean enableUploadToRemoteTranslog() {
-        return isStartedPrimary() || (shouldSeedRemoteStore() && hasOneRemoteSegmentSyncHappened());
-    }
-
-    private boolean hasOneRemoteSegmentSyncHappened() {
-        assert indexSettings.isAssignedOnRemoteNode();
-        // We upload remote translog only after one remote segment upload in case of migration
-        RemoteSegmentStoreDirectory rd = getRemoteDirectory();
-        AtomicBoolean segment_n_uploaded = new AtomicBoolean(false);
-        rd.getSegmentsUploadedToRemoteStore().forEach((key, value) -> {
-            if (key.startsWith("segments")) {
-                segment_n_uploaded.set(true);
-            }
-        });
-        return segment_n_uploaded.get();
-    }
-
-    /**
-     * @return true if segment reverse search optimization is enabled for time series based workload.
-     */
-    public boolean isTimeSeriesDescSortOptimizationEnabled() {
-        // Do not change segment order in case of index sort.
-        return isTimeSeriesIndex && getIndexSort() == null;
-    }
-
-    /**
-     * @return True if settings indicate this shard is backed by a remote snapshot, false otherwise.
-     */
-    public boolean isRemoteSnapshot() {
-        return indexSettings != null && indexSettings.isRemoteSnapshot();
-    }
-
-    /**
-     * Acquire a primary operation permit whenever the shard is ready for indexing. If a permit is directly available, the provided
-     * ActionListener will be called on the calling thread. During relocation hand-off, permit acquisition can be delayed. The provided
-     * ActionListener will then be called using the provided executor.
-     *
-     * @param debugInfo an extra information that can be useful when tracing an unreleased permit. When assertions are enabled
-     *                  the tracing will capture the supplied object's {@link Object#toString()} value. Otherwise the object
-     *                  isn't used
-     */
-    public void acquirePrimaryOperationPermit(ActionListener<Releasable> onPermitAcquired, String executorOnDelay, Object debugInfo) {
-        acquirePrimaryOperationPermit(onPermitAcquired, executorOnDelay, debugInfo, false);
-    }
-
-    public void acquirePrimaryOperationPermit(
-        ActionListener<Releasable> onPermitAcquired,
-        String executorOnDelay,
-        Object debugInfo,
-        boolean forceExecution
-    ) {
-        verifyNotClosed();
-        assert shardRouting.primary() : "acquirePrimaryOperationPermit should only be called on primary shard: " + shardRouting;
-
-        indexShardOperationPermits.acquire(
-            wrapPrimaryOperationPermitListener(onPermitAcquired),
-            executorOnDelay,
-            forceExecution,
-            debugInfo
-        );
-    }
-
-    /**
-     * Acquire all primary operation permits. Once all permits are acquired, the provided ActionListener is called.
-     * It is the responsibility of the caller to close the {@link Releasable}.
-     */
-    public void acquireAllPrimaryOperationsPermits(final ActionListener<Releasable> onPermitAcquired, final TimeValue timeout) {
-        verifyNotClosed();
-        assert shardRouting.primary() : "acquireAllPrimaryOperationsPermits should only be called on primary shard: " + shardRouting;
-
-        asyncBlockOperations(wrapPrimaryOperationPermitListener(onPermitAcquired), timeout.duration(), timeout.timeUnit());
-    }
-
-    /**
-     * Wraps the action to run on a primary after acquiring permit. This wrapping is used to check if the shard is in primary mode before
-     * executing the action.
-     *
-     * @param listener the listener to wrap
-     * @return the wrapped listener
-     */
-    private ActionListener<Releasable> wrapPrimaryOperationPermitListener(final ActionListener<Releasable> listener) {
-        return ActionListener.delegateFailure(listener, (l, r) -> {
-            if (replicationTracker.isPrimaryMode()) {
-                l.onResponse(r);
-            } else {
-                r.close();
-                l.onFailure(new ShardNotInPrimaryModeException(shardId, state));
-            }
-        });
-    }
-
-    private void asyncBlockOperations(ActionListener<Releasable> onPermitAcquired, long timeout, TimeUnit timeUnit) {
-        final Releasable forceRefreshes = refreshListeners.forceRefreshes();
-        final ActionListener<Releasable> wrappedListener = ActionListener.wrap(r -> {
-            forceRefreshes.close();
-            onPermitAcquired.onResponse(r);
-        }, e -> {
-            forceRefreshes.close();
-            onPermitAcquired.onFailure(e);
-        });
-        try {
-            indexShardOperationPermits.asyncBlockOperations(wrappedListener, timeout, timeUnit);
-        } catch (Exception e) {
-            forceRefreshes.close();
-            throw e;
+         * says otherwise.
+                            if (meta != null) {
         }
-    }
-
-    /**
-     * Runs the specified runnable under a permit and otherwise calling back the specified failure callback. This method is really a
-     * convenience for {@link #acquirePrimaryOperationPermit(ActionListener, String, Object)} where the listener equates to
-     * try-with-resources closing the releasable after executing the runnable on successfully acquiring the permit, an otherwise calling
-     * back the failure callback.
-     *
-     * @param runnable the runnable to execute under permit
-     * @param onFailure the callback on failure
-     * @param executorOnDelay the executor to execute the runnable on if permit acquisition is blocked
-     * @param debugInfo debug info
-     */
-    public void runUnderPrimaryPermit(
-        final Runnable runnable,
-        final Consumer<Exception> onFailure,
-        final String executorOnDelay,
-        final Object debugInfo
-    ) {
-        verifyNotClosed();
-        assert shardRouting.primary() : "runUnderPrimaryPermit should only be called on primary shard but was " + shardRouting;
-        final ActionListener<Releasable> onPermitAcquired = ActionListener.wrap(releasable -> {
-            try (Releasable ignore = releasable) {
-                runnable.run();
-            }
-        }, onFailure);
-        acquirePrimaryOperationPermit(onPermitAcquired, executorOnDelay, debugInfo);
-    }
-
-    private <E extends Exception> void bumpPrimaryTerm(
-        final long newPrimaryTerm,
-        final CheckedRunnable<E> onBlocked,
-        @Nullable ActionListener<Releasable> combineWithAction
-    ) {
-        assert Thread.holdsLock(mutex);
-        assert newPrimaryTerm > pendingPrimaryTerm || (newPrimaryTerm >= pendingPrimaryTerm && combineWithAction != null);
-        assert getOperationPrimaryTerm() <= pendingPrimaryTerm;
-        final CountDownLatch termUpdated = new CountDownLatch(1);
-        asyncBlockOperations(new ActionListener<Releasable>() {
-            @Override
-            public void onFailure(final Exception e) {
-                try {
-                    innerFail(e);
-                } finally {
-                    if (combineWithAction != null) {
-                        combineWithAction.onFailure(e);
-                    }
                 }
-            }
-
-            private void innerFail(final Exception e) {
-                try {
-                    failShard("exception during primary term transition", e);
-                } catch (AlreadyClosedException ace) {
-                    // ignore, shard is already closed
-                }
-            }
-
-            @Override
-            public void onResponse(final Releasable releasable) {
-                final RunOnce releaseOnce = new RunOnce(releasable::close);
-                try {
-                    assert getOperationPrimaryTerm() <= pendingPrimaryTerm;
-                    termUpdated.await();
-                    // indexShardOperationPermits doesn't guarantee that async submissions are executed
-                    // in the order submitted. We need to guard against another term bump
-                    if (getOperationPrimaryTerm() < newPrimaryTerm) {
-                        replicationTracker.setOperationPrimaryTerm(newPrimaryTerm);
-                        onBlocked.run();
-                    }
-                } catch (final Exception e) {
-                    if (combineWithAction == null) {
-                        // otherwise leave it to combineWithAction to release the permit
-                        releaseOnce.run();
-                    }
-                    innerFail(e);
-                } finally {
-                    if (combineWithAction != null) {
-                        combineWithAction.onResponse(releasable);
-                    } else {
-                        releaseOnce.run();
-                    }
-                }
-            }
-        }, 30, TimeUnit.MINUTES);
-        pendingPrimaryTerm = newPrimaryTerm;
-        termUpdated.countDown();
-    }
-
-    /**
-     * Acquire a replica operation permit whenever the shard is ready for indexing (see
-     * {@link #acquirePrimaryOperationPermit(ActionListener, String, Object)}). If the given primary term is lower than then one in
-     * {@link #shardRouting}, the {@link ActionListener#onFailure(Exception)} method of the provided listener is invoked with an
-     * {@link IllegalStateException}. If permit acquisition is delayed, the listener will be invoked on the executor with the specified
-     * name.
-     *
-     * @param opPrimaryTerm              the operation primary term
-     * @param globalCheckpoint           the global checkpoint associated with the request
-     * @param maxSeqNoOfUpdatesOrDeletes the max seq_no of updates (index operations overwrite Lucene) or deletes captured on the primary
-     *                                   after this replication request was executed on it (see {@link #getMaxSeqNoOfUpdatesOrDeletes()}
-     * @param onPermitAcquired           the listener for permit acquisition
-     * @param executorOnDelay            the name of the executor to invoke the listener on if permit acquisition is delayed
-     * @param debugInfo                  an extra information that can be useful when tracing an unreleased permit. When assertions are
-     *                                   enabled the tracing will capture the supplied object's {@link Object#toString()} value.
-     *                                   Otherwise the object isn't used
-     */
-    public void acquireReplicaOperationPermit(
-        final long opPrimaryTerm,
-        final long globalCheckpoint,
-        final long maxSeqNoOfUpdatesOrDeletes,
-        final ActionListener<Releasable> onPermitAcquired,
-        final String executorOnDelay,
-        final Object debugInfo
-    ) {
-        innerAcquireReplicaOperationPermit(
-            opPrimaryTerm,
-            globalCheckpoint,
-            maxSeqNoOfUpdatesOrDeletes,
-            onPermitAcquired,
-            false,
-            (listener) -> indexShardOperationPermits.acquire(listener, executorOnDelay, true, debugInfo)
-        );
-    }
-
-    /**
-     * Acquire all replica operation permits whenever the shard is ready for indexing (see
-     * {@link #acquireAllPrimaryOperationsPermits(ActionListener, TimeValue)}. If the given primary term is lower than then one in
-     * {@link #shardRouting}, the {@link ActionListener#onFailure(Exception)} method of the provided listener is invoked with an
-     * {@link IllegalStateException}.
-     *
-     * @param opPrimaryTerm              the operation primary term
-     * @param globalCheckpoint           the global checkpoint associated with the request
-     * @param maxSeqNoOfUpdatesOrDeletes the max seq_no of updates (index operations overwrite Lucene) or deletes captured on the primary
-     *                                   after this replication request was executed on it (see {@link #getMaxSeqNoOfUpdatesOrDeletes()}
-     * @param onPermitAcquired           the listener for permit acquisition
-     * @param timeout                    the maximum time to wait for the in-flight operations block
-     */
-    public void acquireAllReplicaOperationsPermits(
-        final long opPrimaryTerm,
-        final long globalCheckpoint,
-        final long maxSeqNoOfUpdatesOrDeletes,
-        final ActionListener<Releasable> onPermitAcquired,
-        final TimeValue timeout
-    ) {
-        innerAcquireReplicaOperationPermit(
-            opPrimaryTerm,
-            globalCheckpoint,
-            maxSeqNoOfUpdatesOrDeletes,
-            onPermitAcquired,
-            true,
-            listener -> asyncBlockOperations(listener, timeout.duration(), timeout.timeUnit())
-        );
-    }
-
-    private void innerAcquireReplicaOperationPermit(
-        final long opPrimaryTerm,
-        final long globalCheckpoint,
-        final long maxSeqNoOfUpdatesOrDeletes,
-        final ActionListener<Releasable> onPermitAcquired,
-        final boolean allowCombineOperationWithPrimaryTermUpdate,
-        final Consumer<ActionListener<Releasable>> operationExecutor
-    ) {
-        verifyNotClosed();
-
-        // This listener is used for the execution of the operation. If the operation requires all the permits for its
-        // execution and the primary term must be updated first, we can combine the operation execution with the
-        // primary term update. Since indexShardOperationPermits doesn't guarantee that async submissions are executed
-        // in the order submitted, combining both operations ensure that the term is updated before the operation is
-        // executed. It also has the side effect of acquiring all the permits one time instead of two.
-        final ActionListener<Releasable> operationListener = ActionListener.delegateFailure(
-            onPermitAcquired,
-            (delegatedListener, releasable) -> {
-                if (opPrimaryTerm < getOperationPrimaryTerm()) {
-                    releasable.close();
-                    final String message = String.format(
-                        Locale.ROOT,
-                        "%s operation primary term [%d] is too old (current [%d])",
-                        shardId,
-                        opPrimaryTerm,
-                        getOperationPrimaryTerm()
-                    );
-                    delegatedListener.onFailure(new IllegalStateException(message));
-                } else {
-                    assert assertReplicationTarget();
-                    try {
-                        updateGlobalCheckpointOnReplica(globalCheckpoint, "operation");
-                        advanceMaxSeqNoOfUpdatesOrDeletes(maxSeqNoOfUpdatesOrDeletes);
-                    } catch (Exception e) {
-                        releasable.close();
-                        delegatedListener.onFailure(e);
-                        return;
                     }
                     delegatedListener.onResponse(releasable);
-                }
-            }
-        );
-
-        if (requirePrimaryTermUpdate(opPrimaryTerm, allowCombineOperationWithPrimaryTermUpdate)) {
-            synchronized (mutex) {
-                if (requirePrimaryTermUpdate(opPrimaryTerm, allowCombineOperationWithPrimaryTermUpdate)) {
-                    final IndexShardState shardState = state();
-                    // only roll translog and update primary term if shard has made it past recovery
-                    // Having a new primary term here means that the old primary failed and that there is a new primary, which again
-                    // means that the cluster-manager will fail this shard as all initializing shards are failed when a primary is selected
-                    // We abort early here to prevent an ongoing recovery from the failed primary to mess with the global / local checkpoint
-                    if (shardState != IndexShardState.POST_RECOVERY && shardState != IndexShardState.STARTED) {
-                        throw new IndexShardNotStartedException(shardId, shardState);
-                    }
-
-                    bumpPrimaryTerm(opPrimaryTerm, () -> {
-                        updateGlobalCheckpointOnReplica(globalCheckpoint, "primary term transition");
-                        final long currentGlobalCheckpoint = getLastKnownGlobalCheckpoint();
-                        final long maxSeqNo = seqNoStats().getMaxSeqNo();
-                        logger.info(
-                            "detected new primary with primary term [{}], global checkpoint [{}], max_seq_no [{}]",
-                            opPrimaryTerm,
-                            currentGlobalCheckpoint,
-                            maxSeqNo
-                        );
-                        // With Segment Replication enabled, we never want to reset a replica's engine unless
-                        // it is promoted to primary.
-                        if (currentGlobalCheckpoint < maxSeqNo && indexSettings.isSegRepEnabledOrRemoteNode() == false) {
-                            resetEngineToGlobalCheckpoint();
-                        } else {
-                            getIndexer().translogManager().rollTranslogGeneration();
-                        }
-                    }, allowCombineOperationWithPrimaryTermUpdate ? operationListener : null);
-
-                    if (allowCombineOperationWithPrimaryTermUpdate) {
-                        logger.debug("operation execution has been combined with primary term update");
-                        return;
-                    }
-                }
-            }
-        }
-        assert opPrimaryTerm <= pendingPrimaryTerm : "operation primary term ["
-            + opPrimaryTerm
-            + "] should be at most ["
-            + pendingPrimaryTerm
-            + "]";
-        operationExecutor.accept(operationListener);
-    }
-
-    private boolean requirePrimaryTermUpdate(final long opPrimaryTerm, final boolean allPermits) {
-        return (opPrimaryTerm > pendingPrimaryTerm) || (allPermits && opPrimaryTerm > getOperationPrimaryTerm());
-    }
-
-    public static final int OPERATIONS_BLOCKED = -1;
-
-    /**
-     * Obtain the active operation count, or {@link IndexShard#OPERATIONS_BLOCKED} if all permits are held (even if there are
-     * outstanding operations in flight).
-     *
-     * @return the active operation count, or {@link IndexShard#OPERATIONS_BLOCKED} when all permits are held.
-     */
-    public int getActiveOperationsCount() {
-        return indexShardOperationPermits.getActiveOperationsCount();
-    }
-
-    /**
-     * @return a list of describing each permit that wasn't released yet. The description consist of the debugInfo supplied
-     *         when the permit was acquired plus a stack traces that was captured when the permit was request.
-     */
-    public List<String> getActiveOperations() {
-        return indexShardOperationPermits.getActiveOperations();
-    }
-
-    private final AsyncIOProcessor<Translog.Location> translogSyncProcessor;
-
-    private static AsyncIOProcessor<Translog.Location> createTranslogSyncProcessor(
-        Logger logger,
-        ThreadPool threadPool,
-        Supplier<Indexer> engineSupplier,
-        boolean bufferAsyncIoProcessor,
-        Supplier<TimeValue> bufferIntervalSupplier
-    ) {
-        assert bufferAsyncIoProcessor == false || Objects.nonNull(bufferIntervalSupplier)
-            : "If bufferAsyncIoProcessor is true, then the bufferIntervalSupplier needs to be non null";
-        ThreadContext threadContext = threadPool.getThreadContext();
-        CheckedConsumer<List<Tuple<Translog.Location, Consumer<Exception>>>, IOException> writeConsumer = candidates -> {
-            try {
-                engineSupplier.get().translogManager().ensureTranslogSynced(candidates.stream().map(Tuple::v1));
-            } catch (AlreadyClosedException ex) {
-                // that's fine since we already synced everything on engine close - this also is conform with the methods
-                // documentation
-            } catch (IOException ex) { // if this fails we are in deep shit - fail the request
-                logger.debug("failed to sync translog", ex);
-                throw ex;
-            }
-        };
-        if (bufferAsyncIoProcessor) {
-            return new BufferedAsyncIOProcessor<>(logger, 102400, threadContext, threadPool, bufferIntervalSupplier) {
-                @Override
-                protected void write(List<Tuple<Translog.Location, Consumer<Exception>>> candidates) throws IOException {
-                    writeConsumer.accept(candidates);
-                }
-
-                @Override
-                protected String getBufferProcessThreadPoolName() {
-                    return ThreadPool.Names.TRANSLOG_SYNC;
-                }
-            };
-        }
-
-        return new AsyncIOProcessor<>(logger, 1024, threadContext) {
-            @Override
-            protected void write(List<Tuple<Translog.Location, Consumer<Exception>>> candidates) throws IOException {
-                writeConsumer.accept(candidates);
-            }
-        };
-    }
-
-    /**
-     * Syncs the given location with the underlying storage unless already synced. This method might return immediately without
-     * actually fsyncing the location until the sync listener is called. Yet, unless there is already another thread fsyncing
-     * the transaction log the caller thread will be hijacked to run the fsync for all pending fsync operations.
-     * This method allows indexing threads to continue indexing without blocking on fsync calls. We ensure that there is only
-     * one thread blocking on the sync an all others can continue indexing.
-     * NOTE: if the syncListener throws an exception when it's processed the exception will only be logged. Users should make sure that the
-     * listener handles all exception cases internally.
-     */
-    public final void sync(Translog.Location location, Consumer<Exception> syncListener) {
-        verifyNotClosed();
-        translogSyncProcessor.put(location, syncListener);
-    }
-
-    public void sync() throws IOException {
-        verifyNotClosed();
-        getIndexer().translogManager().syncTranslog();
-    }
-
-    /**
-     * Checks if the underlying storage sync is required.
-     */
-    public boolean isSyncNeeded() {
-        return getIndexer().translogManager().isTranslogSyncNeeded();
-    }
-
-    /**
-     * Returns the current translog durability mode
-     */
-    public Durability getTranslogDurability() {
-        return indexSettings.getTranslogDurability();
-    }
-
-    // we can not protect with a lock since we "release" on a different thread
-    private final AtomicBoolean flushOrRollRunning = new AtomicBoolean();
-
-    /**
-     * Schedules a flush or translog generation roll if needed but will not schedule more than one concurrently. The operation will be
-     * executed asynchronously on the flush thread pool.
-     * Can also schedule a flush if decided by translog manager
-     */
-    public void afterWriteOperation() {
-        if (shouldPeriodicallyFlush() || shouldRollTranslogGeneration()) {
-            if (flushOrRollRunning.compareAndSet(false, true)) {
-                /*
-                 * We have to check again since otherwise there is a race when a thread passes the first check next to another thread which
-                 * performs the operation quickly enough to  finish before the current thread could flip the flag. In that situation, we
-                 * have an extra operation.
-                 *
-                 * Additionally, a flush implicitly executes a translog generation roll so if we execute a flush then we do not need to
-                 * check if we should roll the translog generation.
-                 */
-                if (shouldPeriodicallyFlush()) {
-                    logger.debug("submitting async flush request");
-                    final AbstractRunnable flush = new AbstractRunnable() {
-                        @Override
-                        public void onFailure(final Exception e) {
-                            if (state != IndexShardState.CLOSED) {
-                                logger.warn("failed to flush index", e);
+        return markSeqNoAsNoop(getIndexer(), seqNo, opPrimaryTerm, reason, Engine.Operation.Origin.REPLICA);
                             }
-                        }
-
-                        @Override
-                        protected void doRun() throws IOException {
-                            flush(new FlushRequest());
-                            periodicFlushMetric.inc();
-                        }
-
-                        @Override
-                        public void onAfter() {
-                            flushOrRollRunning.compareAndSet(true, false);
-                            afterWriteOperation();
-                        }
-                    };
-                    threadPool.executor(ThreadPool.Names.FLUSH).execute(flush);
-                } else if (shouldRollTranslogGeneration()) {
-                    logger.debug("submitting async roll translog generation request");
-                    final AbstractRunnable roll = new AbstractRunnable() {
-                        @Override
-                        public void onFailure(final Exception e) {
-                            if (state != IndexShardState.CLOSED) {
-                                logger.warn("failed to roll translog generation", e);
-                            }
-                        }
-
-                        @Override
-                        protected void doRun() throws Exception {
-                            rollTranslogGeneration();
-                        }
-
-                        @Override
-                        public void onAfter() {
-                            flushOrRollRunning.compareAndSet(true, false);
-                            afterWriteOperation();
-                        }
-                    };
-                    threadPool.executor(ThreadPool.Names.FLUSH).execute(roll);
+import org.opensearch.node.remotestore.RemoteStoreNodeAttribute;
                 } else {
-                    flushOrRollRunning.compareAndSet(true, false);
-                }
-            }
+     * immediately inline. Otherwise, the listener will be invoked on the merge thread
+        @Nullable final ReferencedSegmentsPublisher referencedSegmentsPublisher,
+    }
+     * @param debugInfo                  an extra information that can be useful when tracing an unreleased permit. When assertions are
         }
-    }
-
-    /**
-     * Build {@linkplain RefreshListeners} for this shard.
+        assert assertPrimaryMode();
+                final Indexer indexer = getIndexerOrNull();
+     * We will reuse the existing stored checkpoint if it is at the same SI version.
      */
-    private RefreshListeners buildRefreshListeners() {
-        return new RefreshListeners(
-            indexSettings::getMaxRefreshListeners,
-            () -> refresh("too_many_listeners"),
-            logger,
-            threadPool.getThreadContext(),
-            externalRefreshMetric
-        );
+    public ShardRouting routingEntry() {
+ */
+        boolean accurateCount
+     * in the finalized snapshot. Only applies to Lucene-backed snapshots; merged-segment pre-copy
+    public void markAllocationIdAsInSync(final String allocationId, final long localCheckpoint) throws InterruptedException {
     }
-
-    /**
-     * Simple struct encapsulating a shard failure
-     *
-     * @see IndexShard#addShardFailureCallback(Consumer)
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static final class ShardFailure {
-        public final ShardRouting routing;
-        public final String reason;
-        @Nullable
-        public final Exception cause;
-
-        public ShardFailure(ShardRouting routing, String reason, @Nullable Exception cause) {
-            this.routing = routing;
-            this.reason = reason;
-            this.cause = cause;
+    }
         }
+     * Syncs the global checkpoint to the replicas if the global checkpoint on at least one replica is behind the global checkpoint on the
+        try {
     }
-
-    IndexerFactory getIndexerFactory() {
-        return indexerFactory;
+                    // only roll translog and update primary term if shard has made it past recovery
     }
-
-    EngineConfigFactory getEngineConfigFactory() {
-        return engineConfigFactory;
+                    + this.shardRouting;
+                try {
+            logger.trace("noop (seq# [{}])", noOp.seqNo());
+            onPermitAcquired.onResponse(r);
+                            } else {
+        if (lastUploadedMetadata == null) {
+            listener.onFailure(e);
     }
-
-    // for tests
-    ReplicationTracker getReplicationTracker() {
-        return replicationTracker;
-    }
-
-    /**
-     * Executes a scheduled refresh if necessary.
-     *
-     * @return <code>true</code> iff the engine got refreshed otherwise <code>false</code>
-     */
-    public boolean scheduledRefresh() {
-        verifyNotClosed();
-        boolean listenerNeedsRefresh = refreshListeners.refreshNeeded();
-        if (isReadAllowed() && (listenerNeedsRefresh || getIndexer().refreshNeeded())) {
-            if (listenerNeedsRefresh == false // if we have a listener that is waiting for a refresh we need to force it
-                && isSearchIdleSupported()
-                && isSearchIdle()
-                && indexSettings.isExplicitRefresh() == false
+            || !(indexer instanceof EngineBackedIndexer engineBackedIndexer
+        return this.store;
                 && active.get()) { // it must be active otherwise we might not free up segment memory once the shard became inactive
-                // lets skip this refresh since we are search idle and
-                // don't necessarily need to refresh. the next searcher access will register a refreshListener and that will
-                // cause the next schedule to refresh.
-                final Indexer engine = getIndexer();
-                engine.maybePruneDeletes(); // try to prune the deletes in the engine if we accumulated some
-                setRefreshPending(engine);
-                return false;
-            } else {
-                if (logger.isTraceEnabled()) {
-                    logger.trace("refresh with source [schedule]");
-                }
-                return getIndexer().maybeRefresh("schedule");
-            }
+                    }
+                );
+        // all of the current methods here follow a pattern of:
+                // close() moves the shard to CLOSED and then closes periodicFlushTask without taking periodicFlushMutex. If it
+        if (getReplicationEngine().isEmpty() && isReplicationTarget() == false) {
+            if (didRefresh && lastWriteLocation != null) {
+        RemoteSegmentMetadata lastUploadedMetadata = getRemoteDirectory().readLatestMetadataFile();
+        String luceneSample = metadataSnapshot.asMap()
+        for (MergedSegmentCheckpoint mergedSegmentCheckpoint : pendingDeleteCheckpoints) {
+        // which settings changes could possibly have happened, so here we forcefully push any config changes to the new engine.
+import org.apache.logging.log4j.Logger;
+            .periodic(periodicFlushMetric.count())
+        ActionListener<Releasable> onPermitAcquired,
+    public ShardBitsetFilterCache shardBitsetFilterCache() {
+        long fromSeqNo,
+            );
+                if (state == IndexShardState.CLOSED) {
+            ifSeqNo,
+                    index.id(),
+    }
+    public RemoteStoreFileDownloader getFileDownloader() {
+                        + newRouting
         }
-        final Indexer engine = getIndexer();
-        engine.maybePruneDeletes(); // try to prune the deletes in the engine if we accumulated some
-        return false;
-    }
-
-    /**
-     * Returns true if this shards is search idle
-     */
-    public final boolean isSearchIdle() {
-        return (threadPool.relativeTimeInMillis() - lastSearcherAccess.get()) >= indexSettings.getSearchIdleAfter().getMillis();
-    }
-
-    /**
-     * Returns true if this shard supports search idle.
-     * <p>
-     * Indices using Segment Replication will ignore search idle unless there are no replicas.
-     * Primary shards push out new segments only
-     * after a refresh, so we don't want to wait for a search to trigger that cycle. Replicas will only refresh after receiving
-     * a new set of segments.
-     */
-    // TODO: Should we disable this as data will never get in sync if we use search idle for context aware segments.
-    public final boolean isSearchIdleSupported() {
-        // If the index is remote store backed, then search idle is not supported. This is to ensure that async
-        // refresh. If the index is context aware enabled, search idle is not supported. This will ensure periodic sync
-        // between child and parent IndexWriter.
-        // task continues to upload to remote store periodically.
-        if (isRemoteTranslogEnabled() || indexSettings.isAssignedOnRemoteNode() || indexSettings.isContextAwareEnabled()) {
             return false;
         }
-        return indexSettings.isSegRepEnabledOrRemoteNode() == false || indexSettings.getNumberOfReplicas() == 0;
-    }
-
-    /**
-     * Returns the last timestamp the searcher was accessed. This is a relative timestamp in milliseconds.
-     */
-    final long getLastSearcherAccess() {
-        return lastSearcherAccess.get();
-    }
-
-    /**
-     * Returns true if this shard has some scheduled refresh that is pending because of search-idle.
-     */
-    public final boolean hasRefreshPending() {
-        return pendingRefreshLocation.get() != null;
-    }
-
-    private void setRefreshPending(Indexer indexer) {
-        final Translog.Location lastWriteLocation = indexer.translogManager().getTranslogLastWriteLocation();
-        pendingRefreshLocation.updateAndGet(curr -> {
-            if (curr == null || curr.compareTo(lastWriteLocation) <= 0) {
-                return lastWriteLocation;
-            } else {
-                return curr;
+import java.util.function.Function;
+     *
+                    threadPool.executor(ThreadPool.Names.FLUSH).execute(flush);
+        if (node != null) {
             }
-        });
-    }
-
-    private class RefreshPendingLocationListener implements ReferenceManager.RefreshListener {
-        Translog.Location lastWriteLocation;
-
-        @Override
-        public void beforeRefresh() {
-            try {
-                lastWriteLocation = getIndexer().translogManager().getTranslogLastWriteLocation();
-            } catch (AlreadyClosedException exc) {
-                // shard is closed - no location is fine
-                lastWriteLocation = null;
-            }
-        }
-
-        @Override
-        public void afterRefresh(boolean didRefresh) {
-            if (didRefresh && lastWriteLocation != null) {
-                pendingRefreshLocation.updateAndGet(pendingLocation -> {
-                    if (pendingLocation == null || pendingLocation.compareTo(lastWriteLocation) <= 0) {
-                        return null;
-                    } else {
-                        return pendingLocation;
-                    }
-                });
-            }
-        }
-    }
-
-    /**
-     * Registers the given listener and invokes it once the shard is active again and all
-     * pending refresh translog location has been refreshed. If there is no pending refresh location registered the listener will be
-     * invoked immediately.
-     * @param listener the listener to invoke once the pending refresh location is visible. The listener will be called with
-     *                 <code>true</code> if the listener was registered to wait for a refresh.
-     */
-    public final void awaitShardSearchActive(Consumer<Boolean> listener) {
-        boolean isSearchIdle = isSearchIdle();
-        markSearcherAccessed(); // move the shard into non-search idle
-        final Translog.Location location = pendingRefreshLocation.get();
         if (location != null) {
-            if (isSearchIdle) {
-                SearchOperationListener searchOperationListener = getSearchOperationListener();
-                searchOperationListener.onSearchIdleReactivation();
+            ShardStateMetadata.FORMAT.writeAndCleanup(newShardStateMetadata, shardPath.getShardStatePath());
             }
-            addRefreshListener(location, (b) -> {
-                pendingRefreshLocation.compareAndSet(location, null);
-                listener.accept(true);
-            });
-        } else {
-            listener.accept(false);
-        }
-    }
-
-    /**
-     * Add a listener for refreshes.
-     *
-     * @param location the location to listen for
-     * @param listener for the refresh. Called with true if registering the listener ran it out of slots and forced a refresh. Called with
-     *        false otherwise.
-     */
-    public void addRefreshListener(Translog.Location location, Consumer<Boolean> listener) {
-        final boolean readAllowed;
-        if (isReadAllowed()) {
-            readAllowed = true;
-        } else {
-            // check again under postRecoveryMutex. this is important to create a happens before relationship
-            // between the switch to POST_RECOVERY + associated refresh. Otherwise we may respond
-            // to a listener before a refresh actually happened that contained that operation.
-            synchronized (postRecoveryMutex) {
-                readAllowed = isReadAllowed();
-            }
-        }
-        // NRT Replicas will not accept refresh listeners.
-        if (readAllowed && isSegmentReplicationAllowed() == false) {
-            refreshListeners.addOrNotify(location, listener);
-        } else {
-            // we're not yet ready fo ready for reads, just ignore refresh cycles
-            listener.accept(false);
-        }
-    }
-
-    /**
-     * Metrics updater for a refresh
-     *
-     * @opensearch.internal
-     */
-    private static class RefreshMetricUpdater implements ReferenceManager.RefreshListener {
-
-        private final MeanMetric refreshMetric;
-        private long currentRefreshStartTime;
-        private Thread callingThread = null;
-
-        private RefreshMetricUpdater(MeanMetric refreshMetric) {
-            this.refreshMetric = refreshMetric;
-        }
-
-        @Override
-        public void beforeRefresh() throws IOException {
-            if (Assertions.ENABLED) {
-                assert callingThread == null : "beforeRefresh was called by "
-                    + callingThread.getName()
-                    + " without a corresponding call to afterRefresh";
-                callingThread = Thread.currentThread();
-            }
-            currentRefreshStartTime = System.nanoTime();
-        }
-
-        @Override
-        public void afterRefresh(boolean didRefresh) throws IOException {
-            if (Assertions.ENABLED) {
-                assert callingThread != null : "afterRefresh called but not beforeRefresh";
-                assert callingThread == Thread.currentThread() : "beforeRefreshed called by a different thread. current ["
-                    + Thread.currentThread().getName()
-                    + "], thread that called beforeRefresh ["
-                    + callingThread.getName()
-                    + "]";
-                callingThread = null;
-            }
-            refreshMetric.inc(System.nanoTime() - currentRefreshStartTime);
-        }
-    }
-
-    /**
-     * Refresh listener to update the Shard's ReplicationCheckpoint post refresh.
-     */
-    private class ReplicationCheckpointUpdater implements ReferenceManager.RefreshListener {
-        @Override
-        public void beforeRefresh() throws IOException {}
-
-        @Override
-        public void afterRefresh(boolean didRefresh) throws IOException {
-            if (didRefresh) {
-                // We're only starting to track the replication checkpoint. The timers for replication are started when
-                // the checkpoint is published. This is done so that the timers do not include the time spent by primary
-                // in uploading the segments to remote store.
-                updateReplicationCheckpoint();
-            }
-        }
-    }
-
-    private void updateReplicationCheckpoint() {
-        try (GatedCloseable<CatalogSnapshot> snapshot = getCatalogSnapshot()) {
-            replicationTracker.setLatestReplicationCheckpoint(computeReplicationCheckpoint(snapshot.get()));
-        } catch (AlreadyClosedException e) {
-            // Refresh listener may fire while the engine is concurrently closing; ignore.
-            logger.trace("Skipped replication checkpoint update — engine already closed", e);
-        } catch (IOException e) {
-            throw new OpenSearchException("Error computing replication checkpoint from CatalogSnapshot", e);
-        }
-    }
-
-    private EngineConfig.TombstoneDocSupplier tombstoneDocSupplier() {
-        final RootObjectMapper.Builder noopRootMapper = new RootObjectMapper.Builder("__noop");
-        final DocumentMapper noopDocumentMapper = mapperService != null
-            ? new DocumentMapper.Builder(noopRootMapper, mapperService).build(mapperService)
-            : null;
-        return new EngineConfig.TombstoneDocSupplier() {
-            @Override
-            public ParsedDocument newDeleteTombstoneDoc(String id) {
-                return docMapper().getDocumentMapper().createDeleteTombstoneDoc(shardId.getIndexName(), id);
-            }
-
-            @Override
-            public ParsedDocument newDeleteTombstoneDoc(String id, String routing) {
-                return docMapper().getDocumentMapper().createDeleteTombstoneDoc(shardId.getIndexName(), id, routing);
-            }
-
-            @Override
-            public ParsedDocument newNoopTombstoneDoc(String reason) {
-                return noopDocumentMapper.createNoopTombstoneDoc(shardId.getIndexName(), reason);
-            }
-        };
-    }
-
-    /**
-     * Rollback the current engine to the safe commit, then replay local translog up to the global checkpoint.
-     */
-    void resetEngineToGlobalCheckpoint() throws IOException {
-        assert Thread.holdsLock(mutex) == false : "resetting engine under mutex";
-        assert getActiveOperationsCount() == OPERATIONS_BLOCKED : "resetting engine without blocking operations; active operations are ["
-            + getActiveOperations()
-            + ']';
-        sync(); // persist the global checkpoint to disk
-        final SeqNoStats seqNoStats = seqNoStats();
-        final TranslogStats translogStats = translogStats();
-        // flush to make sure the latest commit, which will be opened by the read-only engine, includes all operations.
-        flush(new FlushRequest().waitIfOngoing(true));
-
-        SetOnce<Indexer> newEngineReference = new SetOnce<>();
-        final long globalCheckpoint = getLastKnownGlobalCheckpoint();
-        assert globalCheckpoint == getLastSyncedGlobalCheckpoint();
-        synchronized (engineMutex) {
-            verifyNotClosed();
-            // we must create both new read-only engine and new read-write engine under
-            // engineMutex to ensure snapshotStoreMetadata, acquireXXXCommit and close works.
-            // Delegates intentionally do NOT synchronize on engineMutex: doing so would
-            // deadlock because close holds engineMutex and waits for writeLock, while
-            // recoverFromTranslog holds readLock and a refresh listener calls a delegate.
-            // SetOnce is backed by AtomicReference so get() provides happens-before visibility.
-            final Engine readOnlyEngine = new ReadOnlyEngine(
-                newEngineConfig(replicationTracker),
-                seqNoStats,
-                translogStats,
-                false,
-                Function.identity(),
-                true
-            ) {
-                @Override
-                public GatedCloseable<IndexCommit> acquireLastIndexCommit(boolean flushFirst) {
-                    if (newEngineReference.get() == null) {
-                        throw new AlreadyClosedException("engine was closed");
-                    }
-                    // ignore flushFirst since we flushed above and we do not want to interfere with ongoing translog replay
-                    return applyOnEngine(newEngineReference.get(), engine -> engine.acquireLastIndexCommit(false));
-                }
-
-                @Override
-                public GatedCloseable<IndexCommit> acquireSafeIndexCommit() {
-                    if (newEngineReference.get() == null) {
-                        throw new AlreadyClosedException("engine was closed");
-                    }
-                    return applyOnEngine(newEngineReference.get(), Engine::acquireSafeIndexCommit);
-                }
-
-                @Override
-                public GatedCloseable<CatalogSnapshot> acquireSafeCatalogSnapshot() {
-                    synchronized (engineMutex) {
-                        if (newEngineReference.get() == null) {
-                            throw new AlreadyClosedException("engine was closed");
-                        }
-                        return applyOnEngine(newEngineReference.get(), Engine::acquireSafeCatalogSnapshot);
-                    }
-                }
-
-                @Override
-                public GatedCloseable<CatalogSnapshot> acquireLastCommittedSnapshot(boolean flushFirst) throws IOException {
-                    // flushFirst is a no-op on read-only engines — no writer to flush.
-                    synchronized (engineMutex) {
-                        final Indexer ref = newEngineReference.get();
-                        if (ref == null) {
-                            throw new AlreadyClosedException("engine was closed");
-                        }
-                        return ref.acquireLastCommittedSnapshot(false);
-                    }
-                }
-
-                @Override
-                public GatedCloseable<CatalogSnapshot> acquireSnapshot() {
-                    final Indexer ref = newEngineReference.get();
-                    if (ref == null) {
-                        throw new AlreadyClosedException("engine was closed");
-                    }
-                    return ref.acquireSnapshot();
-                }
-
-                @Override
-                public void close() throws IOException {
-                    assert Thread.holdsLock(engineMutex);
-
-                    Indexer newEngine = newEngineReference.get();
-                    if (newEngine == currentEngineReference.get()) {
-                        // we successfully installed the new engine so do not close it.
-                        newEngine = null;
-                    }
-                    IOUtils.close(super::close, newEngine);
-                }
-            };
-            IOUtils.close(currentEngineReference.getAndSet(new EngineBackedIndexer(readOnlyEngine)));
-            if (indexSettings.isRemoteStoreEnabled() || this.isRemoteSeeded()) {
-                syncSegmentsFromRemoteSegmentStore(false);
-            }
-            if (isTranslogBackedByRemoteStore() && shardRouting.primary()) {
-                // On replica-to-primary promotion the operation term has already been bumped, and the previous primary
-                // may be alive behind a partition, still holding a valid fence token. Seal before reading the remote
-                // translog restore point, or that primary could keep acknowledging writes landing after it. A primary
-                // relocation target must not seal: the source is still legitimately serving at the same term, and
-                // ordering with it is enforced by the fence CAS once this copy starts uploading.
-                if (shardRouting.isRelocationTarget() == false) {
-                    sealRemoteStoreFence();
-                }
-                syncRemoteTranslogAndUpdateGlobalCheckpoint();
-            }
-            newEngineReference.set(indexerFactory.createIndexer(newEngineConfig(replicationTracker)));
-            onNewEngine(newEngineReference.get());
-        }
-        final TranslogRecoveryRunner translogRunner = (snapshot) -> {
-            long startTime = System.currentTimeMillis();
-            Indexer engine = newEngineReference.get();
-            assert null != engine;
-            int translogRecoveryOperations;
-            int totalOperations = snapshot.totalOperations();
-            int batchSize = recoverySettings.getTranslogConcurrentRecoveryBatchSize();
-            long localCheckpoint = engine.getProcessedLocalCheckpoint();
-            final int batches = (totalOperations + batchSize - 1) / batchSize;
-            // When the total totalOperations <= batchSize, there is no need to use concurrent execution.
-            boolean isConcurrentRecovery = recoverySettings.isTranslogConcurrentRecoveryEnable()
-                && indexSettings.isSegRepEnabledOrRemoteNode()
-                && totalOperations > batchSize
-                && translogConcurrentRecoverySemaphore.tryAcquire(batches);
-            if (isConcurrentRecovery) {
-                List<Future<Integer>> translogRecoveryFutureList = new ArrayList<>();
-                try {
-                    // Since the translog does not change at this time, it is safe to re-partition the translog snapshot here.
-                    CompletionService<Integer> completionService = new ExecutorCompletionService<>(
-                        threadPool.executor(ThreadPool.Names.TRANSLOG_RECOVERY)
-                    );
-                    for (int i = 0; i < batches; i++) {
-                        long start = localCheckpoint + 1 + (long) i * batchSize;
-                        long end = (i == batches - 1) ? Long.MAX_VALUE : start + batchSize - 1;
-                        translogRecoveryFutureList.add(completionService.submit(() -> {
-                            try (Translog.Snapshot translogSnapshot = engine.translogManager().newChangesSnapshot(start, end, false)) {
-                                return runTranslogRecovery(engine, translogSnapshot, Engine.Operation.Origin.LOCAL_RESET, () -> {
-                                    // TODO: add a dedicate recovery stats for the reset translog
-                                });
-                            }
-                        }));
-                    }
-                    Exception exception = null;
-                    int totalRecovered = 0;
-                    for (int i = 0; i < batches; i++) {
-                        try {
-                            if (exception != null) {
-                                for (Future<Integer> translogRecoveryFuture : translogRecoveryFutureList) {
-                                    FutureUtils.cancel(translogRecoveryFuture);
-                                    if (false == translogRecoveryFuture.isCancelled()) {
-                                        translogRecoveryFuture.get();
-                                    }
-                                }
-                                break;
-                            }
-                            totalRecovered += completionService.take().get();
-                        } catch (Exception e) {
-                            if (exception == null) {
-                                exception = e;
-                            } else {
-                                exception.addSuppressed(e);
-                            }
-                        }
-                    }
-                    if (exception != null) {
-                        throw new IOException("Failed to concurrent recovery translog", exception);
-                    }
-                    translogRecoveryOperations = totalRecovered;
-                } finally {
-                    translogConcurrentRecoverySemaphore.release(batches);
-                }
             } else {
-                translogRecoveryOperations = runTranslogRecovery(
-                    newEngineReference.get(),
-                    snapshot,
-                    Engine.Operation.Origin.LOCAL_RESET,
-                    () -> {
-                        // TODO: add a dedicate recovery stats for the reset translog
-                    }
-                );
-            }
-
-            logger.info(
-                "translog recovery complete, isConcurrentRecovery {}, cost {}ms, totalRecovered {}",
-                isConcurrentRecovery,
-                System.currentTimeMillis() - startTime,
-                translogRecoveryOperations
-            );
-
-            return translogRecoveryOperations;
-        };
-
-        // When the new engine is created, translogs are synced from remote store onto local. Since remote store is the source
-        // of truth for translog, we play all translogs that exists locally. Otherwise, the recoverUpto happens upto global checkpoint.
-        // We also replay all local translog ops with Segment replication, because on engine swap our local translog may
-        // hold more ops than the global checkpoint.
-        long recoverUpto = this.isRemoteTranslogEnabled() || indexSettings().isSegRepEnabledOrRemoteNode()
-            ? Long.MAX_VALUE
-            : globalCheckpoint;
-        newEngineReference.get()
-            .translogManager()
+     * @throws IllegalArgumentException if the specified retention lease already exists
+        boolean isRetry
+     * engineMutex.
+     * Aborts the remote store hydration that a recovery of this shard is running, if any. Called by {@link #close} once
+                        + ", new "
+        if (indexSettings.isDerivedSourceEnabled()) {
+     * cluster state, the shard will not be in STARTED state. This method is used to prevent pre-emptive segment or
+                        // it is promoted to primary.
+    ToDo : Fix this https://github.com/opensearch-project/OpenSearch/issues/8003
+                segmentInfosGatedCloseable.get().getVersion(),
+        logger.debug(
+     * @param retainingSequenceNumber the retaining sequence number
+     * @throws InterruptedException            if blocking operations is interrupted
+        RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = getRemoteDirectory();
             .recoverFromTranslog(translogRunner, newEngineReference.get().getProcessedLocalCheckpoint(), recoverUpto);
-        newEngineReference.get().refresh("reset_engine");
-        synchronized (engineMutex) {
-            verifyNotClosed();
-            IOUtils.close(currentEngineReference.getAndSet(newEngineReference.get()));
-            // We set active because we are now writing operations to the engine; this way,
-            // if we go idle after some time and become inactive, we still give sync'd flush a chance to run.
-            active.set(true);
-        }
-        // time elapses after the engine is created above (pulling the config settings) until we set the engine reference, during
-        // which settings changes could possibly have happened, so here we forcefully push any config changes to the new engine.
-        onSettingsChanged();
-    }
-
-    private void syncRemoteTranslogAndUpdateGlobalCheckpoint() throws IOException {
-        assert assertRemoteStoreFenceSealedBeforeRestore();
-        syncTranslogFilesFromRemoteTranslog();
-        loadGlobalCheckpointToReplicationTracker();
-    }
-
-    /**
+                assert assertPrimaryMode();
      * Claims the remote store fence for this copy before its translog restore point is read during recovery, so that a
-     * previous primary that is still alive but no longer in the cluster's view cannot acknowledge writes landing after
-     * that restore point. See {@link RemoteFsTranslog#sealFence}.
-     * <p>
-     * Deliberately skipped for peer recovery: a primary relocation target recovers while the source is still serving at
-     * the same primary term, so sealing here would fence a healthy primary mid-handoff. Relocation ordering is instead
-     * enforced by the fence CAS once the target starts uploading.
-     * <p>
-     * Every other recovery source seals. For sources whose shard has a remote translog lineage to take over
-     * (EXISTING_STORE, REMOTE_STORE, in-place SNAPSHOT restore) the seal invalidates any partitioned previous writer.
-     * For sources that begin a fresh lineage under a new index UUID — LOCAL_SHARDS (a shrink/split/clone target) and
-     * SNAPSHOT restore into a new index — the fence key derives from the new UUID, so the seal is simply the fresh
-     * chain's create-if-absent bootstrap; nothing beyond this index's own metadata and the translog repository is
-     * required for the path to resolve.
-     */
-    private void sealRemoteStoreFenceForRecovery() throws IOException {
-        if (recoveryState.getRecoverySource().getType() == RecoverySource.Type.PEER) {
-            return;
-        }
-        sealRemoteStoreFence();
-    }
-
-    /**
-     * Claims the remote store fence for this copy at the current operation primary term. Must run before this copy
-     * reads a translog restore point it intends to serve from — whether during recovery
-     * ({@link #sealRemoteStoreFenceForRecovery}) or on replica-to-primary promotion
-     * ({@link #resetEngineToGlobalCheckpoint}), where the previous primary may be alive behind a partition and its CAS
-     * token must be invalidated before this copy can acknowledge anything.
-     */
-    private void sealRemoteStoreFence() throws IOException {
-        if (indexSettings.isRemoteStoreFencingEnabled() == false) {
-            return;
-        }
-        TranslogFactory translogFactory = translogFactorySupplier.apply(indexSettings, shardRouting);
-        assert translogFactory instanceof RemoteBlobStoreInternalTranslogFactory;
-        RemoteFsTranslog.sealFence(
-            ((RemoteBlobStoreInternalTranslogFactory) translogFactory).getRepository(),
-            shardId,
-            indexSettings.getRemoteStorePathStrategy(),
-            remoteStoreSettings,
-            RemoteStoreUtils.isServerSideEncryptionEnabledIndex(indexSettings.getIndexMetadata()),
-            shardRouting.allocationId().getId(),
-            translogConfig.getNodeId(),
-            // Deliberately the operation term rather than the pending term: uploads advance the fence at the operation
-            // term, and the pending term can transiently lead it. Sealing above the term we will upload at would make
-            // the shard fence itself; sealing at or below is safe, since bootstrap seals over at a term >= the fence's.
-            getOperationPrimaryTerm()
-        );
-        remoteStoreFenceSealed = true;
-    }
-
-    /**
-     * The seal-before-restore invariant of {@link org.opensearch.index.translog.transfer.RemoteStoreFence}: a fencing-enabled primary must
-     * have claimed the fence before it reads the remote translog restore point it will serve from, with one exception —
-     * a primary relocation target, whose source is still legitimately serving at the same term and for which ordering
-     * is enforced by the fence CAS once the target starts uploading. Asserted at the read choke point so that any new
-     * code path reaching the remote translog without sealing fails loudly in tests rather than silently reopening the
-     * acked-write-loss window.
-     */
-    private boolean assertRemoteStoreFenceSealedBeforeRestore() {
-        assert indexSettings.isRemoteStoreFencingEnabled() == false || remoteStoreFenceSealed || shardRouting.isRelocationTarget()
-            : "remote translog restore point read without sealing the fence for " + shardRouting;
-        return true;
-    }
-
-    public void deleteTranslogFilesFromRemoteTranslog() throws IOException {
-        TranslogFactory translogFactory = translogFactorySupplier.apply(indexSettings, shardRouting);
-        assert translogFactory instanceof RemoteBlobStoreInternalTranslogFactory;
-        Repository repository = ((RemoteBlobStoreInternalTranslogFactory) translogFactory).getRepository();
-        RemoteFsTranslog.cleanup(
-            repository,
-            shardId,
-            getThreadPool(),
-            indexSettings.getRemoteStorePathStrategy(),
-            remoteStoreSettings,
-            indexSettings().isTranslogMetadataEnabled(),
-            RemoteStoreUtils.isServerSideEncryptionEnabledIndex(indexSettings.getIndexMetadata())
-        );
-    }
-
-    /*
-    Cleans up remote store and remote translog contents.
-    This is used in remote store migration, where we want to clean up all stale segment and translog data
-    and seed the remote store afresh
-     */
-    public void deleteRemoteStoreContents() throws IOException {
-        deleteTranslogFilesFromRemoteTranslog();
-        getRemoteDirectory().delete();
-    }
-
-    public void syncTranslogFilesFromRemoteTranslog() throws IOException {
-        TranslogFactory translogFactory = translogFactorySupplier.apply(indexSettings, shardRouting);
-        assert translogFactory instanceof RemoteBlobStoreInternalTranslogFactory;
-        Repository repository = ((RemoteBlobStoreInternalTranslogFactory) translogFactory).getRepository();
-        syncTranslogFilesFromGivenRemoteTranslog(
-            repository,
-            shardId,
-            indexSettings.getRemoteStorePathStrategy(),
-            indexSettings().isTranslogMetadataEnabled(),
-            0,
-            RemoteStoreUtils.isServerSideEncryptionEnabledIndex(indexSettings.getIndexMetadata())
-        );
-    }
-
-    public void syncTranslogFilesFromGivenRemoteTranslog(
-        Repository repository,
-        ShardId shardId,
-        RemoteStorePathStrategy remoteStorePathStrategy,
-        boolean isTranslogMetadataEnabled,
-        long timestamp
-    ) throws IOException {
-        this.syncTranslogFilesFromGivenRemoteTranslog(
-            repository,
-            shardId,
-            remoteStorePathStrategy,
-            isTranslogMetadataEnabled,
-            timestamp,
-            false
-        );
-    }
-
-    public void syncTranslogFilesFromGivenRemoteTranslog(
-        Repository repository,
-        ShardId shardId,
-        RemoteStorePathStrategy remoteStorePathStrategy,
-        boolean isTranslogMetadataEnabled,
-        long timestamp,
-        boolean isServerSideEncryptionEnabled
-    ) throws IOException {
-        RemoteFsTranslog.download(
-            repository,
-            shardId,
-            getThreadPool(),
-            shardPath().resolveTranslog(),
-            remoteStorePathStrategy,
-            remoteStoreSettings,
-            logger,
-            shouldSeedRemoteStore(),
-            isTranslogMetadataEnabled,
-            timestamp,
-            isServerSideEncryptionEnabled
-        );
-    }
-
-    /**
-     * Downloads segments from remote segment store
-     * @param overrideLocal flag to override local segment files with those in remote store.
-     * @throws IOException if exception occurs while reading segments from remote store.
-     */
-    public void syncSegmentsFromRemoteSegmentStore(boolean overrideLocal) throws IOException {
-        syncSegmentsFromRemoteSegmentStore(overrideLocal, () -> {});
-    }
-
-    /**
-     * Downloads segments from remote segment store along with updating the access time of the recovery target.
-     * @param overrideLocal flag to override local segment files with those in remote store.
-     * @param onFileSync runnable that updates the access time when run.
-     * @throws IOException if exception occurs while reading segments from remote store.
-     */
-    public void syncSegmentsFromRemoteSegmentStore(boolean overrideLocal, final Runnable onFileSync) throws IOException {
-        boolean syncSegmentSuccess = false;
-        long startTimeMs = System.currentTimeMillis();
-        assert indexSettings.isRemoteStoreEnabled() || this.isRemoteSeeded();
-        logger.trace("Downloading segments from remote segment store");
-        RemoteSegmentStoreDirectory remoteDirectory = getRemoteDirectory();
-        // We need to call RemoteSegmentStoreDirectory.init() in order to get latest metadata of the files that
-        // are uploaded to the remote segment store.
-        RemoteSegmentMetadata remoteSegmentMetadata = remoteDirectory.init();
-
-        Map<String, UploadedSegmentMetadata> uploadedSegments = remoteDirectory.getSegmentsUploadedToRemoteStore()
-            .entrySet()
-            .stream()
-            .filter(entry -> entry.getKey().startsWith(IndexFileNames.SEGMENTS) == false)
-            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        store.incRef();
-        remoteStore.incRef();
-        try {
-            final Directory storeDirectory;
-            if (recoveryState.getStage() == RecoveryState.Stage.INDEX) {
-                storeDirectory = new StoreRecovery.StatsDirectoryWrapper(store.directory(), recoveryState.getIndex());
-                for (String file : uploadedSegments.keySet()) {
-                    long checksum = Long.parseLong(uploadedSegments.get(file).getChecksum());
-                    if (overrideLocal || localDirectoryContains(storeDirectory, file, checksum) == false) {
-                        recoveryState.getIndex().addFileDetail(file, uploadedSegments.get(file).getLength(), false);
-                    } else {
-                        recoveryState.getIndex().addFileDetail(file, uploadedSegments.get(file).getLength(), true);
-                    }
-                }
-            } else {
-                storeDirectory = store.directory();
+     * Operations from the translog will be replayed to bring lucene up to date.
             }
-            if (indexSettings.isWarmIndex() == false) {
-                copySegmentFiles(storeDirectory, remoteDirectory, null, uploadedSegments, overrideLocal, onFileSync);
-            }
-
-            if (remoteSegmentMetadata != null) {
-                // Bytes are always Lucene SegmentInfos. DFA snapshots travel in userData.
-                final SegmentInfos infosSnapshot = store.buildSegmentInfos(
-                    remoteSegmentMetadata.getSegmentInfosBytes(),
-                    remoteSegmentMetadata.getGeneration()
-                );
-                long processedLocalCheckpoint = Long.parseLong(infosSnapshot.getUserData().getOrDefault(LOCAL_CHECKPOINT_KEY, "-1"));
-                // delete any other commits, we want to start the engine only from a new commit made with the downloaded infos bytes.
-                // Extra segments will be wiped on engine open.
-                for (String file : List.of(store.directory().listAll())) {
-                    if (file.startsWith(IndexFileNames.SEGMENTS)) {
                         store.deleteQuiet(file);
-                    }
-                }
-                assert Arrays.stream(store.directory().listAll()).filter(f -> f.startsWith(IndexFileNames.SEGMENTS)).findAny().isEmpty()
-                    || indexSettings.isWarmIndex() : "There should not be any segments file in the dir";
-                store.commitSegmentInfos(infosSnapshot, processedLocalCheckpoint, processedLocalCheckpoint);
-            }
-            syncSegmentSuccess = true;
-        } catch (IOException e) {
-            throw new IndexShardRecoveryException(shardId, "Exception while copying segment files from remote segment store", e);
-        } finally {
-            logger.trace(
-                "syncSegmentsFromRemoteSegmentStore success={} elapsedTime={}",
-                syncSegmentSuccess,
-                (System.currentTimeMillis() - startTimeMs)
-            );
-            store.decRef();
-            remoteStore.decRef();
-        }
-    }
-
-    /**
-     * Downloads segments from given remote segment store for a specific commit.
-     * @param overrideLocal flag to override local segment files with those in remote store
-     * @param sourceRemoteDirectory RemoteSegmentDirectory Instance from which we need to sync segments
-     * @throws IOException if exception occurs while reading segments from remote store
-     */
-    public void syncSegmentsFromGivenRemoteSegmentStore(
-        boolean overrideLocal,
-        RemoteSegmentStoreDirectory sourceRemoteDirectory,
-        RemoteSegmentMetadata remoteSegmentMetadata,
-        boolean pinnedTimestamp
-    ) throws IOException {
-        logger.trace("Downloading segments from given remote segment store");
-        RemoteSegmentStoreDirectory remoteDirectory = null;
-        if (remoteStore != null) {
-            remoteDirectory = getRemoteDirectory();
-            remoteDirectory.init();
-            remoteStore.incRef();
-        }
-        Map<String, UploadedSegmentMetadata> uploadedSegments = sourceRemoteDirectory.getSegmentsUploadedToRemoteStore();
-        store.incRef();
-        try {
-            final Directory storeDirectory;
-            if (recoveryState.getStage() == RecoveryState.Stage.INDEX) {
-                storeDirectory = new StoreRecovery.StatsDirectoryWrapper(store.directory(), recoveryState.getIndex());
-                for (String file : uploadedSegments.keySet()) {
+                if (state == IndexShardState.CLOSED) {
+            assert null != engine;
                     long checksum = Long.parseLong(uploadedSegments.get(file).getChecksum());
-                    if (overrideLocal || localDirectoryContains(storeDirectory, file, checksum) == false) {
-                        recoveryState.getIndex().addFileDetail(file, uploadedSegments.get(file).getLength(), false);
-                    } else {
-                        recoveryState.getIndex().addFileDetail(file, uploadedSegments.get(file).getLength(), true);
-                    }
-                }
-            } else {
-                storeDirectory = store.directory();
-            }
-
-            String segmentsNFile = copySegmentFiles(
-                storeDirectory,
-                sourceRemoteDirectory,
-                remoteDirectory,
-                uploadedSegments,
-                overrideLocal,
-                () -> {}
-            );
-            if (pinnedTimestamp) {
-                final SegmentInfos infosSnapshot = store.buildSegmentInfos(
-                    remoteSegmentMetadata.getSegmentInfosBytes(),
-                    remoteSegmentMetadata.getGeneration()
-                );
-                long processedLocalCheckpoint = Long.parseLong(infosSnapshot.getUserData().get(LOCAL_CHECKPOINT_KEY));
-                // delete any other commits, we want to start the engine only from a new commit made with the downloaded infos bytes.
-                // Extra segments will be wiped on engine open.
-                for (String file : List.of(store.directory().listAll())) {
-                    if (file.startsWith(IndexFileNames.SEGMENTS)) {
-                        store.deleteQuiet(file);
-                    }
-                }
-                assert Arrays.stream(store.directory().listAll()).filter(f -> f.startsWith(IndexFileNames.SEGMENTS)).findAny().isEmpty()
-                    || indexSettings.isWarmIndex() : "There should not be any segments file in the dir";
-                store.commitSegmentInfos(infosSnapshot, processedLocalCheckpoint, processedLocalCheckpoint);
-            } else if (segmentsNFile != null) {
-                try (
-                    ChecksumIndexInput indexInput = new BufferedChecksumIndexInput(
-                        storeDirectory.openInput(segmentsNFile, IOContext.READONCE)
-                    )
-                ) {
-                    long commitGeneration = SegmentInfos.generationFromSegmentsFileName(segmentsNFile);
-                    SegmentInfos infosSnapshot = SegmentInfos.readCommit(store.directory(), indexInput, commitGeneration);
-                    long processedLocalCheckpoint = Long.parseLong(infosSnapshot.getUserData().get(LOCAL_CHECKPOINT_KEY));
-                    if (remoteStore != null) {
-                        store.commitSegmentInfos(infosSnapshot, processedLocalCheckpoint, processedLocalCheckpoint);
-                    } else {
-                        store.directory().sync(infosSnapshot.files(true));
-                        store.directory().syncMetaData();
-                    }
-                }
-            }
-        } catch (IOException e) {
-            throw new IndexShardRecoveryException(shardId, "Exception while copying segment files from remote segment store", e);
-        } finally {
-            store.decRef();
-            if (remoteStore != null) {
-                remoteStore.decRef();
-            }
+     * Checks if the underlying storage sync is required.
+                if (requirePrimaryTermUpdate(opPrimaryTerm, allowCombineOperationWithPrimaryTermUpdate)) {
+    public final void awaitShardSearchActive(Consumer<Boolean> listener) {
+            mapperService != null ? mapperService.indexAnalyzer() : null,
+        indexShardOperationPermits.blockOperations(30, TimeUnit.MINUTES, () -> { resetEngineToGlobalCheckpoint(); });
+                    index.version(),
+import java.nio.channels.ClosedByInterruptException;
+                final DirectoryReader wrappedReader = indexReaderWrapper == null ? reader : indexReaderWrapper.apply(reader);
+            final String translogUUID = store.readLastCommittedSegmentsInfo().getUserData().get(TRANSLOG_UUID_KEY);
+        final Optional<SequenceNumbers.CommitInfo> safeCommit;
+    private final ShardGetService getService;
+        // DFA warm primaries: relax checkpoint assertion. During hot-to-warm relocation after cancel+bulk+retry,
         }
+     * one more publish at our own term produces an orphan, which is the pre-existing harmless case, whereas failing
+            + opPrimaryTerm
+        VersionType versionType,
+                );
+import java.util.concurrent.atomic.AtomicLong;
+        return getService.stats();
+                        periodicFlushTask
+     */
+                     * shard state are initializing, we could replace the current shard and reinitialize it. It is however
+     * a drainable merge queue (Lucene-backed primaries, replicas, read-only engines).
+     * Acquire all primary operation permits. Once all permits are acquired, the provided ActionListener is called.
+                SearchOperationListener searchOperationListener = getSearchOperationListener();
+            indexingOperationListeners.postDelete(shardId, delete, e);
+        }
+                    delete.primaryTerm(),
+        final SeqNoStats stats = getIndexer().getSeqNoStats(replicationTracker.getGlobalCheckpoint());
+     *
+     */
+        return this.pendingPrimaryTerm;
+     */
     }
-
-    private String copySegmentFiles(
-        Directory storeDirectory,
-        RemoteSegmentStoreDirectory sourceRemoteDirectory,
-        RemoteSegmentStoreDirectory targetRemoteDirectory,
-        Map<String, UploadedSegmentMetadata> uploadedSegments,
-        boolean overrideLocal,
-        final Runnable onFileSync
-    ) throws IOException {
-        Set<String> toDownloadSegments = new HashSet<>();
-        Set<String> skippedSegments = new HashSet<>();
-        String segmentNFile = null;
-
-        try {
-            if (overrideLocal) {
-                for (String file : storeDirectory.listAll()) {
-                    storeDirectory.deleteFile(file);
-                }
+            try {
+     * @throws org.apache.lucene.index.CorruptIndexException      if the lucene index is corrupted. This can be caused by a checksum
+        storeRecovery.recoverFromStore(this, listener);
+     * the transaction log the caller thread will be hijacked to run the fsync for all pending fsync operations.
+    boolean shouldRollTranslogGeneration() {
+                    if (state == IndexShardState.CLOSED) {
+        } catch (Exception e) {
+     * @param primaryTerm current primary term.
+                        final String translogUUID = lastCommittedSegmentInfos.userData.get(TRANSLOG_UUID_KEY);
+    private Engine.DeleteResult applyDeleteOperation(
             }
-
-            for (String file : uploadedSegments.keySet()) {
-                long checksum = Long.parseLong(uploadedSegments.get(file).getChecksum());
-                if (overrideLocal || localDirectoryContains(storeDirectory, file, checksum) == false) {
-                    toDownloadSegments.add(file);
-                } else {
-                    skippedSegments.add(file);
-                }
-
-                if (file.startsWith(IndexFileNames.SEGMENTS)) {
-                    assert segmentNFile == null : "There should be only one SegmentInfosSnapshot file";
-                    segmentNFile = file;
-                }
-            }
-
-            if (toDownloadSegments.isEmpty() == false) {
-                try {
-                    fileDownloader.download(sourceRemoteDirectory, storeDirectory, targetRemoteDirectory, toDownloadSegments, onFileSync);
-                    // Seed the precomputed checksum cache with downloaded files' checksums.
-                    DataFormatAwareStoreDirectory dfasd = DataFormatAwareStoreDirectory.unwrap(storeDirectory);
-                    if (dfasd != null) {
-                        Map<String, String> fileToChecksum = new HashMap<>();
-                        for (String file : toDownloadSegments) {
-                            UploadedSegmentMetadata meta = uploadedSegments.get(file);
-                            if (meta != null) {
-                                fileToChecksum.put(file, meta.getChecksum());
+    public StoreStats storeStats() {
+        this.circuitBreakerService = circuitBreakerService;
+import org.opensearch.cluster.node.DiscoveryNode;
+            + "] is different than engine ["
+            metadataMap.values().stream().mapToLong(StoreFileMetadata::length).sum(),
+                // this thread up; it now either observes CLOSED before it registers (it checks under mutex), or is
                             }
-                        }
-                        dfasd.registerDownloadedChecksums(fileToChecksum);
-                    }
-                } catch (Exception e) {
-                    throw new IOException("Error occurred when downloading segments from remote store", e);
-                }
+import org.opensearch.common.util.concurrent.AbstractAsyncTask;
+     * Runs the specified runnable under a permit and otherwise calling back the specified failure callback. This method is really a
             }
-        } finally {
-            logger.trace("Downloaded segments here: {}", toDownloadSegments);
-            logger.trace("Skipped download for segments here: {}", skippedSegments);
-        }
-
-        return segmentNFile;
+                segmentMetadataMap.values().stream().mapToLong(StoreFileMetadata::length).sum(),
+                sourceToParse,
+        try {
     }
-
-    // Visible for testing
-    boolean localDirectoryContains(Directory localDirectory, String file, long checksum) throws IOException {
-        try (IndexInput indexInput = localDirectory.openInput(file, IOContext.READONCE)) {
-            long localChecksum;
-            if (indexSettings.isPluggableDataFormatEnabled()) {
-                DataFormatAwareStoreDirectory dfasd = DataFormatAwareStoreDirectory.unwrap(localDirectory);
-                if (dfasd != null) {
-                    try {
-                        localChecksum = Long.parseLong(dfasd.calculateUploadChecksum(file));
-                    } catch (NumberFormatException e) {
-                        logger.warn("Invalid checksum format for file [{}]: {}", file, e.getMessage());
-                        return false;
-                    }
-                } else {
-                    localChecksum = CodecUtil.retrieveChecksum(indexInput);
-                }
-            } else {
-                localChecksum = CodecUtil.retrieveChecksum(indexInput);
-            }
-            if (checksum == localChecksum) {
-                return true;
-            } else {
-                logger.warn("Checksum mismatch between local and remote segment file: {}, will override local file", file);
-                // If there is a checksum mismatch and we are not serving reads it is safe to go ahead and delete the file now.
-                // Outside of engine resets this method will be invoked during recovery so this is safe.
-                if (isReadAllowed() == false) {
-                    localDirectory.deleteFile(file);
-                } else {
-                    // segment conflict with remote store while the shard is serving reads.
-                    failShard("Local copy of segment " + file + " has a different checksum than the version in remote store", null);
-                }
-            }
-        } catch (NoSuchFileException | FileNotFoundException e) {
-            logger.debug("File {} does not exist in local FS, downloading from remote store", file);
-        } catch (IOException e) {
-            logger.warn("Exception while reading checksum of file: {}, this can happen if file is corrupted", file);
-            // For any other exception on reading checksum, we delete the file to re-download again
-            localDirectory.deleteFile(file);
-        }
-        return false;
-    }
-
-    /**
-     * Returns the maximum sequence number of either update or delete operations have been processed in this shard
-     * or the sequence number from {@link #advanceMaxSeqNoOfUpdatesOrDeletes(long)}. An index request is considered
-     * as an update operation if it overwrites the existing documents in Lucene index with the same document id.
-     * <p>
-     * The primary captures this value after executes a replication request, then transfers it to a replica before
-     * executing that replication request on a replica.
-     */
-    public long getMaxSeqNoOfUpdatesOrDeletes() {
-        return getIndexer().getMaxSeqNoOfUpdatesOrDeletes();
-    }
-
-    /**
-     * A replica calls this method to advance the max_seq_no_of_updates marker of its engine to at least the max_seq_no_of_updates
-     * value (piggybacked in a replication request) that it receives from its primary before executing that replication request.
-     * The receiving value is at least as high as the max_seq_no_of_updates on the primary was when any of the operations of that
-     * replication request were processed on it.
-     * <p>
-     * A replica shard also calls this method to bootstrap the max_seq_no_of_updates marker with the value that it received from
-     * the primary in peer-recovery, before it replays remote translog operations from the primary. The receiving value is at least
-     * as high as the max_seq_no_of_updates on the primary was when any of these operations were processed on it.
-     * <p>
-     * These transfers guarantee that every index/delete operation when executing on a replica engine will observe this marker a value
-     * which is at least the value of the max_seq_no_of_updates marker on the primary after that operation was executed on the primary.
-     *
-     * @see #acquireReplicaOperationPermit(long, long, long, ActionListener, String, Object)
-     * @see RecoveryTarget#indexTranslogOperations(List, int, long, long, RetentionLeases, long, ActionListener)
-     */
-    public void advanceMaxSeqNoOfUpdatesOrDeletes(long seqNo) {
-        getIndexer().advanceMaxSeqNoOfUpdatesOrDeletes(seqNo);
-    }
-
-    /**
-     * Performs the pre-closing checks on the {@link IndexShard}.
-     *
-     * @throws IllegalStateException if the sanity checks failed
-     */
-    public void verifyShardBeforeIndexClosing() throws IllegalStateException {
-        getIndexer().verifyEngineBeforeIndexClosing();
-    }
-
-    RetentionLeaseSyncer getRetentionLeaseSyncer() {
-        return retentionLeaseSyncer;
-    }
-
-    /**
-     * Fetch the latest SegmentInfos held by the shard's underlying Engine, wrapped
-     * by a {@link GatedCloseable} to ensure files are not deleted/merged away.
-     *
-     * @throws EngineException - When segment infos cannot be safely retrieved
-     */
-    @Deprecated
-    public GatedCloseable<SegmentInfos> getSegmentInfosSnapshot() {
-        if (getIndexer() instanceof EngineBackedIndexer indexer) {
-            return indexer.getEngine().getSegmentInfosSnapshot();
-        }
-        throw new IllegalStateException("Cannot request SegmentInfos directly on IndexShard");
-    }
-
-    /**
-     * Returns a reference-counted {@link CatalogSnapshot} for the current shard state.
-     * If a {@link DataFormatAwareEngine} is present,
-     * acquires from there. Otherwise wraps the SegmentInfos into a {@link SegmentInfosCatalogSnapshot}.
-     *
-     * @return a {@link GatedCloseable} wrapping the catalog snapshot
-     */
-    public GatedCloseable<CatalogSnapshot> getCatalogSnapshot() {
-        return getIndexer().acquireSnapshot();
-    }
-
-    /**
-     * Returns a {@link CheckedFunction} that serializes the given {@link CatalogSnapshot} into
-     * the Lucene {@code SegmentInfos} bytes to be uploaded as remote-store metadata. Delegates
-     * to {@code getIndexer().serializeSnapshotToRemoteMetadata(...)}.
-     *
-     * <p>Passed into {@link org.opensearch.index.store.RemoteSegmentStoreDirectory#uploadMetadata}
-     * so that the final bytes are produced at the point where the upload lock is held, using
-     * the reader registered for the snapshot — eliminating the race between catalog acquisition
-     * and an on-demand {@code IndexWriter} re-capture.
-     */
-    @ExperimentalApi
-    public org.opensearch.common.CheckedFunction<CatalogSnapshot, byte[], IOException> catalogSnapshotToRemoteMetadataSerializer() {
-        assert this.shardRouting.primary() : "This should only be invoked for primary shards";
-        return cs -> getIndexer().serializeSnapshotToRemoteMetadata(cs);
-    }
-
-    private TimeValue getRemoteTranslogUploadBufferInterval(Supplier<TimeValue> clusterRemoteTranslogBufferIntervalSupplier) {
-        assert Objects.nonNull(clusterRemoteTranslogBufferIntervalSupplier) : "remote translog buffer interval supplier is null";
-        if (indexSettings().isRemoteTranslogBufferIntervalExplicit()) {
-            return indexSettings().getRemoteTranslogUploadBufferInterval();
-        }
-        return clusterRemoteTranslogBufferIntervalSupplier.get();
-    }
-
-    // Exclusively for testing, please do not use it elsewhere.
-    public AsyncIOProcessor<Translog.Location> getTranslogSyncProcessor() {
-        return translogSyncProcessor;
-    }
-
-    enum ShardMigrationState {
-        REMOTE_NON_MIGRATING,
-        REMOTE_MIGRATING_SEEDED,
-        REMOTE_MIGRATING_UNSEEDED,
-        DOCREP_NON_MIGRATING
-    }
-
-    static ShardMigrationState getShardMigrationState(IndexSettings indexSettings, boolean shouldSeed) {
-        if (indexSettings.isAssignedOnRemoteNode() && indexSettings.isRemoteStoreEnabled()) {
-            return REMOTE_NON_MIGRATING;
-        } else if (indexSettings.isAssignedOnRemoteNode()) {
-            return shouldSeed ? REMOTE_MIGRATING_UNSEEDED : REMOTE_MIGRATING_SEEDED;
-        }
-        return ShardMigrationState.DOCREP_NON_MIGRATING;
-    }
-
-    /**
-     * Updates the ingestion state based on the received index metadata.
-     */
-    @Override
-    public void updateShardIngestionState(IndexMetadata indexMetadata) {
-        if (indexMetadata.useIngestionSource() == false) {
-            return;
-        }
-
-        IngestionSettings ingestionSettings = IngestionSettings.builder()
-            .setIsPaused(indexMetadata.getIngestionStatus().isPaused())
-            .build();
-        updateShardIngestionState(ingestionSettings);
-    }
-
-    /**
-     * Updates the ingestion state by delegating to the ingestion engine.
-     */
+                );
+                    if (engine != null && flushEngine) {
+        String source,
+     * Reclaims remote store fence ownership after an aborted handoff, so that a source the cluster is about to keep as
     public void updateShardIngestionState(IngestionSettings ingestionSettings) {
-        synchronized (engineMutex) {
-            if (!(getIndexerOrNull() instanceof EngineBackedIndexer indexer
-                && indexer.getEngine() instanceof IngestionEngine ingestionEngine)) {
-                return;
-            }
+    public static final class ShardFailure {
+        if (readAllowed && isSegmentReplicationAllowed() == false) {
+        return primaryReplicaResyncInProgress.get();
+        );
+        try {
+        }
             ingestionEngine.updateIngestionSettings(ingestionSettings);
-        }
-    }
-
-    /**
-     * Returns the current ingestion state for the shard.
+                        combineWithAction.onFailure(e);
+                retentionLeases.v2()
+        throw new UnsupportedOperationException();
+import org.apache.lucene.store.BufferedChecksumIndexInput;
+                long checksum = Long.parseLong(uploadedSegments.get(file).getChecksum());
      */
-    @Override
-    public ShardIngestionState getIngestionState() {
-        Indexer indexer = getIndexerOrNull();
-        if (indexSettings.getIndexMetadata().useIngestionSource() == false
-            || !(indexer instanceof EngineBackedIndexer engineBackedIndexer
-                && engineBackedIndexer.getEngine() instanceof IngestionEngine ingestionEngine)) {
-            throw new OpenSearchException("Unable to retrieve ingestion state as the shard does not have ingestion enabled.");
+                            + ", new routing: "
+                /*
+     * The setting is dynamic, so this is called both on engine creation and on every settings change.
+            getOperationPrimaryTerm(),
+    }
+                        throw new AlreadyClosedException("engine was closed");
+     * True if this shard is still indexing (recently) and false if we've been idle for long enough (as periodically checked by {@link
+        // The target's engine was built at the start of the recovery; refresh so the relocated primary uses the
+    public PollingIngestStats pollingIngestStats() {
+        sync(); // persist the global checkpoint to disk
+    }
+            if (toDownloadSegments.isEmpty() == false) {
+        try {
+        } finally {
+        List<Releasable> releasablesOnHandoffFailures = new ArrayList<>(2);
+                logger.trace(
+            indexSettings,
+                // ignore, we are being shutdown
+                }
+        return getIndexer().translogManager() instanceof RemoteStoreFenceOwnership ownership ? ownership : null;
+        final Consumer<ReplicationTracker.PrimaryContext> consumer,
+        return false;
+import org.opensearch.index.engine.NRTReplicationEngine;
+                     * in one state causing it's term to be incremented. Note that if both current shard state and new
+                        return;
+        assert indexSettings.isAssignedOnRemoteNode();
+        if (state != IndexShardState.STARTED) {
+                    executeRecovery(
+     * @return the local checkpoint
+            tombstoneDocSupplier(),
+                            e.addSuppressed(inner);
+     * expiration of existing retention leases, and then gets all non-expired retention leases tracked on this shard. Note that only the
+                if (indexSettings.isSegRepEnabledOrRemoteNode()) {
+    }
+            getIndexer().activateThrottling();
+import org.opensearch.index.mapper.DocumentMapper;
+        getIndexer().translogManager().skipTranslogRecovery();
+                storeDirectory = new StoreRecovery.StatsDirectoryWrapper(store.directory(), recoveryState.getIndex());
+     * cheap alternative to {@link #resetToWriteableEngine()} for a plugin whose policy is keyed off an
+                } catch (final Exception e) {
+import java.util.HashSet;
         }
-
-        return ingestionEngine.getIngestionState();
+    public Translog.Snapshot getHistoryOperations(String reason, long startingSeqNo, long endSeqNo, boolean accurateCount)
+                        releasablesOnHandoffFailures.add(releasableListener.drainRefreshes());
+                                    }
+                remoteStoreHydration.compareAndSet(cancellableThreads, null);
+        } else {
+        return (remoteStore != null && shardRouting.primary());
     }
-
-    public IndexReaderProvider getReaderProvider() {
-        return getIndexer();
-    }
-
-    /**
-     * Async shard refresh task for running refreshes at shard level independently
-     */
-    @ExperimentalApi
-    public final class AsyncShardRefreshTask extends AbstractAsyncTask {
-
-        private final IndexShard indexShard;
-        private final Logger logger;
-
-        public AsyncShardRefreshTask(IndexShard indexShard) {
-            super(indexShard.logger, indexShard.threadPool, refreshInterval.get(), true, fixedRefreshIntervalSchedulingEnabled);
-            this.logger = indexShard.logger;
+                        throw new OpenSearchException("Interrupted waiting for completion of [{}]", ie);
+     * Acquire a primary operation permit whenever the shard is ready for indexing. If a permit is directly available, the provided
+    public ReplicationStats getReplicationStats() {
+            final Map<String, Long> globalCheckpoints = getInSyncGlobalCheckpoints();
             this.indexShard = indexShard;
-            rescheduleIfNecessary();
-        }
-
-        @Override
-        protected boolean mustReschedule() {
-            return indexShard.state != IndexShardState.CLOSED
-                && indexShard.indexSettings.getIndexMetadata().getState() == IndexMetadata.State.OPEN;
-        }
-
-        @Override
-        protected void runInternal() {
-            indexShard.scheduledRefresh();
-        }
-
-        @Override
-        protected String getThreadPool() {
-            return ThreadPool.Names.REFRESH;
-        }
-
-        @Override
-        public String toString() {
-            return "shard_refresh";
+            shardId,
+                newRouting.allocationId(),
+    public void preRecovery() {
+            : null;
+            + "]";
+    }
+        long startTime = System.nanoTime();
+     * The remote store hydration a recovery is currently running (segment and translog downloads that precede the engine
+                new ParsedDocument(null, null, id, null, null, sourceToParse.source(), sourceToParse.getMediaType(), null),
+                    mergedSegmentCheckpoint,
+                }
+        final Indexer indexer = getIndexer();
+                        replicationTracker.activatePrimaryMode(getLocalCheckpoint());
+     * @return {@link ReferencedSegmentsCheckpoint}.
+    }
+        final Engine.NoOp noOp = new Engine.NoOp(seqNo, opPrimaryTerm, origin, startTime, reason);
+        recoveryState.validateCurrentStage(RecoveryState.Stage.INDEX);
         }
     }
-
-    public void startRefreshTask() {
-        assert Thread.holdsLock(refreshMutex);
-        // The refresh task is expected to be null at this point.
-        assert Objects.isNull(refreshTask);
-        refreshTask = new AsyncShardRefreshTask(this);
+            );
+        boolean isTranslogMetadataEnabled,
+    @PublicApi(since = "1.0.0")
+            if (state == IndexShardState.RECOVERING) {
+    This is used in remote store migration, where we want to clean up all stale segment and translog data
+     * @return - Map of Segment Filename to its {@link StoreFileMetadata}
+            + "]";
+        final OpenSearchDirectoryReader openSearchDirectoryReader = OpenSearchDirectoryReader.getOpenSearchDirectoryReader(
+                active.set(true);
+            };
+                    result.getFailure()
+     * operations can be ignored during engine migration
+     * When warmup is enabled, this method blocks until the shard has caught up with the streaming source
+     *
+                + recoveryState.getRecoverySource()
+        final ShardPath path,
+    protected volatile ShardRouting shardRouting;
+        replicationTracker.renewPeerRecoveryRetentionLeases();
+        if (shardRouting.relocating() == false) {
+        try (GatedCloseable<SegmentInfos> segmentInfosGatedCloseable = getSegmentInfosSnapshot()) {
     }
-
-    public void stopRefreshTask() {
-        assert Thread.holdsLock(refreshMutex);
-        // The refresh task is expected to be non-null at this point.
-        assert Objects.nonNull(refreshTask);
-        refreshTask.close();
-        refreshTask = null;
+                assert getActiveOperationsCount() == OPERATIONS_BLOCKED
+    @ExperimentalApi
+                        return applyOnEngine(newEngineReference.get(), Engine::acquireSafeCatalogSnapshot);
+    private static final EnumSet<IndexShardState> readAllowedStates = EnumSet.of(IndexShardState.STARTED, IndexShardState.POST_RECOVERY);
+            assert currentRouting != null;
+        // TODO: Create a proper object to encapsulate the recovery context
+            final Directory storeDirectory;
+                // we must create a new engine under mutex (see IndexShard#snapshotStoreMetadata).
+        assert routingEntry().recoverySource().getType() == RecoverySource.Type.PEER : "not a peer recovery [" + routingEntry() + "]";
+    public boolean isRemoteTranslogEnabled() {
+            );
+     */
     }
-
+     */
+import org.opensearch.core.index.shard.ShardId;
+     */
+            warmer,
+     * @throws IOException if an I/O exception occurs reading the retention leases
+    private final String checkIndexOnStartup;
+        }
+        this.recoverySettings = recoverySettings;
+                        pendingReplicationActions,
+            @Override
+                l.onFailure(new ShardNotInPrimaryModeException(shardId, state));
+                    DataFormatAwareStoreDirectory dfasd = DataFormatAwareStoreDirectory.unwrap(storeDirectory);
+                    long checksum = Long.parseLong(uploadedSegments.get(file).getChecksum());
+            logger.trace("Shard is in primary mode and cannot perform segment replication as a replica.");
+     */
+        }
+        final Supplier<Sort> indexSortSupplier,
+     * TODO: Mark this as deprecated once new searcher interface is integrated into the IndexShard
     // Visible for testing
-    public AsyncShardRefreshTask getRefreshTask() {
-        return refreshTask;
+                && referencedSegmentsCheckpoint.isAheadOf(mergedSegmentCheckpoint)) {
+        refreshTask.close();
+            .translogManager()
+            failure
+     *                  isn't used
+                for (String file : List.of(store.directory().listAll())) {
+            indexSettings().isTranslogMetadataEnabled(),
+        this.globalCheckpointListeners.add(waitingForGlobalCheckpoint, listener, timeout);
+                executeRecovery("from remote store", recoveryState, recoveryListener, l -> restoreFromRemoteStore(l));
+     * Returns the current ingestion state for the shard.
+                throw new IndexShardRecoveringException(shardId);
+        int total = metadataSnapshot.size();
+import org.opensearch.index.refresh.RefreshStats;
+    private Engine.Searcher wrapSearcher(Engine.Searcher searcher) {
     }
-
+                            // compareAndSet(true, false) below is guaranteed to succeed and the assert holds.
+            segmentsStats.addReplicationStats(getReplicationStats());
+import org.opensearch.index.translog.RemoteStoreFenceOwnership;
+        }
+                    try {
+                try {
+                        synchronized (mutex) {
+        Engine.Searcher engineSearcher,
+    }
+                final Translog.NoOp noOp = (Translog.NoOp) operation;
+            // This helps to get a consistent state in remote store where both remote segment store and remote
+     * @throws AlreadyClosedException if shard is closed
+                                fileToChecksum.put(file, meta.getChecksum());
+                    if (newEngineReference.get() == null) {
+    }
+                : retainingSequenceNumber;
+     */
+        if (currentRouting == null
+        assert readerWrapper != null;
+     */
+     * Has explicit null checks to ensure that the {@link ReplicationTracker#invariant()}
+    final CircuitBreakerService circuitBreakerService;
+            assert refreshListeners.pendingCount() == 0 : "we can't restart with pending listeners";
+        if (isReadAllowed() && (listenerNeedsRefresh || getIndexer().refreshNeeded())) {
+            }
+            }
+        if (state().equals(IndexShardState.STARTED) == false
+        RemoteStoreFenceOwnership fenceOwnership = remoteStoreFenceOwnership();
+                logger.trace("delete [{}] (seq no [{}])", delete.uid().text(), delete.seqNo());
+    }
+          With segment replication enabled for primary relocation, recover replica shard initially as read only and
+     * Throws {@link UnsupportedOperationException} when the indexer does not maintain
+        }
+import org.opensearch.common.unit.TimeValue;
+            @Override
+        assert indexSettings.isAssignedOnRemoteNode() : "Remote translog store is not enabled";
+     */
+            && indexSettings.isRemoteTranslogStoreEnabled() == false
+            throw new IndexShardNotRecoveringException(shardId, state);
+            this.routing = routing;
+     * tiering (Lucene-backed primaries, replicas, read-only engines). Callers must
+     * metadata, and garbage collection. Those are not covered by the fence CAS, which sits on the translog upload, yet a
+            (listener) -> indexShardOperationPermits.acquire(listener, executorOnDelay, true, debugInfo)
+                        try {
+import org.opensearch.action.support.replication.PendingReplicationActions;
+            } else if (rfee.getCause() instanceof ThreadInterruptedException) {
+                snapshot.getVersion(),
+import org.opensearch.index.seqno.RetentionLeaseSyncer;
+     * Prepares an index operation by parsing the source document and creating an Engine.Index operation.
+                    globalCheckpoint
+    }
+        } catch (AlreadyClosedException ex) {
+                    engineSearcher
+                    if (directory.getSegmentsUploadedToRemoteStore().size() > segmentUploadeCount) {
+    }
+     * @param requestCheckpoint       received checkpoint that is checked for processing
+            }
+        } catch (AlreadyClosedException e) {
+    }
+        if (indexSettings.isSegRepEnabledOrRemoteNode() && routingEntry().primary() == false) {
+        }
+                storeDirectory = store.directory();
+     * Returns the latest global checkpoint value that has been persisted in the underlying storage (i.e. translog's checkpoint)
+                                exception = e;
+        active.set(true);
+                        } else {
+        // Start periodic flush task for this shard
+     * handover is what authorizes the target.
+            throttled = engine.isThrottled();
+    }
+            // only sync if index is not closed and there is a shard lagging the primary
+                    current.close();
+            );
+        } catch (Exception e) {
+import java.nio.channels.FileChannel;
+                    skippedSegments.add(file);
+import java.util.concurrent.CompletionService;
+                switch (result.getResultType()) {
+                        logger.warn("Invalid checksum format for file [{}]: {}", file, e.getMessage());
+     *
+import org.opensearch.cluster.routing.ShardRoutingState;
+        assert assertPrimaryMode();
+     * Fetches the last remote uploaded segment metadata file
+     * @param retainingSequenceNumber the retaining sequence number
+            }
+            repository,
+            final RetentionLeases retentionLeases = replicationTracker.getRetentionLeases();
+    boolean isPrimaryReplicaResyncInProgress() {
+     * @deprecated This static method has been moved to {@link Engine#prepareDelete} as an instance method.
+     * Returns the number of currently active (in-flight) merge tasks. Returns the live
+        }
+                opPrimaryTerm,
+            getOperationPrimaryTerm(),
+     * @param timeout                    the timeout
+    public void postRecovery(String reason) throws IndexShardStartedException, IndexShardRelocatedException, IndexShardClosedException {
+                                ThreadPool.Names.GENERIC,
+                    engine,
+     * The fail-CLOSED twin of {@link #isRemoteStoreFenceSuperseded()}, for the garbage collection paths: an
+    private static void persistMetadata(
+            RemoteStoreUtils.isServerSideEncryptionEnabledIndex(indexSettings.getIndexMetadata()),
+     *
+            assert recoveryState.getRecoverySource().getType() == RecoverySource.Type.SNAPSHOT : "invalid recovery type: "
+                runnable.run();
     /**
-     * Starts the periodic flush task if {@code index.periodic_flush_interval} is enabled and the task is not already running.
-     * Invoked when a new engine is created. Subsequent changes to the setting are applied by {@link #updatePeriodicFlushTask(boolean)}.
+     * @param debugInfo debug info
+    }
+                    @Override
+    }
+    enum ShardMigrationState {
+                            if (state != IndexShardState.CLOSED) {
+    public void persistRetentionLeases() throws WriteStateException {
+                + "] replicas failed to sync within "
+                // response lost - and the reclaim path is what resolves that: a successful revert proves the target
+import org.opensearch.index.mapper.ParsedDocument;
+    public Engine.NoOpResult markSeqNoAsNoop(long seqNo, long opPrimaryTerm, String reason) throws IOException {
+import java.util.concurrent.Future;
+    private final Map<String, FormatChecksumStrategy> checksumStrategies;
+        final ClusterApplierService clusterApplierService,
+    ) throws IOException {
+     * This test is based on the current size of the translog compared to the configured flush threshold size.
+        }
+                                    // TODO: add a dedicate recovery stats for the reset translog
+        final IndexSettings indexSettings,
+                    "Trying to set a routing entry with shardId " + newRouting.shardId() + " on a shard with shardId " + shardId()
+    public void startRefreshTask() {
+                    this,
+            }
+                }
+     * @param onPermitAcquired           the listener for permit acquisition
+     * (names containing a {@code "/"} path separator indicate a non-Lucene format),
+            Set<String> segmentNames = Sets.newHashSet();
+        return flushOrRollRunning.get();
+                } finally {
+                }
+/*
+     */
+            protected void doRun() {
+        final Function<ShardId, ReplicationStats> segmentReplicationStatsProvider,
+                        shardId(),
+            );
+                        if (ref == null) {
+import org.opensearch.index.translog.TranslogFactory;
+                    "skip local recovery as the index was closed or not allowed to write; safe commit {} global checkpoint {}",
+            logger.trace("Skipped download for segments here: {}", skippedSegments);
+     * updates to the {@link Indexer} (polymorphic: Lucene vs data-format-aware), then performs
+                        logger.info(
+     */
+        } catch (Exception e) {
+        if (state != IndexShardState.RECOVERING) {
+    private final Store store;
+    /**
+     */
+    }
+import java.util.concurrent.atomic.AtomicReference;
+    /**
+                break;
+     * cluster runs in {@code segments_only} mode. Such a replica receives operations through node-to-node replication,
+        this.retentionLeaseSyncer = Objects.requireNonNull(retentionLeaseSyncer);
+        verifyNotClosed();
+        verifyNotClosed();
+                }
+        getIndexer().refresh("Snapshot for Remote Store based Shard");
+    /**
+                    } else {
+        if (remoteStore != null) {
+    public void onCheckpointPublished(ReplicationCheckpoint checkpoint) {
+    public Set<SegmentReplicationShardStats> getReplicationStatsForTrackedReplicas() {
+                && indexer.getEngine() instanceof IngestionEngine ingestionEngine)) {
+        if (!indexSettings.isSegRepEnabledOrRemoteNode()) {
+        engine.forceMerge(
+                        "segment replication complete, remove segment {} from pending merged segments",
+                        + "]";
+            getIndexer().deactivateThrottling();
+ */
+                            afterWriteOperation();
+            success = true;
+        }
+                @Override
+        this.globalCheckpointSyncer = globalCheckpointSyncer;
+    }
+        }
+                && indexSettings.isSegRepEnabledOrRemoteNode()
+    /**
+    }
+                }
+                            // Watchdog for a lost resync response: if neither onResponse nor onFailure fires within
+     * by a {@link GatedCloseable} to ensure files are not deleted/merged away.
+                    )
+                    return ref.acquireSnapshot();
+        return luceneVersion == null ? indexSettings.getIndexVersionCreated().luceneVersion : luceneVersion;
+        assert opPrimaryTerm <= getOperationPrimaryTerm() : "op term [ "
+    public Engine.DeleteResult getFailedDeleteResult(Exception e, long version) {
+        long ifSeqNo,
+        return clusterRemoteTranslogBufferIntervalSupplier.get();
+            || state == IndexShardState.RECOVERING
+        this.refreshInterval = refreshInterval;
+    }
+            // we need to find the safe commit again as we should have created a new one during the local recovery
+     *
+    private void evictStaleDownloadedChecksums(CatalogSnapshot catalogSnapshot) {
+          change to a writeable engine during relocation handoff after a round of segment replication.
+import org.opensearch.index.engine.exec.Indexer;
+    }
+     * @return the wrapped listener
+            indexSettings.isAssignedOnRemoteNode(),
+                        // Reset hasAllPeerRecoveryRetentionLeases to false first to prevent assertion
+                    }
+    private final RecoveryStats recoveryStats = new RecoveryStats();
+                opsRecovered++;
+                    )) {
+    private final AtomicReference<Translog.Location> pendingRefreshLocation = new AtomicReference<>();
+     *
+    public void resetToWriteableEngine() throws IOException, InterruptedException, TimeoutException {
+            );
+            if (!(getIndexerOrNull() instanceof EngineBackedIndexer indexer
+    /**
+            if (indexSettings.isWarmIndex() == false) {
+    public void cleanupRedundantPendingMergeSegment(ReferencedSegmentsCheckpoint referencedSegmentsCheckpoint) {
+                    }
+            return false;
+        }
+     */
+     *
+                )) {
+            logger,
+            + shardRouting
+                }
+                    changeState(IndexShardState.CLOSED, reason);
+        @Override
+            // between the switch to POST_RECOVERY + associated refresh. Otherwise we may respond
+                return new Engine.IndexResult(update);
+                    recoveryState.getTranslog().totalLocal(snapshot.totalOperations());
+                && (stats.getGlobalCheckpoint() < stats.getMaxSeqNo() || replicationTracker.pendingInSync()))
+import static org.opensearch.index.shard.IndexShard.ShardMigrationState.REMOTE_NON_MIGRATING;
+                    snapshot,
+                        @Override
+                        for (String file : toDownloadSegments) {
+    public PrimaryOperationPolicy getPrimaryOperationPolicy() {
+    }
+     * @param opPrimaryTerm              the operation primary term
+        flush(new FlushRequest().waitIfOngoing(true));
+     */
+    /**
+                ) {
+            return 0;
+                } finally {
+                exc.addSuppressed(suppressed);
+     *                  the tracing will capture the supplied object's {@link Object#toString()} value. Otherwise the object
+                } finally {
+                            flushOrRollRunning.compareAndSet(true, false);
+     * This is particularly useful for pull-based ingestion index without translog to ensure offsets are regularly committed.
+            throw new OpenSearchException("Unable to retrieve ingestion state as the shard does not have ingestion enabled.");
+     */
+     * source does not track sequence numbers explicitly and hence defaults to NO_OPS_PERFORMED for compatibility.
+    public void acquirePrimaryOperationPermit(
+                return;
+     * and fail the same way until {@code index.allocation.max_retries} leaves the shard unassigned.
+     * return the most recently computed ReplicationCheckpoint for a particular shard.
+                    }
+        }
+     */
+                        MediaTypeRegistry.xContentType(index.source()),
+        final GlobalCheckpointListeners.GlobalCheckpointListener listener,
+                                    }
+            seqNo,
+    /**
+                    state(),
+    private volatile long pendingPrimaryTerm; // see JavaDocs for getPendingPrimaryTerm
+        boolean overrideLocal,
+            StoreRecovery storeRecovery = new StoreRecovery(shardId, logger);
+                logger.trace(
+        } catch (AlreadyClosedException e) {
+    public Engine.DeleteResult applyDeleteOperationOnReplica(
+            threadPool,
+     * @throws IOException if exception occurs while reading segments from remote store.
+            throttleTimeInMillis = 0;
+     */
+                        + newRouting
+            && shardRouting.isSearchOnly() == false
+            }
+        long seqNo,
+            logger.warn("timed out waiting for relocation hand-off to complete");
+     */
+                + ", max bytes behind: "
+                    assert segmentNFile == null : "There should be only one SegmentInfosSnapshot file";
+                // below, so a copy left with a stale token would fail the shard for no reason. The handover is inside
+    final EngineConfigFactory engineConfigFactory;
+     * required for the path to resolve.
+        newEngineReference.get()
+                    case SUCCESS:
+            case DELETE:
+     * @param segmentCommitInfo {@link SegmentCommitInfo} segmentCommitInfo to use to compute.
+    private final Object periodicFlushMutex = new Object();
+                            // was set to true, whichever of these three runs first always observes the flag as true, so the
+            ifSeqNo,
+        if (state == IndexShardState.CLOSED) {
+                    // is uncontested. The target may only take the fence over once it observes this, which is what
+        final long throttleTimeInMillis;
+        long ifSeqNo,
+        final ActionListener<Releasable> onPermitAcquired = ActionListener.wrap(releasable -> {
+    /**
+import org.opensearch.index.mapper.IdFieldMapper;
+                // registered and is interrupted here. Either way it stops writing and its engine open is refused.
+                        shardId,
+                // write path. Standing down is not optional: the target owns the chain now.
+        verifyNotClosed();
+    }
+            // Only schedule for open shards with a valid interval
+     */
+    private volatile boolean useRetentionLeasesInPeerRecovery;
+    }
+    private final ShardBitsetFilterCache shardBitsetFilterCache;
+                + "] but got "
+        }
+import org.opensearch.index.translog.RemoteBlobStoreInternalTranslogFactory;
+                    }
+            return;
+            : "Translog is expected to be empty but holds " + translogStats().estimatedNumberOfOperations() + "Operations.";
+import java.util.Set;
+        // executed. It also has the side effect of acquiring all the permits one time instead of two.
+        throws IOException {
+     * @param timeout maximum time to wait for replicas to sync
+    private void doCheckIndex() throws IOException {
+import org.opensearch.index.mapper.MapperService;
+    /**
+            int translogRecoveryOperations;
+                            try (Translog.Snapshot translogSnapshot = engine.translogManager().newChangesSnapshot(start, end, false)) {
+    /**
+import java.util.concurrent.atomic.AtomicBoolean;
+    }
+    /**
+    }
+    */
+        }
+                    0,
+        }
+        }
+        RemoteSegmentStoreDirectory rd = getRemoteDirectory();
+        recoveryState().setStage(RecoveryState.Stage.INIT);
+            long maxBytesBehind = stats.stream().mapToLong(SegmentReplicationShardStats::getBytesBehindCount).max().orElse(0);
+            forceMerge.forceMergeUUID()
+    }
+        assert userData.containsKey(SequenceNumbers.LOCAL_CHECKPOINT_KEY) : "commit point doesn't contains a local checkpoint";
+            isTranslogMetadataEnabled,
+     * Logs a one-line summary of the {@link Store.MetadataSnapshot} produced by
+        ThreadPool threadPool,
+        if (getIndexer() instanceof DataFormatAwareReadOnlyEngine == false) {
+            if (r) {
+        this.checksumStrategies = checksumStrategies;
+                behindReplicas,
+    );
+        return isTimeSeriesIndex && getIndexSort() == null;
+        return getIndexer().getMaxSeqNoOfUpdatesOrDeletes();
+        );
+            throw new IndexShardNotRecoveringException(shardId, state);
+                final Translog.Delete delete = (Translog.Delete) operation;
+                    IOUtils.close(super::close, newEngine);
+     * This function fetches a metadata snapshot from the store that comes with an IO cost.
+import org.opensearch.threadpool.ThreadPool;
+     * Counts the number of history operations within the provided sequence numbers
+    public RemoteSegmentMetadata fetchLastRemoteUploadedSegmentMetadata() throws IOException {
+     *
+                    index.primaryTerm(),
+        final MergedSegmentWarmerFactory mergedSegmentWarmerFactory,
+        if (indexSettings.isAssignedOnRemoteNode()) {
+    private void discardCorruptLocalRemoteTranslog(Exception failure) {
+            protected void write(List<Tuple<Translog.Location, Consumer<Exception>>> candidates) throws IOException {
+        if (state != IndexShardState.RECOVERING) {
+            }
+    private void logSnapshotStoreMetadataSummary(Store.MetadataSnapshot metadataSnapshot, String source) {
+                Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY,
+                try {
+import org.opensearch.indices.RemoteStoreSettings;
+     On source remote node , it will be REMOTE_MIGRATING_SEEDED when relocating from remote node
+        // only sync if there are no operations in flight, or when using async durability
+     * @param listener                the callback when the retention lease is successfully added and synced to replicas
+                                ReplicationTimer timer = new ReplicationTimer();
+        private final Logger logger;
+        Engine.Operation.Origin origin
+                }
+            );
+    // TODO: Should we disable this as data will never get in sync if we use search idle for context aware segments.
+        };
+    }
+            doc.addDynamicMappingsUpdate(docMapper.getMapping());
+import org.apache.lucene.index.LeafReader;
+                current.setInterval(interval);
+                        + pendingPrimaryTerm
+    }
+                    throw new IllegalIndexShardStateException(shardId, state, "remote store hydration is already running");
+     * @throws AlreadyClosedException if the shard's engine is closed
+     * of how many are currently running. Returns {@code false} when the shard's indexer is
+        RemoteStorePathStrategy remoteStorePathStrategy,
+    }
+            final SegmentInfos segmentInfos = snapshot.get();
+            return new Engine.IndexResult(e, version, opPrimaryTerm, seqNo);
+        long autoGeneratedTimestamp,
+                        + currentRouting
+                if (opPrimaryTerm < getOperationPrimaryTerm()) {
+        } catch (Throwable e) {
+     * The segments referenced by the SegmentInfos will remain on disk until the GatedCloseable is closed.
+ *
+                } else {
+import java.util.ArrayList;
+        );
+        } catch (final IOException e) {
+import org.opensearch.indices.cluster.IndicesClusterStateService;
+        VersionType versionType,
+                changeState(IndexShardState.POST_RECOVERY, reason);
+        // the query cache is a node-level thing, however we want the most popular filters
+    // we can not protect with a lock since we "release" on a different thread
+            forceMerge.onlyExpungeDeletes(),
+            );
+                );
+        ParsedDocument doc = docMapper.getDocumentMapper().parse(source);
+                }
+        }
+            return ReplicationCheckpoint.empty(shardId);
+        boolean pinnedTimestamp
+            if (flushOrRollRunning.compareAndSet(false, true)) {
+    // version checks to make sure its consistent a relocated shard can also be target of a replication if the relocation target has not
+     * @return true if checkpoint should be processed
+    boolean isTranslogBackedByRemoteStore() {
+                    // set initial replication checkpoints into tracker.
+                    numShards = requiredShards.size();
+        final MergeStats mergeStats = engine.getMergeStats();
+        }
+                    );
+            if (!newRouting.shardId().equals(shardId())) {
+            debugInfo
+    private void syncRemoteTranslogAndUpdateGlobalCheckpoint() throws IOException {
+        }
+            return false;
+        long ifSeqNo,
+            }
+                    assert assertReplicationTarget();
+            }
+     * The callback {@code onOperationRecovered} is notified after each translog operation is replayed successfully.
+    /**
+        return pendingRefreshLocation.get() != null;
+            logger.trace("Shard routing is marked primary thus cannot perform segment replication as replica");
+        this.dataFormatRegistry = dataFormatRegistry;
+    /**
+                    this,
+     * ------------------------------------------------------------------------------
+        return mergedSegmentTransferTracker;
+                        + "], "
+        // flush to make sure the latest commit, which will be opened by the read-only engine, includes all operations.
+    public Engine.SearcherSupplier acquireSearcherSupplier() {
+                        index.origin()
+                        // from remote translog at the time of failover.
+        } finally {
+    @ExperimentalApi
+            return shouldSeed ? REMOTE_MIGRATING_UNSEEDED : REMOTE_MIGRATING_SEEDED;
+                System.nanoTime(),
+                );
+     * which is at least the value of the max_seq_no_of_updates marker on the primary after that operation was executed on the primary.
+        // recoveryListener.onRecoveryDone(recoveryState);
+                            totalRecovered += completionService.take().get();
+import org.apache.lucene.store.IOContext;
+    }
+    }
+                        long end = (i == batches - 1) ? Long.MAX_VALUE : start + batchSize - 1;
+import org.opensearch.common.CheckedFunction;
+    public void deleteTranslogFilesFromRemoteTranslog() throws IOException {
+    private final IndexEventListener indexEventListener;
+        return false;
+        }
+        final TranslogRecoveryRunner translogRecoveryRunner = (snapshot) -> {
+            }
+                    // Use the engine directly (not IndexShard.acquireSearcher) so that we do NOT
+             * ignore the global checkpoint update. This can happen if we are in the translog stage of recovery. Prior to this, the engine
+                        engine.translogManager().onDelete();
+                break;
+        String segmentNFile = null;
+                }
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
+                    throw new IndexShardClosedException(shardId);
+    public void failShard(String reason, @Nullable Exception e) {
+        if (isSegmentReplicationAllowed() == false) {
+            boolean isConcurrentRecovery = recoverySettings.isTranslogConcurrentRecoveryEnable()
+            return false;
+                    } catch (AlreadyClosedException | IllegalIndexShardStateException e) {
+        return useRetentionLeasesInPeerRecovery;
+    public MergeStats mergeStats() {
+import java.util.Objects;
+import org.opensearch.common.util.concurrent.ThreadContext;
+            .keySet()
+                // Flush here after relocation of primary, so that replica get all changes from new primary rather than waiting for more
+            internalRefreshListener.add(new ReplicationCheckpointUpdater());
+     * {@link #snapshotStoreMetadata()}, including total file count, DFA-format file count
+        Engine.Operation.Origin origin,
+        }
+        return shardRouting.primary() == false
+        logger.trace("flush with {}", request);
+            if (dfasd == null) {
+        return replicationTracker.getPeerRecoveryRetentionLeases();
+                r.close();
+        if (logger.isTraceEnabled()) {
+    /**
+        RemoteStoreFenceOwnership fenceOwnership = remoteStoreFenceOwnership();
+                    indexShardOperationPermits.close();
+        return checksumStrategies;
+            // checkpoint can be synced. Also take into account that a shard might be pending sync, which means that it isn't
+            if (currentRouting.primary() && newRouting.primary() == false) {
+                        // No primary-origin operation can have run yet, so this is safe without blocking operations.
+            boolean wasActive = active.getAndSet(false);
+            if (recoveryState.getStage() == RecoveryState.Stage.INDEX) {
+ * Unless required by applicable law or agreed to in writing,
+        }
+    private void handleRefreshException(Exception e) {
+        GatedCloseable<SegmentInfos> snapshot = null;
+    Object getEngineMutex() {
+        // We also replay all local translog ops with Segment replication, because on engine swap our local translog may
+        this.indexEventListener = indexEventListener;
+            globalCheckpointSupplier,
+     * executing the action.
+     * Every other recovery source seals. For sources whose shard has a remote translog lineage to take over
+        verifyNotClosed();
+                new Term(IdFieldMapper.NAME, Uid.encodeId(id)),
+     *
+                return globalCheckpoint + 1;
+            indexSettings().isTranslogMetadataEnabled(),
+        }
+        // ensure PendingReplicationActions is updated with the newest version to prevent races.
+            } catch (final AlreadyClosedException e) {
+        final BiConsumer<IndexShard, ActionListener<ResyncTask>> primaryReplicaSyncer,
+         */
+import org.opensearch.index.engine.exec.IndexerFactory;
+import org.opensearch.common.annotation.ExperimentalApi;
+            Engine.Index index = new Engine.Index(
+        delete = indexingOperationListeners.preDelete(shardId, delete);
+        replicationTracker.updateLocalCheckpoint(allocationId, checkpoint);
+                try {
+                            // mutex
+        Indexer indexer = getIndexerOrNull();
+import org.opensearch.index.engine.CommitStats;
+            } finally {
+import org.opensearch.indices.replication.checkpoint.MergedSegmentCheckpoint;
+            return fenceOwnership.isRemoteStoreFenceSuperseded();
+                );
+             * When remote translog is enabled for an index, replication operation is limited to primary term validation and does not
+    /**
+                             */
+            hydrateFromRemoteStore(syncFromRemote);
+            logger.trace("Skipped replication checkpoint update — engine already closed", e);
+     *
+                try {
+    private final Engine.Warmer warmer;
+     * ------------------------------------------------------------------------------
+        indexingOperationListeners.postDelete(shardId, delete, result);
+                            FileChannel::open
+        Map<String, UploadedSegmentMetadata> uploadedSegments = sourceRemoteDirectory.getSegmentsUploadedToRemoteStore();
+            if (origin == Engine.Operation.Origin.PRIMARY) {
+     *   <li>interval &gt; 0 and no task: a new task is started (only if an engine is available to flush)</li>
+     * time4 | _1.si, _2.si, _3.si, _4.si, _5.si | _3.si
+        long version,
+            indexingOperationListeners.postIndex(shardId, index, e);
+                                @Override
+     *       |               primary             |              replica
+     */
+        long seqNo,
+     * its internal counter; Lucene-backed engines report
+    @Deprecated(since = "3.4.0", forRemoval = true)
+            .filter(entry -> entry.getKey().startsWith(IndexFileNames.SEGMENTS) == false)
+     * shard without a remote translog is left alone: its local translog is the only copy, and discarding it would lose data.
+        long opPrimaryTerm,
+    private final CounterMetric periodicFlushMetric = new CounterMetric();
+                    && (Durability.ASYNC == indexSettings.getTranslogDurability() || indexSettings.isPluggableDataFormatEnabled());
+                            }
+            return engine.getNativeBytesUsed();
+        RepositoriesService repositoriesService,
+import java.util.Optional;
+                );
+                // acked ops may still be in the buffered upload path and not yet on remote. If we drained without
+    }
+        markAsRecovering(reason, recoveryState); // mark the shard as recovering on the cluster state thread
+                        assert getOperationPrimaryTerm() == newPrimaryTerm;
+     * time2 | _1.si, _2.si, _3.si, _4.si        |
+    public org.opensearch.common.CheckedFunction<CatalogSnapshot, byte[], IOException> catalogSnapshotToRemoteMetadataSerializer() {
+        } catch (Exception e) {
+                    assert requiredShards.isEmpty() == false;
+                    } catch (NumberFormatException e) {
+        try (BytesStreamOutput os = new BytesStreamOutput(); PrintStream out = new PrintStream(os, false, StandardCharsets.UTF_8.name())) {
+     *
+            routing,
+            return UNASSIGNED_SEQ_NO;
+    /**
+            return UNASSIGNED_SEQ_NO;
+                // Only close() cancels this, so the shard is closed; report it as such, the way any other operation on
+                }
+        }
+     * Waits for all tracked replicas to be in sync with the primary's latest checkpoint.
+     * Returns number of heap bytes used by the indexing buffer for this shard, or 0 if the shard is closed
+        }
+        RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = getRemoteDirectory();
+            throw new IndexShardNotStartedException(shardId, state);
+    public void acquirePrimaryOperationPermit(ActionListener<Releasable> onPermitAcquired, String executorOnDelay, Object debugInfo) {
+                    // to prevent primary relocation handoff while resync is not completed
+        try {
+                writeReason = "initial state with allocation id [" + newRouting.allocationId() + "]";
+            IngestionEngine ingestionEngine = (IngestionEngine) engine;
+                @Override
+    }
+            return 0;
+             * is not opened and this shard will not receive global checkpoint updates, and after this the shard will be contributing to
+     * At time1, the primary shard merges _1.si and _2.si into segment _3.si. _3.si is pre-copied to the replica shard, which completed at time4.
+            getIndexer().config().getCodec().getName(),
+                        translogRecoveryFutureList.add(completionService.submit(() -> {
+                engineSearcher.getQueryCache(),
+        final Indexer engine = getIndexerOrNull();
+    }
+                    state,
+                    if (combineWithAction != null) {
+    }
+            final ShardStateMetadata.IndexDataLocation indexDataLocation = IndexSettings.SEARCHABLE_SNAPSHOT_REPOSITORY.exists(
+import org.opensearch.index.cache.bitset.ShardBitsetFilterCache;
+    public void updateLocalCheckpointForShard(final String allocationId, final long checkpoint) {
+     * @return the renewed retention lease
+        org.apache.lucene.util.Version version = minimumCompatibleVersion();
+                        return ref.acquireLastCommittedSnapshot(false);
+            this.shardRouting = newRouting;
+            }
+    @ExperimentalApi
+                    routingEntry().allocationId(),
+        protected boolean mustReschedule() {
      */
     public void startPeriodicFlushTask() {
-        // Called from onNewEngine, before the engine reference is published, so the engine is known to be available.
-        updatePeriodicFlushTask(true);
-    }
-
-    /**
-     * Reconciles the periodic flush task with the current value of {@code index.periodic_flush_interval}:
-     * <ul>
-     *   <li>interval &gt; 0 and no task: a new task is started (only if an engine is available to flush)</li>
-     *   <li>interval &gt; 0 and a task exists with a different interval: the task is rescheduled with the new interval</li>
-     *   <li>interval &lt;= 0 and a task exists: the task is closed</li>
-     * </ul>
-     * The setting is dynamic, so this is called both on engine creation and on every settings change.
-     *
-     * @param engineAvailable whether an engine exists (or is about to be published) for this shard
-     */
-    void updatePeriodicFlushTask(boolean engineAvailable) {
-        synchronized (periodicFlushMutex) {
-            if (state == IndexShardState.CLOSED) {
-                return;
+                // We set active because we are now writing operations to the engine; this way,
+     * {@link #shardRouting}, the {@link ActionListener#onFailure(Exception)} method of the provided listener is invoked with an
+                + ". Replicas still behind: "
+ */
+import org.opensearch.gateway.WriteStateException;
+            remoteStore.incRef();
+                        store.deleteQuiet(file);
+        assert opPrimaryTerm <= pendingPrimaryTerm : "operation primary term ["
+     * Hydrates remote segments and translog before engine construction. Remote I/O runs outside {@link #engineMutex};
+    /** Returns native (off-heap) bytes used by indexing buffers for this shard, or 0 if closed. */
+    private final IndexCache indexCache;
+        updateShardIngestionState(ingestionSettings);
+                logger.error("Failed to sync translog to remote from new primary", e);
+                    safeCommit.get(),
+                        localChecksum = Long.parseLong(dfasd.calculateUploadChecksum(file));
+        }
             }
-            final TimeValue interval = indexSettings.getPeriodicFlushInterval();
-            final AsyncShardFlushTask current = periodicFlushTask;
-            if (interval.millis() <= 0) {
-                if (current != null) {
-                    current.close();
-                    periodicFlushTask = null;
-                    logger.info("Stopped periodic flush task for shard [{}]", shardId);
+        final ReplicationCheckpoint localCheckpoint = getLatestReplicationCheckpoint();
+        } else {
+        String reason,
+        return lastSearcherAccess.get();
+    }
+    public void readAllowed() throws IllegalIndexShardStateException {
+            if (state == IndexShardState.POST_RECOVERY && newRouting.active()) {
+     * We will reuse the existing stored checkpoint if it is at the same SI version.
                 }
+        if (recoveryState.getRecoverySource().getType() == RecoverySource.Type.PEER) {
+            id,
+            };
+import org.opensearch.index.cache.request.ShardRequestCache;
+                logger.warn("Checksum mismatch between local and remote segment file: {}, will override local file", file);
+        );
+    public void openEngineAndSkipTranslogRecoveryFromSnapshot() throws IOException {
+            logger.trace(
+                + recoveryState.getRecoverySource();
+     *
+        return isSegmentReplicationAllowed() && requestCheckpoint.getPrimaryTerm() >= getOperationPrimaryTerm();
+                shardId,
+                            startedShards.add(shard);
+                            // during replica recovery) but skip postActivatePrimaryMode (no remote
+                    repository,
+        this.internalIndexingStats = new InternalIndexingStats(threadPool);
+     * Called by {@link IndexingMemoryController} to check whether more than {@code inactiveTimeNS} has passed since the last
+                                                + "primaryReplicaResyncInProgress flag to unblock primary relocation",
+    }
+                        FieldInfos fieldInfos = FieldInfos.getMergedFieldInfos(searcher.getIndexReader());
+     * <p>Passed into {@link org.opensearch.index.store.RemoteSegmentStoreDirectory#uploadMetadata}
+            isRetry,
+     */
+     */
+            store.decRef();
+     * @return {@link ReplicationCheckpoint} Checkpoint computed from the infos.
+            indexSettings.getMergePolicy(isTimeSeriesIndex),
+            String.join(", ", dfaFiles),
+        if (newRouting.equals(currentRouting) == false) {
+    private final InternalIndexingStats internalIndexingStats;
+            dfasd.evictStaleChecksums(catalogSnapshot.getFiles(true));
+            replicationTracker::getRetentionLeases,
+                                    shardId,
+     * Polls every 500ms until either all replicas report {@code checkpointsBehindCount == 0}
+        } else {
+     */
+import org.opensearch.common.util.concurrent.AbstractRunnable;
+    }
+     * Stable marker substring embedded in every replica-sync-timeout message. Used for detection
+import java.io.FileNotFoundException;
+     */
+        final IndexShardRoutingTable routingTable,
+        ensureSoftDeletesEnabled("retention leases");
+    }
+        openEngineAndRecoverFromTranslog(true);
+                                public void onFailure(Exception e) {
+        }
+    public void prepareForIndexRecovery() {
+                    snapshot.close();
+        }
+    }
+    public final boolean shouldProcessCheckpoint(ReplicationCheckpoint requestCheckpoint) {
+    }
+        }
+         */
+                    final String repo = recoverySource.snapshot().getRepository();
+    private final DataFormatRegistry dataFormatRegistry;
+     * (EXISTING_STORE, REMOTE_STORE, in-place SNAPSHOT restore) the seal invalidates any partitioned previous writer.
+                    .allMatch(
+                    return true;
+        // between child and parent IndexWriter.
+                    wrappedCatalogSnapshot = indexer.acquireLastCommittedSnapshot(false);
+        }
+    /**
+                    final AbstractRunnable flush = new AbstractRunnable() {
+     * @param toSeqNo    to sequence number, included
+    }
+                }
+    /**
+                Collection<String> uploadFiles = directory.getSegmentsUploadedToRemoteStore().keySet();
+                    index.seqNo(),
+                                    if (primaryReplicaResyncInProgress.compareAndSet(true, false)) {
+     * {@link org.opensearch.index.translog.TranslogDeletionPolicy} for details
+                                @Override
+        return cachingPolicy;
+        return engine != null && engine.hasPendingMerges();
+     * relocated. After all operations are successfully blocked, performSegRep is executed followed by target relocation
+        return getIndexer().countNumberOfHistoryOperations(source, fromSeqNo, toSeqNo);
+    }
+     * {@link #acquireAllPrimaryOperationsPermits(ActionListener, TimeValue)}. If the given primary term is lower than then one in
+        // Called from onNewEngine, before the engine reference is published, so the engine is known to be available.
+        assert shardRouting.primary() : "only call maybeSyncGlobalCheckpoint on primary shard";
+     * Reconciles the periodic flush task with the current value of {@code index.periodic_flush_interval}:
+    }
+        Engine.Operation.Origin origin,
+import org.opensearch.OpenSearchException;
+        verifyNotClosed();
+        Indexer engine = getIndexerOrNull();
+                    "index-done [{}] seq# [{}] allocation-id [{}] primaryTerm [{}] operationPrimaryTerm [{}] origin [{}] "
+                // uploads below. This must run for REQUEST durability too, not just ASYNC: with REQUEST the freshest
+                indexSettings.getSoftDeleteRetentionOperations()
+    private void innerAcquireReplicaOperationPermit(
+        // For mixed mode, when relocating from doc rep to remote node, we use a writeable engine
+import org.opensearch.indices.recovery.RecoveryState;
+    // for tests
+        }
+                                logger.warn("failed to flush index", e);
+     * Creates a new changes snapshot for reading operations whose seq_no are between {@code fromSeqNo}(inclusive)
+        boolean bufferAsyncIoProcessor,
+                shardRouting.allocationId().getId(),
+        try {
+        assert userData.containsKey(MAX_SEQ_NO) : "commit point doesn't contains a maximum sequence number";
+     */
+     * Tests whether or not the translog generation should be rolled to a new generation. This test is based on the size of the current
+        } finally {
+        RemoteFsTranslog.download(
+    public GatedCloseable<CatalogSnapshot> getCatalogSnapshot() {
+    }
+                + behindCount
+                            );
+        }
+        boolean listenerNeedsRefresh = refreshListeners.refreshNeeded();
+        /*
+    }
+    @Override
+        }
+                        if (newEngineReference.get() == null) {
+                    }
+    }
+        CheckedConsumer<ActionListener<Boolean>, Exception> action
+     * Marks the shard with the provided allocation ID as in-sync with the primary shard. See
+                        Translog.createEmptyTranslog(
+    /**
+        } catch (IOException | AlreadyClosedException e) {
+    ) {
+     */
+        }
+     * Primary shards compute the seqNo used in the replication checkpoint from the fetched SegmentInfos.
+                // Extra segments will be wiped on engine open.
+                             * the reverted operations on this shard by replaying the translog to avoid losing acknowledged writes.
+        // store state. The warm primary is read-only and will serve all data from remote store regardless of
+        return replicationTracker.getOperationPrimaryTerm();
+            return false;
                 return;
+            remoteDirectory.init();
+                // we can flush if we go idle after some time and become inactive.
+        return getIndexer().commitStats();
+    public void finalizeRecovery() {
+    }
+    public QueryCachingPolicy getQueryCachingPolicy() {
+                        throw new AssertionError("Unknown result type [" + result.getResultType() + "]");
+                () -> new ParameterizedMessage(
+     * engine types (Lucene NRT vs DFA NRT).
+                     * 5) The node process the cluster state where the shard is both started and primary term is incremented.
+     * @param visibleCheckpoint the visible checkpoint
+        }
+ *
+            forceExecution,
+     */
+    public void freezeForTiering() {
+     * the primary's {@code evictUploadedChecksums} behavior). If the engine is closed
+    private final Supplier<Boolean> fixedRefreshIntervalSchedulingEnabled;
+    /**
+     * in mixed-version clusters or log parsing, analogous to
+            logger.error("check index failed during fetch seqNo", e);
+        }
+     */
+            for (String file : store.directory().listAll()) {
+        threadPool.generic().execute(ActionRunnable.wrap(ActionListener.wrap(r -> {
+            long behindReplicas = stats.stream().filter(s -> s.getCheckpointsBehindCount() > 0 || s.getBytesBehindCount() > 0).count();
+        assert shardRouting.primary() : "acquirePrimaryOperationPermit should only be called on primary shard: " + shardRouting;
+     * boundary that needs it, instead of every translog manager inheriting defaults it cannot honour.
+        final Translog.Location lastWriteLocation = indexer.translogManager().getTranslogLastWriteLocation();
+     * @throws IOException When there is an error computing segment metadata from the store.
+    }
+        verifyNotClosed();
+            long localCheckpoint = engine.getProcessedLocalCheckpoint();
+                }
+            UNASSIGNED_SEQ_NO,
+        final Supplier<TimeValue> refreshInterval,
+                for (Map.Entry<String, StoreFileMetadata> entry : metadata.asMap().entrySet()) {
+                overrideLocal,
+        );
+     * the combination {@code FenceSegmentFlow.tla} measures as unsafe.
+    }
+import static org.opensearch.index.shard.IndexShard.ShardMigrationState.REMOTE_MIGRATING_SEEDED;
+        return this.threadPool;
+        long ifSeqNo,
+            indexSettings::getMaxRefreshListeners,
+    @Deprecated
+            (retentionLeases, listener) -> retentionLeaseSyncer.sync(shardId, aId, getPendingPrimaryTerm(), retentionLeases, listener),
+        final Engine.IndexResult result;
+                }
+     * @throws IOException if communication failed
+import org.apache.lucene.index.IndexFileNames;
+     * indexer is not yet initialised.
+        return getIndexer().newChangesSnapshot(source, fromSeqNo, toSeqNo, requiredFullRange, accurateCount);
+     */
+                    "operation only allowed when shard state is one of " + writeAllowedStates + ", origin [" + origin + "]"
+     * the same primary term, so sealing here would fence a healthy primary mid-handoff. Relocation ordering is instead
+            } catch (final AlreadyClosedException e) {
+        } else {
+        assert OpenSearchDirectoryReader.unwrap(searcher.getDirectoryReader()) != null
+        assert Objects.nonNull(clusterRemoteTranslogBufferIntervalSupplier) : "remote translog buffer interval supplier is null";
+            recoveryState.setStage(RecoveryState.Stage.TRANSLOG);
+                        s -> s.getCheckpointsBehindCount() == 0 && s.getBytesBehindCount() == 0 && s.getCurrentReplicationTimeMillis() == 0
+        acquirePrimaryOperationPermit(onPermitAcquired, executorOnDelay, debugInfo);
+                    ) {
+import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
+                        + newPrimaryTerm
+                    }
+                            // a given promotion. Because the resync is dispatched only after primaryReplicaResyncInProgress
+ * this work for additional information regarding copyright
+        };
+                } else {
+                readAllowed = isReadAllowed();
+    }
+                MetadataSnapshot metadata = snapshotStoreMetadata();
+            long maxCheckpointsBehind = stats.stream().mapToLong(SegmentReplicationShardStats::getCheckpointsBehindCount).max().orElse(0);
+        assert indexSettings.isPluggableDataFormatEnabled() || assertSequenceNumbersInCommit();
+                    index.primaryTerm(),
+        onSettingsChanged();
+    public void syncTranslogFilesFromRemoteTranslog() throws IOException {
+    }
+        long version,
+     */
+                                public void onResponse(ResyncTask resyncTask) {
+    }
+        }
+        }
+        assert currentEngineReference.get() == null;
+            if (newRouting.isSameAllocation(currentRouting) == false) {
+            }
+     * Snapshots the most recent safe {@link CatalogSnapshot} from the currently running engine.
+        public void onFailedEngine(String reason, @Nullable Exception failure) {
+    }
+                        public void onAfter() {
+                            primaryReplicaSyncer.accept(this, timeoutListener);
+            total,
+            }
+    }
+     * Downloads segments from remote segment store
+        if (engine != null) {
+    private final List<ReferenceManager.RefreshListener> internalRefreshListener = new ArrayList<>();
+        if (isRemoteStoreEnabled() || isMigratingToRemote()) {
+     * {@code MergeStats.getCurrent()}; replica / read-only engines report {@code 0}.
+                );
+                        index.primaryTerm(),
+     * back the failure callback.
+            isRetry,
+    }
+                                break;
+            final IllegalIndexShardStateException exc = new IndexShardClosedException(shardId, "operation only allowed when not closed");
+        SourceToParse source,
+     *
+            logSnapshotStoreMetadataSummary(ms, "catalog");
+    boolean isFlushOrRollRunning() {
+    }
+    public void finalizeReplication(CatalogSnapshot catalogSnapshot) throws IOException {
+     * after a refresh, so we don't want to wait for a search to trigger that cycle. Replicas will only refresh after receiving
+                autoGeneratedTimeStamp,
+                Thread.currentThread().interrupt();
+    }
+     */
+     */
+        Consumer<MappingMetadata> mappingUpdateConsumer,
+import org.opensearch.action.ActionRunnable;
+        }
+            }
+        final boolean readAllowed;
+    }
+            mergedSegmentTransferTracker,
+                // guarantees one of the two paths closes the task, so a scheduled task never outlives a closed shard.
+     * @return <code>true</code> iff the engine got refreshed otherwise <code>false</code>
+        synchronized (this.refreshMutex) {
+     * commit won't be freed until the commit / snapshot is closed.
+     * {@link #hydrateFromRemoteStore}; cancelled by {@link #close} once the state has moved to CLOSED.
+                    + callingThread.getName()
+                UNASSIGNED_SEQ_NO,
+     * Returns a {@link CheckedFunction} that serializes the given {@link CatalogSnapshot} into
+            });
+        assert indexSettings.isRemoteStoreFencingEnabled() == false || remoteStoreFenceSealed || shardRouting.isRelocationTarget()
+     * superseded copy performing either can break a legitimate owner: an unfenced segment metadata publish moves the
+    public boolean isRemoteStoreFenceSuperseded() {
+                            + "] but was ["
+        RemoteSegmentStoreDirectory sourceRemoteDirectory,
+        if (replicationTracker.isPrimaryMode() == false) {
+    }
+     * @return the retention leases
+        }
+                final Indexer engine = this.currentEngineReference.getAndSet(null);
+        );
+        try {
+        }
+        try {
+     */
+        Objects.requireNonNull(listener);
+        return indexSettings.isSegRepEnabledOrRemoteNode() == false || indexSettings.getNumberOfReplicas() == 0;
+     */
+        if (this.routingEntry().primary()) {
+        this.mergedSegmentTransferTracker = new MergedSegmentTransferTracker();
+import org.opensearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
+        startPeriodicFlushTask();
+        return getIndexer().getProcessedLocalCheckpoint();
+            if (interval.millis() <= 0) {
+                if (file.startsWith(IndexFileNames.SEGMENTS)) {
+     */
+            maxSeqNoOfUpdatesOrDeletes,
+    /**
+                            + ", current routing: "
+                    delete.routing(),
+import org.apache.lucene.index.FilterDirectoryReader;
+            ensurePeerRecoveryRetentionLeasesExist();
+     */
+                for (String file : List.of(store.directory().listAll())) {
+    public void flush(FlushRequest request) {
+    }
+     */
+        Supplier<TimeValue> bufferIntervalSupplier
+        assert newPrimaryTerm > pendingPrimaryTerm || (newPrimaryTerm >= pendingPrimaryTerm && combineWithAction != null);
+     *
+        final Term uid = new Term(IdFieldMapper.NAME, Uid.encodeId(id));
+            assert shardRouting.primary() : "recover from store only makes sense if the shard is a primary shard";
+    public void trimTranslog() {
+            logger.debug("skipped precomputed checksum eviction on replica", e);
+                && indexShard.indexSettings.getIndexMetadata().getState() == IndexMetadata.State.OPEN;
+            super(in, new SubReaderWrapper() {
+        boolean isTranslogMetadataEnabled,
+            handleRefreshException(e);
+        } else {
+    private final MeanMetric externalRefreshMetric = new MeanMetric();
+            if (newRouting.primary()) {
+            return indexer.getEngine().getSegmentInfosSnapshot();
+    }
+                    listener,
+     * Updates the known allocation IDs and the local checkpoints for the corresponding allocations from a primary relocation source.
+            shardId,
+                    index.id(),
+        }
+        refreshListeners = buildRefreshListeners();
+            logger.trace("{} writing shard state, reason [{}]", shardId, writeReason);
+        openEngineAndSkipTranslogRecovery(true);
+     * Check if there are any recoveries pending in-sync.
+     */
+                    repository,
+        // fail the engine. This will cause this shard to also be removed from the node's index service.
+            getThreadPool(),
+     * one thread blocking on the sync an all others can continue indexing.
+            forceRefreshes.close();
+                // If there is a checksum mismatch and we are not serving reads it is safe to go ahead and delete the file now.
+        assert Thread.holdsLock(engineMutex);
+            });
+    public void openEngineAndSkipTranslogRecovery() throws IOException {
+     * that restore point. See {@link RemoteFsTranslog#sealFence}.
+    }
+                    }
+            // For any other exception on reading checksum, we delete the file to re-download again
+        @Nullable String routing,
+import org.opensearch.common.lease.Releasables;
+                throw new IllegalArgumentException("Unknown recovery source " + recoveryState.getRecoverySource());
+            IOUtils.close(wrappedCatalogSnapshot);
+                }
+        final Translog.Location location = pendingRefreshLocation.get();
+import org.opensearch.index.engine.Engine;
+     * Returns true if this shard supports search idle.
+    }
+                throw new IllegalArgumentException(
+        // we have to set it before we open an engine and recover from the translog because
+     * checksum cache (so it stays bounded to the active snapshot on the replica, mirroring
+        assert indexSettings.isSoftDeleteEnabled() == false;
+        } catch (Exception e) {
+                assert assertReplicationTarget();
+    ) {
+    }
+            }
+import java.util.EnumSet;
+        }
+     *
+        StoreRecovery storeRecovery = new StoreRecovery(shardId, logger);
+                recoveryState.getTranslog().totalLocal(0);
+    private final RemoteStoreStatsTrackerFactory remoteStoreStatsTrackerFactory;
+        validateLocalRecoveryState();
+            // term, and the pending term can transiently lead it. Sealing above the term we will upload at would make
+    final class AsyncShardFlushTask extends AbstractAsyncTask {
+        try {
+    public void updateShardIngestionState(IndexMetadata indexMetadata) {
+                        // needed) but still ensure peer recovery retention leases exist for replicas.
+     * @throws IOException When there is an error computing segment metadata from the store.
+                            syncRemoteTranslogAndUpdateGlobalCheckpoint();
+                );
+    // for replicas, replication is also allowed while recovering, since we index also during recovery to replicas and rely on
+        Supplier<Indexer> engineSupplier,
+        if (engine != null) {
+     * store - a remote-store index, or a migrating docrep shard seeded by a remote source - always gets the retry, and a
+    }
+        // execution and the primary term must be updated first, we can combine the operation execution with the
+    }
+    }
+        recoveryState.validateCurrentStage(RecoveryState.Stage.INDEX);
+import org.opensearch.index.merge.MergedSegmentTransferTracker;
+                );
+    /**
+            loadGlobalCheckpointToReplicationTracker();
+            isShardOnRemoteEnabledNode
+            @Override
+     * These transfers guarantee that every index/delete operation when executing on a replica engine will observe this marker a value
+    public List<RetentionLease> getPeerRecoveryRetentionLeases() {
+        // hold more ops than the global checkpoint.
+    public RetentionLease cloneLocalPeerRecoveryRetentionLease(String nodeId, ActionListener<ReplicationResponse> listener) {
+        }
+                storeRecovery.recoverShallowSnapshotV2(
+    class ShardEventListener implements Engine.EventListener {
+                    // Seed the precomputed checksum cache with downloaded files' checksums.
+    private final ThreadPool threadPool;
+    private final AtomicBoolean primaryReplicaResyncInProgress = new AtomicBoolean();
+                        transferRemoteStoreFenceOwnership(targetAllocationId);
+        final EngineConfigFactory engineConfigFactory,
+        long startTime = System.nanoTime();
+        }
+    private Engine.DeleteResult delete(Indexer engine, Engine.Delete delete) throws IOException {
+import java.util.stream.Collectors;
+            } catch (AlreadyClosedException exc) {
+            // SetOnce is backed by AtomicReference so get() provides happens-before visibility.
+        if (store.tryIncRef()) {
+            Indexer engine = getIndexer();
+    // Returns true if shard routing is primary & replication tracker is in primary mode.
+            postActivatePrimaryMode();
+                    toDownloadSegments.add(file);
+    public void updateRetentionLeasesOnReplica(final RetentionLeases retentionLeases) {
+     * not yet initialised.
+     * Returns a list of retention leases for peer recovery installed in this shard copy.
+     *
+                localChecksum = CodecUtil.retrieveChecksum(indexInput);
+     * @return True if settings indicate this shard is backed by a remote snapshot, false otherwise.
+ * @opensearch.api
+            for (IndexShard shard : localShards) {
+        final Map<String, StoreFileMetadata> metadataMap = store.getSegmentMetadataMap(segmentInfos);
+                    )
+                final String reason = "relocation handoff completed at the target, which now owns the remote store fence";
+                logger.debug("flushing shard on inactive");
+            }
+        engine.forceMerge(
+        }
+     */
+                        }
+        assert Thread.holdsLock(mutex) == false : "hydrating from the remote store under mutex";
+    }
+                replicationTracker.updateFromClusterManager(applyingClusterStateVersion, inSyncAllocationIds, routingTable);
+            + "] should be at most ["
+    private long recoverLocallyUptoLastCommit() {
+                throw new OpenSearchException("Interrupted waiting for replica sync on shard [" + shardId + "]", e);
+     * {@link #shardRouting}, the {@link ActionListener#onFailure(Exception)} method of the provided listener is invoked with an
+        markSearcherAccessed(); // move the shard into non-search idle
+                             * were reverted. If the other shard that was promoted to primary subsequently fails before the
+            if (listenerNeedsRefresh == false // if we have a listener that is waiting for a refresh we need to force it
+        final long primaryTerm = indexSettings.getIndexMetadata().primaryTerm(shardId.id());
+            // can not raise an exception that may block any replication of previous operations to the
+    public void publishReferencedSegments() throws IOException {
+     */
+            replicationTracker.setLatestReplicationCheckpoint(computeReplicationCheckpoint(snapshot.get()));
+            }
+        return codecService.codec(CodecService.DEFAULT_CODEC).getName();
+        final Consumer<Exception> onFailure,
+     * ({@link AlreadyClosedException}), the method is a no-op and no cleanup is performed.
+            }
+import org.apache.lucene.util.ThreadInterruptedException;
+            + primaryContext
+                out.flush();
+    public static Engine.Delete prepareDelete(
+    public boolean scheduledRefresh() {
+                    if (getOperationPrimaryTerm() < newPrimaryTerm) {
+            }
+        } else {
+        if (indexSettings.isRemoteStoreFencingEnabled() == false) {
+            metadataMap
+                        newEngine = null;
+     * checks and removes translog files that no longer need to be retained. See
+        final long newPrimaryTerm,
+            isTranslogMetadataEnabled,
+     * @param debugInfo an extra information that can be useful when tracing an unreleased permit. When assertions are enabled
+            readerWrapper = indexReaderWrapper;
+                return getIndexer().maybeRefresh("schedule");
+            if ("checksum".equals(checkIndexOnStartup)) {
+        Indexer engine = getIndexer();
+     *
+        assert indexSettings.isAssignedOnRemoteNode();
+    }
+                + primaryContext
+     * Returns the last timestamp the searcher was accessed. This is a relative timestamp in milliseconds.
+                storeRecovery.recoverFromSnapshotAndRemoteStore(
+                    };
+    }
+                        }
+     * pending refresh translog location has been refreshed. If there is no pending refresh location registered the listener will be
+                    }, null);
+     * reads a translog restore point it intends to serve from — whether during recovery
+            }
+                return docMapper().getDocumentMapper().createDeleteTombstoneDoc(shardId.getIndexName(), id);
+     */
+        return indexShardOperationPermits.getActiveOperations();
+            }
+            }
+        @Override
+     *
+        long seqNo,
+            @Override
+    /**
+        ensureWriteAllowed(origin);
+     * expire leases parameter is true, this replication tracker must be in primary mode.
+                        logger.debug("Uploaded segment count {}", directory.getSegmentsUploadedToRemoteStore().size());
+                 * We have to check again since otherwise there is a race when a thread passes the first check next to another thread which
+        }
+    }
+     *
+                                        failShard("exception during primary-replica resync", e);
+                && isSearchIdleSupported()
+        // We upload remote translog only after one remote segment upload in case of migration
+     * Used with segment replication during relocation handoff, this method updates current read only engine to global
+import org.opensearch.cluster.metadata.IndexMetadata;
+        }
+import org.opensearch.common.io.stream.BytesStreamOutput;
+            + "]";
+                IOUtils.close(snapshots);
+                 * performs the operation quickly enough to  finish before the current thread could flip the flag. In that situation, we
+     */
+        }
+        }
+    }
+            version,
+        return recoveryStats;
+        long timestamp,
+            return "shard_refresh";
+                seqNo,
+        final IndexSettings indexSettings,
+        try {
+            maxSeqNoOfUpdatesOrDeletes,
+    private final MapperService mapperService;
+                    if (dfasd != null) {
+                remoteDirectory,
+        deleteTranslogFilesFromRemoteTranslog();
+                } catch (IOException ex) {
+    /**
+                             * its Lucene index was reset during the primary term transition. In particular, the Lucene index
+                }
+            ifPrimaryTerm
+     * @param requiredFullRange if {@code true} then {@link Translog.Snapshot#next()} will throw {@link IllegalStateException}
+        boolean syncSegmentSuccess = false;
+     * is disabled for this index, or the translog is not remote-backed and so has no fence. Consolidating both checks
+                    return;
+            final int batches = (totalOperations + batchSize - 1) / batchSize;
+        }
+        assert shardRouting.primary() : "only primaries can be marked as relocated: " + shardRouting;
+                     *
+        String id,
+     * have claimed the fence before it reads the remote translog restore point it will serve from, with one exception —
+    public boolean isRemoteSegmentStoreInSync() {
+                    }
+        assert referencedSegmentsPublisher != null;
+        }
+                public void beforeRefresh() {}
+import org.opensearch.cluster.routing.RecoverySource;
+     *
+        return getIndexer().beginTranslogBatch();
+        final CancellableThreads hydration = remoteStoreHydration.get();
+        }
+            IOUtils.close(currentEngineReference.getAndSet(newEngineReference.get()));
+    public Optional<NRTReplicationEngine> getReplicationEngine() {
+    @Override
+                            logger.warn("failed to flush shard on inactive", e);
+                new RemoteStoreRefreshListener(
+            shardId,
+            assert currentRouting == null || currentRouting.isSameAllocation(newRouting);
+                        "index-fail [{}] seq# [{}] allocation-id [{}] primaryTerm [{}] operationPrimaryTerm [{}] origin [{}]",
+        }
+            versionType,
+     * and an on-demand {@code IndexWriter} re-capture.
+            try {
+import org.opensearch.index.merge.MergeStats;
+     * Finalizes replication with a {@link CatalogSnapshot}. Delegates engine-level segment state
+                new ParameterizedMessage(
+     */
+    }
+            // timeseries
+                || indexSettings.isAssignedOnRemoteNode() : "supposedly in-sync shard copy received a global checkpoint ["
+                    };
+    ) throws IOException {
+        if (engine != null) {
+        if (isReadAllowed()) {
+     * Loads the latest retention leases from their dedicated state file.
+                    for (int i = 0; i < batches; i++) {
+        while (System.nanoTime() - startNanos < timeout.nanos()) {
+import org.opensearch.common.util.concurrent.RunOnce;
+        // time elapses after the engine is created above (pulling the config settings) until we set the engine reference, during
+            return new Tuple<>(snapshot, computeReplicationCheckpoint(segmentInfos));
+                sync();
+            assert shardRouting.primary() : "recover from store only makes sense if the shard is a primary shard";
+            autoGeneratedIdTimestamp,
+    public org.apache.lucene.util.Version minimumCompatibleVersion() {
+                                // this Shard's engine was read only, we need to update its engine before restoring local history from xlog.
+     *                          if any operation between {@code fromSeqNo} and {@code toSeqNo} is missing.
+                } else {
+            return REMOTE_NON_MIGRATING;
+            return false;
+    /**
+            DataFormatAwareStoreDirectory dfasd = DataFormatAwareStoreDirectory.unwrap(store.directory());
+        } catch (IOException e) {
+    }
+        assert opPrimaryTerm <= getOperationPrimaryTerm() : "op term [ "
+                            };
+        return applyDeleteOperationOnPrimary(version, id, null, versionType, ifSeqNo, ifPrimaryTerm);
+        assert recoveryState.getRecoverySource().expectEmptyRetentionLeases() == false || getRetentionLeases().leases().isEmpty()
+        try {
+     * @return {@link SeqNoStats}
+            } catch (AlreadyClosedException e) {
+        @Nullable final Store remoteStore,
+                || IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.get(indexSettings.getSettings())) {
+            }
+    /**
+            }
+                        return false;
+                if (wrappedCatalogSnapshot == null) {
+import org.opensearch.indices.replication.common.ReplicationTimer;
+                            // The listener below is wrapped by ListenerTimeouts.wrapWithTimeout, which uses a single
+                    }
+            .stream()
+                            // shard via onFailure above.
+        return getIndexer().segments(verbose);
+        }
+    private EngineConfig.TombstoneDocSupplier tombstoneDocSupplier() {
+            () -> getRemoteTranslogUploadBufferInterval(remoteStoreSettings::getClusterRemoteTranslogBufferInterval)
+                    final Indexer ref = newEngineReference.get();
+    /**
+                uploadedSegments,
+                }
+            }
+                }
+        return routingEntry().recoverySource().getType() == RecoverySource.Type.SNAPSHOT
+    public PendingReplicationActions getPendingReplicationActions() {
+                        periodicFlushMetric.inc();
+    public void openEngineAndRecoverFromTranslog() throws IOException {
+    // Exclusively for testing, please do not use it elsewhere.
+            }
+            shardEventListener,
+                syncSegmentsFromRemoteSegmentStore(false);
+        if (primaryReplicaResyncInProgress.get()) {
+            return false;
+                pendingRefreshLocation.updateAndGet(pendingLocation -> {
+        long startNanos = System.nanoTime();
+    public boolean shouldSeedRemoteStore() {
+    }
+    public RetentionLeases getRetentionLeases() {
+            || currentRouting.primary() != newRouting.primary()
+        return periodicFlushTask;
+        }
+                writeConsumer.accept(candidates);
+    private SafeCommitInfo getSafeCommitInfo() {
+    private final IndexingOperationListener indexingOperationListeners;
+            currentRefreshStartTime = System.nanoTime();
+                    index.id()
+            if (indexSettings.getIndexMetadata().getState() == IndexMetadata.State.CLOSE
+        }
+        }
+            + " is not a primary shard in primary mode";
+            logger.trace(
+            }
+            } catch (InterruptedException e) {
+     *
+     * @deprecated This static method has been moved to {@link Engine#prepareIndex} as an instance method.
+            Map<String, StoreFileMetadata> segmentMetadataMap = store.getSegmentMetadataMap(segmentInfos);
+    /**
+        }
+                // ordering with it is enforced by the fence CAS once this copy starts uploading.
+     * and a small sample of filenames. Intended for validating that DFA files are included
+    }
+        }
+                opPrimaryTerm,
+            startTime,
+    }
+        }
+                     * We could fail the shard in that case, but this will cause it to be removed from the insync allocations list
+                Set<String> localFiles;
+                        if (syncFromRemote) {
+        protected boolean mustReschedule() {
+                this.replicationTracker.isPrimaryMode() : "a started primary with non-pending operation term must be in primary mode "
+    }
+        );
+                logger.trace(
+     */
+        this.mergedSegmentPublisher = mergedSegmentPublisher;
+                    if (shardRouting.primary() && isTranslogBackedByRemoteStore()) {
+                        )
+        }
+        return new FlushStats.Builder().total(flushMetric.count())
+    public long getIndexBufferRAMBytesUsed() {
+        assert assertReplicationTarget();
+                @Override
+            segmentsGen,
+            return ThreadPool.Names.REFRESH;
+            : "unsupported operation for segment replication enabled indices or remote store backed indices";
+     * Returns how many bytes we are currently moving from heap to disk
+        final Object debugInfo
+                getPendingPrimaryTerm(),
+        } catch (final IOException e) {
+import org.opensearch.index.store.FormatChecksumStrategy;
+        assert assertPrimaryMode();
+    }
+     * <p>
+    }
+                if (recoverySource.isSearchableSnapshot()) {
+import org.apache.lucene.store.IndexInput;
+    }
+     */
+    }
+    }
+     * outstanding operations in flight).
+    private final RetentionLeaseSyncer retentionLeaseSyncer;
+        // Update target replication checkpoint only when in active primary mode
+     *   <li>interval &gt; 0 and a task exists with a different interval: the task is rescheduled with the new interval</li>
+    ) {
+     * ------------------------------------------------------------------------------
+        final ActionListener<Releasable> onPermitAcquired,
+    /**
+     * <p>
+                )
+            opPrimaryTerm,
+     **/
+    /**
+        RecoveryListener recoveryListener,
+ * under the License.
+     *
+        return state;
+                    UNASSIGNED_SEQ_NO,
+                    final IndexShardState shardState = state();
+                    safeCommit.get(),
+                callingThread = Thread.currentThread();
+    }
+import java.util.stream.StreamSupport;
+                                    boolean resyncCompleted = primaryReplicaResyncInProgress.compareAndSet(true, false);
+                assert callingThread != null : "afterRefresh called but not beforeRefresh";
+    /**
+    /**
+                                + startedShards.size()
+                    // indexShardOperationPermits doesn't guarantee that async submissions are executed
+import org.opensearch.common.settings.Settings;
+     * catalog snapshot. Keeps the replica's cache bounded in size across replication cycles,
+        return isTranslogBackedByRemoteStore(indexSettings, shardMigrationState);
+import org.opensearch.index.store.remote.metadata.RemoteSegmentMetadata;
+            if (indexShard.flushOrRollRunning.compareAndSet(false, true)) {
+     * A replica calls this method to advance the max_seq_no_of_updates marker of its engine to at least the max_seq_no_of_updates
+        }
+     *         when the permit was acquired plus a stack traces that was captured when the permit was request.
+     * for additional details.
+     *                          This parameter should be only enabled when the entire requesting range is below the global checkpoint.
+    }
+        store.incRef();
+                        l -> restoreFromRepository(repositoriesService.repository(repo), l)
+            getOperationPrimaryTerm(),
+    }
+        verifyNotClosed();
+                            if (exception == null) {
+     * Returns the pending replication actions for the shard.
+     * @return the pending replication actions
+    private void maybeSync() {
+        assert shardRouting.primary() || shardRouting.isSearchOnly()
+        verifyNotClosed();
+        DocumentMapperForType docMapper,
+    /**
+    public Closeable acquireHistoryRetentionLock() {
+     * gate. Keeping the two directions on separate methods is what makes them genuinely independent: a single
+            globalCheckpoint,
+            }
+    @ExperimentalApi
+     */
+        }
+                    return;
+    public GatedCloseable<CatalogSnapshot> acquireSafeCatalogSnapshot() throws EngineException {
+                        index.seqNo(),
+            }
+                searchOperationListener.onSearchIdleReactivation();
+        final IndexShardState state = this.state; // one time volatile read
+            isReadOnlyReplica,
+        if (indexSettings().isAssignedOnRemoteNode()) {
+                };
+        );
+                throw new UnsupportedOperationException("computeReferencedSegmentsCheckpoint is not supported for DataFormatAware indices");
+                    ),
+                    created.close();
+    }
+        private RefreshMetricUpdater(MeanMetric refreshMetric) {
+     *
+        return getIndexer().acquireHistoryRetentionLock();
+            return changeState(IndexShardState.RECOVERING, reason);
+                sourceRemoteDirectory,
+                }
+     *
+                        }
+                    } catch (Exception e) {
+        assert shardRouting.primary() && shardRouting.isRelocationTarget()
+            && (shardRouting.primary() == false
+        final Set<String> inSyncAllocationIds,
+    public Engine.IndexResult applyIndexOperationOnPrimary(
+                            replicationTracker.resetHasAllPeerRecoveryRetentionLeases();
+            }
+            } catch (CancellableThreads.ExecutionCancelledException e) {
+            && ((SnapshotRecoverySource) routingEntry().recoverySource()).pinnedTimestamp() > 0;
+    }
+    /**
+    }
+        // }
+                // ignore, we are being shutdown
+            .stream()
+        long behindCount = stats.stream().filter(s -> s.getCheckpointsBehindCount() > 0 || s.getBytesBehindCount() > 0).count();
+                        @Override
+        return pendingReplicationActions;
+            .collect(java.util.stream.Collectors.joining(", "));
+        synchronized (periodicFlushMutex) {
+        // Populate remote_store stats only if the index is remote store backed
+     * <p>
+    /**
+            "Failed to upload to remote segment store within remote upload timeout of "
+                UNASSIGNED_SEQ_NO,
+    }
+        return ingestionEngine.getIngestionState();
+        final boolean shardLevelRefreshEnabled,
+            final long actualRetainingSequenceNumber = retainingSequenceNumber == RETAIN_ALL
+    public void maybeCheckIndex() {
+                segment_n_uploaded.set(true);
+                        recoveryState.getIndex().addFileDetail(file, uploadedSegments.get(file).getLength(), true);
+     * Returns the {@link PrimaryOperationPolicy} in effect for this shard.
+     * as high as the max_seq_no_of_updates on the primary was when any of these operations were processed on it.
+                id,
+                && indexSettings.isExplicitRefresh() == false
+        // in the order submitted, combining both operations ensure that the term is updated before the operation is
+        }
+    public void stopRefreshTask() {
+                            flush(new FlushRequest());
+            logger.debug("skip local recovery as failed to find the safe commit", e);
+                    translogRecoveryOperations = totalRecovered;
+    }
+     * executed asynchronously on the flush thread pool.
+                    // means that the cluster-manager will fail this shard as all initializing shards are failed when a primary is selected
+     */
+        IndexShardRelocatedException, IndexShardRecoveringException, IndexShardClosedException {
+    /**
+                disableTranslogRetention ? new ByteSizeValue(-1) : indexSettings.getTranslogRetentionSize(),
+     * Delegates to {@link Indexer#isReplicaIndexer()} so callers don't need to know concrete
+    /**
+    public void recoverFromLocalShards(
+                            if (getIndexer() instanceof DataFormatAwareReadOnlyEngine == false) {
+            }
+            getIndexer().config().getCodec().getName(),
+            (delegatedListener, releasable) -> {
+        if (fenceOwnership == null) {
+            similarityService.similarity(mapperService),
+        this.warmer = warmer;
+import java.util.concurrent.TimeoutException;
+            internalRefreshListener.add(
+import java.io.Closeable;
+            return;
+        this.useRetentionLeasesInPeerRecovery = replicationTracker.hasAllPeerRecoveryRetentionLeases();
+                    // segment conflict with remote store while the shard is serving reads.
+            REPLICA_SYNC_TIMEOUT_MARKER
+                writeReason = "routing changed from " + currentRouting + " to " + newRouting;
+            operation = indexer.prepareIndex(
+        } catch (Exception e) {
+        @Override
+    /**
+            onPermitAcquired.onFailure(e);
+            case EMPTY_STORE:
+import org.opensearch.index.engine.IngestionEngine;
+     * Can also schedule a flush if decided by translog manager
+    public ShardIngestionState getIngestionState() {
+        assert recoveryState.getRecoverySource().getType() == RecoverySource.Type.LOCAL_SHARDS : "invalid recovery type: "
+    }
+    /**
+            // ignore
+        long ifSeqNo,
+            && latestReplicationCheckpoint.getPrimaryTerm() == getOperationPrimaryTerm()) {
+            storeRecovery.recoverFromRepository(this, repository, listener);
+     */
+    private void executeRecovery(
+                    );
+    }
+    }
+    }
+                .allMatch(
+            String message = feature + " requires soft deletes but " + indexSettings.getIndex() + " does not have soft deletes enabled";
+        while (System.nanoTime() - startNanos < getRecoverySettings().internalRemoteUploadTimeout().nanos()) {
+                    Engine.Operation.Origin.LOCAL_RESET,
+            return 0;
+                    return ms;
+                    return applyOnEngine(newEngineReference.get(), Engine::acquireSafeIndexCommit);
+    public Tuple<Boolean, RetentionLeases> getRetentionLeases(final boolean expireLeases) {
+    public IndexingStats indexingStats() {
+        return segmentsStats;
+            }
+    public void noopUpdate() {
+        termUpdated.countDown();
+            } else {
+import org.opensearch.index.mapper.DocumentMapperForType;
+                doCheckIndex();
+        assert indexSettings.isAssignedOnRemoteNode();
+                assert Arrays.stream(store.directory().listAll()).filter(f -> f.startsWith(IndexFileNames.SEGMENTS)).findAny().isEmpty()
+            maybeCheckIndex(); // check index here and won't do it again if ops-based recovery occurs
+            .totalTimeInMillis(TimeUnit.NANOSECONDS.toMillis(refreshMetric.sum()))
+                && (newRouting.relocating() == false || newRouting.equalsIgnoringMetadata(currentRouting) == false)) {
+        persistMetadata(path, indexSettings, shardRouting, null, logger);
+            return latestReplicationCheckpoint;
+            if (wasActive) {
+                    // ignore flushFirst since we flushed above and we do not want to interfere with ongoing translog replay
+        } catch (AlreadyClosedException ex) {
+                    delegatedListener.onFailure(new IllegalStateException(message));
+                        localFiles.size(),
+            listener.onFailure(e);
+        assert userData.containsKey(Engine.HISTORY_UUID_KEY) : "commit point doesn't contains a history uuid";
+    }
+     *   <li>interval &lt;= 0 and a task exists: the task is closed</li>
+                0
+    /**
+            .totalTimeInMillis(TimeUnit.NANOSECONDS.toMillis(flushMetric.sum()))
+                ? getMinRetainedSeqNo()
+    }
+        };
+                    logger.info("Stopped periodic flush task for shard [{}]", shardId);
+                try {
+     * When the following conditions are met, we will consider the pending merge segment to be redundant and can be deleted.
+        return globalCheckpointSyncer;
+            case INDEX:
+                        l -> recoverFromLocalShards(
+    /**
+            // We treat any exception during parsing and or mapping update as a document level failure
+    /**
+     * Rolls the tranlog generation and cleans unneeded.
+                    e
+    }
+     */
+     */
+        asyncBlockOperations(new ActionListener<Releasable>() {
+     *                                   after this replication request was executed on it (see {@link #getMaxSeqNoOfUpdatesOrDeletes()}
+                logger.info("Started periodic flush task for shard [{}] with interval [{}]", shardId, interval);
+        return this.shardFieldData;
+            try {
+                    if (syncFromRemote) {
+    /**
+        if (engineOrNull != null && System.nanoTime() - engineOrNull.getLastWriteNanos() >= inactiveTimeNS) {
+     * the reader registered for the snapshot — eliminating the race between catalog acquisition
+                logger.info("Reclaimed remote store fence ownership after the relocation handoff failed");
+     * @deprecated Use {@link #applyDeleteOperationOnReplica(long, long, long, String, String)} instead.
+    public void syncSegmentsFromRemoteSegmentStore(boolean overrideLocal, final Runnable onFileSync) throws IOException {
+        @Nullable ActionListener<Releasable> combineWithAction
+    }
+                            // This shard is about to start serving primary-origin operations, so the primary operation
+     */
+     * @throws AlreadyClosedException if shard is closed
+     * <p>
+                    SegmentInfos infosSnapshot = SegmentInfos.readCommit(store.directory(), indexInput, commitGeneration);
+            assert this.shardRouting.primary() == false || this.shardRouting.started() == false || // note that we use started and not
+    }
+        return replicationTracker.addPeerRecoveryRetentionLease(nodeId, globalCheckpoint, listener);
+        assert translogFactory instanceof RemoteBlobStoreInternalTranslogFactory;
+            storeRecovery.recoverFromLocalShards(mappingUpdateConsumer, this, snapshots, recoveryListener);
+        assert Thread.holdsLock(mutex);
+            ); // this will run the closeable on the wrapped engine reader
+     * If a file-based recovery occurs, a recovery target calls this method to reset the recovery stage.
+                        delegatedListener.onFailure(e);
+     * @opensearch.internal
+            false,
+                engineSearcher.getQueryCachingPolicy(),
+                    + "]";
+            // responded to in addRefreshListener. The refresh must happen under the same mutex used in addRefreshListener
+        }
+    // Package visible for testing
+    public long getPendingPrimaryTerm() {
+                new RemoteTranslogStats(remoteStoreStatsTrackerFactory.getRemoteTranslogTransferTracker(shardId).stats())
+    }
+        segmentsStats.addBitsetMemoryInBytes(shardBitsetFilterCache.getMemorySizeInBytes());
+    }
+import org.opensearch.index.seqno.ReplicationTracker;
+        List<MergedSegmentCheckpoint> pendingDeleteCheckpoints = new ArrayList<>();
+                        } catch (Exception e) {
+                     * potentially preventing re-allocation.
+            };
+    }
+import org.opensearch.indices.recovery.RecoveryTarget;
+        verifyNotClosed();
+    }
+     */
+     * Fetch the latest SegmentInfos held by the shard's underlying Engine, wrapped
+        this.referencedSegmentsPublisher = referencedSegmentsPublisher;
+        TranslogFactory translogFactory = translogFactorySupplier.apply(indexSettings, shardRouting);
+     * replication request were processed on it.
+     * elapses before the listener is notified, the listener will be notified with an {@link TimeoutException}. A caller may pass null to
+        try {
+    }
+                )
+        }
+     * recoverable, whereas a skipped collection cycle is retried on the next one - the opposite trade to the publish
+        verifyNotClosed();
+                    remoteStoreStatsTrackerFactory.getRemoteSegmentTransferTracker(shardId()),
+            assert replicationTracker.isPrimaryMode();
+import org.opensearch.index.mapper.SourceToParse;
+            if (state == IndexShardState.POST_RECOVERY) {
+        TranslogFactory translogFactory = translogFactorySupplier.apply(indexSettings, shardRouting);
+                        recoveryState,
+     * Syncs the current retention leases to all replicas.
+        }
+    /** Returns the primary term that is currently being used to assign to operations */
+     * Returns the current translog durability mode
+                getOperationPrimaryTerm(),
+        }
+        readAllowed();
+    /**
+            Integer.MAX_VALUE, // we just want to upgrade the segments, not actually optimize to a single segment
+                    wrappedReader,
+     */
+     *
+        // the reader. This lets DocumentParser enforce the per-shard Lucene field-count limit for
+        // Do not change segment order in case of index sort.
+        final long applyingClusterStateVersion,
+    public static final int OPERATIONS_BLOCKED = -1;
+     */
+     */
+     * a primary relocation target, whose source is still legitimately serving at the same term and for which ordering
+        loadGlobalCheckpointToReplicationTracker();
+     */
+            }
+    }
+        final long globalCheckpoint,
+    }
+    public void rollTranslogGeneration() throws IOException {
+    }
+    public void restoreFromRepository(Repository repository, ActionListener<Boolean> listener) {
+    /**
+            metadataMap.values().stream().mapToLong(StoreFileMetadata::length).sum(),
+    public void runUnderPrimaryPermit(
+    }
+        return replicationTracker.getGlobalCheckpoint();
+                throw new IndexShardClosedException(shardId);
+     * Persists the current retention leases to their dedicated state file.
+        ensureSoftDeletesEnabled("retention leases");
+    }
+                        }));
+     * @param checkpoint   the local checkpoint for the shard
+            if (directory.readLatestMetadataFile() != null) {
+                        consumer.accept(primaryContext);
+                                for (Future<Integer> translogRecoveryFuture : translogRecoveryFutureList) {
+        }
+            segmentInfos.getGeneration(),
+                        // failures in renewPeerRecoveryRetentionLeases() during the async window.
+    private final ShardIndexWarmerService shardWarmerService;
+                for (String file : uploadedSegments.keySet()) {
+            IOUtils.close(currentEngineReference.getAndSet(new EngineBackedIndexer(readOnlyEngine)));
+import org.opensearch.index.similarity.SimilarityService;
+            indexSort,
+    private Engine.Searcher acquireSearcher(String source, Engine.SearcherScope scope) {
+        }
+                    }
+    public Tuple<GatedCloseable<SegmentInfos>, ReplicationCheckpoint> getLatestSegmentInfosAndCheckpoint() {
+            logger.trace("skip local recovery as no index commit found");
+        GatedCloseable<CatalogSnapshot> wrappedCatalogSnapshot = null;
+     * done only once the local copy has been proven wrong. The decision uses the same predicate as the download that
+                                .restoreLocalHistoryFromTranslog(
+        final ReplicationCheckpoint latestReplicationCheckpoint = getLatestReplicationCheckpoint();
+        assert assertPrimaryMode();
+    ReplicationCheckpoint computeReplicationCheckpoint(CatalogSnapshot catalogSnapshot) throws IOException {
+     */
+        readAllowed();
+     * Returns true if this shard has some scheduled refresh that is pending because of search-idle.
+                        }
+        public void beforeRefresh() throws IOException {}
+     * @throws IllegalStateException           if the relocation target is no longer part of the replication group
+import org.opensearch.index.search.stats.ShardSearchStats;
+            }
+                            }
+                    releasable.close();
+import org.opensearch.index.recovery.RecoveryStats;
+    public void onSettingsChanged() {
+                out.flush();
+     * It is the responsibility of the caller to close the {@link Releasable}.
+     */
+        final boolean throttled;
+        verifyNotClosed();
+    /**
+                            final ActionListener<ResyncTask> timeoutListener = ListenerTimeouts.wrapWithTimeout(
+        assert assertPrimaryMode();
+            final boolean syncNeeded = (asyncDurability
+            : "only primary relocation target can update allocation IDs from primary context: " + shardRouting;
+        engine.translogManager().trimUnreferencedTranslogFiles();
+            }
+                // full checkindex
+                            postActivatePrimaryMode();
+            throw new AssertionError(e);
+                                    FutureUtils.cancel(translogRecoveryFuture);
+    private final ReferencedSegmentsPublisher referencedSegmentsPublisher;
+                            // it, and in the common case a real failure completes well before the timeout and still fails the
+        FilterDirectory remoteStoreDirectory = (FilterDirectory) remoteStore.directory();
+    }
+    public Map<String, Long> getInSyncGlobalCheckpoints() {
+                }
+        }
+            } else {
+            return new Engine.Searcher(
+                    if (exception != null) {
+            // upload to resume.
+    }
+        recoveryState.validateCurrentStage(RecoveryState.Stage.TRANSLOG);
+        return delete(engine, delete);
+     * Wraps the action to run on a primary after acquiring permit. This wrapping is used to check if the shard is in primary mode before
+                        getIndexer().refreshPrimaryOperationPolicy();
+        @Override
+     * @param maxSeqNoOfUpdatesOrDeletes the max seq_no of updates (index operations overwrite Lucene) or deletes captured on the primary
+        return ReplicationStats.empty();
+                isConcurrentRecovery,
+        }
+                    protected void doRun() {
+            @Override
+            return 0;
+        replicationTracker.initiateTracking(allocationId);
+                    reader, // this will close the wrappers excluding the NonClosingReaderWrapper
+        );
+                    throw e;
+    /**
+                if (shouldPeriodicallyFlush()) {
+                && getInterval().millis() > 0;
+        } else {
+                     * Before this call returns, we are guaranteed that all future operations are delayed and so this happens before we
+        if (bufferAsyncIoProcessor) {
+                            getPendingPrimaryTerm(),
+                        // the cluster-manager started a recovering primary, activate primary mode.
+    private class ReplicationCheckpointUpdater implements ReferenceManager.RefreshListener {
+            public void onResponse(final Releasable releasable) {
+            if (rfee.getCause() instanceof InterruptedException) {
+                    getOperationPrimaryTerm(),
+     * {@link #getActiveMergeCount()} — {@code true} only when merges are queued, regardless
+    public void updateVisibleCheckpointForShard(final String allocationId, final ReplicationCheckpoint visibleCheckpoint) {
+        }
+        verifyNotClosed();
+            final RecoveryState recoveryState = this.recoveryState;
+    public int countNumberOfHistoryOperations(String source, long fromSeqNo, long toSeqNo) throws IOException {
+     * @param generation Snapshot Commit Generation.
+     * @return the starting sequence number from which the recovery should start.
+        // the old primary's checkpoint may be ahead of the warm target which recovered from an earlier remote
+     *
+    }
+                // Extra segments will be wiped on engine open.
+    }
+    /**
+    public void addRefreshListener(Translog.Location location, Consumer<Boolean> listener) {
+                return false;
+            dfaFiles.size(),
+        return mergeStats;
+                    }
+                            + currentRouting
+                    innerFail(e);
+                        releaseOnce.run();
+                } else if (recoverySource.remoteStoreIndexShallowCopy()) {
+     * By default, UNASSIGNED_SEQ_NO is used as the initial global checkpoint for new shard initialization. Ingestion
+            autoGeneratedTimeStamp,
+                    index.origin()
+     * Fetch a map of StoreFileMetadata for each segment from the latest SegmentInfos.
+        for (MergedSegmentCheckpoint mergedSegmentCheckpoint : pendingMergedSegmentCheckpoints) {
+        loadGlobalCheckpointToReplicationTracker();
+    /**
+    public ShardRequestCache requestCache() {
+     */
+    }
+        pendingPrimaryTerm = newPrimaryTerm;
+            .build();
+                    logSnapshotStoreMetadataSummary(ms, "null-engine");
+                    final ReplicationTracker.PrimaryContext primaryContext = replicationTracker.startRelocationHandoff(targetAllocationId);
+                             * as a starting point), but it simplifies reasoning about the relationship between primary terms and
+import org.opensearch.common.util.set.Sets;
+        } catch (TimeoutException e) {
+        operationExecutor.accept(operationListener);
+            } finally {
+        return ((RemoteSegmentStoreDirectory) remoteDirectory);
+    public void activateWithPrimaryContext(final ReplicationTracker.PrimaryContext primaryContext) {
+    }
+        }
+                                timer.start();
+                    );
+                        return;
+        final List<IndexingOperationListener> listenersList = new ArrayList<>(listeners);
+    protected RemoteStoreStatsTrackerFactory getRemoteStoreStatsTrackerFactory() {
+    private final RefreshListeners refreshListeners;
+                        uploadFiles.size()
+                    executeRecovery(
+     *                                                            mismatch or an unexpected exception when opening the index reading the
+        if (getIndexer() instanceof EngineBackedIndexer indexer) {
+        }
+        return new Engine.Delete(id, uid, seqNo, primaryTerm, version, versionType, origin, startTime, ifSeqNo, ifPrimaryTerm, routing);
+            + getOperationPrimaryTerm()
+        }
+        }
+        try {
+    }
+     * @param listener the listener to invoke once the pending refresh location is visible. The listener will be called with
+            throw new OpenSearchException("failed to wrap searcher", ex);
+        return state == IndexShardState.POST_RECOVERY
+     * or until the configured timeout is reached.
+        @Override
+            public ParsedDocument newNoopTombstoneDoc(String reason) {
+        this.indexingOperationListeners = new IndexingOperationListener.CompositeListener(listenersList, logger);
+        remoteStore.incRef();
+import org.opensearch.index.engine.EngineConfigFactory;
+     * @param source                  the source of the retention lease
+     * Search-only replicas never receive operations and so are excluded.
+     */
+            logger.trace("syncing retention leases [{}] after expiration check", retentionLeases.v2());
+        if (logger.isTraceEnabled()) {
+     * returns stats about ongoing recoveries, both source and target
+        this.replicationTracker = new ReplicationTracker(
+        state = IndexShardState.CREATED;
+     */
+     * {@link org.opensearch.index.engine.exec.Indexer#beginTranslogBatch()} default), so the bulk loop runs unchanged.
+            sourceToParse,
+     * Returns whether a primary-replica resync is currently in progress on this shard.
+    /**
+     * <code>e</code> is caused by index corruption
+     * @throws TimeoutException if timed out waiting for in-flight operations to finish
+    /**
+                        recoveryListener,
+     */
+            if (shardLevelRefreshEnabled) {
+                if (file.endsWith(".si")) {
+    public void acquireLockOnCommitData(String snapshotId, long primaryTerm, long generation) throws IOException {
+        return indexSettings.getIndexMetadata().isSystem();
+                + timeout
+                    }
+    ) {
+import org.opensearch.index.engine.DataFormatAwareReadOnlyEngine;
+                    localFiles = new HashSet<>(catalogSnapshotRef.get().getFiles(true));
+    public boolean isMigratingToRemote() {
+        recoveryState.setStage(RecoveryState.Stage.TRANSLOG);
+    public DocsStats docStats() {
+                engineSupplier.get().translogManager().ensureTranslogSynced(candidates.stream().map(Tuple::v1));
+        return engineMutex;
+    ) {
+    /**
+    }
+            if (success == false) {
+    }
+        throws IOException {
+    }
+    }
+            throw new IllegalIndexShardStateException(shardId, IndexShardState.STARTED, ": shard is no longer relocating " + shardRouting);
+     * time5 | _3.si, _4.si, _5.si               | _1.si, _2.si, _3.si, _4.si
+                }
+                onNewEngine(newEngine);
+    public void addShardFailureCallback(Consumer<ShardFailure> onShardFailure) {
+                            final ActionListener<ResyncTask> resyncListener = new ActionListener<>() {
+                // in uploading the segments to remote store.
             }
             if (current == null) {
-                // Without an engine there is nothing to flush; onNewEngine will start the task once one is created.
-                if (engineAvailable == false) {
-                    return;
-                }
-                final AsyncShardFlushTask created = new AsyncShardFlushTask(this, interval);
-                periodicFlushTask = created;
-                // close() moves the shard to CLOSED and then closes periodicFlushTask without taking periodicFlushMutex. If it
-                // ran between the state check above and the assignment, it may have observed a null task. Re-checking here
-                // guarantees one of the two paths closes the task, so a scheduled task never outlives a closed shard.
-                if (state == IndexShardState.CLOSED) {
-                    created.close();
-                    periodicFlushTask = null;
-                    return;
-                }
-                logger.info("Started periodic flush task for shard [{}] with interval [{}]", shardId, interval);
-            } else if (interval.equals(current.getInterval()) == false) {
-                final TimeValue previous = current.getInterval();
-                current.setInterval(interval);
-                logger.info("Updated periodic flush interval for shard [{}] from [{}] to [{}]", shardId, previous, interval);
-            }
-        }
-    }
-
-    // Visible for testing
-    AsyncShardFlushTask getPeriodicFlushTask() {
-        return periodicFlushTask;
-    }
-
-    // Visible for testing
-    boolean isFlushOrRollRunning() {
-        return flushOrRollRunning.get();
-    }
-
+        // NRT Replicas will not accept refresh listeners.
+     * Executes the given flush request against the engine.
+                    CompletionService<Integer> completionService = new ExecutorCompletionService<>(
+    public SearchOperationListener getSearchOperationListener() {
     /**
-     * Async shard flush task to call flush at a regular interval.
-     * This is particularly useful for pull-based ingestion index without translog to ensure offsets are regularly committed.
+                @Override
      */
-    final class AsyncShardFlushTask extends AbstractAsyncTask {
-
-        private final IndexShard indexShard;
-        private final Logger logger;
-
-        public AsyncShardFlushTask(IndexShard indexShard, TimeValue interval) {
-            super(indexShard.logger, indexShard.threadPool, interval, true);
-            this.logger = indexShard.logger;
-            this.indexShard = indexShard;
-            rescheduleIfNecessary();
+                            "detected new primary with primary term [{}], global checkpoint [{}], max_seq_no [{}]",
+    }
+     * Checks if checkpoint should be processed
+                    }
+    /**
+    }
+        return replicationTracker;
+        return new Engine.DeleteResult(e, version, getOperationPrimaryTerm());
+                : retainingSequenceNumber;
+    public boolean pendingInSync() {
+            newEngineReference.set(indexerFactory.createIndexer(newEngineConfig(replicationTracker)));
+    }
+    public TranslogStats translogStats() {
+        };
+        return getRetentionLeases(false).v2();
+        return shardWarmerService.stats();
+                    new ParameterizedMessage(
+    /**
+         * that we concurrently end up here and therefore have to protect that we do not mark the shard as relocated when its shard routing
+            } catch (InterruptedException e) {
+    public GatedCloseable<IndexCommit> acquireLastIndexCommitAndRefresh(boolean flushFirst) throws EngineException {
+    public WarmerStats warmerStats() {
+     * the Lucene {@code SegmentInfos} bytes to be uploaded as remote-store metadata. Delegates
+     * shard directory. This method is only invoked for non-DFA (Lucene) indices — DFA indices
+    @ExperimentalApi
+                IOException corrupt = null;
+                shardId,
+        String id,
+        ensurePeerRecoveryRetentionLeasesExist();
+                logger.debug(
+                } else {
+        if (!(indexer instanceof EngineBackedIndexer)) {
+        Repository repository = ((RemoteBlobStoreInternalTranslogFactory) translogFactory).getRepository();
+    }
+            translogStats.addRemoteTranslogStats(
+                    "index [{}] seq# [{}] allocation-id [{}] primaryTerm [{}] operationPrimaryTerm [{}] origin [{}]",
+    ) {
+import org.opensearch.indices.pollingingest.PollingIngestStats;
+            sourceToParse,
+    private final MergedSegmentPublisher mergedSegmentPublisher;
+                logger.warn("Failed to perform engine refresh", e);
+    // been marked as active yet and is syncing it's changes back to the relocation source
+            throw new AssertionError(e);
+        try {
+        });
+        boolean overrideLocal,
+    ) {
+                                + shardId()
+    }
+                throw e;
+                        if (currentGlobalCheckpoint < maxSeqNo && indexSettings.isSegRepEnabledOrRemoteNode() == false) {
+                indexSettings.getUUID(),
+        RepositoriesService repositoriesService,
+                                ensurePeerRecoveryRetentionLeasesExist();
+        public void afterRefresh(boolean didRefresh) {
+     *
+        RemoteStoreFenceOwnership fenceOwnership = remoteStoreFenceOwnership();
+     * <p>
+        return true;
+                        store.directory().sync(infosSnapshot.files(true));
         }
-
-        @Override
-        protected boolean mustReschedule() {
-            // Only schedule for open shards with a valid interval
-            return indexShard.state != IndexShardState.CLOSED
-                && indexShard.indexSettings.getIndexMetadata().getState() == IndexMetadata.State.OPEN
-                && getInterval().millis() > 0;
-        }
-
-        @Override
-        protected void runInternal() {
-            // Only execute if no other flush/roll is running to prevent concurrent flushes
-            if (indexShard.flushOrRollRunning.compareAndSet(false, true)) {
-                try {
-                    indexShard.flush(new FlushRequest());
-                    indexShard.periodicFlushMetric.inc();
-                } finally {
-                    indexShard.flushOrRollRunning.set(false);
+     * throws {@link TranslogCorruptedException}, the shard fails, and the next recovery would reuse the very same bytes
+        if (shouldPeriodicallyFlush() || shouldRollTranslogGeneration()) {
+        assert assertPrimaryMode();
+        internalIndexingStats.noopUpdate();
+        this.shardRouting = shardRouting;
+        if (logger.isTraceEnabled()) {
+            // the global checkpoint.
+                        globalCheckpointListeners,
+    /**
+        assert recoveryState.getRecoverySource().equals(shardRouting.recoverySource());
+        return checkpoint;
+                    index.origin(),
+                verifyNotClosed();
+     * Called when our shard is using too much heap and should move buffered indexed/deleted documents to disk.
+            Arrays.asList(refreshListeners, refreshPendingLocationListener),
+    private final Supplier<Sort> indexSortSupplier;
+    /**
+        );
+     * @param id                      the identifier of the retention lease
+     * Returns the maximum auto_id_timestamp of all append-only requests have been processed by this shard or the auto_id_timestamp received
                 }
+     * Registers the given listener and invokes it once the shard is active again and all
+    }
+        }
+        final IndexCache indexCache,
+                + ", max checkpoints behind: "
+        final ActionListener<Releasable> wrappedListener = ActionListener.wrap(r -> {
+                    for (int i = 0; i < batches; i++) {
+     * Also see {@link #getLocalCheckpoint()}.
+                );
+                } catch (Exception e) {
+                    // Since the translog does not change at this time, it is safe to re-partition the translog snapshot here.
+                // delete any other commits, we want to start the engine only from a new commit made with the downloaded infos bytes.
+        long timeNS = System.nanoTime();
+             * while the global checkpoint update may have emanated from the primary when we were in that state, we could subsequently move
+            assert (state() != IndexShardState.POST_RECOVERY && state() != IndexShardState.STARTED)
+        }
+                            UploadedSegmentMetadata meta = uploadedSegments.get(file);
+        try {
+     * <p>
+        verifyNotClosed();
+                    shardRouting.state()
+                        );
+                final Translog.Index index = (Translog.Index) operation;
+    }
+            if (indexSettings.isPluggableDataFormatEnabled()) {
+                final IndexMetadata indexMetadata = indexSettings().getIndexMetadata();
+        maybeCheckIndex();
+     * ActionListener will then be called using the provided executor.
+    public void deleteRemoteStoreContents() throws IOException {
+                System.nanoTime(),
+     * @return the replication group
+        }
+                    "wrapped directory reader doesn't delegate IndexReader#getCoreCacheKey,"
+        // If a translog op is replayed on the primary (eg. ccr), we need to use external instead of null for its version type.
+    private final TranslogConfig translogConfig;
+    }
+        return fileDownloader;
+                        @Override
+            versionType,
+    }
+            .entrySet()
+                    failShard("Local copy of segment " + file + " has a different checksum than the version in remote store", null);
+    public boolean isSyncNeeded() {
+     * Returns the global checkpoint for the shard.
+        final Path translogLocation = shardPath().resolveTranslog();
+            onNewEngine(newEngineReference.get());
+                } else {
+            }
+    private final GlobalCheckpointListeners globalCheckpointListeners;
+                    } catch (IOException exc) {
+            return new BufferedAsyncIOProcessor<>(logger, 102400, threadContext, threadPool, bufferIntervalSupplier) {
+        }
+            seqNo,
+        assert versionType.validateVersionForWrites(version);
+     */
+     * USE THIS METHOD WITH CARE!
+        return replicationTracker.loadRetentionLeases(path.getShardStatePath());
+                + getRetentionLeases();
+        final CancellableThreads cancellableThreads = new CancellableThreads();
+     * to be corrupt inside its operations - rot that an intact footer cannot reveal - opening or replaying the translog
+     *
+                    storeDirectory.deleteFile(file);
+            allocationId = primaryContext.getRoutingTable().primaryShard().allocationId().getId();
+        }
+     * Returns true iff it is able to verify that remote segment store
+            + opPrimaryTerm
+     * primary shard calculates which leases are expired, and if any have expired, syncs the retention leases to any replicas. If the
+        assert routingEntry().recoverySource().getType() == RecoverySource.Type.PEER : "not a peer recovery [" + routingEntry() + "]";
+            synchronized (mutex) {
+                break;
+    }
+     * {@link #acquirePrimaryOperationPermit(ActionListener, String, Object)}). If the given primary term is lower than then one in
+    private final ShardEventListener shardEventListener = new ShardEventListener();
+    }
+                () -> IOUtils.close(
+                )
+        return replicationTracker.cloneLocalPeerRecoveryRetentionLease(nodeId, listener);
+            // Only execute if no other flush/roll is running to prevent concurrent flushes
+    /**
+        public CacheHelper getReaderCacheHelper() {
+                            + pendingPrimaryTerm
+        final Runnable onFileSync
+            throw new IndexShardRecoveryException(shardId, "Exception while copying segment files from remote segment store", e);
+                        assert pendingPrimaryTerm == newPrimaryTerm : "shard term changed on primary. expected ["
+            throw e;
+    public Function<String, Boolean> isShardOnRemoteEnabledNode = nodeId -> {
+        final DiscoveryNodes discoveryNodes,
+    private Engine.Result applyTranslogOperation(Indexer engine, Translog.Operation operation, Engine.Operation.Origin origin)
+                    assert currentRouting.primary() == false : "term is only increased as part of primary promotion";
+        String id
+            if (safeCommit.isPresent() == false) {
+    }
+            throw e;
+            isRetry,
+                    // mainly for MapperParsingException and Failure to detect xcontent
+     * <p>
+                            shardPath().resolveTranslog(),
+     */
+                synchronized (mutex) {
+        ensureWriteAllowed(origin);
+    final long getLastSearcherAccess() {
+                changeState(IndexShardState.STARTED, "global state is [" + newRouting.state() + "]");
+        }
+                             */
+            remoteStore.decRef();
+            .filter(name -> name.contains("/") == false)
+        long ifPrimaryTerm
+            UNASSIGNED_SEQ_NO,
+                    IOUtils.close(
+                logger.trace(
+                @Override
+        final String executorOnDelay,
+            indexSettings.getRemoteStorePathStrategy(),
+import org.opensearch.index.fielddata.FieldDataStats;
+            throw new IllegalStateException("Can't wrap non opensearch directory reader");
+     * To be delegated to {@link ReplicationTracker} so that relevant remote store based
+            this.shardId,
+    /**
+        mergedSegmentPublisher.publish(this, computeMergeSegmentCheckpoint(segmentCommitInfo));
+    }
+            if (getIndexer() instanceof EngineBackedIndexer indexer && indexer.getEngine() instanceof NRTReplicationEngine nrtEngine) {
+     * Compute {@link MergedSegmentCheckpoint} from a SegmentCommitInfo.
+                }
+        Set<SegmentReplicationShardStats> stats = Set.of();
+                translogStats,
             }
         }
-
-        @Override
-        protected String getThreadPool() {
-            return ThreadPool.Names.FLUSH;
+            }
+        } catch (Exception e) {
+     * translog uploads.
+            return getIndexer().acquireSafeCatalogSnapshot();
+        assert remoteStore.directory() instanceof FilterDirectory : "Store.directory is not an instance of FilterDirectory";
+            } else if (segmentsNFile != null) {
+                l.onResponse(r);
+            getOperationPrimaryTerm()
+                                        );
+            return;
+                        // Translog Clean up
+     * Returns the primary term the index shard is supposed to be on. In case of primary promotion or when a replica learns about
+        } catch (Exception e) {
+        getRemoteDirectory().delete();
+    ) throws IOException {
         }
-
-        @Override
-        public String toString() {
-            return "shard_periodic_flush";
-        }
+     */
+     * time1 | _1.si, _2.si, _3.si               |
+                }
+        long timestamp
     }
-
-    public static <T> T applyOnEngine(Indexer indexer, Function<Engine, T> applier) {
-        if (indexer instanceof EngineBackedIndexer engine) {
-            return applier.apply(engine.getEngine());
+    /**
+        final Engine.Warmer warmer,
+     */
+    /**
+     * note that you should still call {@link #postRecovery(String)}.
+            getOperationPrimaryTerm(),
+import org.apache.lucene.index.SegmentCommitInfo;
+        IndexShardState.POST_RECOVERY,
+        final List<IndexingOperationListener> listeners,
+        index = indexingOperationListeners.preIndex(shardId, index);
+    /**
+    public void publishMergedSegment(SegmentCommitInfo segmentCommitInfo) throws IOException {
+                        + "shard "
+     */
+                public void afterRefresh(boolean didRefresh) {
+     * TODO: Mark this as deprecated once new searcher interface is integrated into the IndexShard
+    private void ensureWriteAllowed(Engine.Operation.Origin origin) throws IllegalIndexShardStateException {
+     * NOTE: returns null if engine is not yet started (e.g. recovery phase 1, copying over index files, is still running), or if engine is
+        synchronized (mutex) {
+                        // ignore if closed....
+     */
+        long ifSeqNo,
+        active.set(true);
+    RetentionLeaseSyncer getRetentionLeaseSyncer() {
+            indexShardOperationPermits.asyncBlockOperations(wrappedListener, timeout, timeUnit);
+    }
+    }
+                     * possible that this shard is being started. This can happen if:
+    public void updateGlobalCheckpointOnReplica(final long globalCheckpoint, final String reason) {
+        return new Engine.IndexResult(e, version);
+            public ParsedDocument newDeleteTombstoneDoc(String id, String routing) {
+        @Override
+            return getIndexer().getById(get, this::acquireSearcher);
+                            /* Rolling the translog generation is not strictly needed here (as we will never have collisions between
+            retentionLeaseSyncer.backgroundSync(
+        }
+        }
+        assert globalCheckpoint == getLastSyncedGlobalCheckpoint();
+            engineSearcher.getDirectoryReader()
+                final Indexer engine = getIndexer();
+import org.opensearch.repositories.Repository;
+                            startedShards.stream().filter((s) -> requiredShards.contains(s.shardId())).collect(Collectors.toList()),
+        } catch (IOException e) {
+     * @see #updateMaxUnsafeAutoIdTimestamp(long)
+import org.opensearch.index.translog.TranslogConfig;
+            getIndexer(),
+                || (shardRouting.isRelocationTarget() && recoveryState.getStage() != RecoveryState.Stage.FINALIZE));
+    /**
+     * or a primary-replica resync to force a replica to disable optimization for all append-only requests which are replicated via
+        }
+        assert routingEntry().primary() : "onMergesDrained should only be called on primary shards";
+            if (logger.isTraceEnabled()) {
+     *
+     * and the CLOSED transition are serialized by {@link #mutex}, then engine construction rechecks CLOSED under
+    /**
+                }
+                    }
+                maxBytesBehind
+    }
+     * must stay in the replication group even though its segments live in a remote store.
+    private final ReplicationTracker replicationTracker;
+    /**
+        // write the correct segments_N file. Falls back to the DFA catalog generation when
+    public void syncSegmentsFromRemoteSegmentStore(boolean overrideLocal) throws IOException {
+                if (sourceIndexService != null) {
+        verifyNotClosed();
+                        }
+    private void onNewEngine(Indexer newEngine) {
+            if (state != IndexShardState.RECOVERING) {
+            return translogRecoveryOperations;
+        PeerRecoveryTargetService recoveryTargetService,
+                    }
+        recoveryState.setStage(RecoveryState.Stage.INDEX);
+            indexShardOperationPermits.blockOperations(30, TimeUnit.MINUTES, () -> {
+        final Indexer engine = getIndexerOrNull();
+            // failed. The existing primary will continue to be the primary, so we need to allow the segments and translog
+    }
+     * @param referencedSegmentsCheckpoint primary referenced segments
+            // with the exception side effects of closing the shard. Since we don't have the shard, we
+                    try {
+            try {
+        Map<String, UploadedSegmentMetadata> uploadedSegments,
+            );
+        if (fenceOwnership == null) {
+                        replicationTracker.setOperationPrimaryTerm(newPrimaryTerm);
+        try {
+     * Begin a translog batch for the current thread on this shard's indexer. The caller (the primary bulk path) must
         } else {
-            throw new IllegalStateException("Cannot apply function on indexer " + indexer.getClass() + " directly on IndexShard");
+                            }
+                if (dfasd != null) {
+             * This can happen during recovery when the shard has started its engine but recovery is not finalized and is receiving global
+     * {@link ReplicationTracker#updateLocalCheckpoint(String, long)} for
+                            deleteTranslogFilesFromRemoteTranslog();
+        syncTranslogFilesFromGivenRemoteTranslog(
+                );
+    private final BiFunction<IndexSettings, ShardRouting, TranslogFactory> translogFactorySupplier;
+                                    if (state == IndexShardState.CLOSED) {
+     */
+    private void handlePullBasedIngestionWarmup(Indexer indexer) {
+    public void waitForRemoteStoreSync() throws IOException {
+            logger.error("skip local recovery as failed to find the safe commit", e);
+    }
+                    if (resyncStarted == false) {
+     *
+        replicationTracker.markAllocationIdAsInSync(allocationId, localCheckpoint);
+                    remoteSegmentMetadata.getSegmentInfosBytes(),
+    }
+            && indexSettings.isRemoteTranslogStoreEnabled() == false
+        this.checkpointPublisher = checkpointPublisher;
+        SetOnce<Indexer> newEngineReference = new SetOnce<>();
+import org.opensearch.common.CheckedConsumer;
+    /**
+    public void waitForRemoteStoreSync(Runnable onProgress) throws IOException {
+                        shardId().id(),
+    }
+            // in the in-sync set just yet but might be blocked on waiting for its persisted local checkpoint to catch up to
+     * called if recovery has to be restarted after network error / delay **
+                    return reader;
+                segmentMetadataMap,
+import org.opensearch.index.seqno.SequenceNumbers;
+            timestamp,
+            }
+        }
+     * @throws EngineException - When segment infos cannot be safely retrieved
+    }
+     * @return {@link ReplicationCheckpoint} Checkpoint computed from the infos.
+     * value (piggybacked in a replication request) that it receives from its primary before executing that replication request.
+    public int getActiveMergeCount() {
+     * @param allocationId  the allocation ID of the shard for which recovery was initiated
+             */
+ * The OpenSearch Contributors require contributions made to
+        if (engine == null) {
+                version,
+                releasablesOnHandoffFailures.add(getIndexer().translogManager().drainSync());
+                    updateReplicationCheckpoint();
+     * Async shard refresh task for running refreshes at shard level independently
+                store.commitSegmentInfos(infosSnapshot, processedLocalCheckpoint, processedLocalCheckpoint);
+    public void recoverFromStore(ActionListener<Boolean> listener) {
+                    try {
+            discardCorruptLocalRemoteTranslog(e);
+        if (reader == nonClosingReaderWrapper) {
+                || stats.stream()
+     * @return a list of describing each permit that wasn't released yet. The description consist of the debugInfo supplied
+    }
+    /**
+                assert callingThread == null : "beforeRefresh was called by "
+                engine.maybePruneDeletes(); // try to prune the deletes in the engine if we accumulated some
+            }
+        markSearcherAccessed();
+     */
+        }
+        final Object refreshMutex,
+     */
+import java.util.concurrent.ExecutorCompletionService;
+                getIndexer().config().getCodec().getName(),
+            case LOCAL_SHARDS:
+            this.recoveryState = recoveryState;
+                if (numShards == startedShards.size()) {
+            // Preserve that point-in-time copy; other remote recoveries perform the normal incremental reconciliation.
+        }
+                    globalCheckpoint
+        return shardMigrationState == REMOTE_MIGRATING_SEEDED;
+     * @return {@link MergedSegmentCheckpoint} Checkpoint computed from the segmentCommitInfo.
+                // delete any other commits, we want to start the engine only from a new commit made with the downloaded infos bytes.
+        if (currentRouting.active() == false && newRouting.active()) {
+            throw new AlreadyClosedException("engine is closed");
+                    Indexer newEngine = newEngineReference.get();
+     * @param globalCheckpoint           the global checkpoint associated with the request
+                try (GatedCloseable<CatalogSnapshot> catalogSnapshotRef = getCatalogSnapshot()) {
+     * Returns the current {@link RecoveryState} if this shard is recovering or has been recovering.
+            verifyNotClosed();
+    }
+            // that the return value is empty, and there will be no side effects.
+        final Indexer engine = getIndexerOrNull();
+                 * network operation. Doing this under the mutex can implicitly block the cluster state update thread on network operations.
+        assert Thread.holdsLock(mutex) == false : "snapshotting store metadata under mutex";
+            logger.trace("background syncing retention leases [{}] after expiration check", retentionLeases.v2());
+                        updateGlobalCheckpointOnReplica(globalCheckpoint, "operation");
+     */
+        assert assertPrimaryMode();
+            return getIndexer().index(index);
+     * Syncs the given location with the underlying storage unless already synced. This method might return immediately without
+        recoveryState.validateCurrentStage(RecoveryState.Stage.INDEX);
+        final Indexer engine = getIndexer();
+    }
+            }
+                    );
+    /**
+import org.opensearch.common.CheckedRunnable;
+        this.segmentReplicationStatsProvider = segmentReplicationStatsProvider;
+            if (replicationTracker.isPrimaryMode()) {
+    /**
+    public final boolean shouldProcessMergedSegmentCheckpoint(ReplicationCheckpoint requestCheckpoint) {
+    private boolean assertPrimaryMode() {
+                     * term is incremented.
+    public Engine.Result applyTranslogOperation(Translog.Operation operation, Engine.Operation.Origin origin) throws IOException {
+        this.requestCacheStats = new ShardRequestCache();
+            if (state == IndexShardState.CLOSED) {
+        assert Thread.holdsLock(refreshMutex);
+            isTimeSeriesDescSortOptimizationEnabled() ? DataStream.TIMESERIES_LEAF_SORTER : null, // DESC @timestamp default order for
+                    synchronized (engineMutex) {
+    private RemoteStoreFenceOwnership remoteStoreFenceOwnership() {
+            logger.trace("upgrade with {}", upgrade);
+import org.apache.lucene.index.FieldInfos;
+     * @return the previous shard state
+    public void syncTranslogFilesFromGivenRemoteTranslog(
+     */
+        // }
+     *
+    }
+        public ShardFailure(ShardRouting routing, String reason, @Nullable Exception cause) {
+            0,
+                    throw ExceptionsHelper.convertToRuntime(e);
+        NonClosingReaderWrapper nonClosingReaderWrapper = new NonClosingReaderWrapper(engineSearcher.getDirectoryReader());
+        // DFA warm primaries: skip postActivatePrimaryMode (no remote translog upload needed).
+                        engine.flushAndClose();
+        if (indexSettings.isAssignedOnRemoteNode()) {
+    /**
+    /**
+            int totalOperations = snapshot.totalOperations();
+     *
+        final CountDownLatch termUpdated = new CountDownLatch(1);
+    }
+                    /* Note that due to cluster state batching an initializing primary shard term can failed and re-assigned
+     *
+    public IndexEventListener getIndexEventListener() {
+            case NO_OP:
+    }
+        rd.getSegmentsUploadedToRemoteStore().forEach((key, value) -> {
+                if (state != IndexShardState.CLOSED) {
+            && latestReplicationCheckpoint.getSegmentsGen() == segmentsGen
+            }
+        // After each internal refresh, update the LuceneFieldTracker with merged FieldInfos from
+                    localDirectory.deleteFile(file);
+    /**
+        }
+            }
+                + getLocalCheckpoint()
+        return indexEventListener;
+        replicationTracker.removeRetentionLease(id, listener);
+        final Store store,
+        }
+            () -> refresh("too_many_listeners"),
+    }
+                        "%s operation primary term [%d] is too old (current [%d])",
+                    }
+                () -> replicationTracker.createMissingPeerRecoveryRetentionLeases(
+     * At time3, the primary shard merges _3.si and _4.si into segment _5.si. _5.si is pre-copied to the replica shard, which completed at time6.
+        final Indexer engine = getIndexerOrNull();
+            id,
+            logger.error("skip local recovery as no index commit found");
+        assert versionType.validateVersionForWrites(version);
+                    ChecksumIndexInput indexInput = new BufferedChecksumIndexInput(
+     *
+            .collect(java.util.stream.Collectors.toList());
+        return replicationTracker.assertRetentionLeasesPersisted(path.getShardStatePath());
+                : "routing is active, but local shard state isn't. routing: " + newRouting + ", local state: " + state;
+    public AsyncShardRefreshTask getRefreshTask() {
+        final long maxSeqNoOfUpdatesOrDeletes,
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                    result.getTerm(),
+            refreshListeners.addOrNotify(location, listener);
+        this.searchOperationListener = new SearchOperationListener.CompositeListener(searchListenersList, logger);
+        if (fenceOwnership == null) {
+        Translog.Location lastWriteLocation;
+    private final IndexShardOperationPermits indexShardOperationPermits;
+    public Engine.IndexResult applyIndexOperationOnReplica(
+import org.opensearch.index.translog.TranslogStats;
+        long maxBytes = stats.stream().mapToLong(SegmentReplicationShardStats::getBytesBehindCount).max().orElse(0);
+    /**
+        if (!indexSettings.isAssignedOnRemoteNode()) {
+import org.opensearch.core.index.Index;
+    public void acquireAllPrimaryOperationsPermits(final ActionListener<Releasable> onPermitAcquired, final TimeValue timeout) {
+            shardStateUpdated.countDown();
+        if (latestReplicationCheckpoint.getSegmentInfosVersion() == catalogSnapshot.getVersion()
+                    // if the shard is not in primary mode anymore (after primary relocation) we have to fail when any changes in shard
+     On source doc rep node,  It will be DOCREP_NON_MIGRATING.
+            // engineMutex to ensure snapshotStoreMetadata, acquireXXXCommit and close works.
+                        }
+                newRouting.primary(),
+    public Store store() {
+                    0,
+            : "not a snapshot recovery [" + routingEntry() + "]";
+        boolean isSearchIdle = isSearchIdle();
+            try {
+     * time3 | _1.si, _2.si, _3.si, _4.si, _5.si |
+                    } else {
+     *
+    /**
+                    globalCheckpoint
+        }
+            return GetResult.NOT_EXISTS;
+     * <p>
+            null,
+                useRetentionLeasesInPeerRecovery = true;
+     */
+            } else {
+                && engineBackedIndexer.getEngine() instanceof IngestionEngine ingestionEngine)) {
+        this.indexEventListener.indexShardStateChanged(this, previousState, newState, reason);
+     * without having to worry about the current state of the engine and concurrent flushes.
+                // translog restore point, or that primary could keep acknowledging writes landing after it. A primary
+            null
+            false,
+import java.util.function.Supplier;
+            this.logger = indexShard.logger;
+    }
+            }
+        return result;
+            }
+                 * have an extra operation.
+        return applyOnEngine(indexer, engine -> engine.acquireSearcher(source, scope, this::wrapSearcher));
+    ) {
+                                        logger.error(
+            id,
+         * since we use Engine#writeIndexingBuffer for this now.
+        // are uploaded to the remote segment store.
+        Indexer engine = getIndexerOrNull();
+        assert assertRemoteStoreFenceSealedBeforeRestore();
+     * The fence-ownership view of this shard's translog, or {@code null} when there is none to act on - either fencing
+                }
+    private final AtomicLong lastSearcherAccess = new AtomicLong();
+        return true;
+ * software distributed under the License is distributed on an
+                logger.trace("[translog] recover op {}", operation);
+            } catch (IOException ex) { // if this fails we are in deep shit - fail the request
+            }
+    private Engine.IndexResult applyIndexOperation(
+            indexSettings.getRemoteStorePathStrategy(),
+                        }
+import org.opensearch.indices.IndicesService;
+    }
+                throw new IllegalStateException(
+                    new SourceToParse(
+                }
+            + "] does not contain relocation target ["
+    // Only used for initializing segment replication CopyState
+        final long waitingForGlobalCheckpoint,
+        if (requirePrimaryTermUpdate(opPrimaryTerm, allowCombineOperationWithPrimaryTermUpdate)) {
+                        // indices as replica would only need to read translog in failover scenario and we always fetch data
+     * the state is CLOSED. Interrupts the hydrating thread, whose in-flight file write fails with
+import org.opensearch.cluster.routing.ShardRouting;
+                        e = new IndexNotFoundException(resizeSourceIndex);
+import java.util.concurrent.TimeUnit;
+    private TimeValue getRemoteTranslogUploadBufferInterval(Supplier<TimeValue> clusterRemoteTranslogBufferIntervalSupplier) {
+        final TranslogRecoveryRunner translogRunner = (snapshot) -> {
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+        Indexer engine = getIndexerOrNull();
+     * Acquire all replica operation permits whenever the shard is ready for indexing (see
+     *
+            );
+        } catch (Exception ex) {
+            private void innerFail(final Exception e) {
+                        + "result-seq# [{}] result-term [{}] failure [{}]",
+                    delete.version(),
+        final boolean force = request.force();
+            }
+                ActionListener.wrap(
+        return lastUploadedMetadata;
+            seqNo,
+    private RefreshListeners buildRefreshListeners() {
+        final RetentionLeaseSyncer retentionLeaseSyncer,
+                // lets skip this refresh since we are search idle and
+        return getIndexer().getMaxSeenAutoIdTimestamp();
+     * @throws TimeoutException if timed out waiting for in-flight operations to finish
+        @Nullable final SegmentReplicationCheckpointPublisher checkpointPublisher,
+        }
+            // we need to refresh again to expose all operations that were index until now. Otherwise
+     * Updates the global checkpoint on a replica shard after it has been updated by the primary.
+                    }
+                Engine.Operation.Origin.REPLICA,
+    Cleans up remote store and remote translog contents.
+        // which settings changes could possibly have happened, so here we forcefully push any config changes to the new engine.
+                    }
+     * @return the global checkpoint
+                        @Override
+ * this file be licensed under the Apache-2.0 license or a
+        if (IndexModule.INDEX_QUERY_CACHE_EVERYTHING_SETTING.get(settings)) {
+        }
+            final AsyncShardFlushTask current = periodicFlushTask;
+        this.checkIndexOnStartup = indexSettings.getValue(IndexSettings.INDEX_CHECK_ON_STARTUP);
+     */
+     * Get the local knowledge of the global checkpoints for all in-sync allocation IDs.
+                }
+    /**
+                                exception.addSuppressed(e);
+            listener -> asyncBlockOperations(listener, timeout.duration(), timeout.timeUnit())
+                        snapshot,
+                shardId,
+            default:
+    }
+            localDirectory.deleteFile(file);
+    }
+        verifyNotClosed();
+        return segment_n_uploaded.get();
+                    "Ignoring new replication checkpoint - Shard is already on checkpoint {} that is ahead of {}",
+            final Engine.Searcher newSearcher = readerWrapper == null ? searcher : wrapSearcher(searcher, readerWrapper);
+                    periodicFlushTask = null;
+     */
+            );
+                        recoveryState.getIndex().addFileDetail(file, uploadedSegments.get(file).getLength(), false);
+     * @param onFailure the callback on failure
+     * specify no timeout.
+    @Deprecated
+                }
+            }
+     * Get all retention leases tracked on this shard.
+        assert shardRouting.primary() : "acquireAllPrimaryOperationsPermits should only be called on primary shard: " + shardRouting;
+     * @return the minimum retained sequence number
+     * @return {@code true} if the engine should be flushed
+        try {
+            if (suppressed != null) {
+            forceRefreshes.close();
+        Logger logger,
+                // we set canHaveDuplicates to true all the time such that we de-optimze the translog case and ensure that all
+            }
+            synchronized (postRecoveryMutex) {
+     * acked-write-loss window.
+        final ShardRouting newRouting,
+import java.io.PrintStream;
+        }
+                final List<IndexShard> startedShards = new ArrayList<>();
+            // and before moving this shard to POST_RECOVERY state (i.e., allow to read from this shard).
+                break;
+     * gate on the index being tier-eligible before invoking. No-op when the shard's
+            logger.trace("refresh with source [{}]", source);
+        if (indexSettings.getIndexMetadata().useIngestionSource() == false
+    public void relocated(
+                        public void onFailure(final Exception e) {
+                // token until its next upload.
+        if (engine == null) {
+import org.opensearch.index.engine.RefreshFailedEngineException;
+        throw new IllegalStateException("Cannot request SegmentInfos directly on IndexShard");
+    }
+     * Updates retention leases on a replica.
+    private final AtomicBoolean flushOrRollRunning = new AtomicBoolean();
+        final EngineConfig config = newEngineConfig(globalCheckpointSupplier);
+                periodicFlushTask = created;
+                assert currentRouting.isRelocationTarget() == false
+                segmentCommitInfo.info.name
+     */
+            } else {
+     * @return the retention leases
+     * Fetch stats on segment replication.
+     * @see RecoveryTarget#indexTranslogOperations(List, int, long, long, RetentionLeases, long, ActionListener)
+    public boolean isPrimaryMode() {
+import org.opensearch.index.warmer.WarmerStats;
+     */
+     * </ul>
+            logger.trace("{} skip writing shard state, has been written before", shardId);
+     * @throws IllegalStateException if the sanity checks failed
+                boolean syncTranslog = (isRemoteTranslogEnabled() || this.isMigratingToRemote())
+                }
+        try {
+    private final MeanMetric refreshMetric = new MeanMetric();
+            return false;
+                    }
+        if (getReplicationTracker().isPrimaryMode()) {
+    /**
+     * Indices using Segment Replication will ignore search idle unless there are no replicas.
+     */
+import java.util.function.BiConsumer;
+                     */
+        // Build diagnostic message with per-replica details
+        } else {
+                public void onUse(Query query) {
+                    index.primaryTerm(),
+                + "as it starts using retention leases exclusively in peer recoveries",
+     * @param onPermitAcquired           the listener for permit acquisition
+        public final Exception cause;
+                    + Thread.currentThread().getName()
+    // Visible for testing
+                            // okay, the index was deleted
+                        out.println("checksum failed: " + entry.getKey());
+        // if (source.recover(this)) {
+                    // flushFirst is a no-op on read-only engines — no writer to flush.
+                seqNoStats,
+        remoteSegmentStoreDirectory.acquireLock(primaryTerm, generation, snapshotId);
+        final Object debugInfo
+                        index.id(),
+                globalCheckpointSyncer.run();
+        );
+                    if (file.startsWith(IndexFileNames.SEGMENTS)) {
+    /**
+     * remote source while migrating ({@link ShardMigrationState#REMOTE_MIGRATING_SEEDED}). Every decision that reads the
+                        shardStateUpdated.await();
+                        index.routing()
+            false,
+                                    engine.getProcessedLocalCheckpoint(),
+     * @param fromSeqNo         the from seq_no (inclusive) to read
+    public boolean assertRetentionLeasesPersisted() throws IOException {
+            }
+                        throw e;
+                        + "]";
+     */
+    }
+     * hydrating. {@code FenceSegmentFlow.tla} measures each gate: either one alone suffices to hold
+    }
+     * Fails OPEN - an unreadable fence reports "not superseded" - because that is the safe direction here: permitting
+                .recoverFromTranslog(translogRecoveryRunner, getIndexer().getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+    }
+    }
+        this.remoteStoreStatsTrackerFactory = remoteStoreStatsTrackerFactory;
+                storeDirectory = store.directory();
+@PublicApi(since = "1.0.0")
+import org.apache.lucene.search.Sort;
+     * @param request the flush request
+                            getIndexer(),
+                for (String file : storeDirectory.listAll()) {
+            @Override
+     * names, which only match {@link SegmentInfosCatalogSnapshot}.
+/*
+    public static Engine.Delete prepareDelete(
+                });
+            shardRouting.allocationId().getId(),
+    // Below methods exists for bwc only. We should never make indexshard aware of DataFormatAwareEngine directy.
+    public IndexShardState state() {
+            + " ] > shard term ["
+                        syncSegmentsFromRemoteSegmentStore(false);
+    public SeqNoStats seqNoStats() {
+        final Logger logger
+ *
+        // PendingReplicationActions is dependent on ReplicationGroup. Every time we expose ReplicationGroup,
+     *
+        RemoteStorePathStrategy remoteStorePathStrategy,
+import org.opensearch.index.VersionType;
+                && currentRouting.relocating()
+                    case FAILURE:
+    }
+        public void afterRefresh(boolean didRefresh) throws IOException {
+                // Outside of engine resets this method will be invoked during recovery so this is safe.
+            .limit(5)
+     * @param newState the new shard state
+     * @return - True if the shard is able to perform segment replication.
+        public final String reason;
+            .execute(
+    @Deprecated
+                    + "]";
+    private volatile AsyncShardRefreshTask refreshTask;
+        }
+            // to a listener before a refresh actually happened that contained that operation.
+    public IndexShardState markAsRecovering(String reason, RecoveryState recoveryState) throws IndexShardStartedException,
+        // policy matching the settings as they are now
+                protected void write(List<Tuple<Translog.Location, Consumer<Exception>>> candidates) throws IOException {
+     * Cleanup strategy:
+                        getOperationPrimaryTerm(),
+        replicationTracker.updateGlobalCheckpointOnReplica(globalCheckpoint, "read from translog checkpoint");
+                     */
+     *
+                // check if the persisted global checkpoint
+            public ParsedDocument newDeleteTombstoneDoc(String id) {
+import org.opensearch.indices.replication.checkpoint.SegmentReplicationCheckpointPublisher;
+        long ifPrimaryTerm,
+        this.shardMigrationState = getShardMigrationState(indexSettings, seedRemote);
+        assert assertPrimaryMode();
+        // Only need to get the file metadata information in segmentCommitInfo and reuse Store#getSegmentMetadataMap.
+                );
+                    indexShard.periodicFlushMetric.inc();
+    private Map<String, String> fetchUserData() throws IOException {
+                 */
+        String id,
+                result = applyDeleteOperation(
+    }
+    public boolean ignoreRecoveryAttempt() {
+     * <p>
+            case PEER:
+                    try {
+            result = indexer.index(index);
+                        if (shard.state() == IndexShardState.STARTED && requiredShards.contains(shard.shardId())) {
+     * Changes the state of the current shard
+     * @param allocationId    the allocation ID of the shard to mark as in-sync
+                final AsyncShardFlushTask created = new AsyncShardFlushTask(this, interval);
+    public String getHistoryUUID() {
+            }
+        DOCREP_NON_MIGRATING
+    /**
+            true,  // we need to flush at the end to make sure the upgrade is durable
+     * @param opPrimaryTerm              the operation primary term
+        return this.engineConfigFactory.newEngineConfig(
+        try {
+    public MapperService mapperService() {
+        final ShardRouting currentRouting;
+     * At time6, _5.si on the primary shard becomes searchable. The reference counts of _3.si and _4.si in the primary shard decreased to 0 and were deleted.
+        final Sort indexSort = indexSortSupplier.get();
+            return replicationTracker.addRetentionLease(id, actualRetainingSequenceNumber, source, listener);
+            shardId,
+                } catch (Exception inner) {
+            if (segment.getVersion() == null) continue; // DFAE segments have no Lucene version
+    /**
+            int batchSize = recoverySettings.getTranslogConcurrentRecoveryBatchSize();
+     */
+    }
+import org.opensearch.common.lucene.Lucene;
+         */
+                        throw new IOException("Failed to concurrent recovery translog", exception);
+                    )
+                    getIndexer().getClass()
+     * @param localCheckpoint the current local checkpoint on the shard
+    public void addPendingMergeSegmentCheckpoint(MergedSegmentCheckpoint mergedSegmentCheckpoint) {
+            }
+     *
+                throw new IllegalArgumentException(
+                    throw new OpenSearchException("Error Closing SegmentInfos Snapshot", e);
+            shardId,
+                    + " without a corresponding call to afterRefresh";
+    @Deprecated
+        return refreshTask;
+            return UNASSIGNED_SEQ_NO;
+        assert Thread.holdsLock(mutex);
+                        }
+            version,
+        CheckedConsumer<List<Tuple<Translog.Location, Consumer<Exception>>>, IOException> writeConsumer = candidates -> {
+        }
+     */
+            // our NonClosingReaderWrapper makes sure that our reader is not closed
+        @Override
+                // TODO: Don't enable this leniency unless users explicitly opt-in
+            assert newRouting.active() == false || state == IndexShardState.STARTED || state == IndexShardState.CLOSED
+ * Licensed to Elasticsearch under one or more contributor
+            return fenceOwnership.isRemoteStoreFenceSuperseded();
+        updatePeriodicFlushTask(true);
+        final long newPrimaryTerm,
+     * this copy stands down instead - a failure that has to remain fatal, since the target owns the chain now.
+        final long opPrimaryTerm,
+     * convenience for {@link #acquirePrimaryOperationPermit(ActionListener, String, Object)} where the listener equates to
+        final ShardRouting newRouting,
+            if (remoteStore != null) {
+    public Store.MetadataSnapshot snapshotStoreMetadata() throws IOException {
+                    @Override
+                                // force publish a checkpoint once in primary mode so that replicas not caught up to previous primary
+        final Engine.Result result;
+    private final Set<MergedSegmentCheckpoint> pendingMergedSegmentCheckpoints = Sets.newConcurrentHashSet();
+        if (engineOrNull != null) {
+        /* create engine config */
+        if (hydrateFromRemote) {
+    }
+        }
+        final Map<String, String> userData = fetchUserData();
+            && latestReplicationCheckpoint.getSegmentsGen() == segmentInfos.getGeneration()
+        // task continues to upload to remote store periodically.
+                    reclaimRemoteStoreFenceOwnership(e);
+    public boolean useRetentionLeasesInPeerRecovery() {
+                        routingEntry().allocationId(),
+        }
+     */
+                + " minutes"
+        FilterDirectory byteSizeCachingStoreDirectory = (FilterDirectory) remoteStoreDirectory.getDelegate();
+    /**
+        );
+        assert Objects.nonNull(refreshTask);
+        final ReplicationCheckpoint latestReplicationCheckpoint = getLatestReplicationCheckpoint();
+    }
+                        out.println("checksum passed: " + entry.getKey());
+                                    "Resetting engine on promotion of shard [{}] to primary, startTime {}\n",
+        org.apache.lucene.util.Version previousVersion = minimumCompatibleVersion();
+            IOUtils.rm(translogLocation);
+    public void deactivateThrottling() {
+import org.apache.lucene.search.QueryCachingPolicy;
+                + shardId
+        readAllowed();
+        final String source,
+            opPrimaryTerm,
+        }
+            shardRoutings.addAll(routingTable.assignedShards()); // include relocation targets
+                version,
+                                resetEngineToGlobalCheckpoint();
+            super(indexShard.logger, indexShard.threadPool, refreshInterval.get(), true, fixedRefreshIntervalSchedulingEnabled);
+     * Prepares a delete operation by creating an Engine.Delete operation.
+     * @return the new retention lease
+                    shardId,
+        long startTimeMs = System.currentTimeMillis();
+                    bumpPrimaryTerm(newPrimaryTerm, () -> {
+        try {
+                                resyncListener,
+        this.fixedRefreshIntervalSchedulingEnabled = fixedRefreshIntervalSchedulingEnabled;
+            UNASSIGNED_SEQ_NO,
+                storeDirectory,
+            }
+            }
+        return engineConfigFactory;
+        return (getReplicationTracker().isPrimaryMode() && state() == IndexShardState.STARTED);
+    public GatedCloseable<IndexCommit> acquireSafeIndexCommit() throws EngineException {
+            translogFactorySupplier.apply(indexSettings, shardRouting),
+    private <E extends Exception> void bumpPrimaryTerm(
+            // ignore
+    public void restoreFromRemoteStore(ActionListener<Boolean> listener) {
+            getIndexer().refresh("post_recovery");
+    public boolean shouldPeriodicallyFlush() {
+                public void close() throws IOException {
+                    assert newRouting.initializing() == false : "a started primary shard should never update its term; "
+            } catch (IOException ex) {
+        RemoteSegmentStoreDirectory remoteDirectory = getRemoteDirectory();
+            try {
+    public RecoveryStats recoveryStats() {
+     * remote store instead. This is what a recovery did unconditionally before local generations were reused; it is now
+                }
+                String segmentCommitInfoName = segmentCommitInfo.info.name;
+        RemoteSegmentStoreDirectory directory = getRemoteDirectory();
+     * code path reaching the remote translog without sealing fails loudly in tests rather than silently reopening the
+    public Engine.TranslogBatch beginTranslogBatch() {
+            ifPrimaryTerm
+    /**
+        verifyNotClosed(null);
+        listenersList.add(internalIndexingStats);
+                    origin
+        logger.trace("Downloading segments from remote segment store");
+                            replicationTracker.abortRelocationHandoff();
+        } else if (e instanceof RefreshFailedEngineException rfee) {
+                        @Override
+     */
+     * @return {@link Tuple} V1 - TimeValue in ms - mean replication lag for this primary to its entire group,
+            wrapPrimaryOperationPermitListener(onPermitAcquired),
+     */
+import org.opensearch.index.engine.SegmentsStats;
+    Runnable getGlobalCheckpointSyncer() {
+                + " Shard ["
+        Engine.Index operation;
+    // All interactions should happen via indexer only.
+    ) throws IOException {
+        final ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(
+                    remoteSegmentMetadata.getGeneration()
+            readerWrapper = reader -> {
+    /**
+            routing,
+    /**
+     * @param maxSeqNoOfUpdatesOrDeletes the max seq_no of updates (index operations overwrite Lucene) or deletes captured on the primary
+                    try (
+import org.opensearch.indices.recovery.RecoveryListener;
+     */
+     * during phase-1 peer recovery.
+            }
+                    + callingThread.getName()
+        if (state != IndexShardState.RECOVERING) {
+            () -> new ParameterizedMessage(
+import org.opensearch.common.lease.Releasable;
+    ) throws IOException {
+    }
+import org.opensearch.common.annotation.InternalApi;
+        // The refresh task is expected to be null at this point.
+                        }
+     * @see IndexShard#addShardFailureCallback(Consumer)
+        REMOTE_MIGRATING_UNSEEDED,
+                    index.getAutoGeneratedIdTimestamp(),
+                    boolean resyncStarted = primaryReplicaResyncInProgress.compareAndSet(false, true);
+        // primary term update. Since indexShardOperationPermits doesn't guarantee that async submissions are executed
+                    ),
+            default:
+        }
+     *
+                    } catch (IOException e) {
+            // set this last, once we finished updating all internal state.
+        }
+import org.opensearch.index.warmer.ShardIndexWarmerService;
+                                    assert resyncCompleted : "primary-replica resync finished but was not started";
+     * The receiving value is at least as high as the max_seq_no_of_updates on the primary was when any of the operations of that
+     * Build {@linkplain RefreshListeners} for this shard.
+        this.path = path;
+     * Creates a new history snapshot for reading operations since
+                        // we successfully installed the new engine so do not close it.
+        final Runnable performSegRep
+     * The translog is kept but its operations won't be replayed.
+        long ifSeqNo,
+                        final long checkpoint = Long.parseLong(
+                    }
+        @Nullable final DataFormatRegistry dataFormatRegistry
+    }
+                                + " are started yet, expected "
+                                );
+                    r -> {},
+     */
+                callingThread = null;
+        try {
+        final CheckedRunnable<E> onBlocked,
+            if (isSnapshotV2Restore()) {
+    /**
+        }
+                ? getMinRetainedSeqNo()
+    /**
+        } catch (NoSuchFileException | FileNotFoundException e) {
+                });
+                );
+    }
+     * Primary shards push out new segments only
+                autoGeneratedTimeStamp,
+            }
+                            periodicFlushMetric.inc();
+    }
+        this.globalCheckpointListeners = new GlobalCheckpointListeners(shardId, threadPool.scheduler(), logger);
+    public Translog.Snapshot newChangesSnapshot(
+    public boolean isTimeSeriesDescSortOptimizationEnabled() {
+                }
+            : globalCheckpoint;
+        } else {
+        return engine;
+     * time7 | _5.si                             | _3.si, _5.si
+                assert currentRouting.active() == false : "we are in POST_RECOVERY, but our shard routing is active " + currentRouting;
+                );
+                syncSegmentSuccess,
+                return noopDocumentMapper.createNoopTombstoneDoc(shardId.getIndexName(), reason);
+        final RemoteStoreStatsTrackerFactory remoteStoreStatsTrackerFactory,
+        }
+                threadPool.executor(ThreadPool.Names.FLUSH).execute(new AbstractRunnable() {
+        final long localCheckpoint = getLocalCheckpoint();
+        return checkpoint;
+    /**
+        this.refreshPendingLocationListener = new RefreshPendingLocationListener();
+            // if its post api allocation, the index should exists
+    private final SimilarityService similarityService;
+                        getOperationPrimaryTerm()
+                @Override
+import org.opensearch.cluster.metadata.MappingMetadata;
+import org.apache.lucene.index.IndexCommit;
+        }
+            }
+                )
+            // don't close here - mimic the MultiReader#doClose = false behavior that FilterDirectoryReader doesn't have
+    private void reclaimRemoteStoreFenceOwnership(Exception handoffFailure) {
+        private NonClosingReaderWrapper(DirectoryReader in) throws IOException {
+import org.opensearch.index.remote.RemoteSegmentStats;
+                Thread.currentThread().interrupt();
+    public void advanceMaxSeqNoOfUpdatesOrDeletes(long seqNo) {
+                    IOUtils.close(currentEngineReference.getAndSet(null));
+        assert assertReplicationTarget();
+        return pendingMergedSegmentCheckpoints;
+        if (hydration != null) {
+    public long getProcessedLocalCheckpoint() {
+                    // routing occur (e.g. due to recovery failure / cancellation). The reason is that at the moment we cannot safely
+        return indexCommit;
+        } catch (AlreadyClosedException ex) {
+    public ShardPath shardPath() {
+import org.opensearch.core.rest.RestStatus;
+        private final IndexShard indexShard;
+        assert bufferAsyncIoProcessor == false || Objects.nonNull(bufferIntervalSupplier)
+    }
+        }
+                IndexShardState.STARTED,
+            logger.debug(new ParameterizedMessage("failed to recover shard locally up to global checkpoint {}", globalCheckpoint), e);
+    public void acquireAllReplicaOperationsPermits(
+     * @param snapshotId Snapshot UUID.
+        int segmentUploadeCount = 0;
+     * Allows for the registration of listeners that are called when a change becomes visible for search.
+import org.opensearch.index.engine.EngineException;
+    public int getActiveOperationsCount() {
+    @Nullable
+        // We need to call RemoteSegmentStoreDirectory.init() in order to get latest metadata of the files that
+                        }
+    public long getMaxSeenAutoIdTimestamp() {
+        DocumentMapper mapper = mapperService.documentMapper();
+     * @param id       the identifier of the retention lease
+                getOperationPrimaryTerm(),
+        );
+     * {@link org.opensearch.storage.action.tiering.MergeDrainTimeoutException#MERGE_DRAIN_TIMEOUT_MARKER}.
+                    // Having a new primary term here means that the old primary failed and that there is a new primary, which again
+     */
+                // verifying that all files except EXCLUDE_FILES are uploaded to the remote
+import org.opensearch.index.translog.Translog;
+            } else {
+     */
+                        + pendingPrimaryTerm
+    }
+     */
+    /**
+        if (engine != null) {
+     * Acquires a point-in-time reader that can be used to create {@link Engine.Searcher}s on demand.
+        return new RefreshListeners(
+                logger.debug("check index [success]\n{}", os.bytes().utf8ToString());
+                    );
+                    getIndexer().config().getDocumentMapperForTypeSupplier().get().getDocumentMapper().root()::deriveSource
+            false
+    @InternalApi
+        ShardId shardId,
+                "operations only allowed when shard state is one of " + readAllowedStates.toString()
+            if (isSyncNeeded()) {
+                }
+     * @param timeout                    the maximum time to wait for the in-flight operations block
+            routing,
+                try (
+        ReplicationGroup replicationGroup = replicationTracker.getReplicationGroup();
+        );
+                             * If this shard was serving as a replica shard when another shard was promoted to primary then
+        final ShardRouting shardRouting,
+                logger.debug("failed to sync translog", ex);
+        indexShardOperationPermits.blockOperations(30, TimeUnit.MINUTES, () -> getIndexer().refreshPrimaryOperationPolicy());
+            throw new IndexShardClosedException(shardId(), "timed out waiting for relocation hand-off to complete");
+            this::getIndexer,
+        return getIndexer().translogManager().isTranslogSyncNeeded();
+        long globalCheckpoint,
+            ) {
+                    if (!didRefresh) return;
+     * a retry append-only (without timestamp) via recovery, then an original append-only (with timestamp) via replication.
+     */
+    }
+        long recoverUpto = this.isRemoteTranslogEnabled() || indexSettings().isSegRepEnabledOrRemoteNode()
+        return internalIndexingStats.stats(throttled, throttleTimeInMillis);
+                    threadPool
+                assert callingThread == Thread.currentThread() : "beforeRefreshed called by a different thread. current ["
+     * @return the active operation count, or {@link IndexShard#OPERATIONS_BLOCKED} when all permits are held.
+            remoteStorePathStrategy,
+        if (localTranslog) {
+                    e -> logger.warn(
+        final long time = System.nanoTime();
+import org.opensearch.common.util.io.IOUtils;
+        long version,
+            if (isTranslogBackedByRemoteStore() && shardRouting.primary()) {
+    public static <T> T applyOnEngine(Indexer indexer, Function<Engine, T> applier) {
+                        dfasd.registerDownloadedChecksums(fileToChecksum);
+                if (state == IndexShardState.STARTED) {
+        Set<String> toDownloadSegments = new HashSet<>();
+            && latestReplicationCheckpoint.getPrimaryTerm() == getOperationPrimaryTerm()) {
+    /**
+             * calculations of the global checkpoint. However, we can not assert that we are in the translog stage of recovery here as
+        Indexer engine = getIndexerOrNull();
+                reader,
+        assert assertPrimaryMode();
+        final IndexShardState state = this.state; // one time volatile read
+     */
+        }
+        // local checkpoint value.
+        this.pendingReplicationActions = new PendingReplicationActions(shardId, threadPool);
+        return applyDeleteOperation(
+        }
+            return;
+                        throw result.getFailure();
+                            l
+        if (currentState == IndexShardState.CLOSED) {
+        assert shardRouting.primary() : "only call isRelocatedPrimary on primary shard";
+            cachingPolicy = new QueryCachingPolicy() {
+     * Should be called for each no-op update operation to increment relevant statistics.
+                logger.trace("shard locally recovered up to {}", getIndexer().getSeqNoStats(globalCheckpoint));
+                pendingRefreshLocation.compareAndSet(location, null);
+    }
+    }
+        logger.debug("startRecovery type={}", recoveryState.getRecoverySource().getType());
+                );
+                    : "locally resetting without blocking operations, active operations are [" + getActiveOperations() + "]";
+                    true,
+                                }
+            // replicas
+     */
+    }
+                    );
+        final long globalCheckpoint,
+        try (Closeable ignore = acquireHistoryRetentionLock()) {
+    }
+        verifyActive();
+    AsyncShardFlushTask getPeriodicFlushTask() {
+                        releasable.close();
+            }
+    /**
+    }
+import org.opensearch.index.search.stats.SearchStats;
+                return Optional.empty();
+                        + newPrimaryTerm
+                        getIndexer(),
+        if (openSearchDirectoryReader == null) {
+        VersionType versionType,
+        return getIndexer().translogManager().newChangesSnapshot(startingSeqNo, endSeqNo, true);
+        internalRefreshListener.add(new RefreshMetricUpdater(refreshMetric));
+            onPermitAcquired,
+            if (checksum == localChecksum) {
+    }
+    /**
+        final String id,
+        if (state != IndexShardState.STARTED) {
+                innerOpenEngineAndTranslog(() -> globalCheckpoint);
+    }
+        String id,
+                    throw e;
+                final TimeValue previous = current.getInterval();
+    }
+        assert expireLeases == false || assertPrimaryMode();
+    public long getLocalCheckpoint() {
+    }
+    /**
+    }
+                }
+    /**
+        return new Engine.Index(
+    @Deprecated
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;
+            }
+    /**
+        }
+import org.apache.lucene.search.Query;
+            + " ] > shard term ["
+    public GetStats getStats() {
+            segmentInfos.add(segmentCommitInfo);
+        }
+                    Exception exception = null;
+            maybeCheckIndex();
+            if (reader.getReaderCacheHelper() != openSearchDirectoryReader.getReaderCacheHelper()) {
+                } catch (AlreadyClosedException ace) {
+                null,
+                    case MAPPING_UPDATE_REQUIRED:
+        Indexer indexer,
+        );
+     * calculation is not yet done and the cached replication group details are available
+        }, 30, TimeUnit.MINUTES);
+                    delete.id(),
+    }
+            }
+                e
+        } catch (Exception e) {
+    }
+                // A recovery hydrating this shard from the remote store runs outside engineMutex, so it did not hold
+                            replicationTracker.completeRelocationHandoff(); // make changes to primaryMode and relocated flag only under
+            // we're not yet ready fo ready for reads, just ignore refresh cycles
+        final ActionListener<Releasable> operationListener = ActionListener.delegateFailure(
+import static org.opensearch.index.seqno.SequenceNumbers.NO_OPS_PERFORMED;
+        throws IOException {
+import static org.opensearch.index.seqno.SequenceNumbers.MAX_SEQ_NO;
+     * so that the final bytes are produced at the point where the upload lock is held, using
+        if (indexSettings.isRemoteStoreFencingEnabled() == false) {
+     * @param listener the callback to fire when merges are drained
+        // acquire all permits. This will ensure that the remote store uploads can still be done by the existing primary shard.
+        long opPrimaryTerm,
+     */
+     * Called when the recovery process for a shard has opened the engine on the target shard. Ensures that the right data structures
+                    if (currentRouting.initializing() && currentRouting.isRelocationTarget() == false && newRouting.active()) {
+                    throw new IOException("Error occurred when downloading segments from remote store", e);
+        if (indexSettings.isSoftDeleteEnabled() == false) {
+    EngineConfigFactory getEngineConfigFactory() {
+    public Map<String, StoreFileMetadata> getSegmentMetadataMap() throws IOException {
+            opPrimaryTerm,
+        return cs -> getIndexer().serializeSnapshotToRemoteMetadata(cs);
+                            if (indexSettings.isSegRepEnabledOrRemoteNode()) {
+                if (origin == Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY && ExceptionsHelper.status(e) == RestStatus.BAD_REQUEST) {
+     * Starts the periodic flush task if {@code index.periodic_flush_interval} is enabled and the task is not already running.
+                // cause the next schedule to refresh.
+                    }
+            // Fail primary relocation source and target shards.
+                    // A primary must claim the fence before reading either remote flow. Peer-recovery relocation targets
+            Indexer engine = newEngineReference.get();
+         * If the cluster-manager cancelled recovery, the target will be removed and the recovery will be cancelled. However, it is still possible
+                // There is no point in waiting as shard is now closed .
+                        // TODO: add a dedicate recovery stats for the reset translog
+            // But the new primary is always updated with data in remote sore and is at par with old primary.
+                        return pendingLocation;
+    public void writeIndexingBuffer() {
+            + getHistoryUUID()
+                                + numShards
+import java.util.function.Consumer;
+        }
+     * @param overrideLocal flag to override local segment files with those in remote store
+    private void cancelRemoteStoreHydration(String reason) {
+        Engine engine = ((EngineBackedIndexer) indexer).getEngine();
+                        shardId.getIndexName(),
+        } catch (Exception e) {
+                || StreamSupport.stream(globalCheckpoints.values().spliterator(), false).anyMatch(v -> v < globalCheckpoint);
+        if (logger.isTraceEnabled()) {
+    public long recoverLocallyAndFetchStartSeqNo(boolean localTranslog) {
+    public RetentionLease addRetentionLease(
+            return getIndexer().delete(delete);
+                    if (newEngine == currentEngineReference.get()) {
+        // resolve context which isn't really dependent on the local shards and then async
+        VersionType versionType,
+            if (logger.isTraceEnabled()) {
+import org.opensearch.index.IndexModule;
+    }
+                        recoveryState,
+        // The below list of releasable ensures that if the relocation does not happen, we undo the activity of close and
+            super(indexShard.logger, indexShard.threadPool, interval, true);
+                + recoveryState.getRecoverySource();
+                    long commitGeneration = SegmentInfos.generationFromSegmentsFileName(segmentsNFile);
+            Store.MetadataSnapshot ms = store.getMetadata(wrappedCatalogSnapshot.get());
+            .externalTotalTimeInMillis(TimeUnit.NANOSECONDS.toMillis(externalRefreshMetric.sum()))
+        return getIndexer().getLastSyncedGlobalCheckpoint();
+    }
+                    () -> new ParameterizedMessage(
+        assert opPrimaryTerm <= getOperationPrimaryTerm() : "op term [ "
+                getIndexer().config().getCodec().getName(),
+        }
+        cleanupPendingMergedSegments(catalogSnapshot);
+    /**
+import org.opensearch.common.metrics.CounterMetric;
+                    if (shardState != IndexShardState.POST_RECOVERY && shardState != IndexShardState.STARTED) {
+        String id,
+            // ignore
+     * @throws IOException if exception occurs while reading segments from remote store.
+        return this.remoteStore;
+                final SegmentInfos infosSnapshot = store.buildSegmentInfos(
+    public void activateThrottling() {
+            }
+     */
+                    }
+     * @opensearch.api
+                                            resyncTimeout
+        return shardFieldData.stats(fields);
+        } finally {
+            assert shardRouting.primary() : "recover from local shards only makes sense if the shard is a primary shard";
+     */
+            }
+                        throw new IllegalStateException("cannot start resync while it's already in progress");
+                if (remoteStoreHydration.compareAndSet(null, cancellableThreads) == false) {
+    Blocks the calling thread,  waiting for the remote store to get synced till internal Remote Upload Timeout
+     *
+    public SegmentsStats segmentStats(boolean includeSegmentFileSizes, boolean includeUnloadedSegments) {
+                public GatedCloseable<CatalogSnapshot> acquireSafeCatalogSnapshot() {
+                long processedLocalCheckpoint = Long.parseLong(infosSnapshot.getUserData().get(LOCAL_CHECKPOINT_KEY));
+                    remoteSegmentMetadata.getGeneration()
+        } finally {
+        return engine.lastRefreshedCheckpoint();
+                                timer.stop();
+                             * on this shard was reset to the global checkpoint and the operations above the local checkpoint
+        } finally {
+                    logger.info("ignoring recovery of a corrupt translog entry", e);
+     * handoff.
+    }
+        long seqNo;
+            throw new IllegalIndexShardStateException(shardId, state, "snapshot is not allowed");
+        long version,
+            assert false : message;
+                }
+        logger.debug("state: [{}]->[{}], reason [{}]", state, newState, reason);
+            this::getOperationPrimaryTerm,
+    }
+                    indexShard.flushOrRollRunning.set(false);
+        return new RetentionLeaseStats(getRetentionLeases());
+            long startTime = System.currentTimeMillis();
+     * @throws IOException if replicas fail to sync within the timeout
+            ) ? ShardStateMetadata.IndexDataLocation.REMOTE : ShardStateMetadata.IndexDataLocation.LOCAL;
+        IndexShardState state = this.state; // one time volatile read
+    private boolean isRemoteStoreEnabled() {
+     * @param globalCheckpoint           the global checkpoint associated with the request
+    // for primaries, we only allow to write when actually started (so the cluster has decided we started)
+            try {
+import org.opensearch.index.translog.RemoteFsTranslog;
+            } catch (IOException e) {
+            throw e;
+                final SnapshotRecoverySource recoverySource = (SnapshotRecoverySource) recoveryState.getRecoverySource();
+    public void refreshPrimaryOperationPolicy() throws InterruptedException, TimeoutException {
+            );
+        }
+    ReplicationTracker getReplicationTracker() {
+        if (indexSettings().isRemoteTranslogBufferIntervalExplicit()) {
+        return replicationTracker.isRelocated();
+            );
+import static org.opensearch.index.seqno.SequenceNumbers.LOCAL_CHECKPOINT_KEY;
+    }
+                    "cleanup pending mergedSegmentCheckpoint={}, primary referencedSegmentsCheckpoint={}",
+    /**
+                    recoveryState.getTranslog().totalLocal(recoveredOps); // adjust the total local to reflect the actual count
+            final Directory storeDirectory;
+     * Invoked when a new engine is created. Subsequent changes to the setting are applied by {@link #updatePeriodicFlushTask(boolean)}.
+            snapshot = getSegmentInfosSnapshot();
+        RemoteStoreFenceOwnership fenceOwnership = remoteStoreFenceOwnership();
+            if (currentRouting == null) {
+                "translog recovery complete, isConcurrentRecovery {}, cost {}ms, totalRecovered {}",
+        } catch (Exception e) {
+    /**
+            } finally {
+        if (engine == null) {
+                throw closed;
+                shardId,
+                disableTranslogRetention ? TimeValue.MINUS_ONE : indexSettings.getTranslogRetentionAge(),
+     * Metrics updater for a refresh
+        return ActionListener.delegateFailure(listener, (l, r) -> {
         }
     }
-
+     * Returns whether any merges are queued but not yet started. Reports orthogonally from
+                translogConfig.setDownloadRemoteTranslogOnInit(downloadRemoteTranslogOnInit);
+     * chain's create-if-absent bootstrap; nothing beyond this index's own metadata and the translog repository is
+            @Override
+     * Checks if this target shard should start a round of segment replication.
+import org.opensearch.index.cache.IndexCache;
+     *
+    }
+    public final boolean hasRefreshPending() {
+                break;
+    }
+            success = true;
+        replicationTracker.persistRetentionLeases(path.getShardStatePath());
+    /**
+                    }
+     */
+     */
+                + getRecoverySettings().internalRemoteUploadTimeout().getMinutes()
+        final VersionType versionType = (origin == Engine.Operation.Origin.PRIMARY) ? VersionType.EXTERNAL : null;
+     */
+                state,
+                // The cluster will otherwise keep this copy as primary on the rethrown failure, and it would serve
+        List<IndexShard> localShards,
+            );
+            + opPrimaryTerm
+    private final ShardPath path;
+        this.pendingPrimaryTerm = primaryTerm;
+     * <p>
+            addRefreshListener(location, (b) -> {
+     * is a cache of that copy: a remote-store index, or a docrep index whose shard was seeded into the remote store by a
+            primaryTerm,
+        final TimeValue timeout
+            uid,
+     * enforced by the fence CAS once the target starts uploading.
+     * Whether a strictly higher primary term has taken the remote store fence, i.e. this copy has been superseded.
+    private void innerOpenEngineAndTranslog(LongSupplier globalCheckpointSupplier, boolean syncFromRemote) throws IOException {
+        logger.trace("Downloading segments from given remote segment store");
+                                + " found "
+        protected void runInternal() {
+            internalRefreshListener.add(new CheckpointRefreshListener(this, this.checkpointPublisher));
+                translogConfig.setDownloadRemoteTranslogOnInit(false);
+        verifyNotClosed();
+                throw new IllegalArgumentException(
+        try {
+                        combineWithAction.onResponse(releasable);
+    public CompletionStats completionStats(String... fields) {
+import java.util.concurrent.CountDownLatch;
+     * @throws IOException When there is an error computing segment metadata from the store.
+            for (Consumer<ShardFailure> listener : delegates) {
+                    long processedLocalCheckpoint = Long.parseLong(infosSnapshot.getUserData().get(LOCAL_CHECKPOINT_KEY));
+     * flush and close the returned batch on the same thread. Indexers that do not opt in return a no-op batch (the
+    private class RefreshPendingLocationListener implements ReferenceManager.RefreshListener {
+    /**
+        long ifPrimaryTerm,
+     *
+            forceMerge.flush(),
+    }
+                // We're only starting to track the replication checkpoint. The timers for replication are started when
+            throw new IllegalStateException("Index is not assigned on Remote Node");
+    }
+                    } else if (shardRouting.primary() == false && syncFromRemote) {
+     * @param indexer the indexer to check for warmup
+     * If the expire leases parameter is false, gets all retention leases tracked on this shard and otherwise first calculates
+        replicationTracker.updateGlobalCheckpointForShard(allocationId, globalCheckpoint);
+                    remoteStoreSettings.getSegmentsPathFixedPrefix(),
+    private Engine.IndexResult index(Indexer indexer, Engine.Index index) throws IOException {
+            : "expected empty set of retention leases with recovery source ["
+        @Override
+                }
+                System.currentTimeMillis() - startTime,
+    public ShardGetService getService() {
+            return new MergedSegmentCheckpoint(
+import org.opensearch.action.admin.indices.forcemerge.ForceMergeRequest;
+     */
+                        Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY,
+     */
+        };
+     * Updates the ingestion state based on the received index metadata.
+                }
+        long ifPrimaryTerm
+    }
+     * Returns true if this shards is search idle
+        public void beforeRefresh() throws IOException {
+            return;
+        try {
+        // This listener is used for the execution of the operation. If the operation requires all the permits for its
+        final boolean asyncDurability = indexSettings().getTranslogDurability() == Durability.ASYNC;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                    // Also closing refreshListeners to prevent us from accumulating any more listeners
+        return engine == null ? SafeCommitInfo.EMPTY : engine.getSafeCommitInfo();
+     */
+        store.incRef();
+        @Nullable String routing,
+                ifPrimaryTerm
+        Repository repository,
+     *
+            }
+    public void removeRetentionLease(final String id, final ActionListener<ReplicationResponse> listener) {
+     * unreadable fence reports "superseded", so the caller skips the deletion. A wrongly permitted delete is not
+            && (state() == IndexShardState.POST_RECOVERY && shardRouting.state() == ShardRoutingState.INITIALIZING) == false) {
+    }
+            listener.accept(false);
+        // but we need to make sure we don't loose deletes until we are done recovering
+            return false;
+        return version;
+            return ThreadPool.Names.FLUSH;
+        // with a proper recovery context object we can simply change this to:
+                shardId,
+import org.opensearch.common.Nullable;
+            logger.debug("failed to get ReplicationEngine", e);
+    // for tests
+     */
+    /**
+    }
+        try {
+            + ']';
+        }
+            throttled = false;
+     * @param source                  the source of the retention lease
+        }
+     * to operations. The shard will auto-correct its internal operation term, but this might take time.
+        // shard.
+            return;
+                        storeDirectory.openInput(segmentsNFile, IOContext.READONCE)
+            assert recoveryState.getRecoverySource().getType() == RecoverySource.Type.SNAPSHOT : "invalid recovery type: "
+        getIndexer().refreshPrimaryOperationPolicy();
+    }
+        // markAsRecovery("from " + source.getShortDescription(), recoveryState);
+        Indexer engineOrNull = getIndexerOrNull();
+            doc,
+    public final class AsyncShardRefreshTask extends AbstractAsyncTask {
+        final Engine.Warmer warmer = reader -> {
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+     */
+     */
+                synchronized (engineMutex) {
+        return false;
+    /**
+    private final MergedSegmentWarmerFactory mergedSegmentWarmerFactory;
+import org.opensearch.index.engine.EngineBackedIndexer;
+            }
+    public static Engine.Searcher wrapSearcher(
+    @Override
+            }
+        RemoteSegmentMetadata remoteSegmentMetadata = remoteDirectory.init();
+                    executeRecovery("from snapshot (remote)", recoveryState, recoveryListener, this::recoverFromStore);
+            // Refresh listener may fire while the engine is concurrently closing; ignore.
+            }
+     * Completes the relocation. Operations are blocked and current operations are drained before changing state to
+    /**
+            RemoteStoreUtils.isServerSideEncryptionEnabledIndex(indexSettings.getIndexMetadata())
+     *
+ * the Apache License, Version 2.0 (the "License"); you may
+                final int numShards;
+        evictStaleDownloadedChecksums(catalogSnapshot);
+     */
+    }
+        throw new IOException(
+import org.opensearch.common.util.BigArrays;
+            if (isSearchIdle) {
+    private ActionListener<Releasable> wrapPrimaryOperationPermitListener(final ActionListener<Releasable> listener) {
+                 * Additionally, a flush implicitly executes a translog generation roll so if we execute a flush then we do not need to
+            shardPath().resolveTranslog(),
+        // }
+            ifPrimaryTerm,
+            catalogSnapshot.getVersion(),
+    }
+        }
+        );
+        getIndexer().flush(force, waitIfOngoing);
+    }
+        engine.config().setEnableGcDeletes(true);
+        assert Thread.holdsLock(mutex) == false : "opening engine under mutex";
+            return newSafeCommit.get().localCheckpoint + 1;
+                    failShard("exception during primary term transition", e);
+    }
+            return;
+            ifSeqNo,
+    }
+     * Executes a scheduled refresh if necessary.
+                }
+                }
+    ) throws IOException {
+            assert currentEngineReference.get() == null : "engine is running";
+                        recoveryState.getTranslog()::incrementRecoveredOperations
+            }
+        DirectoryReader reader = readerWrapper.apply(nonClosingReaderWrapper);
+     * Upgrades the shard to the current version of Lucene and returns the minimum segment version
+                        throw new AlreadyClosedException("engine was closed");
+        } else if (indexSettings.isAssignedOnRemoteNode()) {
+    /**
+                + "]";
+                return;
+        }
+                            if (exception != null) {
+     * and {@code toSeqNo}(inclusive). The caller has to close the returned snapshot after finishing the reading.
+                        try {
+                        return null;
+                            rollTranslogGeneration();
+        RemoteSegmentStoreDirectory sourceRemoteDirectory,
+     *
+        int opsRecovered = 0;
+            }
+                @Override
+                    int totalRecovered = 0;
+                    try {
+import static org.opensearch.index.shard.IndexShard.ShardMigrationState.REMOTE_MIGRATING_UNSEEDED;
+            currentRouting = this.shardRouting;
+    }
+                        protected void doRun() throws IOException {
+        // segmentsFileName is not yet set.
+            .build();
+            this::getSafeCommitInfo,
+                        + "], new term ["
+     */
+     * After this call, no new merges can start and in-flight merges are drained.
+            throw ex;
+     * At time2, the primary shard generated _4.si, and _1.si, _2.si, _4.si were copied to the replica shard via segment replication, which completed at time5.
+                // ignore, we are being shutdown
+     */
+        return replicationGroup;
+    public SearchStats searchStats(String... groups) {
+     *                 <code>true</code> if the listener was registered to wait for a refresh.
+                if (engineAvailable == false) {
+        @Nullable String routing,
+                DataFormatAwareStoreDirectory dfasd = DataFormatAwareStoreDirectory.unwrap(localDirectory);
+            }
+                        } catch (final Exception inner) {
+        return remoteStoreStatsTrackerFactory;
+        // doRun() {
+                            throw new AlreadyClosedException("engine was closed");
+     * @return a {@link GatedCloseable} wrapping the catalog snapshot
+            verifyNotClosed();
+     *
+        protected String getThreadPool() {
+            return applier.apply(engine.getEngine());
+     * Claims the remote store fence for this copy at the current operation primary term. Must run before this copy
+    /**
+        }
+    private final AtomicBoolean active = new AtomicBoolean();
+    }
+        return getIndexer().getPrimaryOperationPolicy();
+        // The refresh task is expected to be non-null at this point.
+     *             {@code segments_N} disk read required to materialize an {@link IndexCommit}.
+     * ------------------------------------------------------------------------------
+    public boolean isRemoteSeeded() {
+                );
+        } catch (Exception e) {
+    public Engine.GetResult get(Engine.Get get) {
+                // the checkpoint is published. This is done so that the timers do not include the time spent by primary
+            getIndexer().finalizeReplication(catalogSnapshot);
+                () -> new ParameterizedMessage(
+                // Force a final, blocking translog upload to remote for ALL remote-backed indexes before draining
+        assert assertPrimaryMode();
+    private final Object refreshMutex;
+        final Settings settings = indexSettings.getSettings();
+                        + ", "
+                        // With Segment Replication enabled, we never want to reset a replica's engine unless
+     * Removes entries from {@code pendingMergedSegmentCheckpoints} whose segment names now appear
+                    requiredShards = IndexMetadata.selectRecoverFromShards(
+                    if (overrideLocal || localDirectoryContains(storeDirectory, file, checksum) == false) {
+        boolean forceExecution
+     * unreadable-fence event must never relax the publication gate and a collection gate at once, which is exactly
+                    || currentRouting.primary() == false
+                // docs to get indexed.
+        if (e instanceof AlreadyClosedException) {
+     * the primary in peer-recovery, before it replays remote translog operations from the primary. The receiving value is at least
+                true
+    }
+                    return ThreadPool.Names.TRANSLOG_SYNC;
+            logger.trace("force merge with {}", forceMerge);
+        getIndexer().verifyEngineBeforeIndexClosing();
+                throw new IllegalIndexShardStateException(
+        if (Booleans.isTrue(checkIndexOnStartup) || "checksum".equals(checkIndexOnStartup)) {
+            case REMOTE_STORE:
+        if (!Lucene.indexExists(store.directory())) {
+            if (overrideLocal) {
+    /**
+            if (key.startsWith("segments")) {
+        assert Thread.holdsLock(refreshMutex);
+                // don't necessarily need to refresh. the next searcher access will register a refreshListener and that will
+            }
+            }
+import org.opensearch.core.Assertions;
+        final ShardId shardId = newRouting.shardId();
+    public Store remoteStore() {
+    }
+     */
+     */
+                if (newPrimaryTerm == pendingPrimaryTerm) {
+        );
+        // we are the first primary, recover from the gateway
+     * If a {@link DataFormatAwareEngine} is present,
+                            flushOrRollRunning.compareAndSet(true, false);
+    /**
+            + getOperationPrimaryTerm()
+    }
+                return;
+                // Everything from here on - INCLUDING the ownership handover itself - must reclaim fence ownership if
+    /**
+                logger.trace(
+     * @param id                      the identifier of the retention lease
+            throw new OpenSearchException("Error computing replication checkpoint from CatalogSnapshot", e);
+            this.logger = indexShard.logger;
+            ifSeqNo,
+     * @throws InterruptedException if the calling thread is interrupted
+        }
+     * Since operations stored in soft-deletes do not have max_auto_id_timestamp, the primary has to propagate its max_auto_id_timestamp
+            version,
+                cancelRemoteStoreHydration(reason);
+            metadataMap
+     * @param executorOnDelay the executor to execute the runnable on if permit acquisition is blocked
+        }
+        this.discoveryNodes = discoveryNodes;
+                }
+import org.opensearch.index.remote.RemoteStoreUtils;
+                        recoveryState.getIndex().addFileDetail(file, uploadedSegments.get(file).getLength(), true);
+            throw new IllegalIndexShardStateException(
+                        mapperService.getLuceneFieldTracker().setFieldInfos(fieldInfos);
+        lastSearcherAccess.set(threadPool.relativeTimeInMillis());
+        return getIndexer().completionStats(fields);
+        try {
+     * have been set up locally to track local checkpoint information for the shard and that the shard is added to the replication group.
+    @Deprecated
+        final long maxSeqNoOfUpdatesOrDeletes,
+                }
+    public GatedCloseable<IndexCommit> acquireLastIndexCommit(boolean flushFirst) throws EngineException {
+                    remoteStoreSettings
+                    }
+            engineOrNull.onSettingsChanged(
+        protected DirectoryReader doWrapDirectoryReader(DirectoryReader in) throws IOException {
+    }
+    public RefreshStats refreshStats() {
+     *
+                final IndexService sourceIndexService = indicesService.indexService(resizeSourceIndex);
+                    + globalCheckpoint
+     * Acquire a replica operation permit whenever the shard is ready for indexing (see
+     * @return {@code true} if there is at least one shard pending in-sync, otherwise false
+    public RetentionLeases loadRetentionLeases() throws IOException {
+        );
+                if (syncTranslog) {
+                        );
+     * @return a tuple indicating whether or not any retention leases were expired, and the non-expired retention leases
+        return recoverySettings;
+     * @param reason           the reason the global checkpoint was updated
+                    origin,
+        assert shardRouting.initializing() : "can only start recovery on initializing shard";
+    /**
+                    recoveryTargetService.startRecovery(this, recoveryState.getSourceNode(), recoveryListener);
+            engineConfigFactory.newCodecServiceOrDefault(indexSettings, mapperService, logger, codecService),
+    public long getLastSyncedGlobalCheckpoint() {
+        IndexShardState.RECOVERING,
+                    result.getSeqNo(),
+        // DFA snapshots use the Lucene segments_N generation (parsed from segmentsFileName)
+     * Notifies the service to update the local checkpoint for the shard with the provided allocation ID. See
+     * then the listener will be notified immediately via an executor (so possibly not on the current thread). If the specified timeout
+    public RemoteStoreSettings getRemoteStoreSettings() {
+                        throw new IllegalStateException("failed to hand remote store fence ownership to " + targetAllocationId, e);
+        final Indexer engine = getIndexer();
+        final IndexShardState state = this.state; // one time volatile read
+    /**
+            if (pinnedTimestamp) {
+                                checkpointPublisher.publish(this, getLatestReplicationCheckpoint());
+    /** Only used for testing **/
+import org.opensearch.index.store.Store;
+                }
+            return indexShard.state != IndexShardState.CLOSED
+        Objects.requireNonNull(store, "Store must be provided to the index shard");
+import org.opensearch.indices.pollingingest.IngestionSettings;
+        return acquireSearcher(source, Engine.SearcherScope.EXTERNAL);
+            return UNASSIGNED_SEQ_NO;
+    /**
+                    threadPool
+            shardId
+    private final RefreshPendingLocationListener refreshPendingLocationListener;
+        });
+                        indexMetadata.getNumberOfShards()
+            ((RemoteBlobStoreInternalTranslogFactory) translogFactory).getRepository(),
+     * @opensearch.internal
+        protected void doClose() throws IOException {
+            return node.isRemoteTranslogStoreNode();
+        this.translogConfig = new TranslogConfig(shardId, shardPath().resolveTranslog(), indexSettings, bigArrays, nodeId, aId, seedRemote);
+        }
+     * Replica shards compute the seqNo from its latest processed checkpoint, which only increases when refreshing on new segments.
+     * Gates operations that mutate shared remote state without being on the acknowledgement path - publishing segment
+                segmentNames
+        // we allow snapshot on closed index shard, since we want to do one after we close the shard and before we close the engine
+        try {
+    private final MergedSegmentTransferTracker mergedSegmentTransferTracker;
+            + userData.get(Engine.HISTORY_UUID_KEY)
+            StoreRecovery storeRecovery = new StoreRecovery(shardId, logger);
+                    // deliberately skip the seal inside sealRemoteStoreFenceForRecovery.
+                        segmentCommitInfoName
+     * @param segmentInfos {@link SegmentInfos} infos to use to compute.
+     * The checkpoint is updated inside a refresh listener and may lag behind the SegmentInfos on the reader.
+        }
+            final long bytesStillToRecover = recoveryState == null ? -1L : recoveryState.getIndex().bytesStillToRecover();
+    }
+     * @param allocationId the allocation ID of the shard to update the local checkpoint for
+        StoreRecovery storeRecovery = new StoreRecovery(shardId, logger);
+     */
+            try {
+    }
+                    }
+            .setIsPaused(indexMetadata.getIngestionStatus().isPaused())
+     * V2 - Set of {@link SegmentReplicationShardStats} per shard in this primary's replication group.
+        });
+     * so restoring it from the remote store would discard a translog that is the only durable copy of those operations.
+            logger.trace("Attempting to perform segment replication when it is not enabled on the index");
+        assert assertPrimaryMode();
+                isRetry,
+            recoveryState.getTranslog().totalLocal(0);
+     */
+     * Explicitly freezes the engine for tiering. Closes the race window where the
+    }
+     * <p>
+                // relocation target must not seal: the source is still legitimately serving at the same term, and
+            safeCommit = store.findSafeIndexCommit(globalCheckpoint);
+    }
+    /**
+     */
+     * @param engineAvailable whether an engine exists (or is about to be published) for this shard
+        threadPool.generic().execute(new AbstractRunnable() {
+        return this.recoveryState;
+        return active.get();
+                            engine -> engine.acquireSearcher("lucene_field_count", Engine.SearcherScope.INTERNAL)
+                            }
+        ActionListener<Boolean> listener
+import org.opensearch.common.util.concurrent.AsyncIOProcessor;
+        Indexer engine = getIndexer();
+                snapshots.add(new LocalShardSnapshot(shard));
+    }
+        if (state != IndexShardState.RECOVERING) {
+        final IndexEventListener indexEventListener,
+            return engineSearcher;
+                                logger.warn("failed to roll translog generation", e);
+    /**
+                if (indexSettings.isSegRepEnabledOrRemoteNode()) {
+    }
+    public static final String REPLICA_SYNC_TIMEOUT_MARKER = "[REPLICA_SYNC_TIMEOUT]";
+import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
+                    }
+    private static class RefreshMetricUpdater implements ReferenceManager.RefreshListener {
+        }
+                return; // non-DFA index — no precomputed cache to evict from
+import static org.opensearch.index.translog.Translog.TRANSLOG_UUID_KEY;
+    public Sort getIndexSort() {
+            // This is really bad as ongoing replication operations are preventing this shard from completing relocation hand-off.
+                    bumpPrimaryTerm(opPrimaryTerm, () -> {
+    }
+                        index.id(),
+        syncTranslogFilesFromRemoteTranslog();
+                Engine.Operation.Origin.REPLICA,
+import org.opensearch.common.lucene.index.DerivedSourceDirectoryReader;
+                        );
+import org.opensearch.index.engine.PrimaryOperationPolicy;
+        final Indexer engine = getIndexer();
+     * a new set of segments.
+            versionType,
+    private final PendingReplicationActions pendingReplicationActions;
+                ingestionEngine.awaitWarmupComplete();
+        final RecoverySettings recoverySettings,
+     * Compute {@link ReferencedSegmentsCheckpoint} over the active catalog snapshot.
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+                // it fails: the cluster keeps this copy as primary on any failure and releases its upload drains
+                            // policy has to match the index settings as they are now so refresh the policy.
+     * @param consumer      a {@link Runnable} that is executed after performSegRep
+                        logger.debug("operation execution has been combined with primary term update");
+     */
+        }, e -> recoveryListener.onFailure(recoveryState, new RecoveryFailedException(recoveryState, null, e), true)), action));
+                 *
+ *
+                closed.addSuppressed(e);
+            assert reader != null;
+        }
+        /*
+            failure.addSuppressed(e);
+        getIndexer().translogManager().syncTranslog();
+     * segments before shard relocation begins.
+     *
+                        index.source(),
+     * a store reference keeps the shard path alive, and {@link #close} cancels the registered operation. Registration
+                && translogConcurrentRecoverySemaphore.tryAcquire(batches);
+        }
+    public RetentionLease addPeerRecoveryRetentionLease(
+    }
+                        }
+            }
+     * Marks the shard as recovering based on a recovery state, fails with exception is recovering is not allowed to be set.
+        return path;
+     *
+        return indexSortSupplier.get();
+     */
+                );
+                    for (IndexShard shard : sourceIndexService) {
+import java.util.function.BiFunction;
+            } else {
+            indexCache != null ? indexCache.query() : null,
+        return true;
+        verifyNotClosed();
+                        threadPool.executor(ThreadPool.Names.TRANSLOG_RECOVERY)
+                    || indexSettings.isWarmIndex() : "There should not be any segments file in the dir";
+                }
+                        engine,
+        assert newRouting != null : "newRouting must not be null";
+    }
+     * remote translog during recovery ({@link #hydrateFromRemoteStore}, {@link #resetEngineToGlobalCheckpoint}) and the
+        throw new IOException(
+            } else if (currentRouting.primary()
+     * Obtain the active operation count, or {@link IndexShard#OPERATIONS_BLOCKED} if all permits are held (even if there are
+                                // It is possible an engine can open with a SegmentInfos on a higher gen but the reader does not refresh to
+            this::enableUploadToRemoteTranslog,
+            final boolean downloadRemoteTranslogOnInit = translogConfig.downloadRemoteTranslogOnInit();
+    }
+    /*
+                failShard(reason, null);
+    private static final class NonClosingReaderWrapper extends FilterDirectoryReader {
+    public final boolean isSearchIdle() {
+     * Compute the latest {@link ReplicationCheckpoint} from a CatalogSnapshot.
+     * Snapshots the most recent safe index commit from the currently running engine.
+    private IndexShardState changeState(IndexShardState newState, String reason) {
+import java.util.HashMap;
+            rescheduleIfNecessary();
+import static org.opensearch.index.seqno.RetentionLeaseActions.RETAIN_ALL;
+ * SPDX-License-Identifier: Apache-2.0
+        replicationTracker.updateGlobalCheckpointOnReplica(globalCheckpoint, reason);
+            translogConfig.getNodeId(),
+                engineSearcher.getSimilarity(),
+     * Deliberately skipped for peer recovery: a primary relocation target recovers while the source is still serving at
+    public Durability getTranslogDurability() {
+                throw new OpenSearchException("Interrupted waiting for ingestion warmup", e);
+        return remoteStoreSettings;
+     * checkpoint followed by changing to writeable engine
+            return new NonClosingReaderWrapper(in);
+                updateReplicationCheckpoint();
+        }
+     * @param globalCheckpoint the global checkpoint
+        assert mergedSegmentPublisher != null;
+                    UNASSIGNED_SEQ_NO,
+        boolean seedRemote,
+    // ensure happens-before relation between addRefreshListener() and postRecovery()
+     */
+    public boolean hasPendingMerges() {
+     * acquires from there. Otherwise wraps the SegmentInfos into a {@link SegmentInfosCatalogSnapshot}.
+                recoveryListener.onDone(recoveryState);
+     *
+                );
+                result = markSeqNoAsNoop(engine, noOp.seqNo(), noOp.primaryTerm(), noOp.reason(), origin);
+        this.engineConfigFactory = Objects.requireNonNull(engineConfigFactory);
+    }
+            // we may not expose operations that were indexed with a refresh listener that was immediately
+        assert replicationTracker.isPrimaryMode() == false : "shard " + shardRouting + " in primary mode cannot be a replication target";
+                        recoveryState.getIndex().addFileDetail(file, uploadedSegments.get(file).getLength(), false);
+        long primaryTerm,
+     * gets a {@link Store.MetadataSnapshot} for the current directory. This method is safe to call in all lifecycle of the index shard,
+    }
+    /**
+     *
+                    final AbstractRunnable roll = new AbstractRunnable() {
+            + opPrimaryTerm
+     *                                   Otherwise the object isn't used
+                onSettingsChanged();
+                );
+    public RetentionLeaseStats getRetentionLeaseStats() {
+                        throw new IllegalArgumentException("unexpected mapping update: " + result.getRequiredMappingUpdate());
+                            /*
+    }
+     * @param catalogSnapshot {@link CatalogSnapshot} infos to use to compute.
+    void resetEngineToGlobalCheckpoint() throws IOException {
+        validateLocalRecoveryState();
+     * @throws org.apache.lucene.index.IndexNotFoundException     if no index is found in the current directory
+        IndexShardState previousState = state;
+        updatePeriodicFlushTask(engineOrNull != null);
+                    + "that is higher than its local checkpoint ["
+    private final Supplier<TimeValue> refreshInterval;
+    @Nullable
+        engine.translogManager().rollTranslogGeneration();
+                }
+        Engine.Operation.Origin origin,
+     * @param allocationId     the allocation ID to update the global checkpoint for
+     * skip the periodic publish-referenced-segments task entirely.</p>
+        verifyNotClosed();
+                                updateReplicationCheckpoint();
+        boolean isServerSideEncryptionEnabled
+        boolean success = false;
+     */
+                getIndexer().translogManager()
+    /**
+     * Registers a listener that fires when all in-flight merge operations have completed.
+                        throw new AlreadyClosedException("engine was closed");
+        this.threadPool = threadPool;
+        if (indexSettings.isSegRepEnabledOrRemoteNode() && !routingEntry().primary()) {
+     */
+                ifSeqNo,
+    }
+                final SegmentInfos infosSnapshot = store.buildSegmentInfos(
+     * @throws java.io.FileNotFoundException                      if one or more files referenced by a commit are not present.
+    private final Object mutex = new Object();
+import java.util.List;
+     * @return true if segment checkpoint should be processed
+    }
+            return;
+                                        // ignore, shutting down
+        openEngineAndSkipTranslogRecovery(routingEntry().isSearchOnly());
+        }
+                    if (refreshListener instanceof ReleasableRetryableRefreshListener releasableListener) {
+    and seed the remote store afresh
+                            if (state != IndexShardState.CLOSED) {
+                    () -> {
+     * Used during tiering preparation to verify replicas are in sync after
+    }
+            id
+        final CircuitBreakerService circuitBreakerService,
+                for (ReferenceManager.RefreshListener refreshListener : internalRefreshListener) {
+            .externalTotal(externalRefreshMetric.count())
+            }
+    private boolean recoversTranslogFromPeer() {
+                Releasables.close(success, searcher);
+     * <p>
+                if (isReadAllowed() == false) {
+    }
+        RecoveryState recoveryState,
+    public String getDefaultCodecName() {
+    private void transferRemoteStoreFenceOwnership(String targetAllocationId) throws IOException {
+                // until its next upload lost the CAS - so fail it here instead of leaving it to discover that on the
+     * @throws IllegalArgumentException if the specified retention lease does not exist
+                luceneVersion = segment.getVersion();
     // Visible for testing
-    Object getEngineMutex() {
-        return engineMutex;
+            + getActiveOperations()
+            throw new IllegalIndexShardStateException(shardId, state, "operation only allowed when shard is active");
+                ),
+                        }
+     * @return the active merge count
+     *
+     * @param performSegRep a {@link Runnable} that is executed after operations are blocked
+        } catch (org.apache.lucene.index.IndexNotFoundException e) {
+import org.opensearch.core.common.unit.ByteSizeValue;
+     * Returns true if the current indexer is a replica engine that supports segment replication.
     }
-
-    // Below methods exists for bwc only. We should never make indexshard aware of DataFormatAwareEngine directy.
-    // All interactions should happen via indexer only.
-    @Deprecated
-    public DataFormatAwareEngine getCompositeEngine() {
-        throw new UnsupportedOperationException();
+                    } else {
+                    periodicFlushTask = null;
+            : "DirectoryReader must be an instance or OpenSearchDirectoryReader";
+            // async durability means that the local checkpoint might lag (as it is only advanced on fsync)
+    public FieldDataStats fieldDataStats(String... fields) {
+                        }
+        );
+     * as an update operation if it overwrites the existing documents in Lucene index with the same document id.
+            primaryTerm,
+     * Returns a reference-counted {@link CatalogSnapshot} for the current shard state.
+            this.indexShard = indexShard;
+     */
+    private static final EnumSet<IndexShardState> writeAllowedStates = EnumSet.of(
+        refreshTask = new AsyncShardRefreshTask(this);
+    private DocumentMapperForType docMapper() {
+        // we disable deletes since we allow for operations to be executed against the shard while recovering
+     * primary is not left fenced. If the target had already taken the fence up, the handoff effectively completed and
+     * opens the engine on top of the existing lucene engine and translog.
+     */
+        return acquireSearcherSupplier(Engine.SearcherScope.EXTERNAL);
+                    }, allowCombineOperationWithPrimaryTermUpdate ? operationListener : null);
+        recoveryState.setStage(RecoveryState.Stage.TRANSLOG);
+     * generation compared to the configured generation threshold size.
+     * previous primary that is still alive but no longer in the cluster's view cannot acknowledge writes landing after
+     * Creates a new {@link IndexCommit} snapshot from the currently running engine. All resources referenced by this
+        final Map<String, FormatChecksumStrategy> checksumStrategies,
+        lastSearcherAccess.lazySet(threadPool.relativeTimeInMillis());
+     * Failures here are logged and swallowed — cache eviction is optimization, not correctness.
+                    }
+    /**
+                shardId,
+                            // primary that has otherwise served traffic healthily for the full timeout is worse than keeping
+        this.translogFactorySupplier = translogFactorySupplier;
+                    throw new IOException("index check failure");
+            } catch (Exception e) {
+     * @throws IllegalIndexShardStateException if the shard is not relocating due to concurrent cancellation
+            indexSettings,
+                    public void onFailure(Exception e) {
+                // Ensures all in-flight remote store refreshes drain, before we perform the performSegRep.
+                        @Override
+            active.set(true);
     }
-
-    @Deprecated
-    public void setCompositeEngine(DataFormatAwareEngine unused) {
-        throw new UnsupportedOperationException();
+        long seqNo,
+    public void onMergesDrained(Runnable listener) {
+                    segmentNFile = file;
+            opPrimaryTerm,
+            logger.debug("File {} does not exist in local FS, downloading from remote store", file);
+        }
+            /*
     }
+     * checks does not fail during a cluster manager state update when the latest replication group
+        return applyIndexOperation(
+            assert safeCommit.get().localCheckpoint <= globalCheckpoint : safeCommit.get().localCheckpoint + " > " + globalCheckpoint;
+        boolean isRetry,
+        logger.trace("Recomputed ReplicationCheckpoint for shard {}", checkpoint);
+                    try {
+    ) throws IOException {
+                // physical verification only: verify all checksums for the latest commit
+                        advanceMaxSeqNoOfUpdatesOrDeletes(maxSeqNoOfUpdatesOrDeletes);
+        Repository repository = ((RemoteBlobStoreInternalTranslogFactory) translogFactory).getRepository();
+                                    assert resyncCompleted : "primary-replica resync finished but was not started";
+        final DocumentMapper noopDocumentMapper = mapperService != null
+        if (mapperService != null && indexSettings.isPluggableDataFormatEnabled() == false) {
+        }
+        try {
+                seqNo,
+     * (see {@link org.opensearch.indices.replication.MergedSegmentReplicationTarget}) produces checkpoints keyed by Lucene segment
+    }
+     * @param toSeqNo           the to seq_no (inclusive) to read
+                            throw new AlreadyClosedException("engine was closed");
+    /**
+     * @throws org.apache.lucene.index.IndexFormatTooOldException if the lucene index is too old to be opened.
+                return lastWriteLocation;
+        );
+        long autoGeneratedTimeStamp,
+                             * sequence numbers in a translog generation in a new primary as it takes the last known sequence number
+                    index.seqNo(),
+                } else if (shouldRollTranslogGeneration()) {
+                    logger.warn("check index [failure]\n{}", os.bytes().utf8ToString());
+        final long globalCheckpoint;
+     * {@link IllegalStateException}. If permit acquisition is delayed, the listener will be invoked on the executor with the specified
+        } catch (AlreadyClosedException e) {
+        if (stats.getMaxSeqNo() == stats.getGlobalCheckpoint() || asyncDurability) {
+        }
+    /**
+        Indexer engine = getIndexer();
+        }
+                    referencedSegmentsCheckpoint
+     * <p>The set of referenced segment names is derived from {@code .si} files present in the
+     * primary.
+    // in state RECOVERING or POST_RECOVERY.
+        }
+            if (success == false) {
+        // Populate remote_store stats only if the index is remote store backed
+    ) {
+                }
+     * Fetch the latest checkpoint that has been processed but not necessarily persisted.
+                        protected void doRun() throws Exception {
+                    logger.warn("Failed to perform engine refresh", e);
+            RemoteSegmentStoreDirectory directory = getRemoteDirectory();
+    /**
+            cachingPolicy = new IndicesQueryCache.OpenseachUsageTrackingQueryCachingPolicy(clusterApplierService.clusterSettings());
+     * @param allocationId     the allocation ID to update the global checkpoint for
+                    : "in-flight operations in progress while moving shard state to relocated";
+        long version,
+     * @throws IOException if exception occurs while reading segments from remote store
+        }
+    private final MeanMetric flushMetric = new MeanMetric();
+     *
+            // For remote backed indexes, old primary may not have updated value of local checkpoint of new primary.
+     * @param overrideLocal flag to override local segment files with those in remote store.
+                            opPrimaryTerm,
+                final TranslogRecoveryRunner translogRecoveryRunner = (snapshot) -> {
+import org.opensearch.action.support.replication.ReplicationResponse;
+     */
 }
+     * Whether this shard rebuilds its translog from the primary instead of from a remote store. This is the case for a
+                return curr;
+     * @param source            the source of the request
+            return false;
+            if (state != IndexShardState.CLOSED) {
+        if (state == IndexShardState.STARTED || state == IndexShardState.CLOSED) {
+            return applyOnEngine(getIndexer(), engine -> engine.acquireLastIndexCommit(flushFirst));
+        asyncBlockOperations(wrapPrimaryOperationPermitListener(onPermitAcquired), timeout.duration(), timeout.timeUnit());
+     *    or the primary terms are identical but the segmentInfosVersion of the primary shard is greater than the segmentInfosVersion
+        try {
+    }
+            throw new IllegalIndexShardStateException(shardId, state, "snapshot is not allowed");
+    }
+            // we close the reader to make sure wrappers can release resources if needed....
+                        "RemoteSegmentStoreSyncStatus localSize={} remoteSize={}",
+        final Indexer engine = getIndexerOrNull();
+        final SeqNoStats seqNoStats = seqNoStats();
+        verifyNotClosed();
+            version,
+     *
+     * Compute the latest {@link ReplicationCheckpoint} from a SegmentInfos.
+    /**
+     * This checks if we are in state to upload to remote store. Until the cluster-manager informs the shard through
+                        exc.printStackTrace(out);
+    IndexerFactory getIndexerFactory() {
+    ) throws IOException {
+     * Return the sort order of this index, or null if the index has no sort.
+import org.apache.lucene.search.ReferenceManager;
+            );
+        synchronized (mutex) {
+        markSearcherAccessed();
+    }
+        return segmentNFile;
+        }
+            return indexSettings().getRemoteTranslogUploadBufferInterval();
+     * cluster state with HOT_TO_WARM hasn't propagated to this data node yet.
+            discardCorruptLocalRemoteTranslog(e);
+                                }
+     * If merges are already drained (none active, none pending), fires the listener
+     * @param executorOnDelay            the name of the executor to invoke the listener on if permit acquisition is delayed
+        Map<String, UploadedSegmentMetadata> uploadedSegments = remoteDirectory.getSegmentsUploadedToRemoteStore()
+    private final ShardFieldData shardFieldData;
+    /**
+                        refreshTask,
+import org.opensearch.common.annotation.PublicApi;
+import org.opensearch.action.admin.indices.streamingingestion.state.ShardIngestionState;
+     * Since the remote store holds an intact copy, delete the local directory so that the next attempt starts from the
+     */
+        recoveryState.setStage(RecoveryState.Stage.VERIFY_INDEX);
+     *
+        }
+        @Override
+        // we just want to upgrade the segments, not actually forge merge to a single segment
+     * Re-resolves this shard's primary operation policy against the current index settings, blocking
+            globalCheckpoint = Translog.readGlobalCheckpoint(translogConfig.getTranslogPath(), translogUUID);
+     */
+                    localCheckpoint,
+            }
+    /**
+            }
+            true,
+        }
+        waitForRemoteStoreSync(() -> {});
+                                threadPool,
+ * An OpenSearch index shard
+    }
+        refreshListeners.setCurrentRefreshLocationSupplier(newEngine.translogManager()::getTranslogLastWriteLocation);
+                    failShard("corrupted preexisting index", e);
+                        if (getIndexer() instanceof DataFormatAwareReadOnlyEngine == false) {
+            final boolean disableTranslogRetention = indexSettings.isSoftDeleteEnabled() && useRetentionLeasesInPeerRecovery;
+        }
+        try (IndexInput indexInput = localDirectory.openInput(file, IOContext.READONCE)) {
+        // If the index is remote store backed, then search idle is not supported. This is to ensure that async
+    private final CodecService codecService;
+                            // DFA warm primaries: activate primary mode (needed for initiateTracking
+        }
+        newEngineReference.get().refresh("reset_engine");
+     * @return a sequence number that an operation-based peer recovery can start with.
+                             * translog generations.
+    ) throws IOException {
+            syncSegmentSuccess = true;
+        ensureSoftDeletesEnabled("retention leases");
+        this.refreshMutex = Objects.requireNonNull(refreshMutex);
+                        Engine.Searcher searcher = applyOnEngine(
+                    final String repo = recoverySource.snapshot().getRepository();
+            return "shard_periodic_flush";
+            throw new IllegalIndexShardStateException(
+            try {
+                startRefreshTask();
+     * Simple struct encapsulating a shard failure
+                    executeRecovery(
+        // of truth for translog, we play all translogs that exists locally. Otherwise, the recoverUpto happens upto global checkpoint.
+        final boolean allowCombineOperationWithPrimaryTermUpdate,
+                        flush(new FlushRequest().waitIfOngoing(false).force(false));
+        }
+        assert assertPrimaryMode();
+            return false;
+                    // reactivate primary mode without risking two active primaries.
+    public static Engine.Index prepareIndex(
+    /**
+    public boolean isReadAllowed() {
+import org.opensearch.index.store.RemoteSegmentStoreDirectory.UploadedSegmentMetadata;
+     * @return {@link ReplicationCheckpoint} - The most recently computed ReplicationCheckpoint.
+        String id,
+                // never took over, and a failed one stands this copy down instead of letting it serve on a stale
+                                resyncTimeout,
+            final ShardStateMetadata newShardStateMetadata = new ShardStateMetadata(
+            logger.warn("Exception while reading checksum of file: {}, this can happen if file is corrupted", file);
+            });
+    private void sealRemoteStoreFence() throws IOException {
+            + "]";
+     */
+        indexShardOperationPermits = new IndexShardOperationPermits(shardId, threadPool);
+        pendingMergedSegmentCheckpoints.add(mergedSegmentCheckpoint);
+        final Directory remoteDirectory = byteSizeCachingStoreDirectory.getDelegate();
+            }
+                }
+ * You may obtain a copy of the License at
+        Repository repository,
+        );
+                    assert Thread.holdsLock(engineMutex);
+    }
+    public boolean isReplicationTarget() {
+                getIndexer().translogManager().syncTranslog();
+                store.markStoreCorrupted(e);
+        long autoGeneratedIdTimestamp,
+import java.util.concurrent.Semaphore;
+    /**
+    private static AsyncIOProcessor<Translog.Location> createTranslogSyncProcessor(
+                lastWriteLocation = getIndexer().translogManager().getTranslogLastWriteLocation();
+    }
+                logger.trace(
+            + routingEntry()
+        if (indexMetadata.useIngestionSource() == false) {
+        return getIndexer().newChangesSnapshot(reason, startingSeqNo, endSeqNo, true, accurateCount);
+    public boolean hasCompleteHistoryOperations(String reason, long startingSeqNo) {
+    }
+            ? Long.MAX_VALUE
+            throw new OpenSearchException("get-by-id failed for id [" + get.id() + "]", e);
+        getIndexer().advanceMaxSeqNoOfUpdatesOrDeletes(seqNo);
+     * is enforced by the fence CAS once the target starts uploading. Asserted at the read choke point so that any new
+                    assert getOperationPrimaryTerm() <= pendingPrimaryTerm;
+        }
+        logger.debug("state: [CREATED]");
+    public RemoteSegmentStoreDirectory getRemoteDirectory() {
+                    } catch (InterruptedException ie) {
+                Thread.sleep(500);
+    private void ensurePeerRecoveryRetentionLeasesExist() {
+        return this.currentEngineReference.get();
+        return translogConfig.getNodeId();
+import org.opensearch.indices.recovery.PeerRecoveryTargetService;
+        @Override
+        if (indexSettings.isSegRepEnabledOrRemoteNode()) {
+        try {
+                    }
+        logger.warn(
+            if (curr == null || curr.compareTo(lastWriteLocation) <= 0) {
+                 * We should not invoke the runnable under the mutex as the expected implementation is to handoff the primary context via a
+        SourceToParse sourceToParse,
+                    if (file.startsWith(IndexFileNames.SEGMENTS)) {
+     */
+    private boolean assertSequenceNumbersInCommit() throws IOException {
+        return false;
+            return Optional.empty();
+    @Override
+                translogRecoveryOperations = runTranslogRecovery(
+                    if (numShards == -1) {
+                        final long currentGlobalCheckpoint = getLastKnownGlobalCheckpoint();
+        final Indexer engine = getIndexerOrNull();
+                        final Indexer ref = newEngineReference.get();
+        assert getActiveOperationsCount() == OPERATIONS_BLOCKED : "resetting engine without blocking operations; active operations are ["
+        );
+     * Returns whether the shard is a relocated primary, i.e. not in charge anymore of replicating changes (see {@link ReplicationTracker}).
+    }
+                null,
+            return store.stats(bytesStillToRecover == -1 ? StoreStats.UNKNOWN_RESERVED_BYTES : bytesStillToRecover);
+                snapshot,
+import org.opensearch.ExceptionsHelper;
+    /*
+            clusterApplierService,
+     * @deprecated Use {@link #applyDeleteOperationOnPrimary(long, String, String, VersionType, long, long)} instead.
+import org.opensearch.action.admin.indices.flush.FlushRequest;
+     * or the sequence number from {@link #advanceMaxSeqNoOfUpdatesOrDeletes(long)}. An index request is considered
+            logger.warn("Could not determine whether the remote store fence was superseded; proceeding", e);
+        TranslogStats translogStats = getIndexer().translogManager().getTranslogStats();
+        return mapperService.documentMapperWithAutoCreate();
+     *
+        } catch (IOException e) {
+            shouldSeedRemoteStore(),
+    ) {
+                @Override
+        try (Closeable ignore = acquireHistoryRetentionLock()) {
+     * @return           number of history operations in the sequence number range
+        final boolean hydrateFromRemote = (indexSettings.isRemoteStoreEnabled() || this.isRemoteSeeded())
+                                assert newRouting.primary() && currentRouting.primary() == false;
+    public void trimOperationOfPreviousPrimaryTerms(long aboveSeqNo) {
+            remoteStoreSettings,
+                }
+                    + localCheckpoint
+                translogRecoveryStats::incrementRecoveredOperations
+     * ------------------------------------------------------------------------------
+            store.decRef();
+    }
+        if (isTranslogBackedByRemoteStore() == false || ExceptionsHelper.unwrap(failure, TranslogCorruptedException.class) == null) {
+    void openEngineAndSkipTranslogRecovery(boolean syncFromRemote) throws IOException {
+            SegmentInfos segmentInfos = new SegmentInfos(Version.LATEST.major);
+            String segmentsNFile = copySegmentFiles(
+    }
+            if (syncNeeded && indexSettings.getIndexMetadata().getState() == IndexMetadata.State.OPEN) {
+                        if (state != IndexShardState.CLOSED) {
+        try {
+                            final TimeValue resyncTimeout = recoverySettings.getPrimaryResyncTimeout();
+    private Engine.NoOpResult noOp(Indexer engine, Engine.NoOp noOp) throws IOException {
+        assert indexSettings.isAssignedOnRemoteNode();
+            try {
+        };
+     */
+        onSettingsChanged();
+    }
+        }
+import org.opensearch.index.seqno.RetentionLease;
+        return (threadPool.relativeTimeInMillis() - lastSearcherAccess.get()) >= indexSettings.getSearchIdleAfter().getMillis();
+                                    (snapshot) -> runTranslogRecovery(engine, snapshot, Engine.Operation.Origin.LOCAL_RESET, () -> {})
+                            // stuck forever. Trade-off: because wrapWithTimeout shares one fire-once guard between the real
+    /**
+                () -> new ParameterizedMessage(
+    }
+import org.apache.lucene.index.DirectoryReader;
+        // call some external method with this pointer.
+        @Override
+    /**
+    }
+    }
+                logger.warn("{}; failing this copy", reason);
+                try {
+        if (indexSettings.isSegRepEnabledOrRemoteNode()) {
+            indexShard.scheduledRefresh();
+                                    }
+        assert indexSettings.isRemoteStoreEnabled() || this.isRemoteSeeded();
+        if (catalogSnapshot == null) {
+                    );
+     * {@link IllegalStateException}.
+            checksumStrategies
+                    if (allowCombineOperationWithPrimaryTermUpdate) {
+                        final long maxSeqNo = seqNoStats().getMaxSeqNo();
+import org.apache.lucene.index.SegmentInfos;
+        return prepareDelete(id, null, seqNo, primaryTerm, version, versionType, origin, ifSeqNo, ifPrimaryTerm);
+            // When the total totalOperations <= batchSize, there is no need to use concurrent execution.
+import org.opensearch.index.IndexNotFoundException;
+    private EngineConfig newEngineConfig(LongSupplier globalCheckpointSupplier) throws IOException {
+        long seqNo,
+                    localChecksum = CodecUtil.retrieveChecksum(indexInput);
+    /**
+            UNASSIGNED_SEQ_NO,
+                    )
+    private final ShardSearchStats searchStats = new ShardSearchStats();
+        try {
+    /**
+     * Removes an existing retention lease.
+    ReplicationCheckpoint computeReplicationCheckpoint(SegmentInfos segmentInfos) throws IOException {
+     * is in sync with local
+                    ActionListener.wrap(
+        final long opPrimaryTerm,
+     * @param primaryContext the sequence number context
+import org.opensearch.cluster.node.DiscoveryNodes;
+import org.opensearch.indices.replication.checkpoint.MergedSegmentPublisher;
+             * to recovery finalization, or even finished recovery before the update arrives here.
+        if (state == IndexShardState.STARTED || state == IndexShardState.CLOSED) {
+    }
+    public void syncTranslogFilesFromGivenRemoteTranslog(
+            replicationTracker.resetHasAllPeerRecoveryRetentionLeases();
+    private final ShardRequestCache requestCacheStats;
+            } catch (IOException e) {
+                opPrimaryTerm,
+        assert routingEntry().isSearchOnly() || routingEntry().recoverySource().getType() == RecoverySource.Type.SNAPSHOT
+        final ReplicationCheckpoint checkpoint = new ReplicationCheckpoint(
+    }
+        final IndexShardState currentState = this.state; // single volatile read
+                0,
+    private boolean requirePrimaryTermUpdate(final long opPrimaryTerm, final boolean allPermits) {
+                    markAsRecovering("from " + recoveryState.getSourceNode(), recoveryState);
+import org.opensearch.index.engine.DataFormatAwareEngine;
+            }
+            retentionLeaseSyncer.sync(
+                syncRemoteTranslogAndUpdateGlobalCheckpoint();
+import org.opensearch.action.admin.indices.upgrade.post.UpgradeRequest;
+            if (logger.isTraceEnabled()) {
+                throw new RecoveryFailedException(recoveryState, "check index failed", ex);
+         * We allow flushes while recovery since we allow operations to happen while recovering and we want to keep the translog under
+            logger.trace(
+     * @return true if segment reverse search optimization is enabled for time series based workload.
+        return applyDeleteOperation(
+    private final AtomicReference<Indexer> currentEngineReference = new AtomicReference<>();
+            return UNASSIGNED_SEQ_NO;
+        innerOpenEngineAndTranslog(globalCheckpointSupplier, true);
+     * The primary captures this value after executes a replication request, then transfers it to a replica before
+                // The target took the chain up, so the handoff effectively completed even though this copy saw it fail.
+     * {@link #assertRemoteStoreFenceSealedBeforeRestore()} to assert seal-before-restore ordering.
+        final Tuple<Boolean, RetentionLeases> retentionLeases = getRetentionLeases(true);
+            return;
+import org.apache.logging.log4j.message.ParameterizedMessage;
+        }
+    public CommitStats commitStats() {
+    public final boolean isSearchIdleSupported() {
+            throw new IllegalIndexShardStateException(shardId, state, "snapshot is not allowed");
+    public ReferencedSegmentsCheckpoint computeReferencedSegmentsCheckpoint() throws IOException {
+        VersionType versionType,
+        super(shardRouting.shardId(), indexSettings);
+        public final ShardRouting routing;
+                throw new IllegalStateException("No operation defined for [" + operation + "]");
+                if (current != null) {
+     * @return {@code true} if the current generation should be rolled to a new generation
+        private final MeanMetric refreshMetric;
+    int runTranslogRecovery(Indexer engine, Translog.Snapshot snapshot, Engine.Operation.Origin origin, Runnable onOperationRecovered)
+        final RemoteStoreSettings remoteStoreSettings,
+            }
+    public long getMaxSeqNoOfUpdatesOrDeletes() {
+    /**
+        }
+                    threadPool.executor(ThreadPool.Names.FLUSH).execute(roll);
+                    );
+        state = newState;
+        // if its post api allocation, the index should exists
+        return (opPrimaryTerm > pendingPrimaryTerm) || (allPermits && opPrimaryTerm > getOperationPrimaryTerm());
+import org.opensearch.index.engine.SafeCommitInfo;
+                return safeCommit.get().localCheckpoint + 1;
+            innerOpenEngineAndTranslog(replicationTracker, syncFromRemote);
+    /** returns true if the {@link IndexShardState} allows reading */
+            verifyNotClosed();
+        config.setEnableGcDeletes(false);
+            @Override
+            translogRecoveryStats.totalOperations(snapshot.totalOperations());
+    }
+import org.opensearch.indices.IndicesQueryCache;
+            final ShardFailure shardFailure = new ShardFailure(shardRouting, reason, failure);
+        long maxBehind = stats.stream().mapToLong(SegmentReplicationShardStats::getCheckpointsBehindCount).max().orElse(0);
+            try {
+    /**
+        this.discoveryNodes = discoveryNodes;
+    private void validateLocalRecoveryState() {
+        final ActionListener<Releasable> onPermitAcquired,
+    public long getNativeBytesUsed() {
+            // If shard already closed, return empty. The logic related to segment replication will not continue to execute after judging
+            translogConfig,
+                    // in the order submitted. We need to guard against another term bump
+            // we are the first primary, recover from the gateway
+            if (OpenSearchDirectoryReader.getOpenSearchDirectoryReader(reader) != openSearchDirectoryReader) {
+        }
+     */
+     * Update the local knowledge of the visible global checkpoint for the specified allocation ID.
+            public void onFailure(final Exception e) {
+     * 1. The current primary term of the primary shard is greater than the primary term when the pending merge segment was generated,
+                    // playing safe here and close the engine even if the above succeeds - close can be called multiple times
+    }
+        final RootObjectMapper.Builder noopRootMapper = new RootObjectMapper.Builder("__noop");
+    }
+    }
+        if (origin.isRecovery()) {
+        Indexer engine = getIndexerOrNull();
+     * @throws org.apache.lucene.index.IndexFormatTooNewException if the lucene index is too new to be opened.
+        final String executorOnDelay,
+        assert primaryContext.getCheckpointStates().containsKey(routingEntry().allocationId().getId()) : "primary context ["
+    }
+     * To guarantee the checkpoint is upto date with the latest on-reader infos, use `getLatestSegmentInfosAndCheckpoint` instead.
+        return new Tuple<>(new GatedCloseable<>(null, () -> {}), getLatestReplicationCheckpoint());
+                    requestCheckpoint
+        return shardMigrationState == REMOTE_MIGRATING_UNSEEDED;
+            repository,
+            return true;
+        getIndexer().translogManager().trimOperationsFromTranslog(getOperationPrimaryTerm(), aboveSeqNo);
+    }
+            version,
+        // only persist metadata if routing information that is persisted in shard state metadata actually changed
+                    );
+            + recoveryState.getRecoverySource();
+            "turn off the translog retention for the replication group {} "
+     * Returns the maximum sequence number of either update or delete operations have been processed in this shard
+                -1,
+    static ShardMigrationState getShardMigrationState(IndexSettings indexSettings, boolean shouldSeed) {
+    public void syncSegmentsFromGivenRemoteSegmentStore(
+            Engine.Operation.Origin.REPLICA
+     * Add a global checkpoint listener. If the global checkpoint is equal to or above the global checkpoint the listener is waiting for,
+        }
+                     * 1) Shard is post recovery and sends shard started to the cluster-manager
+        if (requestCheckpoint.isAheadOf(localCheckpoint) == false) {
+            throw new IndexShardNotRecoveringException(shardId, state);
+                () -> {}
+            final long globalCheckpoint = replicationTracker.getGlobalCheckpoint();
+                        updateGlobalCheckpointOnReplica(globalCheckpoint, "primary term transition");
+    private void markSearcherAccessed() {
+            } else if (interval.equals(current.getInterval()) == false) {
+    public IndexShard(
+     * This method should be called after acquiring the retention lock; See {@link #acquireHistoryRetentionLock()}
+     *
+        return true;
+        synchronized (engineMutex) {
+    public void afterWriteOperation() {
+            }
+        }
+     * A best effort to bring up this shard to the global checkpoint using the local translog before performing a peer recovery.
+            && !indexSettings.getIndexMetadata().useIngestionSource()) {
+                try {
+        return applyOnEngine(engine, eng -> eng.acquireSearcherSupplier(this::wrapSearcher, scope));
+            throw new IndexShardRecoveryException(shardId, "Exception while copying segment files from remote segment store", e);
+        });
+import org.apache.lucene.store.FilterDirectory;
+     */
+    private final Runnable globalCheckpointSyncer;
+        assert shardRouting.primary() : "recover from store only makes sense if the shard is a primary shard";
+        try {
+                    }
+    private final RemoteStoreFileDownloader fileDownloader;
+        final long opPrimaryTerm,
+                    "Trying to set a routing entry with a different allocation. Current " + currentRouting + ", new " + newRouting
+            throw e;
+            logger.warn("Could not determine whether the remote store fence was superseded; treating as superseded (fail closed)", e);
+                    + "] "
+     *                                   enabled the tracing will capture the supplied object's {@link Object#toString()} value.
+     */
+     * Tests whether or not the engine should be flushed periodically.
+        }
+            externalRefreshMetric
+    public ReplicationGroup getReplicationGroup() {
+                public GatedCloseable<IndexCommit> acquireLastIndexCommit(boolean flushFirst) {
+        // dynamic_properties without requiring access to the IndexWriter directly.
+     * Updates the ingestion state by delegating to the ingestion engine.
+    public MergedSegmentTransferTracker mergedSegmentTransferTracker() {
+    public void openEngineAndRecoverFromTranslog(boolean syncFromRemote) throws IOException {
+            if (state == IndexShardState.STARTED) {
+                        "from snapshot and remote store",
+            seqNo,
+    }
+        final Indexer engine = getIndexer();
+        indexEventListener.beforeIndexShardRecovery(this, indexSettings);
+        Engine.Operation.Origin origin,
+            // active to avoid relocating shards
+    }
+     * Set once this copy has claimed the remote store fence ({@link #sealRemoteStoreFence()}); consulted only by
+            : "If bufferAsyncIoProcessor is true, then the bufferIntervalSupplier needs to be non null";
+                    // ignore, shard is already closed
+            .stream()
+         * control (up to deletes, which we do not GC). Yet, we do not use flush internally to clear deletes and flush the index writer
+    private boolean assertRemoteStoreFenceSealedBeforeRestore() {
+        acquirePrimaryOperationPermit(onPermitAcquired, executorOnDelay, debugInfo, false);
+                    }
+     * Gets the minimum retained sequence number for this engine.
+    }
+        final long maxSeqNoOfUpdatesOrDeletes,
+            || state == IndexShardState.STARTED
+        // we allow snapshot on closed index shard, since we want to do one after we close the shard and before we close the engine
+            for (SegmentCommitInfo segmentCommitInfo : siSnapshot.getSegmentInfos()) {
+                indexSettings.getSettings()
+        }
+    /**
+                    } else {
+    /**
+import org.opensearch.cluster.metadata.DataStream;
+import org.opensearch.indices.recovery.RecoveryFailedException;
+        this.mapperService = mapperService;
+                    getOperationPrimaryTerm(),
+                final Index resizeSourceIndex = indexMetadata.getResizeSourceIndex();
+            + "]";
+                        segmentUploadeCount = directory.getSegmentsUploadedToRemoteStore().size();
+    }
+        indexShardOperationPermits.acquire(
+                    final int recoveredOps = runTranslogRecovery(
+        // }}
+     */
+                return UNASSIGNED_SEQ_NO;
+    ) {
+            if (this.warmer != null) {
+     * listener handles all exception cases internally.
+        private long currentRefreshStartTime;
+     *
+    protected final void verifyActive() throws IllegalIndexShardStateException {
+                            + newRouting;
+     * or the timeout is exceeded.
+            ? false
+            result = engine.delete(delete);
+     * @opensearch.internal
+    public long getOperationPrimaryTerm() {
+        throw new UnsupportedOperationException();
+                        try {
+            getThreadPool(),
+            translogRecoveryStats.totalOperationsOnStart(snapshot.totalOperations());
+                    flushOrRollRunning.compareAndSet(true, false);
+    /**
+                translogRecoveryOperations
+                && indexShard.indexSettings.getIndexMetadata().getState() == IndexMetadata.State.OPEN
+     * Returns {@code 0} when the shard's indexer is not yet initialised.
+    public void addGlobalCheckpointListener(
+    // Visible for testing
+     * 2. The pending merge segment no longer exists in the primary shard.
+                    shardId,
+     * the provided starting seqno (inclusive) and ending seqno (inclusive)
+    /**
+    private String copySegmentFiles(
+                storeDirectory = new StoreRecovery.StatsDirectoryWrapper(store.directory(), recoveryState.getIndex());
+        private final Logger logger;
+    public void performRecoveryRestart() throws IOException {
+import org.opensearch.index.remote.RemoteStorePathStrategy;
+                Function.identity(),
+            // Delegates intentionally do NOT synchronize on engineMutex: doing so would
+     * @see #acquireReplicaOperationPermit(long, long, long, ActionListener, String, Object)
+                newEngineConfig(replicationTracker),
+        final Indexer engine = getIndexerOrNull();
+    private boolean hasOneRemoteSegmentSyncHappened() {
+    @Deprecated(since = "3.4.0", forRemoval = true)
+        long toSeqNo,
+                // Without an engine there is nothing to flush; onNewEngine will start the task once one is created.
+    public Engine.Searcher acquireSearcher(String source) {
+        logger.trace("Recomputed ReplicationCheckpoint from CatalogSnapshot for shard {}", checkpoint);
+        return replicationTracker.getSegmentReplicationStats();
+     * @throws InterruptedException if calling thread is interrupted
+        }
+                    shr -> shr.assignedToNode() && retentionLeases.contains(ReplicationTracker.getPeerRecoveryRetentionLeaseId(shr))
+import org.apache.lucene.codecs.CodecUtil;
+    }
+     *                                                            segments file.
+     * @param source     source of the requester (e.g., peer-recovery)
+        }
+        final List<LocalShardSnapshot> snapshots = new ArrayList<>();
+                            replicationTracker.updateLocalCheckpoint(currentRouting.allocationId().getId(), getLocalCheckpoint());
+        return seqNo;
+                    // We abort early here to prevent an ongoing recovery from the failed primary to mess with the global / local checkpoint
+        if (indexSettings.isRemoteSnapshot() == false
+        this.codecService = engineConfigFactory.newDefaultCodecService(indexSettings, mapperService, logger);
+     * closed.
+            case EXISTING_STORE:
+    }
+        assert Objects.isNull(refreshTask);
+        long version,
+        }
+            // If the primary mode is still true after the end of handoff attempt, it basically means that the relocation
+                        + " wrappers must override this method and delegate to the original readers core cache key. Wrapped readers can't be "
+                performSegRep.run();
+                                }
+            }
+     * <p>
+                    if (deleted && engine != null && isPrimaryMode()) {
+                recoveryState.getTranslog().totalLocal(0);
+     * @throws java.nio.file.NoSuchFileException                  if one or more files referenced by a commit are not present.
+    public final void sync(Translog.Location location, Consumer<Exception> syncListener) {
+                        )
+import org.opensearch.index.IndexSettings;
+            }
+        // onFailure () { listener.failure() };
+        this.shardBitsetFilterCache = new ShardBitsetFilterCache(shardId, indexSettings);
+        try {
+        assert currentState == IndexShardState.RECOVERING : "expected a recovering shard " + shardId + " but got " + currentState;
+     * @param requestCheckpoint       received segment checkpoint that is checked for processing
+        try (GatedCloseable<CatalogSnapshot> snapshot = getCatalogSnapshot()) {
+                    logger.warn("failed to turn off translog retention", e);
+     */
+            Releasables.close(releasablesOnHandoffFailures);
+        } catch (IOException e) {
+                 * check if we should roll the translog generation.
+                });
+    /**
+                } catch (Exception e) {
+        engine.maybePruneDeletes(); // try to prune the deletes in the engine if we accumulated some
+                    "Shard does not have the correct engine type to perform segment replication {}.",
+        return engine.noOp(noOp);
+     *
+        if (globalCheckpoint > localCheckpoint) {
+        } else {
+            return store.getSegmentMetadataMap(snapshot.get());
+        return this.searchOperationListener;
+    @Deprecated
+        long ifPrimaryTerm,
+                @Override
+     * On a remote-store shard the local translog directory is a cache of the remote copy, and the download that fills it
+        RemoteSegmentStoreDirectory targetRemoteDirectory,
+import static org.opensearch.index.translog.Translog.Durability;
+     */
+        store.incRef();
+        try {
+                public GatedCloseable<IndexCommit> acquireSafeIndexCommit() {
+        long seqNo,
+            }
+        syncFromRemote = syncFromRemote && indexSettings.isRemoteSnapshot() == false;
+        /*
+                logger.debug("All replicas in sync for shard [{}]", shardId);
+            ? new DocumentMapper.Builder(noopRootMapper, mapperService).build(mapperService)
+     * IndexingMemoryController}).
+     * @param listener the listener to wrap
+                // that's fine since we already synced everything on engine close - this also is conform with the methods
+    }
+    public ShardIndexWarmerService warmerService() {
+                // shard is closed - no location is fine
+        ActionListener<Boolean> listener
+    private volatile RecoveryState recoveryState;
+            remoteStorePathStrategy,
+    public String getNodeId() {
+        return getIndexer().docStats();
+        IndexShardState state = this.state; // one time volatile read
+             * checkpoint updates. However, since this shard is not yet contributing to calculating the global checkpoint, it can be the
+        boolean isReadOnlyReplica = indexSettings.isSegRepEnabledOrRemoteNode()
+            // We make sure to upload translog (even if it does not contain any operations) to remote translog.
+                logger.trace(
+import org.opensearch.index.IndexService;
+            synchronized (engineMutex) {
+        if (indexSettings.isSoftDeleteEnabled() && useRetentionLeasesInPeerRecovery == false && state() == IndexShardState.STARTED) {
+        final ActionListener<ReplicationResponse> listener
+                verifyRelocatingState();
+     * @param generation Snapshot Commit Generation.
+        }
+     * SNAPSHOT restore into a new index — the fence key derives from the new UUID, so the seal is simply the fresh
+            synchronized (mutex) {
+                versionType,
+        if (engine == null) {
+        }
+        }
+    private final SegmentReplicationCheckpointPublisher checkpointPublisher;
+            try {
+     */
+        recoveryState().setStage(RecoveryState.Stage.FINALIZE);
+                }
+        if (catalogSnapshot instanceof SegmentInfosCatalogSnapshot siSnapshot) {
+                return Optional.of(nrtEngine);
+                }
+import org.opensearch.index.fielddata.ShardFieldData;
+    private void hydrateFromRemoteStore(boolean syncFromRemote) throws IOException {
+     * @deprecated Use {@link #acquireSafeCatalogSnapshot()} which avoids the extra
+            origin,
+        }
+     * a new term due to a new primary, the term that's exposed here will not be the term that the shard internally uses to assign
+        }
+    private final RemoteStoreSettings remoteStoreSettings;
+        }
+        // called by the current engine
+        DiscoveryNode node = discoveryNodes.get(nodeId);
+            0,
+    /**
+                }
+        if (engine == null) {
+        assert Thread.holdsLock(mutex) == false : "recover locally under mutex";
+                            + "]"
+        }
+import org.opensearch.cluster.service.ClusterApplierService;
+            aId,
+    ) throws IOException {
+                            engine.fillSeqNoGaps(newPrimaryTerm);
+    public QueryCache getQueryCache() {
+        this.indexSortSupplier = indexSortSupplier;
+    /**
+                    if (ref == null) {
+                    }
+     *
+                result = applyIndexOperation(
+                && totalOperations > batchSize
+    }
+        return ShardMigrationState.DOCREP_NON_MIGRATING;
+                            // fire-once guard: exactly one of onResponse, onFailure, or the timeout consumer ever runs for
+            Engine.Operation.Origin.REPLICA,
+    // in case we have a relocation of a primary, we also allow to write after phase 2 completed, where the shard may be
+     * {@code segments_N} to materialize an {@link IndexCommit}.
+            replicationTracker.activateWithPrimaryContext(primaryContext); // make changes to primaryMode flag only under mutex
+            persistMetadata(path, indexSettings, newRouting, currentRouting, logger);
+                        final SegmentInfos lastCommittedSegmentInfos = store().readLastCommittedSegmentsInfo();
+                    logger.warn("check index [failure]\n{}", os.bytes().utf8ToString());
+     */
+                // don't use index.source().utf8ToString() here source might not be valid UTF-8
+            long localChecksum;
+    /**
+            return ms;
+                                            shardId,
+        final CheckedFunction<DirectoryReader, DirectoryReader, IOException> indexReaderWrapper,
+     * @param globalCheckpoint the global checkpoint
+        ActionListener<ReplicationResponse> listener
+                                    logger.info("primary-replica resync completed with {} operations", resyncTask.getResyncedOperations());
+                lastWriteLocation = null;
+                } finally {
+                                // are brought up to date.
+    /*
+    ) {
+     * @param location the location to listen for
+                    throw corrupt;
+                        opPrimaryTerm,
+        CheckedFunction<DirectoryReader, DirectoryReader, IOException> readerWrapper
+        return new EngineConfig.TombstoneDocSupplier() {
+        }
+        long seqNo,
+        assert getLocalCheckpoint() == primaryContext.getCheckpointStates().get(allocationId).getLocalCheckpoint()
+        verifyNotClosed();
+                recoveryState.setStage(RecoveryState.Stage.DONE);
+                    delete.seqNo(),
+    /**
+            null,
+            rescheduleIfNecessary();
+                }
+        } catch (Exception e) {
+    private final boolean isTimeSeriesIndex;
+                    throw new IndexShardStartedException(shardId);
+import org.opensearch.index.translog.TranslogCorruptedException;
+                break;
+import org.opensearch.index.store.RemoteStoreFileDownloader;
+            SnapshotRecoverySource recoverySource = (SnapshotRecoverySource) recoveryState().getRecoverySource();
+    /**
+        searchListenersList.add(searchStats);
+        assert getOperationPrimaryTerm() <= pendingPrimaryTerm;
+        Indexer engine,
+            };
+                // a closed shard would, and keep the interrupted download's own failure for the log.
+    }
+            executorOnDelay,
+                        // fails with TranslogCorruptedException. It is safe to create empty translog for remote store enabled
+     * This is the first operation after the local checkpoint of the safe commit if exists.
+    /**
+        }, onFailure);
+     * ({@link #sealRemoteStoreFenceForRecovery}) or on replica-to-primary promotion
+            onPermitAcquired,
+    }
+                routing
+                    // stops it fencing us if the handoff below aborts; the token retained here is what lets the abort
+            );
+    }
+    }
+     * <p>
+                        + "new term ["
+     * Without this force-update, a replica can generate duplicate documents (for the same id) if it first receives
+        return indexShardOperationPermits.getActiveOperationsCount();
+    public ThreadPool getThreadPool() {
+    /**
+        this.mergedSegmentWarmerFactory = mergedSegmentWarmerFactory;
+        return getIndexer().getPersistedLocalCheckpoint();
+                } finally {
+     */
+                    maybeSync();
+                            verifyRelocatingState();
+                @Override
+     * @param primaryTerm current primary term.
+            throw new IndexShardNotRecoveringException(shardId, currentState);
+                                });
+    /**
+     * ({@link #resetEngineToGlobalCheckpoint}), where the previous primary may be alive behind a partition and its CAS
+    public boolean isStartedPrimary() {
+     */
+        IndexShardState state = state(); // one time volatile read
+    private final Object engineMutex = new Object(); // lock ordering: engineMutex -> mutex
+                        Store.checkIntegrity(entry.getValue(), store.directory());
+        assert assertPrimaryMode();
+        internalRefreshListener.clear();
+            return new ReferencedSegmentsCheckpoint(
+                // documentation
+     * At time7, _5.si on the replica shard becomes searchable. The reference counts of _1.si, _2.si and _4.si in the replica shard decreased to 0 and were deleted.
+                        r -> logger.trace("created missing peer recovery retention leases"),
+     */
+        final Supplier<Boolean> fixedRefreshIntervalSchedulingEnabled,
+    }
+            logger.info(
+     * @throws UnsupportedOperationException if the catalog snapshot is not Lucene-backed (DFA).
+            } else {
+     *
+        public String toString() {
+        }
+                ": primary relocation is forbidden while primary-replica resync is in progress " + shardRouting
+    }
+    private final QueryCachingPolicy cachingPolicy;
+     *
+            for (String file : uploadedSegments.keySet()) {
+    private void updateReplicationCheckpoint() {
+                onOperationRecovered.run();
+            // check again under postRecoveryMutex. this is important to create a happens before relationship
+import org.opensearch.common.metrics.MeanMetric;
+        verifyNotClosed();
+        assert userData.get(Engine.HISTORY_UUID_KEY).equals(getHistoryUUID()) : "commit point history uuid ["
+            true,
+                    if (pendingLocation == null || pendingLocation.compareTo(lastWriteLocation) <= 0) {
+    /**
+     * the shard's indexer is not yet initialised.
+     */
+                }
+    @Deprecated
+            return recoverLocallyUpToGlobalCheckpoint();
+        final String nodeId,
+                shardRouting.allocationId().getId(),
+        this.indexCache = indexCache;
+            synchronized (mutex) {
+        final boolean waitIfOngoing = request.waitIfOngoing();
+    /**
+            );
+        try (GatedCloseable<CatalogSnapshot> snapshot = getCatalogSnapshot()) {
+        return true;
+     * NOTE: if the syncListener throws an exception when it's processed the exception will only be logged. Users should make sure that the
+            stats = getReplicationStatsForTrackedReplicas();
+        assert translogFactory instanceof RemoteBlobStoreInternalTranslogFactory;
+                        // Shard is closing or not yet readable — skip this refresh cycle.
+        } else {
+        public String toString() {
+        String allocationId = routingEntry().allocationId().getId();
+            cachingPolicy,
+            store.decRef();
+                            translogUUID,
+        replicationTracker.startReplicationLagTimers(checkpoint);
+    public void sync() throws IOException {
+                    numShards = -1;
+            opPrimaryTerm,
+        return applyIndexOperation(
+ */
+     * opposite choice and fail closed, since a wrongly permitted delete is not recoverable.
+import org.opensearch.index.translog.RemoteTranslogStats;
+     *
+                );
+            } catch (AlreadyClosedException ex) {
+                seqNo,
+     * The method figures out the sequence number basis the last commit.
+     * from the primary via {@link #updateMaxUnsafeAutoIdTimestamp(long)} at the beginning of a peer-recovery or a primary-replica resync.
+                                (l) -> {
+            store.deleteQuiet(mergedSegmentCheckpoint.getMetadataMap().keySet().toArray(new String[0]));
+     */
+        final Indexer engine = getIndexerOrNull();
+            if (didRefresh) {
+    protected volatile IndexShardState state;
+        }
+        private final CopyOnWriteArrayList<Consumer<ShardFailure>> delegates = new CopyOnWriteArrayList<>();
+        }
+        throws IOException {
+                }
+                getPendingPrimaryTerm(),
+ * compatible open source license.
+import org.opensearch.indices.IndexingMemoryController;
+     */
+        remoteSegmentStoreDirectory.releaseLock(primaryTerm, generation, snapshotId);
+        boolean success = false;
+                    innerFail(e);
+    }
+            globalCheckpointListeners::globalCheckpointUpdated,
+        return previousState;
+    @Override
+                } else {
+    }
+        return engine == null ? 0 : engine.getActiveMergeCount();
+                }
+     * Refresh listener to update the Shard's ReplicationCheckpoint post refresh.
+        // Do not load the global checkpoint if this is a remote snapshot index or using ingestion source
+     * called before starting to copy index files over
+                        public void onAfter() {
+import org.opensearch.index.engine.Engine.GetResult;
+     * ------------------------------------------------------------------------------
+     * to {@code getIndexer().serializeSnapshotToRemoteMetadata(...)}.
+                executeRecovery("from store", recoveryState, recoveryListener, this::recoverFromStore);
+            }
+    private boolean assertReplicationTarget() {
+    }
+                    logger.debug("submitting async flush request");
+                    return recoveredOps;
+        @Override
+                // if the engine is not running, we can access the store directly, but we need to make sure no one starts
+    static boolean isTranslogBackedByRemoteStore(IndexSettings indexSettings, ShardMigrationState shardMigrationState) {
+            this.reason = reason;
+     * closed would silence a healthy shard whenever the repository hiccups. The garbage collection paths make the
+                    logger.trace("refresh with source [schedule]");
+    public void setCompositeEngine(DataFormatAwareEngine unused) {
+import org.opensearch.index.engine.MergedSegmentWarmerFactory;
+     *
+import org.opensearch.index.mapper.Mapping;
+        GatedCloseable<IndexCommit> indexCommit = acquireLastIndexCommit(flushFirst);
+     * Callers must gate on the index being tier-eligible before invoking. No-op when
+     */
+                /*
+    /**
+    public Map<String, FormatChecksumStrategy> getChecksumStrategies() {
+            return getIndexer().isReplicaIndexer();
+            if (snapshot instanceof SegmentInfosCatalogSnapshot == false) {
+        if (readAllowedStates.contains(state) == false) {
+     * This is used to compute diffs for segment replication.
+        replicationTracker.removePeerRecoveryRetentionLease(nodeId, listener);
+                    if (overrideLocal || localDirectoryContains(storeDirectory, file, checksum) == false) {
+            remoteStoreSettings,
+        } finally {
+        return engine.getWritingBytes();
+                            checkpoint,
+                return true;
+                    return applyOnEngine(newEngineReference.get(), engine -> engine.acquireLastIndexCommit(false));
+            }
+            if (fenceOwnership.revertFenceOwnership()) {
+     * ActionListener will be called on the calling thread. During relocation hand-off, permit acquisition can be delayed. The provided
+        } catch (AlreadyClosedException e) {
+    }
+    /**
+    @ExperimentalApi
+import org.opensearch.index.flush.FlushStats;
+    }
+     */
+                store.commitSegmentInfos(infosSnapshot, processedLocalCheckpoint, processedLocalCheckpoint);
+    /**
+            + Engine.MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID
+        synchronized (postRecoveryMutex) {
+                assert Arrays.stream(store.directory().listAll()).filter(f -> f.startsWith(IndexFileNames.SEGMENTS)).findAny().isEmpty()
+    public boolean enableUploadToRemoteTranslog() {
+            }
+     * Here, an example of generating redundant pending merged segments will be provided.
+     * count from the underlying merge scheduler — {@link DataFormatAwareEngine} reports
+        });
+        return indexerFactory;
+    }
+        }
+        // When the new engine is created, translogs are synced from remote store onto local. Since remote store is the source
+            );
+    public ShardFieldData fieldData() {
+    private final Function<ShardId, ReplicationStats> segmentReplicationStatsProvider;
+                    }
+                                + " can't recover shard "
+    public Engine.DeleteResult applyDeleteOperationOnReplica(long seqNo, long opPrimaryTerm, long version, String id) throws IOException {
+     * All index files referenced by this index commit won't be freed until the commit/snapshot is closed.
+                            + newPrimaryTerm
+     * @param runnable the runnable to execute under permit
+     *
+                            } else {
+                // On replica-to-primary promotion the operation term has already been bumped, and the previous primary
+        assert routingEntry().primary() : "freezeForTiering should only be called on primary shards";
+        if (engine instanceof IngestionEngine) {
+import org.opensearch.index.store.StoreStats;
+        IngestionSettings ingestionSettings = IngestionSettings.builder()
+            } finally {
+                            engine.translogManager()
+    /**
+                    throw new IndexShardRelocatedException(
+        final SimilarityService similarityService,
+        // startRecovery(RecoveryState recoveryState, ShardRecoverySource source ) {
+import org.opensearch.common.util.concurrent.FutureUtils;
+            if (remoteSegmentMetadata != null) {
+                this.indexShardOperationPermits.isBlocked() || // if permits are blocked, we are still transitioning
+    }
+        ThreadContext threadContext = threadPool.getThreadContext();
+        );
+                currentEngineReference.set(newEngine);
+        try {
+                        public void onFailure(final Exception e) {
+                );
+                    "shard closed while hydrating from the remote store"
+        pendingRefreshLocation.updateAndGet(curr -> {
+        try {
+    private final Store remoteStore;
+                        long start = localCheckpoint + 1 + (long) i * batchSize;
+                            shardId(),
+                        store.commitSegmentInfos(infosSnapshot, processedLocalCheckpoint, processedLocalCheckpoint);
+            );
+                                replicationTracker.resetHasAllPeerRecoveryRetentionLeases();
+import org.opensearch.common.util.concurrent.BufferedAsyncIOProcessor;
+            // periodically ask for the newest local checkpoint by syncing the global checkpoint, so that ultimately the global
+     * @param snapshotId Snapshot UUID.
+    public void updateShardState(
+                        recoveryListener,
+                    fileDownloader.download(sourceRemoteDirectory, storeDirectory, targetRemoteDirectory, toDownloadSegments, onFileSync);
+     * invoked immediately.
+     * one that discards a local copy proven corrupt ({@link #discardCorruptLocalRemoteTranslog}) must agree on this, so
+     * shard-level cleanup of {@code pendingMergedSegmentCheckpoints} and of the precomputed
+            }
+        ShardId shardId,
+                    }
+                        Thread.sleep(TimeValue.timeValueSeconds(30).millis());
+    private void turnOffTranslogRetention() {
+     * @opensearch.internal
+        final Engine.DeleteResult result;
+            );
+            threadPool.getThreadContext(),
+import org.opensearch.index.mapper.Uid;
+        ensureWriteAllowed(origin);
+        } catch (org.apache.lucene.index.IndexNotFoundException e) {
+                indexDataLocation
+     * The replica shard cleans up redundant pending merged segments based on the referenced segments of the primary shard.
+import org.apache.lucene.store.Directory;
+        switch (recoveryState.getRecoverySource().getType()) {
+                    // go through IndexShard.wrapSearcher.
+    }
+                     * 4) Cluster-manager processes the shard started and starts the shard
+     * For sources that begin a fresh lineage under a new index UUID — LOCAL_SHARDS (a shrink/split/clone target) and
+    }
+    private void setRefreshPending(Indexer indexer) {
+        return getIndexer().getHistoryUUID();
+        VersionType versionType,
+                    }
+        // For Segment Replication enabled replica shards we can be skip parsing the documents as we directly copy segments from primary
+        );
+        finalizeReplication(new SegmentInfosCatalogSnapshot(infos));
+     * @return A {@link Tuple} containing SegmentInfos wrapped in a {@link GatedCloseable} and the {@link ReplicationCheckpoint} computed from the infos.
+            return latestReplicationCheckpoint;
+     */
+    public MergedSegmentCheckpoint computeMergeSegmentCheckpoint(SegmentCommitInfo segmentCommitInfo) throws IOException {
+        // time elapses after the engine is created above (pulling the config settings) until we set the engine reference, during
+                    this,
+            } finally {
+        SourceToParse sourceToParse,
+     * <p>
+            if (state == IndexShardState.CLOSED) {
+                "local translog at [{}] is corrupt; deleting it so that the next recovery downloads it from the remote store",
+                    if (newEngineReference.get() == null) {
+        } catch (IOException e) {
+     *
+                    flush(new FlushRequest().waitIfOngoing(true).force(true));
+        // set it true only if shard is remote, but index setting doesn't say so
+                    remoteSegmentMetadata.getSegmentInfosBytes(),
+                new Term(IdFieldMapper.NAME, Uid.encodeId(id)),
+                    || indexSettings.isWarmIndex() : "There should not be any segments file in the dir";
+        );
+                            mappingUpdateConsumer,
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+        }
+            .listeners(listeners)
+    ) throws IOException {
+        verifyNotClosed();
+                && replicationTracker.isRelocated()
+            }
+            engine.onMergesDrained(listener);
+        RecoveryListener recoveryListener,
+/*
+    /**
+            .build();
+            }
+                    assert newPrimaryTerm > pendingPrimaryTerm : "primary terms can only go up; current term ["
+     * @return {@link RemoteSegmentMetadata}
+                        } catch (final AlreadyClosedException e) {
+            innerOpenEngineAndTranslog(replicationTracker, syncFromRemote);
+     * Fails the shard and marks the shard store as corrupted if
+                if (indexer != null) {
+    public ReplicationCheckpoint getLatestReplicationCheckpoint() {
+    private void ensureSoftDeletesEnabled(String feature) {
+import org.apache.lucene.store.AlreadyClosedException;
+    }
+        remoteStoreFenceSealed = true;
+        final RecoveryState.Translog translogRecoveryStats = recoveryState.getTranslog();
+        SourceToParse sourceToParse
+                    logger.debug("submitting async roll translog generation request");
+                throw new IndexShardRecoveringException(shardId);
+                    "operation only allowed when recovering, origin [" + origin + "]"
+            logger.trace("Downloaded segments here: {}", toDownloadSegments);
+            // translog contains data.
+     * @param listener                   the listener
+            mapperService,
+    /**
+        if (shouldSeedRemoteStore()) {
+                     * 2) Node gets disconnected and rejoins
+    }
+            assert Thread.holdsLock(mutex) == false : "warming engine under mutex";
+            forceRefreshes.close();
+        try {
+     * @param fromSeqNo  from sequence number, included
+    private final Object postRecoveryMutex = new Object();
+     */
+        if (indexSettings.isAssignedOnRemoteNode()) {
+                    + "], thread that called beforeRefresh ["
+        // set it true only if relocating from docrep to remote store
+    public long getLastKnownGlobalCheckpoint() {
+                            if (indexSettings.isSegRepEnabledOrRemoteNode()) {
+        assert Thread.holdsLock(mutex) == false : "restart recovery under mutex";
+                        }
+            shardId,
+        final Map<String, StoreFileMetadata> metadataMap = store.getSegmentMetadataMap(catalogSnapshot);
+     * when the last merge finishes.
+            this.refreshMetric = refreshMetric;
+        final Consumer<ActionListener<Releasable>> operationExecutor
+     * token must be invalidated before this copy can acknowledge anything.
+        }
+        }
+                public LeafReader wrap(LeafReader reader) {
+        this.store = store;
+            if (update != null) {
+    }
+     * executing that replication request on a replica.
+            assert newSearcher != null;
+                }
+            try {
+    }
+    ) throws IOException {
+            version,
+        if (indexSettings.getIndexMetadata().useIngestionSource()) {
+            + getOperationPrimaryTerm()
+                    // path tell a target that took over from one that never wrote.
+        } else {
+                // autoGeneratedID docs that are coming from the primary are updated correctly.
+                    translogConcurrentRecoverySemaphore.release(batches);
+    }
+                isRetry,
+                }
+            final long actualRetainingSequenceNumber = retainingSequenceNumber == RETAIN_ALL
+    void updatePeriodicFlushTask(boolean engineAvailable) {
+                } else {
+import org.opensearch.index.engine.Segment;
+                            }
+            listener.accept(false);
+public class IndexShard extends AbstractIndexShardComponent implements IndicesClusterStateService.Shard {
+            }
+    public void releaseLockOnCommitData(String snapshotId, long primaryTerm, long generation) throws IOException {
+     * {@link java.nio.channels.ClosedByInterruptException}; the recovery then fails with {@link IndexShardClosedException}.
+        }
+                            // resyncTimeout, clear the flag so this promoted primary can still be relocated instead of being
+            versionType,
+            recoveryState.setStage(RecoveryState.Stage.TRANSLOG);
+                    if (combineWithAction == null) {
+     */
+        if (this.checkpointPublisher != null && shardRouting.primary() && indexSettings.isSegRepLocalEnabled()) {
+import org.opensearch.index.translog.TranslogRecoveryRunner;
+     */
+        @Override
+        assert indexSettings.isRemoteStoreEnabled() || this.isRemoteSeeded();
+import org.opensearch.index.store.Store.MetadataSnapshot;
+        engine.refresh("recovery_finalization");
+            return engine.getHeapBytesUsed();
+                        "from snapshot",
+            || (getIndexer() instanceof DataFormatAwareReadOnlyEngine) : "local checkpoint ["
+    public FlushStats flushStats() {
+        boolean isRetry,
+                    requiredShards = Collections.emptySet();
+            return UNASSIGNED_SEQ_NO;
+    }
+        active.set(true);
+            );
+                final CheckIndex.Status status = store.checkIndex(out);
+            getIndexer(),
+import org.opensearch.index.get.GetStats;
+        } catch (IOException e) {
+        getIndexer().updateMaxUnsafeAutoIdTimestamp(maxSeenAutoIdTimestampFromPrimary);
+                }
+     * TODO: Mark this as deprecated once new searcher interface is integrated into the IndexShard
+            : mapperService.documentMapper().mappers().containsTimeStampField();
+                    } else {
+                if (!status.clean) {
+import java.util.Collections;
+        final @Nullable ShardRouting currentRouting,
+    /**
+     * Handles warmup for pull-based ingestion (PBI) engines.
+                setRefreshPending(engine);
+            logger.debug(
+                translogLocation
+        readAllowed();
+                store.decRef();
+            return false;
+     * Returns null if the recovery has not yet started or shard was not recovered (created via an API).
+import java.nio.file.NoSuchFileException;
+        assert shardRouting.initializing();
+     * updatable setting and that has nothing else to rebuild when that setting changes.
+        } catch (AlreadyClosedException e) {
+    }
+        readAllowed();
+            if (stats.isEmpty()
+            seqNo = Long.parseLong(store.readLastCommittedSegmentsInfo().getUserData().get(MAX_SEQ_NO));
+     */
+     */
+     * Writes all indexing changes to disk and opens a new searcher reflecting all changes.  This can throw {@link AlreadyClosedException}.
+    }
+                if (corrupt != null) {
+        Objects.requireNonNull(listener);
+        return new AsyncIOProcessor<>(logger, 1024, threadContext) {
+            // Snapshot V2 has already downloaded the translog for its pinned timestamp from the source repository.
+            // recoverFromTranslog holds readLock and a refresh listener calls a delegate.
+        synchronized (engineMutex) {
+                cancellableThreads.executeIO(() -> {
+     * At time4, the replica completed the pre-copy of _3.si, but _3.si is not searchable.
+                                postActivatePrimaryMode();
+    /**
+import org.opensearch.indices.replication.checkpoint.ReferencedSegmentsPublisher;
+            throw new IndexShardNotRecoveringException(shardId, state);
+        if (segmentInfos == null) {
+            } else {
+    }
+    @Override
+            verifyNotClosed();
+    private void sealRemoteStoreFenceForRecovery() throws IOException {
+            });
+            CatalogSnapshot snapshot = closeable.get();
+        final String translogUUID = store.readLastCommittedSegmentsInfo().getUserData().get(TRANSLOG_UUID_KEY);
+        SegmentsStats segmentsStats = getIndexer().segmentsStats(includeSegmentFileSizes, includeUnloadedSegments);
+    /**
+        boolean requiredFullRange,
+                            replicationTracker.activatePrimaryMode(getLocalCheckpoint());
+        return new RefreshStats.Builder().total(refreshMetric.count())
+                return docMapper().getDocumentMapper().createDeleteTombstoneDoc(shardId.getIndexName(), id, routing);
+            + " ] > shard term ["
+    }
+                // this scope because its own failure can be ambiguous - the write may have landed with only the
+     * @throws IOException
+    /**
+                try {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        final MapperService mapperService,
+    /**
+                            "not all required shards of index "
+            return ReplicationCheckpoint.empty(shardId);
+                List<Future<Integer>> translogRecoveryFutureList = new ArrayList<>();
+    public Translog.Snapshot getHistoryOperationsFromTranslog(long startingSeqNo, long endSeqNo) throws IOException {
+     * {@link ReplicationTracker#markAllocationIdAsInSync(String, long)}
+    }
+    }
+    Throws IOException if the remote store is not synced within the timeout
+     * @param listener the callback when the retention lease is successfully removed and synced to replicas
+     * details.
+                public boolean shouldCache(Query query) {
+        if (indexSettings.isAssignedOnRemoteNode() && indexSettings.isRemoteStoreEnabled()) {
+    }
+            }
+        assert assertPrimaryMode();
+                // no shard operation permits are being held here, move state from started to relocated
+     *                                   after this replication request was executed on it (see {@link #getMaxSeqNoOfUpdatesOrDeletes()}
+                remoteStore.decRef();
+        assert assertPrimaryMode();
+import java.util.Collection;
+     *           _5.si were copied to the replica shard via segment replication, which completed at time7 (This process is fast because it has already performed pre-copy).
+     * Throws {@link UnsupportedOperationException} when the indexer does not support
+                        // Refresh the primary operation policy in case it has changed since the start of recovery.
+            throw new IllegalStateException("Cannot apply function on indexer " + indexer.getClass() + " directly on IndexShard");
+        return mapperService;
+            return 0;
+                            lastCommittedSegmentInfos.userData.get(SequenceNumbers.LOCAL_CHECKPOINT_KEY)
+                                    timer.startTime()
+        final long segmentsGen = catalogSnapshot.getLastCommitGeneration();
+                // ops would never reach remote, silently lost on handoff since the target recovers from remote.
+    public AsyncIOProcessor<Translog.Location> getTranslogSyncProcessor() {
+     * excluded from the replication group. A shard on a {@code segments_only} node keeps its translog locally, so it
+                        } else if (isSnapshotV2Restore() == false) {
+            throw new OpenSearchException("io exception while building 'store stats'", e);
+    public boolean isSegmentReplicationAllowed() {
+        return translogSyncProcessor;
+import org.opensearch.common.util.CancellableThreads;
+            } else if (rfee.getCause() instanceof ClosedByInterruptException) {
+                    // indicesService.indexService(shardRouting.shardId().getIndex()).addMetadataListener();
+     * Creates a new history snapshot from the translog instead of the lucene index. Required for cross cluster replication.
+    /**
+    }
+            );
+import java.util.Locale;
+    }
+    public Engine.DeleteResult applyDeleteOperationOnPrimary(
+     * open), so that {@link #close} can abort it. Registered and cleared under {@link #mutex} by
+            IOUtils.close(currentEngineReference.getAndSet(null));
+     *
+        flushMetric.inc(System.nanoTime() - time);
+    }
+    /**
+                        break;
+        assert Thread.holdsLock(mutex) == false : "resetting engine under mutex";
+                    "failed to find the safe commit after recovering shard locally up to global checkpoint {}",
+     * @throws IOException if there is some failure in releasing lock in remote store.
+                            }
+     * @throws IOException When there is an error computing referenced segments.
+    /**
+            failShard("Failing shard because of exception during storeStats", e);
+     * This method allows indexing threads to continue indexing without blocking on fsync calls. We ensure that there is only
+        IndexShardState state = this.state; // one time volatile read
+                    versionType,
+    /**
+        }
+                        // DFA warm primaries: skip postActivatePrimaryMode (no remote translog upload
+     * try-with-resources closing the releasable after executing the runnable on successfully acquiring the permit, an otherwise calling
+                                logger.info("Completed engine failover for shard [{}] in: {} ms", shardId, timer.time());
+    private volatile boolean remoteStoreFenceSealed;
+            this.cause = cause;
+        return indexSettings.getTranslogDurability();
+import java.util.Arrays;
+        final long globalCheckpoint = Translog.readGlobalCheckpoint(translogConfig.getTranslogPath(), translogUUID);
+                false,
+                    }
+        return true;
+        RemoteFsTranslog.cleanup(
+        );
+                    }
+     */
+            indexSettings.getRemoteStorePathStrategy(),
+                    listener.accept(shardFailure);
+                protected String getBufferProcessThreadPoolName() {
+     *    when the pending merge segment was generated.
+                return DerivedSourceDirectoryReader.wrap(
+     * {@code waitForRemoteStoreSync()} — ensures replicas have downloaded the latest
+    ) throws IOException {
+                }
+        translogSyncProcessor.put(location, syncListener);
+        }
+            public void onFailure(Exception e) {
+            forceMerge.maxNumSegments(),
+                     * increment the primary term. The latch is needed to ensure that we do not unblock operations before the primary
+    public long getLastRefreshedCheckpoint() {
+     * The returned snapshot can be retrieved from either Lucene index or translog files.
+     * (via {@link #getMaxSeenAutoIdTimestamp()} of all processed append-only requests to replicas at the beginning of a peer-recovery
+                } else {
+            throw new FileNotFoundException("No metadata file found in remote store");
+    void checkIndex() throws IOException {
+                    Store.MetadataSnapshot ms = store.getMetadata(null, true);
+                        + "current term ["
+        private final IndexShard indexShard;
+                this.warmer.warm(reader);
+     * perform the last stages of recovery once all translog operations are done.
+        try (Releasable forceRefreshes = refreshListeners.forceRefreshes()) {
+            // deadlock because close holds engineMutex and waits for writeLock, while
+    boolean localDirectoryContains(Directory localDirectory, String file, long checksum) throws IOException {
+    // Used to limit the number of concurrent translog tasks. When the semaphore is exhausted, serial recovery is used.
+import org.opensearch.index.mapper.RootObjectMapper;
+    }
+            }
+        if (isRemoteTranslogEnabled() || indexSettings.isAssignedOnRemoteNode() || indexSettings.isContextAwareEnabled()) {
+        }
+        verifyNotClosed();
+            logger.warn("failed to sync translog", e);
+        }
+        return indexSettings != null && indexSettings.isRemoteSnapshot();
+    }
+                docMapper(),
+ * KIND, either express or implied.  See the License for the
+                logger.info("Updated periodic flush interval for shard [{}] from [{}] to [{}]", shardId, previous, interval);
+                                            "[{}] primary-replica resync timed out after [{}], forcibly clearing "
+     */
+        return this.getService;
+        assert currentEngineReference.get() == null;
+                    }
+    private boolean isSnapshotV2Restore() {
+            internalRefreshListener,
+            } else {
+        return shardMigrationState == REMOTE_MIGRATING_UNSEEDED || shardMigrationState == REMOTE_MIGRATING_SEEDED;
+                        }
+                        e -> logger.debug("failed creating missing peer recovery retention leases", e)
+        final ShardPath shardPath,
+        this.similarityService = similarityService;
+    }
+            getIndexer().translogManager()
+        }
+        if (reader != nonClosingReaderWrapper) {
+    public void syncRetentionLeases() {
+    }
+    /**
+    }
+        synchronized (engineMutex) {
+            return new MergeStats();
+     * Checks if we have a completed history of operations since the given starting seqno (inclusive).
+    public void maybeSyncGlobalCheckpoint(final String reason) {
+            final String writeReason;
+            if (writeAllowedStates.contains(state) == false) {
+        this.isTimeSeriesIndex = (mapperService == null || mapperService.documentMapper() == null)
+    /**
+     * Whether this shard's translog has an authoritative copy in the remote store, so that the local translog directory
+                            afterWriteOperation();
+            final Set<ShardRouting> shardRoutings = new HashSet<>(routingTable.getShards());
+            pendingReplicationActions,
+import org.opensearch.common.concurrent.GatedCloseable;
+     */
+        }
+                    "Shard is not started or recovering {} {} and cannot perform segment replication as a replica",
+                version,
+            logger.debug(
+        long version,
+    }
+            );
+     * @param onFileSync runnable that updates the access time when run.
+                trimTranslog();
+        } catch (Exception e) {
+    ) throws IOException {
+                }
+        } else {
+            }
+        Directory storeDirectory,
+                    }
+     * At time5, the reference counts of _1.si and _2.si in the primary shard decreased to 0 and were deleted.
+                    }
+            remoteDirectory = getRemoteDirectory();
+        }
+ * ownership. Elasticsearch licenses this file to you under
+            logger,
+                return engine.translogManager().shouldRollTranslogGeneration();
+            handlePullBasedIngestionWarmup(getIndexer());
+        // index.periodic_flush_interval is dynamic: start, reschedule or stop the periodic flush task to match the current value.
+        long opPrimaryTerm,
+                        Map<String, String> fileToChecksum = new HashMap<>();
+            getIndexer(),
+        } catch (Exception e) {
+            throw new IllegalStateException(message);
+     * Returns the persisted local checkpoint for the shard.
+        return retentionLeaseSyncer;
+     * <p>
+                if (uploadFiles.containsAll(localFiles)) {
+            threadPool,
+            if (logger.isTraceEnabled()) {
+        public AsyncShardRefreshTask(IndexShard indexShard) {
+                        }
+        }
+            null
+                try {
+    }
+        updateRetentionLeasesOnReplica(loadRetentionLeases());
+    private final ShardMigrationState shardMigrationState;
+     */
+     */
+     * {@code HydrationIntegrity}, so keeping both is defence in depth rather than two independently required checks.
+        this.indexerFactory = Objects.requireNonNull(indexerFactory);
+import org.opensearch.index.engine.ReadOnlyEngine;
+                retentionLeases.v2(),
+                    if (combineWithAction != null) {
+import org.opensearch.index.engine.EngineConfig;
+        sealRemoteStoreFence();
+     * Adds a new retention lease.
+ * GitHub history for details.
+        if (logger.isTraceEnabled()) {
+        // threadPool.generic().execute() {
+     * Acquires a lock on the translog files and Lucene soft-deleted documents to prevent them from being trimmed
+        RemoteFsTranslog.sealFence(
+        getIndexer().failEngine(reason, e);
+        IndexShardState.STARTED
+ * not use this file except in compliance with the License.
+import org.opensearch.index.get.ShardGetService;
+        assert Thread.holdsLock(engineMutex) == false : "hydrating from the remote store under engineMutex";
+             * case that the global checkpoint update from the primary is ahead of the local checkpoint on this shard. In this case, we
+                assert origin == Engine.Operation.Origin.LOCAL_RESET;
+    protected Indexer getIndexerOrNull() {
+                    index.seqNo(),
+    /**
+                                    } else {
+        org.apache.lucene.util.Version luceneVersion = null;
+            // if we go idle after some time and become inactive, we still give sync'd flush a chance to run.
+import java.util.function.LongSupplier;
+     * reference set that garbage collection prunes to, so the owner's own collection then deletes files it is still
+        // do not close the snapshot - caller will close it.
+     * actually fsyncing the location until the sync listener is called. Yet, unless there is already another thread fsyncing
+                            resetEngineToGlobalCheckpoint();
+        return SegmentInfos.readLatestCommit(store.directory()).getUserData();
+        return getIndexer().getSeqNoStats(replicationTracker.getGlobalCheckpoint());
+    /**
+                }
+        AtomicBoolean segment_n_uploaded = new AtomicBoolean(false);
+     On source remote node , it will be REMOTE_MIGRATING_UNSEEDED when relocating from docrep node
+    /**
+    public void acquireReplicaOperationPermit(
+    }
+import org.opensearch.index.store.DataFormatAwareStoreDirectory;
+        recoveryState.getVerifyIndex().checkIndexTime(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - timeNS)));
+                    } catch (final Exception e) {
+        Term uid = new Term(IdFieldMapper.NAME, Uid.encodeId(doc.id()));
+            return segmentReplicationStatsProvider.apply(shardId);
+                break;
+            logger.error("Error Fetching SegmentInfos and latest checkpoint", e);
+        final TranslogStats translogStats = translogStats();
+                // Bytes are always Lucene SegmentInfos. DFA snapshots travel in userData.
+    }
+     * Schedules a flush or translog generation roll if needed but will not schedule more than one concurrently. The operation will be
+                (System.currentTimeMillis() - startTimeMs)
+     */
+    /**
+            assert getIndexer().isReplicaIndexer() : "finalizeReplication called on non-replica indexer";
+            isServerSideEncryptionEnabled
+                    }
+    }
+            try {
+                    default:
+ * specific language governing permissions and limitations
+        }
+     */
+                final Set<ShardId> requiredShards;
+                                // Force update the checkpoint post engine reset.
+    public void waitForReplicaSync(TimeValue timeout) throws IOException {
+        final long globalCheckpoint = getLastKnownGlobalCheckpoint();
+                if (shardRouting.isRelocationTarget() == false) {
+        return index(indexer, operation);
+                        return;
+    public Set<MergedSegmentCheckpoint> getPendingMergedSegmentCheckpoints() {
+            return;
+        getIndexer().refresh(source);
+                origin,
+        Translog.Operation operation;
+                if (state != IndexShardState.CLOSED) {
+                        sourceIndexService.getMetadata(),
+    ) {
+        mergeStats.addUnreferencedFileCleanUpStats(engine.unreferencedFileCleanUpsPerformed());
+     *
+        DiscoveryNodes discoveryNodes
+        return applyDeleteOperationOnReplica(seqNo, opPrimaryTerm, version, id, null);
+            segmentsStats.addRemoteSegmentStats(
+                            // translog upload). Reset hasAllPeerRecoveryRetentionLeases and ensure
+    /**
+        innerAcquireReplicaOperationPermit(
+                            }
+            logger,
+            resetRecoveryStage();
+        }
+            pendingMergedSegmentCheckpoints.remove(mergedSegmentCheckpoint);
+            Engine.Operation.Origin.PRIMARY
+                logger.trace("syncing global checkpoint for [{}]", reason);
+    /**
+    public void restoreFromSnapshotAndRemoteStore(
+import org.apache.lucene.index.CheckIndex;
+    private final RecoverySettings recoverySettings;
+        verifyNotClosed();
+     */
+                        }
+import org.opensearch.index.engine.exec.coord.SegmentInfosCatalogSnapshot;
+        synchronized (engineMutex) {
+    }
+     * @param flushFirst <code>true</code> if the index should first be flushed to disk / a low level lucene commit should be executed
+            // the shard fence itself; sealing at or below is safe, since bootstrap seals over at a term >= the fence's.
+        }
+        final String aId = shardRouting.allocationId().getId();
+                pendingDeleteCheckpoints.add(mergedSegmentCheckpoint);
+        return UNASSIGNED_SEQ_NO;
+    public boolean isActive() {
+            repository,
+                        "from local shards",
+                        + "used as cache keys since their are used only per request which would lead to subtle bugs"
+                        throw new IndexShardNotStartedException(shardId, shardState);
+    /**
+                        refreshListeners,
+            }
+        }
+            : "remote translog restore point read without sealing the fence for " + shardRouting;
+        return shardBitsetFilterCache;
+                pendingMergedSegmentCheckpoints.removeIf(s -> s.getSegmentName().equals(segmentCommitInfoName));
+            }
+    /**
+            fenceOwnership.transferFenceOwnership(targetAllocationId);
+            isReadOnlyReplica = false;
+        if (retentionLeases.v1()) {
+            remoteStoreSettings,
+        assert translogFactory instanceof RemoteBlobStoreInternalTranslogFactory;
+                            maxSeqNo
+            + " is not found in commit";
+    public void startRecovery(
+     *
+package org.opensearch.index.shard;
+            () -> docMapper(),
+            shardId,
+        return getIndexer().acquireSnapshot();
+     * Wrapper for a non-closing reader
+            }
+import org.opensearch.indices.recovery.RecoverySettings;
+                    indexShard.flush(new FlushRequest());
+            }
+            logger.trace("upgraded segments for {} from version {} to version {}", shardId, previousVersion, version);
+        }
+            .keySet()
+import java.io.IOException;
+    }
+                break;
+        return false;
+        // Reset hasAllPeerRecoveryRetentionLeases and ensure retention leases exist for replicas.
+        long startNanos = System.nanoTime();
+        @Override
+            return replicationTracker.renewRetentionLease(id, actualRetainingSequenceNumber, source);
+        } catch (IOException e) {
+            origin,
+        if (latestReplicationCheckpoint.getSegmentInfosVersion() == segmentInfos.getVersion()
+        return indexSettings.isRemoteTranslogStoreEnabled() || shardMigrationState == REMOTE_MIGRATING_SEEDED;
+     * so source and target share one fence object and the term cannot arbitrate between them: the source's recorded
+import org.opensearch.index.seqno.SeqNoStats;
+            if (shardRoutings.stream()
+    ) {
+        long ifPrimaryTerm
+import org.opensearch.common.collect.Tuple;
+        String nodeId,
+            if (false == referencedSegmentsCheckpoint.getSegmentNames().contains(mergedSegmentCheckpoint.getSegmentName())
+                }
+    }
+            threadPool::absoluteTimeInMillis,
+                    listener,
+                    writeConsumer.accept(candidates);
+        // and an engine can be forced to close in ctor which also causes the global checkpoint to be pulled in.
+                    () -> new ParameterizedMessage(
+            return getIndexer().acquireSafeIndexCommit();
+                    }
+import org.opensearch.action.support.ListenerTimeouts;
+            IndexingMemoryController.SHARD_INACTIVE_TIME_SETTING.get(indexSettings.getSettings()),
+        // refresh. If the index is context aware enabled, search idle is not supported. This will ensure periodic sync
+    }
+        assert indexSettings.isSegRepEnabledOrRemoteNode();
+        long primaryTerm,
+        // to be computed on a per-shard basis
+                copySegmentFiles(storeDirectory, remoteDirectory, null, uploadedSegments, overrideLocal, onFileSync);
+            }
+        // acquiring a snapshot from the translog causes a sync which causes the global checkpoint to be pulled in,
+                                return runTranslogRecovery(engine, translogSnapshot, Engine.Operation.Origin.LOCAL_RESET, () -> {
+    }
+        }
+        assert this.shardRouting.primary() : "This should only be invoked for primary shards";
+     * time6 | _5.si                             | _1.si, _2.si, _3.si, _4.si, _5.si
+        assert routingEntry().isSearchOnly() == false || translogStats().estimatedNumberOfOperations() == 0
+    private static final Semaphore translogConcurrentRecoverySemaphore = new Semaphore(1000);
+                    segmentNames.add(IndexFileNames.parseSegmentName(file));
+        public AsyncShardFlushTask(IndexShard indexShard, TimeValue interval) {
+                throw ex;
+        java.util.List<String> dfaFiles = metadataSnapshot.asMap()
+        try (GatedCloseable<CatalogSnapshot> closeable = acquireSafeCatalogSnapshot()) {
+     * Returns the latest cluster routing entry received with this shard.
+                    return true;
+    /**
+/**
+        return translogStats;
+    ) {
+                public GatedCloseable<CatalogSnapshot> acquireLastCommittedSnapshot(boolean flushFirst) throws IOException {
+    }
+        }
+        if (shardRouting.primary() == false) {
+import org.opensearch.repositories.RepositoriesService;
+    }
+                    : "a primary relocation is completed by the cluster-managerr, but primary mode is not active " + currentRouting;
+            throw e;
+                // this sync, the pending upload would hit the drained syncPermit, no-op (TLOG-SKIP), and those acked
+            0,
+        if (state == IndexShardState.STARTED || state == IndexShardState.CLOSED) {
+            if (luceneVersion == null || luceneVersion.onOrAfter(segment.getVersion())) {
+        return getIndexer().pollingIngestStats();
+                    if (remoteStore != null) {
+                logger.trace("skip local recovery as no safe commit found");
+            // We set active because we are now writing operations to the engine; this way,
+     */
+     */
+     * Add a listener for refreshes.
+    private Engine.NoOpResult markSeqNoAsNoop(Indexer engine, long seqNo, long opPrimaryTerm, String reason, Engine.Operation.Origin origin)
+        return applyTranslogOperation(getIndexer(), operation, origin);
+            } else {
+            .sorted()
+    public Engine.DeleteResult applyDeleteOperationOnPrimary(
+    public boolean isSystem() {
+     *
+                            currentGlobalCheckpoint,
+    /**
+import org.apache.lucene.store.ChecksumIndexInput;
+import org.apache.lucene.util.Version;
+    }
+                throw new IllegalStateException("wrapped directory reader hides actual OpenSearchDirectoryReader but shouldn't");
+            getInitialGlobalCheckpointForShard(indexSettings),
+            indexEventListener.afterIndexShardStarted(this);
+            return recoverLocallyUptoLastCommit();
+    private void cleanupPendingMergedSegments(CatalogSnapshot catalogSnapshot) {
+                localFiles.removeAll(RemoteStoreRefreshListener.EXCLUDE_FILES);
+    }
+        }, e -> {
+    }
+        } else {
+     * ------------------------------------------------------------------------------
+     * @throws IOException - When there is an error loading metadata from the store.
+                                    boolean resyncCompleted = primaryReplicaResyncInProgress.compareAndSet(true, false);
+        final BigArrays bigArrays,
+    /**
+     * @param listener for the refresh. Called with true if registering the listener ran it out of slots and forced a refresh. Called with
+                            ensurePeerRecoveryRetentionLeasesExist();
+    }
+                    // Hand remote store fence ownership to the target while our uploads are drained, so the transfer
+     * See {@link org.opensearch.cluster.metadata.IndexMetadata#primaryTerm(int)}
+    final IndexerFactory indexerFactory;
+        @Nullable
+                    final RuntimeException e;
+            false,
+    }
+            onPermitAcquired,
+    ) throws IOException {
+     * Returns the current replication group for the shard.
+        final IndexerFactory indexerFactory,
+            mergedSegmentWarmerFactory.get(this),
+            }
+                }
+                                logger.debug(
+        Repository repository,
+        return noOp(engine, noOp);
+        syncSegmentsFromRemoteSegmentStore(overrideLocal, () -> {});
+        assert shardRouting.primary() : "recover from local shards only makes sense if the shard is a primary shard";
+                } catch (final Exception e) {
+                return engine.shouldPeriodicallyFlush();
+     */
+        @Override
+        // Off to the generic threadPool as pruning the delete tombstones can be expensive.
+                if (logger.isTraceEnabled()) {
+            logger.error("Exception while reading latest metadata", e);
+    public boolean isRelocatedPrimary() {
+        @Nullable final MergedSegmentPublisher mergedSegmentPublisher,
+            if (logger.isDebugEnabled()) {
+        @Nullable VersionType versionType,
+    public void forceMerge(ForceMergeRequest forceMerge) throws IOException {
+                    versionType,
+                    )
+                engineSearcher.source(),
+                Collections.emptyMap(),
+        refreshTask = null;
+        long primaryTerm,
+    }
+     * Replays translog operations from the provided translog {@code snapshot} to the current engine using the given {@code origin}.
+     */
+            logger.debug("finalizeReplication skipped, indexer already closed", e);
+     * Preferred over {@link #acquireSafeIndexCommit()} because it does not require re-reading
+            if (indexSettings.isRemoteStoreEnabled() || this.isRemoteSeeded()) {
+                )
+        return isStartedPrimary() || (shouldSeedRemoteStore() && hasOneRemoteSegmentSyncHappened());
+                                        translogRecoveryFuture.get();
+        }
+     */
+        // only needed for BWC reasons involving rolling upgrades from versions that do not support PRRLs:
+        int listeners = refreshListeners.pendingCount();
+     */
+            .sorted()
+            );
+                                }
+     *
+     *
+            failShard("timed out waiting for relocation hand-off to complete", null);
+     * Checks if segment checkpoint should be processed
+     * Compute and return the latest ReplicationCheckpoint for a shard and a GatedCloseable containing the corresponding SegmentInfos.
+                    state,
+        Object debugInfo,
+     * @throws IOException if there is some failure in acquiring lock in remote store.
+                        store.directory().syncMetaData();
+    private long recoverLocallyUpToGlobalCheckpoint() {
+    public RecoverySettings getRecoverySettings() {
+        final Runnable globalCheckpointSyncer,
+import org.opensearch.index.ReplicationStats;
+                // may be alive behind a partition, still holding a valid fence token. Seal before reading the remote
+                && isSearchIdle()
+     * <ul>
+     * here is what lets {@code TranslogManager} stay free of fence surface: the capability is narrowed once, at the only
+                checkIndex();
+        String id,
+        } catch (IOException e) {
+        } catch (IOException ex) {
+            && RemoteStoreNodeAttribute.isTranslogRepoConfigured(indexSettings.getNodeSettings()) == false;
+            // Wait for ingestion warmup if enabled (pull-based ingestion only)
+     * @param sourceRemoteDirectory RemoteSegmentDirectory Instance from which we need to sync segments
+            case SNAPSHOT:
+        this.shardEventListener.delegates.add(onShardFailure);
+import java.util.Map;
+                        } else {
+        innerAcquireReplicaOperationPermit(
+        } catch (AlreadyClosedException ex) {
+            // Deliberately the operation term rather than the pending term: uploads advance the fence at the operation
+    }
+        if (indexSettings.isSegRepEnabledOrRemoteNode()) {
+    private void postActivatePrimaryMode() {
+                    return;
+    public DataFormatAwareEngine getCompositeEngine() {
+            } else {
+        assert shardRouting.primary() : "runUnderPrimaryPermit should only be called on primary shard but was " + shardRouting;
+             * update local checkpoint at replica, so the local checkpoint at replica can be less than globalCheckpoint.
+    }
+    };
+                } else {
+    // Visible for testing
+     * The seal-before-restore invariant of {@link org.opensearch.index.translog.transfer.RemoteStoreFence}: a fencing-enabled primary must
+                @Override
+     */
+        RecoveryState recoveryState,
+                    sealRemoteStoreFence();
+        final ActionListener<Boolean> recoveryListener = ActionListener.runBefore(listener, () -> IOUtils.close(snapshots));
+            Mapping update = operation.parsedDoc().dynamicMappingsUpdate();
+     * Opens the engine on top of the existing lucene engine and translog.
+                assert indexShardOperationPermits.getActiveOperationsCount() == OPERATIONS_BLOCKED
+            + "]";
+     */
+import org.opensearch.index.codec.CodecService;
+            hydration.cancel("shard closed: " + reason);
+        );
+import org.opensearch.index.store.StoreFileMetadata;
+        long startTime = System.nanoTime();
+        return replicationTracker.getLatestReplicationCheckpoint();
+            if (newRouting.primary()) {
+            RemoteStoreUtils.isServerSideEncryptionEnabledIndex(indexSettings.getIndexMetadata())
+            return;
+            engine.freezeForTiering();
+     */
+                    } else {
+            upgrade.upgradeOnlyAncientSegments(),
+    }
+            } else if (origin == Engine.Operation.Origin.REPLICA) {
+        protected String getThreadPool() {
+            throw e;
+     * Downloads segments from given remote segment store for a specific commit.
+     * After time7, _3.si on the replica is the redundant pending merged segment.
+            repository,
+import org.opensearch.index.seqno.RetentionLeases;
+    /**
+    public long getMinRetainedSeqNo() {
+        synchronized (engineMutex) {
+        long version,
+            verifyNotClosed(e);
+                // prevent that somebody wraps with a non-filter reader
+            if (Assertions.ENABLED) {
+        final List<SearchOperationListener> searchOperationListener,
+     */
+        } catch (Exception e) {
+        verifyNotClosed();
+     * Hands remote store fence ownership to a primary relocation target. Relocation happens at a constant primary term,
+    private DiscoveryNodes discoveryNodes;
+import org.opensearch.index.store.RemoteSegmentStoreDirectory;
+        final ActionListener<Releasable> onPermitAcquired,
+            // So, we can use a stricter check where local checkpoint of new primary is checked against that of old primary.
+                        releaseOnce.run();
+                        );
+        return replicationTracker.pendingInSync();
+    /**
+        @Override
+    ) throws IOException {
+        long ifPrimaryTerm
+     */
+            || state == IndexShardState.CLOSED;
+        final Engine.Delete delete = engine.prepareDelete(
+     *
+                    final String message = String.format(
+            return null;
+     * Rollback the current engine to the safe commit, then replay local translog up to the global checkpoint.
+            final Engine.Delete delete = new Engine.Delete(
+        assert routingEntry().recoverySource().getType() == RecoverySource.Type.PEER : "not a peer recovery [" + routingEntry() + "]";
+                // ran between the state check above and the assignment, it may have observed a null task. Re-checking here
+     */
+                }
+import java.nio.file.Path;
+        final String targetAllocationId,
+        final ThreadPool threadPool,
+            timestamp,
+        long version,
+                // we are already closed, no need to flush or roll
+    public GatedCloseable<SegmentInfos> getSegmentInfosSnapshot() {
+                        e
+            final TimeValue interval = indexSettings.getPeriodicFlushInterval();
+                // TODO: For composite engine, this would be replaced by a separate factory.
+     * @return a map from allocation ID to the local knowledge of the global checkpoint for that allocation ID
+    public void removePeerRecoveryRetentionLease(String nodeId, ActionListener<ReplicationResponse> listener) {
+        }
+        while ((operation = snapshot.next()) != null) {
+    private final SearchOperationListener searchOperationListener;
+     * Renews an existing retention lease.
+                    inner.addSuppressed(failure);
+            circuitBreakerService,
+                if (isRemoteSegmentStoreInSync()) {
+    @ExperimentalApi
+        public void beforeRefresh() {
+    public IndexReaderProvider getReaderProvider() {
+        this.translogSyncProcessor = createTranslogSyncProcessor(
+import org.opensearch.index.engine.exec.IndexReaderProvider;
+        store.incRef();
+                                + resizeSourceIndex
+                    .recoverFromTranslog(translogRecoveryRunner, getIndexer().getProcessedLocalCheckpoint(), globalCheckpoint);
+            } else {
+        );
+        this.clusterApplierService = clusterApplierService;
+            ifPrimaryTerm,
+            store.decRef();
+        if (engine == null) {
+    public long getWritingBytes() {
+     * reused the generation ({@link #isTranslogBackedByRemoteStore()}), so a shard whose translog came from the remote
+            return UNASSIGNED_SEQ_NO;
+        if (indexSettings.getIndexMetadata().useIngestionSource()) {
+    }
+     */
+        return this.shardWarmerService;
+        Set<String> skippedSegments = new HashSet<>();
+        );
+                );
+        final List<SearchOperationListener> searchListenersList = new ArrayList<>(searchOperationListener);
+import org.opensearch.common.SetOnce;
+                    termUpdated.await();
+    ) throws IllegalIndexShardStateException, IllegalStateException, InterruptedException {
+            logger.trace(
+        }
+            refreshMetric.inc(System.nanoTime() - currentRefreshStartTime);
+                    engine,
+    }
+                Engine.Result result = applyTranslogOperation(engine, operation, origin);
+    }
+        return result;
+     * This tracks the remote translog specifically, because the tracker uses it to decide whether a replica can be
+                 */
+     * name.
+import org.opensearch.core.action.ActionListener;
+    /**
+        String executorOnDelay,
+            StoreRecovery storeRecovery = new StoreRecovery(shardId, logger);
+            final Optional<SequenceNumbers.CommitInfo> newSafeCommit = store.findSafeIndexCommit(globalCheckpoint);
+        if (indexer instanceof EngineBackedIndexer engine) {
+    }
+    }
+        }
+            // we must create both new read-only engine and new read-write engine under
+            handoffFailure.addSuppressed(e);
+                public GatedCloseable<CatalogSnapshot> acquireSnapshot() {
+        }
+        @Nullable VersionType versionType,
+    private void verifyRelocatingState() {
+    }
+                        onBlocked.run();
+    }
+    public void refresh(String source) {
+        private Thread callingThread = null;
+        referencedSegmentsPublisher.publish(this, computeReferencedSegmentsCheckpoint());
+import org.apache.lucene.index.Term;
+                            // retention leases exist for replicas.
+     *
+    private volatile AsyncShardFlushTask periodicFlushTask;
+        try {
+                                // trigger our refresh listener.
+        threadPool.generic()
+     * indexing operation, so we can flush the index.
+    }
+     * Use the recommended {@link #getHistoryOperations(String, long, long, boolean)} method for other cases.
+            }
+    private static final long REPLICA_SYNC_POLL_INTERVAL_MS = 500;
+    /**
+    private final AtomicReference<CancellableThreads> remoteStoreHydration = new AtomicReference<>();
+        return false;
+            return newSearcher;
+            }
+        recoveryState.validateCurrentStage(RecoveryState.Stage.TRANSLOG);
+        long opPrimaryTerm,
+        return shardRouting.primary() && replicationTracker.isPrimaryMode();
+                return;
+        return getIndexer();
+                    /*
+        } else {
+        final long retainingSequenceNumber,
+import java.util.concurrent.CopyOnWriteArrayList;
+            "[DFA-RECOVERY] snapshotStoreMetadata shardId={} source={} totalFiles={} dfaFiles={} dfaList=[{}] luceneSample=[{}]",
+            if (recoveryState.getStage() == RecoveryState.Stage.INDEX) {
+     * This method should only be invoked if Segment Replication or Remote Store is not enabled.
+        final BiFunction<IndexSettings, ShardRouting, TranslogFactory> translogFactorySupplier,
+     * Acquires a point-in-time reader that can be used to create {@link Engine.Searcher}s on demand.
+     */
+        return this.requestCacheStats;
+    }
+        final Indexer engine = getIndexer();
+     * reuses a local generation whose footer matches the checksum the remote advertises. If such a generation turns out
+    public void flushOnIdle(long inactiveTimeNS) {
+     */
+                    repositoriesService,
+     */
+        this.shardWarmerService = new ShardIndexWarmerService(shardId, indexSettings);
+import org.opensearch.index.remote.RemoteStoreStatsTrackerFactory;
+                    || replicationTracker.isPrimaryMode()
+                     * 3) Cluster-manager assigns the shard back to the node
+        if (docMapper.getMapping() != null) {
+        IndexShardState state = this.state; // one time volatile read
+     * This function fetches a metadata snapshot from the store that comes with an IO cost.
+            internalRefreshListener.add(new ReferenceManager.RefreshListener() {
+    }
+    }
+     * A replica shard also calls this method to bootstrap the max_seq_no_of_updates marker with the value that it received from
+    }
+                        // translog is having the same UUID that is referred by the segments. If they are different, engine open
+     * @throws WriteStateException if an exception occurs writing the state file
+     * operations for the duration so that no operation observes a policy change mid-flight. This is the
+    /**
+    }
+                            engine.translogManager().rollTranslogGeneration();
+        return replicationTracker.getRetentionLeases(expireLeases);
+                    newEngineReference.get(),
+    private void loadGlobalCheckpointToReplicationTracker() throws IOException {
+            : "recover from store only makes sense if the shard is a primary shard or an untracked search only replica";
+                }
+        maybeCheckIndex();
+        RemoteSegmentMetadata remoteSegmentMetadata,
+                for (String file : uploadedSegments.keySet()) {
+            final Engine readOnlyEngine = new ReadOnlyEngine(
+        final TimeValue timeout
+                             * primary/replica re-sync completes successfully and we are now being promoted, we have to restore
+                "Waiting for replica sync on shard [{}]: {} replica(s) still behind, max checkpoints behind: {}, max bytes behind: {}",
+            throw exc;
+     * TODO: Mark this as deprecated once new searcher interface is integrated into the IndexShard
+    public void resetRecoveryStage() {
+     * Returns {@code true} if this shard can ignore a recovery attempt made to it (since the already doing/done it)
+    public void finalizeReplication(SegmentInfos infos) throws IOException {
+        if (isRemoteStoreEnabled() || isMigratingToRemote()) {
+    public void updateMaxUnsafeAutoIdTimestamp(long maxSeenAutoIdTimestampFromPrimary) {
+                            getIndexer().refreshPrimaryOperationPolicy();
+import org.opensearch.index.seqno.RetentionLeaseStats;
+            engine.writeIndexingBuffer();
+    /**
+                try {
+            } else {
+                            // listener and the timeout, a genuine resync failure that only arrives after the timeout has
+            return;
+        @Override
+        storeRecovery.recoverFromRemoteStore(this, listener);
+                        l -> restoreFromSnapshotAndRemoteStore(repositoriesService.repository(repo), repositoriesService, l)
+        IndicesService indicesService
+        pendingReplicationActions.accept(replicationGroup);
+        return replicationTracker.getInSyncGlobalCheckpoints();
+        REMOTE_MIGRATING_SEEDED,
+                // we are already closed, no need to flush or roll
+            return;
+        public void afterRefresh(boolean didRefresh) throws IOException {
+        verifyActive();
+                if (overrideLocal || localDirectoryContains(storeDirectory, file, checksum) == false) {
+    @Deprecated
+import org.opensearch.search.suggest.completion.CompletionStats;
+            if (isConcurrentRecovery) {
+    Indexer getIndexer() {
+        long version,
+     * @param retentionLeases the retention leases
+            try (Releasable ignore = releasable) {
+     *
+import org.opensearch.index.shard.PrimaryReplicaSyncer.ResyncTask;
+    }
+    /*
+            || indexSettings().getTranslogDurability() == Durability.ASYNC
+        this.remoteStoreSettings = remoteStoreSettings;
+    }
+import java.nio.charset.StandardCharsets;
+     * @return {@link CommitStats}
+                listener.accept(true);
+        this.getService = new ShardGetService(indexSettings, this, mapperService);
+    private long getInitialGlobalCheckpointForShard(IndexSettings indexSettings) {
+     * replication while its retry variants are replicated via recovery without auto_id_timestamp.
+import org.opensearch.index.SegmentReplicationShardStats;
+                            final Indexer engine = getIndexer();
+        return readAllowedStates.contains(state);
+        boolean isRetry,
+            shardId,
+                    }
+     * Returns the name of the default codec in codecService
+                    if (shardRouting.primary() && isTranslogBackedByRemoteStore()) {
+                throw new IllegalIndexShardStateException(
+    private final ClusterApplierService clusterApplierService;
+    }
+    @Deprecated(since = "3.4.0", forRemoval = true)
+    ) {
+     *        false otherwise.
+                long processedLocalCheckpoint = Long.parseLong(infosSnapshot.getUserData().getOrDefault(LOCAL_CHECKPOINT_KEY, "-1"));
+     */
+     */
+                        recoveryState,
+                    "skip local recovery as the safe commit is up to date; safe commit {} global checkpoint {}",
+        return opsRecovered;
+            return NO_OPS_PERFORMED;
+     * This function fetches a metadata snapshot from the store that comes with an IO cost.
+        replicationTracker.updateRetentionLeasesOnReplica(retentionLeases);
+        }
+            }
+        switch (operation.opType()) {
+                new RemoteSegmentStats(remoteStoreStatsTrackerFactory.getRemoteSegmentTransferTracker(shardId).stats())
+    public Engine.IndexResult getFailedIndexResult(Exception e, long version) {
+     * Best-effort eviction of checksum entries for files no longer referenced by the active
+    public RecoveryState recoveryState() {
+     * ------------------------------------------------------------------------------
+import org.apache.lucene.search.QueryCache;
+                        // For replicas, when we download segments from remote segment store, we need to make sure that local
+    public void initiateTracking(final String allocationId) {
+                            getIndexer().translogManager().rollTranslogGeneration();
+            dataFormatRegistry,
+            && recoversTranslogFromPeer() == false;
+    }
+            return;
+     * ------------------------------------------------------------------------------
+                    logger.warn("exception while notifying engine failure", inner);
+                forceRefreshes.close();
+     * Update the local knowledge of the persisted global checkpoint for the specified allocation ID.
+                + "] does not match checkpoint from primary context ["
+        synchronized (engineMutex) {
+                maxCheckpointsBehind,
+    }
+        this.remoteStore = remoteStore;
+            return;
+    public List<Segment> segments(boolean verbose) {
+     * mirroring the primary's post-upload eviction in {@code RemoteStoreRefreshListener}.
+            }
+                    synchronized (engineMutex) {
+        final long globalCheckpoint,
+                        new ParameterizedMessage("failed to sync retention leases [{}] after expiration check", retentionLeases),
+                turnOffTranslogRetention();
+                        sealRemoteStoreFenceForRecovery();
+        return result;
+                        recoveryListener,
+        long ifSeqNo,
+     * Performs the pre-closing checks on the {@link IndexShard}.
+            if (recoverySource.pinnedTimestamp() != 0) {
+        for (Segment segment : getIndexer().segments(false)) {
+                + maxBehind
+            return in.getReaderCacheHelper();
+            try {
+        assert indexSettings.isSegRepEnabledOrRemoteNode() == false
+    public void close(String reason, boolean flushEngine, boolean deleted) throws IOException {
+        return this.shardRouting;
+     * Async shard flush task to call flush at a regular interval.
+                        Locale.ROOT,
+    private final AsyncIOProcessor<Translog.Location> translogSyncProcessor;
+        }
+                final RunOnce releaseOnce = new RunOnce(releasable::close);
+                    recoveryListener.onFailure(recoveryState, new RecoveryFailedException(recoveryState, null, e), true);
+        RemoteSegmentStoreDirectory remoteDirectory = null;
+                }
+                        // otherwise leave it to combineWithAction to release the permit
+    public Engine.SearcherSupplier acquireSearcherSupplier(Engine.SearcherScope scope) {
+import org.opensearch.common.Booleans;
+            ),
+            autoGeneratedTimestamp,
+            } else {
+            if (snapshot != null) {
+        Consumer<MappingMetadata> mappingUpdateConsumer,
+     * write replica of an index whose segments live in a remote store but whose translog does not, as happens when the
+    private final CheckedFunction<DirectoryReader, DirectoryReader, IOException> readerWrapper;
+    Calls onProgress on seeing an increased file count on remote
+        } catch (AlreadyClosedException | IOException e) {
+import org.opensearch.indices.replication.checkpoint.ReferencedSegmentsCheckpoint;
+    /**
+            return runTranslogRecovery(
+        }
+     * @param overrideLocal flag to override local segment files with those in remote store.
+                )
+    }
+                @Override
+                // the engine on us. If the engine is running, we can get a snapshot via the deletion policy of the engine.
+     */
+    }
+                // Ensure all in-flight remote store translog upload drains, before we perform the performSegRep.
+        if (this.isPrimaryMode()) {
+    private void verifyNotClosed(Exception suppressed) throws IllegalIndexShardStateException {
+        return indexCache != null ? indexCache.query() : null;
+        }
+     */
+                @Override
+    public boolean isRemoteStoreFenceSupersededFailingClosed() {
+     * @param waitingForGlobalCheckpoint the global checkpoint the listener is waiting for
+        return getIndexer().hasCompleteOperationHistory(reason, startingSeqNo);
+        indexingOperationListeners.postIndex(shardId, index, result);
+            store,
+                getIndexer(),
+    /**
+        Indexer engineOrNull = getIndexerOrNull();
+ * license agreements. See the NOTICE file distributed with
+        if (logger.isInfoEnabled() == false) {
+                    routingEntry().allocationId(),
+    public void updateGlobalCheckpointForShard(final String allocationId, final long globalCheckpoint) {
+        final Releasable forceRefreshes = refreshListeners.forceRefreshes();
+        // so the replica's SegmentInfos.readCommit(bytes, segmentsGen) and commitCatalogSnapshot
+    private void asyncBlockOperations(ActionListener<Releasable> onPermitAcquired, long timeout, TimeUnit timeUnit) {
+        REMOTE_NON_MIGRATING,
+            luceneSample
+            if (safeCommit.get().localCheckpoint == globalCheckpoint) {
+        if (mapper == null) {
+        this.syncTranslogFilesFromGivenRemoteTranslog(
+        TranslogFactory translogFactory = translogFactorySupplier.apply(indexSettings, shardRouting);
+            return indexShard.state != IndexShardState.CLOSED
+    }
+                    this.checkpointPublisher,
+        protected void runInternal() {
+            indexEventListener.shardRoutingChanged(this, currentRouting, newRouting);
+        assert shardRouting.primary() && replicationTracker.isPrimaryMode() : "shard "
+        assert assertPrimaryMode();
+    public void verifyShardBeforeIndexClosing() throws IllegalStateException {
+                                );
+            }
+        long ifPrimaryTerm
+            readAllowed = true;
+     *
+    /**
+        assert userData.containsKey(Engine.MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID) : "opening index which was created post 5.5.0 but "
+        } catch (Exception e) {
+        final Runnable runnable,
+        if (indexSettings.isSegRepEnabledOrRemoteNode() == false) {
+        if (fenceOwnership != null) {
+        return getIndexer().getMinRetainedSeqNo();
+            assert newSafeCommit.isPresent() : "no safe commit found after local recovery";
+                        onProgress.run();
+        @Override
+                + maxBytes
+                shardId,
+                    repositoriesService,
+            final CountDownLatch shardStateUpdated = new CountDownLatch(1);
+     * they all go through here. An unseeded migrating shard has no remote copy yet, and its local translog is the only one.
+    }
+                        corrupt = exc;
+            if (Assertions.ENABLED) {
+            + pendingPrimaryTerm
+    }
+    public boolean isRemoteSnapshot() {
+    public RetentionLease renewRetentionLease(final String id, final long retainingSequenceNumber, final String source) {
+        this.fileDownloader = new RemoteStoreFileDownloader(shardRouting.shardId(), threadPool, recoverySettings);
+            Engine.Operation.Origin.PRIMARY,
+     * Downloads segments from remote segment store along with updating the access time of the recovery target.
+            this.shardId,
+    }
+    }
+    ) throws IOException {
+                    shardId,
+            .filter(name -> name.contains("/"))
+        } else {

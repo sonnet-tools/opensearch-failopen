@@ -1,279 +1,252 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.opensearch.action.admin.indices.mapping.put.PutMappingRequest;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.mapper.MapperService.MergeReason;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.InternalSettingsPlugin;
-import org.opensearch.test.OpenSearchSingleNodeTestCase;
-import org.hamcrest.Matchers;
-
-import java.io.IOException;
-import java.util.Collection;
-
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.CoreMatchers.equalTo;
-
-public class UpdateMappingTests extends OpenSearchSingleNodeTestCase {
-    @Override
-    protected Collection<Class<? extends Plugin>> getPlugins() {
-        return pluginList(InternalSettingsPlugin.class);
-    }
-
-    public void testConflictFieldsMapping(String fieldName) throws Exception {
-        // test store, ... all the parameters that are not to be changed just like in other fields
-        XContentBuilder mapping = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject(fieldName)
-            .field("enabled", true)
-            .field("store", false)
             .endObject()
-            .endObject();
-        XContentBuilder mappingUpdate = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject(fieldName)
-            .field("enabled", true)
-            .field("store", true)
-            .endObject()
-            .startObject("properties")
             .startObject("text")
-            .field("type", "text")
-            .endObject()
-            .endObject()
-            .endObject();
-        testConflictWhileMergingAndMappingUnchanged(mapping, mappingUpdate);
-    }
-
-    protected void testConflictWhileMergingAndMappingUnchanged(XContentBuilder mapping, XContentBuilder mappingUpdate) throws IOException {
-        IndexService indexService = createIndex("test", Settings.builder().build(), mapping);
-        CompressedXContent mappingBeforeUpdate = indexService.mapperService().documentMapper().mappingSource();
-        // simulate like in MetadataMappingService#putMapping
-        try {
-            indexService.mapperService()
-                .merge(
-                    MapperService.SINGLE_MAPPING_NAME,
-                    new CompressedXContent(BytesReference.bytes(mappingUpdate)),
-                    MapperService.MergeReason.MAPPING_UPDATE
-                );
-            fail();
-        } catch (IllegalArgumentException e) {
-            // expected
-        }
-        // make sure simulate flag actually worked - no mappings applied
-        CompressedXContent mappingAfterUpdate = indexService.mapperService().documentMapper().mappingSource();
-        assertThat(mappingAfterUpdate, equalTo(mappingBeforeUpdate));
-    }
-
-    public void testConflictSameType() throws Exception {
+            () -> mapperService.merge(
         XContentBuilder mapping = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("properties")
-            .startObject("foo")
-            .field("type", "long")
-            .endObject()
-            .endObject()
-            .endObject();
-        MapperService mapperService = createIndex("test", Settings.builder().build(), mapping).mapperService();
-
-        XContentBuilder update = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("properties")
-            .startObject("foo")
-            .field("type", "double")
-            .endObject()
-            .endObject()
-            .endObject();
-
-        IllegalArgumentException e = expectThrows(
+ */
+ */
+ * You may obtain a copy of the License at
             IllegalArgumentException.class,
-            () -> mapperService.merge(
-                MapperService.SINGLE_MAPPING_NAME,
-                new CompressedXContent(update.toString()),
-                MapperService.MergeReason.MAPPING_UPDATE
-            )
-        );
-        assertThat(e.getMessage(), containsString("mapper [foo] cannot be changed from type [long] to [double]"));
-
-        e = expectThrows(
-            IllegalArgumentException.class,
-            () -> mapperService.merge(
-                MapperService.SINGLE_MAPPING_NAME,
-                new CompressedXContent(update.toString()),
-                MapperService.MergeReason.MAPPING_UPDATE
-            )
-        );
-        assertThat(e.getMessage(), containsString("mapper [foo] cannot be changed from type [long] to [double]"));
-
+ * license agreements. See the NOTICE file distributed with
         assertThat(
-            ((FieldMapper) mapperService.documentMapper().mapping().root().getMapper("foo")).fieldType().typeName(),
-            equalTo("long")
-        );
-    }
-
     public void testConflictNewType() throws Exception {
-        XContentBuilder mapping = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("properties")
-            .startObject("foo")
+        );
+import org.opensearch.common.xcontent.XContentFactory;
             .field("type", "long")
-            .endObject()
-            .endObject()
+                .merge(
+ * this file be licensed under the Apache-2.0 license or a
             .endObject();
-        MapperService mapperService = createIndex("test", Settings.builder().build(), mapping).mapperService();
-
-        XContentBuilder update = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("properties")
-            .startObject("foo")
-            .field("type", "double")
-            .endObject()
-            .endObject()
-            .endObject();
-
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> mapperService.merge(
-                MapperService.SINGLE_MAPPING_NAME,
-                new CompressedXContent(update.toString()),
-                MapperService.MergeReason.MAPPING_UPDATE
+            )
+        assertThat(e.getMessage(), equalTo("can't merge a non object mapping [foo] with an object mapping"));
             )
         );
-        assertThat(e.getMessage(), containsString("mapper [foo] cannot be changed from type [long] to [double]"));
-
-        assertThat(
-            ((FieldMapper) mapperService.documentMapper().mapping().root().getMapper("foo")).fieldType().typeName(),
-            equalTo("long")
-        );
+/*
+            () -> mapperService.merge(
+            final PutMappingRequest request = new PutMappingRequest();
+            IllegalArgumentException.class,
+            .field("type", "long")
+            .startObject("foo")
+ *
+        MapperParsingException e = expectThrows(
+            final PutMappingRequest request = new PutMappingRequest();
+            .endObject()
+import java.util.Collection;
+                MapperService.SINGLE_MAPPING_NAME,
+            request.source("field", "type=text");
+    public void testRejectFieldDefinedTwice() throws IOException {
+                MapperService.SINGLE_MAPPING_NAME,
+            .endObject()
+            .startObject("foo")
+                    new CompressedXContent(BytesReference.bytes(mappingUpdate)),
+        IllegalArgumentException e = expectThrows(
+                MapperService.MergeReason.MAPPING_UPDATE
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            () -> mapperService2.merge(MapperService.SINGLE_MAPPING_NAME, new CompressedXContent(mapping1), MergeReason.MAPPING_UPDATE)
+ * KIND, either express or implied.  See the License for the
     }
-
-    public void testReuseMetaField() throws IOException {
-        XContentBuilder mapping = XContentFactory.jsonBuilder()
+        );
+            .endObject()
+                MapperService.SINGLE_MAPPING_NAME,
+            assertThat(clusterService.state().metadata().index("test").getMappingVersion(), Matchers.equalTo(previousVersion));
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
+ * the Apache License, Version 2.0 (the "License"); you may
+            .field("store", false)
+import org.opensearch.action.admin.indices.mapping.put.PutMappingRequest;
+        testConflictWhileMergingAndMappingUnchanged(mapping, mappingUpdate);
+        IllegalArgumentException e = expectThrows(
+            IllegalArgumentException.class,
+            .startObject("foo")
+        assertThat(e.getMessage(), containsString("mapper [foo] cannot be changed from type [long] to [double]"));
+            .startObject("properties")
+ * not use this file except in compliance with the License.
+            equalTo("long")
+ * Unless required by applicable law or agreed to in writing,
             .startObject()
+        IndexService indexService = createIndex("test", Settings.builder().build(), mapping);
+            () -> mapperService.merge(
+    }
+    protected void testConflictWhileMergingAndMappingUnchanged(XContentBuilder mapping, XContentBuilder mappingUpdate) throws IOException {
+            .startObject()
+            equalTo("long")
+            .startObject("properties")
+import org.opensearch.core.xcontent.XContentBuilder;
+            .endObject()
+            request.indices("test");
+                new CompressedXContent(mapping.toString()),
+ * ownership. Elasticsearch licenses this file to you under
+        }
+            .endObject()
+            .startObject()
+                MapperService.SINGLE_MAPPING_NAME,
+        // simulate like in MetadataMappingService#putMapping
+        CompressedXContent mappingAfterUpdate = indexService.mapperService().documentMapper().mappingSource();
+            .field("type", "text")
+import org.opensearch.test.InternalSettingsPlugin;
+import static org.hamcrest.CoreMatchers.containsString;
+        );
+        MapperService mapperService = createIndex("test", Settings.builder().build()).mapperService();
+        assertThat(mappingAfterUpdate, equalTo(mappingBeforeUpdate));
+            ((FieldMapper) mapperService.documentMapper().mapping().root().getMapper("foo")).fieldType().typeName(),
+            .endObject()
+            .field("type", "long")
+}
+    @Override
+                MapperService.MergeReason.MAPPING_UPDATE
+            .startObject()
+        // make sure simulate flag actually worked - no mappings applied
+import org.hamcrest.Matchers;
+            .startObject()
+        );
+            .startObject("foo")
+        return pluginList(InternalSettingsPlugin.class);
+ * compatible open source license.
+        try {
+        );
+            .startObject()
+        }
+            .endObject();
+    public void testReuseMetaField() throws IOException {
+            MapperParsingException.class,
+            .startObject("properties")
+            .endObject()
+import org.opensearch.common.compress.CompressedXContent;
+    public void testMappingVersion() {
+            // expected
+            final long previousVersion = clusterService.state().metadata().index("test").getMappingVersion();
+package org.opensearch.index.mapper;
+            () -> mapperService1.merge(MapperService.SINGLE_MAPPING_NAME, new CompressedXContent(mapping2), MergeReason.MAPPING_UPDATE)
+            .endObject()
+            .endObject()
+        mapperService2.merge(MapperService.SINGLE_MAPPING_NAME, new CompressedXContent(mapping2), MergeReason.MAPPING_UPDATE);
+            .endObject()
+            assertThat(clusterService.state().metadata().index("test").getMappingVersion(), Matchers.equalTo(1 + previousVersion));
+    public void testConflictSameType() throws Exception {
+ * Licensed to Elasticsearch under one or more contributor
+        String mapping2 = XContentFactory.jsonBuilder()
+            .field("enabled", true)
+            .startObject("foo")
+import org.opensearch.index.IndexService;
+ * specific language governing permissions and limitations
+            .startObject("properties")
+            .startObject()
+                    MapperService.SINGLE_MAPPING_NAME,
+        e = expectThrows(
+            final long previousVersion = clusterService.state().metadata().index("test").getMappingVersion();
+            .endObject()
+            .toString();
+            () -> mapperService.merge(
+            request.indices("test");
+            request.source("field", "type=text");
+ * under the License.
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+        mapperService1.merge(MapperService.SINGLE_MAPPING_NAME, new CompressedXContent(mapping1), MergeReason.MAPPING_UPDATE);
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+        } catch (IllegalArgumentException e) {
+        IllegalArgumentException e = expectThrows(
+                );
+        XContentBuilder update = XContentFactory.jsonBuilder()
+            .field("store", true)
+            )
+/*
+                    MapperService.MergeReason.MAPPING_UPDATE
+            .toString();
+import org.opensearch.cluster.service.ClusterService;
+import static org.hamcrest.CoreMatchers.equalTo;
+        assertThat(e.getMessage(), containsString("mapper [foo] cannot be changed from type [long] to [double]"));
+            client().admin().indices().putMapping(request).actionGet();
+        createIndex("test", client().admin().indices().prepareCreate("test"));
+            client().admin().indices().putMapping(request).actionGet();
+                MapperService.MergeReason.MAPPING_UPDATE
+            )
+        {
+            .startObject()
+    }
+import org.opensearch.index.mapper.MapperService.MergeReason;
+        String mapping1 = XContentFactory.jsonBuilder()
+            .endObject();
+ *
+ * GitHub history for details.
+        );
+        {
+ * this work for additional information regarding copyright
+        assertThat(e.getMessage(), equalTo("can't merge a non object mapping [foo] with an object mapping"));
+            () -> mapperService.merge(
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+            .field("type", "double")
+        );
+import org.opensearch.plugins.Plugin;
+        MapperService mapperService1 = createIndex("test1").mapperService();
+        }
+    }
+            .field("type", "double")
+    }
+            .endObject();
+        assertThat(
+        CompressedXContent mappingBeforeUpdate = indexService.mapperService().documentMapper().mappingSource();
+            .endObject()
+        );
+            .field("type", "object")
+        assertThat(e.getMessage(), containsString("Field [_id] is defined more than once"));
+                new CompressedXContent(mapping.toString()),
+                MapperService.MergeReason.MAPPING_UPDATE
+            fail();
+            IllegalArgumentException.class,
+    protected Collection<Class<? extends Plugin>> getPlugins() {
+import org.opensearch.core.common.bytes.BytesReference;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            .field("enabled", true)
+        XContentBuilder mappingUpdate = XContentFactory.jsonBuilder()
+            MapperParsingException.class,
+            .startObject("properties")
+                MapperService.MergeReason.MAPPING_UPDATE
+                new CompressedXContent(update.toString()),
+ * The OpenSearch Contributors require contributions made to
+        MapperService mapperService = createIndex("test", Settings.builder().build(), mapping).mapperService();
+        assertThat(e.getMessage(), containsString("mapper [foo] cannot be changed from type [long] to [double]"));
+            .startObject("foo")
             .startObject("properties")
             .startObject("_id")
-            .field("type", "text")
             .endObject()
+        MapperParsingException e2 = expectThrows(
             .endObject()
             .endObject();
-        MapperService mapperService = createIndex("test", Settings.builder().build()).mapperService();
-
-        MapperParsingException e = expectThrows(
-            MapperParsingException.class,
-            () -> mapperService.merge(
-                MapperService.SINGLE_MAPPING_NAME,
-                new CompressedXContent(mapping.toString()),
-                MapperService.MergeReason.MAPPING_UPDATE
-            )
-        );
-        assertThat(e.getMessage(), containsString("Field [_id] is defined more than once"));
-
-        MapperParsingException e2 = expectThrows(
-            MapperParsingException.class,
-            () -> mapperService.merge(
-                MapperService.SINGLE_MAPPING_NAME,
-                new CompressedXContent(mapping.toString()),
-                MapperService.MergeReason.MAPPING_UPDATE
-            )
-        );
-        assertThat(e2.getMessage(), containsString("Field [_id] is defined more than once"));
-    }
-
-    public void testRejectFieldDefinedTwice() throws IOException {
-        String mapping1 = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("properties")
-            .startObject("foo")
-            .field("type", "object")
-            .endObject()
-            .endObject()
-            .endObject()
-            .toString();
-        String mapping2 = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("properties")
-            .startObject("foo")
-            .field("type", "long")
-            .endObject()
-            .endObject()
-            .endObject()
-            .toString();
-
-        MapperService mapperService1 = createIndex("test1").mapperService();
-        mapperService1.merge(MapperService.SINGLE_MAPPING_NAME, new CompressedXContent(mapping1), MergeReason.MAPPING_UPDATE);
-        IllegalArgumentException e = expectThrows(
+import org.opensearch.common.settings.Settings;
+ * Modifications Copyright OpenSearch Contributors. See
+            indexService.mapperService()
             IllegalArgumentException.class,
-            () -> mapperService1.merge(MapperService.SINGLE_MAPPING_NAME, new CompressedXContent(mapping2), MergeReason.MAPPING_UPDATE)
-        );
-        assertThat(e.getMessage(), equalTo("can't merge a non object mapping [foo] with an object mapping"));
-
-        MapperService mapperService2 = createIndex("test2").mapperService();
-        mapperService2.merge(MapperService.SINGLE_MAPPING_NAME, new CompressedXContent(mapping2), MergeReason.MAPPING_UPDATE);
+            .endObject()
+            )
+            .endObject()
+            .field("type", "text")
+public class UpdateMappingTests extends OpenSearchSingleNodeTestCase {
+                MapperService.SINGLE_MAPPING_NAME,
         e = expectThrows(
-            IllegalArgumentException.class,
-            () -> mapperService2.merge(MapperService.SINGLE_MAPPING_NAME, new CompressedXContent(mapping1), MergeReason.MAPPING_UPDATE)
-        );
-        assertThat(e.getMessage(), equalTo("can't merge a non object mapping [foo] with an object mapping"));
-    }
-
-    public void testMappingVersion() {
-        createIndex("test", client().admin().indices().prepareCreate("test"));
+import java.io.IOException;
+        MapperService mapperService2 = createIndex("test2").mapperService();
+/*
         final ClusterService clusterService = getInstanceFromNode(ClusterService.class);
-        {
-            final long previousVersion = clusterService.state().metadata().index("test").getMappingVersion();
-            final PutMappingRequest request = new PutMappingRequest();
-            request.indices("test");
-            request.source("field", "type=text");
-            client().admin().indices().putMapping(request).actionGet();
-            assertThat(clusterService.state().metadata().index("test").getMappingVersion(), Matchers.equalTo(1 + previousVersion));
-        }
-
-        {
-            final long previousVersion = clusterService.state().metadata().index("test").getMappingVersion();
-            final PutMappingRequest request = new PutMappingRequest();
-            request.indices("test");
-            request.source("field", "type=text");
-            client().admin().indices().putMapping(request).actionGet();
-            // the version should be unchanged after putting the same mapping again
-            assertThat(clusterService.state().metadata().index("test").getMappingVersion(), Matchers.equalTo(previousVersion));
-        }
     }
-
-}
+        assertThat(e2.getMessage(), containsString("Field [_id] is defined more than once"));
+            .endObject()
+ *
+            ((FieldMapper) mapperService.documentMapper().mapping().root().getMapper("foo")).fieldType().typeName(),
+            .startObject()
+ * SPDX-License-Identifier: Apache-2.0
+    }
+ * software distributed under the License is distributed on an
+ */
+            .startObject(fieldName)
+                new CompressedXContent(update.toString()),
+            .startObject("properties")
+            .endObject();
+    public void testConflictFieldsMapping(String fieldName) throws Exception {
+        XContentBuilder update = XContentFactory.jsonBuilder()
+        // test store, ... all the parameters that are not to be changed just like in other fields
+            .endObject()
+                new CompressedXContent(update.toString()),
+            // the version should be unchanged after putting the same mapping again
+            .startObject("properties")
+            .startObject(fieldName)
+        MapperService mapperService = createIndex("test", Settings.builder().build(), mapping).mapperService();
+            .endObject()
+    }
+            .endObject();

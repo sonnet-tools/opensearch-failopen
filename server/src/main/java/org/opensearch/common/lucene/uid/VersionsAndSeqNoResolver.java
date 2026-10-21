@@ -1,246 +1,223 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.lucene.uid;
-
-import org.apache.lucene.index.FilterLeafReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.SegmentReader;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.util.CloseableThreadLocal;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.util.concurrent.ConcurrentCollections;
-import org.opensearch.index.codec.CriteriaBasedCodec;
-import org.opensearch.index.seqno.SequenceNumbers;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Objects;
-import java.util.concurrent.ConcurrentMap;
-
-/**
- * Utility class to resolve the Lucene doc ID, version, seqNo and primaryTerms for a given uid.
- *
- * @opensearch.internal
- */
-public final class VersionsAndSeqNoResolver {
-
-    static final ConcurrentMap<IndexReader.CacheKey, CloseableThreadLocal<PerThreadIDVersionAndSeqNoLookup[]>> lookupStates =
-        ConcurrentCollections.newConcurrentMapWithAggressiveConcurrency();
-
-    // Evict this reader from lookupStates once it's closed:
-    private static final IndexReader.ClosedListener removeLookupState = key -> {
-        CloseableThreadLocal<PerThreadIDVersionAndSeqNoLookup[]> ctl = lookupStates.remove(key);
-        if (ctl != null) {
-            ctl.close();
-        }
-    };
-
-    private static PerThreadIDVersionAndSeqNoLookup[] getLookupState(IndexReader reader, String uidField) throws IOException {
-        return getLookupState(reader, uidField, PerThreadIDVersionAndSeqNoLookup.LookupMode.FULL);
-    }
-
-    private static PerThreadIDVersionAndSeqNoLookup[] getLookupState(
-        IndexReader reader,
-        String uidField,
-        PerThreadIDVersionAndSeqNoLookup.LookupMode mode
-    ) throws IOException {
-        // We cache on the top level
-        // This means cache entries have a shorter lifetime, maybe as low as 1s with the
-        // default refresh interval and a steady indexing rate, but on the other hand it
-        // proved to be cheaper than having to perform a CHM and a TL get for every segment.
-        // See https://github.com/elastic/elasticsearch/pull/19856.
-        // Note: a given reader is only ever queried in one mode — InternalEngine readers go through
-        // the strict path (LookupMode.FULL); the composite secondary reader is only used by
-        // loadDocId (LookupMode.DOC_ID_ONLY) — so a cache entry's build mode always matches its caller.
-        IndexReader.CacheHelper cacheHelper = reader.getReaderCacheHelper();
-        CloseableThreadLocal<PerThreadIDVersionAndSeqNoLookup[]> ctl = lookupStates.get(cacheHelper.getKey());
-        if (ctl == null) {
-            // First time we are seeing this reader's core; make a new CTL:
-            ctl = new CloseableThreadLocal<>();
-            CloseableThreadLocal<PerThreadIDVersionAndSeqNoLookup[]> other = lookupStates.putIfAbsent(cacheHelper.getKey(), ctl);
-            if (other == null) {
-                // Our CTL won, we must remove it when the reader is closed:
-                cacheHelper.addClosedListener(removeLookupState);
-            } else {
-                // Another thread beat us to it: just use their CTL:
-                ctl = other;
-            }
-        }
-
-        PerThreadIDVersionAndSeqNoLookup[] lookupState = ctl.get();
-        if (lookupState == null) {
-            lookupState = new PerThreadIDVersionAndSeqNoLookup[reader.leaves().size()];
-            for (LeafReaderContext leaf : reader.leaves()) {
-                lookupState[leaf.ord] = new PerThreadIDVersionAndSeqNoLookup(leaf.reader(), uidField, mode);
-            }
-            ctl.set(lookupState);
-        }
-
-        if (lookupState.length != reader.leaves().size()) {
-            throw new AssertionError("Mismatched numbers of leaves: " + lookupState.length + " != " + reader.leaves().size());
-        }
-
-        if (lookupState.length > 0 && Objects.equals(lookupState[0].uidField, uidField) == false) {
-            throw new AssertionError(
-                "Index does not consistently use the same uid field: [" + uidField + "] != [" + lookupState[0].uidField + "]"
-            );
-        }
-
         return lookupState;
-    }
-
-    private VersionsAndSeqNoResolver() {}
-
-    /**
-     * Wraps an {@link LeafReaderContext}, a doc ID <b>relative to the context doc base</b> and a version.
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class DocIdAndVersion {
-        public final int docId;
-        public final long version;
-        public final long seqNo;
-        public final long primaryTerm;
-        public final LeafReader reader;
-        public final int docBase;
-
-        public DocIdAndVersion(int docId, long version, long seqNo, long primaryTerm, LeafReader reader, int docBase) {
-            this.docId = docId;
-            this.version = version;
-            this.seqNo = seqNo;
-            this.primaryTerm = primaryTerm;
-            this.reader = reader;
+            ctl.close();
+                    SegmentReader unwrappedReader = (SegmentReader) (FilterLeafReader.unwrap(leaf.reader()));
+        // See https://github.com/elastic/elasticsearch/pull/19856.
+import org.apache.lucene.search.DocIdSetIterator;
+        PerThreadIDVersionAndSeqNoLookup.LookupMode mode
+        CloseableThreadLocal<PerThreadIDVersionAndSeqNoLookup[]> ctl = lookupStates.remove(key);
+    // Evict this reader from lookupStates once it's closed:
+     * Resolves the live doc id for a uid (no {@code _version}/{@code _seq_no} needed), returning the
             this.docBase = docBase;
+                    if (prevCriteria.equals(currentCriteria) == false) {
+        final PerThreadIDVersionAndSeqNoLookup[] lookups = getLookupState(reader, term.field());
+                "Index does not consistently use the same uid field: [" + uidField + "] != [" + lookupState[0].uidField + "]"
+ * not use this file except in compliance with the License.
+    static final ConcurrentMap<IndexReader.CacheKey, CloseableThreadLocal<PerThreadIDVersionAndSeqNoLookup[]>> lookupStates =
+     * The result is either null or the live and latest version of the given uid.
+        // which are likely to be in the last segments
+     * <li>null if the uid wasn't found,
+            ctl = new CloseableThreadLocal<>();
+        );
+            // First time we are seeing this reader's core; make a new CTL:
+ *
+                    }
         }
-    }
-
-    /**
-     * Wraps an {@link LeafReaderContext}, a doc ID <b>relative to the context doc base</b> and a seqNo.
-     *
-     * @opensearch.internal
-     */
-    public static class DocIdAndSeqNo {
-        public final int docId;
-        public final long seqNo;
-        public final LeafReaderContext context;
-
-        DocIdAndSeqNo(int docId, long seqNo, LeafReaderContext context) {
-            this.docId = docId;
+    public static class DocIdAndVersion {
             this.seqNo = seqNo;
+     * </ul>
+        // the strict path (LookupMode.FULL); the composite secondary reader is only used by
+     * Wraps an {@link LeafReaderContext}, a doc ID <b>relative to the context doc base</b> and a version.
+    public static DocIdAndVersion loadDocIdAndVersion(IndexReader reader, Term term, boolean loadSeqNo, String currentCriteria)
+/*
+        // iterate backwards to optimize for the frequently updated documents
+ * under the License.
+        PerThreadIDVersionAndSeqNoLookup[] lookups = getLookupState(reader, term.field());
+ * Utility class to resolve the Lucene doc ID, version, seqNo and primaryTerms for a given uid.
+     * Wraps an {@link LeafReaderContext}, a doc ID <b>relative to the context doc base</b> and a seqNo.
+    }
+        public final long primaryTerm;
+ * The OpenSearch Contributors require contributions made to
+ */
+        return getLookupState(reader, uidField, PerThreadIDVersionAndSeqNoLookup.LookupMode.FULL);
+    private static PerThreadIDVersionAndSeqNoLookup[] getLookupState(
+import org.apache.lucene.index.LeafReader;
+public final class VersionsAndSeqNoResolver {
+        public final int docId;
+import org.opensearch.common.annotation.PublicApi;
+ *
+        public final long seqNo;
+        if (ctl == null) {
+ * KIND, either express or implied.  See the License for the
+        CloseableThreadLocal<PerThreadIDVersionAndSeqNoLookup[]> ctl = lookupStates.get(cacheHelper.getKey());
+        // default refresh interval and a steady indexing rate, but on the other hand it
+        if (lookupState.length > 0 && Objects.equals(lookupState[0].uidField, uidField) == false) {
             this.context = context;
         }
-    }
-
+     * {@code seqNo = }{@link SequenceNumbers#UNASSIGNED_SEQ_NO} — use only {@code docId} and {@code context}.
+    private VersionsAndSeqNoResolver() {}
+ * this work for additional information regarding copyright
+        // which are likely to be in the last segments
+        public final int docBase;
+        // iterate backwards to optimize for the frequently updated documents
+        // Note: a given reader is only ever queried in one mode — InternalEngine readers go through
+                if (result.version > 0 && currentCriteria != null) {
+            }
+                    assert prevCriteria != null;
+     *
+import org.apache.lucene.index.FilterLeafReader;
+ * You may obtain a copy of the License at
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        public DocIdAndVersion(int docId, long version, long seqNo, long primaryTerm, LeafReader reader, int docBase) {
+        IndexReader reader,
+        }
+            if (result != null) {
+        for (int i = leaves.size() - 1; i >= 0; i--) {
+        PerThreadIDVersionAndSeqNoLookup[] lookupState = ctl.get();
+            }
+ * software distributed under the License is distributed on an
+            this.reader = reader;
+package org.opensearch.common.lucene.uid;
+import java.util.concurrent.ConcurrentMap;
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+        final List<LeafReaderContext> leaves = reader.leaves();
+            this.version = version;
+            final int docId = lookups[leaf.ord].getDocID(term.bytes(), leaf);
+ * Licensed to Elasticsearch under one or more contributor
+                cacheHelper.addClosedListener(removeLookupState);
+ * SPDX-License-Identifier: Apache-2.0
+                            null
+            if (docId != DocIdSetIterator.NO_MORE_DOCS) {
+        public final long seqNo;
     /**
-     * Load the internal doc ID and version for the uid from the reader, returning<ul>
-     * <li>null if the uid wasn't found,
-     * <li>a doc ID and a version otherwise
-     * </ul>
+ * @opensearch.internal
+ */
+            if (other == null) {
+ * this file be licensed under the Apache-2.0 license or a
+        }
+        public final int docId;
+            final DocIdAndSeqNo result = lookup.lookupSeqNo(term.bytes(), leaf);
+                            "Updating grouping criteria is not allowed for context aware enabled indices.",
+            final LeafReaderContext leaf = leaves.get(i);
+ * Unless required by applicable law or agreed to in writing,
      */
-    public static DocIdAndVersion loadDocIdAndVersion(IndexReader reader, Term term, boolean loadSeqNo, String currentCriteria)
-        throws IOException {
-        PerThreadIDVersionAndSeqNoLookup[] lookups = getLookupState(reader, term.field());
+import org.apache.lucene.util.CloseableThreadLocal;
+     * leaf and doc id, or null if not found. The returned {@link DocIdAndSeqNo} has
+        public final long version;
+     */
+        }
+     *
+            throw new AssertionError(
+        // which are likely to be in the last segments
+     */
+    }
+        return null;
+     * Load the internal doc ID and version for the uid from the reader, returning<ul>
+                ctl = other;
+     */
         List<LeafReaderContext> leaves = reader.leaves();
         // iterate backwards to optimize for the frequently updated documents
-        // which are likely to be in the last segments
-        for (int i = leaves.size() - 1; i >= 0; i--) {
-            final LeafReaderContext leaf = leaves.get(i);
-            PerThreadIDVersionAndSeqNoLookup lookup = lookups[leaf.ord];
-            DocIdAndVersion result = lookup.lookupVersion(term.bytes(), loadSeqNo, leaf);
-            if (result != null) {
-                if (result.version > 0 && currentCriteria != null) {
-                    SegmentReader unwrappedReader = (SegmentReader) (FilterLeafReader.unwrap(leaf.reader()));
-                    String prevCriteria = unwrappedReader.getSegmentInfo().info.getAttribute(CriteriaBasedCodec.BUCKET_NAME);
-                    assert prevCriteria != null;
-                    if (prevCriteria.equals(currentCriteria) == false) {
+            CloseableThreadLocal<PerThreadIDVersionAndSeqNoLookup[]> other = lookupStates.putIfAbsent(cacheHelper.getKey(), ctl);
+    }
+import org.apache.lucene.index.IndexReader;
+            this.docId = docId;
+                // Our CTL won, we must remove it when the reader is closed:
+            }
                         throw new UnsupportedOperationException(
-                            "Updating grouping criteria is not allowed for context aware enabled indices.",
-                            null
-                        );
-                    }
-                }
-
-                return result;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Loads the internal docId and sequence number of the latest copy for a given uid from the provided reader.
-     * The result is either null or the live and latest version of the given uid.
-     */
-    public static DocIdAndSeqNo loadDocIdAndSeqNo(IndexReader reader, Term term) throws IOException {
-        final PerThreadIDVersionAndSeqNoLookup[] lookups = getLookupState(reader, term.field());
-        final List<LeafReaderContext> leaves = reader.leaves();
-        // iterate backwards to optimize for the frequently updated documents
-        // which are likely to be in the last segments
-        for (int i = leaves.size() - 1; i >= 0; i--) {
-            final LeafReaderContext leaf = leaves.get(i);
             final PerThreadIDVersionAndSeqNoLookup lookup = lookups[leaf.ord];
-            final DocIdAndSeqNo result = lookup.lookupSeqNo(term.bytes(), leaf);
-            if (result != null) {
-                return result;
-            }
         }
+        public final LeafReaderContext context;
+                }
+    };
+    public static DocIdAndSeqNo loadDocIdAndSeqNo(IndexReader reader, Term term) throws IOException {
         return null;
-    }
-
+import org.opensearch.index.codec.CriteriaBasedCodec;
+        }
     /**
-     * Resolves the live doc id for a uid (no {@code _version}/{@code _seq_no} needed), returning the
-     * leaf and doc id, or null if not found. The returned {@link DocIdAndSeqNo} has
-     * {@code seqNo = }{@link SequenceNumbers#UNASSIGNED_SEQ_NO} — use only {@code docId} and {@code context}.
-     */
-    public static DocIdAndSeqNo loadDocId(IndexReader reader, Term term) throws IOException {
-        final PerThreadIDVersionAndSeqNoLookup[] lookups = getLookupState(
-            reader,
-            term.field(),
-            PerThreadIDVersionAndSeqNoLookup.LookupMode.DOC_ID_ONLY
-        );
-        final List<LeafReaderContext> leaves = reader.leaves();
-        // iterate backwards to optimize for the frequently updated documents
-        // which are likely to be in the last segments
-        for (int i = leaves.size() - 1; i >= 0; i--) {
-            final LeafReaderContext leaf = leaves.get(i);
-            final int docId = lookups[leaf.ord].getDocID(term.bytes(), leaf);
-            if (docId != DocIdSetIterator.NO_MORE_DOCS) {
-                return new DocIdAndSeqNo(docId, SequenceNumbers.UNASSIGNED_SEQ_NO, leaf);
+import org.apache.lucene.index.LeafReaderContext;
             }
-        }
-        return null;
-    }
+        public final LeafReader reader;
+     * @opensearch.internal
+        for (int i = leaves.size() - 1; i >= 0; i--) {
+        final List<LeafReaderContext> leaves = reader.leaves();
+import java.io.IOException;
+            this.docId = docId;
 }
+ * specific language governing permissions and limitations
+     */
+import java.util.List;
+                return result;
+    }
+    public static class DocIdAndSeqNo {
+ */
+import org.opensearch.common.util.concurrent.ConcurrentCollections;
+            reader,
+    }
+            }
+            DocIdAndVersion result = lookup.lookupVersion(term.bytes(), loadSeqNo, leaf);
+        ConcurrentCollections.newConcurrentMapWithAggressiveConcurrency();
+ * Modifications Copyright OpenSearch Contributors. See
+        if (lookupState == null) {
+            } else {
+ */
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    }
+        if (ctl != null) {
+            PerThreadIDVersionAndSeqNoLookup.LookupMode.DOC_ID_ONLY
+            term.field(),
+    public static DocIdAndSeqNo loadDocId(IndexReader reader, Term term) throws IOException {
+            this.seqNo = seqNo;
+    /**
+        final PerThreadIDVersionAndSeqNoLookup[] lookups = getLookupState(
+            );
+                lookupState[leaf.ord] = new PerThreadIDVersionAndSeqNoLookup(leaf.reader(), uidField, mode);
+                // Another thread beat us to it: just use their CTL:
+ * ownership. Elasticsearch licenses this file to you under
+            lookupState = new PerThreadIDVersionAndSeqNoLookup[reader.leaves().size()];
+import org.opensearch.index.seqno.SequenceNumbers;
+     * @opensearch.api
+        IndexReader.CacheHelper cacheHelper = reader.getReaderCacheHelper();
+        // We cache on the top level
+        // This means cache entries have a shorter lifetime, maybe as low as 1s with the
+ * license agreements. See the NOTICE file distributed with
+ *
+/*
+     * <li>a doc ID and a version otherwise
+        DocIdAndSeqNo(int docId, long seqNo, LeafReaderContext context) {
+        String uidField,
+                    String prevCriteria = unwrappedReader.getSegmentInfo().info.getAttribute(CriteriaBasedCodec.BUCKET_NAME);
+        throws IOException {
+        return null;
+    private static final IndexReader.ClosedListener removeLookupState = key -> {
+    @PublicApi(since = "1.0.0")
+            PerThreadIDVersionAndSeqNoLookup lookup = lookups[leaf.ord];
+                return result;
+/**
+        }
+        }
+ * GitHub history for details.
+    private static PerThreadIDVersionAndSeqNoLookup[] getLookupState(IndexReader reader, String uidField) throws IOException {
+            final LeafReaderContext leaf = leaves.get(i);
+        // loadDocId (LookupMode.DOC_ID_ONLY) — so a cache entry's build mode always matches its caller.
+ * compatible open source license.
+            if (result != null) {
+/*
+     * Loads the internal docId and sequence number of the latest copy for a given uid from the provided reader.
+            throw new AssertionError("Mismatched numbers of leaves: " + lookupState.length + " != " + reader.leaves().size());
+        }
+                        );
+    ) throws IOException {
+import java.util.Objects;
+            final LeafReaderContext leaf = leaves.get(i);
+import org.apache.lucene.index.Term;
+            ctl.set(lookupState);
+            for (LeafReaderContext leaf : reader.leaves()) {
+import org.apache.lucene.index.SegmentReader;
+        // proved to be cheaper than having to perform a CHM and a TL get for every segment.
+    }
+        for (int i = leaves.size() - 1; i >= 0; i--) {
+                return new DocIdAndSeqNo(docId, SequenceNumbers.UNASSIGNED_SEQ_NO, leaf);
+            this.primaryTerm = primaryTerm;
+        if (lookupState.length != reader.leaves().size()) {
+    /**
+    /**

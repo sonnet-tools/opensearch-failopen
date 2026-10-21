@@ -1,2055 +1,1898 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.client.documentation;
-
-import org.apache.hc.core5.http.HttpHost;
-import org.opensearch.OpenSearchException;
-import org.opensearch.action.DocWriteRequest;
-import org.opensearch.action.DocWriteResponse;
-import org.opensearch.action.LatchedActionListener;
-import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
-import org.opensearch.action.bulk.BackoffPolicy;
-import org.opensearch.action.bulk.BulkItemResponse;
-import org.opensearch.action.bulk.BulkProcessor;
-import org.opensearch.action.bulk.BulkRequest;
-import org.opensearch.action.bulk.BulkResponse;
-import org.opensearch.action.delete.DeleteRequest;
-import org.opensearch.action.delete.DeleteResponse;
-import org.opensearch.action.get.GetRequest;
-import org.opensearch.action.get.GetResponse;
-import org.opensearch.action.get.MultiGetItemResponse;
-import org.opensearch.action.get.MultiGetRequest;
-import org.opensearch.action.get.MultiGetResponse;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.action.support.ActiveShardCount;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.WriteRequest;
-import org.opensearch.action.support.WriteRequest.RefreshPolicy;
-import org.opensearch.action.support.replication.ReplicationResponse;
-import org.opensearch.action.update.UpdateRequest;
-import org.opensearch.action.update.UpdateResponse;
-import org.opensearch.client.OpenSearchRestHighLevelClientTestCase;
-import org.opensearch.client.Request;
-import org.opensearch.client.RequestOptions;
-import org.opensearch.client.Response;
-import org.opensearch.client.RestHighLevelClient;
-import org.opensearch.client.RethrottleRequest;
-import org.opensearch.client.core.GetSourceRequest;
-import org.opensearch.client.core.GetSourceResponse;
-import org.opensearch.client.core.MultiTermVectorsRequest;
-import org.opensearch.client.core.MultiTermVectorsResponse;
-import org.opensearch.client.core.TermVectorsRequest;
-import org.opensearch.client.core.TermVectorsResponse;
-import org.opensearch.client.indices.CreateIndexRequest;
-import org.opensearch.client.indices.CreateIndexResponse;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.VersionType;
-import org.opensearch.index.get.GetResult;
-import org.opensearch.index.query.MatchAllQueryBuilder;
-import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.index.reindex.BulkByScrollResponse;
-import org.opensearch.index.reindex.DeleteByQueryRequest;
-import org.opensearch.index.reindex.ReindexRequest;
-import org.opensearch.index.reindex.RemoteInfo;
-import org.opensearch.index.reindex.ScrollableHitSource;
-import org.opensearch.index.reindex.UpdateByQueryRequest;
-import org.opensearch.script.Script;
-import org.opensearch.script.ScriptType;
-import org.opensearch.search.fetch.subphase.FetchSourceContext;
-
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-
-import static java.util.Collections.singletonMap;
-import static org.hamcrest.Matchers.arrayWithSize;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.hasEntry;
-import static org.hamcrest.Matchers.hasKey;
-import static org.hamcrest.Matchers.not;
-
-/**
- * Documentation for CRUD APIs in the high level java client.
- * Code wrapped in {@code tag} and {@code end} tags is included in the docs.
- */
-public class CRUDDocumentationIT extends OpenSearchRestHighLevelClientTestCase {
-
-    @SuppressWarnings("unused")
-    public void testIndex() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-
         {
-            //tag::index-request-map
-            Map<String, Object> jsonMap = new HashMap<>();
-            jsonMap.put("user", "foobar");
-            jsonMap.put("postDate", new Date());
-            jsonMap.put("message", "trying out OpenSearch");
-            IndexRequest indexRequest = new IndexRequest("posts")
-                .id("1").source(jsonMap); // <1>
-            //end::index-request-map
-            IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
-            assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
-        }
-        {
-            //tag::index-request-xcontent
-            XContentBuilder builder = XContentFactory.jsonBuilder();
-            builder.startObject();
-            {
-                builder.field("user", "foobar");
-                builder.timeField("postDate", new Date());
-                builder.field("message", "trying out OpenSearch");
-            }
-            builder.endObject();
-            IndexRequest indexRequest = new IndexRequest("posts")
-                .id("1").source(builder);  // <1>
-            //end::index-request-xcontent
-            IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
-            assertEquals(DocWriteResponse.Result.UPDATED, indexResponse.getResult());
-        }
-        {
-            //tag::index-request-shortcut
-            IndexRequest indexRequest = new IndexRequest("posts")
-                .id("1")
-                .source("user", "foobar",
-                    "postDate", new Date(),
-                    "message", "trying out OpenSearch"); // <1>
-            //end::index-request-shortcut
-            IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
-            assertEquals(DocWriteResponse.Result.UPDATED, indexResponse.getResult());
-        }
-        {
-            //tag::index-request-string
-            IndexRequest request = new IndexRequest("posts"); // <1>
-            request.id("1"); // <2>
-            String jsonString = "{" +
-                    "\"user\":\"foobar\"," +
-                    "\"postDate\":\"2013-01-30\"," +
-                    "\"message\":\"trying out OpenSearch\"" +
-                    "}";
-            request.source(jsonString, MediaTypeRegistry.JSON); // <3>
-            //end::index-request-string
-
-            // tag::index-execute
-            IndexResponse indexResponse = client.index(request, RequestOptions.DEFAULT);
-            // end::index-execute
-            assertEquals(DocWriteResponse.Result.UPDATED, indexResponse.getResult());
-
-            // tag::index-response
-            String index = indexResponse.getIndex();
-            String id = indexResponse.getId();
-            if (indexResponse.getResult() == DocWriteResponse.Result.CREATED) {
-                // <1>
-            } else if (indexResponse.getResult() == DocWriteResponse.Result.UPDATED) {
-                // <2>
-            }
-            ReplicationResponse.ShardInfo shardInfo = indexResponse.getShardInfo();
-            if (shardInfo.getTotal() != shardInfo.getSuccessful()) {
-                // <3>
-            }
-            if (shardInfo.getFailed() > 0) {
-                for (ReplicationResponse.ShardInfo.Failure failure :
-                        shardInfo.getFailures()) {
-                    String reason = failure.reason(); // <4>
-                }
-            }
-            // end::index-response
-        }
-        {
-            IndexRequest request = new IndexRequest("posts").id("1");
-            // tag::index-request-routing
-            request.routing("routing"); // <1>
-            // end::index-request-routing
-            // tag::index-request-timeout
-            request.timeout(TimeValue.timeValueSeconds(1)); // <1>
-            request.timeout("1s"); // <2>
-            // end::index-request-timeout
-            // tag::index-request-refresh
-            request.setRefreshPolicy(WriteRequest.RefreshPolicy.WAIT_UNTIL); // <1>
-            request.setRefreshPolicy("wait_for");                            // <2>
-            // end::index-request-refresh
-            // tag::index-request-version
-            request.version(2); // <1>
-            // end::index-request-version
-            // tag::index-request-version-type
-            request.versionType(VersionType.EXTERNAL); // <1>
-            // end::index-request-version-type
-            // tag::index-request-op-type
-            request.opType(DocWriteRequest.OpType.CREATE); // <1>
-            request.opType("create"); // <2>
-            // end::index-request-op-type
-            // tag::index-request-pipeline
-            request.setPipeline("pipeline"); // <1>
-            // end::index-request-pipeline
-        }
-        {
-            // tag::index-conflict
-            IndexRequest request = new IndexRequest("posts")
-                .id("1")
-                .source("field", "value")
-                .setIfSeqNo(10L)
-                .setIfPrimaryTerm(20);
-            try {
-                IndexResponse response = client.index(request, RequestOptions.DEFAULT);
-            } catch(OpenSearchException e) {
-                if (e.status() == RestStatus.CONFLICT) {
-                    // <1>
-                }
-            }
-            // end::index-conflict
-        }
-        {
-            // tag::index-optype
-            IndexRequest request = new IndexRequest("posts")
-                .id("1")
-                .source("field", "value")
-                .opType(DocWriteRequest.OpType.CREATE);
-            try {
-                IndexResponse response = client.index(request, RequestOptions.DEFAULT);
-            } catch(OpenSearchException e) {
-                if (e.status() == RestStatus.CONFLICT) {
-                    // <1>
-                }
-            }
-            // end::index-optype
-        }
-        {
-            IndexRequest request = new IndexRequest("posts").id("async").source("field", "value");
-            ActionListener<IndexResponse> listener;
-            // tag::index-execute-listener
-            listener = new ActionListener<IndexResponse>() {
-                @Override
-                public void onResponse(IndexResponse indexResponse) {
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>
-                }
-            };
-            // end::index-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::index-execute-async
-            client.indexAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::index-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-    }
-
-    @SuppressWarnings("unused")
-    public void testUpdate() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-        {
-            IndexRequest indexRequest = new IndexRequest("posts").id("1").source("field", 0);
-            IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
-            assertSame(RestStatus.CREATED, indexResponse.status());
-
-            Request request = new Request("POST", "/_scripts/increment-field");
-            request.setJsonEntity(
-                JsonXContent.contentBuilder()
-                    .startObject()
-                    .startObject("script")
-                    .field("lang", "painless")
-                    .field("source", "ctx._source.field += params.count")
-                    .endObject()
-                    .endObject()
-                    .toString()
-            );
-            Response response = client().performRequest(request);
-            assertEquals(RestStatus.OK.getStatus(), response.getStatusLine().getStatusCode());
-        }
-        {
-            //tag::update-request
-            UpdateRequest request = new UpdateRequest(
-                    "posts", // <1>
-                    "1");   // <2>
-            //end::update-request
-            request.fetchSource(true);
-            //tag::update-request-with-inline-script
-            Map<String, Object> parameters = singletonMap("count", 4); // <1>
-
-            Script inline = new Script(ScriptType.INLINE, "painless",
-                    "ctx._source.field += params.count", parameters);  // <2>
-            request.script(inline);  // <3>
-            //end::update-request-with-inline-script
-            UpdateResponse updateResponse = client.update(request, RequestOptions.DEFAULT);
-            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
-            assertEquals(4, updateResponse.getGetResult().getSource().get("field"));
-
-            request = new UpdateRequest("posts", "1").fetchSource(true);
-            //tag::update-request-with-stored-script
-            Script stored = new Script(
-                    ScriptType.STORED, null, "increment-field", parameters);  // <1>
-            request.script(stored);  // <2>
-            //end::update-request-with-stored-script
-            updateResponse = client.update(request, RequestOptions.DEFAULT);
-            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
-            assertEquals(8, updateResponse.getGetResult().getSource().get("field"));
-        }
-        {
-            //tag::update-request-with-doc-as-map
-            Map<String, Object> jsonMap = new HashMap<>();
-            jsonMap.put("updated", new Date());
-            jsonMap.put("reason", "daily update");
-            UpdateRequest request = new UpdateRequest("posts", "1")
-                    .doc(jsonMap); // <1>
-            //end::update-request-with-doc-as-map
-            UpdateResponse updateResponse = client.update(request, RequestOptions.DEFAULT);
-            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
-        }
-        {
-            //tag::update-request-with-doc-as-xcontent
-            XContentBuilder builder = XContentFactory.jsonBuilder();
-            builder.startObject();
-            {
-                builder.timeField("updated", new Date());
-                builder.field("reason", "daily update");
-            }
-            builder.endObject();
-            UpdateRequest request = new UpdateRequest("posts", "1")
-                    .doc(builder);  // <1>
-            //end::update-request-with-doc-as-xcontent
-            UpdateResponse updateResponse = client.update(request, RequestOptions.DEFAULT);
-            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
-        }
-        {
-            //tag::update-request-shortcut
-            UpdateRequest request = new UpdateRequest("posts", "1")
-                    .doc("updated", new Date(),
-                         "reason", "daily update"); // <1>
-            //end::update-request-shortcut
-            UpdateResponse updateResponse = client.update(request, RequestOptions.DEFAULT);
-            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
-        }
-        {
-            //tag::update-request-with-doc-as-string
-            UpdateRequest request = new UpdateRequest("posts", "1");
-            String jsonString = "{" +
-                    "\"updated\":\"2017-01-01\"," +
-                    "\"reason\":\"daily update\"" +
-                    "}";
-            request.doc(jsonString, MediaTypeRegistry.JSON); // <1>
-            //end::update-request-with-doc-as-string
-            request.fetchSource(true);
-            // tag::update-execute
-            UpdateResponse updateResponse = client.update(
-                    request, RequestOptions.DEFAULT);
-            // end::update-execute
-            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
-
-            // tag::update-response
-            String index = updateResponse.getIndex();
-            String id = updateResponse.getId();
-            long version = updateResponse.getVersion();
-            if (updateResponse.getResult() == DocWriteResponse.Result.CREATED) {
-                // <1>
-            } else if (updateResponse.getResult() == DocWriteResponse.Result.UPDATED) {
-                // <2>
-            } else if (updateResponse.getResult() == DocWriteResponse.Result.DELETED) {
-                // <3>
-            } else if (updateResponse.getResult() == DocWriteResponse.Result.NOOP) {
-                // <4>
-            }
-            // end::update-response
-
-            // tag::update-getresult
-            GetResult result = updateResponse.getGetResult(); // <1>
-            if (result.isExists()) {
-                String sourceAsString = result.sourceAsString(); // <2>
-                Map<String, Object> sourceAsMap = result.sourceAsMap(); // <3>
-                byte[] sourceAsBytes = result.source(); // <4>
-            } else {
-                // <5>
-            }
-            // end::update-getresult
-            assertNotNull(result);
-            assertEquals(3, result.sourceAsMap().size());
-            // tag::update-failure
-            ReplicationResponse.ShardInfo shardInfo = updateResponse.getShardInfo();
-            if (shardInfo.getTotal() != shardInfo.getSuccessful()) {
-                // <1>
-            }
-            if (shardInfo.getFailed() > 0) {
-                for (ReplicationResponse.ShardInfo.Failure failure :
-                        shardInfo.getFailures()) {
-                    String reason = failure.reason(); // <2>
-                }
-            }
-            // end::update-failure
-        }
-        {
-            //tag::update-docnotfound
-            UpdateRequest request = new UpdateRequest("posts", "does_not_exist")
-                    .doc("field", "value");
-            try {
-                UpdateResponse updateResponse = client.update(
-                        request, RequestOptions.DEFAULT);
-            } catch (OpenSearchException e) {
-                if (e.status() == RestStatus.NOT_FOUND) {
-                    // <1>
-                }
-            }
-            //end::update-docnotfound
-        }
-        {
-            // tag::update-conflict
-            UpdateRequest request = new UpdateRequest("posts", "1")
-                    .doc("field", "value")
-                    .setIfSeqNo(101L)
-                    .setIfPrimaryTerm(200L);
-            try {
-                UpdateResponse updateResponse = client.update(
-                        request, RequestOptions.DEFAULT);
-            } catch(OpenSearchException e) {
-                if (e.status() == RestStatus.CONFLICT) {
-                    // <1>
-                }
-            }
-            // end::update-conflict
-        }
-        {
-            UpdateRequest request = new UpdateRequest("posts", "1").doc("reason", "no source");
-            //tag::update-request-no-source
-            request.fetchSource(true); // <1>
-            //end::update-request-no-source
-            UpdateResponse updateResponse = client.update(request, RequestOptions.DEFAULT);
-            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
-            assertNotNull(updateResponse.getGetResult());
-            assertEquals(3, updateResponse.getGetResult().sourceAsMap().size());
-        }
-        {
-            UpdateRequest request = new UpdateRequest("posts", "1").doc("reason", "source includes");
-            //tag::update-request-source-include
-            String[] includes = new String[]{"updated", "r*"};
-            String[] excludes = Strings.EMPTY_ARRAY;
-            request.fetchSource(
-                    new FetchSourceContext(true, includes, excludes)); // <1>
-            //end::update-request-source-include
-            UpdateResponse updateResponse = client.update(request, RequestOptions.DEFAULT);
-            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
-            Map<String, Object> sourceAsMap = updateResponse.getGetResult().sourceAsMap();
-            assertEquals(2, sourceAsMap.size());
-            assertEquals("source includes", sourceAsMap.get("reason"));
-            assertTrue(sourceAsMap.containsKey("updated"));
-        }
-        {
-            UpdateRequest request = new UpdateRequest("posts", "1").doc("reason", "source excludes");
-            //tag::update-request-source-exclude
-            String[] includes = Strings.EMPTY_ARRAY;
-            String[] excludes = new String[]{"updated"};
-            request.fetchSource(
-                    new FetchSourceContext(true, includes, excludes)); // <1>
-            //end::update-request-source-exclude
-            UpdateResponse updateResponse = client.update(request, RequestOptions.DEFAULT);
-            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
-            Map<String, Object> sourceAsMap = updateResponse.getGetResult().sourceAsMap();
-            assertEquals(2, sourceAsMap.size());
-            assertEquals("source excludes", sourceAsMap.get("reason"));
-            assertTrue(sourceAsMap.containsKey("field"));
-        }
-        {
-            UpdateRequest request = new UpdateRequest("posts", "id");
-            // tag::update-request-routing
-            request.routing("routing"); // <1>
-            // end::update-request-routing
-            // tag::update-request-timeout
-            request.timeout(TimeValue.timeValueSeconds(1)); // <1>
-            request.timeout("1s"); // <2>
-            // end::update-request-timeout
-            // tag::update-request-retry
-            request.retryOnConflict(3); // <1>
-            // end::update-request-retry
-            // tag::update-request-refresh
-            request.setRefreshPolicy(WriteRequest.RefreshPolicy.WAIT_UNTIL); // <1>
-            request.setRefreshPolicy("wait_for");                            // <2>
-            // end::update-request-refresh
-            // tag::update-request-cas
-            request.setIfSeqNo(2L); // <1>
-            request.setIfPrimaryTerm(1L); // <2>
-            // end::update-request-cas
-            // tag::update-request-detect-noop
-            request.detectNoop(false); // <1>
-            // end::update-request-detect-noop
-            // tag::update-request-upsert
-            String jsonString = "{\"created\":\"2017-01-01\"}";
-            request.upsert(jsonString, MediaTypeRegistry.JSON);  // <1>
-            // end::update-request-upsert
-            // tag::update-request-scripted-upsert
-            request.scriptedUpsert(true); // <1>
-            // end::update-request-scripted-upsert
-            // tag::update-request-doc-upsert
-            request.docAsUpsert(true); // <1>
-            // end::update-request-doc-upsert
-            // tag::update-request-active-shards
-            request.waitForActiveShards(2); // <1>
-            request.waitForActiveShards(ActiveShardCount.ALL); // <2>
-            // end::update-request-active-shards
-        }
-        {
-            UpdateRequest request = new UpdateRequest("posts", "async").doc("reason", "async update").docAsUpsert(true);
-
-            ActionListener<UpdateResponse> listener;
-            // tag::update-execute-listener
-            listener = new ActionListener<UpdateResponse>() {
-                @Override
-                public void onResponse(UpdateResponse updateResponse) {
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>
-                }
-            };
-            // end::update-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::update-execute-async
-            client.updateAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::update-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-    }
-
-    @SuppressWarnings("unused")
-    public void testDelete() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-
-        {
-            IndexRequest indexRequest = new IndexRequest("posts").id("1").source("field", "value");
-            IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
-            assertSame(RestStatus.CREATED, indexResponse.status());
-        }
-
-        {
-            // tag::delete-request
-            DeleteRequest request = new DeleteRequest(
-                    "posts",    // <1>
-                    "1");       // <2>
-            // end::delete-request
-
-            // tag::delete-execute
-            DeleteResponse deleteResponse = client.delete(
-                    request, RequestOptions.DEFAULT);
-            // end::delete-execute
-            assertSame(DocWriteResponse.Result.DELETED, deleteResponse.getResult());
-
-            // tag::delete-response
-            String index = deleteResponse.getIndex();
-            String id = deleteResponse.getId();
-            long version = deleteResponse.getVersion();
-            ReplicationResponse.ShardInfo shardInfo = deleteResponse.getShardInfo();
-            if (shardInfo.getTotal() != shardInfo.getSuccessful()) {
-                // <1>
-            }
-            if (shardInfo.getFailed() > 0) {
-                for (ReplicationResponse.ShardInfo.Failure failure :
-                        shardInfo.getFailures()) {
-                    String reason = failure.reason(); // <2>
-                }
-            }
-            // end::delete-response
-        }
-
-        {
-            DeleteRequest request = new DeleteRequest("posts", "1");
-            // tag::delete-request-routing
-            request.routing("routing"); // <1>
-            // end::delete-request-routing
-            // tag::delete-request-timeout
-            request.timeout(TimeValue.timeValueMinutes(2)); // <1>
-            request.timeout("2m"); // <2>
-            // end::delete-request-timeout
-            // tag::delete-request-refresh
-            request.setRefreshPolicy(WriteRequest.RefreshPolicy.WAIT_UNTIL); // <1>
-            request.setRefreshPolicy("wait_for");                            // <2>
-            // end::delete-request-refresh
-            // tag::delete-request-version
-            request.version(2); // <1>
-            // end::delete-request-version
-            // tag::delete-request-version-type
-            request.versionType(VersionType.EXTERNAL); // <1>
-            // end::delete-request-version-type
-        }
-
-        {
-            // tag::delete-notfound
-            DeleteRequest request = new DeleteRequest("posts", "does_not_exist");
-            DeleteResponse deleteResponse = client.delete(
-                    request, RequestOptions.DEFAULT);
-            if (deleteResponse.getResult() == DocWriteResponse.Result.NOT_FOUND) {
-                // <1>
-            }
-            // end::delete-notfound
-        }
-
-        {
-            IndexResponse indexResponse = client.index(new IndexRequest("posts").id("1").source("field", "value"), RequestOptions.DEFAULT);
-            assertSame(RestStatus.CREATED, indexResponse.status());
-
-            // tag::delete-conflict
-            try {
-                DeleteResponse deleteResponse = client.delete(
-                    new DeleteRequest("posts", "1").setIfSeqNo(100).setIfPrimaryTerm(2),
-                        RequestOptions.DEFAULT);
-            } catch (OpenSearchException exception) {
-                if (exception.status() == RestStatus.CONFLICT) {
-                    // <1>
-                }
-            }
-            // end::delete-conflict
-        }
-        {
-            IndexResponse indexResponse = client.index(
-                new IndexRequest("posts").id("async").source("field", "value"),
-                RequestOptions.DEFAULT
-            );
-            assertSame(RestStatus.CREATED, indexResponse.status());
-
-            DeleteRequest request = new DeleteRequest("posts", "async");
-
-            ActionListener<DeleteResponse> listener;
-            // tag::delete-execute-listener
-            listener = new ActionListener<DeleteResponse>() {
-                @Override
-                public void onResponse(DeleteResponse deleteResponse) {
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>
-                }
-            };
-            // end::delete-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::delete-execute-async
-            client.deleteAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::delete-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-    }
-
-    @SuppressWarnings("unused")
-    public void testBulk() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-        {
-            // tag::bulk-request
-            BulkRequest request = new BulkRequest(); // <1>
-            request.add(new IndexRequest("posts").id("1")  // <2>
-                    .source(MediaTypeRegistry.JSON,"field", "foo"));
-            request.add(new IndexRequest("posts").id("2")  // <3>
-                    .source(MediaTypeRegistry.JSON,"field", "bar"));
-            request.add(new IndexRequest("posts").id("3")  // <4>
-                    .source(MediaTypeRegistry.JSON,"field", "baz"));
-            // end::bulk-request
-            // tag::bulk-execute
-            BulkResponse bulkResponse = client.bulk(request, RequestOptions.DEFAULT);
-            // end::bulk-execute
-            assertSame(RestStatus.OK, bulkResponse.status());
-            assertFalse(bulkResponse.hasFailures());
-        }
-        {
-            // tag::bulk-request-with-mixed-operations
-            BulkRequest request = new BulkRequest();
-            request.add(new DeleteRequest("posts", "3")); // <1>
-            request.add(new UpdateRequest("posts", "2") // <2>
-                    .doc(MediaTypeRegistry.JSON,"other", "test"));
-            request.add(new IndexRequest("posts").id("4")  // <3>
-                    .source(MediaTypeRegistry.JSON,"field", "baz"));
-            // end::bulk-request-with-mixed-operations
-            BulkResponse bulkResponse = client.bulk(request, RequestOptions.DEFAULT);
-            assertSame(RestStatus.OK, bulkResponse.status());
-            assertFalse(bulkResponse.hasFailures());
-
-            // tag::bulk-response
-            for (BulkItemResponse bulkItemResponse : bulkResponse) { // <1>
-                DocWriteResponse itemResponse = bulkItemResponse.getResponse(); // <2>
-
-                switch (bulkItemResponse.getOpType()) {
-                case INDEX:    // <3>
-                case CREATE:
-                    IndexResponse indexResponse = (IndexResponse) itemResponse;
-                    break;
-                case UPDATE:   // <4>
-                    UpdateResponse updateResponse = (UpdateResponse) itemResponse;
-                    break;
-                case DELETE:   // <5>
-                    DeleteResponse deleteResponse = (DeleteResponse) itemResponse;
-                }
-            }
-            // end::bulk-response
-            // tag::bulk-has-failures
-            if (bulkResponse.hasFailures()) { // <1>
-
-            }
-            // end::bulk-has-failures
-            // tag::bulk-errors
-            for (BulkItemResponse bulkItemResponse : bulkResponse) {
-                if (bulkItemResponse.isFailed()) { // <1>
-                    BulkItemResponse.Failure failure =
-                            bulkItemResponse.getFailure(); // <2>
-                }
-            }
-            // end::bulk-errors
-        }
-        {
-            BulkRequest request = new BulkRequest();
-            // tag::bulk-request-timeout
-            request.timeout(TimeValue.timeValueMinutes(2)); // <1>
-            request.timeout("2m"); // <2>
-            // end::bulk-request-timeout
-            // tag::bulk-request-refresh
-            request.setRefreshPolicy(WriteRequest.RefreshPolicy.WAIT_UNTIL); // <1>
-            request.setRefreshPolicy("wait_for");                            // <2>
-            // end::bulk-request-refresh
-            // tag::bulk-request-active-shards
-            request.waitForActiveShards(2); // <1>
-            request.waitForActiveShards(ActiveShardCount.ALL); // <2>
-            // end::bulk-request-active-shards
-            // tag::bulk-request-pipeline
-            request.pipeline("pipelineId"); // <1>
-            // end::bulk-request-pipeline
-            // tag::bulk-request-routing
-            request.routing("routingId"); // <1>
-            // end::bulk-request-routing
-
-            // tag::bulk-request-index-type
-            BulkRequest defaulted = new BulkRequest("posts"); // <1>
-            // end::bulk-request-index-type
-
-            // tag::bulk-execute-listener
-            ActionListener<BulkResponse> listener = new ActionListener<BulkResponse>() {
-                @Override
-                public void onResponse(BulkResponse bulkResponse) {
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>
-                }
-            };
-            // end::bulk-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::bulk-execute-async
-            client.bulkAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::bulk-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-    }
-
-    @SuppressWarnings("unused")
-    public void testReindex() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-        {
-            String mapping = "  \"properties\": {\n"
-                + "    \"user\": {\n"
-                + "      \"type\": \"text\"\n"
-                + "    },\n"
-                + "    \"field1\": {\n"
-                + "      \"type\": \"integer\"\n"
-                + "    },\n"
-                + "    \"field2\": {\n"
-                + "      \"type\": \"integer\"\n"
-                + "    }\n"
-                + "  }";
-            createIndex("source1", Settings.EMPTY, mapping);
-            createIndex("source2", Settings.EMPTY, mapping);
-            createPipeline("my_pipeline");
-        }
-        {
-            // tag::reindex-request
-            ReindexRequest request = new ReindexRequest(); // <1>
-            request.setSourceIndices("source1", "source2"); // <2>
-            request.setDestIndex("dest");  // <3>
-            // end::reindex-request
-            // tag::reindex-request-versionType
-            request.setDestVersionType(VersionType.EXTERNAL); // <1>
-            // end::reindex-request-versionType
-            // tag::reindex-request-opType
-            request.setDestOpType("create"); // <1>
-            // end::reindex-request-opType
-            // tag::reindex-request-conflicts
-            request.setConflicts("proceed"); // <1>
-            // end::reindex-request-conflicts
-            // tag::reindex-request-maxDocs
-            request.setMaxDocs(10); // <1>
-            // end::reindex-request-maxDocs
-            // tag::reindex-request-sourceSize
-            request.setSourceBatchSize(100); // <1>
-            // end::reindex-request-sourceSize
-            // tag::reindex-request-pipeline
-            request.setDestPipeline("my_pipeline"); // <1>
-            // end::reindex-request-pipeline
-            // tag::reindex-request-script
-            request.setScript(
-                new Script(
-                    ScriptType.INLINE, "painless",
-                    "if (ctx._source.user == 'foobar') {ctx._source.likes++;}",
-                    Collections.emptyMap())); // <1>
-            // end::reindex-request-script
-            HttpHost host = getClusterHosts().get(0);
-            Integer remotePort = host.getPort();
-            String remoteHost = host.getHostName();
-            String user = "test_user";
-            String password = "test-password";
-
-            // tag::reindex-request-remote
-            request.setRemoteInfo(
-                new RemoteInfo(
-                    "http", remoteHost, remotePort, null,
-                    new BytesArray(new MatchAllQueryBuilder().toString()),
-                    user, password, Collections.emptyMap(),
-                    new TimeValue(100, TimeUnit.MILLISECONDS),
-                    new TimeValue(100, TimeUnit.SECONDS)
-                )
-            ); // <1>
-            // end::reindex-request-remote
-            // tag::reindex-request-timeout
-            request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>
-            // end::reindex-request-timeout
-            // tag::reindex-request-refresh
-            request.setRefresh(true); // <1>
-            // end::reindex-request-refresh
-            // tag::reindex-request-scroll
-            request.setScroll(TimeValue.timeValueMinutes(10)); // <1>
-            // end::reindex-request-scroll
-
-            // tag::reindex-execute
-            BulkByScrollResponse bulkResponse =
-                    client.reindex(request, RequestOptions.DEFAULT);
-            // end::reindex-execute
-            assertSame(0, bulkResponse.getSearchFailures().size());
-            assertSame(0, bulkResponse.getBulkFailures().size());
-            // tag::reindex-response
-            TimeValue timeTaken = bulkResponse.getTook(); // <1>
-            boolean timedOut = bulkResponse.isTimedOut(); // <2>
-            long totalDocs = bulkResponse.getTotal(); // <3>
-            long updatedDocs = bulkResponse.getUpdated(); // <4>
-            long createdDocs = bulkResponse.getCreated(); // <5>
-            long deletedDocs = bulkResponse.getDeleted(); // <6>
-            long batches = bulkResponse.getBatches(); // <7>
-            long noops = bulkResponse.getNoops(); // <8>
-            long versionConflicts = bulkResponse.getVersionConflicts(); // <9>
-            long bulkRetries = bulkResponse.getBulkRetries(); // <10>
-            long searchRetries = bulkResponse.getSearchRetries(); // <11>
-            TimeValue throttledMillis = bulkResponse.getStatus().getThrottled(); // <12>
-            TimeValue throttledUntilMillis =
-                    bulkResponse.getStatus().getThrottledUntil(); // <13>
-            List<ScrollableHitSource.SearchFailure> searchFailures =
-                    bulkResponse.getSearchFailures(); // <14>
-            List<BulkItemResponse.Failure> bulkFailures =
-                    bulkResponse.getBulkFailures(); // <15>
-            // end::reindex-response
-        }
-        {
-            ReindexRequest request = new ReindexRequest();
-            request.setSourceIndices("source1");
-            request.setDestIndex("dest");
-
-            // These cannot be set with a remote set, so its set here instead for the docs
-            // tag::reindex-request-query
-            request.setSourceQuery(new TermQueryBuilder("user", "foobar")); // <1>
-            // end::reindex-request-query
-            // tag::reindex-request-slices
-            request.setSlices(2); // <1>
-            // end::reindex-request-slices
-
-            ActionListener<BulkByScrollResponse> listener;
-            // tag::reindex-execute-listener
-            listener = new ActionListener<BulkByScrollResponse>() {
-                @Override
-                public void onResponse(BulkByScrollResponse bulkResponse) {
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>
-                }
-            };
-            // end::reindex-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::reindex-execute-async
-            client.reindexAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::reindex-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-    }
-
-    @SuppressWarnings("unused")
-    public void testReindexRethrottle() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-        TaskId taskId = new TaskId("oTUltX4IQMOUUVeiohTt8A:124");
-        {
-            // tag::rethrottle-disable-request
-            RethrottleRequest request = new RethrottleRequest(taskId); // <1>
-            // end::rethrottle-disable-request
-        }
-
-        {
-            // tag::rethrottle-request
-            RethrottleRequest request = new RethrottleRequest(taskId, 100.0f); // <1>
-            // end::rethrottle-request
-        }
-
-        {
-            RethrottleRequest request = new RethrottleRequest(taskId);
-            // tag::rethrottle-request-execution
-            client.reindexRethrottle(request, RequestOptions.DEFAULT);       // <1>
-            client.updateByQueryRethrottle(request, RequestOptions.DEFAULT); // <2>
-            client.deleteByQueryRethrottle(request, RequestOptions.DEFAULT); // <3>
-            // end::rethrottle-request-execution
-        }
-
-        ActionListener<ListTasksResponse> listener;
-        // tag::rethrottle-request-async-listener
-        listener = new ActionListener<ListTasksResponse>() {
-            @Override
-            public void onResponse(ListTasksResponse response) {
-                // <1>
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                // <2>
-            }
-        };
-        // end::rethrottle-request-async-listener
-
-        // Replace the empty listener by a blocking listener in test
-        final CountDownLatch latch = new CountDownLatch(3);
-        listener = new LatchedActionListener<>(listener, latch);
-
-        RethrottleRequest request = new RethrottleRequest(taskId);
-        // tag::rethrottle-execute-async
-        client.reindexRethrottleAsync(request,
-                RequestOptions.DEFAULT, listener); // <1>
-        client.updateByQueryRethrottleAsync(request,
-                RequestOptions.DEFAULT, listener); // <2>
-        client.deleteByQueryRethrottleAsync(request,
-                RequestOptions.DEFAULT, listener); // <3>
-        // end::rethrottle-execute-async
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-    }
-
-    @SuppressWarnings("unused")
-    public void testUpdateByQuery() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-        {
-            String mapping = "  \"properties\": {\n"
-                + "    \"user\": {\n"
-                + "      \"type\": \"text\"\n"
-                + "    },\n"
-                + "    \"field1\": {\n"
-                + "      \"type\": \"integer\"\n"
-                + "    },\n"
-                + "    \"field2\": {\n"
-                + "      \"type\": \"integer\"\n"
-                + "    }\n"
-                + "  }";
-            createIndex("source1", Settings.EMPTY, mapping);
-            createIndex("source2", Settings.EMPTY, mapping);
-            createPipeline("my_pipeline");
-        }
-        {
-            // tag::update-by-query-request
-            UpdateByQueryRequest request =
-                    new UpdateByQueryRequest("source1", "source2"); // <1>
-            // end::update-by-query-request
-            // tag::update-by-query-request-conflicts
-            request.setConflicts("proceed"); // <1>
-            // end::update-by-query-request-conflicts
-            // tag::update-by-query-request-query
-            request.setQuery(new TermQueryBuilder("user", "foobar")); // <1>
-            // end::update-by-query-request-query
-            // tag::update-by-query-request-maxDocs
-            request.setMaxDocs(10); // <1>
-            // end::update-by-query-request-maxDocs
-            // tag::update-by-query-request-scrollSize
-            request.setBatchSize(100); // <1>
-            // end::update-by-query-request-scrollSize
-            // tag::update-by-query-request-pipeline
-            request.setPipeline("my_pipeline"); // <1>
-            // end::update-by-query-request-pipeline
-            // tag::update-by-query-request-script
-            request.setScript(
-                new Script(
-                    ScriptType.INLINE, "painless",
-                    "if (ctx._source.user == 'foobar') {ctx._source.likes++;}",
-                    Collections.emptyMap())); // <1>
-            // end::update-by-query-request-script
-            // tag::update-by-query-request-timeout
-            request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>
-            // end::update-by-query-request-timeout
-            // tag::update-by-query-request-refresh
-            request.setRefresh(true); // <1>
-            // end::update-by-query-request-refresh
-            // tag::update-by-query-request-slices
-            request.setSlices(2); // <1>
-            // end::update-by-query-request-slices
-            // tag::update-by-query-request-scroll
-            request.setScroll(TimeValue.timeValueMinutes(10)); // <1>
-            // end::update-by-query-request-scroll
-            // tag::update-by-query-request-routing
-            request.setRouting("=cat"); // <1>
-            // end::update-by-query-request-routing
-            // tag::update-by-query-request-indicesOptions
-            request.setIndicesOptions(IndicesOptions.LENIENT_EXPAND_OPEN); // <1>
-            // end::update-by-query-request-indicesOptions
-
-            // tag::update-by-query-execute
-            BulkByScrollResponse bulkResponse =
-                    client.updateByQuery(request, RequestOptions.DEFAULT);
-            // end::update-by-query-execute
-            assertSame(0, bulkResponse.getSearchFailures().size());
-            assertSame(0, bulkResponse.getBulkFailures().size());
-            // tag::update-by-query-response
-            TimeValue timeTaken = bulkResponse.getTook(); // <1>
-            boolean timedOut = bulkResponse.isTimedOut(); // <2>
-            long totalDocs = bulkResponse.getTotal(); // <3>
-            long updatedDocs = bulkResponse.getUpdated(); // <4>
-            long deletedDocs = bulkResponse.getDeleted(); // <5>
-            long batches = bulkResponse.getBatches(); // <6>
-            long noops = bulkResponse.getNoops(); // <7>
-            long versionConflicts = bulkResponse.getVersionConflicts(); // <8>
-            long bulkRetries = bulkResponse.getBulkRetries(); // <9>
-            long searchRetries = bulkResponse.getSearchRetries(); // <10>
-            TimeValue throttledMillis = bulkResponse.getStatus().getThrottled(); // <11>
-            TimeValue throttledUntilMillis =
-                    bulkResponse.getStatus().getThrottledUntil(); // <12>
-            List<ScrollableHitSource.SearchFailure> searchFailures =
-                    bulkResponse.getSearchFailures(); // <13>
-            List<BulkItemResponse.Failure> bulkFailures =
-                    bulkResponse.getBulkFailures(); // <14>
-            // end::update-by-query-response
-        }
-        {
-            UpdateByQueryRequest request = new UpdateByQueryRequest();
-            request.indices("source1");
-
-            ActionListener<BulkByScrollResponse> listener;
-            // tag::update-by-query-execute-listener
-            listener = new ActionListener<BulkByScrollResponse>() {
-                @Override
-                public void onResponse(BulkByScrollResponse bulkResponse) {
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>
-                }
-            };
-            // end::update-by-query-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::update-by-query-execute-async
-            client.updateByQueryAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::update-by-query-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-    }
-
-    @SuppressWarnings("unused")
-    public void testDeleteByQuery() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-        {
-            String mapping = "  \"properties\": {\n"
-                + "    \"user\": {\n"
-                + "      \"type\": \"text\"\n"
-                + "    },\n"
-                + "    \"field1\": {\n"
-                + "      \"type\": \"integer\"\n"
-                + "    },\n"
-                + "    \"field2\": {\n"
-                + "      \"type\": \"integer\"\n"
-                + "    }\n"
-                + "  }";
-            createIndex("source1", Settings.EMPTY, mapping);
-            createIndex("source2", Settings.EMPTY, mapping);
-        }
-        {
-            // tag::delete-by-query-request
-            DeleteByQueryRequest request =
-                    new DeleteByQueryRequest("source1", "source2"); // <1>
-            // end::delete-by-query-request
-            // tag::delete-by-query-request-conflicts
-            request.setConflicts("proceed"); // <1>
-            // end::delete-by-query-request-conflicts
-            // tag::delete-by-query-request-query
-            request.setQuery(new TermQueryBuilder("user", "foobar")); // <1>
-            // end::delete-by-query-request-query
-            // tag::delete-by-query-request-maxDocs
-            request.setMaxDocs(10); // <1>
-            // end::delete-by-query-request-maxDocs
-            // tag::delete-by-query-request-scrollSize
-            request.setBatchSize(100); // <1>
-            // end::delete-by-query-request-scrollSize
-            // tag::delete-by-query-request-timeout
-            request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>
-            // end::delete-by-query-request-timeout
-            // tag::delete-by-query-request-refresh
-            request.setRefresh(true); // <1>
-            // end::delete-by-query-request-refresh
-            // tag::delete-by-query-request-slices
-            request.setSlices(2); // <1>
-            // end::delete-by-query-request-slices
-            // tag::delete-by-query-request-scroll
-            request.setScroll(TimeValue.timeValueMinutes(10)); // <1>
-            // end::delete-by-query-request-scroll
-            // tag::delete-by-query-request-routing
-            request.setRouting("=cat"); // <1>
-            // end::delete-by-query-request-routing
-            // tag::delete-by-query-request-indicesOptions
-            request.setIndicesOptions(IndicesOptions.LENIENT_EXPAND_OPEN); // <1>
-            // end::delete-by-query-request-indicesOptions
-
-            // tag::delete-by-query-execute
-            BulkByScrollResponse bulkResponse =
-                    client.deleteByQuery(request, RequestOptions.DEFAULT);
-            // end::delete-by-query-execute
-            assertSame(0, bulkResponse.getSearchFailures().size());
-            assertSame(0, bulkResponse.getBulkFailures().size());
-            // tag::delete-by-query-response
-            TimeValue timeTaken = bulkResponse.getTook(); // <1>
-            boolean timedOut = bulkResponse.isTimedOut(); // <2>
-            long totalDocs = bulkResponse.getTotal(); // <3>
-            long deletedDocs = bulkResponse.getDeleted(); // <4>
-            long batches = bulkResponse.getBatches(); // <5>
-            long noops = bulkResponse.getNoops(); // <6>
-            long versionConflicts = bulkResponse.getVersionConflicts(); // <7>
-            long bulkRetries = bulkResponse.getBulkRetries(); // <8>
-            long searchRetries = bulkResponse.getSearchRetries(); // <9>
-            TimeValue throttledMillis = bulkResponse.getStatus().getThrottled(); // <10>
-            TimeValue throttledUntilMillis =
-                    bulkResponse.getStatus().getThrottledUntil(); // <11>
-            List<ScrollableHitSource.SearchFailure> searchFailures =
-                    bulkResponse.getSearchFailures(); // <12>
-            List<BulkItemResponse.Failure> bulkFailures =
-                    bulkResponse.getBulkFailures(); // <13>
-            // end::delete-by-query-response
-        }
-        {
-            DeleteByQueryRequest request = new DeleteByQueryRequest();
-            request.indices("source1");
-
-            ActionListener<BulkByScrollResponse> listener;
-            // tag::delete-by-query-execute-listener
-            listener = new ActionListener<BulkByScrollResponse>() {
-                @Override
-                public void onResponse(BulkByScrollResponse bulkResponse) {
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>
-                }
-            };
-            // end::delete-by-query-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::delete-by-query-execute-async
-            client.deleteByQueryAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::delete-by-query-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-    }
-
-    @SuppressWarnings("unused")
-    public void testGet() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-        {
-            Request createIndex = new Request("PUT", "/posts");
-            createIndex.setJsonEntity(
-                "{\n"
-                    + "    \"mappings\" : {\n"
-                    + "        \"properties\" : {\n"
-                    + "            \"message\" : {\n"
-                    + "                \"type\": \"text\",\n"
-                    + "                \"store\": true\n"
-                    + "            }\n"
-                    + "        }\n"
-                    + "    }\n"
-                    + "}"
-            );
-            Response response = client().performRequest(createIndex);
-            assertEquals(200, response.getStatusLine().getStatusCode());
-
-            IndexRequest indexRequest = new IndexRequest("posts").id("1")
-                .source("user", "foobar", "postDate", new Date(), "message", "trying out OpenSearch");
-            IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
-            assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
-        }
-        {
-            //tag::get-request
-            GetRequest getRequest = new GetRequest(
-                    "posts", // <1>
-                    "1");   // <2>
-            //end::get-request
-
-            //tag::get-execute
-            GetResponse getResponse = client.get(getRequest, RequestOptions.DEFAULT);
-            //end::get-execute
-            assertTrue(getResponse.isExists());
-            assertEquals(3, getResponse.getSourceAsMap().size());
-            //tag::get-response
-            String index = getResponse.getIndex();
-            String id = getResponse.getId();
-            if (getResponse.isExists()) {
-                long version = getResponse.getVersion();
-                String sourceAsString = getResponse.getSourceAsString();        // <1>
-                Map<String, Object> sourceAsMap = getResponse.getSourceAsMap(); // <2>
-                byte[] sourceAsBytes = getResponse.getSourceAsBytes();          // <3>
-            } else {
-                // <4>
-            }
-            //end::get-response
-        }
-        {
-            GetRequest request = new GetRequest("posts", "1");
-            //tag::get-request-no-source
-            request.fetchSourceContext(FetchSourceContext.DO_NOT_FETCH_SOURCE); // <1>
-            //end::get-request-no-source
-            GetResponse getResponse = client.get(request, RequestOptions.DEFAULT);
-            assertNull(getResponse.getSourceInternal());
-        }
-        {
-            GetRequest request = new GetRequest("posts", "1");
-            //tag::get-request-source-include
-            String[] includes = new String[]{"message", "*Date"};
-            String[] excludes = Strings.EMPTY_ARRAY;
-            FetchSourceContext fetchSourceContext =
-                    new FetchSourceContext(true, includes, excludes);
-            request.fetchSourceContext(fetchSourceContext); // <1>
-            //end::get-request-source-include
-            GetResponse getResponse = client.get(request, RequestOptions.DEFAULT);
-            Map<String, Object> sourceAsMap = getResponse.getSourceAsMap();
-            assertEquals(2, sourceAsMap.size());
-            assertEquals("trying out OpenSearch", sourceAsMap.get("message"));
-            assertTrue(sourceAsMap.containsKey("postDate"));
-        }
-        {
-            GetRequest request = new GetRequest("posts", "1");
-            //tag::get-request-source-exclude
-            String[] includes = Strings.EMPTY_ARRAY;
-            String[] excludes = new String[]{"message"};
-            FetchSourceContext fetchSourceContext =
-                    new FetchSourceContext(true, includes, excludes);
-            request.fetchSourceContext(fetchSourceContext); // <1>
-            //end::get-request-source-exclude
-            GetResponse getResponse = client.get(request, RequestOptions.DEFAULT);
-            Map<String, Object> sourceAsMap = getResponse.getSourceAsMap();
-            assertEquals(2, sourceAsMap.size());
-            assertEquals("foobar", sourceAsMap.get("user"));
-            assertTrue(sourceAsMap.containsKey("postDate"));
-        }
-        {
-            GetRequest request = new GetRequest("posts", "1");
-            //tag::get-request-stored
-            request.storedFields("message"); // <1>
-            GetResponse getResponse = client.get(request, RequestOptions.DEFAULT);
-            String message = getResponse.getField("message").getValue(); // <2>
-            //end::get-request-stored
-            assertEquals("trying out OpenSearch", message);
-            assertEquals(1, getResponse.getFields().size());
-            assertNull(getResponse.getSourceInternal());
-        }
-        {
-            GetRequest request = new GetRequest("posts", "1");
-            //tag::get-request-routing
-            request.routing("routing"); // <1>
-            //end::get-request-routing
-            //tag::get-request-preference
-            request.preference("preference"); // <1>
-            //end::get-request-preference
-            //tag::get-request-realtime
-            request.realtime(false); // <1>
-            //end::get-request-realtime
-            //tag::get-request-refresh
-            request.refresh(true); // <1>
-            //end::get-request-refresh
-            //tag::get-request-version
-            request.version(2); // <1>
-            //end::get-request-version
-            //tag::get-request-version-type
-            request.versionType(VersionType.EXTERNAL); // <1>
-            //end::get-request-version-type
-        }
-        {
-            GetRequest request = new GetRequest("posts", "1");
-
+                new TermVectorsRequest("authors", "1");
             // tag::get-execute-listener
-            ActionListener<GetResponse> listener = new ActionListener<GetResponse>() {
-                @Override
-                public void onResponse(GetResponse getResponse) {
-                    // <1>
+        return item;
+            UpdateResponse updateResponse = client.update(request, RequestOptions.DEFAULT);
+            // end::update-by-query-request-slices
+                    client.reindex(request, RequestOptions.DEFAULT);
+                .startObject("user")
                 }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>
-                }
-            };
-            // end::get-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
+            FetchSourceContext fetchSourceContext =
+import java.util.List;
+            // assertEquals(RestStatus.CONFLICT, ee.status());          // <4>
+            // end::delete-by-query-request-timeout
+            jsonMap.put("message", "trying out OpenSearch");
+            // tag::multi-get-request-no-source
+            request.setPipeline("my_pipeline"); // <1>
+                    + "                \"store\": true\n"
+            // end::term-vectors-request-optional-arguments
+    }
+import org.opensearch.action.DocWriteRequest;
+            long searchRetries = bulkResponse.getSearchRetries(); // <10>
+        listener = new ActionListener<ListTasksResponse>() {
+                    user, password, Collections.emptyMap(),
+            XContentBuilder docBuilder = XContentFactory.jsonBuilder();
+            } else {
+import org.opensearch.common.xcontent.json.JsonXContent;
+            request.setConflicts("proceed"); // <1>
+                .versionType(VersionType.EXTERNAL)  // <2>
+        CountDownLatch latch = new CountDownLatch(1);
             listener = new LatchedActionListener<>(listener, latch);
-
-            //tag::get-execute-async
-            client.getAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            //end::get-execute-async
-
+                    public void onFailure(Exception e) {
+        }
+                .startObject("properties")
+                                int endOffset = token.getEndOffset(); // <14>
+            long deletedDocs = bulkResponse.getDeleted(); // <4>
+            request.setScroll(TimeValue.timeValueMinutes(10)); // <1>
+        {
+            //end::get-request-version-type
+            listener = new LatchedActionListener<>(listener, latch);
+            "1");    // <2>
+            assertEquals(2, sourceAsMap.size());
+            long version = updateResponse.getVersion();
+            Response response = client().performRequest(createIndex);
+    }
+import static org.hamcrest.Matchers.not;
             assertTrue(latch.await(30L, TimeUnit.SECONDS));
         }
+            }
+            // tag::update-execute-async
         {
-            //tag::get-indexnotfound
-            GetRequest request = new GetRequest("does_not_exist", "1");
-            try {
-                GetResponse getResponse = client.get(request, RequestOptions.DEFAULT);
-            } catch (OpenSearchException e) {
-                if (e.status() == RestStatus.NOT_FOUND) {
+            builder.startObject();
+            }
+                    .setIfSeqNo(101L)
+                            executionId, numberOfActions);
+                    // <3>
+                    "posts",    // <1>
+            request.add(new MultiGetRequest.Item("index", "example_id")
+            request.setFields("user");
+            TimeValue throttledMillis = bulkResponse.getStatus().getThrottled(); // <10>
+    // Not entirely sure if _termvectors belongs to CRUD, and in the absence of a better place, will have it here
+        getRequest.fetchSourceContext(FetchSourceContext.DO_NOT_FETCH_SOURCE); // <3>
+            } catch (OpenSearchException exception) {
+            request.preference("some_preference");  // <1>
+ */
+        }
+            // tag::delete-request
+            long noops = bulkResponse.getNoops(); // <7>
+        MultiTermVectorsRequest request =
+import org.opensearch.common.settings.Settings;
+            } catch(OpenSearchException e) {
+            assertTrue(firstGet.isExists());
+            // end::delete-execute-listener
+            // tag::delete-by-query-response
+            // end::update-execute-listener
+import org.opensearch.core.rest.RestStatus;
+            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
+            final CountDownLatch latch = new CountDownLatch(1);
+                    DeleteResponse deleteResponse = (DeleteResponse) itemResponse;
+            //end::update-docnotfound
+            request.setScroll(TimeValue.timeValueMinutes(10)); // <1>
+                    + "            }\n"
+                }
+            DeleteByQueryRequest request =
+            // end::index-request-pipeline
+            }
+        }
+                long version = firstGet.getVersion();
+            Map<String, String> perFieldAnalyzer = new HashMap<>();
+            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
+        {
+            // end::reindex-request-query
+        // Replace the empty listener by a blocking listener in test
+            boolean timedOut = bulkResponse.isTimedOut(); // <2>
+            } else if (updateResponse.getResult() == DocWriteResponse.Result.DELETED) {
+        }
+                    }
+        }
+            MultiGetRequest request = new MultiGetRequest();
+            }
+            // tag::delete-by-query-execute
+            listener = new LatchedActionListener<>(listener, latch);
+            assertFalse(exists);
+                }
+            // tag::reindex-request
+                }
+        {
+            for (BulkItemResponse bulkItemResponse : bulkResponse) { // <1>
+            GetRequest request = new GetRequest("posts", "1");
+        {
+            request.setMaxDocs(10); // <1>
+        }
+        {
+        {
+            Response response = client().performRequest(request);
+            request.detectNoop(false); // <1>
                     // <1>
+            // end::index-execute-listener
+            // end::update-request-refresh
+            request.version(2); // <1>
+            IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+    }
+        {
+            request.setDestIndex("dest");  // <3>
+import org.opensearch.index.reindex.ReindexRequest;
+            // tag::update-by-query-execute-listener
+            }
+            createIndex.setJsonEntity(
+    }
+        }
+                containsString("version conflict, current version [1] is "
+            // end::multi-get-response
+            DeleteResponse deleteResponse = client.delete(
+                    bulkResponse.getBulkFailures(); // <15>
+            if (bulkResponse.hasFailures()) { // <1>
+            };
+        listener = new ActionListener<TermVectorsResponse>() {
+            MultiGetItemResponse item = unwrapAndAssertExample(client.mget(request, RequestOptions.DEFAULT));
+                new ActionListener<GetSourceResponse>() {
+                    "1");   // <2>
+            // end::reindex-request-timeout
+        {
+            // tag::delete-by-query-request-indicesOptions
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
+            XContentFactory.jsonBuilder()
+        }
+            // tag::bulk-execute
+            // tag::update-request-active-shards
+            @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        getSourceRequest.refresh(true); // <1>
+            request.setSourceBatchSize(100); // <1>
+            assertSame(RestStatus.CREATED, indexResponse.status());
+                };
+/**
+            // end::update-by-query-request-pipeline
+            // end::get-source-execute
+import org.opensearch.action.support.WriteRequest;
+            assertNull(item.getResponse());                          // <1>
+            // tag::bulk-request-active-shards
+            // end::bulk-processor-add
+                    // <2>
+            // end::index-optype
+            ActionListener<BulkByScrollResponse> listener;
+    @SuppressWarnings("unused")
                 }
             }
+                        // <1>
+                    .doc("field", "value")
+            request.routing("routing"); // <1>
+                new RemoteInfo(
+                @Override
+            request.setFieldStatistics(false); // <1>
+            request.add(new MultiGetRequest.Item("index", "example_id")
+            listener = new LatchedActionListener<>(listener, latch);
+            builder.setConcurrentRequests(0); // <3>
+        // end::term-vectors-execute
+    @SuppressWarnings("unused")
+            }
+            ActionListener<BulkResponse> listener = new ActionListener<BulkResponse>() {
+        };
+                }
+            // end::bulk-request-routing
+            request.setBatchSize(100); // <1>
+            } else if (indexResponse.getResult() == DocWriteResponse.Result.UPDATED) {
+            listener = new LatchedActionListener<>(listener, latch);
+            new IndexRequest("index").id("example_id").source(source).setRefreshPolicy(RefreshPolicy.IMMEDIATE),
+            request.fetchSource(
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+        {
+                String fieldname = tv.getFieldName(); // <1>
+            long updatedDocs = bulkResponse.getUpdated(); // <4>
+            Map<String, Object> sourceAsMap = updateResponse.getGetResult().sourceAsMap();
+            request.setIndicesOptions(IndicesOptions.LENIENT_EXPAND_OPEN); // <1>
+        }
+            // tag::update-by-query-request-conflicts
+            assertSame(RestStatus.CREATED, indexResponse.status());
+            // end::multi-get-request-source-exclude
+            request.setRefreshPolicy(WriteRequest.RefreshPolicy.WAIT_UNTIL); // <1>
+            // tag::reindex-request-versionType
+        {
+                public void onResponse(IndexResponse indexResponse) {
+            String[] includes = Strings.EMPTY_ARRAY;
+            tvrequest1.setFields("user");
+            // tag::reindex-request-maxDocs
+            builder.endObject();
+            final CountDownLatch latch = new CountDownLatch(1);
+                    break;
+        }
+        assertEquals("example_id", item.getId());
+            //end::update-request-source-exclude
+            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
+        }
+            //tag::update-request-with-doc-as-xcontent
             //end::get-indexnotfound
         }
-        {
-            // tag::get-conflict
-            try {
-                GetRequest request = new GetRequest("posts", "1").version(2);
-                GetResponse getResponse = client.get(request, RequestOptions.DEFAULT);
-            } catch (OpenSearchException exception) {
-                if (exception.status() == RestStatus.CONFLICT) {
-                    // <1>
-                }
-            }
-            // end::get-conflict
-        }
-    }
-
-    public void testGetSource() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-        {
-            Request createIndex = new Request("PUT", "/posts");
-            createIndex.setJsonEntity(
-                "{\n"
-                    + "    \"mappings\" : {\n"
-                    + "        \"properties\" : {\n"
-                    + "            \"message\" : {\n"
-                    + "                \"type\": \"text\",\n"
-                    + "                \"store\": true\n"
-                    + "            }\n"
-                    + "        }\n"
-                    + "    }\n"
-                    + "}"
-            );
-            Response response = client().performRequest(createIndex);
-            assertEquals(200, response.getStatusLine().getStatusCode());
-
-            IndexRequest indexRequest = new IndexRequest("posts").id("1")
-                .source("user", "foobar", "postDate", new Date(), "message", "trying out OpenSearch");
-            IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
-            assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
-        }
-
-        // tag::get-source-request
-        GetSourceRequest getSourceRequest = new GetSourceRequest(
-            "posts", // <1>
-            "1");   // <2>
-        // end::get-source-request
-
-        //tag::get-source-request-optional
-        String[] includes = Strings.EMPTY_ARRAY;  // <2>
-        String[] excludes = new String[]{"postDate"};
-        getSourceRequest.fetchSourceContext(
-            new FetchSourceContext(true, includes, excludes)); // <1>
-        // end::get-source-request-optional
-
-        //tag::get-source-request-routing
-        getSourceRequest.routing("routing"); // <1>
-        //end::get-source-request-routing
-        //tag::get-source-request-preference
-        getSourceRequest.preference("preference"); // <1>
         //end::get-source-request-preference
-        //tag::get-source-request-realtime
-        getSourceRequest.realtime(false); // <1>
-        //end::get-source-request-realtime
-        //tag::get-source-request-refresh
-        getSourceRequest.refresh(true); // <1>
-        //end::get-source-request-refresh
-
-        {
-            // tag::get-source-execute
-            GetSourceResponse response =
-                client.getSource(getSourceRequest, RequestOptions.DEFAULT);
-            // end::get-source-execute
-            // tag::get-source-response
-            Map<String, Object> source = response.getSource();
-            // end::get-source-response
-
-            Map<String, Object> expectSource = new HashMap<>();
-            expectSource.put("user", "foobar");
-            expectSource.put("message", "trying out OpenSearch");
-            assertEquals(expectSource, source);
-        }
-        {
-            GetSourceRequest request = new GetSourceRequest("posts", "1");
-
-            // tag::get-source-execute-listener
-            ActionListener<GetSourceResponse> listener =
-                new ActionListener<GetSourceResponse>() {
-                    @Override
-                    public void onResponse(GetSourceResponse getResponse) {
-                        // <1>
-                    }
-
-                    @Override
-                    public void onFailure(Exception e) {
-                        // <2>
-                    }
-                };
-            // end::get-source-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);
-
-            //tag::get-source-execute-async
-            client.getSourceAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            //end::get-source-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-
-    }
-
-    public void testExists() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-        // tag::exists-request
-        GetRequest getRequest = new GetRequest(
-            "posts", // <1>
-            "1");    // <2>
-        getRequest.fetchSourceContext(FetchSourceContext.DO_NOT_FETCH_SOURCE); // <3>
-        getRequest.storedFields("_none_");                            // <4>
-        // end::exists-request
-        {
-            // tag::exists-execute
-            boolean exists = client.exists(getRequest, RequestOptions.DEFAULT);
-            // end::exists-execute
-            assertFalse(exists);
-        }
-        {
-            // tag::exists-execute-listener
-            ActionListener<Boolean> listener = new ActionListener<Boolean>() {
                 @Override
-                public void onResponse(Boolean exists) {
-                    // <1>
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    // <2>
-                }
-            };
-            // end::exists-execute-listener
-
-            // Replace the empty listener by a blocking listener in test
-            final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::exists-execute-async
-            client.existsAsync(getRequest, RequestOptions.DEFAULT, listener); // <1>
-            // end::exists-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
-        }
-    }
-
-    public void testBulkProcessor() throws InterruptedException {
-        RestHighLevelClient client = highLevelClient();
+ * this work for additional information regarding copyright
         {
-            // tag::bulk-processor-init
-            BulkProcessor.Listener listener = new BulkProcessor.Listener() { // <1>
-                @Override
-                public void beforeBulk(long executionId, BulkRequest request) {
-                    // <2>
-                }
-
-                @Override
-                public void afterBulk(long executionId, BulkRequest request,
-                        BulkResponse response) {
-                    // <3>
-                }
-
-                @Override
-                public void afterBulk(long executionId, BulkRequest request,
-                        Throwable failure) {
-                    // <4>
-                }
-            };
-
-            BulkProcessor bulkProcessor = BulkProcessor.builder(
-                    (request, bulkListener) ->
-                        client.bulkAsync(request, RequestOptions.DEFAULT, bulkListener),
-                    listener).build(); // <5>
-            // end::bulk-processor-init
-            assertNotNull(bulkProcessor);
-
-            // tag::bulk-processor-add
-            IndexRequest one = new IndexRequest("posts").id("1")
-                    .source(MediaTypeRegistry.JSON, "title",
-                            "In which order are my OpenSearch queries executed?");
-            IndexRequest two = new IndexRequest("posts").id("2")
-                    .source(MediaTypeRegistry.JSON, "title",
-                            "Current status and upcoming changes in OpenSearch");
-            IndexRequest three = new IndexRequest("posts").id("3")
-                    .source(MediaTypeRegistry.JSON, "title",
-                            "The Future of Federated Search in OpenSearch");
-
-            bulkProcessor.add(one);
-            bulkProcessor.add(two);
-            bulkProcessor.add(three);
-            // end::bulk-processor-add
-
-            // tag::bulk-processor-await
-            boolean terminated = bulkProcessor.awaitClose(30L, TimeUnit.SECONDS); // <1>
-            // end::bulk-processor-await
-            assertTrue(terminated);
-
-            // tag::bulk-processor-close
-            bulkProcessor.close();
-            // end::bulk-processor-close
-        }
-        {
-            // tag::bulk-processor-listener
-            BulkProcessor.Listener listener = new BulkProcessor.Listener() {
-                @Override
-                public void beforeBulk(long executionId, BulkRequest request) {
-                    int numberOfActions = request.numberOfActions(); // <1>
-                    logger.debug("Executing bulk [{}] with {} requests",
-                            executionId, numberOfActions);
-                }
-
-                @Override
-                public void afterBulk(long executionId, BulkRequest request,
-                        BulkResponse response) {
-                    if (response.hasFailures()) { // <2>
-                        logger.warn("Bulk [{}] executed with failures", executionId);
-                    } else {
-                        logger.debug("Bulk [{}] completed in {} milliseconds",
-                                executionId, response.getTook().getMillis());
-                    }
-                }
-
-                @Override
-                public void afterBulk(long executionId, BulkRequest request,
-                        Throwable failure) {
-                    logger.error("Failed to execute bulk", failure); // <3>
-                }
-            };
-            // end::bulk-processor-listener
-
-            // tag::bulk-processor-options
-            BulkProcessor.Builder builder = BulkProcessor.builder(
-                    (request, bulkListener) ->
-                        client.bulkAsync(request, RequestOptions.DEFAULT, bulkListener),
-                    listener);
-            builder.setBulkActions(500); // <1>
-            builder.setBulkSize(new ByteSizeValue(1L, ByteSizeUnit.MB)); // <2>
-            builder.setConcurrentRequests(0); // <3>
-            builder.setFlushInterval(TimeValue.timeValueSeconds(10L)); // <4>
-            builder.setBackoffPolicy(BackoffPolicy
-                    .constantBackoff(TimeValue.timeValueSeconds(1L), 3)); // <5>
-            // end::bulk-processor-options
-        }
-    }
-
-    // Not entirely sure if _termvectors belongs to CRUD, and in the absence of a better place, will have it here
-    public void testTermVectors() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-        CreateIndexRequest authorsRequest = new CreateIndexRequest("authors").mapping(
-            XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject("properties")
-                .startObject("user")
-                .field("type", "keyword")
-                .endObject()
-                .endObject()
-                .endObject()
-        );
-        CreateIndexResponse authorsResponse = client.indices().create(authorsRequest, RequestOptions.DEFAULT);
-        assertTrue(authorsResponse.isAcknowledged());
-        client.index(new IndexRequest("index").id("1").source("user", "foobar"), RequestOptions.DEFAULT);
-        Response refreshResponse = client().performRequest(new Request("POST", "/authors/_refresh"));
-        assertEquals(200, refreshResponse.getStatusLine().getStatusCode());
-
-        {
-            // tag::term-vectors-request
-            TermVectorsRequest request = new TermVectorsRequest("authors", "1");
-            request.setFields("user");
-            // end::term-vectors-request
-        }
-
-        {
-            // tag::term-vectors-request-artificial
-            XContentBuilder docBuilder = XContentFactory.jsonBuilder();
-            docBuilder.startObject().field("user", "guest-user").endObject();
-            TermVectorsRequest request = new TermVectorsRequest("authors",
-                docBuilder); // <1>
-            // end::term-vectors-request-artificial
-
-            // tag::term-vectors-request-optional-arguments
-            request.setFieldStatistics(false); // <1>
-            request.setTermStatistics(true); // <2>
-            request.setPositions(false); // <3>
-            request.setOffsets(false); // <4>
-            request.setPayloads(false); // <5>
-
-            Map<String, Integer> filterSettings = new HashMap<>();
-            filterSettings.put("max_num_terms", 3);
-            filterSettings.put("min_term_freq", 1);
-            filterSettings.put("max_term_freq", 10);
-            filterSettings.put("min_doc_freq", 1);
-            filterSettings.put("max_doc_freq", 100);
-            filterSettings.put("min_word_length", 1);
+            // end::delete-execute-async
             filterSettings.put("max_word_length", 10);
-
-            request.setFilterSettings(filterSettings);  // <6>
-
-            Map<String, String> perFieldAnalyzer = new HashMap<>();
-            perFieldAnalyzer.put("user", "keyword");
-            request.setPerFieldAnalyzer(perFieldAnalyzer);  // <7>
-
-            request.setRealtime(false); // <8>
-            request.setRouting("routing"); // <9>
-            // end::term-vectors-request-optional-arguments
+            assertEquals(3, updateResponse.getGetResult().sourceAsMap().size());
+                + "  }";
         }
-
-        TermVectorsRequest request = new TermVectorsRequest("authors", "1");
-        request.setFields("user");
-
-        // tag::term-vectors-execute
-        TermVectorsResponse response =
-                client.termvectors(request, RequestOptions.DEFAULT);
-        // end::term-vectors-execute
-
-        // tag::term-vectors-response
-        String index = response.getIndex(); // <1>
-        String id = response.getId(); // <2>
-        boolean found = response.getFound(); // <3>
-        // end::term-vectors-response
-
-        if (response.getTermVectorsList() != null) {
-            // tag::term-vectors-term-vectors
-            for (TermVectorsResponse.TermVector tv : response.getTermVectorsList()) {
-                String fieldname = tv.getFieldName(); // <1>
-                int docCount = tv.getFieldStatistics().getDocCount(); // <2>
-                long sumTotalTermFreq =
-                        tv.getFieldStatistics().getSumTotalTermFreq(); // <3>
-                long sumDocFreq = tv.getFieldStatistics().getSumDocFreq(); // <4>
-                if (tv.getTerms() != null) {
-                    List<TermVectorsResponse.TermVector.Term> terms =
-                            tv.getTerms(); // <5>
-                    for (TermVectorsResponse.TermVector.Term term : terms) {
-                        String termStr = term.getTerm(); // <6>
-                        int termFreq = term.getTermFreq(); // <7>
-                        int docFreq = term.getDocFreq(); // <8>
-                        long totalTermFreq = term.getTotalTermFreq(); // <9>
-                        float score = term.getScore(); // <10>
-                        if (term.getTokens() != null) {
-                            List<TermVectorsResponse.TermVector.Token> tokens =
-                                    term.getTokens(); // <11>
-                            for (TermVectorsResponse.TermVector.Token token : tokens) {
-                                int position = token.getPosition(); // <12>
-                                int startOffset = token.getStartOffset(); // <13>
-                                int endOffset = token.getEndOffset(); // <14>
-                                String payload = token.getPayload(); // <15>
-                            }
-                        }
-                    }
-                }
-            }
-            // end::term-vectors-term-vectors
-        }
-
-        ActionListener<TermVectorsResponse> listener;
-        // tag::term-vectors-execute-listener
-        listener = new ActionListener<TermVectorsResponse>() {
-            @Override
-            public void onResponse(TermVectorsResponse termVectorsResponse) {
-                // <1>
-            }
-            @Override
-            public void onFailure(Exception e) {
-                // <2>
-            }
-        };
-        // end::term-vectors-execute-listener
-        CountDownLatch latch = new CountDownLatch(1);
-        listener = new LatchedActionListener<>(listener, latch);
-        // tag::term-vectors-execute-async
-        client.termvectorsAsync(request, RequestOptions.DEFAULT, listener); // <1>
-        // end::term-vectors-execute-async
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-
-    }
-
-    // Not entirely sure if _mtermvectors belongs to CRUD, and in the absence of a better place, will have it here
-    public void testMultiTermVectors() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-        CreateIndexRequest authorsRequest = new CreateIndexRequest("authors").mapping(
-            XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject("properties")
-                .startObject("user")
-                .field("type", "keyword")
-                .endObject()
-                .endObject()
-                .endObject()
-        );
-        CreateIndexResponse authorsResponse = client.indices().create(authorsRequest, RequestOptions.DEFAULT);
-        assertTrue(authorsResponse.isAcknowledged());
-        client.index(new IndexRequest("index").id("1").source("user", "foobar"), RequestOptions.DEFAULT);
-        client.index(new IndexRequest("index").id("2").source("user", "baz"), RequestOptions.DEFAULT);
-        Response refreshResponse = client().performRequest(new Request("POST", "/authors/_refresh"));
-        assertEquals(200, refreshResponse.getStatusLine().getStatusCode());
-
+            Request request = new Request("POST", "/_scripts/increment-field");
+                case UPDATE:   // <4>
         {
-            // tag::multi-term-vectors-request
-            MultiTermVectorsRequest request = new MultiTermVectorsRequest(); // <1>
-            TermVectorsRequest tvrequest1 =
-                new TermVectorsRequest("authors", "1");
-            tvrequest1.setFields("user");
-            request.add(tvrequest1); // <2>
-
-            XContentBuilder docBuilder = XContentFactory.jsonBuilder();
-            docBuilder.startObject().field("user", "guest-user").endObject();
-            TermVectorsRequest tvrequest2 =
-                new TermVectorsRequest("authors", docBuilder);
-            request.add(tvrequest2); // <3>
-            // end::multi-term-vectors-request
-        }
-
-        // tag::multi-term-vectors-request-template
-        TermVectorsRequest tvrequestTemplate =
-            new TermVectorsRequest("authors", "fake_id"); // <1>
-        tvrequestTemplate.setFields("user");
-        String[] ids = {"1", "2"};
-        MultiTermVectorsRequest request =
-            new MultiTermVectorsRequest(ids, tvrequestTemplate); // <2>
-        // end::multi-term-vectors-request-template
-
-        // tag::multi-term-vectors-execute
-        MultiTermVectorsResponse response =
-            client.mtermvectors(request, RequestOptions.DEFAULT);
-        // end::multi-term-vectors-execute
-
-        // tag::multi-term-vectors-response
-        List<TermVectorsResponse> tvresponseList =
-            response.getTermVectorsResponses(); // <1>
-        if (tvresponseList != null) {
-            for (TermVectorsResponse tvresponse : tvresponseList) {
-            }
-        }
-        // end::multi-term-vectors-response
-
-        ActionListener<MultiTermVectorsResponse> listener;
-        // tag::multi-term-vectors-execute-listener
-        listener = new ActionListener<MultiTermVectorsResponse>() {
-            @Override
-            public void onResponse(MultiTermVectorsResponse mtvResponse) {
-                // <1>
-            }
-            @Override
-            public void onFailure(Exception e) {
-                // <2>
-            }
-        };
-        // end::multi-term-vectors-execute-listener
-        CountDownLatch latch = new CountDownLatch(1);
-        listener = new LatchedActionListener<>(listener, latch);
-        // tag::multi-term-vectors-execute-async
-        client.mtermvectorsAsync(
-            request, RequestOptions.DEFAULT, listener); // <1>
-        // end::multi-term-vectors-execute-async
-        assertTrue(latch.await(30L, TimeUnit.SECONDS));
-
-    }
-
+                    new TimeValue(100, TimeUnit.MILLISECONDS),
     @SuppressWarnings("unused")
-    public void testMultiGet() throws Exception {
+            UpdateByQueryRequest request =
+                + "    \"field2\": {\n"
+            // tag::update-response
+            assertEquals("trying out OpenSearch", message);
         RestHighLevelClient client = highLevelClient();
-
-        {
-            Request createIndex = new Request("PUT", "/index");
-            createIndex.setJsonEntity(
-                "{\n"
-                    + "    \"mappings\" : {\n"
-                    + "        \"properties\" : {\n"
-                    + "            \"foo\" : {\n"
-                    + "                \"type\": \"text\",\n"
-                    + "                \"store\": true\n"
-                    + "            }\n"
-                    + "        }\n"
-                    + "    }\n"
-                    + "}"
-            );
-            Response response = client().performRequest(createIndex);
-            assertEquals(200, response.getStatusLine().getStatusCode());
+            //tag::get-response
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            Request createIndex = new Request("PUT", "/posts");
+                // <1>
+            // end::bulk-request-with-mixed-operations
+            request.retryOnConflict(3); // <1>
+                + "    \"user\": {\n"
+                    for (TermVectorsResponse.TermVector.Term term : terms) {
+            builder.setBackoffPolicy(BackoffPolicy
+            client.getSourceAsync(request, RequestOptions.DEFAULT, listener); // <1>
+    @SuppressWarnings("unused")
+                        BulkResponse response) {
+            // tag::delete-by-query-request-conflicts
         }
-
-        Map<String, Object> source = new HashMap<>();
-        source.put("foo", "val1");
-        source.put("bar", "val2");
-        source.put("baz", "val3");
-        client.index(
-            new IndexRequest("index").id("example_id").source(source).setRefreshPolicy(RefreshPolicy.IMMEDIATE),
-            RequestOptions.DEFAULT
-        );
-
-        {
-            // tag::multi-get-request
-            MultiGetRequest request = new MultiGetRequest();
-            request.add(new MultiGetRequest.Item(
-                "index",         // <1>
-                "example_id"));  // <2>
-            request.add(new MultiGetRequest.Item("index", "another_id")); // <3>
-            // end::multi-get-request
-
-            // Add a missing index so we can test it.
-            request.add(new MultiGetRequest.Item("missing_index", "id"));
-
-            // tag::multi-get-request-item-extras
-            request.add(new MultiGetRequest.Item("index", "with_routing")
-                .routing("some_routing"));          // <1>
-            request.add(new MultiGetRequest.Item("index", "with_version")
-                .versionType(VersionType.EXTERNAL)  // <2>
-                .version(10123L));                  // <3>
-            // end::multi-get-request-item-extras
-            // tag::multi-get-request-top-level-extras
-            request.preference("some_preference");  // <1>
-            request.realtime(false);                // <2>
-            request.refresh(true);                  // <3>
-            // end::multi-get-request-top-level-extras
-
-            // tag::multi-get-execute
-            MultiGetResponse response = client.mget(request, RequestOptions.DEFAULT);
-            // end::multi-get-execute
-
-            // tag::multi-get-response
-            MultiGetItemResponse firstItem = response.getResponses()[0];
-            assertNull(firstItem.getFailure());              // <1>
-            GetResponse firstGet = firstItem.getResponse();  // <2>
-            String index = firstItem.getIndex();
-            String id = firstItem.getId();
-            if (firstGet.isExists()) {
-                long version = firstGet.getVersion();
-                String sourceAsString = firstGet.getSourceAsString();        // <3>
-                Map<String, Object> sourceAsMap = firstGet.getSourceAsMap(); // <4>
-                byte[] sourceAsBytes = firstGet.getSourceAsBytes();          // <5>
-            } else {
-                // <6>
-            }
-            // end::multi-get-response
-
-            assertTrue(firstGet.isExists());
-            assertEquals(source, firstGet.getSource());
-
-            MultiGetItemResponse missingIndexItem = response.getResponses()[2];
-            // tag::multi-get-indexnotfound
-            assertNull(missingIndexItem.getResponse());                // <1>
-            Exception e = missingIndexItem.getFailure().getFailure();  // <2>
-            OpenSearchException ee = (OpenSearchException) e;    // <3>
-            // TODO status is broken! fix in a followup
-            // assertEquals(RestStatus.NOT_FOUND, ee.status());        // <4>
-            assertThat(e.getMessage(),
-                containsString("reason=no such index [missing_index]")); // <5>
-            // end::multi-get-indexnotfound
-
-            ActionListener<MultiGetResponse> listener;
-            // tag::multi-get-execute-listener
-            listener = new ActionListener<MultiGetResponse>() {
-                @Override
-                public void onResponse(MultiGetResponse response) {
+import org.opensearch.index.query.TermQueryBuilder;
+                + "    },\n"
+            ActionListener<UpdateResponse> listener;
+            // end::rethrottle-request
+                    bulkResponse.getStatus().getThrottledUntil(); // <12>
+            // end::update-by-query-request-conflicts
+            // end::multi-get-request-no-source
+                    .source(MediaTypeRegistry.JSON, "title",
+            RethrottleRequest request = new RethrottleRequest(taskId); // <1>
+        // end::multi-term-vectors-execute-async
+                }
+import org.opensearch.client.Request;
+            request.waitForActiveShards(ActiveShardCount.ALL); // <2>
+    public void testReindex() throws Exception {
+                public void onResponse(BulkResponse bulkResponse) {
+                    .endObject()
+                    new FetchSourceContext(true, includes, excludes)); // <1>
                     // <1>
                 }
-
-                @Override
-                public void onFailure(Exception e) {
+        String[] excludes = new String[]{"postDate"};
+            request.add(new UpdateRequest("posts", "2") // <2>
                     // <2>
-                }
-            };
-            // end::multi-get-execute-listener
-
+                    "1");       // <2>
+import static org.hamcrest.Matchers.arrayWithSize;
+            public void onFailure(Exception e) {
+            // tag::update-by-query-request-indicesOptions
+                    // <2>
+        String[] includes = Strings.EMPTY_ARRAY;  // <2>
+            // end::update-by-query-execute-async
+            // tag::term-vectors-term-vectors
+            //end::update-request-with-doc-as-string
+        TermVectorsRequest tvrequestTemplate =
+import org.opensearch.core.common.bytes.BytesArray;
+            client.reindexRethrottle(request, RequestOptions.DEFAULT);       // <1>
+            // tag::delete-by-query-request-refresh
+        ActionListener<MultiTermVectorsResponse> listener;
+            request.timeout(TimeValue.timeValueSeconds(1)); // <1>
+                String sourceAsString = firstGet.getSourceAsString();        // <3>
+                @Override
+import java.util.Map;
             // Replace the empty listener by a blocking listener in test
+            UpdateResponse updateResponse = client.update(
+            // tag::delete-by-query-execute-async
+        }
+            UpdateRequest request = new UpdateRequest("posts", "1")
+            // tag::reindex-request-remote
+        // end::exists-request
+                builder.timeField("updated", new Date());
+        Map<String, Object> source = new HashMap<>();
+            // tag::update-by-query-request-routing
+                        request, RequestOptions.DEFAULT);
+            }
+            // tag::bulk-processor-add
+        }
+            request.setRealtime(false); // <8>
+                    + "        }\n"
+            // end::update-request-retry
+                }
+ * software distributed under the License is distributed on an
+                + "    }\n"
+            // Replace the empty listener by a blocking listener in test
+                                int startOffset = token.getStartOffset(); // <13>
+import static java.util.Collections.singletonMap;
+                    .startObject("script")
+            // end::update-request-routing
+            // end::bulk-processor-init
+            client.updateByQueryRethrottle(request, RequestOptions.DEFAULT); // <2>
+            // Replace the empty listener by a blocking listener in test
+            // Add a missing index so we can test it.
+            // tag::reindex-request-scroll
+            // tag::update-request-routing
+            UpdateRequest request = new UpdateRequest("posts", "1")
+                // <2>
+        // tag::term-vectors-execute
+            request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>
+                .opType(DocWriteRequest.OpType.CREATE);
+            //end::index-request-xcontent
+            filterSettings.put("min_word_length", 1);
+            //tag::update-request-source-include
+        }
+            String[] excludes = new String[]{"updated"};
+            // end::delete-by-query-execute-listener
+    public void testIndex() throws Exception {
+            // tag::delete-by-query-request
+                @Override
+            // end::multi-get-execute
+        {
+            assertThat(item.getResponse().getSource(), hasEntry("baz", "val3"));
+            listener = new ActionListener<MultiGetResponse>() {
+            request.setRefresh(true); // <1>
+            // end::bulk-request-pipeline
+            new TermVectorsRequest("authors", "fake_id"); // <1>
+    // Not entirely sure if _mtermvectors belongs to CRUD, and in the absence of a better place, will have it here
+                }
+            // end::delete-request-refresh
+        ActionListener<ListTasksResponse> listener;
+            ReindexRequest request = new ReindexRequest();
+            request.routing("routing"); // <1>
+                    + "        \"properties\" : {\n"
+        {
+                    "\"reason\":\"daily update\"" +
+            IndexRequest request = new IndexRequest("posts").id("1");
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            assertFalse(bulkResponse.hasFailures());
+            request.id("1"); // <2>
+                + "    },\n"
+        {
+            // end::bulk-processor-options
+            assertEquals("source includes", sourceAsMap.get("reason"));
+            long batches = bulkResponse.getBatches(); // <7>
+            assertEquals(DocWriteResponse.Result.UPDATED, indexResponse.getResult());
+    public void testBulk() throws Exception {
+            // tag::update-by-query-request-timeout
+                int docCount = tv.getFieldStatistics().getDocCount(); // <2>
+            // end::update-by-query-request
+            // end::reindex-request-script
+        client.reindexRethrottleAsync(request,
+                }
+            request.timeout(TimeValue.timeValueSeconds(1)); // <1>
+            }
+            assertEquals(expectSource, source);
+            // tag::bulk-processor-listener
+            Script inline = new Script(ScriptType.INLINE, "painless",
+            // tag::bulk-request-refresh
+                // <1>
+            //end::update-request-source-include
+        RestHighLevelClient client = highLevelClient();
+            {
+                    "}";
+                }
+            GetResponse firstGet = firstItem.getResponse();  // <2>
+            } else if (updateResponse.getResult() == DocWriteResponse.Result.UPDATED) {
+            UpdateRequest request = new UpdateRequest(
+            UpdateRequest request = new UpdateRequest("posts", "1").doc("reason", "source includes");
+            //end::get-request-source-exclude
+            UpdateRequest request = new UpdateRequest("posts", "1").doc("reason", "no source");
+        {
+                        // <2>
+                if (e.status() == RestStatus.NOT_FOUND) {
+                .source("user", "foobar",
+        {
+            XContentFactory.jsonBuilder()
+            // end::exists-execute
+                long version = getResponse.getVersion();
+                }
+                    (request, bulkListener) ->
+            request.setDestVersionType(VersionType.EXTERNAL); // <1>
+            new MultiTermVectorsRequest(ids, tvrequestTemplate); // <2>
+            Map<String, Object> source = response.getSource();
+                    + "                \"type\": \"text\",\n"
+        RethrottleRequest request = new RethrottleRequest(taskId);
+            };
+            }
+            listener = new ActionListener<BulkByScrollResponse>() {
+            Map<String, Object> jsonMap = new HashMap<>();
+            // tag::index-conflict
+            assertSame(RestStatus.OK, bulkResponse.status());
+                .setIfPrimaryTerm(20);
+import org.opensearch.core.action.ActionListener;
+            request.add(new IndexRequest("posts").id("3")  // <4>
+            request.add(tvrequest2); // <3>
+        {
+                        logger.warn("Bulk [{}] executed with failures", executionId);
+                    // <1>
+ * Code wrapped in {@code tag} and {@code end} tags is included in the docs.
+        {
+            request.storedFields("message"); // <1>
+            //tag::index-request-shortcut
+            // end::update-getresult
+                JsonXContent.contentBuilder()
+            request.setQuery(new TermQueryBuilder("user", "foobar")); // <1>
+            // tag::update-request-timeout
+            assertSame(RestStatus.CREATED, indexResponse.status());
+        // end::rethrottle-request-async-listener
+        listener = new LatchedActionListener<>(listener, latch);
+            IndexRequest indexRequest = new IndexRequest("posts")
+        {
+                    String reason = failure.reason(); // <4>
+                .endObject()
+                    "\"updated\":\"2017-01-01\"," +
+            TimeValue throttledUntilMillis =
+            TimeValue throttledUntilMillis =
             final CountDownLatch latch = new CountDownLatch(1);
-            listener = new LatchedActionListener<>(listener, latch);
-
-            // tag::multi-get-execute-async
-            client.mgetAsync(request, RequestOptions.DEFAULT, listener); // <1>
-            // end::multi-get-execute-async
-
-            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+                    + "    \"mappings\" : {\n"
         }
-        {
-            MultiGetRequest request = new MultiGetRequest();
-            // tag::multi-get-request-no-source
-            request.add(new MultiGetRequest.Item("index", "example_id")
-                .fetchSourceContext(FetchSourceContext.DO_NOT_FETCH_SOURCE));  // <1>
-            // end::multi-get-request-no-source
-            MultiGetItemResponse item = unwrapAndAssertExample(client.mget(request, RequestOptions.DEFAULT));
-            assertNull(item.getResponse().getSource());
-        }
-        {
-            MultiGetRequest request = new MultiGetRequest();
-            // tag::multi-get-request-source-include
+            assertThat(e.getMessage(),
+                if (exception.status() == RestStatus.CONFLICT) {
+        getSourceRequest.preference("preference"); // <1>
+        );
+            // tag::bulk-request-with-mixed-operations
+            UpdateRequest request = new UpdateRequest("posts", "async").doc("reason", "async update").docAsUpsert(true);
+            request.setDestIndex("dest");
+    public void testBulkProcessor() throws InterruptedException {
+            client.deleteByQueryAsync(request, RequestOptions.DEFAULT, listener); // <1>
+                // <2>
+import java.util.Date;
+                if (tv.getTerms() != null) {
+            // tag::multi-term-vectors-request
             String[] includes = new String[] {"foo", "*r"};
+    }
+            long searchRetries = bulkResponse.getSearchRetries(); // <11>
+            request.setScript(
+    @SuppressWarnings("unused")
+                public void onFailure(Exception e) {
+            request.setSourceIndices("source1");
+                    .startObject()
+                // <4>
+        }
+            // tag::update-by-query-request-query
+            // tag::multi-get-indexnotfound
+            IndexRequest three = new IndexRequest("posts").id("3")
+            // tag::update-failure
+                    BulkItemResponse.Failure failure =
+            perFieldAnalyzer.put("user", "keyword");
+            // tag::update-by-query-request-scrollSize
+        }
+            request.setConflicts("proceed"); // <1>
+                DeleteResponse deleteResponse = client.delete(
+            client.reindexAsync(request, RequestOptions.DEFAULT, listener); // <1>
+            // end::reindex-request-slices
+            request.pipeline("pipelineId"); // <1>
+            MultiGetRequest request = new MultiGetRequest();
+            // end::update-by-query-response
+        TermVectorsRequest request = new TermVectorsRequest("authors", "1");
+        {
+            request.setRouting("routing"); // <9>
+            // tag::get-source-execute
+            }
+            // end::multi-get-request-stored
+        // end::multi-term-vectors-request-template
+                                executionId, response.getTook().getMillis());
+                new Script(
+            // Replace the empty listener by a blocking listener in test
+            // These cannot be set with a remote set, so its set here instead for the docs
+        {
+        {
+            // tag::index-request-timeout
+            DeleteResponse deleteResponse = client.delete(
+        {
+            // tag::index-request-version-type
+                    }
+            createIndex.setJsonEntity(
+        // tag::term-vectors-execute-async
+        RestHighLevelClient client = highLevelClient();
+            // end::multi-get-request
+                    // <2>
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>
+            IndexRequest indexRequest = new IndexRequest("posts").id("1")
+            // end::index-conflict
+            };
+            UpdateByQueryRequest request = new UpdateByQueryRequest();
+            request.setDestPipeline("my_pipeline"); // <1>
+            TermVectorsRequest request = new TermVectorsRequest("authors", "1");
+                @Override
+            // Replace the empty listener by a blocking listener in test
+        {
+                    client.updateByQuery(request, RequestOptions.DEFAULT);
+            Map<String, Object> jsonMap = new HashMap<>();
+                // <2>
+            bulkProcessor.add(one);
+        {
+    public void testReindexRethrottle() throws Exception {
+                + "    },\n"
+            //end::get-request-realtime
+                if (e.status() == RestStatus.NOT_FOUND) {
+                public void beforeBulk(long executionId, BulkRequest request) {
+            long bulkRetries = bulkResponse.getBulkRetries(); // <9>
+                // <3>
+                @Override
+                    + "}"
+            // end::delete-by-query-response
+            request.realtime(false); // <1>
+            UpdateRequest request = new UpdateRequest("posts", "1").doc("reason", "source excludes");
+            builder.setBulkActions(500); // <1>
+            IndexRequest two = new IndexRequest("posts").id("2")
+                }
+            docBuilder.startObject().field("user", "guest-user").endObject();
+                        logger.debug("Bulk [{}] completed in {} milliseconds",
+            request.setPositions(false); // <3>
+            filterSettings.put("min_doc_freq", 1);
+                public void onFailure(Exception e) {
+            // end::reindex-request-conflicts
+import org.opensearch.client.core.MultiTermVectorsResponse;
+            // end::bulk-response
+            IndexRequest request = new IndexRequest("posts").id("async").source("field", "value");
+            // tag::bulk-errors
+            // end::delete-by-query-request-routing
+            String index = firstItem.getIndex();
+            } catch(OpenSearchException e) {
+            BulkRequest defaulted = new BulkRequest("posts"); // <1>
+        {
+            // tag::reindex-request-timeout
+            // end::get-source-execute-listener
+            // tag::bulk-has-failures
+                .startObject("properties")
+            request.source(jsonString, MediaTypeRegistry.JSON); // <3>
+        }
+            request.setIfSeqNo(2L); // <1>
+                + "    \"user\": {\n"
+            "1");   // <2>
+import static org.hamcrest.Matchers.containsString;
+import org.opensearch.action.support.ActiveShardCount;
+                                String payload = token.getPayload(); // <15>
+            // tag::update-request-refresh
+                @Override
+            // end::index-execute
+            // tag::delete-by-query-request-scroll
+            // tag::update-by-query-request-refresh
+            TermVectorsRequest tvrequest1 =
+            // tag::update-getresult
+            // tag::index-execute-listener
+            bulkProcessor.add(three);
+            MultiGetResponse response = client.mget(request, RequestOptions.DEFAULT);
+import org.opensearch.action.bulk.BulkItemResponse;
+            client.bulkAsync(request, RequestOptions.DEFAULT, listener); // <1>
+                RequestOptions.DEFAULT, listener); // <2>
+            // tag::index-optype
+            BulkProcessor bulkProcessor = BulkProcessor.builder(
+            boolean timedOut = bulkResponse.isTimedOut(); // <2>
+            long versionConflicts = bulkResponse.getVersionConflicts(); // <9>
+import org.opensearch.index.VersionType;
             String[] excludes = Strings.EMPTY_ARRAY;
+                        Throwable failure) {
+                + "    \"field2\": {\n"
+            request.setSourceQuery(new TermQueryBuilder("user", "foobar")); // <1>
+        client.index(
+            GetRequest getRequest = new GetRequest(
+                // <3>
+            // tag::multi-get-request-item-extras
+                    // <1>
+            }
+            // tag::reindex-request-pipeline
+            // end::update-by-query-request-timeout
+                    (request, bulkListener) ->
+            } catch (OpenSearchException e) {
+            // tag::bulk-execute-async
+            Map<String, Object> sourceAsMap = getResponse.getSourceAsMap();
+        }
+                builder.field("reason", "daily update");
+                for (ReplicationResponse.ShardInfo.Failure failure :
+            long totalDocs = bulkResponse.getTotal(); // <3>
+        }
+                    "if (ctx._source.user == 'foobar') {ctx._source.likes++;}",
+            long versionConflicts = bulkResponse.getVersionConflicts(); // <7>
+            new FetchSourceContext(true, includes, excludes)); // <1>
+        // end::term-vectors-execute-async
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            // end::get-source-response
+                        Throwable failure) {
+        getSourceRequest.fetchSourceContext(
+            HttpHost host = getClusterHosts().get(0);
+        //end::get-source-request-refresh
+            //end::update-request-with-doc-as-xcontent
+            // end::get-execute-listener
+            //tag::index-request-string
+            assertTrue(terminated);
+            IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
+                for (ReplicationResponse.ShardInfo.Failure failure :
+            // end::delete-by-query-request-query
+                @Override
+                public void onResponse(BulkByScrollResponse bulkResponse) {
+            // end::term-vectors-term-vectors
+                public void onFailure(Exception e) {
+        getRequest.storedFields("_none_");                            // <4>
+            // tag::bulk-processor-init
+            //end::get-request-preference
+            // tag::update-execute-listener
+                "index",         // <1>
+            };
+}
+                .id("1").source(jsonMap); // <1>
+            IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
+                .routing("some_routing"));          // <1>
+        {
+            // tag::bulk-execute-listener
+            IndexRequest indexRequest = new IndexRequest("posts")
+        };
+            XContentBuilder builder = XContentFactory.jsonBuilder();
+        boolean found = response.getFound(); // <3>
+            request.realtime(false);                // <2>
+        List<TermVectorsResponse> tvresponseList =
+            // tag::update-by-query-execute
+            String[] excludes = Strings.EMPTY_ARRAY;
+            jsonMap.put("postDate", new Date());
+            // tag::term-vectors-request-artificial
+            //tag::get-execute-async
+            //tag::get-request-preference
+            // tag::exists-execute
+                // <6>
+                byte[] sourceAsBytes = result.source(); // <4>
+            };
+                    + "            }\n"
+    }
+            request.setSlices(2); // <1>
+            } catch(OpenSearchException e) {
+            public void onResponse(TermVectorsResponse termVectorsResponse) {
+        }
+            // end::update-by-query-request-query
+            // end::update-by-query-request-refresh
+            assertTrue(sourceAsMap.containsKey("postDate"));
+            //tag::update-docnotfound
+            GetResult result = updateResponse.getGetResult(); // <1>
+            String[] includes = new String[]{"updated", "r*"};
+            try {
+            }
+        client.index(new IndexRequest("index").id("1").source("user", "foobar"), RequestOptions.DEFAULT);
+            IndexRequest indexRequest = new IndexRequest("posts")
+                            bulkItemResponse.getFailure(); // <2>
+            request.add(new MultiGetRequest.Item(
+            listener = new LatchedActionListener<>(listener, latch);
+        CreateIndexRequest authorsRequest = new CreateIndexRequest("authors").mapping(
+ * Licensed to Elasticsearch under one or more contributor
+            // tag::reindex-execute
+                .source("user", "foobar", "postDate", new Date(), "message", "trying out OpenSearch");
+                builder.field("message", "trying out OpenSearch");
+import org.opensearch.client.RestHighLevelClient;
+                    "message", "trying out OpenSearch"); // <1>
+            long versionConflicts = bulkResponse.getVersionConflicts(); // <8>
+            long version = deleteResponse.getVersion();
+            for (TermVectorsResponse.TermVector tv : response.getTermVectorsList()) {
+            // tag::multi-get-request-source-include
+        // tag::get-source-request
+                    client.deleteByQuery(request, RequestOptions.DEFAULT);
+                    "\"message\":\"trying out OpenSearch\"" +
+            // end::update-execute-async
+import org.opensearch.action.get.MultiGetRequest;
+        }
+                    + "                \"type\": \"text\",\n"
+            // end::update-request-upsert
+            // tag::delete-response
+import static org.hamcrest.Matchers.hasEntry;
+        // end::term-vectors-response
+        // tag::term-vectors-execute-listener
+                + "  }";
+            List<BulkItemResponse.Failure> bulkFailures =
+            );
+        // tag::term-vectors-response
+                Map<String, Object> sourceAsMap = firstGet.getSourceAsMap(); // <4>
+                case INDEX:    // <3>
+/*
+                    "\"user\":\"foobar\"," +
+        // end::get-source-request
+            );
+ * this file be licensed under the Apache-2.0 license or a
+                    ScriptType.STORED, null, "increment-field", parameters);  // <1>
+            // end::update-by-query-request-scrollSize
+                                int position = token.getPosition(); // <12>
+            jsonMap.put("reason", "daily update");
+                if (e.status() == RestStatus.CONFLICT) {
+            request.setScroll(TimeValue.timeValueMinutes(10)); // <1>
+            // tag::multi-get-response
+            assertNull(firstItem.getFailure());              // <1>
+            // tag::delete-request-routing
+                + "    },\n"
+            String id = updateResponse.getId();
+                    "if (ctx._source.user == 'foobar') {ctx._source.likes++;}",
+                + "  }";
+        source.put("foo", "val1");
+                    ScriptType.INLINE, "painless",
+                new Script(
+        //end::get-source-request-routing
+        }
+            List<ScrollableHitSource.SearchFailure> searchFailures =
+            // tag::bulk-processor-options
+                + "    \"user\": {\n"
+            List<BulkItemResponse.Failure> bulkFailures =
+        }
+/*
+            if (shardInfo.getTotal() != shardInfo.getSuccessful()) {
+            // tag::index-request-version
+                // <1>
+                }
+            // end::delete-conflict
+    public void testGet() throws Exception {
+            request.opType(DocWriteRequest.OpType.CREATE); // <1>
+            String[] includes = Strings.EMPTY_ARRAY;
+            String[] includes = new String[]{"message", "*Date"};
+            GetRequest request = new GetRequest("posts", "1");
+                long sumTotalTermFreq =
+                    bulkResponse.getBulkFailures(); // <14>
+                .id("1")
+            // end::update-by-query-request-script
+            // tag::update-request-cas
+        }
+            XContentBuilder builder = XContentFactory.jsonBuilder();
+            List<ScrollableHitSource.SearchFailure> searchFailures =
+            }
+                "{\n"
+            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
+        );
+                            tv.getTerms(); // <5>
+            createPipeline("my_pipeline");
+            IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
+                    + "                \"store\": true\n"
+            try {
+                // <2>
+                @Override
+            // end::bulk-request
+import org.opensearch.action.index.IndexRequest;
+            assertSame(RestStatus.OK, bulkResponse.status());
+            @Override
+        if (tvresponseList != null) {
+            // end::reindex-request-refresh
+            updateResponse = client.update(request, RequestOptions.DEFAULT);
+            request.setScript(
+            // end::bulk-processor-await
+            // tag::bulk-request-pipeline
+                + "      \"type\": \"text\"\n"
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
+import org.opensearch.client.RethrottleRequest;
+import org.opensearch.index.query.MatchAllQueryBuilder;
+            GetSourceRequest request = new GetSourceRequest("posts", "1");
             FetchSourceContext fetchSourceContext =
-                    new FetchSourceContext(true, includes, excludes);
-            request.add(new MultiGetRequest.Item("index", "example_id")
-                .fetchSourceContext(fetchSourceContext));  // <1>
+            assertEquals(DocWriteResponse.Result.UPDATED, indexResponse.getResult());
+        }
+        RestHighLevelClient client = highLevelClient();
+            // end::delete-by-query-request-indicesOptions
+            // tag::index-execute
+        CreateIndexRequest authorsRequest = new CreateIndexRequest("authors").mapping(
+            assertSame(0, bulkResponse.getSearchFailures().size());
+            //tag::get-request-version-type
+                    Collections.emptyMap())); // <1>
+            //end::get-request-stored
+            TimeValue timeTaken = bulkResponse.getTook(); // <1>
+            // end::update-request-detect-noop
+            request.setOffsets(false); // <4>
+    @SuppressWarnings("unused")
+        {
             // end::multi-get-request-source-include
-            MultiGetItemResponse item = unwrapAndAssertExample(client.mget(request, RequestOptions.DEFAULT));
-            assertThat(item.getResponse().getSource(), hasEntry("foo", "val1"));
+        }
+            //end::get-request-source-include
+            assertNull(item.getResponse().getSource());
+                        request, RequestOptions.DEFAULT);
+public class CRUDDocumentationIT extends OpenSearchRestHighLevelClientTestCase {
+            // end::multi-get-indexnotfound
+            request.indices("source1");
+import org.opensearch.action.update.UpdateResponse;
+                GetRequest request = new GetRequest("posts", "1").version(2);
+            // tag::index-execute-async
+            //end::get-request-routing
+            request.timeout(TimeValue.timeValueMinutes(2)); // <1>
+            // tag::reindex-request-script
+            MultiGetRequest request = new MultiGetRequest();
+                @Override
+        client.mtermvectorsAsync(
+            // tag::reindex-request-refresh
+            // end::delete-execute
+            }
+            client.mgetAsync(request, RequestOptions.DEFAULT, listener); // <1>
+                + "    \"field1\": {\n"
+            BulkByScrollResponse bulkResponse =
+import org.opensearch.core.common.unit.ByteSizeValue;
+            String mapping = "  \"properties\": {\n"
+        RestHighLevelClient client = highLevelClient();
+        // tag::multi-term-vectors-response
+            request.timeout(TimeValue.timeValueMinutes(2)); // <1>
+            // end::delete-request-timeout
+            // tag::index-response
+            String id = deleteResponse.getId();
+            // end::reindex-request
+                    request, RequestOptions.DEFAULT);
+            request.setRefreshPolicy(WriteRequest.RefreshPolicy.WAIT_UNTIL); // <1>
+            request.fetchSource(true); // <1>
+            BulkByScrollResponse bulkResponse =
+            BulkProcessor.Builder builder = BulkProcessor.builder(
+            // tag::delete-by-query-request-scrollSize
+            client.updateByQueryAsync(request, RequestOptions.DEFAULT, listener); // <1>
+                .endObject()
+            // end::reindex-execute-listener
+            FetchSourceContext fetchSourceContext =
+        }
+            String password = "test-password";
+                    // <1>
+                + "      \"type\": \"integer\"\n"
+            String index = getResponse.getIndex();
+    public void testMultiTermVectors() throws Exception {
+        //tag::get-source-request-preference
+import org.opensearch.index.get.GetResult;
+            //tag::update-request-source-exclude
+        // tag::rethrottle-execute-async
+                if (e.status() == RestStatus.CONFLICT) {
+                byte[] sourceAsBytes = firstGet.getSourceAsBytes();          // <5>
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            // tag::delete-request-timeout
+                    IndexResponse indexResponse = (IndexResponse) itemResponse;
+                + "    \"field2\": {\n"
+        Response refreshResponse = client().performRequest(new Request("POST", "/authors/_refresh"));
+            request.setSlices(2); // <1>
+            OpenSearchException ee = (OpenSearchException) e;    // <3>
+            // tag::reindex-execute-async
+            //tag::update-request-no-source
+        RestHighLevelClient client = highLevelClient();
+                public void onResponse(UpdateResponse updateResponse) {
+        GetSourceRequest getSourceRequest = new GetSourceRequest(
+            // tag::reindex-execute-listener
+            //end::get-response
+                .endObject()
+            request.doc(jsonString, MediaTypeRegistry.JSON); // <1>
+            expectSource.put("message", "trying out OpenSearch");
+ *
+                case CREATE:
+        }
+            TermVectorsRequest tvrequest2 =
+            // end::bulk-processor-listener
+        String[] ids = {"1", "2"};
+        {
+            assertEquals(2, sourceAsMap.size());
+            // end::bulk-execute
+            }
+        {
+        }
+            GetRequest request = new GetRequest("posts", "1");
+            request.script(inline);  // <3>
+        {
+        // tag::multi-term-vectors-execute-listener
+        MultiGetItemResponse item = response.getResponses()[0];
+                public void onResponse(Boolean exists) {
+            response.getTermVectorsResponses(); // <1>
+            request.refresh(true);                  // <3>
+            request.add(new IndexRequest("posts").id("4")  // <3>
+            long createdDocs = bulkResponse.getCreated(); // <5>
+    public void testDelete() throws Exception {
+                    // <2>
+        {
+            }
+            request.add(new MultiGetRequest.Item("index", "example_id")
+            Exception e = missingIndexItem.getFailure().getFailure();  // <2>
+            request.setRefreshPolicy(WriteRequest.RefreshPolicy.WAIT_UNTIL); // <1>
+        {
+            long searchRetries = bulkResponse.getSearchRetries(); // <9>
+            builder.startObject();
+            assertThat(e.getMessage(),
+                        client.bulkAsync(request, RequestOptions.DEFAULT, bulkListener),
+            // end::delete-by-query-request
             assertThat(item.getResponse().getSource(), hasEntry("bar", "val2"));
+            assertEquals(200, response.getStatusLine().getStatusCode());
+            long totalDocs = bulkResponse.getTotal(); // <3>
+                @Override
+            // end::reindex-request-maxDocs
+                .fetchSourceContext(FetchSourceContext.DO_NOT_FETCH_SOURCE));  // <1>
+                    + "            \"foo\" : {\n"
+            String jsonString = "{" +
+            ReplicationResponse.ShardInfo shardInfo = updateResponse.getShardInfo();
+        }
+            createIndex("source2", Settings.EMPTY, mapping);
+            BulkProcessor.Listener listener = new BulkProcessor.Listener() { // <1>
+                    "http", remoteHost, remotePort, null,
+            client.mtermvectors(request, RequestOptions.DEFAULT);
+                    "postDate", new Date(),
+            // assertEquals(RestStatus.NOT_FOUND, ee.status());        // <4>
+                .startObject()
+            //tag::get-request-version
+                @Override
+                public void afterBulk(long executionId, BulkRequest request,
+            //tag::get-execute
+            final CountDownLatch latch = new CountDownLatch(1);
+            //end::index-request-shortcut
+                }
+            request.add(new MultiGetRequest.Item("index", "example_id")
+            createIndex("source1", Settings.EMPTY, mapping);
+import org.opensearch.action.index.IndexResponse;
+            request.setRefreshPolicy(WriteRequest.RefreshPolicy.WAIT_UNTIL); // <1>
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            String message = getResponse.getField("message").getValue(); // <2>
+            // end::update-by-query-execute-listener
+            // end::index-execute-async
+            //tag::update-request-with-inline-script
+            // tag::multi-get-request-stored
+                    // <2>
+            }
+                }
+        assertThat(response.getResponses(), arrayWithSize(1));
+            UpdateRequest request = new UpdateRequest("posts", "id");
+import org.opensearch.action.get.MultiGetResponse;
+            String[] excludes = new String[] {"foo", "*r"};
+import org.opensearch.client.Response;
+            GetRequest request = new GetRequest("posts", "1");
+            String remoteHost = host.getHostName();
+                    bulkResponse.getBulkFailures(); // <13>
+            IndexRequest request = new IndexRequest("posts")
+            List<ScrollableHitSource.SearchFailure> searchFailures =
+                            "Current status and upcoming changes in OpenSearch");
+            IndexRequest indexRequest = new IndexRequest("posts").id("1").source("field", "value");
+            assertEquals(8, updateResponse.getGetResult().getSource().get("field"));
+    public void testExists() throws Exception {
+            public void onResponse(ListTasksResponse response) {
+            // tag::index-request-pipeline
+            // tag::delete-execute-async
+        // end::get-source-request-optional
+            // tag::update-execute
+ * license agreements. See the NOTICE file distributed with
+            // tag::get-source-response
+                    List<TermVectorsResponse.TermVector.Term> terms =
+import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
+        }
+        }
+                    .doc(jsonMap); // <1>
+                    logger.debug("Executing bulk [{}] with {} requests",
+            // tag::delete-by-query-request-query
+        }
+                    "\"postDate\":\"2013-01-30\"," +
+            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
+            @Override
+        {
+import static org.hamcrest.Matchers.hasKey;
+            IndexRequest request = new IndexRequest("posts")
+        source.put("baz", "val3");
+            }
+            boolean timedOut = bulkResponse.isTimedOut(); // <2>
+        // tag::multi-term-vectors-execute
+                    // <1>
+                        shardInfo.getFailures()) {
+        );
+            createIndex("source1", Settings.EMPTY, mapping);
+            listener = new LatchedActionListener<>(listener, latch);
+            // end::update-request-active-shards
+            request.setIndicesOptions(IndicesOptions.LENIENT_EXPAND_OPEN); // <1>
+            assertSame(DocWriteResponse.Result.DELETED, deleteResponse.getResult());
+            Map<String, Object> sourceAsMap = updateResponse.getGetResult().sourceAsMap();
+                    .setIfPrimaryTerm(200L);
+                .id("1")
+            };
+                + "      \"type\": \"integer\"\n"
+            // tag::update-by-query-request-script
+                + "    },\n"
+        }
+            final CountDownLatch latch = new CountDownLatch(1);
+                    // <1>
+                }
+        {
+            // end::update-by-query-request-scroll
+        {
+            client.updateAsync(request, RequestOptions.DEFAULT, listener); // <1>
+import org.opensearch.action.LatchedActionListener;
+            // tag::update-by-query-request
+            // tag::multi-get-execute
+            //tag::update-request-with-doc-as-map
+            assertThat(item.getResponse().getSource(), not(hasKey("bar")));
+        // end::multi-term-vectors-response
+            // end::update-request-timeout
+            final CountDownLatch latch = new CountDownLatch(1);
+            }
+import org.opensearch.index.reindex.RemoteInfo;
+            String mapping = "  \"properties\": {\n"
+import org.opensearch.script.ScriptType;
+            boolean exists = client.exists(getRequest, RequestOptions.DEFAULT);
+import org.opensearch.index.reindex.UpdateByQueryRequest;
+        RestHighLevelClient client = highLevelClient();
+            {
+                }
+            MultiGetRequest request = new MultiGetRequest();
+            request.setFilterSettings(filterSettings);  // <6>
+ * under the License.
+            IndexRequest request = new IndexRequest("posts"); // <1>
+            ActionListener<MultiGetResponse> listener;
+            assertEquals(200, response.getStatusLine().getStatusCode());
+                    // <1>
+import java.util.concurrent.CountDownLatch;
+            MultiGetItemResponse item = response.getResponses()[0];
+    private MultiGetItemResponse unwrapAndAssertExample(MultiGetResponse response) {
+                    "}";
+            listener = new LatchedActionListener<>(listener, latch);
+            listener = new LatchedActionListener<>(listener, latch);
+                            for (TermVectorsResponse.TermVector.Token token : tokens) {
+            //end::get-execute
+                }
+            request.versionType(VersionType.EXTERNAL); // <1>
+ *
+            request.add(new IndexRequest("posts").id("2")  // <3>
+            request.timeout("1s"); // <2>
+import org.opensearch.client.core.GetSourceResponse;
+        }
+            // end::delete-request-version
+            "posts", // <1>
+                    // <1>
+            request.setJsonEntity(
+                docBuilder); // <1>
+                .endObject()
+        RestHighLevelClient client = highLevelClient();
+        {
+            GetResponse getResponse = client.get(request, RequestOptions.DEFAULT);
+            "posts", // <1>
+            GetSourceResponse response =
+        }
+                    + "            }\n"
+        {
+            // tag::bulk-request-index-type
+        {
+        }
+            assertNull(missingIndexItem.getResponse());                // <1>
+            // end::multi-get-execute-listener
+            MultiGetResponse response = client.mget(request, RequestOptions.DEFAULT);
+            // tag::delete-request-version-type
+            // end::update-by-query-request-indicesOptions
+            request.setMaxDocs(10); // <1>
+            UpdateResponse updateResponse = client.update(request, RequestOptions.DEFAULT);
+            request.routing("routingId"); // <1>
+                    .source(MediaTypeRegistry.JSON, "title",
+            // end::bulk-request-active-shards
+                    .doc(builder);  // <1>
+            String index = indexResponse.getIndex();
+            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
+            request.setTermStatistics(true); // <2>
+            //tag::get-request-no-source
+import org.opensearch.client.indices.CreateIndexResponse;
+        }
+                    .doc("updated", new Date(),
+                    .source(MediaTypeRegistry.JSON,"field", "foo"));
+            assertEquals("source excludes", sourceAsMap.get("reason"));
+            TimeValue throttledMillis = bulkResponse.getStatus().getThrottled(); // <11>
+            request.timeout("2m"); // <2>
+    }
+            request.routing("routing"); // <1>
+            // end::bulk-errors
+                UpdateResponse updateResponse = client.update(
+        {
+            final CountDownLatch latch = new CountDownLatch(1);
+                    .doc(MediaTypeRegistry.JSON,"other", "test"));
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+                    new DeleteRequest("posts", "1").setIfSeqNo(100).setIfPrimaryTerm(2),
+            docBuilder.startObject().field("user", "guest-user").endObject();
+            // tag::multi-get-request-top-level-extras
+import org.opensearch.client.core.TermVectorsRequest;
+            // end::reindex-request-sourceSize
+        {
+            assertEquals(DocWriteResponse.Result.UPDATED, indexResponse.getResult());
+            // end::delete-request
+                    + "    \"mappings\" : {\n"
+import org.opensearch.client.indices.CreateIndexRequest;
+                    bulkResponse.getSearchFailures(); // <12>
+            OpenSearchException ee = (OpenSearchException) e;  // <3>
+                for (ReplicationResponse.ShardInfo.Failure failure :
+        client.deleteByQueryRethrottleAsync(request,
+        source.put("bar", "val2");
+        RestHighLevelClient client = highLevelClient();
+        }
+        }
+            GetResponse getResponse = client.get(request, RequestOptions.DEFAULT);
+            request.add(tvrequest1); // <2>
+            } catch (OpenSearchException exception) {
+            //tag::get-request-source-include
+        {
+                @Override
+                    .endObject()
+            // tag::update-request-scripted-upsert
+            jsonMap.put("updated", new Date());
+                    // <4>
+import org.apache.hc.core5.http.HttpHost;
+    public void testUpdate() throws Exception {
+            ReplicationResponse.ShardInfo shardInfo = indexResponse.getShardInfo();
+            String id = indexResponse.getId();
+                    // <1>
+            }
+        {
+            request.setRemoteInfo(
+        {
+        client.updateByQueryRethrottleAsync(request,
+        client.index(new IndexRequest("index").id("1").source("user", "foobar"), RequestOptions.DEFAULT);
+            assertNull(item.getResponse().getSource());
+            //tag::get-request-stored
+            request.fetchSource(true);
+        RestHighLevelClient client = highLevelClient();
+            // end::multi-term-vectors-request
+            //end::update-request-no-source
+            // Replace the empty listener by a blocking listener in test
+            }
+                        client.bulkAsync(request, RequestOptions.DEFAULT, bulkListener),
+            try {
+                public void onResponse(BulkByScrollResponse bulkResponse) {
+            assertSame(0, bulkResponse.getSearchFailures().size());
+            request.versionType(VersionType.EXTERNAL); // <1>
+            String id = getResponse.getId();
+            // end::reindex-request-remote
+            //tag::get-request-routing
+            // end::update-failure
+        // end::multi-term-vectors-execute-listener
+        CreateIndexResponse authorsResponse = client.indices().create(authorsRequest, RequestOptions.DEFAULT);
+            request.timeout("2m"); // <2>
+            IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
+            request.add(new MultiGetRequest.Item("index", "with_routing")
+            ); // <1>
+            };
+            request.add(new IndexRequest("posts").id("1")  // <2>
+            request.waitForActiveShards(2); // <1>
+            //end::update-request-with-inline-script
+                    listener);
+        {
+            };
+                    String reason = failure.reason(); // <2>
+            request.setRefresh(true); // <1>
+            // tag::reindex-request-opType
+                @Override
+                    .toString()
+                }
+        RestHighLevelClient client = highLevelClient();
+            assertSame(RestStatus.CREATED, indexResponse.status());
+                @Override
+            // tag::index-request-op-type
+            RethrottleRequest request = new RethrottleRequest(taskId, 100.0f); // <1>
+        CountDownLatch latch = new CountDownLatch(1);
+        RestHighLevelClient client = highLevelClient();
+            if (shardInfo.getTotal() != shardInfo.getSuccessful()) {
+            BulkProcessor.Listener listener = new BulkProcessor.Listener() {
+            Response response = client().performRequest(createIndex);
+            }
+        }
+                + "    \"field1\": {\n"
+        }
+                    + "        \"properties\" : {\n"
+                .fetchSourceContext(fetchSourceContext));  // <1>
+                    // <2>
+            // tag::update-by-query-response
+            // end::rethrottle-disable-request
+                .id("1")
+        String id = response.getId(); // <2>
+                String sourceAsString = getResponse.getSourceAsString();        // <1>
+import org.opensearch.action.delete.DeleteRequest;
+            try {
+                containsString("reason=no such index [missing_index]")); // <5>
+    }
+                    new FetchSourceContext(true, includes, excludes);
+            // tag::reindex-response
+        {
+                }
+import org.opensearch.action.bulk.BulkResponse;
+                // <5>
+                        int termFreq = term.getTermFreq(); // <7>
+            // Replace the empty listener by a blocking listener in test
+            //tag::update-request-with-stored-script
+            Response response = client().performRequest(createIndex);
+        assertEquals("index", item.getIndex());
+            // tag::bulk-request-routing
+            // end::delete-response
+            if (indexResponse.getResult() == DocWriteResponse.Result.CREATED) {
+            String index = updateResponse.getIndex();
+            listener = new ActionListener<UpdateResponse>() {
+                + "    }\n"
+                        tv.getFieldStatistics().getSumTotalTermFreq(); // <3>
+import org.opensearch.common.unit.TimeValue;
+            // end::rethrottle-request-execution
+        }
+                    + "        }\n"
+            builder.setFlushInterval(TimeValue.timeValueSeconds(10L)); // <4>
+        }
+            //tag::get-request-realtime
+            }
+                "example_id"));  // <2>
+        if (response.getTermVectorsList() != null) {
+            //end::update-request-with-doc-as-map
+            //end::get-execute-async
+            //tag::update-request-with-doc-as-string
+import java.util.concurrent.TimeUnit;
+            // tag::update-conflict
+            request.setRefreshPolicy("wait_for");                            // <2>
+            } else {
+                @Override
+            // tag::bulk-processor-await
+                // <1>
+        {
+            // end::get-conflict
+import org.opensearch.action.get.MultiGetItemResponse;
+            ReindexRequest request = new ReindexRequest(); // <1>
+                .source("user", "foobar", "postDate", new Date(), "message", "trying out OpenSearch");
+            MultiGetItemResponse item = response.getResponses()[0];
+            MultiGetItemResponse item = unwrapAndAssertExample(client.mget(request, RequestOptions.DEFAULT));
+ * Modifications Copyright OpenSearch Contributors. See
+                IndexResponse response = client.index(request, RequestOptions.DEFAULT);
+            // TODO status is broken! fix in a followup
+            Script stored = new Script(
+        }
+        ActionListener<TermVectorsResponse> listener;
+            filterSettings.put("min_term_freq", 1);
+import org.opensearch.common.xcontent.XContentFactory;
+                    }
+            try {
+            client.getAsync(request, RequestOptions.DEFAULT, listener); // <1>
+            String[] excludes = new String[]{"message"};
+            createIndex.setJsonEntity(
+            // tag::rethrottle-request
+            TimeValue throttledMillis = bulkResponse.getStatus().getThrottled(); // <12>
+import org.opensearch.core.common.Strings;
+            // tag::delete-by-query-request-timeout
+        }
+                    .field("source", "ctx._source.field += params.count")
+        // tag::rethrottle-request-async-listener
+            filterSettings.put("max_num_terms", 3);
+                    String reason = failure.reason(); // <2>
+            request.version(2); // <1>
+                builder.field("user", "foobar");
+                .setIfSeqNo(10L)
+            request.setBatchSize(100); // <1>
+            // tag::rethrottle-request-execution
+ * SPDX-License-Identifier: Apache-2.0
+                }
+            //end::update-request-shortcut
+ * Documentation for CRUD APIs in the high level java client.
+import org.opensearch.index.reindex.BulkByScrollResponse;
+            builder.endObject();
+            @Override
+        listener = new LatchedActionListener<>(listener, latch);
+            GetRequest request = new GetRequest("posts", "1");
+                                    term.getTokens(); // <11>
+            }
+                + "    \"field1\": {\n"
+            createIndex("source2", Settings.EMPTY, mapping);
+            // end::delete-by-query-execute-async
+                .field("type", "keyword")
+            // end::delete-by-query-request-scrollSize
+import org.opensearch.action.update.UpdateRequest;
+                    // <1>
+    @SuppressWarnings("unused")
+import org.opensearch.client.core.MultiTermVectorsRequest;
+                byte[] sourceAsBytes = getResponse.getSourceAsBytes();          // <3>
+        assertTrue(authorsResponse.isAcknowledged());
+            GetResponse getResponse = client.get(getRequest, RequestOptions.DEFAULT);
+                // <1>
+        // end::rethrottle-execute-async
+            }
+                    .source(MediaTypeRegistry.JSON,"field", "bar"));
+                    @Override
+                .fetchSourceContext(fetchSourceContext));  // <1>
+import java.util.HashMap;
+            @Override
+                        RequestOptions.DEFAULT);
+                    listener).build(); // <5>
+                builder.timeField("postDate", new Date());
+import org.opensearch.action.bulk.BulkRequest;
+                    ScriptType.INLINE, "painless",
+        assertTrue(authorsResponse.isAcknowledged());
+            // tag::delete-execute
+            List<BulkItemResponse.Failure> bulkFailures =
+                UpdateResponse updateResponse = client.update(
+                    request, RequestOptions.DEFAULT);
+            assertEquals("foobar", sourceAsMap.get("user"));
+        {
+                IndexResponse response = client.index(request, RequestOptions.DEFAULT);
+                            List<TermVectorsResponse.TermVector.Token> tokens =
+            //tag::get-request-source-exclude
+            // tag::update-by-query-execute-async
+                        long totalTermFreq = term.getTotalTermFreq(); // <9>
+                    Collections.emptyMap())); // <1>
+            // end::term-vectors-request
+        {
+            assertSame(0, bulkResponse.getSearchFailures().size());
+        {
+                    new UpdateByQueryRequest("source1", "source2"); // <1>
+            request.refresh(true); // <1>
+/*
+            request = new UpdateRequest("posts", "1").fetchSource(true);
+                }
+        {
+import org.opensearch.index.reindex.ScrollableHitSource;
+            ActionListener<Boolean> listener = new ActionListener<Boolean>() {
+            IndexRequest indexRequest = new IndexRequest("posts").id("1").source("field", 0);
+                @Override
+ *
+                    bulkResponse.getStatus().getThrottledUntil(); // <11>
+            // end::index-request-version
+                .source("field", "value")
+            // end::delete-notfound
+            listener = new ActionListener<BulkByScrollResponse>() {
+        }
+            ActionListener<IndexResponse> listener;
+    }
+        }
+                + "    }\n"
+                .endObject()
+                // <2>
+            // tag::update-by-query-request-maxDocs
+            if (deleteResponse.getResult() == DocWriteResponse.Result.NOT_FOUND) {
+            if (shardInfo.getFailed() > 0) {
+            String user = "test_user";
+            request.setPayloads(false); // <5>
+            public void onResponse(MultiTermVectorsResponse mtvResponse) {
+        listener = new LatchedActionListener<>(listener, latch);
+            // Replace the empty listener by a blocking listener in test
+        {
+        listener = new ActionListener<MultiTermVectorsResponse>() {
+                @Override
+            request.setRefreshPolicy("wait_for");                            // <2>
+            // tag::bulk-request
+        }
+                .source("field", "value")
+            //end::update-request-with-stored-script
+                    + "                \"type\": \"text\",\n"
+            bulkProcessor.add(two);
+        {
+            // Replace the empty listener by a blocking listener in test
+            //tag::get-source-execute-async
+            request.setMaxDocs(10); // <1>
+            // tag::reindex-request-sourceSize
+        // end::term-vectors-execute-listener
+            assertEquals(source, firstGet.getSource());
+    }
+            long batches = bulkResponse.getBatches(); // <6>
+            } catch (OpenSearchException e) {
+            assertEquals(200, response.getStatusLine().getStatusCode());
+            request.setPipeline("pipeline"); // <1>
+            BulkRequest request = new BulkRequest(); // <1>
+            long deletedDocs = bulkResponse.getDeleted(); // <6>
+                .id("1").source(builder);  // <1>
+            assertTrue(getResponse.isExists());
+            } else if (updateResponse.getResult() == DocWriteResponse.Result.NOOP) {
+            long totalDocs = bulkResponse.getTotal(); // <3>
+            } else {
+    public void testDeleteByQuery() throws Exception {
+                    // <2>
+            request.setRefreshPolicy("wait_for");                            // <2>
+                public void onResponse(MultiGetResponse response) {
+            // tag::update-request-detect-noop
+            Integer remotePort = host.getPort();
+        }
+            IndexResponse indexResponse = client.index(new IndexRequest("posts").id("1").source("field", "value"), RequestOptions.DEFAULT);
+    public void testTermVectors() throws Exception {
+            //tag::get-request-refresh
+            request.add(new MultiGetRequest.Item("index", "example_id")
+            UpdateResponse updateResponse = client.update(request, RequestOptions.DEFAULT);
+ * ownership. Elasticsearch licenses this file to you under
+            UpdateResponse updateResponse = client.update(request, RequestOptions.DEFAULT);
+                    break;
+            // tag::update-request-upsert
+            request.setSourceIndices("source1", "source2"); // <2>
+            // end::index-request-refresh
+import org.opensearch.action.bulk.BackoffPolicy;
+            long bulkRetries = bulkResponse.getBulkRetries(); // <10>
+    }
+            // tag::bulk-request-timeout
+                        shardInfo.getFailures()) {
+                switch (bulkItemResponse.getOpType()) {
+                    if (response.hasFailures()) { // <2>
+                "{\n"
+import org.opensearch.action.get.GetRequest;
+            // tag::update-by-query-request-scroll
+            GetResponse getResponse = client.get(request, RequestOptions.DEFAULT);
+            assertNull(getResponse.getSourceInternal());
+            long updatedDocs = bulkResponse.getUpdated(); // <4>
+                public void onFailure(Exception e) {
+                }
+            request.script(stored);  // <2>
+            ReplicationResponse.ShardInfo shardInfo = deleteResponse.getShardInfo();
+                            }
+            listener = new LatchedActionListener<>(listener, latch);
+            //end::get-request-no-source
+            BulkResponse bulkResponse = client.bulk(request, RequestOptions.DEFAULT);
+            String mapping = "  \"properties\": {\n"
+            Map<String, Object> expectSource = new HashMap<>();
+import org.opensearch.core.xcontent.XContentBuilder;
+            // tag::delete-by-query-execute-listener
+            GetRequest request = new GetRequest("posts", "1");
+            }
+        client.index(new IndexRequest("index").id("2").source("user", "baz"), RequestOptions.DEFAULT);
+    public void testMultiGet() throws Exception {
+            // end::multi-get-request-top-level-extras
+            ActionListener<BulkByScrollResponse> listener;
+import org.opensearch.action.support.IndicesOptions;
+                    new FetchSourceContext(true, includes, excludes)); // <1>
+            // end::bulk-has-failures
+            UpdateRequest request = new UpdateRequest("posts", "1")
+                Map<String, Object> sourceAsMap = result.sourceAsMap(); // <3>
+        request.setFields("user");
+            }
+            Request createIndex = new Request("PUT", "/index");
+            // tag::reindex-request-slices
+            Exception e = item.getFailure().getFailure();            // <2>
+import org.opensearch.action.support.replication.ReplicationResponse;
+            // Replace the empty listener by a blocking listener in test
+            try {
+            request.setSlices(2); // <1>
+                public void onFailure(Exception e) {
+ * You may obtain a copy of the License at
+            // tag::rethrottle-disable-request
+            UpdateRequest request = new UpdateRequest("posts", "does_not_exist")
+            DeleteRequest request = new DeleteRequest("posts", "1");
+            // tag::index-request-routing
+            // tag::reindex-request-conflicts
+            // tag::reindex-request-query
+                    .field("lang", "painless")
+                        BulkResponse response) {
+            if (getResponse.isExists()) {
+            TermVectorsRequest request = new TermVectorsRequest("authors",
+                + "      \"type\": \"integer\"\n"
+        //tag::get-source-request-realtime
+            assertEquals(2, sourceAsMap.size());
+                    // <1>
+            String[] excludes = Strings.EMPTY_ARRAY;
+            // tag::get-source-execute-listener
+            request.waitForActiveShards(ActiveShardCount.ALL); // <2>
+            FetchSourceContext fetchSourceContext =
+import org.opensearch.OpenSearchException;
+        RestHighLevelClient client = highLevelClient();
+                        }
+            // end::delete-by-query-request-maxDocs
+                + "      \"type\": \"text\"\n"
+                public void afterBulk(long executionId, BulkRequest request,
+        }
+            // end::delete-by-query-request-scroll
+            request.add(new DeleteRequest("posts", "3")); // <1>
+                + "      \"type\": \"integer\"\n"
+            // tag::delete-request-refresh
+            MultiGetItemResponse item = unwrapAndAssertExample(client.mget(request, RequestOptions.DEFAULT));
+                + "      \"type\": \"integer\"\n"
+                if (bulkItemResponse.isFailed()) { // <1>
+                + "      \"type\": \"integer\"\n"
+                    + "    }\n"
+                .storedFields("foo"));  // <1>
+            MultiGetRequest request = new MultiGetRequest();
+        }
+                }
+        {
+            assertSame(0, bulkResponse.getBulkFailures().size());
+            request.setRefreshPolicy("wait_for");                            // <2>
+            // tag::multi-get-request-source-exclude
+        {
+            long deletedDocs = bulkResponse.getDeleted(); // <5>
+                @Override
+                long sumDocFreq = tv.getFieldStatistics().getSumDocFreq(); // <4>
+        // tag::multi-term-vectors-execute-async
+ * GitHub history for details.
+            TimeValue timeTaken = bulkResponse.getTook(); // <1>
+    public void testGetSource() throws Exception {
+                        float score = term.getScore(); // <10>
+ * specific language governing permissions and limitations
+        String index = response.getIndex(); // <1>
+                new TermVectorsRequest("authors", docBuilder);
+            createIndex("source1", Settings.EMPTY, mapping);
+            // tag::delete-notfound
+            // end::update-response
+            Map<String, Integer> filterSettings = new HashMap<>();
+                        int docFreq = term.getDocFreq(); // <8>
+                public void onFailure(Exception e) {
+            // tag::update-request-retry
+import org.opensearch.client.OpenSearchRestHighLevelClientTestCase;
+            //tag::get-request
+                    // <1>
+            filterSettings.put("max_doc_freq", 100);
+        CreateIndexResponse authorsResponse = client.indices().create(authorsRequest, RequestOptions.DEFAULT);
+                .startObject()
+                }
+                }
+            // tag::delete-execute-listener
+        {
+            // tag::delete-by-query-request-routing
+            createPipeline("my_pipeline");
+                    new FetchSourceContext(true, includes, excludes);
+                public void onFailure(Exception e) {
+                // <4>
+            ActionListener<GetResponse> listener = new ActionListener<GetResponse>() {
+        }
+                    // <2>
+                        if (term.getTokens() != null) {
+            // tag::bulk-response
+                @Override
+                    bulkResponse.getStatus().getThrottledUntil(); // <13>
+                public void afterBulk(long executionId, BulkRequest request,
+            assertNotNull(result);
+            DeleteRequest request = new DeleteRequest(
+            assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
+            listener = new LatchedActionListener<>(listener, latch);
             assertThat(item.getResponse().getSource(), not(hasKey("baz")));
         }
+            // end::bulk-request-refresh
+    @SuppressWarnings("unused")
         {
-            MultiGetRequest request = new MultiGetRequest();
-            // tag::multi-get-request-source-exclude
-            String[] includes = Strings.EMPTY_ARRAY;
-            String[] excludes = new String[] {"foo", "*r"};
-            FetchSourceContext fetchSourceContext =
+        assertEquals(200, refreshResponse.getStatusLine().getStatusCode());
+                GetResponse getResponse = client.get(request, RequestOptions.DEFAULT);
+            // tag::term-vectors-request
+                    + "}"
+        }
+                    + "                \"store\": true\n"
+            // end::update-by-query-request-routing
+            public void onFailure(Exception e) {
+                public void onResponse(DeleteResponse deleteResponse) {
+    public void testUpdateByQuery() throws Exception {
+            request.add(new MultiGetRequest.Item("missing_index", "id"));
+        }
+                .field("type", "keyword")
+            // end::multi-get-request-item-extras
+            //tag::index-request-xcontent
+            request.setPerFieldAnalyzer(perFieldAnalyzer);  // <7>
+            RequestOptions.DEFAULT
+ * The OpenSearch Contributors require contributions made to
+                    new BytesArray(new MatchAllQueryBuilder().toString()),
+            request.preference("preference"); // <1>
+            request.add(new MultiGetRequest.Item("index", "another_id")); // <3>
+            if (firstGet.isExists()) {
+            assertEquals(4, updateResponse.getGetResult().getSource().get("field"));
+                    logger.error("Failed to execute bulk", failure); // <3>
+            IndexResponse indexResponse = client.index(
+                case DELETE:   // <5>
+            createIndex("source2", Settings.EMPTY, mapping);
+            ActionListener<BulkByScrollResponse> listener;
+                }
+            assertSame(0, bulkResponse.getBulkFailures().size());
+                    .source(MediaTypeRegistry.JSON,"field", "baz"));
+            //tag::index-request-map
+                @Override
+                RequestOptions.DEFAULT
+        //tag::get-source-request-refresh
+            // end::reindex-request-pipeline
+        {
+    }
+            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
+                            "In which order are my OpenSearch queries executed?");
+            // end::bulk-execute-async
+            request.setDestOpType("create"); // <1>
+            try {
+            UpdateRequest request = new UpdateRequest("posts", "1")
                     new FetchSourceContext(true, includes, excludes);
-            request.add(new MultiGetRequest.Item("index", "example_id")
-                .fetchSourceContext(fetchSourceContext));  // <1>
-            // end::multi-get-request-source-exclude
-            MultiGetItemResponse item = unwrapAndAssertExample(client.mget(request, RequestOptions.DEFAULT));
-            assertThat(item.getResponse().getSource(), not(hasKey("foo")));
-            assertThat(item.getResponse().getSource(), not(hasKey("bar")));
-            assertThat(item.getResponse().getSource(), hasEntry("baz", "val3"));
-        }
-        {
+            // tag::exists-execute-async
+import org.opensearch.action.DocWriteResponse;
+            client.indexAsync(request, RequestOptions.DEFAULT, listener); // <1>
+            //tag::update-request
+            public void onFailure(Exception e) {
             MultiGetRequest request = new MultiGetRequest();
-            // tag::multi-get-request-stored
-            request.add(new MultiGetRequest.Item("index", "example_id")
-                .storedFields("foo"));  // <1>
-            MultiGetResponse response = client.mget(request, RequestOptions.DEFAULT);
-            MultiGetItemResponse item = response.getResponses()[0];
-            String value = item.getResponse().getField("foo").getValue(); // <2>
-            // end::multi-get-request-stored
-            assertNull(item.getResponse().getSource());
-            assertEquals("val1", value);
+            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
+ */
+            assertEquals(DocWriteResponse.Result.UPDATED, updateResponse.getResult());
+                            "The Future of Federated Search in OpenSearch");
+            // end::reindex-response
+            // Replace the empty listener by a blocking listener in test
+    }
+            // tag::delete-by-query-request-maxDocs
         }
+        };
+        }
+    @SuppressWarnings("unused")
+            // end::index-request-version-type
+                    // <1>
+ */
+            // end::update-execute
+                public void beforeBulk(long executionId, BulkRequest request) {
+            // end::exists-execute-async
+                    // <2>
+            DeleteByQueryRequest request = new DeleteByQueryRequest();
+            assertEquals(RestStatus.OK.getStatus(), response.getStatusLine().getStatusCode());
+            MultiGetResponse response = client.mget(request, RequestOptions.DEFAULT);
+                    + "        }\n"
+    }
         {
+            Map<String, Object> sourceAsMap = getResponse.getSourceAsMap();
+                    "posts", // <1>
+            // end::exists-execute-listener
             // tag::multi-get-conflict
-            MultiGetRequest request = new MultiGetRequest();
-            request.add(new MultiGetRequest.Item("index", "example_id")
-                .version(1000L));
-            MultiGetResponse response = client.mget(request, RequestOptions.DEFAULT);
-            MultiGetItemResponse item = response.getResponses()[0];
-            assertNull(item.getResponse());                          // <1>
-            Exception e = item.getFailure().getFailure();            // <2>
-            OpenSearchException ee = (OpenSearchException) e;  // <3>
-            // TODO status is broken! fix in a followup
-            // assertEquals(RestStatus.CONFLICT, ee.status());          // <4>
-            assertThat(e.getMessage(),
-                containsString("version conflict, current version [1] is "
-                    + "different than the one provided [1000]"));    // <5>
-            // end::multi-get-conflict
+                )
+        Response refreshResponse = client().performRequest(new Request("POST", "/authors/_refresh"));
         }
-
+            }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.client.RequestOptions;
+            // end::index-response
+            MultiTermVectorsRequest request = new MultiTermVectorsRequest(); // <1>
+            bulkProcessor.close();
+            // end::update-by-query-execute
+            final CountDownLatch latch = new CountDownLatch(1);
+            XContentBuilder docBuilder = XContentFactory.jsonBuilder();
+                public void onFailure(Exception e) {
+            }
+            request.upsert(jsonString, MediaTypeRegistry.JSON);  // <1>
+                    new TimeValue(100, TimeUnit.SECONDS)
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+                    + "different than the one provided [1000]"));    // <5>
+                public void afterBulk(long executionId, BulkRequest request,
+                // <1>
+        MultiTermVectorsResponse response =
+        }
+                    new DeleteByQueryRequest("source1", "source2"); // <1>
+            };
+        {
+            String value = item.getResponse().getField("foo").getValue(); // <2>
+            // end::index-request-op-type
+            long bulkRetries = bulkResponse.getBulkRetries(); // <8>
+                    + "}"
+            // end::update-request-doc-upsert
+                    .constantBackoff(TimeValue.timeValueSeconds(1L), 3)); // <5>
+        TaskId taskId = new TaskId("oTUltX4IQMOUUVeiohTt8A:124");
+                }
+            ActionListener<GetSourceResponse> listener =
+        {
     }
-
-    private MultiGetItemResponse unwrapAndAssertExample(MultiGetResponse response) {
-        assertThat(response.getResponses(), arrayWithSize(1));
-        MultiGetItemResponse item = response.getResponses()[0];
-        assertEquals("index", item.getIndex());
-        assertEquals("example_id", item.getId());
-        return item;
+                    + "        \"properties\" : {\n"
+            IndexResponse indexResponse = client.index(request, RequestOptions.DEFAULT);
+            //end::index-request-map
+                .version(10123L));                  // <3>
+            assertFalse(bulkResponse.hasFailures());
+ * compatible open source license.
+        getSourceRequest.routing("routing"); // <1>
+            filterSettings.put("max_term_freq", 10);
+        {
+            final CountDownLatch latch = new CountDownLatch(1);
+            // tag::index-request-refresh
+            request.docAsUpsert(true); // <1>
+                public void onFailure(Exception e) {
+            // end::term-vectors-request-artificial
+            // tag::get-conflict
+            request.add(new MultiGetRequest.Item("index", "with_version")
+            listener = new ActionListener<BulkByScrollResponse>() {
+                }
+            // tag::multi-get-execute-listener
+            for (BulkItemResponse bulkItemResponse : bulkResponse) {
+        }
+            client.deleteByQueryRethrottle(request, RequestOptions.DEFAULT); // <3>
+                    + "    \"mappings\" : {\n"
+                }
+                        shardInfo.getFailures()) {
+            jsonMap.put("user", "foobar");
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            DeleteRequest request = new DeleteRequest("posts", "does_not_exist");
+            String jsonString = "{\"created\":\"2017-01-01\"}";
+            // end::index-request-routing
+            listener = new ActionListener<IndexResponse>() {
+                @Override
+import org.opensearch.client.core.TermVectorsResponse;
+                .startObject("user")
+            String[] includes = Strings.EMPTY_ARRAY;
+                public void onFailure(Exception e) {
+            assertEquals(1, getResponse.getFields().size());
+            BulkByScrollResponse bulkResponse =
+            request.indices("source1");
+        {
+                         "reason", "daily update"); // <1>
+                    }
+                DocWriteResponse itemResponse = bulkItemResponse.getResponse(); // <2>
+            IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
+        tvrequestTemplate.setFields("user");
+                "{\n"
+ * KIND, either express or implied.  See the License for the
+            //end::get-request-refresh
+            };
+            // end::delete-request-routing
+            // tag::multi-get-execute-async
+                @Override
+                    UpdateResponse updateResponse = (UpdateResponse) itemResponse;
+            // end::delete-by-query-request-slices
+            GetRequest request = new GetRequest("does_not_exist", "1");
+            if (shardInfo.getFailed() > 0) {
+            request.scriptedUpsert(true); // <1>
+            long noops = bulkResponse.getNoops(); // <8>
+            // tag::delete-request-version
+                    @Override
+            IndexRequest one = new IndexRequest("posts").id("1")
+            RethrottleRequest request = new RethrottleRequest(taskId);
+                    .doc("field", "value");
+            // end::reindex-request-versionType
+        }
+        assertEquals(200, refreshResponse.getStatusLine().getStatusCode());
+            BulkRequest request = new BulkRequest();
+            assertEquals(2, sourceAsMap.size());
+                    "posts", // <1>
     }
-}
+import org.opensearch.client.core.GetSourceRequest;
+            // end::update-by-query-request-maxDocs
+            assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
+            //end::get-source-execute-async
+            if (result.isExists()) {
+import java.util.Collections;
+            request.setQuery(new TermQueryBuilder("user", "foobar")); // <1>
+            String index = deleteResponse.getIndex();
+                        String termStr = term.getTerm(); // <6>
+            for (TermVectorsResponse tvresponse : tvresponseList) {
+                    request, RequestOptions.DEFAULT);
+                    // <1>
+        }
+            UpdateResponse updateResponse = client.update(request, RequestOptions.DEFAULT);
+            UpdateResponse updateResponse = client.update(request, RequestOptions.DEFAULT);
+                new IndexRequest("posts").id("async").source("field", "value"),
+            if (updateResponse.getResult() == DocWriteResponse.Result.CREATED) {
+            MultiGetItemResponse missingIndexItem = response.getResponses()[2];
+                    // <2>
+            // tag::delete-conflict
+            // end::update-conflict
+            assertNull(getResponse.getSourceInternal());
+            // end::multi-get-execute-async
+                // <1>
+            IndexRequest indexRequest = new IndexRequest("posts").id("1")
+            assertNotNull(updateResponse.getGetResult());
+            assertThat(item.getResponse().getSource(), not(hasKey("foo")));
+            GetResponse getResponse = client.get(request, RequestOptions.DEFAULT);
+            // end::reindex-request-scroll
+            assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
+            UpdateRequest request = new UpdateRequest("posts", "1");
+            request.opType("create"); // <2>
+                    + "    }\n"
+                GetResponse getResponse = client.get(request, RequestOptions.DEFAULT);
+            assertTrue(latch.await(30L, TimeUnit.SECONDS));
+            // tag::update-by-query-request-slices
+            };
+import org.opensearch.core.common.unit.ByteSizeUnit;
+                    new FetchSourceContext(true, includes, excludes);
+            if (shardInfo.getFailed() > 0) {
+                    + "            \"message\" : {\n"
+            // tag::delete-by-query-request-slices
+        GetRequest getRequest = new GetRequest(
+            request.setRefresh(true); // <1>
+            assertEquals("val1", value);
+                    + "    }\n"
+                .endObject()
+            final CountDownLatch latch = new CountDownLatch(1);
+            );
+            String jsonString = "{" +
+            // end::delete-request-version-type
+            ActionListener<DeleteResponse> listener;
+            request.routing("routing"); // <1>
+            // tag::update-by-query-request-pipeline
+                    + "            \"message\" : {\n"
+            long noops = bulkResponse.getNoops(); // <6>
+                    bulkResponse.getSearchFailures(); // <13>
+            client.deleteAsync(request, RequestOptions.DEFAULT, listener); // <1>
+        {
+                + "      \"type\": \"text\"\n"
+            listener = new ActionListener<DeleteResponse>() {
+            request.fetchSource(true);
+                    bulkResponse.getSearchFailures(); // <14>
+ */
+        TermVectorsResponse response =
+            request.version(2); // <1>
+            request.fetchSourceContext(FetchSourceContext.DO_NOT_FETCH_SOURCE); // <1>
+            // end::delete-by-query-request-refresh
+            // tag::multi-get-request
+            // end::update-request-cas
+                if (exception.status() == RestStatus.CONFLICT) {
+                // <1>
+                client.getSource(getSourceRequest, RequestOptions.DEFAULT);
+            MultiGetItemResponse firstItem = response.getResponses()[0];
+            request.setTimeout(TimeValue.timeValueMinutes(2)); // <1>
+            //end::update-request
+                RequestOptions.DEFAULT, listener); // <3>
+import org.opensearch.core.tasks.TaskId;
+        //tag::get-source-request-optional
+                    .source(MediaTypeRegistry.JSON, "title",
+        final CountDownLatch latch = new CountDownLatch(3);
+            TimeValue timeTaken = bulkResponse.getTook(); // <1>
+            BulkRequest request = new BulkRequest();
+            request, RequestOptions.DEFAULT, listener); // <1>
+                }
+            expectSource.put("user", "foobar");
+            );
+        // tag::multi-term-vectors-request-template
+package org.opensearch.client.documentation;
+import org.opensearch.action.bulk.BulkProcessor;
+            // tag::update-request-doc-upsert
+ * not use this file except in compliance with the License.
+                    public void onResponse(GetSourceResponse getResponse) {
+                    "1");   // <2>
+                    // <1>
+                String sourceAsString = result.sourceAsString(); // <2>
+            if (shardInfo.getTotal() != shardInfo.getSuccessful()) {
+            // end::update-request-scripted-upsert
+            }
+            @Override
+                client.termvectors(request, RequestOptions.DEFAULT);
+                }
+        getSourceRequest.realtime(false); // <1>
+            assertSame(0, bulkResponse.getBulkFailures().size());
+                @Override
+            // end::bulk-request-timeout
+                    int numberOfActions = request.numberOfActions(); // <1>
+ * the Apache License, Version 2.0 (the "License"); you may
+            assertEquals(3, result.sourceAsMap().size());
+            // end::reindex-execute
+                    .source(MediaTypeRegistry.JSON,"field", "baz"));
+            //end::get-request
+            //end::index-request-string
+            // end::delete-by-query-execute
+            final CountDownLatch latch = new CountDownLatch(1);
+            assertTrue(sourceAsMap.containsKey("field"));
+            // end::reindex-request-opType
+            request.setConflicts("proceed"); // <1>
+            // tag::bulk-processor-close
+import org.opensearch.script.Script;
+            // tag::term-vectors-request-optional-arguments
+            client.existsAsync(getRequest, RequestOptions.DEFAULT, listener); // <1>
+                    } else {
+ * Unless required by applicable law or agreed to in writing,
+            request.timeout("1s"); // <2>
+            request.setRouting("=cat"); // <1>
+            //end::get-request-version
+            request.versionType(VersionType.EXTERNAL); // <1>
+            request.fetchSourceContext(fetchSourceContext); // <1>
+        //tag::get-source-request-routing
+            IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
+            DeleteRequest request = new DeleteRequest("posts", "async");
+            long batches = bulkResponse.getBatches(); // <5>
+            Request createIndex = new Request("PUT", "/posts");
+import org.opensearch.action.delete.DeleteResponse;
+            // end::bulk-processor-close
+            assertTrue(sourceAsMap.containsKey("postDate"));
+            // end::index-request-timeout
+            // tag::exists-execute-listener
+        {
+            assertNotNull(bulkProcessor);
+                }
+        //end::get-source-request-realtime
+                if (e.status() == RestStatus.CONFLICT) {
+            BulkResponse bulkResponse = client.bulk(request, RequestOptions.DEFAULT);
+import org.opensearch.action.get.GetResponse;
+            String id = firstItem.getId();
+                public void onResponse(BulkByScrollResponse bulkResponse) {
+        client.termvectorsAsync(request, RequestOptions.DEFAULT, listener); // <1>
+            TimeValue throttledUntilMillis =
+    @SuppressWarnings("unused")
+            Map<String, Object> parameters = singletonMap("count", 4); // <1>
+        // tag::exists-request
+            boolean terminated = bulkProcessor.awaitClose(30L, TimeUnit.SECONDS); // <1>
+                    "ctx._source.field += params.count", parameters);  // <2>
+            assertEquals(3, getResponse.getSourceAsMap().size());
+        RestHighLevelClient client = highLevelClient();
+            //tag::get-indexnotfound
+            // TODO status is broken! fix in a followup
+                @Override
+            // end::multi-get-conflict
+            }
+            // end::bulk-request-index-type
+        }
+                }
+        }
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            // end::bulk-execute-listener
+            assertTrue(sourceAsMap.containsKey("updated"));
+        }
+                public void onResponse(GetResponse getResponse) {
+            };
+                .version(1000L));
+            assertThat(item.getResponse().getSource(), hasEntry("foo", "val1"));
+            request.fetchSource(
+            // end::reindex-execute-async
+        {
+                }
+                Map<String, Object> sourceAsMap = getResponse.getSourceAsMap(); // <2>
+            request.waitForActiveShards(2); // <1>
+            builder.setBulkSize(new ByteSizeValue(1L, ByteSizeUnit.MB)); // <2>
+                    // <1>
+            //tag::update-request-shortcut
+            request.fetchSourceContext(fetchSourceContext); // <1>
+        RestHighLevelClient client = highLevelClient();
+                }
+            UpdateResponse updateResponse = client.update(request, RequestOptions.DEFAULT);
+            request.setIfPrimaryTerm(1L); // <2>
+            );
+import org.opensearch.index.reindex.DeleteByQueryRequest;
+            // end::delete-by-query-request-conflicts
+            assertEquals("trying out OpenSearch", sourceAsMap.get("message"));
+            request.setRouting("=cat"); // <1>
+                + "    },\n"
+                RequestOptions.DEFAULT, listener); // <1>
+        assertTrue(latch.await(30L, TimeUnit.SECONDS));
+                }
+        // end::multi-term-vectors-execute
+                @Override

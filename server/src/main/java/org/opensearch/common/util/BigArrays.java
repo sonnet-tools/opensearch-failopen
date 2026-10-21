@@ -1,886 +1,769 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.util;
-
-import org.apache.lucene.util.ArrayUtil;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.RamUsageEstimator;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.recycler.Recycler;
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.breaker.CircuitBreakingException;
-import org.opensearch.core.common.util.BigArray;
-import org.opensearch.core.common.util.ByteArray;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-
-import java.util.Arrays;
-
-/**
- * Utility class to work with arrays.
- *
- * @opensearch.api
- * */
-@PublicApi(since = "1.0.0")
-public class BigArrays {
-
-    public static final BigArrays NON_RECYCLING_INSTANCE = new BigArrays(null, null, CircuitBreaker.REQUEST);
-
-    /** Returns the next size to grow when working with parallel arrays that
-     *  may have different page sizes or number of bytes per element. */
-    public static long overSize(long minTargetSize) {
-        return overSize(minTargetSize, PageCacheRecycler.PAGE_SIZE_IN_BYTES / 8, 1);
-    }
-
-    /** Return the next size to grow to that is &gt;= <code>minTargetSize</code>.
-     *  Inspired from {@link ArrayUtil#oversize(int, int)} and adapted to play nicely with paging. */
-    public static long overSize(long minTargetSize, int pageSize, int bytesPerElement) {
-        if (minTargetSize < 0) {
-            throw new IllegalArgumentException("minTargetSize must be >= 0");
         }
-        if (pageSize < 0) {
+    }
+        }
+            }
+        public long ramBytesUsed() {
+        public byte get(long index) {
+        this.recycler = recycler;
+    public static long overSize(long minTargetSize, int pageSize, int bytesPerElement) {
+            for (long i = 0, end = Math.min(size, array.size()); i < end; ++i) {
+     */
+    /**
+    }
+        }
+            return size;
+    /** Resize the array to the exact provided size. */
+            assert indexIsInt(toIndex);
+ * ownership. Elasticsearch licenses this file to you under
+            final byte ret = array[(int) index];
+        try {
+            return array[(int) index];
+    /** @see Arrays#hashCode(byte[]) */
+        public T get(long index) {
+            this.array = array;
+            final Recycler.V<long[]> page = recycler.longPage(clearOnResize);
+            adjustBreaker(BigIntArray.estimateRamBytes(size), false);
+import org.opensearch.common.annotation.PublicApi;
+            adjustBreaker(array.ramBytesUsed(), true);
+            System.arraycopy(buf, offset, array, (int) index, len);
+                Releasables.closeWhileHandlingException(array);
+    }
+    private abstract static class AbstractArrayWrapper extends AbstractArray implements BigArray {
+        public long set(long index, long value) {
+            // Prevent use of BinarySearcher.search() and force the use of DoubleBinarySearcher.search()
+     */
+        final long newSize = overSize(minSize, PageCacheRecycler.INT_PAGE_SIZE, Float.BYTES);
+        @Override
+    public BigArrays(PageCacheRecycler recycler, @Nullable final CircuitBreakerService breakerService, String breakerName) {
+            return SHALLOW_SIZE + RamUsageEstimator.sizeOf(array);
+     */
+        }
+    public FloatArray newFloatArray(long size) {
+import org.opensearch.common.lease.Releasable;
+    public LongArray resize(LongArray array, long size) {
+        @Override
+        @Override
+    private static class IntArrayWrapper extends AbstractArrayWrapper implements IntArray {
+                    breaker.addWithoutBreaking(delta);
+        public long ramBytesUsed() {
+    }
+    static boolean indexIsInt(long index) {
+        } else {
+     */
+     */
+            this.array = array;
+        @Override
+            assert indexIsInt(index);
+ * */
+        if (bytesPerElement <= 0) {
+            this.searchFor = Integer.MIN_VALUE;
+ * this work for additional information regarding copyright
+        }
+        LongArrayWrapper(BigArrays bigArrays, long[] array, long size, Recycler.V<long[]> releasable, boolean clearOnResize) {
+            assert indexIsInt(toIndex);
+        static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(ByteArrayWrapper.class);
+            final FloatArray newArray = newFloatArray(size, arr.clearOnResize);
+        public void fill(long fromIndex, long toIndex, int value) {
             throw new IllegalArgumentException("pageSize must be > 0");
         }
-        if (bytesPerElement <= 0) {
-            throw new IllegalArgumentException("bytesPerElement must be > 0");
-        }
-
-        long newSize;
-        if (minTargetSize < pageSize) {
-            newSize = Math.min(ArrayUtil.oversize((int) minTargetSize, bytesPerElement), pageSize);
-        } else {
-            final long pages = (minTargetSize + pageSize - 1) / pageSize; // ceil(minTargetSize/pageSize)
-            newSize = pages * pageSize;
-        }
-
-        return newSize;
-    }
-
-    static boolean indexIsInt(long index) {
-        return index == (int) index;
-    }
-
-    /**
-     * Base array wrapper class
-     *
-     * @opensearch.internal
-     */
-    private abstract static class AbstractArrayWrapper extends AbstractArray implements BigArray {
-
-        static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(ByteArrayWrapper.class);
-
-        private final Releasable releasable;
-        private final long size;
-
-        AbstractArrayWrapper(BigArrays bigArrays, long size, Releasable releasable, boolean clearOnResize) {
-            super(bigArrays, clearOnResize);
-            this.releasable = releasable;
-            this.size = size;
-        }
-
-        @Override
-        public final long size() {
-            return size;
-        }
-
-        @Override
-        protected final void doClose() {
-            Releasables.close(releasable);
-        }
-
-    }
-
-    /**
-     * Wraps a byte array
-     *
-     * @opensearch.internal
-     */
-    private static class ByteArrayWrapper extends AbstractArrayWrapper implements ByteArray {
-
-        private final byte[] array;
-
-        ByteArrayWrapper(BigArrays bigArrays, byte[] array, long size, Recycler.V<byte[]> releasable, boolean clearOnResize) {
-            super(bigArrays, size, releasable, clearOnResize);
-            this.array = array;
-        }
-
-        @Override
-        public long ramBytesUsed() {
-            return SHALLOW_SIZE + RamUsageEstimator.sizeOf(array);
-        }
-
-        @Override
-        public byte get(long index) {
-            assert indexIsInt(index);
-            return array[(int) index];
-        }
-
-        @Override
-        public byte set(long index, byte value) {
-            assert indexIsInt(index);
-            final byte ret = array[(int) index];
-            array[(int) index] = value;
-            return ret;
-        }
-
-        @Override
-        public boolean get(long index, int len, BytesRef ref) {
-            assert indexIsInt(index);
-            ref.bytes = array;
-            ref.offset = (int) index;
-            ref.length = len;
-            return false;
-        }
-
-        @Override
-        public void set(long index, byte[] buf, int offset, int len) {
-            assert indexIsInt(index);
-            System.arraycopy(buf, offset, array, (int) index, len);
-        }
-
-        @Override
-        public void fill(long fromIndex, long toIndex, byte value) {
-            assert indexIsInt(fromIndex);
-            assert indexIsInt(toIndex);
-            Arrays.fill(array, (int) fromIndex, (int) toIndex, value);
-        }
-
-        @Override
-        public boolean hasArray() {
-            return true;
-        }
-
-        @Override
-        public byte[] array() {
+        boolean success = false;
             return array;
+     * Allocate a new {@link ObjectArray}.
+            // when allocating big arrays, we want to first ensure we have the capacity by
+            return resizeInPlace((BigObjectArray<T>) array, size);
+ * license agreements. See the NOTICE file distributed with
+                newArray.set(i, array.get(i));
         }
-    }
-
-    /**
-     * Wraps an int array
-     *
-     * @opensearch.internal
-     */
-    private static class IntArrayWrapper extends AbstractArrayWrapper implements IntArray {
-
-        private final int[] array;
-
-        IntArrayWrapper(BigArrays bigArrays, int[] array, long size, Recycler.V<int[]> releasable, boolean clearOnResize) {
-            super(bigArrays, size, releasable, clearOnResize);
-            this.array = array;
         }
-
+ *
+        }
+        } else {
+        return newDoubleArray(size, true);
+            assert indexIsInt(index);
+            );
+            return false;
+    private final String breakerName;
+        }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+            return new BigLongArray(size, this, clearOnResize);
+        }
+        assert oldMemSize == array.ramBytesEstimated(oldSize)
+        }
+        ObjectArrayWrapper(BigArrays bigArrays, Object[] array, long size, Recycler.V<Object[]> releasable) {
         @Override
-        public long ramBytesUsed() {
-            return SHALLOW_SIZE + RamUsageEstimator.sizeOf(array);
+package org.opensearch.common.util;
+            super(bigArrays, size, releasable, clearOnResize);
+    /**
+        for (long i = 0; i < array.size(); i++) {
+            // checking with the circuit breaker before attempting to allocate
+    public DoubleArray newDoubleArray(long size) {
+            assert indexIsInt(fromIndex);
+/*
+            // when allocating big arrays, we want to first ensure we have the capacity by
+        final long oldMemSize = array.ramBytesUsed();
         }
-
+            return array;
+        this(recycler, breakerService, breakerName, false);
+            Arrays.fill(array, (int) fromIndex, (int) toIndex, Double.doubleToRawLongBits(value));
+            } else {
+     * @param size          the initial length of the array
+    }
+            final byte[] rawArray = ((ByteArrayWrapper) array).array;
+            this.circuitBreakingInstance = this;
+        @Override
+            return newArray;
+            return validate(new ByteArrayWrapper(this, new byte[(int) size], size, null, clearOnResize));
+            adjustBreaker(BigByteArray.estimateRamBytes(size), false);
+            super(bigArrays, size, releasable, clearOnResize);
+        @Override
+            arr.close();
+            return SHALLOW_SIZE + RamUsageEstimator.sizeOf(array);
+        if (array == null) {
+        public byte[] array() {
+        }
+            if (array.get(i) != other.get(i)) {
+        return array;
+     * @param size          the initial length of the array
+        return resize(array, newSize);
+            // checking with the circuit breaker before attempting to allocate
+            return validate(new FloatArrayWrapper(this, page.v(), size, page, clearOnResize));
+     */
+        if (array.size() != other.size()) {
+            final ByteArray newArray = newByteArray(size, arr.clearOnResize);
+            this.array = array;
+            final Recycler.V<int[]> page = recycler.intPage(clearOnResize);
+            super(bigArrays, clearOnResize);
+ * not use this file except in compliance with the License.
+        } else {
+        DoubleArray array;
+        @Override
+    /** Grow an array to a size that is larger than <code>minSize</code>,
+            double ret = Double.longBitsToDouble(array[(int) index]);
+        array.resize(newSize);
+            assert indexIsInt(toIndex);
+     */
+            final LongArray newArray = newLongArray(size, arr.clearOnResize);
+        public byte set(long index, byte value) {
+    /** Allocate a new {@link DoubleArray} of the given capacity. */
+            // checking with the circuit breaker before attempting to allocate
+    /** Resize the array to the exact provided size. */
+        protected int compare(int index) {
+        }
+        }
+            return array;
+            array[(int) index] = value;
+            assert indexIsInt(fromIndex);
         @Override
         public int get(long index) {
-            assert indexIsInt(index);
-            return array[(int) index];
-        }
-
-        @Override
-        public int set(long index, int value) {
-            assert indexIsInt(index);
-            final int ret = array[(int) index];
+        } else if (size >= PageCacheRecycler.LONG_PAGE_SIZE / 2 && recycler != null) {
+            this.releasable = releasable;
             array[(int) index] = value;
-            return ret;
-        }
-
-        @Override
-        public int increment(long index, int inc) {
-            assert indexIsInt(index);
-            return array[(int) index] += inc;
-        }
-
-        @Override
-        public void fill(long fromIndex, long toIndex, int value) {
-            assert indexIsInt(fromIndex);
-            assert indexIsInt(toIndex);
-            Arrays.fill(array, (int) fromIndex, (int) toIndex, value);
-        }
-
-    }
-
-    /**
-     * Wraps a long array
-     *
-     * @opensearch.internal
-     */
-    private static class LongArrayWrapper extends AbstractArrayWrapper implements LongArray {
-
-        private final long[] array;
-
-        LongArrayWrapper(BigArrays bigArrays, long[] array, long size, Recycler.V<long[]> releasable, boolean clearOnResize) {
-            super(bigArrays, size, releasable, clearOnResize);
-            this.array = array;
-        }
-
-        @Override
-        public long ramBytesUsed() {
-            return SHALLOW_SIZE + RamUsageEstimator.sizeOf(array);
-        }
-
-        @Override
-        public long get(long index) {
-            assert indexIsInt(index);
-            return array[(int) index];
-        }
-
-        @Override
-        public long set(long index, long value) {
-            assert indexIsInt(index);
-            final long ret = array[(int) index];
-            array[(int) index] = value;
-            return ret;
-        }
-
-        @Override
-        public long increment(long index, long inc) {
-            assert indexIsInt(index);
-            return array[(int) index] += inc;
-        }
-
-        @Override
-        public void fill(long fromIndex, long toIndex, long value) {
-            assert indexIsInt(fromIndex);
-            assert indexIsInt(toIndex);
-            Arrays.fill(array, (int) fromIndex, (int) toIndex, value);
-        }
-    }
-
-    /**
-     * Wraps a double array
-     *
-     * @opensearch.internal
-     */
-    private static class DoubleArrayWrapper extends AbstractArrayWrapper implements DoubleArray {
-
-        private final long[] array;
-
-        DoubleArrayWrapper(BigArrays bigArrays, long[] array, long size, Recycler.V<long[]> releasable, boolean clearOnResize) {
-            super(bigArrays, size, releasable, clearOnResize);
-            this.array = array;
-        }
-
-        @Override
-        public long ramBytesUsed() {
-            return SHALLOW_SIZE + RamUsageEstimator.sizeOf(array);
-        }
-
-        @Override
-        public double get(long index) {
-            assert indexIsInt(index);
-            return Double.longBitsToDouble(array[(int) index]);
-        }
-
-        @Override
-        public double set(long index, double value) {
-            assert indexIsInt(index);
-            double ret = Double.longBitsToDouble(array[(int) index]);
-            array[(int) index] = Double.doubleToRawLongBits(value);
-            return ret;
-        }
-
-        @Override
-        public double increment(long index, double inc) {
-            assert indexIsInt(index);
-            return array[(int) index] = Double.doubleToRawLongBits(Double.longBitsToDouble(array[(int) index]) + inc);
-        }
-
-        @Override
-        public void fill(long fromIndex, long toIndex, double value) {
-            assert indexIsInt(fromIndex);
-            assert indexIsInt(toIndex);
-            Arrays.fill(array, (int) fromIndex, (int) toIndex, Double.doubleToRawLongBits(value));
-        }
-
-    }
-
-    /**
-     * Wraps a float array
-     *
-     * @opensearch.internal
-     */
-    private static class FloatArrayWrapper extends AbstractArrayWrapper implements FloatArray {
-
-        private final int[] array;
-
-        FloatArrayWrapper(BigArrays bigArrays, int[] array, long size, Recycler.V<int[]> releasable, boolean clearOnResize) {
-            super(bigArrays, size, releasable, clearOnResize);
-            this.array = array;
-        }
-
-        @Override
-        public long ramBytesUsed() {
-            return SHALLOW_SIZE + RamUsageEstimator.sizeOf(array);
-        }
-
-        @Override
-        public float get(long index) {
-            assert indexIsInt(index);
-            return Float.intBitsToFloat(array[(int) index]);
-        }
-
-        @Override
-        public float set(long index, float value) {
-            assert indexIsInt(index);
-            float ret = Float.intBitsToFloat(array[(int) index]);
-            array[(int) index] = Float.floatToRawIntBits(value);
-            return ret;
-        }
-
-        @Override
-        public float increment(long index, float inc) {
-            assert indexIsInt(index);
-            return array[(int) index] = Float.floatToRawIntBits(Float.intBitsToFloat(array[(int) index]) + inc);
-        }
-
-        @Override
-        public void fill(long fromIndex, long toIndex, float value) {
-            assert indexIsInt(fromIndex);
-            assert indexIsInt(toIndex);
-            Arrays.fill(array, (int) fromIndex, (int) toIndex, Float.floatToRawIntBits(value));
-        }
-
-    }
-
-    /**
-     * Wraps an object array
-     *
-     * @opensearch.internal
-     */
-    private static class ObjectArrayWrapper<T> extends AbstractArrayWrapper implements ObjectArray<T> {
-
-        private final Object[] array;
-
-        ObjectArrayWrapper(BigArrays bigArrays, Object[] array, long size, Recycler.V<Object[]> releasable) {
-            super(bigArrays, size, releasable, true);
-            this.array = array;
-        }
-
-        @Override
-        public long ramBytesUsed() {
-            return SHALLOW_SIZE + RamUsageEstimator.alignObjectSize(
-                RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + RamUsageEstimator.NUM_BYTES_OBJECT_REF * size()
-            );
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public T get(long index) {
-            assert indexIsInt(index);
-            return (T) array[(int) index];
-        }
-
-        @Override
-        public T set(long index, T value) {
-            assert indexIsInt(index);
-            @SuppressWarnings("unchecked")
-            T ret = (T) array[(int) index];
-            array[(int) index] = value;
-            return ret;
-        }
-
-    }
-
-    final PageCacheRecycler recycler;
+ */
+        if (minSize <= array.size()) {
+        IntArrayWrapper(BigArrays bigArrays, int[] array, long size, Recycler.V<int[]> releasable, boolean clearOnResize) {
     private final CircuitBreakerService breakerService;
-    private final boolean checkBreaker;
-    private final BigArrays circuitBreakingInstance;
-    private final String breakerName;
-
-    public BigArrays(PageCacheRecycler recycler, @Nullable final CircuitBreakerService breakerService, String breakerName) {
-        // Checking the breaker is disabled if not specified
-        this(recycler, breakerService, breakerName, false);
-    }
-
-    protected BigArrays(
-        PageCacheRecycler recycler,
-        @Nullable final CircuitBreakerService breakerService,
-        String breakerName,
-        boolean checkBreaker
-    ) {
-        this.checkBreaker = checkBreaker;
-        this.recycler = recycler;
-        this.breakerService = breakerService;
-        this.breakerName = breakerName;
-        if (checkBreaker) {
-            this.circuitBreakingInstance = this;
-        } else {
-            this.circuitBreakingInstance = new BigArrays(recycler, breakerService, breakerName, true);
         }
-    }
-
+/**
+            ref.offset = (int) index;
+        public double get(long index) {
     /**
-     * Adjust the circuit breaker with the given delta, if the delta is
-     * negative, or checkBreaker is false, the breaker will be adjusted
-     * without tripping.  If the data was already created before calling
-     * this method, and the breaker trips, we add the delta without breaking
-     * to account for the created data.  If the data has not been created yet,
-     * we do not add the delta to the breaker if it trips.
-     */
-    void adjustBreaker(final long delta, final boolean isDataAlreadyCreated) {
-        if (this.breakerService != null) {
-            CircuitBreaker breaker = this.breakerService.getBreaker(breakerName);
-            if (this.checkBreaker) {
-                // checking breaker means potentially tripping, but it doesn't
-                // have to if the delta is negative
-                if (delta > 0) {
-                    try {
-                        breaker.addEstimateBytesAndMaybeBreak(delta, "<reused_arrays>");
-                    } catch (CircuitBreakingException e) {
-                        if (isDataAlreadyCreated) {
-                            // since we've already created the data, we need to
-                            // add it so closing the stream re-adjusts properly
-                            breaker.addWithoutBreaking(delta);
-                        }
-                        // re-throw the original exception
-                        throw e;
-                    }
-                } else {
-                    breaker.addWithoutBreaking(delta);
-                }
-            } else {
-                // even if we are not checking the breaker, we need to adjust
-                // its' totals, so add without breaking
-                breaker.addWithoutBreaking(delta);
-            }
+            assert indexIsInt(index);
         }
-    }
-
-    /**
-     * Return an instance of this BigArrays class with circuit breaking
-     * explicitly enabled, instead of only accounting enabled
-     */
-    public BigArrays withCircuitBreaking() {
-        return this.circuitBreakingInstance;
-    }
-
-    public CircuitBreakerService breakerService() {
-        return this.circuitBreakingInstance.breakerService;
-    }
-
-    private <T extends AbstractBigArray> T resizeInPlace(T array, long newSize) {
-        final long oldMemSize = array.ramBytesUsed();
-        final long oldSize = array.size();
-        assert oldMemSize == array.ramBytesEstimated(oldSize)
             : "ram bytes used should equal that which was previously estimated: ramBytesUsed="
-                + oldMemSize
-                + ", ramBytesEstimated="
-                + array.ramBytesEstimated(oldSize);
-        final long estimatedIncreaseInBytes = array.ramBytesEstimated(newSize) - oldMemSize;
-        adjustBreaker(estimatedIncreaseInBytes, false);
-        array.resize(newSize);
-        return array;
-    }
-
-    private <T extends BigArray> T validate(T array) {
-        boolean success = false;
-        try {
-            adjustBreaker(array.ramBytesUsed(), true);
-            success = true;
-        } finally {
-            if (!success) {
-                Releasables.closeWhileHandlingException(array);
-            }
-        }
-        return array;
-    }
-
-    /**
-     * Allocate a new {@link ByteArray}.
-     * @param size          the initial length of the array
-     * @param clearOnResize whether values should be set to 0 on initialization and resize
-     */
-    public ByteArray newByteArray(long size, boolean clearOnResize) {
-        if (size > PageCacheRecycler.BYTE_PAGE_SIZE) {
-            // when allocating big arrays, we want to first ensure we have the capacity by
-            // checking with the circuit breaker before attempting to allocate
-            adjustBreaker(BigByteArray.estimateRamBytes(size), false);
-            return new BigByteArray(size, this, clearOnResize);
-        } else if (size >= PageCacheRecycler.BYTE_PAGE_SIZE / 2 && recycler != null) {
-            final Recycler.V<byte[]> page = recycler.bytePage(clearOnResize);
-            return validate(new ByteArrayWrapper(this, page.v(), size, page, clearOnResize));
-        } else {
-            return validate(new ByteArrayWrapper(this, new byte[(int) size], size, null, clearOnResize));
-        }
-    }
-
-    /**
-     * Allocate a new {@link ByteArray} initialized with zeros.
-     * @param size          the initial length of the array
-     */
-    public ByteArray newByteArray(long size) {
-        return newByteArray(size, true);
-    }
-
-    /** Resize the array to the exact provided size. */
-    public ByteArray resize(ByteArray array, long size) {
-        if (array instanceof BigByteArray) {
-            return resizeInPlace((BigByteArray) array, size);
-        } else {
-            AbstractArray arr = (AbstractArray) array;
-            final ByteArray newArray = newByteArray(size, arr.clearOnResize);
-            final byte[] rawArray = ((ByteArrayWrapper) array).array;
-            newArray.set(0, rawArray, 0, (int) Math.min(rawArray.length, newArray.size()));
-            arr.close();
-            return newArray;
-        }
-    }
-
-    /** Grow an array to a size that is larger than <code>minSize</code>,
-     * preserving content, and potentially reusing part of the provided array. */
-    public ByteArray grow(ByteArray array, long minSize) {
-        if (minSize <= array.size()) {
-            return array;
-        }
-        final long newSize = overSize(minSize, PageCacheRecycler.BYTE_PAGE_SIZE, 1);
-        return resize(array, newSize);
-    }
-
-    /** @see Arrays#hashCode(byte[]) */
-    public int hashCode(ByteArray array) {
-        if (array == null) {
-            return 0;
-        }
-
-        int hash = 1;
-        for (long i = 0; i < array.size(); i++) {
-            hash = 31 * hash + array.get(i);
-        }
-
-        return hash;
-    }
-
-    /** @see Arrays#equals(byte[], byte[]) */
-    public boolean equals(ByteArray array, ByteArray other) {
-        if (array == other) {
-            return true;
-        }
-
-        if (array.size() != other.size()) {
-            return false;
-        }
-
-        for (long i = 0; i < array.size(); i++) {
-            if (array.get(i) != other.get(i)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Allocate a new {@link IntArray}.
-     * @param size          the initial length of the array
-     * @param clearOnResize whether values should be set to 0 on initialization and resize
-     */
-    public IntArray newIntArray(long size, boolean clearOnResize) {
-        if (size > PageCacheRecycler.INT_PAGE_SIZE) {
-            // when allocating big arrays, we want to first ensure we have the capacity by
-            // checking with the circuit breaker before attempting to allocate
-            adjustBreaker(BigIntArray.estimateRamBytes(size), false);
-            return new BigIntArray(size, this, clearOnResize);
-        } else if (size >= PageCacheRecycler.INT_PAGE_SIZE / 2 && recycler != null) {
-            final Recycler.V<int[]> page = recycler.intPage(clearOnResize);
-            return validate(new IntArrayWrapper(this, page.v(), size, page, clearOnResize));
-        } else {
-            return validate(new IntArrayWrapper(this, new int[(int) size], size, null, clearOnResize));
-        }
-    }
-
-    /**
-     * Allocate a new {@link IntArray}.
-     * @param size          the initial length of the array
-     */
-    public IntArray newIntArray(long size) {
-        return newIntArray(size, true);
-    }
-
-    /** Resize the array to the exact provided size. */
-    public IntArray resize(IntArray array, long size) {
-        if (array instanceof BigIntArray) {
-            return resizeInPlace((BigIntArray) array, size);
-        } else {
-            AbstractArray arr = (AbstractArray) array;
-            final IntArray newArray = newIntArray(size, arr.clearOnResize);
-            for (long i = 0, end = Math.min(size, array.size()); i < end; ++i) {
-                newArray.set(i, array.get(i));
-            }
-            array.close();
-            return newArray;
-        }
-    }
-
-    /** Grow an array to a size that is larger than <code>minSize</code>,
-     * preserving content, and potentially reusing part of the provided array. */
-    public IntArray grow(IntArray array, long minSize) {
-        if (minSize <= array.size()) {
-            return array;
-        }
-        final long newSize = overSize(minSize, PageCacheRecycler.INT_PAGE_SIZE, Integer.BYTES);
-        return resize(array, newSize);
-    }
-
-    /**
-     * Allocate a new {@link LongArray}.
-     * @param size          the initial length of the array
-     * @param clearOnResize whether values should be set to 0 on initialization and resize
-     */
-    public LongArray newLongArray(long size, boolean clearOnResize) {
-        if (size > PageCacheRecycler.LONG_PAGE_SIZE) {
-            // when allocating big arrays, we want to first ensure we have the capacity by
-            // checking with the circuit breaker before attempting to allocate
-            adjustBreaker(BigLongArray.estimateRamBytes(size), false);
-            return new BigLongArray(size, this, clearOnResize);
-        } else if (size >= PageCacheRecycler.LONG_PAGE_SIZE / 2 && recycler != null) {
-            final Recycler.V<long[]> page = recycler.longPage(clearOnResize);
-            return validate(new LongArrayWrapper(this, page.v(), size, page, clearOnResize));
-        } else {
-            return validate(new LongArrayWrapper(this, new long[(int) size], size, null, clearOnResize));
-        }
-    }
-
-    /**
-     * Allocate a new {@link LongArray}.
-     * @param size          the initial length of the array
-     */
-    public LongArray newLongArray(long size) {
-        return newLongArray(size, true);
-    }
-
-    /** Resize the array to the exact provided size. */
-    public LongArray resize(LongArray array, long size) {
-        if (array instanceof BigLongArray) {
-            return resizeInPlace((BigLongArray) array, size);
-        } else {
-            AbstractArray arr = (AbstractArray) array;
-            final LongArray newArray = newLongArray(size, arr.clearOnResize);
-            for (long i = 0, end = Math.min(size, array.size()); i < end; ++i) {
-                newArray.set(i, array.get(i));
-            }
-            array.close();
-            return newArray;
-        }
-    }
-
-    /** Grow an array to a size that is larger than <code>minSize</code>,
-     * preserving content, and potentially reusing part of the provided array. */
-    public LongArray grow(LongArray array, long minSize) {
-        if (minSize <= array.size()) {
-            return array;
-        }
-        final long newSize = overSize(minSize, PageCacheRecycler.LONG_PAGE_SIZE, Long.BYTES);
-        return resize(array, newSize);
-    }
-
-    /**
-     * Allocate a new {@link DoubleArray}.
-     * @param size          the initial length of the array
-     * @param clearOnResize whether values should be set to 0 on initialization and resize
-     */
-    public DoubleArray newDoubleArray(long size, boolean clearOnResize) {
-        if (size > PageCacheRecycler.LONG_PAGE_SIZE) {
-            // when allocating big arrays, we want to first ensure we have the capacity by
-            // checking with the circuit breaker before attempting to allocate
-            adjustBreaker(BigDoubleArray.estimateRamBytes(size), false);
-            return new BigDoubleArray(size, this, clearOnResize);
-        } else if (size >= PageCacheRecycler.LONG_PAGE_SIZE / 2 && recycler != null) {
-            final Recycler.V<long[]> page = recycler.longPage(clearOnResize);
-            return validate(new DoubleArrayWrapper(this, page.v(), size, page, clearOnResize));
-        } else {
-            return validate(new DoubleArrayWrapper(this, new long[(int) size], size, null, clearOnResize));
-        }
-    }
-
-    /** Allocate a new {@link DoubleArray} of the given capacity. */
-    public DoubleArray newDoubleArray(long size) {
-        return newDoubleArray(size, true);
-    }
-
-    /** Resize the array to the exact provided size. */
-    public DoubleArray resize(DoubleArray array, long size) {
-        if (array instanceof BigDoubleArray) {
-            return resizeInPlace((BigDoubleArray) array, size);
-        } else {
-            AbstractArray arr = (AbstractArray) array;
-            final DoubleArray newArray = newDoubleArray(size, arr.clearOnResize);
-            for (long i = 0, end = Math.min(size, array.size()); i < end; ++i) {
-                newArray.set(i, array.get(i));
-            }
-            array.close();
-            return newArray;
-        }
-    }
-
-    /** Grow an array to a size that is larger than <code>minSize</code>,
-     * preserving content, and potentially reusing part of the provided array. */
-    public DoubleArray grow(DoubleArray array, long minSize) {
-        if (minSize <= array.size()) {
-            return array;
-        }
-        final long newSize = overSize(minSize, PageCacheRecycler.LONG_PAGE_SIZE, Long.BYTES);
-        return resize(array, newSize);
-    }
-
-    /**
-     * A double value binary searcher
-     *
-     * @opensearch.internal
-     */
-    public static class DoubleBinarySearcher extends BinarySearcher {
-
-        DoubleArray array;
-        double searchFor;
-
-        public DoubleBinarySearcher(DoubleArray array) {
-            this.array = array;
-            this.searchFor = Integer.MIN_VALUE;
-        }
-
-        @Override
-        protected int compare(int index) {
-            // Prevent use of BinarySearcher.search() and force the use of DoubleBinarySearcher.search()
             assert this.searchFor != Integer.MIN_VALUE;
-
-            return Double.compare(array.get(index), searchFor);
+import org.apache.lucene.util.ArrayUtil;
+            return array[(int) index] += inc;
+     * @param clearOnResize whether values should be set to 0 on initialization and resize
+ * under the License.
+        return array;
+        public void fill(long fromIndex, long toIndex, double value) {
         }
-
-        @Override
-        protected double distance(int index) {
-            return Math.abs(array.get(index) - searchFor);
         }
-
-        public int search(int from, int to, double searchFor) {
+        } else {
+            return array;
+    /**
+            array[(int) index] = Double.doubleToRawLongBits(value);
+        final long estimatedIncreaseInBytes = array.ramBytesEstimated(newSize) - oldMemSize;
+            return new BigObjectArray<>(size, this);
+public class BigArrays {
+            return new BigFloatArray(size, this, clearOnResize);
+        if (checkBreaker) {
+                newArray.set(i, array.get(i));
+     * @param size          the initial length of the array
+            assert indexIsInt(toIndex);
+        } else {
+     *
+            final ObjectArray<T> newArray = newObjectArray(size);
+    public IntArray newIntArray(long size, boolean clearOnResize) {
+    }
+    private final boolean checkBreaker;
+            return validate(new DoubleArrayWrapper(this, new long[(int) size], size, null, clearOnResize));
+     */
             this.searchFor = searchFor;
             return super.search(from, to);
-        }
-    }
-
-    /**
-     * Allocate a new {@link FloatArray}.
-     * @param size          the initial length of the array
-     * @param clearOnResize whether values should be set to 0 on initialization and resize
-     */
-    public FloatArray newFloatArray(long size, boolean clearOnResize) {
-        if (size > PageCacheRecycler.INT_PAGE_SIZE) {
-            // when allocating big arrays, we want to first ensure we have the capacity by
-            // checking with the circuit breaker before attempting to allocate
-            adjustBreaker(BigFloatArray.estimateRamBytes(size), false);
-            return new BigFloatArray(size, this, clearOnResize);
-        } else if (size >= PageCacheRecycler.INT_PAGE_SIZE / 2 && recycler != null) {
-            final Recycler.V<int[]> page = recycler.intPage(clearOnResize);
-            return validate(new FloatArrayWrapper(this, page.v(), size, page, clearOnResize));
-        } else {
-            return validate(new FloatArrayWrapper(this, new int[(int) size], size, null, clearOnResize));
-        }
-    }
-
-    /** Allocate a new {@link FloatArray} of the given capacity. */
-    public FloatArray newFloatArray(long size) {
-        return newFloatArray(size, true);
-    }
-
-    /** Resize the array to the exact provided size. */
-    public FloatArray resize(FloatArray array, long size) {
-        if (array instanceof BigFloatArray) {
-            return resizeInPlace((BigFloatArray) array, size);
-        } else {
-            AbstractArray arr = (AbstractArray) array;
-            final FloatArray newArray = newFloatArray(size, arr.clearOnResize);
-            for (long i = 0, end = Math.min(size, array.size()); i < end; ++i) {
-                newArray.set(i, array.get(i));
-            }
-            arr.close();
-            return newArray;
-        }
-    }
-
-    /** Grow an array to a size that is larger than <code>minSize</code>,
-     * preserving content, and potentially reusing part of the provided array. */
-    public FloatArray grow(FloatArray array, long minSize) {
-        if (minSize <= array.size()) {
-            return array;
-        }
-        final long newSize = overSize(minSize, PageCacheRecycler.INT_PAGE_SIZE, Float.BYTES);
-        return resize(array, newSize);
-    }
-
-    /**
-     * Allocate a new {@link ObjectArray}.
-     * @param size          the initial length of the array
-     */
-    public <T> ObjectArray<T> newObjectArray(long size) {
-        if (size > PageCacheRecycler.OBJECT_PAGE_SIZE) {
-            // when allocating big arrays, we want to first ensure we have the capacity by
-            // checking with the circuit breaker before attempting to allocate
-            adjustBreaker(BigObjectArray.estimateRamBytes(size), false);
-            return new BigObjectArray<>(size, this);
-        } else if (size >= PageCacheRecycler.OBJECT_PAGE_SIZE / 2 && recycler != null) {
-            final Recycler.V<Object[]> page = recycler.objectPage();
-            return validate(new ObjectArrayWrapper<>(this, page.v(), size, page));
-        } else {
-            return validate(new ObjectArrayWrapper<>(this, new Object[(int) size], size, null));
-        }
-    }
-
-    /** Resize the array to the exact provided size. */
-    public <T> ObjectArray<T> resize(ObjectArray<T> array, long size) {
+        private final int[] array;
+     * Wraps a double array
+                        breaker.addEstimateBytesAndMaybeBreak(delta, "<reused_arrays>");
+                }
         if (array instanceof BigObjectArray) {
-            return resizeInPlace((BigObjectArray<T>) array, size);
-        } else {
-            final ObjectArray<T> newArray = newObjectArray(size);
-            for (long i = 0, end = Math.min(size, array.size()); i < end; ++i) {
-                newArray.set(i, array.get(i));
-            }
-            array.close();
+            return resizeInPlace((BigLongArray) array, size);
             return newArray;
+     * Allocate a new {@link IntArray}.
+    /**
+            for (long i = 0, end = Math.min(size, array.size()); i < end; ++i) {
         }
-    }
-
-    /** Grow an array to a size that is larger than <code>minSize</code>,
+    public <T> ObjectArray<T> resize(ObjectArray<T> array, long size) {
+        final long newSize = overSize(minSize, PageCacheRecycler.LONG_PAGE_SIZE, Long.BYTES);
+        } else {
+            super(bigArrays, size, releasable, clearOnResize);
+    /** Resize the array to the exact provided size. */
+            assert indexIsInt(toIndex);
+     *
+            AbstractArray arr = (AbstractArray) array;
+        AbstractArrayWrapper(BigArrays bigArrays, long size, Releasable releasable, boolean clearOnResize) {
+        } else if (size >= PageCacheRecycler.OBJECT_PAGE_SIZE / 2 && recycler != null) {
+            // when allocating big arrays, we want to first ensure we have the capacity by
+        boolean checkBreaker
+            assert indexIsInt(index);
+     * @param clearOnResize whether values should be set to 0 on initialization and resize
+ * The OpenSearch Contributors require contributions made to
+     * @opensearch.internal
+            @SuppressWarnings("unchecked")
+        @Override
+            assert indexIsInt(index);
+        }
+                    try {
+    /**
      * preserving content, and potentially reusing part of the provided array. */
-    public <T> ObjectArray<T> grow(ObjectArray<T> array, long minSize) {
+            hash = 31 * hash + array.get(i);
+            T ret = (T) array[(int) index];
+ * software distributed under the License is distributed on an
+     * @opensearch.internal
+     * @param clearOnResize whether values should be set to 0 on initialization and resize
+    public IntArray newIntArray(long size) {
+ * specific language governing permissions and limitations
+            this.array = array;
+    private static class ByteArrayWrapper extends AbstractArrayWrapper implements ByteArray {
         if (minSize <= array.size()) {
-            return array;
-        }
-        final long newSize = overSize(minSize, PageCacheRecycler.OBJECT_PAGE_SIZE, RamUsageEstimator.NUM_BYTES_OBJECT_REF);
-        return resize(array, newSize);
-    }
+            return validate(new FloatArrayWrapper(this, new int[(int) size], size, null, clearOnResize));
+     * preserving content, and potentially reusing part of the provided array. */
+        public long ramBytesUsed() {
 }
+            array.close();
+                // its' totals, so add without breaking
+            return SHALLOW_SIZE + RamUsageEstimator.sizeOf(array);
+    public CircuitBreakerService breakerService() {
+                // even if we are not checking the breaker, we need to adjust
+    }
+            return array;
+        @SuppressWarnings("unchecked")
+        public int increment(long index, int inc) {
+    public FloatArray newFloatArray(long size, boolean clearOnResize) {
+    }
+            AbstractArray arr = (AbstractArray) array;
+        return this.circuitBreakingInstance;
+    protected BigArrays(
+import org.opensearch.core.common.util.ByteArray;
+        ByteArrayWrapper(BigArrays bigArrays, byte[] array, long size, Recycler.V<byte[]> releasable, boolean clearOnResize) {
+                + oldMemSize
+            assert indexIsInt(index);
+     * Allocate a new {@link IntArray}.
+    public <T> ObjectArray<T> newObjectArray(long size) {
+    /** Grow an array to a size that is larger than <code>minSize</code>,
+        }
+                            // add it so closing the stream re-adjusts properly
+            return validate(new ObjectArrayWrapper<>(this, page.v(), size, page));
+     * Allocate a new {@link FloatArray}.
+    public LongArray newLongArray(long size, boolean clearOnResize) {
+            return new BigIntArray(size, this, clearOnResize);
+    public DoubleArray resize(DoubleArray array, long size) {
+     * @opensearch.internal
+                            // since we've already created the data, we need to
+     * preserving content, and potentially reusing part of the provided array. */
+            // checking with the circuit breaker before attempting to allocate
+     *  may have different page sizes or number of bytes per element. */
+        @Override
+        }
+    /**
+        return hash;
+import org.opensearch.common.lease.Releasables;
+    public static class DoubleBinarySearcher extends BinarySearcher {
+                    }
+        public boolean hasArray() {
+        if (array instanceof BigLongArray) {
+        private final long[] array;
+                // have to if the delta is negative
+            array.close();
+            final IntArray newArray = newIntArray(size, arr.clearOnResize);
+     * explicitly enabled, instead of only accounting enabled
+    }
+        }
+    }
+        return resize(array, newSize);
+        private final Releasable releasable;
+     */
+    }
+        } else if (size >= PageCacheRecycler.BYTE_PAGE_SIZE / 2 && recycler != null) {
+            assert indexIsInt(index);
+    }
+            return Math.abs(array.get(index) - searchFor);
+        @Override
+     * Allocate a new {@link ByteArray}.
+        @Override
+    }
+        public int set(long index, int value) {
+            return array;
+        @Override
+                RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + RamUsageEstimator.NUM_BYTES_OBJECT_REF * size()
+            super(bigArrays, size, releasable, clearOnResize);
+ * compatible open source license.
+        @Override
+        final long newSize = overSize(minSize, PageCacheRecycler.OBJECT_PAGE_SIZE, RamUsageEstimator.NUM_BYTES_OBJECT_REF);
+     */
+            adjustBreaker(BigObjectArray.estimateRamBytes(size), false);
+            assert indexIsInt(index);
+        if (array instanceof BigIntArray) {
+     * @param size          the initial length of the array
+     *  Inspired from {@link ArrayUtil#oversize(int, int)} and adapted to play nicely with paging. */
+    /**
+     * Allocate a new {@link DoubleArray}.
+            final long pages = (minTargetSize + pageSize - 1) / pageSize; // ceil(minTargetSize/pageSize)
+ * Licensed to Elasticsearch under one or more contributor
+            float ret = Float.intBitsToFloat(array[(int) index]);
+        }
+    }
+    /** Grow an array to a size that is larger than <code>minSize</code>,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    /**
+        if (this.breakerService != null) {
+            return array[(int) index];
+            assert indexIsInt(index);
+        @Override
+     * negative, or checkBreaker is false, the breaker will be adjusted
+            assert indexIsInt(fromIndex);
+            final Recycler.V<Object[]> page = recycler.objectPage();
+            // when allocating big arrays, we want to first ensure we have the capacity by
+            return resizeInPlace((BigIntArray) array, size);
+     * Wraps an object array
+ * GitHub history for details.
+            // when allocating big arrays, we want to first ensure we have the capacity by
+            assert indexIsInt(index);
+        DoubleArrayWrapper(BigArrays bigArrays, long[] array, long size, Recycler.V<long[]> releasable, boolean clearOnResize) {
+    public DoubleArray grow(DoubleArray array, long minSize) {
+/*
+            array[(int) index] = Float.floatToRawIntBits(value);
+        @Override
+        }
+        return index == (int) index;
+        return newLongArray(size, true);
+        }
+     * Adjust the circuit breaker with the given delta, if the delta is
+                } else {
+     */
+    /**
+import org.opensearch.common.recycler.Recycler;
+     *
+            this.array = array;
+            return newArray;
+            return array;
+        final long newSize = overSize(minSize, PageCacheRecycler.INT_PAGE_SIZE, Integer.BYTES);
+            return array[(int) index] += inc;
+ *
+            throw new IllegalArgumentException("bytesPerElement must be > 0");
+            return validate(new LongArrayWrapper(this, page.v(), size, page, clearOnResize));
+            Arrays.fill(array, (int) fromIndex, (int) toIndex, value);
+            newSize = Math.min(ArrayUtil.oversize((int) minTargetSize, bytesPerElement), pageSize);
+            assert indexIsInt(index);
+ * You may obtain a copy of the License at
+            super(bigArrays, size, releasable, true);
+     * @opensearch.internal
+        }
+        }
+        if (array instanceof BigByteArray) {
+        if (pageSize < 0) {
+    /** Grow an array to a size that is larger than <code>minSize</code>,
+            return resizeInPlace((BigByteArray) array, size);
+    /** Return the next size to grow to that is &gt;= <code>minTargetSize</code>.
+    public boolean equals(ByteArray array, ByteArray other) {
+     * Allocate a new {@link ByteArray} initialized with zeros.
+     *
+        return resize(array, newSize);
+        }
+    private static class FloatArrayWrapper extends AbstractArrayWrapper implements FloatArray {
+            AbstractArray arr = (AbstractArray) array;
+    ) {
+        @Override
+    }
+     */
+        }
+        }
+            assert indexIsInt(index);
+            // checking with the circuit breaker before attempting to allocate
+            // checking with the circuit breaker before attempting to allocate
+        } else {
+    }
+        if (minTargetSize < 0) {
+        @Override
+    }
+            this.size = size;
+        return newByteArray(size, true);
+            Releasables.close(releasable);
+     * Wraps a byte array
+            return ret;
+            return validate(new DoubleArrayWrapper(this, page.v(), size, page, clearOnResize));
+            assert indexIsInt(index);
+        if (size > PageCacheRecycler.LONG_PAGE_SIZE) {
+        @Override
+            assert indexIsInt(index);
+        }
+            Arrays.fill(array, (int) fromIndex, (int) toIndex, value);
+        }
+        } else if (size >= PageCacheRecycler.LONG_PAGE_SIZE / 2 && recycler != null) {
+     * @param size          the initial length of the array
+        }
+     */
+        }
+        String breakerName,
+            assert indexIsInt(fromIndex);
+            return ret;
+        public double set(long index, double value) {
+     * preserving content, and potentially reusing part of the provided array. */
+        }
+        private final byte[] array;
+    }
+     *
+    /** Resize the array to the exact provided size. */
+        @Nullable final CircuitBreakerService breakerService,
+            return false;
+        // Checking the breaker is disabled if not specified
+    }
+            return resizeInPlace((BigFloatArray) array, size);
+            assert indexIsInt(index);
+import org.opensearch.core.common.breaker.CircuitBreakingException;
+        @Override
+        }
+        } else if (size >= PageCacheRecycler.INT_PAGE_SIZE / 2 && recycler != null) {
+    }
+            }
+                newArray.set(i, array.get(i));
+            newSize = pages * pageSize;
+    }
+        }
+     * @param size          the initial length of the array
+        double searchFor;
+        }
+        if (array instanceof BigFloatArray) {
+    private static class LongArrayWrapper extends AbstractArrayWrapper implements LongArray {
+            return new BigDoubleArray(size, this, clearOnResize);
+        if (minTargetSize < pageSize) {
+    }
+        return this.circuitBreakingInstance.breakerService;
+    /**
+     */
+            }
+    public static long overSize(long minTargetSize) {
+     * we do not add the delta to the breaker if it trips.
+     */
+            array[(int) index] = value;
+        private final Object[] array;
+    /** Resize the array to the exact provided size. */
+            if (!success) {
+            ref.bytes = array;
+            return ret;
+        public long get(long index) {
+        final long newSize = overSize(minSize, PageCacheRecycler.BYTE_PAGE_SIZE, 1);
+        if (size > PageCacheRecycler.OBJECT_PAGE_SIZE) {
+        }
+    /**
+        }
+            return validate(new ByteArrayWrapper(this, page.v(), size, page, clearOnResize));
+import org.opensearch.core.common.breaker.CircuitBreaker;
+            for (long i = 0, end = Math.min(size, array.size()); i < end; ++i) {
+    /** Allocate a new {@link FloatArray} of the given capacity. */
+            return newArray;
+            super(bigArrays, size, releasable, clearOnResize);
+     * to account for the created data.  If the data has not been created yet,
+            success = true;
+    }
+    }
+        public long ramBytesUsed() {
+import java.util.Arrays;
+            ref.length = len;
+ */
+        return resize(array, newSize);
+                        throw e;
+     *
+     * @opensearch.internal
+     * @opensearch.internal
+     * Wraps a long array
+        }
+        long newSize;
+        @Override
+        } else {
+            return array[(int) index];
+        public void fill(long fromIndex, long toIndex, float value) {
+            final Recycler.V<int[]> page = recycler.intPage(clearOnResize);
+    /**
+            adjustBreaker(BigDoubleArray.estimateRamBytes(size), false);
+        }
+        }
+    }
+     * @param size          the initial length of the array
+            return true;
+        }
+        public void fill(long fromIndex, long toIndex, long value) {
+     * @param size          the initial length of the array
+        public float set(long index, float value) {
+    void adjustBreaker(final long delta, final boolean isDataAlreadyCreated) {
+        }
+        @Override
+    public <T> ObjectArray<T> grow(ObjectArray<T> array, long minSize) {
+            final DoubleArray newArray = newDoubleArray(size, arr.clearOnResize);
+            Arrays.fill(array, (int) fromIndex, (int) toIndex, value);
+        public final long size() {
+            return validate(new IntArrayWrapper(this, new int[(int) size], size, null, clearOnResize));
+        return newIntArray(size, true);
+                + ", ramBytesEstimated="
+            return 0;
+     * preserving content, and potentially reusing part of the provided array. */
+    private final BigArrays circuitBreakingInstance;
+            assert indexIsInt(index);
+        private final long[] array;
+                        if (isDataAlreadyCreated) {
+@PublicApi(since = "1.0.0")
+        }
+    private <T extends AbstractBigArray> T resizeInPlace(T array, long newSize) {
+                if (delta > 0) {
+    private <T extends BigArray> T validate(T array) {
+        if (array == other) {
+                + array.ramBytesEstimated(oldSize);
+    }
+     * Base array wrapper class
+            final long ret = array[(int) index];
+ * Modifications Copyright OpenSearch Contributors. See
+        } else {
+import org.opensearch.common.Nullable;
+            return Double.longBitsToDouble(array[(int) index]);
+        public void fill(long fromIndex, long toIndex, byte value) {
+        @Override
+        }
+            }
+        @Override
+                        // re-throw the original exception
+            array.close();
+     * @opensearch.internal
+        @Override
+            return validate(new LongArrayWrapper(this, new long[(int) size], size, null, clearOnResize));
+    }
+            return ret;
+    /**
+            array.close();
+        @Override
+        public double increment(long index, double inc) {
+        if (size > PageCacheRecycler.LONG_PAGE_SIZE) {
+            return validate(new IntArrayWrapper(this, page.v(), size, page, clearOnResize));
+     * this method, and the breaker trips, we add the delta without breaking
+    public LongArray newLongArray(long size) {
+     * @param clearOnResize whether values should be set to 0 on initialization and resize
+            final int ret = array[(int) index];
+        if (minSize <= array.size()) {
+        }
+        @Override
+                            breaker.addWithoutBreaking(delta);
+     * @opensearch.internal
+        } else {
+     * Wraps an int array
+            assert indexIsInt(fromIndex);
+        if (minSize <= array.size()) {
+        @Override
+    public int hashCode(ByteArray array) {
+        protected final void doClose() {
+        if (array instanceof BigDoubleArray) {
+        }
+        }
+    public DoubleArray newDoubleArray(long size, boolean clearOnResize) {
+ * Unless required by applicable law or agreed to in writing,
+        if (size > PageCacheRecycler.INT_PAGE_SIZE) {
+    public static final BigArrays NON_RECYCLING_INSTANCE = new BigArrays(null, null, CircuitBreaker.REQUEST);
+    private static class DoubleArrayWrapper extends AbstractArrayWrapper implements DoubleArray {
+        adjustBreaker(estimatedIncreaseInBytes, false);
+            return Float.intBitsToFloat(array[(int) index]);
+                // checking breaker means potentially tripping, but it doesn't
+    }
+     *
+        }
+     * Wraps a float array
+        } finally {
+        return resize(array, newSize);
+     * preserving content, and potentially reusing part of the provided array. */
+        public void set(long index, byte[] buf, int offset, int len) {
+ * @opensearch.api
+        }
+    public ByteArray resize(ByteArray array, long size) {
+        if (size > PageCacheRecycler.BYTE_PAGE_SIZE) {
+        @Override
+        }
+    }
+     */
+    /**
+    public ByteArray newByteArray(long size, boolean clearOnResize) {
+    /**
+     */
+        }
+     */
+            for (long i = 0, end = Math.min(size, array.size()); i < end; ++i) {
+        }
+     *
+    public FloatArray resize(FloatArray array, long size) {
+        } else {
+        }
+                breaker.addWithoutBreaking(delta);
+    /** @see Arrays#equals(byte[], byte[]) */
+     * Allocate a new {@link LongArray}.
+     * @param clearOnResize whether values should be set to 0 on initialization and resize
+        protected double distance(int index) {
+            }
+            return array[(int) index] = Double.doubleToRawLongBits(Double.longBitsToDouble(array[(int) index]) + inc);
+        return overSize(minTargetSize, PageCacheRecycler.PAGE_SIZE_IN_BYTES / 8, 1);
+    final PageCacheRecycler recycler;
+     * @param size          the initial length of the array
+/*
+                return false;
+    }
+            return array[(int) index] = Float.floatToRawIntBits(Float.intBitsToFloat(array[(int) index]) + inc);
+        public long ramBytesUsed() {
+    /**
+            adjustBreaker(BigLongArray.estimateRamBytes(size), false);
+        }
+        @Override
+        }
+    }
+    /**
+import org.apache.lucene.util.BytesRef;
+        return resize(array, newSize);
+            }
+                        }
+        }
+            AbstractArray arr = (AbstractArray) array;
+            return SHALLOW_SIZE + RamUsageEstimator.sizeOf(array);
+        } else {
+            final Recycler.V<byte[]> page = recycler.bytePage(clearOnResize);
+    public IntArray resize(IntArray array, long size) {
+     * Return an instance of this BigArrays class with circuit breaking
+    public ByteArray newByteArray(long size) {
+ * SPDX-License-Identifier: Apache-2.0
+            this.circuitBreakingInstance = new BigArrays(recycler, breakerService, breakerName, true);
+            return validate(new ObjectArrayWrapper<>(this, new Object[(int) size], size, null));
+        @Override
+                newArray.set(i, array.get(i));
+    }
+        }
+        return true;
+    /** Returns the next size to grow when working with parallel arrays that
+    }
+            }
+            return newArray;
+    }
+        public DoubleBinarySearcher(DoubleArray array) {
+        int hash = 1;
+                newArray.set(i, array.get(i));
+    public LongArray grow(LongArray array, long minSize) {
+        }
+        }
+        final long newSize = overSize(minSize, PageCacheRecycler.LONG_PAGE_SIZE, Long.BYTES);
+            this.array = array;
+        PageCacheRecycler recycler,
+import org.apache.lucene.util.RamUsageEstimator;
+        @Override
+        public float get(long index) {
+    /** Grow an array to a size that is larger than <code>minSize</code>,
+    /** Resize the array to the exact provided size. */
+        }
+            return resizeInPlace((BigDoubleArray) array, size);
+        }
+            array[(int) index] = value;
+import org.opensearch.core.common.util.BigArray;
+        } else {
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+        return newFloatArray(size, true);
+        final long oldSize = array.size();
+            return (T) array[(int) index];
+            // when allocating big arrays, we want to first ensure we have the capacity by
+    }
+        @Override
+        }
+    }
+        @Override
+    }
+    public BigArrays withCircuitBreaking() {
+            }
+            for (long i = 0, end = Math.min(size, array.size()); i < end; ++i) {
+            return new BigByteArray(size, this, clearOnResize);
+        if (size > PageCacheRecycler.INT_PAGE_SIZE) {
+        this.breakerName = breakerName;
+        public int search(int from, int to, double searchFor) {
+            assert indexIsInt(index);
+        public T set(long index, T value) {
+ * this file be licensed under the Apache-2.0 license or a
+        for (long i = 0; i < array.size(); i++) {
+        }
+            return ret;
+    }
+    }
+     */
+    public IntArray grow(IntArray array, long minSize) {
+    public ByteArray grow(ByteArray array, long minSize) {
+        return newSize;
+ */
+        public boolean get(long index, int len, BytesRef ref) {
+            throw new IllegalArgumentException("minTargetSize must be >= 0");
+            return SHALLOW_SIZE + RamUsageEstimator.sizeOf(array);
+        private final long size;
+            return true;
+        this.breakerService = breakerService;
+            return SHALLOW_SIZE + RamUsageEstimator.alignObjectSize(
+            final Recycler.V<long[]> page = recycler.longPage(clearOnResize);
+        private final int[] array;
+    }
+                    } catch (CircuitBreakingException e) {
+        }
+ *
+        }
+    }
+    }
+        public float increment(long index, float inc) {
+        if (minSize <= array.size()) {
+    /** Grow an array to a size that is larger than <code>minSize</code>,
+     * without tripping.  If the data was already created before calling
+        if (minSize <= array.size()) {
+ * KIND, either express or implied.  See the License for the
+            return newArray;
+        FloatArrayWrapper(BigArrays bigArrays, int[] array, long size, Recycler.V<int[]> releasable, boolean clearOnResize) {
+    }
+            CircuitBreaker breaker = this.breakerService.getBreaker(breakerName);
+        }
+            if (this.checkBreaker) {
+ * Utility class to work with arrays.
+ * the Apache License, Version 2.0 (the "License"); you may
+        } else {
+            Arrays.fill(array, (int) fromIndex, (int) toIndex, Float.floatToRawIntBits(value));
+            AbstractArray arr = (AbstractArray) array;
+        this.checkBreaker = checkBreaker;
+    private static class ObjectArrayWrapper<T> extends AbstractArrayWrapper implements ObjectArray<T> {
+     * Allocate a new {@link LongArray}.
+    public FloatArray grow(FloatArray array, long minSize) {
+     * A double value binary searcher
+            arr.close();
+        }
+        public long ramBytesUsed() {
+            return ret;
+        public long increment(long index, long inc) {
+        } else if (size >= PageCacheRecycler.INT_PAGE_SIZE / 2 && recycler != null) {
+            this.array = array;
+            assert indexIsInt(index);
+    /**
+            return Double.compare(array.get(index), searchFor);
+            adjustBreaker(BigFloatArray.estimateRamBytes(size), false);
+            newArray.set(0, rawArray, 0, (int) Math.min(rawArray.length, newArray.size()));
+        }

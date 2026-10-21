@@ -1,313 +1,279 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.xcontent;
-
-import org.opensearch.common.CheckedBiConsumer;
-import org.opensearch.common.CheckedConsumer;
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.xcontent.json.JsonXContent;
+            // because of the missing type to identify the parser, we expect no return value, but also no exception
+        try (
+        final String delimiter = randomFrom("#", ":", "/", "-", "_", "|", "_delim_");
 import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedObjectNotFoundException;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.core.xcontent.XContentParserUtils;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.List;
-import java.util.Map;
-
-import static org.opensearch.core.xcontent.XContentHelper.toXContent;
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureFieldName;
-import static org.opensearch.core.xcontent.XContentParserUtils.parseTypedKeysObject;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.endsWith;
-import static org.hamcrest.Matchers.instanceOf;
-
-public class XContentParserUtilsTests extends OpenSearchTestCase {
-
-    public void testEnsureExpectedToken() throws IOException {
-        final XContentParser.Token randomToken = randomFrom(XContentParser.Token.values());
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, "{}")) {
-            // Parser current token is null
-            assertNull(parser.currentToken());
-            ParsingException e = expectThrows(
-                ParsingException.class,
-                () -> ensureExpectedToken(randomToken, parser.currentToken(), parser)
-            );
-            assertEquals("Failed to parse object: expecting token of type [" + randomToken + "] but found [null]", e.getMessage());
-            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-            ensureExpectedToken(XContentParser.Token.END_OBJECT, parser.nextToken(), parser);
+ * SPDX-License-Identifier: Apache-2.0
         }
-    }
-
-    public void testStoredFieldsValueString() throws IOException {
-        final String value = randomAlphaOfLengthBetween(0, 10);
-        assertParseFieldsSimpleValue(value, (xcontentType, result) -> assertEquals(value, result));
-    }
-
-    public void testStoredFieldsValueInt() throws IOException {
-        final Integer value = randomInt();
-        assertParseFieldsSimpleValue(value, (xcontentType, result) -> assertEquals(value, result));
-    }
-
-    public void testStoredFieldsValueLong() throws IOException {
-        final Long value = randomLong();
-        assertParseFieldsSimpleValue(value, (xcontentType, result) -> assertEquals(value, result));
-    }
-
-    public void testStoredFieldsValueDouble() throws IOException {
-        final Double value = randomDouble();
-        assertParseFieldsSimpleValue(value, (xcontentType, result) -> assertEquals(value, ((Number) result).doubleValue(), 0.0d));
-    }
-
-    public void testStoredFieldsValueFloat() throws IOException {
-        final Float value = randomFloat();
-        assertParseFieldsSimpleValue(value, (xcontentType, result) -> assertEquals(value, ((Number) result).floatValue(), 0.0f));
-    }
-
-    public void testStoredFieldsValueBoolean() throws IOException {
-        final Boolean value = randomBoolean();
-        assertParseFieldsSimpleValue(value, (xcontentType, result) -> assertEquals(value, result));
-    }
-
-    public void testStoredFieldsValueBinary() throws IOException {
-        final byte[] value = randomUnicodeOfLength(scaledRandomIntBetween(10, 1000)).getBytes("UTF-8");
-        assertParseFieldsSimpleValue(value, (xcontentType, result) -> {
-            if (xcontentType == MediaTypeRegistry.JSON) {
-                // binary values will be parsed back and returned as base64 strings when reading from json
-                assertArrayEquals(value, Base64.getDecoder().decode((String) result));
-            } else {
-                // cbor, smile, and yaml support binary
-                assertArrayEquals(value, ((BytesArray) result).array());
-            }
-        });
-    }
-
+ * compatible open source license.
+ * Modifications Copyright OpenSearch Contributors. See
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        assertParseFieldsValue((builder) -> builder.value(value), assertConsumer);
+                ensureExpectedToken(XContentParser.Token.END_ARRAY, parser.nextToken(), parser);
+        {
+        );
+        final XContentType xContentType = randomFrom(XContentType.values());
+        }
+        ) {
     public void testStoredFieldsValueNull() throws IOException {
-        assertParseFieldsSimpleValue(null, (xcontentType, result) -> assertNull(result));
-    }
-
+import org.opensearch.core.xcontent.ObjectParser;
+            SetOnce<Boolean> booleanConsumer = new SetOnce<>();
+        });
     public void testStoredFieldsValueObject() throws IOException {
+            SetOnce<Boolean> parsedBoolean = new SetOnce<>();
+    }
+            () -> assertParseFieldsValue((builder) -> {}, (x, r) -> fail("Should have thrown a parsing exception"))
+            builder.startObject();
+    }
+            }
+ * ownership. Elasticsearch licenses this file to you under
+ */
+            builder.startArray(fieldName);
+        namedXContents.add(new NamedXContentRegistry.Entry(Long.class, new ParseField("long"), p -> LONGPARSER.parse(p, null).get()));
         assertParseFieldsValue(
-            (builder) -> builder.startObject().endObject(),
+        ) {
+            parseTypedKeysObject(parser, delimiter, Boolean.class, booleanConsumer::set);
+            ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.nextToken(), parser);
+        assertParseFieldsSimpleValue(null, (xcontentType, result) -> assertNull(result));
+            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+    public void testStoredFieldsValueString() throws IOException {
+            (builder, params) -> builder.startObject("type" + delimiter + "name").field("bool", true).endObject(),
+                );
+import static org.hamcrest.Matchers.containsString;
+            try (
+        bytes = toXContent(
+    }
+                randomBoolean()
+import java.util.Map;
+ * Unless required by applicable law or agreed to in writing,
             (xcontentType, result) -> assertThat(result, instanceOf(Map.class))
         );
-    }
-
-    public void testStoredFieldsValueArray() throws IOException {
-        assertParseFieldsValue(
-            (builder) -> builder.startArray().endArray(),
-            (xcontentType, result) -> assertThat(result, instanceOf(List.class))
-        );
-    }
-
-    public void testParseFieldsValueUnknown() {
-        ParsingException e = expectThrows(
-            ParsingException.class,
-            () -> assertParseFieldsValue((builder) -> {}, (x, r) -> fail("Should have thrown a parsing exception"))
-        );
-        assertThat(e.getMessage(), containsString("unexpected token"));
-    }
-
-    private void assertParseFieldsSimpleValue(final Object value, final CheckedBiConsumer<XContentType, Object, IOException> assertConsumer)
-        throws IOException {
-        assertParseFieldsValue((builder) -> builder.value(value), assertConsumer);
-    }
-
-    private void assertParseFieldsValue(
-        final CheckedConsumer<XContentBuilder, IOException> fieldBuilder,
-        final CheckedBiConsumer<XContentType, Object, IOException> assertConsumer
-    ) throws IOException {
-        final XContentType xContentType = randomFrom(XContentType.values());
-        try (XContentBuilder builder = XContentBuilder.builder(xContentType.xContent())) {
-            final String fieldName = randomAlphaOfLengthBetween(0, 10);
-
-            builder.startObject();
-            builder.startArray(fieldName);
-            fieldBuilder.accept(builder);
-            builder.endArray();
-            builder.endObject();
-
-            try (XContentParser parser = createParser(builder)) {
-                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-                ensureFieldName(parser, parser.nextToken(), fieldName);
-                ensureExpectedToken(XContentParser.Token.START_ARRAY, parser.nextToken(), parser);
-                assertNotNull(parser.nextToken());
-                assertConsumer.accept(xContentType, XContentParserUtils.parseFieldsValue(parser));
-                ensureExpectedToken(XContentParser.Token.END_ARRAY, parser.nextToken(), parser);
-                ensureExpectedToken(XContentParser.Token.END_OBJECT, parser.nextToken(), parser);
-                assertNull(parser.nextToken());
-            }
-        }
-    }
-
-    public void testParseTypedKeysObject() throws IOException {
-        final String delimiter = randomFrom("#", ":", "/", "-", "_", "|", "_delim_");
-        final XContentType xContentType = randomFrom(XContentType.values());
-
-        final ObjectParser<SetOnce<Boolean>, Void> BOOLPARSER = new ObjectParser<>("bool", () -> new SetOnce<>());
-        BOOLPARSER.declareBoolean(SetOnce::set, new ParseField("field"));
-        final ObjectParser<SetOnce<Long>, Void> LONGPARSER = new ObjectParser<>("long", () -> new SetOnce<>());
-        LONGPARSER.declareLong(SetOnce::set, new ParseField("field"));
-
-        List<NamedXContentRegistry.Entry> namedXContents = new ArrayList<>();
-        namedXContents.add(new NamedXContentRegistry.Entry(Boolean.class, new ParseField("bool"), p -> BOOLPARSER.parse(p, null).get()));
-        namedXContents.add(new NamedXContentRegistry.Entry(Long.class, new ParseField("long"), p -> LONGPARSER.parse(p, null).get()));
-        final NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(namedXContents);
-
-        BytesReference bytes = toXContent(
-            (builder, params) -> builder.startObject("name").field("field", 0).endObject(),
-            xContentType,
-            randomBoolean()
-        );
-        try (
-            XContentParser parser = xContentType.xContent()
-                .createParser(namedXContentRegistry, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, bytes.streamInput())
-        ) {
-            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-            ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.nextToken(), parser);
-            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-            SetOnce<Boolean> booleanConsumer = new SetOnce<>();
-            parseTypedKeysObject(parser, delimiter, Boolean.class, booleanConsumer::set);
-            // because of the missing type to identify the parser, we expect no return value, but also no exception
-            assertNull(booleanConsumer.get());
-            ensureExpectedToken(XContentParser.Token.END_OBJECT, parser.currentToken(), parser);
-            ensureExpectedToken(XContentParser.Token.END_OBJECT, parser.nextToken(), parser);
-            assertNull(parser.nextToken());
-        }
-
-        bytes = toXContent(
-            (builder, params) -> builder.startObject("type" + delimiter + "name").field("bool", true).endObject(),
-            xContentType,
-            randomBoolean()
-        );
-        try (
-            XContentParser parser = xContentType.xContent()
-                .createParser(namedXContentRegistry, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, bytes.streamInput())
-        ) {
-            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-            ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.nextToken(), parser);
-            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-            NamedObjectNotFoundException e = expectThrows(
-                NamedObjectNotFoundException.class,
-                () -> parseTypedKeysObject(parser, delimiter, Boolean.class, a -> {})
-            );
-            assertThat(e.getMessage(), endsWith("unknown field [type]"));
-        }
-
-        final long longValue = randomLong();
-        final boolean boolValue = randomBoolean();
-        bytes = toXContent((builder, params) -> {
-            builder.startObject("long" + delimiter + "l").field("field", longValue).endObject();
-            builder.startObject("bool" + delimiter + "l").field("field", boolValue).endObject();
-            return builder;
-        }, xContentType, randomBoolean());
-
-        try (
-            XContentParser parser = xContentType.xContent()
-                .createParser(namedXContentRegistry, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, bytes.streamInput())
-        ) {
-            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-
-            ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.nextToken(), parser);
-            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-            SetOnce<Long> parsedLong = new SetOnce<>();
-            parseTypedKeysObject(parser, delimiter, Long.class, parsedLong::set);
-            assertNotNull(parsedLong);
-            assertEquals(longValue, parsedLong.get().longValue());
-
-            ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.nextToken(), parser);
-            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-            SetOnce<Boolean> parsedBoolean = new SetOnce<>();
-            parseTypedKeysObject(parser, delimiter, Boolean.class, parsedBoolean::set);
-            assertNotNull(parsedBoolean);
-            assertEquals(boolValue, parsedBoolean.get());
-
-            ensureExpectedToken(XContentParser.Token.END_OBJECT, parser.nextToken(), parser);
-        }
-    }
-
     public void testParseTypedKeysObjectErrors() throws IOException {
-        final XContentType xContentType = randomFrom(XContentType.values());
-        {
-            BytesReference bytes = toXContent(
+        assertParseFieldsSimpleValue(value, (xcontentType, result) -> assertEquals(value, result));
+import org.opensearch.common.xcontent.json.JsonXContent;
+public class XContentParserUtilsTests extends OpenSearchTestCase {
+ *
+        assertParseFieldsSimpleValue(value, (xcontentType, result) -> assertEquals(value, result));
+            ensureExpectedToken(XContentParser.Token.END_OBJECT, parser.currentToken(), parser);
+    public void testEnsureExpectedToken() throws IOException {
+                assertNull(parser.nextToken());
+        bytes = toXContent((builder, params) -> {
+    }
+                .createParser(namedXContentRegistry, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, bytes.streamInput())
+            }
                 (builder, params) -> builder.startObject("name").field("field", 0).endObject(),
-                xContentType,
-                randomBoolean()
             );
-            try (
-                XContentParser parser = xContentType.xContent()
-                    .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, bytes.streamInput())
-            ) {
-                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-                ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.nextToken(), parser);
-                ParsingException exception = expectThrows(
+    }
+ */
+        final XContentType xContentType = randomFrom(XContentType.values());
+            (xcontentType, result) -> assertThat(result, instanceOf(List.class))
                     ParsingException.class,
-                    () -> parseTypedKeysObject(parser, "#", Boolean.class, o -> {})
-                );
-                assertEquals("Failed to parse object: unexpected token [FIELD_NAME] found", exception.getMessage());
-            }
+            ) {
+        throws IOException {
+        ParsingException e = expectThrows(
+    public void testParseFieldsValueUnknown() {
+ * under the License.
+    public void testStoredFieldsValueBinary() throws IOException {
+            final String fieldName = randomAlphaOfLengthBetween(0, 10);
+                xContentType,
+        final boolean boolValue = randomBoolean();
+            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+            (builder) -> builder.startObject().endObject(),
+            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+/*
+    }
+                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+                ensureExpectedToken(XContentParser.Token.END_OBJECT, parser.nextToken(), parser);
+            randomBoolean()
+/*
         }
-        {
-            BytesReference bytes = toXContent(
+ */
+    }
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import static org.hamcrest.Matchers.endsWith;
+            parseTypedKeysObject(parser, delimiter, Boolean.class, parsedBoolean::set);
+ * Licensed to Elasticsearch under one or more contributor
+    }
+import org.opensearch.common.SetOnce;
+                assertArrayEquals(value, Base64.getDecoder().decode((String) result));
+ *
+import org.opensearch.core.xcontent.XContentParser;
+            // Parser current token is null
+        );
+ * this file be licensed under the Apache-2.0 license or a
+                assertConsumer.accept(xContentType, XContentParserUtils.parseFieldsValue(parser));
+                .createParser(namedXContentRegistry, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, bytes.streamInput())
+            assertThat(e.getMessage(), endsWith("unknown field [type]"));
+            ParsingException.class,
+                // cbor, smile, and yaml support binary
+import java.util.Base64;
+        List<NamedXContentRegistry.Entry> namedXContents = new ArrayList<>();
+        }
+                ParsingException exception = expectThrows(
+        try (XContentBuilder builder = XContentBuilder.builder(xContentType.xContent())) {
+            ) {
                 (builder, params) -> builder.startObject("").field("field", 0).endObject(),
-                xContentType,
-                randomBoolean()
-            );
-            try (
-                XContentParser parser = xContentType.xContent()
+                assertEquals("Failed to parse object: unexpected token [FIELD_NAME] found", exception.getMessage());
+ * software distributed under the License is distributed on an
                     .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, bytes.streamInput())
-            ) {
-                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-                ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.nextToken(), parser);
-                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-                ParsingException exception = expectThrows(
-                    ParsingException.class,
-                    () -> parseTypedKeysObject(parser, "#", Boolean.class, o -> {})
-                );
-                assertEquals("Failed to parse object: empty key", exception.getMessage());
+ * You may obtain a copy of the License at
+        namedXContents.add(new NamedXContentRegistry.Entry(Boolean.class, new ParseField("bool"), p -> BOOLPARSER.parse(p, null).get()));
+import org.opensearch.test.OpenSearchTestCase;
+        final CheckedConsumer<XContentBuilder, IOException> fieldBuilder,
+            try (
             }
+import java.io.IOException;
+import org.opensearch.core.common.ParsingException;
+    private void assertParseFieldsValue(
+        );
+        LONGPARSER.declareLong(SetOnce::set, new ParseField("field"));
+                    .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, bytes.streamInput())
+    public void testStoredFieldsValueInt() throws IOException {
+                NamedObjectNotFoundException.class,
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, "{}")) {
+            xContentType,
+            return builder;
+            (builder, params) -> builder.startObject("name").field("field", 0).endObject(),
+            parseTypedKeysObject(parser, delimiter, Long.class, parsedLong::set);
+        final ObjectParser<SetOnce<Boolean>, Void> BOOLPARSER = new ObjectParser<>("bool", () -> new SetOnce<>());
+    public void testStoredFieldsValueDouble() throws IOException {
+import org.opensearch.core.xcontent.XContentParserUtils;
         }
+            );
+        assertParseFieldsSimpleValue(value, (xcontentType, result) -> assertEquals(value, ((Number) result).floatValue(), 0.0f));
+        final Float value = randomFloat();
+        ) {
+    }
+        }
+                () -> parseTypedKeysObject(parser, delimiter, Boolean.class, a -> {})
+            xContentType,
+            XContentParser parser = xContentType.xContent()
+            NamedObjectNotFoundException e = expectThrows(
+            builder.startObject("bool" + delimiter + "l").field("field", boolValue).endObject();
+                () -> ensureExpectedToken(randomToken, parser.currentToken(), parser)
+        try (
+            ParsingException e = expectThrows(
+            builder.startObject("long" + delimiter + "l").field("field", longValue).endObject();
+        final String value = randomAlphaOfLengthBetween(0, 10);
+                assertEquals("Failed to parse object: empty key", exception.getMessage());
+            builder.endObject();
+                ensureFieldName(parser, parser.nextToken(), fieldName);
+                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+                randomBoolean()
+            XContentParser parser = xContentType.xContent()
+        assertThat(e.getMessage(), containsString("unexpected token"));
+                );
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+import org.opensearch.core.xcontent.XContentBuilder;
+    private void assertParseFieldsSimpleValue(final Object value, final CheckedBiConsumer<XContentType, Object, IOException> assertConsumer)
+                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+            XContentParser parser = xContentType.xContent()
+import static org.opensearch.core.xcontent.XContentHelper.toXContent;
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureFieldName;
+                XContentParser parser = xContentType.xContent()
+            SetOnce<Long> parsedLong = new SetOnce<>();
+import org.opensearch.common.CheckedConsumer;
+            );
+                ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.nextToken(), parser);
+        final NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(namedXContents);
+ * KIND, either express or implied.  See the License for the
+        final Integer value = randomInt();
+/*
+                    () -> parseTypedKeysObject(parser, "#", Boolean.class, o -> {})
+            builder.endArray();
+            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+        final long longValue = randomLong();
+            }
+        );
+            assertNull(parser.currentToken());
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import static org.hamcrest.Matchers.instanceOf;
+import java.util.List;
+    }
+            assertEquals(boolValue, parsedBoolean.get());
+        assertParseFieldsValue(
+                ParsingException exception = expectThrows(
+        BOOLPARSER.declareBoolean(SetOnce::set, new ParseField("field"));
+            if (xcontentType == MediaTypeRegistry.JSON) {
+    }
+import java.util.ArrayList;
+import org.opensearch.common.CheckedBiConsumer;
+            assertEquals("Failed to parse object: expecting token of type [" + randomToken + "] but found [null]", e.getMessage());
+            ensureExpectedToken(XContentParser.Token.END_OBJECT, parser.nextToken(), parser);
+                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+        assertParseFieldsSimpleValue(value, (xcontentType, result) -> assertEquals(value, result));
+import org.opensearch.core.common.bytes.BytesArray;
+        try (
+ * this work for additional information regarding copyright
+            BytesReference bytes = toXContent(
+                    () -> parseTypedKeysObject(parser, "#", Boolean.class, o -> {})
+        assertParseFieldsSimpleValue(value, (xcontentType, result) -> assertEquals(value, ((Number) result).doubleValue(), 0.0d));
+        final Double value = randomDouble();
+                    ParsingException.class,
+            assertNull(booleanConsumer.get());
+                assertNotNull(parser.nextToken());
+ * not use this file except in compliance with the License.
+        final CheckedBiConsumer<XContentType, Object, IOException> assertConsumer
+        final byte[] value = randomUnicodeOfLength(scaledRandomIntBetween(10, 1000)).getBytes("UTF-8");
+                xContentType,
+        assertParseFieldsSimpleValue(value, (xcontentType, result) -> {
+    }
+    }
+                ensureExpectedToken(XContentParser.Token.START_ARRAY, parser.nextToken(), parser);
+    public void testStoredFieldsValueLong() throws IOException {
+        }, xContentType, randomBoolean());
+            BytesReference bytes = toXContent(
+            try (XContentParser parser = createParser(builder)) {
+            ensureExpectedToken(XContentParser.Token.END_OBJECT, parser.nextToken(), parser);
+        assertParseFieldsSimpleValue(value, (xcontentType, result) -> assertEquals(value, result));
+            ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.nextToken(), parser);
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+    public void testParseTypedKeysObject() throws IOException {
+                .createParser(namedXContentRegistry, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, bytes.streamInput())
+            );
+            ensureExpectedToken(XContentParser.Token.END_OBJECT, parser.nextToken(), parser);
+        final XContentParser.Token randomToken = randomFrom(XContentParser.Token.values());
+ * GitHub history for details.
+    ) throws IOException {
+        final Long value = randomLong();
+package org.opensearch.common.xcontent;
+ * license agreements. See the NOTICE file distributed with
+                ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.nextToken(), parser);
+            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+    public void testStoredFieldsValueFloat() throws IOException {
+            ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.nextToken(), parser);
+    }
+                ParsingException.class,
+            assertNull(parser.nextToken());
+    }
+import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.xcontent.NamedObjectNotFoundException;
+    public void testStoredFieldsValueBoolean() throws IOException {
+        final Boolean value = randomBoolean();
+            randomBoolean()
+            assertEquals(longValue, parsedLong.get().longValue());
     }
 }
+        {
+        final ObjectParser<SetOnce<Long>, Void> LONGPARSER = new ObjectParser<>("long", () -> new SetOnce<>());
+ * specific language governing permissions and limitations
+                // binary values will be parsed back and returned as base64 strings when reading from json
+            ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.nextToken(), parser);
+import static org.opensearch.core.xcontent.XContentParserUtils.parseTypedKeysObject;
+        final XContentType xContentType = randomFrom(XContentType.values());
+import org.opensearch.core.xcontent.DeprecationHandler;
+            (builder) -> builder.startArray().endArray(),
+                assertArrayEquals(value, ((BytesArray) result).array());
+            assertNotNull(parsedBoolean);
+            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+ * The OpenSearch Contributors require contributions made to
+    public void testStoredFieldsValueArray() throws IOException {
+            fieldBuilder.accept(builder);
+                XContentParser parser = xContentType.xContent()
+        }
+            ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+        BytesReference bytes = toXContent(
+ * the Apache License, Version 2.0 (the "License"); you may
+            } else {
+            assertNotNull(parsedLong);

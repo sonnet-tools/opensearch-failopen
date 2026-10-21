@@ -1,1098 +1,1003 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.analysis.Tokenizer;
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.FieldType;
-import org.apache.lucene.document.SortedSetDocValuesField;
-import org.apache.lucene.index.IndexOptions;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.ConstantScoreScorer;
-import org.apache.lucene.search.ConstantScoreWeight;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.MultiTermQuery;
-import org.apache.lucene.search.PrefixQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryVisitor;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.ScorerSupplier;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TwoPhaseIterator;
-import org.apache.lucene.search.Weight;
-import org.apache.lucene.search.WildcardQuery;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.automaton.Automaton;
-import org.apache.lucene.util.automaton.CompiledAutomaton;
-import org.apache.lucene.util.automaton.Operations;
-import org.apache.lucene.util.automaton.RegExp;
-import org.opensearch.common.lucene.BytesRefs;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.lucene.search.AutomatonQueries;
-import org.opensearch.common.unit.Fuzziness;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.analysis.IndexAnalyzers;
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.index.fielddata.IndexFieldData;
-import org.opensearch.index.fielddata.plain.NonPruningSortedSetOrdinalsIndexFieldData;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.lookup.SearchLookup;
-import org.opensearch.search.lookup.SourceLookup;
-
-import java.io.IOException;
-import java.io.StringReader;
-import java.io.UncheckedIOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
-
-import static org.opensearch.index.mapper.KeywordFieldMapper.normalizeValue;
-
-/**
- * Mapper for the "wildcard" field type, which supports (relatively) efficient matching by wildcard, prefix, and regexp
- * queries. It's not really a "full-text" field type, but rather an "unstructured string" field type.
- *
- * @opensearch.internal
- */
-public class WildcardFieldMapper extends ParametrizedFieldMapper {
-    private final String nullValue;
-    private final int ignoreAbove;
-    private final String normalizerName;
-    private final boolean hasDocValues;
-    private final IndexAnalyzers indexAnalyzers;
-
-    /**
-     * The builder for the field mapper.
-     *
-     * @opensearch.internal
-     */
-    public static final class Builder extends ParametrizedFieldMapper.Builder {
-
-        // Copy relevant parameters from KeywordFieldMapper
-        private final Parameter<String> nullValue = Parameter.stringParam("null_value", false, m -> toType(m).nullValue, null)
-            .acceptsNull();
-        private final Parameter<Integer> ignoreAbove = Parameter.intParam(
-            "ignore_above",
-            true,
-            m -> toType(m).ignoreAbove,
-            Integer.MAX_VALUE
-        );
-        private final Parameter<String> normalizer = Parameter.stringParam("normalizer", false, m -> toType(m).normalizerName, "default");
-        private final Parameter<Map<String, String>> meta = Parameter.metaParam();
-        private final Parameter<Boolean> hasDocValues = Parameter.docValuesParam(m -> toType(m).hasDocValues, true).alwaysSerialize();
-        private final IndexAnalyzers indexAnalyzers;
-
-        public Builder(String name, IndexAnalyzers indexAnalyzers) {
-            super(name);
-            this.indexAnalyzers = indexAnalyzers;
-        }
-
-        public Builder(String name) {
-            this(name, null);
-        }
-
-        public WildcardFieldMapper.Builder ignoreAbove(int ignoreAbove) {
-            this.ignoreAbove.setValue(ignoreAbove);
-            return this;
-        }
-
-        WildcardFieldMapper.Builder normalizer(String normalizerName) {
-            this.normalizer.setValue(normalizerName);
-            return this;
-        }
-
-        WildcardFieldMapper.Builder nullValue(String nullValue) {
-            this.nullValue.setValue(nullValue);
-            return this;
-        }
-
-        public WildcardFieldMapper.Builder docValues(boolean hasDocValues) {
-            this.hasDocValues.setValue(hasDocValues);
-            return this;
-        }
-
-        @Override
-        protected List<Parameter<?>> getParameters() {
-            return Arrays.asList(nullValue, ignoreAbove, normalizer, hasDocValues, meta);
-        }
-
-        @Override
-        public WildcardFieldMapper build(BuilderContext context) {
-            String normalizerName = normalizer.getValue();
-            NamedAnalyzer normalizer = Lucene.KEYWORD_ANALYZER;
-            if ("default".equals(normalizerName) == false) {
-                assert indexAnalyzers != null;
-                normalizer = indexAnalyzers.getNormalizer(normalizerName);
-            }
-
-            return new WildcardFieldMapper(
-                name,
-                new WildcardFieldType(context.path().pathAsText(name), normalizer, this),
-                multiFieldsBuilder.build(this, context),
-                copyTo.build(),
-                this
-            );
-        }
-
-    }
-
-    public static final int NGRAM_SIZE = 3;
-    public static final String CONTENT_TYPE = "wildcard";
-    public static final TypeParser PARSER = new TypeParser((n, c) -> new WildcardFieldMapper.Builder(n, c.getIndexAnalyzers()));
-
-    protected WildcardFieldMapper(
-        String simpleName,
-        MappedFieldType mappedFieldType,
-        MultiFields multiFields,
-        CopyTo copyTo,
-        Builder builder
-    ) {
-        super(simpleName, mappedFieldType, multiFields, copyTo);
-        this.nullValue = builder.nullValue.getValue();
-        this.ignoreAbove = builder.ignoreAbove.getValue();
-        this.normalizerName = builder.normalizer.getValue();
-        this.hasDocValues = builder.hasDocValues.getValue();
-        this.indexAnalyzers = builder.indexAnalyzers;
-    }
-
-    public int ignoreAbove() {
-        return ignoreAbove;
-    }
-
-    private static final FieldType FIELD_TYPE = new FieldType();
-    static {
-        FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
-        FIELD_TYPE.setTokenized(true);
-        FIELD_TYPE.setOmitNorms(true);
-        FIELD_TYPE.setStored(false);
-        FIELD_TYPE.freeze();
-    }
-
-    @Override
-    protected void parseCreateField(ParseContext context) throws IOException {
-        String value = parseWildcardValue(context);
-        if (value == null || value.length() > ignoreAbove) {
-            return;
-        }
-
-        NamedAnalyzer normalizer = fieldType().normalizer();
-        if (normalizer != null) {
-            value = normalizeValue(normalizer, name(), value);
-        }
-
-        // convert to utf8 only once before feeding postings/dv/stored fields
-        final BytesRef binaryValue = new BytesRef(value);
-        Tokenizer tokenizer = new WildcardFieldTokenizer();
-        tokenizer.setReader(new StringReader(value));
-        context.doc().add(new Field(fieldType().name(), tokenizer, FIELD_TYPE));
-        if (fieldType().hasDocValues()) {
-            context.doc().add(new SortedSetDocValuesField(fieldType().name(), binaryValue));
-        } else {
-            if (fieldType().hasDocValues() == false) {
-                createFieldNamesField(context);
-            }
-        }
-    }
-
-    @Override
-    protected void parseCreateFieldForPluggableFormat(ParseContext context) throws IOException {
-        String value = parseWildcardValue(context);
-        if (value == null || value.length() > ignoreAbove) {
-            return;
-        }
-        context.documentInput().addField(fieldType(), value);
-    }
-
-    private String parseWildcardValue(ParseContext context) throws IOException {
-        if (context.externalValueSet()) {
-            return context.externalValue().toString();
-        }
-        XContentParser parser = context.parser();
-        if (parser.currentToken() == XContentParser.Token.VALUE_NULL) {
-            return nullValue;
-        }
-        return parser.textOrNull();
-    }
-
-    /**
-     * Tokenizer to emit tokens to support wildcard first-phase matching.
-     * <p>
-     * Will emit all substrings of only 3, with 0-valued anchors for the prefix/suffix.
-     * <p>
-     * For example, given the string "lucene", output the following terms:
-     * <p>
-     * [0, 0, 'l']
-     * [0, 'l', 'u']
-     * ['l', 'u', 'c']
-     * ['u','c','e']
-     * ['c', 'e', 'n']
-     * ['e', 'n', 'e']
-     * ['n', 'e', 0]
-     * ['e', 0, 0]
-     * <p>
-     * Visible for testing.
-     */
-    static final class WildcardFieldTokenizer extends Tokenizer {
-        private final CharTermAttribute charTermAttribute = addAttribute(CharTermAttribute.class);
-        private final char[] buffer = new char[NGRAM_SIZE]; // Ring buffer for up to 3 chars
-        private int offset = NGRAM_SIZE - 1; // next position in buffer to store next input char
-
-        @Override
-        public void reset() throws IOException {
-            super.reset();
-            for (int i = 0; i < NGRAM_SIZE - 1; i++) {
-                buffer[i] = 0;
-            }
-        }
-
-        @Override
-        public boolean incrementToken() throws IOException {
-            charTermAttribute.setLength(NGRAM_SIZE);
-            int c = input.read();
-            c = c == -1 ? 0 : c;
-
-            buffer[offset++ % NGRAM_SIZE] = (char) c;
-            boolean has_next = false;
-            for (int i = 0; i < NGRAM_SIZE; i++) {
-                char curChar = buffer[(offset + i) % NGRAM_SIZE];
-                charTermAttribute.buffer()[i] = curChar;
-                has_next |= curChar != 0;
-            }
-
-            return has_next;
-        }
-    }
-
-    /**
-     * Implements the various query types over wildcard fields.
-     */
-    public static final class WildcardFieldType extends StringFieldType {
-        private static final Set<Character> WILDCARD_SPECIAL = Set.of('?', '*', '\\');
-        private static final Set<Character> REGEXP_SPECIAL = Set.of(
-            '.',
-            '^',
-            '$',
-            '*',
-            '+',
-            '?',
-            '(',
-            ')',
-            '[',
-            ']',
-            '{',
-            '}',
-            '|',
-            '/',
-            '\\'
-        );
-
-        private final int ignoreAbove;
-        private final String nullValue;
-
-        public WildcardFieldType(String name) {
-            this(name, Collections.emptyMap());
-        }
-
-        public WildcardFieldType(String name, Map<String, String> meta) {
-            super(name, true, false, false, TextSearchInfo.SIMPLE_MATCH_ONLY, meta);
-            setIndexAnalyzer(Lucene.KEYWORD_ANALYZER);
-            this.ignoreAbove = Integer.MAX_VALUE;
-            this.nullValue = null;
-        }
-
-        public WildcardFieldType(String name, NamedAnalyzer normalizer, Builder builder) {
-            super(name, true, false, builder.hasDocValues.getValue(), TextSearchInfo.SIMPLE_MATCH_ONLY, builder.meta.getValue());
-            setIndexAnalyzer(normalizer);
-            this.ignoreAbove = builder.ignoreAbove.getValue();
-            this.nullValue = builder.nullValue.getValue();
-        }
-
-        @Override
-        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {
-            // Copied from KeywordFieldMapper.KeywordFieldType
-            if (format != null) {
-                throw new IllegalArgumentException("Field [" + name() + "] of type [" + typeName() + "] doesn't " + "support formats.");
-            }
-
-            if (hasDocValues() && searchLookup != null) {
-                return new DocValueFetcher(DocValueFormat.RAW, searchLookup.doc().getForField(this));
-            }
-
-            return sourceValueFetcher(context.sourcePath(name()), nullValue, ignoreAbove, normalizer(), name());
-        }
-
-        /**
-         * Returns a supplier of the {@link ValueFetcher} that {@link WildcardMatchingQuery} uses to verify candidate
-         * documents. It fetches the same values {@link #valueFetcher} would for a query-phase lookup, but resolves
-         * everything it needs from {@code context} eagerly so that the returned supplier retains only index-level
-         * state: an {@link IndexFieldData} (itself cached per field by the index) or the set of source paths.
-         * <p>
-         * This matters because a {@link WildcardMatchingQuery} can outlive the request that built it — Lucene's
-         * {@code LRUQueryCache} keeps it alive as a cache key — so it must not hold onto the {@link QueryShardContext}
-         * or its {@link SearchLookup}, which transitively reference the shard's {@code IndexSearcher} and segment
-         * readers. See <a href="https://github.com/opensearch-project/OpenSearch/issues/22419">issue 22419</a>.
-         */
-        Supplier<ValueFetcher> valueFetcherSupplier(QueryShardContext context) {
-            if (hasDocValues()) {
-                final IndexFieldData<?> fieldData = context.getForField(this);
-                return () -> new DocValueFetcher(DocValueFormat.RAW, fieldData);
-            }
-            // Bind every value the fetcher needs to a local so the lambda below captures no reference to this
-            // field type or to the query shard context.
-            final Set<String> sourcePaths = context.sourcePath(name());
-            final String nullValue = this.nullValue;
-            final int ignoreAbove = this.ignoreAbove;
-            final NamedAnalyzer normalizer = normalizer();
-            final String fieldName = name();
-            return () -> sourceValueFetcher(sourcePaths, nullValue, ignoreAbove, normalizer, fieldName);
-        }
-
-        // Copied from KeywordFieldMapper.KeywordFieldType. Static so that the returned fetcher captures only the
-        // arguments handed to it — see valueFetcherSupplier.
-        private static SourceValueFetcher sourceValueFetcher(
-            Set<String> sourcePaths,
-            String nullValue,
-            int ignoreAbove,
-            NamedAnalyzer normalizer,
-            String fieldName
-        ) {
-            return new SourceValueFetcher(sourcePaths, nullValue) {
-                @Override
-                protected String parseSourceValue(Object value) {
-                    String keywordValue = value.toString();
-                    if (keywordValue.length() > ignoreAbove) {
-                        return null;
-                    }
-
-                    if (normalizer == null) {
-                        return keywordValue;
-                    }
-
-                    try {
-                        return normalizeValue(normalizer, fieldName, keywordValue);
-                    } catch (IOException e) {
-                        throw new UncheckedIOException(e);
-                    }
-                }
-            };
-        }
-
-        @Override
-        public String typeName() {
-            return CONTENT_TYPE;
-        }
-
-        NamedAnalyzer normalizer() {
-            return indexAnalyzer();
-        }
-
-        @Override
-        public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {
-            failIfNoDocValues();
-            return new NonPruningSortedSetOrdinalsIndexFieldData.Builder(name(), CoreValuesSourceType.BYTES);
-        }
-
-        @Override
-        public Query fuzzyQuery(
-            Object value,
-            Fuzziness fuzziness,
-            int prefixLength,
-            int maxExpansions,
-            boolean transpositions,
-            MultiTermQuery.RewriteMethod method,
-            QueryShardContext context
-        ) {
-            // TODO: Not sure if we can reasonably describe a fuzzy query in terms of n-grams without exploding the cardinality
-            throw new IllegalArgumentException(
-                "Can only use fuzzy queries on keyword and text fields - not on [" + name() + "] which is of type [" + typeName() + "]"
-            );
-        }
-
-        @Override
-        public Query prefixQuery(String value, MultiTermQuery.RewriteMethod method, boolean caseInsensitive, QueryShardContext context) {
-            return wildcardQuery(value + "*", method, caseInsensitive, context);
-        }
-
-        @Override
-        public Query wildcardQuery(String value, MultiTermQuery.RewriteMethod method, boolean caseInsensitive, QueryShardContext context) {
-            NamedAnalyzer normalizer = normalizer();
-            if (normalizer != null) {
-                value = normalizeWildcardPattern(name(), value, normalizer);
-            }
-            final String finalValue;
-            if (caseInsensitive) {
-                // Use ROOT locale, as it seems to be consistent with AutomatonQueries.toCaseInsensitiveChar.
-                finalValue = value.toLowerCase(Locale.ROOT);
-            } else {
-                finalValue = value;
-            }
-            Predicate<String> matchPredicate;
-            Automaton automaton = WildcardQuery.toAutomaton(new Term(name(), finalValue), Operations.DEFAULT_DETERMINIZE_WORK_LIMIT);
-            CompiledAutomaton compiledAutomaton = new CompiledAutomaton(automaton);
-            if (compiledAutomaton.type == CompiledAutomaton.AUTOMATON_TYPE.SINGLE) {
-                // when type equals SINGLE, #compiledAutomaton.runAutomaton is null
-                matchPredicate = s -> {
-                    if (caseInsensitive) {
-                        s = s.toLowerCase(Locale.ROOT);
-                    }
-                    return s.equals(performEscape(finalValue, false));
-                };
-            } else if (compiledAutomaton.type == CompiledAutomaton.AUTOMATON_TYPE.ALL) {
-                return existsQuery(context);
-            } else if (compiledAutomaton.type == CompiledAutomaton.AUTOMATON_TYPE.NONE) {
-                return new MatchNoDocsQuery("Wildcard expression matches nothing");
-            } else {
-                matchPredicate = s -> {
-                    if (caseInsensitive) {
-                        s = s.toLowerCase(Locale.ROOT);
-                    }
-                    BytesRef valueBytes = BytesRefs.toBytesRef(s);
-                    return compiledAutomaton.runAutomaton.run(valueBytes.bytes, valueBytes.offset, valueBytes.length);
-                };
-            }
-
-            Set<String> requiredNGrams = getRequiredNGrams(finalValue, false);
-            Query approximation;
-            if (requiredNGrams.isEmpty()) {
-                // This only happens when all characters are wildcard characters (* or ?),
-                // or it's only contains sequential characters less than NGRAM_SIZE (which defaults to 3).
-                if (findNonWildcardSequence(value, 0) != value.length() || value.length() == 0 || value.contains("?")) {
-                    approximation = this.existsQuery(context);
-                } else {
-                    return existsQuery(context);
-                }
-            } else {
-                approximation = matchAllTermsQuery(name(), requiredNGrams, caseInsensitive);
-            }
-            return new WildcardMatchingQuery(
-                name(),
-                approximation,
-                matchPredicate,
-                value,
-                0,
-                caseInsensitive ? RegExp.ASCII_CASE_INSENSITIVE : 0,
-                context,
-                this
-            );
-        }
-
-        // Package-private for testing
-        static Set<String> getRequiredNGrams(String value, boolean regexpMode) {
-            Set<String> terms = new HashSet<>();
-
-            if (value.isEmpty()) {
-                return terms;
-            }
-
-            int pos = 0;
-            String rawSequence = null;
-            String currentSequence = null;
-            char[] buffer = new char[NGRAM_SIZE];
-            List<String> possiblePrefixTerms = new ArrayList<>();
-            if (!value.startsWith("?") && !value.startsWith("*")) {
-                // Can add prefix term
-                rawSequence = getNonWildcardSequence(value, 0);
-                currentSequence = performEscape(rawSequence, regexpMode);
-
-                // buffer[0] is automatically set to 0
-                Arrays.fill(buffer, (char) 0);
-                int startIdx = Math.max(NGRAM_SIZE - currentSequence.length(), 1);
-                for (int j = 0; j < currentSequence.length() && j < NGRAM_SIZE - 1; j++) {
-                    buffer[startIdx + j] = currentSequence.charAt(j);
-                }
-
-                terms.add(new String(buffer));
-            } else {
-                pos = findNonWildcardSequence(value, pos);
-                rawSequence = getNonWildcardSequence(value, pos);
-            }
-            while (pos < value.length()) {
-                boolean isEndOfValue = pos + rawSequence.length() == value.length();
-                currentSequence = performEscape(rawSequence, regexpMode);
-
-                if (currentSequence.length() >= NGRAM_SIZE) {
-                    for (int i = 0; i < currentSequence.length() - NGRAM_SIZE + 1; i++) {
-                        terms.add(currentSequence.substring(i, i + 3));
-                    }
-                } else if (isEndOfValue != true && currentSequence.isEmpty() == false) {
-                    possiblePrefixTerms.add(currentSequence);
-                }
-                if (isEndOfValue) {
-                    // This is the end of the input. We can attach a suffix anchor.
-                    // special case when we should generate '0xxxxxxx0', where we have (NGRAM_SIZE - 2) * x
-                    Arrays.fill(buffer, (char) 0);
-                    if (pos == 0 && currentSequence.length() == NGRAM_SIZE - 2) {
-                        for (int i = 0; i < currentSequence.length(); i++) {
-                            buffer[i + 1] = currentSequence.charAt(i);
-                        }
-                        terms.add(new String(buffer));
-                        Arrays.fill(buffer, (char) 0);
-                    }
-                    int rightStartIdx = NGRAM_SIZE - currentSequence.length() - 2;
-                    rightStartIdx = rightStartIdx < 0 ? NGRAM_SIZE - 2 : rightStartIdx;
-                    for (int j = 0; j < currentSequence.length() && j < NGRAM_SIZE - 1; j++) {
-                        buffer[rightStartIdx - j] = currentSequence.charAt(currentSequence.length() - j - 1);
-                    }
-                    terms.add(new String(buffer));
-                }
-                pos = findNonWildcardSequence(value, pos + rawSequence.length());
-                rawSequence = getNonWildcardSequence(value, pos);
-            }
-
-            if (terms.isEmpty()) {
-                // If there are 3-gram terms, keep the first phase selective with shorter prefix terms.
-                terms.addAll(possiblePrefixTerms);
-            }
-
-            return terms;
-        }
-
-        private static String getNonWildcardSequence(String value, int startFrom) {
-            int consecutiveBackslashes = 0;
-            for (int i = startFrom; i < value.length(); i++) {
-                char c = value.charAt(i);
-                if (c == '\\') {
-                    consecutiveBackslashes++;
-                } else {
-                    if ((c == '?' || c == '*') && consecutiveBackslashes % 2 == 0) {
-                        return value.substring(startFrom, i);
-                    }
-                    consecutiveBackslashes = 0;
-                }
-            }
-            // Made it to the end. No more wildcards.
-            return value.substring(startFrom);
-        }
-
-        private static int findNonWildcardSequence(String value, int startFrom) {
-            for (int i = startFrom; i < value.length(); i++) {
-                char c = value.charAt(i);
-                if (c != '?' && c != '*') {
-                    return i;
-                }
-            }
-            return value.length();
-        }
-
-        /**
-         * reversed process of quoteWildcard
-         * @param str target string
-         * @param regexpMode whether is used for regexp escape
-         * @return string before escaped
-         */
-        private static String performEscape(String str, boolean regexpMode) {
-            final StringBuilder sb = new StringBuilder();
-            final Set<Character> targetChars = regexpMode ? REGEXP_SPECIAL : WILDCARD_SPECIAL;
-
-            for (int i = 0; i < str.length(); i++) {
-                if (str.charAt(i) == '\\' && (i + 1) < str.length()) {
-                    char c = str.charAt(i + 1);
-                    if (targetChars.contains(c)) {
-                        i++;
-                    }
-                }
-                sb.append(str.charAt(i));
-            }
-            return sb.toString();
-        }
-
-        /**
-         * manually escape instead of call String.replace for better performance
-         * only for term query
-         * @param str target string
-         * @return escaped string
-         */
-        private static String quoteWildcard(String str) {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < str.length(); i++) {
-                if (WILDCARD_SPECIAL.contains(str.charAt(i))) {
-                    sb.append('\\');
-                }
-                sb.append(str.charAt(i));
-            }
-            return sb.toString();
-        }
-
-        @Override
-        public Query regexpQuery(
-            String value,
-            int syntaxFlags,
-            int matchFlags,
-            int maxDeterminizedStates,
-            MultiTermQuery.RewriteMethod method,
-            QueryShardContext context
-        ) {
-            NamedAnalyzer normalizer = normalizer();
-            final String finalValue = normalizer != null ? value = normalizer.normalize(name(), value).utf8ToString() : value;
-            final boolean caseInsensitive = matchFlags == RegExp.ASCII_CASE_INSENSITIVE;
-
-            RegExp regExp = new RegExp(finalValue, syntaxFlags, matchFlags);
-            Automaton automaton = Operations.determinize(regExp.toAutomaton(), Operations.DEFAULT_DETERMINIZE_WORK_LIMIT);
-            CompiledAutomaton compiledAutomaton = new CompiledAutomaton(automaton);
-
-            Predicate<String> regexpPredicate;
-            if (compiledAutomaton.type == CompiledAutomaton.AUTOMATON_TYPE.ALL) {
-                return existsQuery(context);
-            } else if (compiledAutomaton.type == CompiledAutomaton.AUTOMATON_TYPE.NONE) {
-                return new MatchNoDocsQuery("Regular expression matches nothing");
-            } else if (compiledAutomaton.type == CompiledAutomaton.AUTOMATON_TYPE.SINGLE) {
-                // when type equals SINGLE, #compiledAutomaton.runAutomaton is null
-                regexpPredicate = s -> {
-                    if (caseInsensitive) {
-                        s = s.toLowerCase(Locale.ROOT);
-                    }
-                    return s.equals(performEscape(finalValue, true));
-                };
-            } else {
-                regexpPredicate = s -> {
-                    BytesRef valueBytes = BytesRefs.toBytesRef(s);
-                    return compiledAutomaton.runAutomaton.run(valueBytes.bytes, valueBytes.offset, valueBytes.length);
-                };
-            }
-
-            List<String> possiblePrefixTerms = new ArrayList<>();
-            Query approximation = regexpToQuery(name(), regExp, caseInsensitive, possiblePrefixTerms);
-            if (approximation instanceof MatchAllDocsQuery) {
-                if (possiblePrefixTerms.isEmpty()) {
-                    approximation = existsQuery(context);
-                } else {
-                    String prefixTerm = possiblePrefixTerms.get(0);
-                    for (int i = 1; i < possiblePrefixTerms.size(); i++) {
-                        String candidate = possiblePrefixTerms.get(i);
-                        if (candidate.length() > prefixTerm.length()) {
-                            prefixTerm = candidate;
-                        }
-                    }
-                    if (caseInsensitive) {
-                        approximation = AutomatonQueries.caseInsensitivePrefixQuery(new Term(name(), prefixTerm));
-                    } else {
-                        approximation = new PrefixQuery(new Term(name(), prefixTerm));
-                    }
-                }
-            }
-            return new WildcardMatchingQuery(
-                name(),
-                approximation,
-                regexpPredicate,
-                "/" + finalValue + "/",
-                syntaxFlags,
-                matchFlags,
-                context,
-                this
-            );
-        }
-
-        /**
-         * Implement the match rules described in <a href="https://swtch.com/~rsc/regexp/regexp4.html">Regular Expression Matching with a Trigram Index</a>.
-         *
-         * @param fieldName name of the wildcard field
-         * @param regExp a parsed node in the {@link RegExp} tree
-         * @return a query that matches on the known required parts of the given regular expression
-         */
-        private static Query regexpToQuery(String fieldName, RegExp regExp, boolean caseInsensitive, List<String> possiblePrefixTerms) {
-            BooleanQuery query;
             if (Objects.requireNonNull(regExp.kind) == RegExp.Kind.REGEXP_UNION) {
-                List<Query> clauses = new ArrayList<>();
-                while (regExp.exp1.kind == RegExp.Kind.REGEXP_UNION) {
-                    clauses.add(regexpToQuery(fieldName, regExp.exp2, caseInsensitive, null));
-                    regExp = regExp.exp1;
+                BytesRef binaryValue = (BytesRef) value;
+        if (normalizer != null) {
+                "Can only use fuzzy queries on keyword and text fields - not on [" + name() + "] which is of type [" + typeName() + "]"
+        }
+                        return value.substring(startFrom, i);
+            return CONTENT_TYPE;
                 }
-                clauses.add(regexpToQuery(fieldName, regExp.exp2, caseInsensitive, null));
-                clauses.add(regexpToQuery(fieldName, regExp.exp1, caseInsensitive, null));
-                BooleanQuery.Builder builder = new BooleanQuery.Builder();
-                for (int i = clauses.size() - 1; i >= 0; i--) {
-                    Query clause = clauses.get(i);
-                    if (clause instanceof MatchAllDocsQuery) {
-                        return clause;
-                    }
-                    builder.add(clause, BooleanClause.Occur.SHOULD);
-                }
-                query = builder.build();
-            } else if (regExp.kind == RegExp.Kind.REGEXP_STRING) {
-                BooleanQuery.Builder builder = new BooleanQuery.Builder();
-                for (String string : getRequiredNGrams("*" + regExp.s + "*", true)) {
-                    if (string.length() == NGRAM_SIZE) {
-                        final Query subQuery;
-                        if (caseInsensitive) {
-                            subQuery = AutomatonQueries.caseInsensitiveTermQuery(new Term(fieldName, string));
-                        } else {
-                            subQuery = new TermQuery(new Term(fieldName, string));
-                        }
-                        builder.add(subQuery, BooleanClause.Occur.FILTER);
-                    } else if (possiblePrefixTerms != null) {
-                        assert string.length() < NGRAM_SIZE;
-                        possiblePrefixTerms.add(string);
-                    }
-                }
-                query = builder.build();
-            } else if (regExp.kind == RegExp.Kind.REGEXP_CONCATENATION) {
-                List<Query> clauses = new ArrayList<>();
-                while (regExp.exp1.kind == RegExp.Kind.REGEXP_CONCATENATION) {
-                    clauses.add(regexpToQuery(fieldName, regExp.exp2, caseInsensitive, possiblePrefixTerms));
-                    regExp = regExp.exp1;
-                }
-                clauses.add(regexpToQuery(fieldName, regExp.exp2, caseInsensitive, possiblePrefixTerms));
+import java.util.HashSet;
+                name,
+        // Copy relevant parameters from KeywordFieldMapper
+                rawSequence = getNonWildcardSequence(value, pos);
+         * {@code LRUQueryCache} keeps it alive as a cache key — so it must not hold onto the {@link QueryShardContext}
                 clauses.add(regexpToQuery(fieldName, regExp.exp1, caseInsensitive, possiblePrefixTerms));
-                BooleanQuery.Builder builder = new BooleanQuery.Builder();
-                for (int i = clauses.size() - 1; i >= 0; i--) {
-                    Query clause = clauses.get(i);
-                    if (!(clause instanceof MatchAllDocsQuery)) {
-                        builder.add(clause, BooleanClause.Occur.FILTER);
-                    }
-                }
-                query = builder.build();
-            } else if ((regExp.kind == RegExp.Kind.REGEXP_REPEAT_MIN || regExp.kind == RegExp.Kind.REGEXP_REPEAT_MINMAX)
-                && regExp.min > 0) {
-                    return regexpToQuery(fieldName, regExp.exp1, caseInsensitive, possiblePrefixTerms);
-                } else if (regExp.kind == RegExp.Kind.REGEXP_CHAR && possiblePrefixTerms != null) {
-                    possiblePrefixTerms.add(String.valueOf((char) regExp.c));
-                    return MatchAllDocsQuery.INSTANCE;
-                } else {
-                    return MatchAllDocsQuery.INSTANCE;
-                }
-            if (query.clauses().size() == 1) {
-                return query.iterator().next().query();
-            } else if (query.clauses().size() == 0) {
-                return MatchAllDocsQuery.INSTANCE;
+        public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
             }
-            return query;
-        }
-
-        @Override
-        public Query rangeQuery(Object lowerTerm, Object upperTerm, boolean includeLower, boolean includeUpper, QueryShardContext context) {
-            throw new UnsupportedOperationException("TODO");
-        }
-
-        @Override
-        public Query termQueryCaseInsensitive(Object value, QueryShardContext context) {
-            return wildcardQuery(quoteWildcard(BytesRefs.toString(value)), MultiTermQuery.CONSTANT_SCORE_REWRITE, true, context);
-        }
-
-        @Override
-        public Query termQuery(Object value, QueryShardContext context) {
-            return wildcardQuery(quoteWildcard(BytesRefs.toString(value)), MultiTermQuery.CONSTANT_SCORE_REWRITE, false, context);
-        }
-
-        @Override
-        public Query termsQuery(List<?> values, QueryShardContext context) {
-            BooleanQuery.Builder builder = new BooleanQuery.Builder();
-            Set<String> expectedValues = new HashSet<>();
-            StringBuilder pattern = new StringBuilder();
-            for (Object value : values) {
-                String stringVal = BytesRefs.toString(value);
-                builder.add(
-                    matchAllTermsQuery(name(), getRequiredNGrams(quoteWildcard(stringVal), false), false),
-                    BooleanClause.Occur.SHOULD
-                );
-                expectedValues.add(stringVal);
-                if (pattern.length() > 0) {
-                    pattern.append('|');
-                }
-                pattern.append(stringVal);
-            }
-            return new WildcardMatchingQuery(name(), builder.build(), expectedValues::contains, pattern.toString(), 0, 0, context, this);
-        }
-
-        private static BooleanQuery matchAllTermsQuery(String fieldName, Set<String> terms, boolean caseInsensitive) {
-            BooleanQuery.Builder matchAllTermsBuilder = new BooleanQuery.Builder();
-            Query query;
-            for (String term : terms) {
-                if (term.length() == NGRAM_SIZE) {
-                    if (caseInsensitive) {
-                        query = AutomatonQueries.caseInsensitiveTermQuery(new Term(fieldName, term));
-                    } else {
-                        query = new TermQuery(new Term(fieldName, term));
-                    }
-                } else {
-                    assert term.length() < NGRAM_SIZE;
-                    if (caseInsensitive) {
-                        query = AutomatonQueries.caseInsensitivePrefixQuery(new Term(fieldName, term));
-                    } else {
-                        query = new PrefixQuery(new Term(fieldName, term));
-                    }
-                }
-                matchAllTermsBuilder.add(query, BooleanClause.Occur.FILTER);
-            }
-            return matchAllTermsBuilder.build();
-        }
+            } else {
+import org.apache.lucene.search.ScoreMode;
+    @Override
+     * 1. Doc values must be enabled to derive the source, later we can add explicit stored field in case of
+        context.doc().add(new Field(fieldType().name(), tokenizer, FIELD_TYPE));
     }
-
+            setIndexAnalyzer(Lucene.KEYWORD_ANALYZER);
+        String value = parseWildcardValue(context);
+                String stringVal = BytesRefs.toString(value);
+     * <p>
+        tokenizer.setReader(new StringReader(value));
+            } else if (regExp.kind == RegExp.Kind.REGEXP_STRING) {
+                rawSequence = getNonWildcardSequence(value, 0);
+    @Override
+            } else if (query.clauses().size() == 0) {
+     *
+            if (hasDocValues()) {
+                        final Query subQuery;
+        public Query termQueryCaseInsensitive(Object value, QueryShardContext context) {
+                && Objects.equals(patternString, that.patternString);
+ * compatible open source license.
+        @Override
+                    if (caseInsensitive) {
+    private final String normalizerName;
+                        String candidate = possiblePrefixTerms.get(i);
+                        buffer[rightStartIdx - j] = currentSequence.charAt(currentSequence.length() - j - 1);
+                            buffer[i + 1] = currentSequence.charAt(i);
+        }
+            super(name);
+                    approximation = this.existsQuery(context);
+                    return MatchAllDocsQuery.INSTANCE;
+                                    return MATCH_COST_ESTIMATE;
+                            SourceLookup sourceLookup = new SourceLookup();
+        }, null) {
+        ) {
+        this.hasDocValues = builder.hasDocValues.getValue();
+     * ['e', 'n', 'e']
+    private final int ignoreAbove;
+            return "WildcardMatchingQuery(" + fieldName + ":\"" + patternString + "\")";
+                    if (caseInsensitive) {
+import org.opensearch.core.xcontent.XContentParser;
+            if (approximation instanceof MatchAllDocsQuery) {
+import org.apache.lucene.util.automaton.RegExp;
+            if (this == o) return true;
+                    builder.add(clause, BooleanClause.Occur.SHOULD);
+                                @Override
+        this.indexAnalyzers = builder.indexAnalyzers;
+import java.util.Locale;
+            if (context != null) {
+            if (rewriteFirstPhase != firstPhaseQuery) {
+                        assert string.length() < NGRAM_SIZE;
+        if (fieldType().hasDocValues()) {
+     * Implements the various query types over wildcard fields.
+            Query rewriteFirstPhase = firstPhaseQuery.rewrite(indexSearcher);
+                    Query clause = clauses.get(i);
+                regexpPredicate = s -> {
+import org.apache.lucene.search.BooleanQuery;
+                        for (int i = 0; i < currentSequence.length(); i++) {
+                    sb.append('\\');
+     *    derived source, so that we can always derive source even if doc values are disabled
+     * ['e', 0, 0]
+            '^',
+            char[] buffer = new char[NGRAM_SIZE];
+        }
+            }
+            this.ignoreAbove = Integer.MAX_VALUE;
+        WildcardFieldMapper.Builder normalizer(String normalizerName) {
+        if (context.externalValueSet()) {
+        @Override
+                                    for (Object value : values) {
+                boolean isEndOfValue = pos + rawSequence.length() == value.length();
+                    if (caseInsensitive) {
+    @Override
+                        terms.add(new String(buffer));
+            this.nullValue = null;
+    }
+                                @Override
+     * ['u','c','e']
+        this.ignoreAbove = builder.ignoreAbove.getValue();
+            '}',
+         * @return a query that matches on the known required parts of the given regular expression
+            }
+                    }
+                sb.append(str.charAt(i));
+import java.util.function.Predicate;
+                }
+                        public long cost() {
+                0,
+        }
+        }
+                // when type equals SINGLE, #compiledAutomaton.runAutomaton is null
+                    clauses.add(regexpToQuery(fieldName, regExp.exp2, caseInsensitive, possiblePrefixTerms));
+                    matchAllTermsQuery(name(), getRequiredNGrams(quoteWildcard(stringVal), false), false),
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
+            // field type or to the query shard context.
+            }
+            );
+     *    1. When using doc values, for multi value field, result would be deduplicated and in sorted order
+import org.apache.lucene.analysis.Tokenizer;
+                    regExp = regExp.exp1;
+            Integer.MAX_VALUE
+        private final int matchFlags;
+            String value,
+        return new Builder(simpleName(), indexAnalyzers).init(this);
+        public WildcardFieldMapper.Builder docValues(boolean hasDocValues) {
+        // convert to utf8 only once before feeding postings/dv/stored fields
+                    }
+import org.apache.lucene.search.Weight;
+            setIndexAnalyzer(normalizer);
+    protected String contentType() {
+                    Query clause = clauses.get(i);
+            for (int i = 0; i < str.length(); i++) {
+            if (requiredNGrams.isEmpty()) {
+        }
+        private static final Set<Character> WILDCARD_SPECIAL = Set.of('?', '*', '\\');
+        public void reset() throws IOException {
+            @Override
+            this.patternString = Objects.requireNonNull(patternString);
+import org.apache.lucene.search.MultiTermQuery;
+import org.opensearch.search.lookup.SourceLookup;
+                // Use ROOT locale, as it seems to be consistent with AutomatonQueries.toCaseInsensitiveChar.
+        MappedFieldType mappedFieldType,
+        private final Parameter<String> normalizer = Parameter.stringParam("normalizer", false, m -> toType(m).normalizerName, "default");
+            int syntaxFlags,
+     * [0, 'l', 'u']
+                matchPredicate,
+import java.util.Objects;
+        if (this.ignoreAbove != Integer.MAX_VALUE || !Objects.equals(this.normalizerName, "default")) {
+        }
+            '\\'
+import org.apache.lucene.search.ConstantScoreScorer;
+         * alone does not always pin down which documents the matcher accepts: a case-sensitive and a
+        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {
+        public WildcardFieldType(String name) {
+                value,
+            for (int i = startFrom; i < value.length(); i++) {
+        XContentParser parser = context.parser();
+                public boolean isCacheable(LeafReaderContext leafReaderContext) {
+                            }
+                    }
+        }
+                        terms.add(currentSequence.substring(i, i + 3));
+                    BooleanClause.Occur.SHOULD
+            this.ignoreAbove.setValue(ignoreAbove);
+                }
+        private final char[] buffer = new char[NGRAM_SIZE]; // Ring buffer for up to 3 chars
+                                return Long.MAX_VALUE;
+                    }
+        }
     /**
-     * Custom two-phase query type for queries over the wildcard field. The expected behavior is that a first-phase
-     * query provides the best possible filter over the indexed trigrams, while the second phase matcher eliminates
-     * false positives by evaluating the true field value.
-     */
-    static class WildcardMatchingQuery extends Query {
-        private static final long MATCH_COST_ESTIMATE = 1000L;
-
-        private final String fieldName;
-        private final Query firstPhaseQuery;
+                }
+                    String prefixTerm = possiblePrefixTerms.get(0);
+                value = normalizeWildcardPattern(name(), value, normalizer);
+     * Support:
+import org.opensearch.index.fielddata.IndexFieldData;
+            String rawSequence = null;
+            this.secondPhaseMatcher = secondPhaseMatcher;
+                        }
+            return terms;
+            }
+        }
+                            final ValueFetcher valueFetcher = valueFetcherSupplier.get();
+                query = builder.build();
         private final Predicate<String> secondPhaseMatcher;
-        private final String patternString; // For toString
+                matchFlags,
+         * Resolved from the {@link QueryShardContext} at construction time and {@code null} when the query was
+            m -> toType(m).ignoreAbove,
+            MultiTermQuery.RewriteMethod method,
+            }
+         * state: an {@link IndexFieldData} (itself cached per field by the index) or the set of source paths.
+     * Visible for testing.
+        // Copied from KeywordFieldMapper.KeywordFieldType. Static so that the returned fetcher captures only the
+                    char c = str.charAt(i + 1);
+                && Objects.equals(fieldName, that.fieldName)
+                    if (targetChars.contains(c)) {
+        public boolean equals(Object o) {
+            );
+        @Override
+import org.opensearch.search.lookup.SearchLookup;
+         * {@link #createWeight(IndexSearcher, ScoreMode, float)}.
+            value = normalizeValue(normalizer, name(), value);
+                if (pattern.length() > 0) {
+                        if (caseInsensitive) {
+                        }
+        /**
+                    } else {
+            this.valueFetcherSupplier = valueFetcherSupplier;
+        private static Query regexpToQuery(String fieldName, RegExp regExp, boolean caseInsensitive, List<String> possiblePrefixTerms) {
+    private final IndexAnalyzers indexAnalyzers;
+            throw new IllegalArgumentException(
+     * For example, given the string "lucene", output the following terms:
+                name(),
+        checkDocValuesForDerivedSource();
+                }
+         * cache answer one with the other's documents.
+                pattern.append(stringVal);
+            return wildcardQuery(quoteWildcard(BytesRefs.toString(value)), MultiTermQuery.CONSTANT_SCORE_REWRITE, true, context);
+                if (possiblePrefixTerms.isEmpty()) {
+            final String finalValue = normalizer != null ? value = normalizer.normalize(name(), value).utf8ToString() : value;
+                if (currentSequence.length() >= NGRAM_SIZE) {
+            int matchFlags,
+        }
+            return Arrays.asList(nullValue, ignoreAbove, normalizer, hasDocValues, meta);
+            }
+                currentSequence = performEscape(rawSequence, regexpMode);
+        ) {
+                        public Scorer get(long leadCost) throws IOException {
+                return FieldValueType.DOC_VALUES;
+                            Scorer approximateScorer = firstPhaseSupplier.get(leadCost);
+            "ignore_above",
+     * @opensearch.internal
+        return ignoreAbove;
+    ) {
+            String patternString,
+            this.nullValue.setValue(nullValue);
+                if (isEndOfValue) {
+        final BytesRef binaryValue = new BytesRef(value);
+     * ['c', 'e', 'n']
+         * @param regexpMode whether is used for regexp escape
+import org.apache.lucene.search.MatchNoDocsQuery;
+    }
+            '*',
+                    secondPhaseMatcher,
+        public Query termsQuery(List<?> values, QueryShardContext context) {
+        private static final Set<Character> REGEXP_SPECIAL = Set.of(
+            ']',
+    }
+        // ---------------------------------------------------------------------------------------------
+            RegExp regExp = new RegExp(finalValue, syntaxFlags, matchFlags);
+        private static String performEscape(String str, boolean regexpMode) {
+ * @opensearch.internal
+            this.secondPhaseMatcher = Objects.requireNonNull(secondPhaseMatcher);
+            '(',
+                List<Query> clauses = new ArrayList<>();
+import org.apache.lucene.search.Query;
+    }
+                } else {
+            Supplier<ValueFetcher> valueFetcherSupplier
+        Builder builder
+            Automaton automaton = WildcardQuery.toAutomaton(new Term(name(), finalValue), Operations.DEFAULT_DETERMINIZE_WORK_LIMIT);
+            true,
+        return CONTENT_TYPE;
+                approximation,
+            int pos = 0;
+        public String toString(String s) {
+                BooleanQuery.Builder builder = new BooleanQuery.Builder();
+            StringBuilder pattern = new StringBuilder();
+            Query query;
+            @Override
+                                            return true;
+                        if (candidate.length() > prefixTerm.length()) {
+        private static SourceValueFetcher sourceValueFetcher(
+                            TwoPhaseIterator twoPhaseIterator = new TwoPhaseIterator(approximation) {
+            int matchFlags,
+         *
+import org.opensearch.index.analysis.IndexAnalyzers;
+        public Builder(String name, IndexAnalyzers indexAnalyzers) {
+                "/" + finalValue + "/",
+            List<String> possiblePrefixTerms = new ArrayList<>();
+            this.fieldName = Objects.requireNonNull(fieldName);
+                "Unable to derive source for [" + name() + "] with " + "ignore_above and/or normalizer set"
+                }
+         * only for term query
+        } else {
+            MultiTermQuery.RewriteMethod method,
+                } else {
+        }
+        }
+                    Arrays.fill(buffer, (char) 0);
+            Set<String> sourcePaths,
+import org.apache.lucene.search.WildcardQuery;
+            );
+                    } else if (possiblePrefixTerms != null) {
+                has_next |= curChar != 0;
+     * Custom two-phase query type for queries over the wildcard field. The expected behavior is that a first-phase
+            '$',
+            int c = input.read();
+        }
+                    } else {
+        private final int ignoreAbove;
+        public Query wildcardQuery(String value, MultiTermQuery.RewriteMethod method, boolean caseInsensitive, QueryShardContext context) {
+    private static WildcardFieldMapper toType(FieldMapper in) {
+                                    return false;
+    static {
+            failIfNoDocValues();
+                    return regexpToQuery(fieldName, regExp.exp1, caseInsensitive, possiblePrefixTerms);
+            return indexAnalyzer();
+        public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {
+            return has_next;
+import org.apache.lucene.util.automaton.CompiledAutomaton;
+            return this;
+        public Query rewrite(IndexSearcher indexSearcher) throws IOException {
+            Query firstPhaseQuery,
+            '.',
+                if (term.length() == NGRAM_SIZE) {
+    public int ignoreAbove() {
+        public Query regexpQuery(
+     * <p>
+            for (int i = startFrom; i < value.length(); i++) {
+import java.util.List;
+            super(name, true, false, false, TextSearchInfo.SIMPLE_MATCH_ONLY, meta);
+                }
+                    return true;
+                protected String parseSourceValue(Object value) {
+        public WildcardFieldMapper build(BuilderContext context) {
+                terms.addAll(possiblePrefixTerms);
+ *
+                    syntaxFlags,
+                        return null;
+    }
+            for (String term : terms) {
+    public static final class Builder extends ParametrizedFieldMapper.Builder {
+                    return MatchAllDocsQuery.INSTANCE;
+                        s = s.toLowerCase(Locale.ROOT);
+        if (value == null || value.length() > ignoreAbove) {
+                && matchFlags == that.matchFlags
+     * ['l', 'u', 'c']
+                        builder.add(subQuery, BooleanClause.Occur.FILTER);
+import java.io.StringReader;
+                    }
+        }
+     * query provides the best possible filter over the indexed trigrams, while the second phase matcher eliminates
+                    regExp = regExp.exp1;
+        public int hashCode() {
+                charTermAttribute.buffer()[i] = curChar;
+        @Override
+     *    2. If "normalizer" is set in the field mapping, then also we won't support derived source, as with
+                    return s.equals(performEscape(finalValue, true));
+        private final Parameter<Integer> ignoreAbove = Parameter.intParam(
+                    } catch (IOException e) {
+            }
+                }
+                        query = new TermQuery(new Term(fieldName, term));
+                return terms;
+            int maxExpansions,
+                return () -> new DocValueFetcher(DocValueFormat.RAW, fieldData);
+            if (compiledAutomaton.type == CompiledAutomaton.AUTOMATON_TYPE.ALL) {
+                                        }
+            }
+            this.matchFlags = matchFlags;
+                clauses.add(regexpToQuery(fieldName, regExp.exp2, caseInsensitive, possiblePrefixTerms));
+            if (!value.startsWith("?") && !value.startsWith("*")) {
+                    if (clause instanceof MatchAllDocsQuery) {
+            } else {
+                    }
+                        }
+        protected List<Parameter<?>> getParameters() {
+    @Override
+         * {@link #equals(Object)} because the matcher itself is a lambda that cannot be compared, and the pattern
+        this.nullValue = builder.nullValue.getValue();
+                if (findNonWildcardSequence(value, 0) != value.length() || value.length() == 0 || value.contains("?")) {
+                }
+                        return null;
+                            long firstPhaseCost = firstPhaseSupplier.cost();
+/*
+                    }
+                @Override
+                        s = s.toLowerCase(Locale.ROOT);
+import java.util.Map;
+                    terms.add(new String(buffer));
+            };
+                            if (firstPhaseCost >= Long.MAX_VALUE / MATCH_COST_ESTIMATE) {
+            int syntaxFlags,
+import org.apache.lucene.index.LeafReaderContext;
+            this.firstPhaseQuery = firstPhaseQuery;
+     * The builder for the field mapper.
+                }
+                    }
+                        i++;
+                }
+        CopyTo copyTo,
+        }
+        @Override
+import java.util.Arrays;
+         */
+            } else if ((regExp.kind == RegExp.Kind.REGEXP_REPEAT_MIN || regExp.kind == RegExp.Kind.REGEXP_REPEAT_MINMAX)
+                    if (!(clause instanceof MatchAllDocsQuery)) {
+            return this;
+    protected void canDeriveSourceInternal() {
+            this.hasDocValues.setValue(hasDocValues);
+        public Builder(String name) {
+            } else {
+                while (regExp.exp1.kind == RegExp.Kind.REGEXP_UNION) {
+            };
+         * everything it needs from {@code context} eagerly so that the returned supplier retains only index-level
+                    return compiledAutomaton.runAutomaton.run(valueBytes.bytes, valueBytes.offset, valueBytes.length);
+                finalValue = value.toLowerCase(Locale.ROOT);
+            Set<String> requiredNGrams = getRequiredNGrams(finalValue, false);
+                            prefixTerm = candidate;
+         */
+            final String fieldName = name();
+     */
+import java.util.Collections;
+                buffer[i] = 0;
+        ) {
+            );
+                    }
+            NamedAnalyzer normalizer = normalizer();
+            Set<String> terms = new HashSet<>();
+         * @return string before escaped
+        private static int findNonWildcardSequence(String value, int startFrom) {
+        /**
+import org.opensearch.common.lucene.BytesRefs;
+import org.opensearch.common.unit.Fuzziness;
+            NamedAnalyzer normalizer,
+                approximation,
+                    return null;
+        NamedAnalyzer normalizer() {
+        }
+            }
+         * This matters because a {@link WildcardMatchingQuery} can outlive the request that built it — Lucene's
+            }
+            return sb.toString();
+                int startIdx = Math.max(NGRAM_SIZE - currentSequence.length(), 1);
+        }
+         * reversed process of quoteWildcard
+                    for (int j = 0; j < currentSequence.length() && j < NGRAM_SIZE - 1; j++) {
+                        approximation = new PrefixQuery(new Term(name(), prefixTerm));
+                Arrays.fill(buffer, (char) 0);
+            throw new UnsupportedOperationException(
+import org.apache.lucene.search.QueryVisitor;
+                char c = value.charAt(i);
+    /**
+            this.ignoreAbove = builder.ignoreAbove.getValue();
+                } else {
+    /**
+            );
+        public Query prefixQuery(String value, MultiTermQuery.RewriteMethod method, boolean caseInsensitive, QueryShardContext context) {
+            int ignoreAbove,
+                // Can add prefix term
+        private static final long MATCH_COST_ESTIMATE = 1000L;
+     * false positives by evaluating the true field value.
+        }
+            return new WildcardMatchingQuery(
+                    BytesRef valueBytes = BytesRefs.toBytesRef(s);
+                    buffer[startIdx + j] = currentSequence.charAt(j);
+        @Override
+                }
+    public static final class WildcardFieldType extends StringFieldType {
+        }
+         * @param fieldName name of the wildcard field
+                caseInsensitive ? RegExp.ASCII_CASE_INSENSITIVE : 0,
+    static final class WildcardFieldTokenizer extends Tokenizer {
+        ) {
+import org.apache.lucene.search.DocIdSetIterator;
+                    consecutiveBackslashes = 0;
+        }
+                name(),
+            } else {
+            final boolean caseInsensitive = matchFlags == RegExp.ASCII_CASE_INSENSITIVE;
+                            // A fresh SourceLookup and ValueFetcher per scorer: ValueFetcher.setNextReader and
+                this.valueFetcherSupplier = fieldType.valueFetcherSupplier(context);
+            this.nullValue = builder.nullValue.getValue();
+                            subQuery = new TermQuery(new Term(fieldName, string));
+ */
+        }
+                normalizer = indexAnalyzers.getNormalizer(normalizerName);
+            // Bind every value the fetcher needs to a local so the lambda below captures no reference to this
+                    String keywordValue = value.toString();
+            return wildcardQuery(quoteWildcard(BytesRefs.toString(value)), MultiTermQuery.CONSTANT_SCORE_REWRITE, false, context);
+            this.patternString = patternString;
+            final String nullValue = this.nullValue;
+import org.opensearch.index.fielddata.plain.NonPruningSortedSetOrdinalsIndexFieldData;
+            int consecutiveBackslashes = 0;
+                } else if (regExp.kind == RegExp.Kind.REGEXP_CHAR && possiblePrefixTerms != null) {
+            } else if (regExp.kind == RegExp.Kind.REGEXP_CONCATENATION) {
+            return new SourceValueFetcher(sourcePaths, nullValue) {
+            this(name, Collections.emptyMap());
+                );
+            Automaton automaton = Operations.determinize(regExp.toAutomaton(), Operations.DEFAULT_DETERMINIZE_WORK_LIMIT);
+                regexpPredicate = s -> {
+                                        if (secondPhaseMatcher.test(value.toString())) {
+                );
+            return new WildcardMatchingQuery(name(), builder.build(), expectedValues::contains, pattern.toString(), 0, 0, context, this);
+        String value = parseWildcardValue(context);
+                // or it's only contains sequential characters less than NGRAM_SIZE (which defaults to 3).
+public class WildcardFieldMapper extends ParametrizedFieldMapper {
+        }
+        }
+                    possiblePrefixTerms.add(String.valueOf((char) regExp.c));
+        context.documentInput().addField(fieldType(), value);
+            }
+                    return s.equals(performEscape(finalValue, false));
+        private final Query firstPhaseQuery;
+            }
+                    // resolves index-level data up front (see WildcardFieldType#valueFetcherSupplier), and equal
+                if (WILDCARD_SPECIAL.contains(str.charAt(i))) {
+                }
+                    }
+                for (String string : getRequiredNGrams("*" + regExp.s + "*", true)) {
+     */
+            WildcardMatchingQuery that = (WildcardMatchingQuery) o;
+    /**
+         * share the pattern string, yet match different documents. Treating those two as equal would let the query
+        /**
+                List<Query> clauses = new ArrayList<>();
+                multiFieldsBuilder.build(this, context),
+    private final boolean hasDocValues;
+                query = builder.build();
+                    };
+        }
+                            return new ConstantScoreScorer(score(), scoreMode, twoPhaseIterator);
+ *
+            '+',
+            BooleanQuery.Builder matchAllTermsBuilder = new BooleanQuery.Builder();
+        private final String fieldName;
+                if (value == null) {
+        }
+        if (value == null || value.length() > ignoreAbove) {
+         * built without one. Such a query can be compared, hashed and rewritten, but not searched: see
+        Tokenizer tokenizer = new WildcardFieldTokenizer();
+     * <p>
+            '[',
+                while (regExp.exp1.kind == RegExp.Kind.REGEXP_CONCATENATION) {
+        this.normalizerName = builder.normalizer.getValue();
+            public Object convert(Object value) {
+        @Override
+            return new NonPruningSortedSetOrdinalsIndexFieldData.Builder(name(), CoreValuesSourceType.BYTES);
+         */
+            String patternString,
+                } else {
+                    int rightStartIdx = NGRAM_SIZE - currentSequence.length() - 2;
+            NamedAnalyzer normalizer = Lucene.KEYWORD_ANALYZER;
+        private final Parameter<String> nullValue = Parameter.stringParam("null_value", false, m -> toType(m).nullValue, null)
+            }
+                // buffer[0] is automatically set to 0
+                            valueFetcher.setNextReader(context);
+        private static String quoteWildcard(String str) {
+        public void visit(QueryVisitor queryVisitor) {
+        private final Supplier<ValueFetcher> valueFetcherSupplier;
+import org.apache.lucene.index.IndexOptions;
+                    return existsQuery(context);
+         * documents. It fetches the same values {@link #valueFetcher} would for a query-phase lookup, but resolves
+        }
+        );
+                    patternString,
+                    return i;
+     *    1. If "ignore_above" is set in the field mapping, then we won't be supporting derived source for now,
+    public WildcardFieldType fieldType() {
+        private final Parameter<Boolean> hasDocValues = Parameter.docValuesParam(m -> toType(m).hasDocValues, true).alwaysSerialize();
+        }
+                    return compiledAutomaton.runAutomaton.run(valueBytes.bytes, valueBytes.offset, valueBytes.length);
+                    assert term.length() < NGRAM_SIZE;
+                    }
+            }
+            charTermAttribute.setLength(NGRAM_SIZE);
+                        s = s.toLowerCase(Locale.ROOT);
+package org.opensearch.index.mapper;
+import org.apache.lucene.search.BooleanClause;
+                    }
+                }
+import org.apache.lucene.util.automaton.Automaton;
+                                }
+                terms.add(new String(buffer));
+            }
+            String fieldName,
+        // Package-private for testing
+            this.matchFlags = matchFlags;
+            Set<String> expectedValues = new HashSet<>();
+            String normalizerName = normalizer.getValue();
+     * Tokenizer to emit tokens to support wildcard first-phase matching.
+import java.io.IOException;
+            int syntaxFlags,
+import org.opensearch.common.lucene.Lucene;
+                query = builder.build();
+        private final int syntaxFlags;
+            ')',
+            return Objects.hash(fieldName, firstPhaseQuery, patternString, syntaxFlags, matchFlags);
+            } else if (compiledAutomaton.type == CompiledAutomaton.AUTOMATON_TYPE.NONE) {
+            this.syntaxFlags = syntaxFlags;
+    }
+            return this;
+         * Implement the match rules described in <a href="https://swtch.com/~rsc/regexp/regexp4.html">Regular Expression Matching with a Trigram Index</a>.
+import org.opensearch.search.DocValueFormat;
+            if (caseInsensitive) {
+        return new DerivedFieldGenerator(mappedFieldType, new SortedSetDocValuesFetcher(mappedFieldType, simpleName()) {
+     * ['n', 'e', 0]
+        public Query rangeQuery(Object lowerTerm, Object upperTerm, boolean includeLower, boolean includeUpper, QueryShardContext context) {
+                final IndexFieldData<?> fieldData = context.getForField(this);
+                return new DocValueFetcher(DocValueFormat.RAW, searchLookup.doc().getForField(this));
+                    if (keywordValue.length() > ignoreAbove) {
+        super(simpleName, mappedFieldType, multiFields, copyTo);
+        public Query fuzzyQuery(
+                );
+            firstPhaseQuery.visit(queryVisitor);
+                } else {
+                    consecutiveBackslashes++;
+            return sourceValueFetcher(context.sourcePath(name()), nullValue, ignoreAbove, normalizer(), name());
+        @Override
+import org.apache.lucene.search.ConstantScoreWeight;
+    }
+                if (c == '\\') {
+                // This only happens when all characters are wildcard characters (* or ?),
+            this.syntaxFlags = syntaxFlags;
+            } else {
+                rawSequence = getNonWildcardSequence(value, pos);
+                        query = AutomatonQueries.caseInsensitivePrefixQuery(new Term(fieldName, term));
+                        }
+            QueryShardContext context
+     */
+        FIELD_TYPE.setTokenized(true);
+            }
+ * SPDX-License-Identifier: Apache-2.0
+            if ("default".equals(normalizerName) == false) {
+            }
+        return parser.textOrNull();
+            if (compiledAutomaton.type == CompiledAutomaton.AUTOMATON_TYPE.SINGLE) {
+            for (int i = 0; i < NGRAM_SIZE; i++) {
+    }
+        private static String getNonWildcardSequence(String value, int startFrom) {
+                char curChar = buffer[(offset + i) % NGRAM_SIZE];
+         * case-insensitive regexp {@code a|b}, for instance, both approximate with the field's exists query and
+                copyTo.build(),
+        private final String nullValue;
+            return () -> sourceValueFetcher(sourcePaths, nullValue, ignoreAbove, normalizer, fieldName);
+                if (str.charAt(i) == '\\' && (i + 1) < str.length()) {
+        @Override
+            if (o == null || getClass() != o.getClass()) return false;
+                        + ": the query was built without a QueryShardContext, so field values cannot be fetched to verify candidates"
+                    }
+            }
+        FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
+        }
+            this.normalizer.setValue(normalizerName);
+import org.apache.lucene.index.Term;
+            return secondPhaseMatcher;
+                    valueFetcherSupplier
+        private final IndexAnalyzers indexAnalyzers;
+         * @param str target string
+    }
+                }
+                createFieldNamesField(context);
+                return binaryValue.utf8ToString();
+            this.fieldName = fieldName;
+                        builder.add(clause, BooleanClause.Occur.FILTER);
+                        }
+                    if (string.length() == NGRAM_SIZE) {
+    private static final FieldType FIELD_TYPE = new FieldType();
+         * manually escape instead of call String.replace for better performance
         /**
          * {@link RegExp} syntax and match flags the {@link #secondPhaseMatcher} was compiled with. They take part in
-         * {@link #equals(Object)} because the matcher itself is a lambda that cannot be compared, and the pattern
-         * alone does not always pin down which documents the matcher accepts: a case-sensitive and a
-         * case-insensitive regexp {@code a|b}, for instance, both approximate with the field's exists query and
-         * share the pattern string, yet match different documents. Treating those two as equal would let the query
-         * cache answer one with the other's documents.
-         */
-        private final int syntaxFlags;
-        private final int matchFlags;
-        /**
-         * Resolved from the {@link QueryShardContext} at construction time and {@code null} when the query was
-         * built without one. Such a query can be compared, hashed and rewritten, but not searched: see
-         * {@link #createWeight(IndexSearcher, ScoreMode, float)}.
-         */
-        private final Supplier<ValueFetcher> valueFetcherSupplier;
-
-        public WildcardMatchingQuery(
-            String fieldName,
-            Query firstPhaseQuery,
-            Predicate<String> secondPhaseMatcher,
-            String patternString,
-            int syntaxFlags,
-            int matchFlags,
-            QueryShardContext context,
-            WildcardFieldType fieldType
-        ) {
-            this.fieldName = Objects.requireNonNull(fieldName);
-            this.firstPhaseQuery = Objects.requireNonNull(firstPhaseQuery);
-            this.secondPhaseMatcher = Objects.requireNonNull(secondPhaseMatcher);
-            this.patternString = Objects.requireNonNull(patternString);
-            this.syntaxFlags = syntaxFlags;
-            this.matchFlags = matchFlags;
-            if (context != null) {
-                this.valueFetcherSupplier = fieldType.valueFetcherSupplier(context);
-            } else {
-                this.valueFetcherSupplier = null;
-            }
-        }
-
-        private WildcardMatchingQuery(
-            String fieldName,
-            Query firstPhaseQuery,
-            Predicate<String> secondPhaseMatcher,
-            String patternString,
-            int syntaxFlags,
-            int matchFlags,
-            Supplier<ValueFetcher> valueFetcherSupplier
-        ) {
-            this.fieldName = fieldName;
-            this.firstPhaseQuery = firstPhaseQuery;
-            this.secondPhaseMatcher = secondPhaseMatcher;
-            this.patternString = patternString;
-            this.syntaxFlags = syntaxFlags;
-            this.matchFlags = matchFlags;
-            this.valueFetcherSupplier = valueFetcherSupplier;
-        }
-
+            final Set<Character> targetChars = regexpMode ? REGEXP_SPECIAL : WILDCARD_SPECIAL;
+                char c = value.charAt(i);
         @Override
-        public String toString(String s) {
-            return "WildcardMatchingQuery(" + fieldName + ":\"" + patternString + "\")";
-        }
-
-        @Override
-        public void visit(QueryVisitor queryVisitor) {
-            firstPhaseQuery.visit(queryVisitor);
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            WildcardMatchingQuery that = (WildcardMatchingQuery) o;
-            return syntaxFlags == that.syntaxFlags
-                && matchFlags == that.matchFlags
-                && Objects.equals(fieldName, that.fieldName)
-                && Objects.equals(firstPhaseQuery, that.firstPhaseQuery)
-                && Objects.equals(patternString, that.patternString);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(fieldName, firstPhaseQuery, patternString, syntaxFlags, matchFlags);
-        }
-
-        @Override
-        public Query rewrite(IndexSearcher indexSearcher) throws IOException {
-            Query rewriteFirstPhase = firstPhaseQuery.rewrite(indexSearcher);
-            if (rewriteFirstPhase != firstPhaseQuery) {
+                clauses.add(regexpToQuery(fieldName, regExp.exp2, caseInsensitive, null));
+                pos = findNonWildcardSequence(value, pos + rawSequence.length());
                 return new WildcardMatchingQuery(
-                    fieldName,
-                    rewriteFirstPhase,
-                    secondPhaseMatcher,
-                    patternString,
-                    syntaxFlags,
-                    matchFlags,
-                    valueFetcherSupplier
-                );
-            }
-            return this;
         }
-
-        @Override
-        public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
-            if (valueFetcherSupplier == null) {
-                throw new IllegalStateException(
-                    "Cannot search "
-                        + this
-                        + ": the query was built without a QueryShardContext, so field values cannot be fetched to verify candidates"
-                );
-            }
-            Weight firstPhaseWeight = firstPhaseQuery.createWeight(searcher, scoreMode, boost);
-            return new ConstantScoreWeight(this, boost) {
-                @Override
-                public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
-                    ScorerSupplier firstPhaseSupplier = firstPhaseWeight.scorerSupplier(context);
-                    if (firstPhaseSupplier == null) {
-                        return null;
+            .acceptsNull();
                     }
-                    return new ScorerSupplier() {
-                        @Override
-                        public Scorer get(long leadCost) throws IOException {
-                            Scorer approximateScorer = firstPhaseSupplier.get(leadCost);
-                            DocIdSetIterator approximation = approximateScorer.iterator();
-                            // A fresh SourceLookup and ValueFetcher per scorer: ValueFetcher.setNextReader and
-                            // SourceLookup are not thread safe, and a scorer is confined to one slice.
-                            SourceLookup sourceLookup = new SourceLookup();
-                            final ValueFetcher valueFetcher = valueFetcherSupplier.get();
-                            valueFetcher.setNextReader(context);
-
-                            TwoPhaseIterator twoPhaseIterator = new TwoPhaseIterator(approximation) {
-                                @Override
-                                public boolean matches() throws IOException {
-                                    sourceLookup.setSegmentAndDocument(context, approximation.docID());
-                                    List<?> values = valueFetcher.fetchValues(sourceLookup);
-                                    for (Object value : values) {
-                                        if (secondPhaseMatcher.test(value.toString())) {
-                                            return true;
-                                        }
-                                    }
-                                    return false;
-                                }
-
-                                @Override
-                                public float matchCost() {
-                                    return MATCH_COST_ESTIMATE;
-                                }
-                            };
-                            return new ConstantScoreScorer(score(), scoreMode, twoPhaseIterator);
-                        }
-
-                        @Override
-                        public long cost() {
-                            long firstPhaseCost = firstPhaseSupplier.cost();
-                            if (firstPhaseCost >= Long.MAX_VALUE / MATCH_COST_ESTIMATE) {
-                                return Long.MAX_VALUE;
-                            }
-                            return firstPhaseCost * MATCH_COST_ESTIMATE;
-                        }
-                    };
-                }
-
-                @Override
-                public boolean isCacheable(LeafReaderContext leafReaderContext) {
-                    // Safe because the query holds no request- or shard-scoped state: the value fetcher supplier
-                    // resolves index-level data up front (see WildcardFieldType#valueFetcherSupplier), and equal
-                    // queries select the same documents on a given segment (see #equals). Segments are immutable, so
-                    // a cached bitset stays valid for the life of the cache entry.
-                    return true;
-                }
-            };
-        }
-
-        // ---------------------------------------------------------------------------------------------
-        // Visible for testing only. Nothing below is used by production code.
-        // ---------------------------------------------------------------------------------------------
-
-        Predicate<String> getSecondPhaseMatcher() {
-            return secondPhaseMatcher;
-        }
-    }
-
-    @Override
-    public WildcardFieldType fieldType() {
-        return (WildcardFieldType) super.fieldType();
-    }
-
-    @Override
-    protected String contentType() {
-        return CONTENT_TYPE;
-    }
-
-    @Override
-    public ParametrizedFieldMapper.Builder getMergeBuilder() {
-        return new Builder(simpleName(), indexAnalyzers).init(this);
-    }
-
-    private static WildcardFieldMapper toType(FieldMapper in) {
-        return (WildcardFieldMapper) in;
-    }
-
-    @Override
-    protected void canDeriveSourceInternal() {
-        if (this.ignoreAbove != Integer.MAX_VALUE || !Objects.equals(this.normalizerName, "default")) {
-            throw new UnsupportedOperationException(
-                "Unable to derive source for [" + name() + "] with " + "ignore_above and/or normalizer set"
-            );
-        }
-        checkDocValuesForDerivedSource();
-    }
-
-    /**
-     * 1. Doc values must be enabled to derive the source, later we can add explicit stored field in case of
-     *    derived source, so that we can always derive source even if doc values are disabled
-     * <p>
-     * Support:
-     *    1. If "ignore_above" is set in the field mapping, then we won't be supporting derived source for now,
-     *       considering for these cases we will need to have explicit stored field.
-     *    2. If "normalizer" is set in the field mapping, then also we won't support derived source, as with
-     *       normalizer it is hard to regenerate original source
-     * <p>
-     * Considerations:
-     *    1. When using doc values, for multi value field, result would be deduplicated and in sorted order
-     */
-    @Override
-    protected DerivedFieldGenerator derivedFieldGenerator() {
-        return new DerivedFieldGenerator(mappedFieldType, new SortedSetDocValuesFetcher(mappedFieldType, simpleName()) {
-            @Override
-            public Object convert(Object value) {
-                if (value == null) {
-                    return null;
-                }
-                BytesRef binaryValue = (BytesRef) value;
-                return binaryValue.utf8ToString();
-            }
-        }, null) {
-            @Override
-            public FieldValueType getDerivedFieldPreference() {
-                return FieldValueType.DOC_VALUES;
-            }
+                        return normalizeValue(normalizer, fieldName, keywordValue);
         };
-    }
+                matchPredicate = s -> {
+                                    List<?> values = valueFetcher.fetchValues(sourceLookup);
+         */
+            }
+            boolean has_next = false;
+                return MatchAllDocsQuery.INSTANCE;
+         * <p>
+        @Override
+/**
+                        + this
+            this.indexAnalyzers = indexAnalyzers;
+                            };
+            return this;
+        public Query termQuery(Object value, QueryShardContext context) {
+                @Override
+        public WildcardFieldMapper.Builder ignoreAbove(int ignoreAbove) {
+        }
+import org.apache.lucene.util.BytesRef;
+     */
+            }
+                                    sourceLookup.setSegmentAndDocument(context, approximation.docID());
+                for (int i = clauses.size() - 1; i >= 0; i--) {
+            Predicate<String> matchPredicate;
+                for (int i = clauses.size() - 1; i >= 0; i--) {
+                approximation = matchAllTermsQuery(name(), requiredNGrams, caseInsensitive);
+        // Visible for testing only. Nothing below is used by production code.
+            for (int i = 0; i < str.length(); i++) {
+    static class WildcardMatchingQuery extends Query {
+import org.opensearch.common.lucene.search.AutomatonQueries;
+        }
+     * Will emit all substrings of only 3, with 0-valued anchors for the prefix/suffix.
+import java.util.ArrayList;
+        NamedAnalyzer normalizer = fieldType().normalizer();
+import org.apache.lucene.document.Field;
+                                }
+            return syntaxFlags == that.syntaxFlags
+        @Override
+        @Override
+                            DocIdSetIterator approximation = approximateScorer.iterator();
+            return;
+                        return keywordValue;
+                        query = AutomatonQueries.caseInsensitiveTermQuery(new Term(fieldName, term));
+                        query = new PrefixQuery(new Term(fieldName, term));
 }
+                    matchFlags,
+import org.apache.lucene.search.MatchAllDocsQuery;
+            return nullValue;
+                    ScorerSupplier firstPhaseSupplier = firstPhaseWeight.scorerSupplier(context);
+    }
+                    BytesRef valueBytes = BytesRefs.toBytesRef(s);
+            this.firstPhaseQuery = Objects.requireNonNull(firstPhaseQuery);
+            buffer[offset++ % NGRAM_SIZE] = (char) c;
+                    rewriteFirstPhase,
+            '/',
+                return new MatchNoDocsQuery("Wildcard expression matches nothing");
+                finalValue = value;
+                new WildcardFieldType(context.path().pathAsText(name), normalizer, this),
+         */
+    public static final int NGRAM_SIZE = 3;
+            if (format != null) {
+            int maxDeterminizedStates,
+     * [0, 0, 'l']
+        }
+            BooleanQuery query;
+        MultiFields multiFields,
+import org.opensearch.index.query.QueryShardContext;
+        }
+                        approximation = AutomatonQueries.caseInsensitivePrefixQuery(new Term(name(), prefixTerm));
+                regexpPredicate,
+                        throw new UncheckedIOException(e);
+            return context.externalValue().toString();
+            final StringBuilder sb = new StringBuilder();
+ * The OpenSearch Contributors require contributions made to
+            this(name, null);
+            Predicate<String> regexpPredicate;
+                            return firstPhaseCost * MATCH_COST_ESTIMATE;
+            BooleanQuery.Builder builder = new BooleanQuery.Builder();
+import java.util.Set;
+            Query approximation;
+        @Override
+            return value.length();
+                return query.iterator().next().query();
+        }
+        );
+        }
+                                    }
+import static org.opensearch.index.mapper.KeywordFieldMapper.normalizeValue;
+        public WildcardFieldType(String name, Map<String, String> meta) {
+            } else if (compiledAutomaton.type == CompiledAutomaton.AUTOMATON_TYPE.ALL) {
+            '?',
+            // Copied from KeywordFieldMapper.KeywordFieldType
+            '{',
+            String currentSequence = null;
+                }
+        String simpleName,
+ * Mapper for the "wildcard" field type, which supports (relatively) efficient matching by wildcard, prefix, and regexp
+                            subQuery = AutomatonQueries.caseInsensitiveTermQuery(new Term(fieldName, string));
+    }
+    public static final TypeParser PARSER = new TypeParser((n, c) -> new WildcardFieldMapper.Builder(n, c.getIndexAnalyzers()));
+        @Override
+            return wildcardQuery(value + "*", method, caseInsensitive, context);
+                    possiblePrefixTerms.add(currentSequence);
+            boolean transpositions,
+                    // a cached bitset stays valid for the life of the cache entry.
+        public WildcardFieldType(String name, NamedAnalyzer normalizer, Builder builder) {
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
+        /**
+        @Override
+            }
+            List<String> possiblePrefixTerms = new ArrayList<>();
+                throw new IllegalArgumentException("Field [" + name() + "] of type [" + typeName() + "] doesn't " + "support formats.");
+                    if (caseInsensitive) {
+            for (int i = 0; i < NGRAM_SIZE - 1; i++) {
+        FIELD_TYPE.setStored(false);
+                    rightStartIdx = rightStartIdx < 0 ? NGRAM_SIZE - 2 : rightStartIdx;
+            }
+            WildcardFieldType fieldType
+            return matchAllTermsBuilder.build();
+                    if (normalizer == null) {
+import org.apache.lucene.search.TermQuery;
+         * readers. See <a href="https://github.com/opensearch-project/OpenSearch/issues/22419">issue 22419</a>.
+                clauses.add(regexpToQuery(fieldName, regExp.exp1, caseInsensitive, null));
+                syntaxFlags,
+     */
+        }
+        }
+                        Arrays.fill(buffer, (char) 0);
+            if (fieldType().hasDocValues() == false) {
+            Fuzziness fuzziness,
+                        @Override
+    protected void parseCreateFieldForPluggableFormat(ParseContext context) throws IOException {
+            NamedAnalyzer normalizer = normalizer();
+                    for (int i = 0; i < currentSequence.length() - NGRAM_SIZE + 1; i++) {
+            if (value.isEmpty()) {
+                }
+                throw new IllegalStateException(
+            return new WildcardFieldMapper(
+            return;
+            Weight firstPhaseWeight = firstPhaseQuery.createWeight(searcher, scoreMode, boost);
+                if (c != '?' && c != '*') {
+                pos = findNonWildcardSequence(value, pos);
+        }
+        public String typeName() {
+                    // special case when we should generate '0xxxxxxx0', where we have (NGRAM_SIZE - 2) * x
+                    if (firstPhaseSupplier == null) {
+        }
+            if (hasDocValues() && searchLookup != null) {
+                assert indexAnalyzers != null;
+            Predicate<String> secondPhaseMatcher,
+            while (pos < value.length()) {
+                    } else {
+            final Set<String> sourcePaths = context.sourcePath(name());
+        private static BooleanQuery matchAllTermsQuery(String fieldName, Set<String> terms, boolean caseInsensitive) {
+            final int ignoreAbove = this.ignoreAbove;
+    protected WildcardFieldMapper(
+        ) {
+        }
+                context,
+            }
+        private final Parameter<Map<String, String>> meta = Parameter.metaParam();
+                };
+            return new ConstantScoreWeight(this, boost) {
+                context,
+    }
+            return query;
+    protected DerivedFieldGenerator derivedFieldGenerator() {
+        @Override
+                    "Cannot search "
+                this.valueFetcherSupplier = null;
+        @Override
+        FIELD_TYPE.freeze();
+            Predicate<String> secondPhaseMatcher,
+                        @Override
+                    fieldName,
+    public ParametrizedFieldMapper.Builder getMergeBuilder() {
+        return (WildcardFieldType) super.fieldType();
+            } else {
+                for (int j = 0; j < currentSequence.length() && j < NGRAM_SIZE - 1; j++) {
+            c = c == -1 ? 0 : c;
+import org.apache.lucene.search.IndexSearcher;
+            } else if (compiledAutomaton.type == CompiledAutomaton.AUTOMATON_TYPE.NONE) {
+         */
+                        possiblePrefixTerms.add(string);
+                BooleanQuery.Builder builder = new BooleanQuery.Builder();
+            }
+        }
+        // ---------------------------------------------------------------------------------------------
+            super.reset();
+            return this;
+                return new MatchNoDocsQuery("Regular expression matches nothing");
+                this
+                };
+            String fieldName,
+            '|',
+            String nullValue,
+                    }
+        }
+            }
+         * Returns a supplier of the {@link ValueFetcher} that {@link WildcardMatchingQuery} uses to verify candidate
+    protected void parseCreateField(ParseContext context) throws IOException {
+                    pattern.append('|');
+        WildcardFieldMapper.Builder nullValue(String nullValue) {
+            }
+                    // queries select the same documents on a given segment (see #equals). Segments are immutable, so
+                sb.append(str.charAt(i));
+                }
+        private int offset = NGRAM_SIZE - 1; // next position in buffer to store next input char
+                    }
+import org.apache.lucene.document.FieldType;
+                this
+        static Set<String> getRequiredNGrams(String value, boolean regexpMode) {
+        FIELD_TYPE.setOmitNorms(true);
+import org.apache.lucene.search.Scorer;
+    @Override
+         * @param str target string
+            if (terms.isEmpty()) {
+                    if (pos == 0 && currentSequence.length() == NGRAM_SIZE - 2) {
+                                public float matchCost() {
+import java.util.function.Supplier;
+                }
+     * Considerations:
+    }
+        private WildcardMatchingQuery(
+                    // Safe because the query holds no request- or shard-scoped state: the value fetcher supplier
+     *       considering for these cases we will need to have explicit stored field.
+            Object value,
+            int prefixLength,
+            CompiledAutomaton compiledAutomaton = new CompiledAutomaton(automaton);
+                    approximation = existsQuery(context);
+            final NamedAnalyzer normalizer = normalizer();
+    /**
+                public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
+                } else if (isEndOfValue != true && currentSequence.isEmpty() == false) {
+     *       normalizer it is hard to regenerate original source
+         * @param regExp a parsed node in the {@link RegExp} tree
+                    return new ScorerSupplier() {
+import org.apache.lucene.search.TwoPhaseIterator;
+                    }
+        public WildcardMatchingQuery(
+            QueryShardContext context,
+        }
+                // when type equals SINGLE, #compiledAutomaton.runAutomaton is null
+            StringBuilder sb = new StringBuilder();
+                    try {
+                }
+    }
+                                public boolean matches() throws IOException {
+        /**
+import org.opensearch.index.analysis.NamedAnalyzer;
+        }
+            for (Object value : values) {
+     * <p>
+        public boolean incrementToken() throws IOException {
+            // Made it to the end. No more wildcards.
+                this
+            final String finalValue;
+                matchAllTermsBuilder.add(query, BooleanClause.Occur.FILTER);
+        Predicate<String> getSecondPhaseMatcher() {
+            public FieldValueType getDerivedFieldPreference() {
+        if (parser.currentToken() == XContentParser.Token.VALUE_NULL) {
+     * <p>
+ * queries. It's not really a "full-text" field type, but rather an "unstructured string" field type.
+ * this file be licensed under the Apache-2.0 license or a
+                && regExp.min > 0) {
+                    if (caseInsensitive) {
+            return sb.toString();
+                    if (caseInsensitive) {
+        Supplier<ValueFetcher> valueFetcherSupplier(QueryShardContext context) {
+                currentSequence = performEscape(rawSequence, regexpMode);
+        }
+                builder.add(
+            // TODO: Not sure if we can reasonably describe a fuzzy query in terms of n-grams without exploding the cardinality
+            if (valueFetcherSupplier == null) {
+            return value.substring(startFrom);
+                expectedValues.add(stringVal);
+            if (query.clauses().size() == 1) {
+        @Override
+import org.apache.lucene.search.ScorerSupplier;
+        private final CharTermAttribute charTermAttribute = addAttribute(CharTermAttribute.class);
+                    if ((c == '?' || c == '*') && consecutiveBackslashes % 2 == 0) {
+ */
+            int matchFlags,
+            }
+    @Override
+            if (normalizer != null) {
+import org.apache.lucene.search.PrefixQuery;
+        @Override
+            } else if (compiledAutomaton.type == CompiledAutomaton.AUTOMATON_TYPE.SINGLE) {
+            throw new UnsupportedOperationException("TODO");
+            context.doc().add(new SortedSetDocValuesField(fieldType().name(), binaryValue));
+            CompiledAutomaton compiledAutomaton = new CompiledAutomaton(automaton);
+        }
+                    clauses.add(regexpToQuery(fieldName, regExp.exp2, caseInsensitive, null));
+         * @return escaped string
+import java.io.UncheckedIOException;
+                    }
+        }
+import org.apache.lucene.document.SortedSetDocValuesField;
+                @Override
+    }
+                    for (int i = 1; i < possiblePrefixTerms.size(); i++) {
+        }
+                BooleanQuery.Builder builder = new BooleanQuery.Builder();
+                };
+            Query firstPhaseQuery,
+                // If there are 3-gram terms, keep the first phase selective with shorter prefix terms.
+                && Objects.equals(firstPhaseQuery, that.firstPhaseQuery)
+import org.apache.lucene.util.automaton.Operations;
+    private String parseWildcardValue(ParseContext context) throws IOException {
+        // arguments handed to it — see valueFetcherSupplier.
+                            // SourceLookup are not thread safe, and a scorer is confined to one slice.
+    @Override
+                };
+        }
+            String fieldName
+                return existsQuery(context);
+        @Override
+            }
+            QueryShardContext context
+     * <p>
+         * or its {@link SearchLookup}, which transitively reference the shard's {@code IndexSearcher} and segment
+            super(name, true, false, builder.hasDocValues.getValue(), TextSearchInfo.SIMPLE_MATCH_ONLY, builder.meta.getValue());
+                return existsQuery(context);
+    private final String nullValue;
+    public static final String CONTENT_TYPE = "wildcard";
+            Query approximation = regexpToQuery(name(), regExp, caseInsensitive, possiblePrefixTerms);
+        return (WildcardFieldMapper) in;
+                        return clause;
+                    }
+            return new WildcardMatchingQuery(
+        private final String patternString; // For toString
+                        } else {
+                matchPredicate = s -> {
+                }
+                    // This is the end of the input. We can attach a suffix anchor.

@@ -1,338 +1,307 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.histogram;
-
-import org.opensearch.common.Rounding;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.breaker.CircuitBreakingException;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.aggregations.MultiBucketConsumerService;
-import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;
-import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
-import org.opensearch.test.InternalMultiBucketAggregationTestCase;
-
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
-
-import org.mockito.Mockito;
-
-import static org.opensearch.common.unit.TimeValue.timeValueHours;
-import static org.opensearch.common.unit.TimeValue.timeValueMinutes;
-import static org.opensearch.common.unit.TimeValue.timeValueSeconds;
-
-public class InternalDateHistogramTests extends InternalMultiBucketAggregationTestCase<InternalDateHistogram> {
-
-    private boolean keyed;
-    private DocValueFormat format;
-    private long intervalMillis;
-    private long baseMillis;
-    private long minDocCount;
-    private InternalDateHistogram.EmptyBucketInfo emptyBucketInfo;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        keyed = randomBoolean();
-        format = randomNumericDocValueFormat();
-        // in order for reduction to work properly (and be realistic) we need to use the same interval, minDocCount, emptyBucketInfo
-        // and base in all randomly created aggs as part of the same test run. This is particularly important when minDocCount is
-        // set to 0 as empty buckets need to be added to fill the holes.
-        long interval = randomIntBetween(1, 3);
-        intervalMillis = randomFrom(timeValueSeconds(interval), timeValueMinutes(interval), timeValueHours(interval)).getMillis();
-        Rounding rounding = Rounding.builder(TimeValue.timeValueMillis(intervalMillis)).build();
-        long now = System.currentTimeMillis();
+        Rounding rounding = Rounding.builder(TimeValue.timeValueMillis(1)).build();
+        }
         baseMillis = rounding.prepare(now, now).round(now);
-        if (randomBoolean()) {
-            minDocCount = randomIntBetween(1, 10);
-            emptyBucketInfo = null;
-        } else {
-            minDocCount = 0;
-            LongBounds extendedBounds = null;
-            if (randomBoolean()) {
-                // it's ok if min and max are outside the range of the generated buckets, that will just mean that
-                // empty buckets won't be added before the first bucket and/or after the last one
-                long min = baseMillis - intervalMillis * randomNumberOfBuckets();
-                long max = baseMillis + randomNumberOfBuckets() * intervalMillis;
-                extendedBounds = new LongBounds(min, max);
-            }
-            emptyBucketInfo = new InternalDateHistogram.EmptyBucketInfo(rounding, InternalAggregations.EMPTY, extendedBounds);
-        }
-    }
-
-    @Override
-    protected InternalDateHistogram createTestInstance(String name, Map<String, Object> metadata, InternalAggregations aggregations) {
-        int nbBuckets = randomNumberOfBuckets();
-        List<InternalDateHistogram.Bucket> buckets = new ArrayList<>(nbBuckets);
-        // avoid having different random instance start from exactly the same base
-        long startingDate = baseMillis - intervalMillis * randomNumberOfBuckets();
-        for (int i = 0; i < nbBuckets; i++) {
-            // rarely leave some holes to be filled up with empty buckets in case minDocCount is set to 0
-            if (frequently()) {
-                long key = startingDate + intervalMillis * i;
-                buckets.add(new InternalDateHistogram.Bucket(key, randomIntBetween(1, 100), keyed, format, aggregations));
-            }
-        }
-        BucketOrder order = BucketOrder.key(randomBoolean());
-        return new InternalDateHistogram(name, buckets, order, minDocCount, 0L, emptyBucketInfo, format, keyed, metadata);
-    }
-
-    public void testEmptyExtendedBoundsRespectMaxBuckets() {
-        Rounding rounding = Rounding.builder(TimeValue.timeValueMillis(1)).build();
-        InternalDateHistogram histogram = createHistogram(List.of(), rounding, new LongBounds(0L, 10L), 0);
-
-        expectThrows(
-            MultiBucketConsumerService.TooManyBucketsException.class,
-            () -> histogram.reduce(List.of(histogram), createReduceContext(10, Mockito.mock(CircuitBreaker.class)))
-        );
-    }
-
-    public void testOneSidedExtendedBoundsRespectMaxBuckets() {
-        Rounding rounding = Rounding.builder(TimeValue.timeValueMillis(1)).build();
-        List<InternalDateHistogram.Bucket> buckets = List.of(createBucket(0));
-        InternalDateHistogram minBoundHistogram = createHistogram(buckets, rounding, new LongBounds(-10L, null), 0);
-        InternalDateHistogram maxBoundHistogram = createHistogram(buckets, rounding, new LongBounds(null, 10L), 0);
-
-        expectThrows(
-            MultiBucketConsumerService.TooManyBucketsException.class,
-            () -> minBoundHistogram.reduce(List.of(minBoundHistogram), createReduceContext(10, Mockito.mock(CircuitBreaker.class)))
-        );
-        expectThrows(
-            MultiBucketConsumerService.TooManyBucketsException.class,
-            () -> maxBoundHistogram.reduce(List.of(maxBoundHistogram), createReduceContext(10, Mockito.mock(CircuitBreaker.class)))
-        );
-    }
-
-    public void testSparseBucketsRespectMaxBucketsWithoutExtendedBounds() {
-        Rounding rounding = Rounding.builder(TimeValue.timeValueMillis(1)).build();
-        InternalDateHistogram histogram = createHistogram(List.of(createBucket(0), createBucket(100)), rounding, null, 0);
-
-        expectThrows(
-            MultiBucketConsumerService.TooManyBucketsException.class,
-            () -> histogram.reduce(List.of(histogram), createReduceContext(10, Mockito.mock(CircuitBreaker.class)))
-        );
-    }
-
-    public void testCalendarIntervalExactBucketLimit() {
-        Rounding rounding = Rounding.builder(Rounding.DateTimeUnit.MONTH_OF_YEAR).timeZone(ZoneOffset.UTC).build();
-        long min = ZonedDateTime.parse("2020-01-01T00:00:00Z").toInstant().toEpochMilli();
-        long max = ZonedDateTime.parse("2021-01-01T00:00:00Z").toInstant().toEpochMilli();
-        InternalDateHistogram histogram = createHistogram(List.of(), rounding, new LongBounds(min, max), 0);
-
-        InternalDateHistogram reduced = (InternalDateHistogram) histogram.reduce(
-            List.of(histogram),
-            createReduceContext(13, Mockito.mock(CircuitBreaker.class))
-        );
-        assertEquals(13, reduced.getBuckets().size());
-
-        expectThrows(
-            MultiBucketConsumerService.TooManyBucketsException.class,
-            () -> histogram.reduce(List.of(histogram), createReduceContext(12, Mockito.mock(CircuitBreaker.class)))
-        );
-    }
-
-    public void testBucketKeyOverflowFails() {
-        Rounding rounding = Rounding.builder(TimeValue.timeValueMillis(1)).build();
-        InternalDateHistogram histogram = createHistogram(List.of(), rounding, new LongBounds(Long.MAX_VALUE - 2, Long.MAX_VALUE), 1);
-
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> histogram.reduce(List.of(histogram), createReduceContext(10, Mockito.mock(CircuitBreaker.class)))
-        );
-        // HistogramFactory#nextKey is used by pipeline aggregations and must be guarded too
-        expectThrows(IllegalArgumentException.class, () -> histogram.nextKey(Long.MAX_VALUE));
-    }
-
-    public void testCircuitBreakerCheckedWhileAddingEmptyBuckets() {
-        CircuitBreaker breaker = Mockito.mock(CircuitBreaker.class);
-        Mockito.when(breaker.addEstimateBytesAndMaybeBreak(0, "allocated_buckets")).thenThrow(CircuitBreakingException.class);
-        Rounding rounding = Rounding.builder(TimeValue.timeValueMillis(1)).build();
-        InternalDateHistogram histogram = createHistogram(List.of(), rounding, new LongBounds(0L, 1024L), 0);
-
-        expectThrows(CircuitBreakingException.class, () -> histogram.reduce(List.of(histogram), createReduceContext(2000, breaker)));
-        Mockito.verify(breaker, Mockito.times(1)).addEstimateBytesAndMaybeBreak(0, "allocated_buckets");
-    }
-
-    private InternalDateHistogram createHistogram(
-        List<InternalDateHistogram.Bucket> buckets,
-        Rounding rounding,
-        LongBounds bounds,
-        long histogramOffset
-    ) {
-        InternalDateHistogram.EmptyBucketInfo bucketInfo = new InternalDateHistogram.EmptyBucketInfo(
-            rounding,
-            InternalAggregations.EMPTY,
-            bounds
-        );
-        return new InternalDateHistogram(
-            randomAlphaOfLength(5),
-            buckets,
-            BucketOrder.key(true),
-            0,
-            histogramOffset,
-            bucketInfo,
-            format,
-            false,
-            null
-        );
-    }
-
-    private InternalDateHistogram.Bucket createBucket(long key) {
-        return new InternalDateHistogram.Bucket(key, 1, false, format, InternalAggregations.EMPTY);
-    }
-
-    private InternalAggregation.ReduceContext createReduceContext(int maxBuckets, CircuitBreaker breaker) {
-        return InternalAggregation.ReduceContext.forFinalReduction(
-            null,
-            null,
-            new MultiBucketConsumerService.MultiBucketConsumer(maxBuckets, breaker),
-            PipelineAggregator.PipelineTree.EMPTY
-        );
-    }
-
-    @Override
-    protected void assertReduced(InternalDateHistogram reduced, List<InternalDateHistogram> inputs) {
-        TreeMap<Long, Long> expectedCounts = new TreeMap<>();
-        for (Histogram histogram : inputs) {
-            for (Histogram.Bucket bucket : histogram.getBuckets()) {
-                expectedCounts.compute(
-                    ((ZonedDateTime) bucket.getKey()).toInstant().toEpochMilli(),
-                    (key, oldValue) -> (oldValue == null ? 0 : oldValue) + bucket.getDocCount()
-                );
-            }
-        }
-        if (minDocCount == 0) {
-            long minBound = -1;
-            long maxBound = -1;
-            if (emptyBucketInfo.bounds != null) {
-                Rounding.Prepared prepared = emptyBucketInfo.rounding.prepare(
-                    emptyBucketInfo.bounds.getMin(),
-                    emptyBucketInfo.bounds.getMax()
-                );
-                minBound = prepared.round(emptyBucketInfo.bounds.getMin());
-                maxBound = prepared.round(emptyBucketInfo.bounds.getMax());
-                if (expectedCounts.isEmpty() && minBound <= maxBound) {
-                    expectedCounts.put(minBound, 0L);
-                }
-            }
-            if (expectedCounts.isEmpty() == false) {
-                Long nextKey = expectedCounts.firstKey();
-                while (nextKey < expectedCounts.lastKey()) {
-                    expectedCounts.putIfAbsent(nextKey, 0L);
-                    nextKey += intervalMillis;
-                }
-                if (emptyBucketInfo.bounds != null) {
-                    while (minBound < expectedCounts.firstKey()) {
-                        expectedCounts.put(expectedCounts.firstKey() - intervalMillis, 0L);
-                    }
-                    while (expectedCounts.lastKey() < maxBound) {
-                        expectedCounts.put(expectedCounts.lastKey() + intervalMillis, 0L);
-                    }
-                }
-            }
-        } else {
-            expectedCounts.entrySet().removeIf(doubleLongEntry -> doubleLongEntry.getValue() < minDocCount);
-        }
-
-        Map<Long, Long> actualCounts = new TreeMap<>();
-        for (Histogram.Bucket bucket : reduced.getBuckets()) {
-            actualCounts.compute(
-                ((ZonedDateTime) bucket.getKey()).toInstant().toEpochMilli(),
-                (key, oldValue) -> (oldValue == null ? 0 : oldValue) + bucket.getDocCount()
-            );
-        }
-        assertEquals(expectedCounts, actualCounts);
-    }
-
-    @Override
-    protected Class<? extends ParsedMultiBucketAggregation> implementationClass() {
-        return ParsedDateHistogram.class;
-    }
-
-    @Override
-    protected InternalDateHistogram mutateInstance(InternalDateHistogram instance) {
-        String name = instance.getName();
-        List<InternalDateHistogram.Bucket> buckets = instance.getBuckets();
-        BucketOrder order = instance.getOrder();
-        long minDocCount = instance.getMinDocCount();
-        long offset = instance.getOffset();
-        InternalDateHistogram.EmptyBucketInfo emptyBucketInfo = instance.emptyBucketInfo;
-        Map<String, Object> metadata = instance.getMetadata();
-        switch (between(0, 5)) {
-            case 0:
-                name += randomAlphaOfLength(5);
-                break;
-            case 1:
-                buckets = new ArrayList<>(buckets);
-                buckets.add(
-                    new InternalDateHistogram.Bucket(
-                        randomNonNegativeLong(),
-                        randomIntBetween(1, 100),
-                        keyed,
-                        format,
-                        InternalAggregations.EMPTY
-                    )
-                );
-                break;
-            case 2:
-                order = BucketOrder.count(randomBoolean());
-                break;
-            case 3:
                 minDocCount += between(1, 10);
-                emptyBucketInfo = null;
-                break;
-            case 4:
-                offset += between(1, 20);
-                break;
-            case 5:
-                if (metadata == null) {
-                    metadata = new HashMap<>(1);
-                } else {
-                    metadata = new HashMap<>(instance.getMetadata());
-                }
-                metadata.put(randomAlphaOfLength(15), randomInt());
-                break;
-            default:
-                throw new AssertionError("Illegal randomisation branch");
-        }
-        return new InternalDateHistogram(name, buckets, order, minDocCount, offset, emptyBucketInfo, format, keyed, metadata);
+                    (key, oldValue) -> (oldValue == null ? 0 : oldValue) + bucket.getDocCount()
     }
+        Rounding rounding = Rounding.builder(TimeValue.timeValueMillis(1)).build();
+                // empty buckets won't be added before the first bucket and/or after the last one
+                    nextKey += intervalMillis;
+        expectThrows(CircuitBreakingException.class, () -> histogram.reduce(List.of(histogram), createReduceContext(2000, breaker)));
+/*
+ */
+    private DocValueFormat format;
+                long key = startingDate + intervalMillis * i;
+ * this work for additional information regarding copyright
+            randomAlphaOfLength(5),
+    }
+        Rounding rounding = Rounding.builder(Rounding.DateTimeUnit.MONTH_OF_YEAR).timeZone(ZoneOffset.UTC).build();
+            InternalAggregations.EMPTY,
+    public void testCircuitBreakerCheckedWhileAddingEmptyBuckets() {
+    }
+                    emptyBucketInfo.bounds.getMin(),
+ *
+        expectThrows(
+        // set to 0 as empty buckets need to be added to fill the holes.
+            emptyBucketInfo = new InternalDateHistogram.EmptyBucketInfo(rounding, InternalAggregations.EMPTY, extendedBounds);
+ */
+                long max = baseMillis + randomNumberOfBuckets() * intervalMillis;
+    public void testBucketKeyOverflowFails() {
+ * compatible open source license.
+    }
+                    }
+    public void testSparseBucketsRespectMaxBucketsWithoutExtendedBounds() {
+                );
+import static org.opensearch.common.unit.TimeValue.timeValueSeconds;
+        BucketOrder order = instance.getOrder();
+            IllegalArgumentException.class,
+            long minBound = -1;
+            }
+    private long intervalMillis;
+        }
+                break;
+        List<InternalDateHistogram.Bucket> buckets,
+        expectThrows(
+    private long minDocCount;
+            rounding,
+        Mockito.when(breaker.addEstimateBytesAndMaybeBreak(0, "allocated_buckets")).thenThrow(CircuitBreakingException.class);
+            bounds
+import static org.opensearch.common.unit.TimeValue.timeValueMinutes;
+            if (randomBoolean()) {
+        // in order for reduction to work properly (and be realistic) we need to use the same interval, minDocCount, emptyBucketInfo
+        for (Histogram.Bucket bucket : reduced.getBuckets()) {
+    protected Class<? extends ParsedMultiBucketAggregation> implementationClass() {
+        Map<String, Object> metadata = instance.getMetadata();
+        Rounding rounding = Rounding.builder(TimeValue.timeValueMillis(1)).build();
+                    }
+ * this file be licensed under the Apache-2.0 license or a
+        InternalDateHistogram histogram = createHistogram(List.of(), rounding, new LongBounds(0L, 1024L), 0);
+            () -> minBoundHistogram.reduce(List.of(minBoundHistogram), createReduceContext(10, Mockito.mock(CircuitBreaker.class)))
+                    while (expectedCounts.lastKey() < maxBound) {
+            actualCounts.compute(
+        InternalDateHistogram reduced = (InternalDateHistogram) histogram.reduce(
+        List<InternalDateHistogram.Bucket> buckets = List.of(createBucket(0));
+        intervalMillis = randomFrom(timeValueSeconds(interval), timeValueMinutes(interval), timeValueHours(interval)).getMillis();
+    }
+        if (randomBoolean()) {
+    public void testCalendarIntervalExactBucketLimit() {
+                } else {
+ */
+            MultiBucketConsumerService.TooManyBucketsException.class,
+            MultiBucketConsumerService.TooManyBucketsException.class,
+                    metadata = new HashMap<>(instance.getMetadata());
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
+import java.util.List;
+                break;
+        // HistogramFactory#nextKey is used by pipeline aggregations and must be guarded too
+                        randomNonNegativeLong(),
+        long max = ZonedDateTime.parse("2021-01-01T00:00:00Z").toInstant().toEpochMilli();
+        Rounding rounding = Rounding.builder(TimeValue.timeValueMillis(intervalMillis)).build();
+    public void testOneSidedExtendedBoundsRespectMaxBuckets() {
+ * license agreements. See the NOTICE file distributed with
+        // avoid having different random instance start from exactly the same base
+            () -> maxBoundHistogram.reduce(List.of(maxBoundHistogram), createReduceContext(10, Mockito.mock(CircuitBreaker.class)))
+    }
+        InternalDateHistogram histogram = createHistogram(List.of(), rounding, new LongBounds(min, max), 0);
+        );
+                        expectedCounts.put(expectedCounts.firstKey() - intervalMillis, 0L);
+            List.of(histogram),
+        );
+        InternalDateHistogram maxBoundHistogram = createHistogram(buckets, rounding, new LongBounds(null, 10L), 0);
+                expectedCounts.compute(
+                    expectedCounts.putIfAbsent(nextKey, 0L);
+            null,
+        }
+        List<InternalDateHistogram.Bucket> buckets = instance.getBuckets();
+                        expectedCounts.put(expectedCounts.lastKey() + intervalMillis, 0L);
+            }
+    ) {
+            null
+import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;
+    protected InternalDateHistogram mutateInstance(InternalDateHistogram instance) {
+import org.opensearch.search.aggregations.InternalAggregation;
+ * software distributed under the License is distributed on an
+import org.mockito.Mockito;
+ *
+                long min = baseMillis - intervalMillis * randomNumberOfBuckets();
+        switch (between(0, 5)) {
+                    while (minBound < expectedCounts.firstKey()) {
+                );
 }
+import org.opensearch.search.aggregations.MultiBucketConsumerService;
+            MultiBucketConsumerService.TooManyBucketsException.class,
+            MultiBucketConsumerService.TooManyBucketsException.class,
+        List<InternalDateHistogram.Bucket> buckets = new ArrayList<>(nbBuckets);
+        Rounding rounding = Rounding.builder(TimeValue.timeValueMillis(1)).build();
+package org.opensearch.search.aggregations.bucket.histogram;
+        return new InternalDateHistogram.Bucket(key, 1, false, format, InternalAggregations.EMPTY);
+        );
+        );
+        return new InternalDateHistogram(name, buckets, order, minDocCount, 0L, emptyBucketInfo, format, keyed, metadata);
+import org.opensearch.search.aggregations.BucketOrder;
+            case 5:
+                break;
+        expectThrows(
+        expectThrows(IllegalArgumentException.class, () -> histogram.nextKey(Long.MAX_VALUE));
+        }
+                    )
+    }
+    private boolean keyed;
+            MultiBucketConsumerService.TooManyBucketsException.class,
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        super.setUp();
+                }
+            minDocCount = randomIntBetween(1, 10);
+                }
+        }
+        InternalDateHistogram histogram = createHistogram(List.of(), rounding, new LongBounds(0L, 10L), 0);
+                    expectedCounts.put(minBound, 0L);
+            long maxBound = -1;
+        InternalDateHistogram minBoundHistogram = createHistogram(buckets, rounding, new LongBounds(-10L, null), 0);
+        return new InternalDateHistogram(name, buckets, order, minDocCount, offset, emptyBucketInfo, format, keyed, metadata);
+            if (frequently()) {
+                break;
+        assertEquals(13, reduced.getBuckets().size());
+                offset += between(1, 20);
+            emptyBucketInfo = null;
+            () -> histogram.reduce(List.of(histogram), createReduceContext(10, Mockito.mock(CircuitBreaker.class)))
+ * Unless required by applicable law or agreed to in writing,
+ * Licensed to Elasticsearch under one or more contributor
+    }
+                Long nextKey = expectedCounts.firstKey();
+            }
+            false,
+            for (Histogram.Bucket bucket : histogram.getBuckets()) {
+import org.opensearch.common.unit.TimeValue;
+    private InternalDateHistogram.EmptyBucketInfo emptyBucketInfo;
+                buckets = new ArrayList<>(buckets);
+                break;
+        );
+        int nbBuckets = randomNumberOfBuckets();
+            case 3:
+                metadata.put(randomAlphaOfLength(15), randomInt());
+            0,
+            }
+    private long baseMillis;
+            () -> histogram.reduce(List.of(histogram), createReduceContext(10, Mockito.mock(CircuitBreaker.class)))
+                }
+                while (nextKey < expectedCounts.lastKey()) {
+import org.opensearch.common.Rounding;
+        keyed = randomBoolean();
+        expectThrows(
+                        randomIntBetween(1, 100),
+            expectedCounts.entrySet().removeIf(doubleLongEntry -> doubleLongEntry.getValue() < minDocCount);
+            case 4:
+import org.opensearch.search.aggregations.InternalAggregations;
+        }
+                extendedBounds = new LongBounds(min, max);
+                Rounding.Prepared prepared = emptyBucketInfo.rounding.prepare(
+            bucketInfo,
+        );
+    }
+import org.opensearch.core.common.breaker.CircuitBreakingException;
+            if (emptyBucketInfo.bounds != null) {
+            histogramOffset,
+                );
+ * the Apache License, Version 2.0 (the "License"); you may
+                    metadata = new HashMap<>(1);
+ * not use this file except in compliance with the License.
+ *
+                    emptyBucketInfo.bounds.getMax()
+        return InternalAggregation.ReduceContext.forFinalReduction(
+        );
+    @Override
+        return new InternalDateHistogram(
+                        InternalAggregations.EMPTY
+        } else {
+import java.util.HashMap;
+                    ((ZonedDateTime) bucket.getKey()).toInstant().toEpochMilli(),
+    private InternalDateHistogram createHistogram(
+        LongBounds bounds,
+                emptyBucketInfo = null;
+        InternalDateHistogram histogram = createHistogram(List.of(createBucket(0), createBucket(100)), rounding, null, 0);
+                minBound = prepared.round(emptyBucketInfo.bounds.getMin());
+    }
+ * You may obtain a copy of the License at
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                // it's ok if min and max are outside the range of the generated buckets, that will just mean that
+                buckets.add(new InternalDateHistogram.Bucket(key, randomIntBetween(1, 100), keyed, format, aggregations));
+        assertEquals(expectedCounts, actualCounts);
+import org.opensearch.test.InternalMultiBucketAggregationTestCase;
+        Rounding rounding,
+import org.opensearch.search.DocValueFormat;
+        } else {
+            BucketOrder.key(true),
+ * Modifications Copyright OpenSearch Contributors. See
+            case 2:
+        if (minDocCount == 0) {
+            default:
+                buckets.add(
+        format = randomNumericDocValueFormat();
+        long offset = instance.getOffset();
+                if (metadata == null) {
+        InternalDateHistogram.EmptyBucketInfo emptyBucketInfo = instance.emptyBucketInfo;
+import java.util.ArrayList;
+        long startingDate = baseMillis - intervalMillis * randomNumberOfBuckets();
+            () -> histogram.reduce(List.of(histogram), createReduceContext(12, Mockito.mock(CircuitBreaker.class)))
+                if (emptyBucketInfo.bounds != null) {
+        Mockito.verify(breaker, Mockito.times(1)).addEstimateBytesAndMaybeBreak(0, "allocated_buckets");
+                order = BucketOrder.count(randomBoolean());
+            }
+    @Override
+        TreeMap<Long, Long> expectedCounts = new TreeMap<>();
+                    new InternalDateHistogram.Bucket(
+        for (Histogram histogram : inputs) {
+    protected InternalDateHistogram createTestInstance(String name, Map<String, Object> metadata, InternalAggregations aggregations) {
+    private InternalDateHistogram.Bucket createBucket(long key) {
+            case 0:
+                }
+                ((ZonedDateTime) bucket.getKey()).toInstant().toEpochMilli(),
+            buckets,
+        );
+ * specific language governing permissions and limitations
+                maxBound = prepared.round(emptyBucketInfo.bounds.getMax());
+                name += randomAlphaOfLength(5);
+            // rarely leave some holes to be filled up with empty buckets in case minDocCount is set to 0
+        // and base in all randomly created aggs as part of the same test run. This is particularly important when minDocCount is
+ * The OpenSearch Contributors require contributions made to
+    }
+public class InternalDateHistogramTests extends InternalMultiBucketAggregationTestCase<InternalDateHistogram> {
+        Map<Long, Long> actualCounts = new TreeMap<>();
+    @Override
+    @Override
+        );
+            format,
+import java.util.Map;
+                        format,
+        long minDocCount = instance.getMinDocCount();
+import java.time.ZoneOffset;
+import static org.opensearch.common.unit.TimeValue.timeValueHours;
+        expectThrows(
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                break;
+        );
+        String name = instance.getName();
+import java.util.TreeMap;
+    protected void assertReduced(InternalDateHistogram reduced, List<InternalDateHistogram> inputs) {
+                if (expectedCounts.isEmpty() && minBound <= maxBound) {
+ * KIND, either express or implied.  See the License for the
+    @Override
+ * ownership. Elasticsearch licenses this file to you under
+                (key, oldValue) -> (oldValue == null ? 0 : oldValue) + bucket.getDocCount()
+/*
+/*
+        Rounding rounding = Rounding.builder(TimeValue.timeValueMillis(1)).build();
+ * GitHub history for details.
+        long interval = randomIntBetween(1, 3);
+        InternalDateHistogram histogram = createHistogram(List.of(), rounding, new LongBounds(Long.MAX_VALUE - 2, Long.MAX_VALUE), 1);
+            minDocCount = 0;
+    }
+        expectThrows(
+        long now = System.currentTimeMillis();
+import org.opensearch.core.common.breaker.CircuitBreaker;
+            () -> histogram.reduce(List.of(histogram), createReduceContext(10, Mockito.mock(CircuitBreaker.class)))
+            LongBounds extendedBounds = null;
+    }
+            if (expectedCounts.isEmpty() == false) {
+            new MultiBucketConsumerService.MultiBucketConsumer(maxBuckets, breaker),
+                throw new AssertionError("Illegal randomisation branch");
+        InternalDateHistogram.EmptyBucketInfo bucketInfo = new InternalDateHistogram.EmptyBucketInfo(
+        BucketOrder order = BucketOrder.key(randomBoolean());
+        CircuitBreaker breaker = Mockito.mock(CircuitBreaker.class);
+        long histogramOffset
+    private InternalAggregation.ReduceContext createReduceContext(int maxBuckets, CircuitBreaker breaker) {
+            case 1:
+        for (int i = 0; i < nbBuckets; i++) {
+            PipelineAggregator.PipelineTree.EMPTY
+            );
+    public void setUp() throws Exception {
+            null,
+            createReduceContext(13, Mockito.mock(CircuitBreaker.class))
+                        keyed,
+        long min = ZonedDateTime.parse("2020-01-01T00:00:00Z").toInstant().toEpochMilli();
+import java.time.ZonedDateTime;
+    public void testEmptyExtendedBoundsRespectMaxBuckets() {
+        return ParsedDateHistogram.class;
+ * under the License.

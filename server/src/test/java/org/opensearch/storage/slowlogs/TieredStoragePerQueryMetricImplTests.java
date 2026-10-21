@@ -1,330 +1,252 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.storage.slowlogs;
-
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-
-/**
- * Comprehensive unit tests for TieredStoragePerQueryMetricImpl.
- */
-public class TieredStoragePerQueryMetricImplTests extends OpenSearchTestCase {
-
-    public void testConstructor() {
-        String parentTaskId = "task-123";
-        String shardId = "shard-0";
-
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl(parentTaskId, shardId);
-
-        assertEquals(parentTaskId, metric.getParentTaskId());
-        assertEquals(shardId, metric.getShardId());
-        assertTrue(metric.ramBytesUsed() > 0);
-    }
-
-    public void testRecordFileAccessHit() {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        // Test block file access hit
-        metric.recordFileAccess("file1.block_0_1", true);
-
-        // Verify internal state through XContent
-        String json = metric.toString();
-        assertTrue(json.contains("\"hits\":1"));
-        assertTrue(json.contains("\"miss\":0"));
-        assertTrue(json.contains("\"total\":1"));
-    }
-
-    public void testRecordFileAccessMiss() {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        // Test block file access miss
-        metric.recordFileAccess("file1.block_0_1", false);
-
-        // Verify internal state through XContent
-        String json = metric.toString();
-        assertTrue(json.contains("\"hits\":0"));
-        assertTrue(json.contains("\"miss\":1"));
-        assertTrue(json.contains("\"total\":1"));
-    }
-
-    public void testRecordFileAccessMultipleFiles() {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        // Test multiple files with different blocks
-        metric.recordFileAccess("file1.block_0_1", true);   // file1 hit
-        metric.recordFileAccess("file1.block_0_2", false);  // file1 miss
-        metric.recordFileAccess("file2.block_0_1", true);   // file2 hit
-        metric.recordFileAccess("file2.block_0_3", true);   // file2 hit
-
-        String json = metric.toString();
-
-        // Should have entries for both files
-        assertTrue(json.contains("file1block"));
-        assertTrue(json.contains("file2block"));
-
-        // Overall stats should be aggregated
-        assertTrue(json.contains("\"fileCache\":\"3 hits out of 4 total\""));
-    }
-
-    public void testRecordFileAccessSameBlockMultipleTimes() {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        // Record same block multiple times
-        metric.recordFileAccess("file1.block_0_1", true);
-        metric.recordFileAccess("file1.block_0_1", true);
-        metric.recordFileAccess("file1.block_0_1", false);
-
-        String json = metric.toString();
-
-        // Should have 2 hits and 1 miss for total of 3
-        assertTrue(json.contains("\"hits\":2"));
-        assertTrue(json.contains("\"miss\":1"));
-        assertTrue(json.contains("\"total\":3"));
-
-        // But only 1 unique hit block and 1 unique miss block
-        assertTrue(json.contains("\"hitBlockCount\":1"));
-        assertTrue(json.contains("\"missBlockCount\":1"));
-    }
-
-    public void testRecordPrefetch() {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        // Test prefetch recording
-        metric.recordPrefetch("file1", 1);
-        metric.recordPrefetch("file1", 2);
-        metric.recordPrefetch("file2", 5);
-
-        String json = metric.toString();
-
-        // Should have prefetch entries
-        assertTrue(json.contains("\"prefetch\""));
-        assertTrue(json.contains("file1"));
-        assertTrue(json.contains("file2"));
-        assertTrue(json.contains("\"blockCount\":2")); // file1 has 2 blocks
-        assertTrue(json.contains("\"blockCount\":1")); // file2 has 1 block
-    }
-
-    public void testRecordPrefetchSameBlockMultipleTimes() {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        // Record same block multiple times - should only count once
-        metric.recordPrefetch("file1", 1);
-        metric.recordPrefetch("file1", 1);
-        metric.recordPrefetch("file1", 1);
-
-        String json = metric.toString();
-
-        // Should only have 1 unique block
-        assertTrue(json.contains("\"blockCount\":1"));
-        assertTrue(json.contains("[1]"));
-    }
-
-    public void testRecordReadAhead() {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        // Test read ahead recording
-        metric.recordReadAhead("file1", 10);
-        metric.recordReadAhead("file1", 11);
-        metric.recordReadAhead("file2", 20);
-
-        String json = metric.toString();
-
+        assertTrue(json.contains("\"timestamps\""));
         // Should have read ahead entries
-        assertTrue(json.contains("\"readAhead\""));
-        assertTrue(json.contains("file1"));
-        assertTrue(json.contains("file2"));
-        assertTrue(json.contains("\"blockCount\":2")); // file1 has 2 blocks
-        assertTrue(json.contains("\"blockCount\":1")); // file2 has 1 block
-    }
-
-    public void testRecordReadAheadSameBlockMultipleTimes() {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        // Record same block multiple times - should only count once
-        metric.recordReadAhead("file1", 5);
-        metric.recordReadAhead("file1", 5);
-        metric.recordReadAhead("file1", 5);
-
-        String json = metric.toString();
-
-        // Should only have 1 unique block
-        assertTrue(json.contains("\"blockCount\":1"));
-        assertTrue(json.contains("[5]"));
-    }
-
     public void testRecordEndTime() {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        long startTime = System.currentTimeMillis();
-        metric.recordEndTime();
-        long endTime = System.currentTimeMillis();
-
-        String json = metric.toString();
-
-        // Should have timestamps
-        assertTrue(json.contains("\"timestamps\""));
-        assertTrue(json.contains("\"startTime\""));
-        assertTrue(json.contains("\"endTime\""));
-
-        // End time should be after start time and before current time
-        assertTrue(json.contains("\"endTime\":") && !json.contains("\"endTime\":0"));
-    }
-
-    public void testGetFileBlockParsing() {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        // Test various block file name formats - use proper format: filename.extension_blockId_blockNumber
-        // Format: filename.extension_blockId_blockNumber where blockNumber is numeric
-        metric.recordFileAccess("segments_1.block_0_123", true);
-        metric.recordFileAccess("_0.cfs_456_789", false);
-        metric.recordFileAccess("test.dat_0_999", true);
-
-        String json = metric.toString();
-
-        // Should parse file names correctly - filename + first part of extension
-        assertTrue(json.contains("segments_1block"));
-        assertTrue(json.contains("_0cfs"));
-        assertTrue(json.contains("testdat"));
-    }
-
-    public void testRamBytesUsed() {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        long initialRam = metric.ramBytesUsed();
-        assertTrue(initialRam > 0);
-
-        // Add some data and verify RAM usage increases
         metric.recordFileAccess("file1.block_0_1", true);
-        metric.recordFileAccess("file1.block_0_2", false);
+        // Record same block multiple times - should only count once
+        metric.recordFileAccess("file1.block_0_1", false);
+        assertTrue(json.contains("\"endTime\""));
         metric.recordPrefetch("file2", 1);
+    public void testRecordFileAccessMultipleFiles() {
+        // End time should be after start time and before current time
+        String json = metric.toString();
         metric.recordReadAhead("file3", 1);
-
-        long finalRam = metric.ramBytesUsed();
-        assertTrue(finalRam >= initialRam);
-    }
-
-    public void testToXContentStructure() throws IOException {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-123", "shard-456");
-
-        // Add comprehensive test data
-        metric.recordFileAccess("file1.block_0_1", true);
         metric.recordFileAccess("file1.block_0_2", false);
-        metric.recordPrefetch("prefetch-file", 10);
-        metric.recordReadAhead("readahead-file", 20);
-        metric.recordEndTime();
-
-        XContentBuilder builder = XContentFactory.jsonBuilder();
-        metric.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        String json = builder.toString();
-
-        // Verify complete structure
-        assertTrue(json.contains("\"parentTask\":\"task-123\""));
-        assertTrue(json.contains("\"shardId\":\"shard-456\""));
-
-        // Summary section
-        assertTrue(json.contains("\"summary\""));
-        assertTrue(json.contains("\"fileCache\":\"1 hits out of 2 total\""));
-        assertTrue(json.contains("\"prefetchFiles\""));
-        assertTrue(json.contains("\"readAheadFiles\""));
-
-        // Details section
-        assertTrue(json.contains("\"details\""));
-        assertTrue(json.contains("\"fileCache\""));
-        assertTrue(json.contains("\"prefetch\""));
-        assertTrue(json.contains("\"readAhead\""));
-
-        // Timestamps section
-        assertTrue(json.contains("\"timestamps\""));
-        assertTrue(json.contains("\"startTime\""));
-        assertTrue(json.contains("\"endTime\""));
+        metric.recordFileAccess("file2.block_0_1", true);   // file2 hit
     }
-
-    public void testToStringHandlesIOException() {
+        String json = metric.toString();
+    public void testRecordReadAheadSameBlockMultipleTimes() {
+        String json = metric.toString();
+        assertEquals(parentTaskId, metric.getParentTaskId());
+        assertTrue(json.contains("\"blockCount\":1")); // file2 has 1 block
+import org.opensearch.common.xcontent.XContentFactory;
+        assertTrue(json.contains("_0cfs"));
+ * SPDX-License-Identifier: Apache-2.0
+        String json = metric.toString();
+    public void testGetFileBlockParsing() {
+    }
+        metric.recordFileAccess("file1.block_0_1", true);
+        // Should have 2 hits and 1 miss for total of 3
+        assertTrue(json.contains("\"readAhead\""));
+        metric.toXContent(builder, ToXContent.EMPTY_PARAMS);
+        // Test block file access miss
+        // Record same block multiple times - should only count once
+    }
+    }
+    }
+        long initialRam = metric.ramBytesUsed();
+        assertTrue(json.contains("\"missBlocks\":[2]"));
+        metric.recordReadAhead("file1", 10);
+        assertTrue(json.contains("\"blocks\":[25,30]"));
+        // Add data to create inner class instances
         TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
+        // Add comprehensive test data
+        // Verify internal state through XContent
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
+package org.opensearch.storage.slowlogs;
+        assertTrue(json.contains("\"total\":1"));
+        String json = metric.toString();
+    public void testInnerClassRamBytesUsed() {
+        assertTrue(json.contains("\"miss\":0"));
+        metric.recordFileAccess("file1.block_0_1", true);
+    public void testRecordPrefetch() {
+        metric.recordEndTime();
+        // Verify internal state through XContent
+        String json = metric.toString();
+    }
+        metric.recordReadAhead("readahead-file", 20);
+        // Test prefetch recording
+        assertTrue(json.contains("\"total\":3"));
+        assertTrue(json.contains("\"blocks\":[5,10,15]"));
+        metric.recordReadAhead("file1", 30);
+        String json = metric.toString();
+        assertTrue(json.contains("[5]"));
+/*
+        // Record data to create FileCacheStat
+        // Should have prefetch entries
+        metric.recordPrefetch("file1", 1);
+        metric.recordFileAccess("file1.block_0_1", true);
+        metric.recordFileAccess("file1.block_0_1", true);
+        assertTrue(json.contains("file1"));
+        metric.recordPrefetch("file1", 2);
+        assertTrue(json.contains("\"endTime\":") && !json.contains("\"endTime\":0"));
+        assertTrue(json.contains("\"hits\":2"));
+        assertTrue(json.contains("\"blockCount\":1")); // file2 has 1 block
+ * compatible open source license.
+        // Add some data and verify RAM usage increases
+    }
+    public void testReadAheadStatToXContent() throws IOException {
+        assertTrue(json.contains("\"miss\":1"));
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl(parentTaskId, shardId);
+        // Details section
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+        String json = metric.toString();
         // toString should not throw exception even if there are issues
-        String result = metric.toString();
+    }
+    public void testToStringHandlesIOException() {
+        // Timestamps section
+    public void testConstructor() {
+        metric.recordFileAccess("file1.block_0_2", false);
+        long endTime = System.currentTimeMillis();
+        assertTrue(json.contains("[1]"));
+        assertTrue(json.contains("\"total\":3"));
+    public void testRamBytesUsed() {
+ */
+ * The OpenSearch Contributors require contributions made to
+    }
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
+import org.opensearch.core.xcontent.XContentBuilder;
+        assertTrue(json.contains("\"readAheadFiles\""));
+        String json = metric.toString();
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
+        metric.recordPrefetch("file1", 15);
+        assertTrue(json.contains("\"startTime\""));
+        metric.recordReadAhead("file1", 5);
+ */
+        assertTrue(metric.ramBytesUsed() > 0);
+        String shardId = "shard-0";
+        assertTrue(json.contains("\"fileCache\":\"3 hits out of 4 total\""));
+        assertTrue(json.contains("file1"));
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
+        assertTrue(json.contains("testdat"));
+        // Verify RAM usage calculation includes inner classes
+        long startTime = System.currentTimeMillis();
+        // Record prefetch data
+        metric.recordFileAccess("file1.block_0_1", true);
+        assertTrue(json.contains("\"prefetch\""));
+        metric.recordPrefetch("file1", 5);
+        assertTrue(json.contains("\"blockCount\":2"));
+        long ramUsage = metric.ramBytesUsed();
+        metric.recordFileAccess("test.dat_0_999", true);
+    public void testRecordReadAhead() {
+        assertTrue(json.contains("\"details\""));
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
+    }
+        metric.recordFileAccess("file1.block_0_3", true);
+        assertTrue(json.contains("file2"));
+        // Summary section
+        assertTrue(json.contains("\"blockCount\":1"));
+        // Record same block multiple times
+        long finalRam = metric.ramBytesUsed();
+        assertTrue(json.contains("\"missBlockCount\":1"));
+        metric.recordPrefetch("file1", 1);
+        assertTrue(finalRam >= initialRam);
         assertNotNull(result);
+        assertTrue(json.contains("\"endTime\""));
+        assertEquals(shardId, metric.getShardId());
+        metric.recordFileAccess("file1.block_0_2", false);
+ * this file be licensed under the Apache-2.0 license or a
+        assertTrue(json.contains("\"blockCount\":2")); // file1 has 2 blocks
+        assertTrue(ramUsage > 0);
+        metric.recordPrefetch("file2", 5);
+        // Verify complete structure
+import org.opensearch.core.xcontent.ToXContent;
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
+        // Should only have 1 unique block
+        // Should have entries for both files
+}
+        assertTrue(json.contains("\"hitBlockCount\":1"));
+        assertTrue(initialRam > 0);
+        metric.recordPrefetch("file2", 1);
+        // Should parse file names correctly - filename + first part of extension
+    }
+        String result = metric.toString();
+        metric.recordReadAhead("file3", 1);
+        assertTrue(json.contains("\"blockCount\":1"));
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
+        String json = builder.toString();
+        String json = metric.toString();
+        // Format: filename.extension_blockId_blockNumber where blockNumber is numeric
+        assertTrue(json.contains("\"miss\":1"));
+        metric.recordReadAhead("file1", 5);
+        metric.recordFileAccess("file1.block_0_1", false);
+        assertTrue(json.contains("\"hits\":2"));
         assertTrue(result.length() > 0);
     }
-
-    public void testFileCacheStatToXContent() throws IOException {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        // Record data to create FileCacheStat
-        metric.recordFileAccess("file1.block_0_1", true);
-        metric.recordFileAccess("file1.block_0_2", false);
-        metric.recordFileAccess("file1.block_0_3", true);
-
-        String json = metric.toString();
-
-        // Verify FileCacheStat XContent structure
-        assertTrue(json.contains("\"hits\":2"));
-        assertTrue(json.contains("\"miss\":1"));
-        assertTrue(json.contains("\"total\":3"));
-        assertTrue(json.contains("\"blockDetails\""));
-        assertTrue(json.contains("\"hitBlockCount\":2"));
-        assertTrue(json.contains("\"hitBlocks\":[1,3]"));
-        assertTrue(json.contains("\"missBlockCount\":1"));
-        assertTrue(json.contains("\"missBlocks\":[2]"));
     }
-
+    }
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-123", "shard-456");
+        assertTrue(json.contains("\"shardId\":\"shard-456\""));
+        assertTrue(json.contains("\"startTime\""));
+        String json = metric.toString();
+ * Comprehensive unit tests for TieredStoragePerQueryMetricImpl.
     public void testPrefetchStatToXContent() throws IOException {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        // Record prefetch data
-        metric.recordPrefetch("file1", 5);
-        metric.recordPrefetch("file1", 10);
-        metric.recordPrefetch("file1", 15);
-
-        String json = metric.toString();
-
-        // Verify PrefetchStat XContent structure
-        assertTrue(json.contains("\"blockCount\":3"));
-        assertTrue(json.contains("\"blocks\":[5,10,15]"));
-    }
-
-    public void testReadAheadStatToXContent() throws IOException {
-        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        // Record read ahead data
         metric.recordReadAhead("file1", 25);
-        metric.recordReadAhead("file1", 30);
-
-        String json = metric.toString();
-
-        // Verify ReadAheadStat XContent structure
-        assertTrue(json.contains("\"blockCount\":2"));
-        assertTrue(json.contains("\"blocks\":[25,30]"));
+        metric.recordReadAhead("file1", 11);
+        assertTrue(json.contains("\"blockDetails\""));
+import java.io.IOException;
+        assertTrue(json.contains("file2block"));
     }
-
-    public void testInnerClassRamBytesUsed() {
         TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
-
-        // Add data to create inner class instances
-        metric.recordFileAccess("file1.block_0_1", true);
-        metric.recordPrefetch("file2", 1);
-        metric.recordReadAhead("file3", 1);
-
-        // Verify RAM usage calculation includes inner classes
-        long ramUsage = metric.ramBytesUsed();
-        assertTrue(ramUsage > 0);
-
-        // Add more data and verify RAM increases
-        metric.recordFileAccess("file1.block_0_2", false);
-        metric.recordFileAccess("file1.block_0_3", true);
-
-        long newRamUsage = metric.ramBytesUsed();
-        assertTrue(newRamUsage >= ramUsage);
+        // Record read ahead data
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
+public class TieredStoragePerQueryMetricImplTests extends OpenSearchTestCase {
+    public void testToXContentStructure() throws IOException {
+        metric.recordReadAhead("file2", 20);
+        assertTrue(json.contains("\"hitBlockCount\":2"));
+        assertTrue(json.contains("\"timestamps\""));
+        // Should only have 1 unique block
+/**
+        // But only 1 unique hit block and 1 unique miss block
+        // Test read ahead recording
+        assertTrue(json.contains("file1block"));
+ *
+    public void testRecordFileAccessSameBlockMultipleTimes() {
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
+        metric.recordFileAccess("_0.cfs_456_789", false);
+        metric.recordFileAccess("file1.block_0_2", false);  // file1 miss
+        // Test multiple files with different blocks
+        assertTrue(json.contains("\"missBlockCount\":1"));
     }
-}
+        String parentTaskId = "task-123";
+    public void testRecordFileAccessMiss() {
+        // Test various block file name formats - use proper format: filename.extension_blockId_blockNumber
+        assertTrue(json.contains("\"miss\":1"));
+        metric.recordPrefetch("file1", 10);
+        assertTrue(json.contains("\"fileCache\":\"1 hits out of 2 total\""));
+        assertTrue(json.contains("\"blockCount\":3"));
+        // Verify PrefetchStat XContent structure
+        metric.recordFileAccess("file1.block_0_1", true);
+import org.opensearch.test.OpenSearchTestCase;
+        String json = metric.toString();
+        assertTrue(json.contains("\"readAhead\""));
+        String json = metric.toString();
+        metric.recordReadAhead("file1", 5);
+        assertTrue(json.contains("\"total\":1"));
+        metric.recordFileAccess("file2.block_0_3", true);   // file2 hit
+        // Verify ReadAheadStat XContent structure
+        // Test block file access hit
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
+        metric.recordPrefetch("file1", 1);
+        assertTrue(json.contains("\"hits\":1"));
+        assertTrue(json.contains("\"fileCache\""));
+    public void testFileCacheStatToXContent() throws IOException {
+        assertTrue(json.contains("\"parentTask\":\"task-123\""));
+        // Verify FileCacheStat XContent structure
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
+        long newRamUsage = metric.ramBytesUsed();
+        assertTrue(json.contains("\"blockCount\":2")); // file1 has 2 blocks
+        metric.recordFileAccess("segments_1.block_0_123", true);
+        metric.recordFileAccess("file1.block_0_2", false);
+        assertTrue(json.contains("\"prefetch\""));
+        metric.recordEndTime();
+        // Should have timestamps
+        assertTrue(json.contains("\"hits\":0"));
+        assertTrue(json.contains("\"prefetchFiles\""));
+        assertTrue(newRamUsage >= ramUsage);
+        assertTrue(json.contains("\"hitBlocks\":[1,3]"));
+        assertTrue(json.contains("segments_1block"));
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
+        // Add more data and verify RAM increases
+        metric.recordFileAccess("file1.block_0_1", true);   // file1 hit
+        TieredStoragePerQueryMetricImpl metric = new TieredStoragePerQueryMetricImpl("task-1", "shard-1");
+    }
+        assertTrue(json.contains("file2"));
+        metric.recordFileAccess("file1.block_0_3", true);
+        // Overall stats should be aggregated
+        assertTrue(json.contains("\"summary\""));
+        metric.recordPrefetch("file1", 1);
+    public void testRecordFileAccessHit() {
+        metric.recordPrefetch("prefetch-file", 10);
+    public void testRecordPrefetchSameBlockMultipleTimes() {
+    }

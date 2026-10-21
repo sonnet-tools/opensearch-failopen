@@ -1,230 +1,208 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
 import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.Scorable;
-import org.apache.lucene.search.ScoreMode;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.util.ObjectArray;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.util.CollectionUtils;
-import org.opensearch.script.Script;
-import org.opensearch.script.ScriptedMetricAggContexts;
-import org.opensearch.script.ScriptedMetricAggContexts.MapScript;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.LeafBucketCollector;
-import org.opensearch.search.aggregations.LeafBucketCollectorBase;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.lookup.SearchLookup;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-
-import static java.util.Collections.singletonList;
-
-/**
- * Aggregate all docs based on a value script
- *
- * @opensearch.internal
- */
-class ScriptedMetricAggregator extends MetricsAggregator {
-    /**
-     * Estimated cost to maintain a bucket. Since this aggregator uses
-     * untracked java collections for its state it is going to both be
-     * much "heavier" than a normal metric aggregator and not going to be
-     * tracked by the circuit breakers properly. This is sad. So we pick a big
-     * number and estimate that each bucket costs that. It could be wildly
-     * inaccurate. We're sort of hoping that the real memory breaker saves
-     * us here. Or that folks just don't use the aggregation.
-     */
-    private static final long BUCKET_COST_ESTIMATE = 1024 * 5;
-
-    private final SearchLookup lookup;
-    private final Map<String, Object> aggParams;
-    @Nullable
-    private final ScriptedMetricAggContexts.InitScript.Factory initScriptFactory;
-    private final Map<String, Object> initScriptParams;
-    private final ScriptedMetricAggContexts.MapScript.Factory mapScriptFactory;
-    private final Map<String, Object> mapScriptParams;
-    private final ScriptedMetricAggContexts.CombineScript.Factory combineScriptFactory;
-    private final Map<String, Object> combineScriptParams;
-    private final Script reduceScript;
-    private ObjectArray<State> states;
-
-    ScriptedMetricAggregator(
-        String name,
-        SearchLookup lookup,
-        Map<String, Object> aggParams,
-        @Nullable ScriptedMetricAggContexts.InitScript.Factory initScriptFactory,
         Map<String, Object> initScriptParams,
         ScriptedMetricAggContexts.MapScript.Factory mapScriptFactory,
-        Map<String, Object> mapScriptParams,
-        ScriptedMetricAggContexts.CombineScript.Factory combineScriptFactory,
-        Map<String, Object> combineScriptParams,
-        Script reduceScript,
-        SearchContext context,
-        Aggregator parent,
-        Map<String, Object> metadata
-    ) throws IOException {
-        super(name, context, parent, metadata);
-        this.lookup = lookup;
-        this.aggParams = aggParams;
-        this.initScriptFactory = initScriptFactory;
-        this.initScriptParams = initScriptParams;
-        this.mapScriptFactory = mapScriptFactory;
-        this.mapScriptParams = mapScriptParams;
-        this.combineScriptFactory = combineScriptFactory;
-        this.combineScriptParams = combineScriptParams;
-        this.reduceScript = reduceScript;
-        states = context.bigArrays().newObjectArray(1);
-    }
-
-    @Override
-    public ScoreMode scoreMode() {
-        return ScoreMode.COMPLETE; // TODO: how can we know if the script relies on scores?
-    }
-
-    @Override
-    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, LeafBucketCollector sub) throws IOException {
-        // Clear any old leaf scripts so we rebuild them on the new leaf when we first see them.
-        for (long i = 0; i < states.size(); i++) {
-            State state = states.get(i);
-            if (state == null) {
-                continue;
-            }
-            state.leafMapScript = null;
-        }
-        return new LeafBucketCollectorBase(sub, null) {
-            private Scorable scorer;
-
-            @Override
-            public void setScorer(Scorable scorer) throws IOException {
-                this.scorer = scorer;
-            }
-
-            @Override
-            public void collect(int doc, long owningBucketOrd) throws IOException {
-                states = context.bigArrays().grow(states, owningBucketOrd + 1);
-                State state = states.get(owningBucketOrd);
-                if (state == null) {
-                    addRequestCircuitBreakerBytes(BUCKET_COST_ESTIMATE);
-                    state = new State();
-                    states.set(owningBucketOrd, state);
-                }
-                if (state.leafMapScript == null) {
-                    state.leafMapScript = state.mapScript.newInstance(ctx);
                     state.leafMapScript.setScorer(scorer);
-                }
-                state.leafMapScript.setDocument(doc);
-                state.leafMapScript.execute();
-            }
-        };
-    }
-
-    @Override
-    public InternalAggregation buildAggregation(long owningBucketOrdinal) {
-        Object result = aggStateForResult(owningBucketOrdinal).combine();
-        if (result != null && result.getClass() != ScriptedAvg.class) {
-            StreamOutput.checkWriteable(result);
-        }
-        return new InternalScriptedMetric(name, singletonList(result), reduceScript, metadata());
-    }
-
-    private State aggStateForResult(long owningBucketOrdinal) {
-        if (owningBucketOrdinal >= states.size()) {
-            return new State();
-        }
-        State state = states.get(owningBucketOrdinal);
-        if (state == null) {
-            return new State();
-        }
-        // The last script that touched the state at this point is the "map" script
         CollectionUtils.ensureNoSelfReferences(state.aggState, "Scripted metric aggs map script");
-        return state;
-    }
-
-    @Override
-    public InternalAggregation buildEmptyAggregation() {
-        return new InternalScriptedMetric(name, singletonList(null), reduceScript, metadata());
-    }
-
-    @Override
-    public void doClose() {
-        Releasables.close(states);
-    }
-
-    private class State {
-        private final ScriptedMetricAggContexts.MapScript.LeafFactory mapScript;
-        private final Map<String, Object> mapScriptParamsForState;
+    /**
+                continue;
+import java.util.HashMap;
         private final Map<String, Object> combineScriptParamsForState;
-        private final Map<String, Object> aggState;
-        private MapScript leafMapScript;
-
-        State() {
-            // Its possible for building the initial state to mutate the parameters as a side effect
-            Map<String, Object> aggParamsForState = ScriptedMetricAggregatorFactory.deepCopyParams(aggParams, context);
-            mapScriptParamsForState = ScriptedMetricAggregatorFactory.mergeParams(aggParamsForState, mapScriptParams);
-            combineScriptParamsForState = ScriptedMetricAggregatorFactory.mergeParams(aggParamsForState, combineScriptParams);
-            aggState = newInitialState(ScriptedMetricAggregatorFactory.mergeParams(aggParamsForState, initScriptParams));
-            mapScript = mapScriptFactory.newFactory(
-                ScriptedMetricAggregatorFactory.deepCopyParams(mapScriptParamsForState, context),
-                aggState,
-                lookup
-            );
-        }
-
-        private Map<String, Object> newInitialState(Map<String, Object> initScriptParamsForState) {
-            if (initScriptFactory == null) {
-                return new HashMap<>();
-            }
-            Map<String, Object> initialState = new HashMap<>();
-            initScriptFactory.newInstance(initScriptParamsForState, initialState).execute();
-            CollectionUtils.ensureNoSelfReferences(initialState, "Scripted metric aggs init script");
-            return initialState;
-        }
-
-        private Object combine() {
-            if (combineScriptFactory == null) {
-                return aggState;
-            }
-            Object result = combineScriptFactory.newInstance(combineScriptParamsForState, aggState).execute();
-            CollectionUtils.ensureNoSelfReferences(result, "Scripted metric aggs combine script");
-            return result;
-        }
-
+ * compatible open source license.
     }
+     * much "heavier" than a normal metric aggregator and not going to be
+ * GitHub history for details.
+            mapScriptParamsForState = ScriptedMetricAggregatorFactory.mergeParams(aggParamsForState, mapScriptParams);
+        this.combineScriptFactory = combineScriptFactory;
+package org.opensearch.search.aggregations.metrics;
+        Map<String, Object> mapScriptParams,
+        private final Map<String, Object> mapScriptParamsForState;
+     * us here. Or that folks just don't use the aggregation.
+ *
+            return new State();
+    }
+    public InternalAggregation buildEmptyAggregation() {
+        }
+        Map<String, Object> aggParams,
+import java.util.Map;
+        this.combineScriptParams = combineScriptParams;
+        this.initScriptParams = initScriptParams;
+        }
+     * tracked by the circuit breakers properly. This is sad. So we pick a big
+        Script reduceScript,
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+class ScriptedMetricAggregator extends MetricsAggregator {
+ * Unless required by applicable law or agreed to in writing,
+    ) throws IOException {
+import org.opensearch.search.aggregations.LeafBucketCollector;
+            }
+            return result;
+    @Override
+                state.leafMapScript.execute();
+        return new InternalScriptedMetric(name, singletonList(result), reduceScript, metadata());
+ * The OpenSearch Contributors require contributions made to
+ */
+            Map<String, Object> initialState = new HashMap<>();
+import org.apache.lucene.search.Scorable;
+import org.apache.lucene.search.ScoreMode;
+                this.scorer = scorer;
+    @Override
+    ScriptedMetricAggregator(
+            }
+    public void doClose() {
+/*
+     * untracked java collections for its state it is going to both be
+            }
+                    addRequestCircuitBreakerBytes(BUCKET_COST_ESTIMATE);
+        this.lookup = lookup;
+        }
+                if (state == null) {
+        Aggregator parent,
+    private final Script reduceScript;
+        private Map<String, Object> newInitialState(Map<String, Object> initScriptParamsForState) {
+    private ObjectArray<State> states;
+        String name,
+            state.leafMapScript = null;
+        ScriptedMetricAggContexts.CombineScript.Factory combineScriptFactory,
+        this.aggParams = aggParams;
+            public void collect(int doc, long owningBucketOrd) throws IOException {
+ */
+import org.opensearch.search.aggregations.InternalAggregation;
+    }
+import org.opensearch.script.Script;
+    private final Map<String, Object> aggParams;
+        }
+import java.io.IOException;
+        private MapScript leafMapScript;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * this file be licensed under the Apache-2.0 license or a
+        Map<String, Object> combineScriptParams,
+                state.leafMapScript.setDocument(doc);
+    private static final long BUCKET_COST_ESTIMATE = 1024 * 5;
+    private final ScriptedMetricAggContexts.CombineScript.Factory combineScriptFactory;
+                states = context.bigArrays().grow(states, owningBucketOrd + 1);
+        this.mapScriptFactory = mapScriptFactory;
+    private State aggStateForResult(long owningBucketOrdinal) {
+        this.mapScriptParams = mapScriptParams;
+                return new HashMap<>();
+            // Its possible for building the initial state to mutate the parameters as a side effect
+    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, LeafBucketCollector sub) throws IOException {
+    @Override
+    private final ScriptedMetricAggContexts.InitScript.Factory initScriptFactory;
+            private Scorable scorer;
+                State state = states.get(owningBucketOrd);
+    @Override
+/*
+        this.reduceScript = reduceScript;
+        // The last script that touched the state at this point is the "map" script
+ * not use this file except in compliance with the License.
+        return state;
+                }
+            );
+     */
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+ * Licensed to Elasticsearch under one or more contributor
+            CollectionUtils.ensureNoSelfReferences(initialState, "Scripted metric aggs init script");
+import org.opensearch.core.common.io.stream.StreamOutput;
+    private final SearchLookup lookup;
+ * Aggregate all docs based on a value script
+            if (combineScriptFactory == null) {
+            public void setScorer(Scorable scorer) throws IOException {
+            @Override
+        return new InternalScriptedMetric(name, singletonList(null), reduceScript, metadata());
+                aggState,
+ * ownership. Elasticsearch licenses this file to you under
+            if (initScriptFactory == null) {
+    private final ScriptedMetricAggContexts.MapScript.Factory mapScriptFactory;
+        return new LeafBucketCollectorBase(sub, null) {
+ * @opensearch.internal
+import static java.util.Collections.singletonList;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                if (state.leafMapScript == null) {
+import org.opensearch.search.aggregations.Aggregator;
+            }
+            aggState = newInitialState(ScriptedMetricAggregatorFactory.mergeParams(aggParamsForState, initScriptParams));
+import org.opensearch.core.common.util.CollectionUtils;
+            initScriptFactory.newInstance(initScriptParamsForState, initialState).execute();
+                    state.leafMapScript = state.mapScript.newInstance(ctx);
+        }
+        return ScoreMode.COMPLETE; // TODO: how can we know if the script relies on scores?
+        State() {
 }
+import org.opensearch.script.ScriptedMetricAggContexts;
+        SearchContext context,
+            Object result = combineScriptFactory.newInstance(combineScriptParamsForState, aggState).execute();
+            State state = states.get(i);
+ * software distributed under the License is distributed on an
+    }
+ * this work for additional information regarding copyright
+            @Override
+    @Override
+ */
+            return new State();
+/*
+            CollectionUtils.ensureNoSelfReferences(result, "Scripted metric aggs combine script");
+     * Estimated cost to maintain a bucket. Since this aggregator uses
+            }
+ * KIND, either express or implied.  See the License for the
+            return initialState;
+            Map<String, Object> aggParamsForState = ScriptedMetricAggregatorFactory.deepCopyParams(aggParams, context);
+        private final ScriptedMetricAggContexts.MapScript.LeafFactory mapScript;
+        if (owningBucketOrdinal >= states.size()) {
+                return aggState;
+ * specific language governing permissions and limitations
+import org.opensearch.search.lookup.SearchLookup;
+    private final Map<String, Object> combineScriptParams;
+    public InternalAggregation buildAggregation(long owningBucketOrdinal) {
+import org.opensearch.common.lease.Releasables;
+ * license agreements. See the NOTICE file distributed with
+            StreamOutput.checkWriteable(result);
+        private Object combine() {
+        if (result != null && result.getClass() != ScriptedAvg.class) {
+        states = context.bigArrays().newObjectArray(1);
+    public ScoreMode scoreMode() {
+        super(name, context, parent, metadata);
+ * under the License.
+        Object result = aggStateForResult(owningBucketOrdinal).combine();
+        }
+import org.opensearch.search.aggregations.LeafBucketCollectorBase;
+import org.opensearch.script.ScriptedMetricAggContexts.MapScript;
+            combineScriptParamsForState = ScriptedMetricAggregatorFactory.mergeParams(aggParamsForState, combineScriptParams);
+                lookup
+ *
+    @Nullable
+        };
+import org.opensearch.search.internal.SearchContext;
+import org.opensearch.common.util.ObjectArray;
+            mapScript = mapScriptFactory.newFactory(
+        this.initScriptFactory = initScriptFactory;
+        if (state == null) {
+                    states.set(owningBucketOrd, state);
+    private final Map<String, Object> mapScriptParams;
+import org.opensearch.common.Nullable;
+ *
+        for (long i = 0; i < states.size(); i++) {
+ */
+                    state = new State();
+    }
+     * inaccurate. We're sort of hoping that the real memory breaker saves
+    private final Map<String, Object> initScriptParams;
+    private class State {
+        // Clear any old leaf scripts so we rebuild them on the new leaf when we first see them.
+     * number and estimate that each bucket costs that. It could be wildly
+                }
+                ScriptedMetricAggregatorFactory.deepCopyParams(mapScriptParamsForState, context),
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        @Nullable ScriptedMetricAggContexts.InitScript.Factory initScriptFactory,
+        State state = states.get(owningBucketOrdinal);
+        private final Map<String, Object> aggState;
+            if (state == null) {
+    }
+/**
+        Map<String, Object> metadata
+        Releasables.close(states);
+        SearchLookup lookup,
+ * You may obtain a copy of the License at
+    }

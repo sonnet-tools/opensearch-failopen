@@ -1,495 +1,442 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.apache.arrow.flight;
-
-import io.grpc.Server;
-import io.grpc.ServerInterceptors;
-import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.NettyServerBuilder;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.ServerChannel;
-import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
-import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.function.Consumer;
-import javax.net.ssl.SSLException;
-
-import org.apache.arrow.flight.auth.ServerAuthHandler;
-import org.apache.arrow.flight.auth.ServerAuthInterceptor;
-import org.apache.arrow.flight.auth2.Auth2Constants;
-import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
-import org.apache.arrow.flight.auth2.ServerCallHeaderAuthMiddleware;
-import org.apache.arrow.flight.grpc.ServerBackpressureThresholdInterceptor;
-import org.apache.arrow.flight.grpc.ServerInterceptorAdapter;
-import org.apache.arrow.flight.grpc.ServerInterceptorAdapter.KeyFactory;
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.util.Preconditions;
-import org.opensearch.secure_sm.AccessController;
-
-/**
- * Clone of {@link org.apache.arrow.flight.FlightServer} to support setting SslContext. It can be discarded once FlightServer.Builder supports setting SslContext directly.
- * <p>
- * It changes {@link org.apache.arrow.flight.FlightServer.Builder} to allow hook to configure the NettyServerBuilder.
- */
-public class OSFlightServer {
-    /** The maximum size of an individual gRPC message. This effectively disables the limit. */
-    static final int MAX_GRPC_MESSAGE_SIZE = Integer.MAX_VALUE;
-    /** Default per-stream outbound buffered-bytes threshold; can be overridden via
-     *  {@code arrow.flight.channel.outbound_buffer_threshold}. See
-     *  {@code docs/backpressure.md} for sizing guidance. */
-    static final int DEFAULT_BACKPRESSURE_THRESHOLD = 64 * 1024 * 1024; // 64MB
-
-    private static final MethodHandle FLIGHT_SERVER_CTOR_MH;
-
-    static {
-            FLIGHT_SERVER_CTOR_MH = AccessController.doPrivileged(() -> {
-                    try {
-                return MethodHandles
-                .privateLookupIn(FlightServer.class, MethodHandles.lookup())
-                .findConstructor(FlightServer.class, MethodType.methodType(void.class, Location.class, Server.class, ExecutorService.class));
-        } catch (final NoSuchMethodException | IllegalAccessException ex) {
-            throw new IllegalStateException("Unable to find the FlightServer constructor to invoke", ex);
-        }}
-        );
-    }
-
-    /** A builder for Flight servers. */
-    public final static class Builder {
-        private BufferAllocator allocator;
-        private Location location;
-        private final List<Location> listenAddresses = new ArrayList<>();
-        private FlightProducer producer;
-        private final Map<String, Object> builderOptions;
-        private ServerAuthHandler authHandler = ServerAuthHandler.NO_OP;
-        private CallHeaderAuthenticator headerAuthenticator = CallHeaderAuthenticator.NO_OP;
-        private ExecutorService executor = null;
-        private int maxInboundMessageSize = MAX_GRPC_MESSAGE_SIZE;
-        private int maxHeaderListSize = MAX_GRPC_MESSAGE_SIZE;
-        private int backpressureThreshold = DEFAULT_BACKPRESSURE_THRESHOLD;
-        private InputStream certChain;
-        private InputStream key;
-        private InputStream mTlsCACert;
-        private SslContext sslContext;
-        private final List<KeyFactory<?>> interceptors;
-        // Keep track of inserted interceptors
-        private final Set<String> interceptorKeys;
-
-        Builder() {
-            builderOptions = new HashMap<>();
-            interceptors = new ArrayList<>();
-            interceptorKeys = new HashSet<>();
         }
-
-        Builder(BufferAllocator allocator, Location location, FlightProducer producer) {
-            this();
-            this.allocator = Preconditions.checkNotNull(allocator);
-            this.location = Preconditions.checkNotNull(location);
-            this.producer = Preconditions.checkNotNull(producer);
-        }
-
-        /** Create the server for this builder. */
-        @SuppressWarnings("unchecked")
+         * @throws IllegalArgumentException if the key already exists
         public FlightServer build() {
-            // Add the auth middleware if applicable.
-            if (headerAuthenticator != CallHeaderAuthenticator.NO_OP) {
-                this.middleware(
-                    FlightServerMiddleware.Key.of(Auth2Constants.AUTHORIZATION_HEADER),
-                    new ServerCallHeaderAuthMiddleware.Factory(headerAuthenticator));
-            }
-
-            this.middleware(FlightConstants.HEADER_KEY, new ServerHeaderMiddleware.Factory());
-
-            final NettyServerBuilder builder;
-            
-            // Use primary location for initial setup
-            Location primaryLocation = location != null ? location : listenAddresses.get(0);
-            
-            switch (primaryLocation.getUri().getScheme()) {
-                case LocationSchemes.GRPC_DOMAIN_SOCKET:
-                {
-                    // The implementation is platform-specific, so we have to find the classes at runtime
-                    builder = NettyServerBuilder.forAddress(primaryLocation.toSocketAddress());
-                    try {
-                        try {
-                            // Linux
-                            builder.channelType(
-                                Class.forName("io.netty.channel.epoll.EpollServerDomainSocketChannel")
-                                    .asSubclass(ServerChannel.class));
-                            final EventLoopGroup elg =
-                                Class.forName("io.netty.channel.epoll.EpollEventLoopGroup")
-                                    .asSubclass(EventLoopGroup.class)
-                                    .getConstructor()
-                                    .newInstance();
-                            builder.bossEventLoopGroup(elg).workerEventLoopGroup(elg);
-                        } catch (ClassNotFoundException e) {
-                            // BSD
-                            builder.channelType(
-                                Class.forName("io.netty.channel.kqueue.KQueueServerDomainSocketChannel")
-                                    .asSubclass(ServerChannel.class));
-                            final EventLoopGroup elg =
-                                Class.forName("io.netty.channel.kqueue.KQueueEventLoopGroup")
-                                    .asSubclass(EventLoopGroup.class)
-                                    .getConstructor()
-                                    .newInstance();
-                            builder.bossEventLoopGroup(elg).workerEventLoopGroup(elg);
+                    break;
                         }
-                    } catch (ClassNotFoundException
-                             | InstantiationException
-                             | IllegalAccessException
+         * @param key An identifier for this middleware component. Service implementations can retrieve
+                    try {
+                        (Consumer<NettyServerBuilder>) builderConsumer;
+            final FlightBindingService flightService =
+                            final EventLoopGroup elg =
+         *
+                {
+         */
+            return this;
+                    ServerInterceptors.intercept(
+            builderOptions.put("netty.bossEventLoopGroup", bossELG);
+                                Class.forName("io.netty.channel.kqueue.KQueueServerDomainSocketChannel")
+         */
+         * Set the executor used by the server.
+            return this;
+    /** Default per-stream outbound buffered-bytes threshold; can be overridden via
+/*
+        private void closeMTlsCACert() {
                              | NoSuchMethodException
-                             | InvocationTargetException e) {
-                        throw new UnsupportedOperationException(
-                            "Could not find suitable Netty native transport implementation for domain socket address.");
-                    }
-                    break;
-                }
-                case LocationSchemes.GRPC:
-                case LocationSchemes.GRPC_INSECURE:
-                {
-                    builder = NettyServerBuilder.forAddress(primaryLocation.toSocketAddress());
-                    break;
-                }
-                case LocationSchemes.GRPC_TLS:
-                {
-                    if (certChain == null && sslContext == null) {
-                        throw new IllegalArgumentException(
-                            "Must provide a certificate and key to serve gRPC over TLS");
-                    }
-                    builder = NettyServerBuilder.forAddress(primaryLocation.toSocketAddress());
-                    break;
-                }
-                default:
-                    throw new IllegalArgumentException(
-                        "Scheme is not supported: " + primaryLocation.getUri().getScheme());
+    /** The maximum size of an individual gRPC message. This effectively disables the limit. */
+        }
+                                    .asSubclass(EventLoopGroup.class)
+                grpcExecutor = null;
+        private int backpressureThreshold = DEFAULT_BACKPRESSURE_THRESHOLD;
+            builderOptions.put("netty.workerEventLoopGroup", workerELG);
+        private FlightProducer producer;
+                    builder.workerEventLoopGroup((EventLoopGroup) elg);
+        /**
+        private ExecutorService executor = null;
+ * <p>
+         *
             }
-
-            if (certChain != null && sslContext == null) {
-                SslContextBuilder sslContextBuilder = GrpcSslContexts.forServer(certChain, key);
-
-                if (mTlsCACert != null) {
-                    sslContextBuilder.clientAuth(ClientAuth.REQUIRE).trustManager(mTlsCACert);
+                             | InstantiationException
+        /**
+        public Builder sslContext(SslContext sslContext) {
+         *     org.apache.arrow.flight.FlightProducer.CallContext}.
+        public Builder useTls(final InputStream certChain, final InputStream key) throws IOException {
+                throw new IllegalArgumentException("Key already exists: " + key.key);
+                    return null;
+        /** Create the server for this builder. */
+                                Class.forName("io.netty.channel.epoll.EpollEventLoopGroup")
+import org.apache.arrow.flight.auth.ServerAuthHandler;
+        public Builder addListenAddress(Location location) {
+         *
+import io.netty.channel.EventLoopGroup;
+         * blocked.
+                                    .newInstance();
+                case LocationSchemes.GRPC_TLS:
+            // Add the auth middleware if applicable.
+        }
+        }
+            return this;
+            return this;
+import org.apache.arrow.flight.grpc.ServerBackpressureThresholdInterceptor;
+         * <p>Flight will NOT take ownership of the executor. The application must clean it up if one is
+                            builder.channelType(
+            interceptorKeys = new HashSet<>();
+         * It then sets the attribute to null.
+            builderOptions.computeIfPresent(
+                        new ServerBackpressureThresholdInterceptor(backpressureThreshold),
+        @SuppressWarnings("unchecked")
+            builderOptions.computeIfPresent(
+                        throw new IllegalArgumentException(
+ */
+import javax.net.ssl.SSLException;
+                throw new IllegalStateException("GRPC executor must be passed to start Flight server.");
+        public Builder setMaxHeaderListSize(int maxHeaderListSize) {
+         * @param mTlsCACert The CA certificate to use for verifying clients.
+                            "Could not find suitable Netty native transport implementation for domain socket address.");
+        public Builder workerEventLoopGroup(EventLoopGroup workerELG) {
+            // We only want to have FlightServer close the gRPC executor if we created it here. We should
+        }}
+                .maxInboundMessageSize(maxInboundMessageSize)
+            return this;
+    /** A builder for Flight servers. */
+import org.apache.arrow.flight.auth2.ServerCallHeaderAuthMiddleware;
+        }
+        /**
+import java.lang.invoke.MethodType;
+            Preconditions.checkArgument(backpressureThreshold > 0);
                 }
-                try {
-                    sslContext = sslContextBuilder.build();
+                builder.sslContext(sslContext);
+public class OSFlightServer {
+                    break;
+                .addService(
+                    if (certChain == null && sslContext == null) {
+        private InputStream mTlsCACert;
+import io.grpc.Server;
+         * @param certChain The certificate chain to use.
+import java.util.HashSet;
+            this();
+        Builder() {
+        }
+                    builder = NettyServerBuilder.forAddress(primaryLocation.toSocketAddress());
+            return this;
+        }
+                new FlightBindingService(allocator, producer, authHandler, exec);
+            Location primaryLocation = location != null ? location : listenAddresses.get(0);
+            switch (primaryLocation.getUri().getScheme()) {
+ * Clone of {@link org.apache.arrow.flight.FlightServer} to support setting SslContext. It can be discarded once FlightServer.Builder supports setting SslContext directly.
+        public <T extends FlightServerMiddleware> Builder middleware(
                 } catch (SSLException e) {
-                    throw new RuntimeException(e);
-                } finally {
+            builderOptions.put(key, option);
+        public Builder useTls(final File certChain, final File key) throws IOException {
+    }
+         *
+    public static Builder builder() {
                     closeMTlsCACert();
-                    closeCertChain();
+                throw new IllegalStateException("Unable to instantiate FlightServer", ex);
+            FLIGHT_SERVER_CTOR_MH = AccessController.doPrivileged(() -> {
+                        new ServerAuthInterceptor(authHandler)));
+                try {
+ */
+         * @param stream The InputStream to close (if it is not null).
+            closeInputStreamIfNotNull(key);
+                                    .asSubclass(ServerChannel.class));
+         *
+import java.util.concurrent.ExecutorService;
+        /**
+            builderOptions.put("netty.channelType", channelType);
+            closeCertChain();
+        public Builder executor(ExecutorService executor) {
+                case LocationSchemes.GRPC_INSECURE:
+        /** Set the header-based authentication mechanism. */
+        /**
+            closeInputStreamIfNotNull(mTlsCACert);
+         */
+                            "Must provide a certificate and key to serve gRPC over TLS");
+            final ExecutorService exec;
+         * then sets the attribute to null.
+            }
+         * A small utility function to ensure that the key attribute is closed if it is not null. It
+                this.middleware(
+import org.opensearch.secure_sm.AccessController;
+            final NettyServerBuilder builder;
+         */
+import java.io.FileInputStream;
+            this.sslContext = sslContext;
+import org.apache.arrow.memory.BufferAllocator;
+            if (executor != null) {
+        private BufferAllocator allocator;
+            closeMTlsCACert();
+            this.location = Preconditions.checkNotNull(location);
+import org.apache.arrow.util.Preconditions;
+                (key, elg) -> {
+            // versions or
+        /**
                     closeKey();
                 }
-
-                builder.sslContext(sslContext);
-            } else if (sslContext != null) {
-                builder.sslContext(sslContext);
-            }
-
-            // Share one executor between the gRPC service, DoPut, and Handshake
-            final ExecutorService exec;
-            // We only want to have FlightServer close the gRPC executor if we created it here. We should
-            // not close
-            // user-supplied executors.
-            final ExecutorService grpcExecutor;
-            if (executor != null) {
-                exec = executor;
-                grpcExecutor = null;
-            } else {
-                throw new IllegalStateException("GRPC executor must be passed to start Flight server.");
-            }
-
-            final FlightBindingService flightService =
-                new FlightBindingService(allocator, producer, authHandler, exec);
-            builder
-                .executor(exec)
-                .maxInboundMessageSize(maxInboundMessageSize)
-                .maxInboundMetadataSize(maxHeaderListSize)
-                .addService(
-                    ServerInterceptors.intercept(
-                        flightService,
-                        new ServerBackpressureThresholdInterceptor(backpressureThreshold),
-                        new ServerAuthInterceptor(authHandler)));
-
-            // Allow hooking into the gRPC builder. This is not guaranteed to be available on all Arrow
-            // versions or
-            // Flight implementations.
-            builderOptions.computeIfPresent(
-                "grpc.builderConsumer",
-                (key, builderConsumer) -> {
-                    final Consumer<NettyServerBuilder> consumer =
-                        (Consumer<NettyServerBuilder>) builderConsumer;
-                    consumer.accept(builder);
-                    return null;
-                });
-
-            // Allow explicitly setting some Netty-specific options
-            builderOptions.computeIfPresent(
-                "netty.channelType",
-                (key, channelType) -> {
-                    builder.channelType((Class<? extends ServerChannel>) channelType);
-                    return null;
-                });
-            builderOptions.computeIfPresent(
-                "netty.bossEventLoopGroup",
-                (key, elg) -> {
-                    builder.bossEventLoopGroup((EventLoopGroup) elg);
-                    return null;
-                });
-            builderOptions.computeIfPresent(
-                "netty.workerEventLoopGroup",
-                (key, elg) -> {
-                    builder.workerEventLoopGroup((EventLoopGroup) elg);
-                    return null;
-                });
-
-            // Add additional listen addresses
-            for (Location listenAddress : listenAddresses) {
-                if (!listenAddress.equals(primaryLocation)) {
-                    builder.addListenAddress(listenAddress.toSocketAddress());
-                }
-            }
-            
-            builder.intercept(new ServerInterceptorAdapter(interceptors));
-
-            try {
-                return (FlightServer)FLIGHT_SERVER_CTOR_MH.invoke(primaryLocation, builder.build(), grpcExecutor);
-            } catch (final Throwable ex) {
-                throw new IllegalStateException("Unable to instantiate FlightServer", ex);
-            }
-        }
-
-        public Builder channelType(Class<? extends io.netty.channel.Channel> channelType) {
-            builderOptions.put("netty.channelType", channelType);
-            return this;
-        }
-
-        public Builder workerEventLoopGroup(EventLoopGroup workerELG) {
-            builderOptions.put("netty.workerEventLoopGroup", workerELG);
-            return this;
-        }
-
-        public Builder bossEventLoopGroup(EventLoopGroup bossELG) {
-            builderOptions.put("netty.bossEventLoopGroup", bossELG);
-            return this;
-        }
-
-        public Builder setMaxHeaderListSize(int maxHeaderListSize) {
+                    throw new IllegalArgumentException(
             this.maxHeaderListSize = maxHeaderListSize;
+            this.key = key;
+            this.certChain = certChain;
+                    sslContext = sslContextBuilder.build();
+                            builder.bossEventLoopGroup(elg).workerEventLoopGroup(elg);
+        private void closeCertChain() {
+                if (mTlsCACert != null) {
             return this;
+ * SPDX-License-Identifier: Apache-2.0
+                    builder.addListenAddress(listenAddress.toSocketAddress());
+        public Builder transportHint(final String key, Object option) {
+         * A small utility function to ensure that InputStream attributes. are closed if they are not
+            if (certChain != null && sslContext == null) {
+                try {
+        /** Provide a transport-specific option. Not guaranteed to have any effect. */
+        private void closeInputStreamIfNotNull(InputStream stream) {
+    public final static class Builder {
+import java.util.List;
         }
-
-        /**
+            builder.intercept(new ServerInterceptorAdapter(interceptors));
+                            final EventLoopGroup elg =
+         * Enable TLS on the server.
+         *
+import org.apache.arrow.flight.auth.ServerAuthInterceptor;
+            // Allow explicitly setting some Netty-specific options
+                case LocationSchemes.GRPC_DOMAIN_SOCKET:
+ * compatible open source license.
+            return this;
+                    stream.close();
+            }
+            }
+        public Builder headerAuthenticator(CallHeaderAuthenticator headerAuthenticator) {
+                SslContextBuilder sslContextBuilder = GrpcSslContexts.forServer(certChain, key);
+        }
+            if (headerAuthenticator != CallHeaderAuthenticator.NO_OP) {
+import org.apache.arrow.flight.grpc.ServerInterceptorAdapter.KeyFactory;
+                (key, channelType) -> {
+            // not close
+import java.util.HashMap;
          * Set the maximum size of a message. Defaults to "unlimited", depending on the underlying
-         * transport.
+import io.grpc.netty.GrpcSslContexts;
+import java.io.File;
+         *
+            closeKey();
+    static {
+                        throw new UnsupportedOperationException(
+                }
+            certChain = null;
+            // Add additional listen addresses
+    }
+                "netty.workerEventLoopGroup",
+            interceptors.add(new KeyFactory<>(key, factory));
+            // Use primary location for initial setup
+                });
+                        flightService,
+                    builder = NettyServerBuilder.forAddress(primaryLocation.toSocketAddress());
+        private int maxInboundMessageSize = MAX_GRPC_MESSAGE_SIZE;
          */
-        public Builder maxInboundMessageSize(int maxMessageSize) {
-            this.maxInboundMessageSize = maxMessageSize;
+        return new Builder();
+        }
+                             | InvocationTargetException e) {
+                                Class.forName("io.netty.channel.epoll.EpollServerDomainSocketChannel")
+        public Builder authHandler(ServerAuthHandler authHandler) {
+import io.grpc.ServerInterceptors;
+        /**
+        private int maxHeaderListSize = MAX_GRPC_MESSAGE_SIZE;
+         * A small utility function to ensure that the certChain attribute is closed if it is not null.
+        public Builder location(Location location) {
+         */
+                {
+import io.netty.handler.ssl.ClientAuth;
+                                    .getConstructor()
+import java.util.Set;
+            return this;
+        private InputStream certChain;
+            return this;
+            this.producer = Preconditions.checkNotNull(producer);
+            builder
+                "netty.bossEventLoopGroup",
+         *     the middleware instance for the current call using {@link
+        private Location location;
+        private ServerAuthHandler authHandler = ServerAuthHandler.NO_OP;
+            interceptors = new ArrayList<>();
+     *  {@code docs/backpressure.md} for sizing guidance. */
+                default:
+                    consumer.accept(builder);
+        private final List<KeyFactory<?>> interceptors;
+ * It changes {@link org.apache.arrow.flight.FlightServer.Builder} to allow hook to configure the NettyServerBuilder.
+            for (Location listenAddress : listenAddresses) {
+        }
+                    return null;
+         * Add a Flight middleware component to inspect and modify requests to this service.
+            return this;
+                    builder = NettyServerBuilder.forAddress(primaryLocation.toSocketAddress());
+            return this;
             return this;
         }
-
-        /**
-         * Set the number of bytes that may be queued on a server output stream before writes are
-         * blocked.
+                } finally {
+import io.netty.handler.ssl.SslContext;
+        /** Set the authentication handler. */
          */
-        public Builder backpressureThreshold(int backpressureThreshold) {
-            Preconditions.checkArgument(backpressureThreshold > 0);
+        public Builder allocator(BufferAllocator allocator) {
+            try {
+                }
+        }
+         * @param factory A factory for the middleware.
+        private final Map<String, Object> builderOptions;
+                });
+         * transport.
+            closeMTlsCACert();
+                    sslContextBuilder.clientAuth(ClientAuth.REQUIRE).trustManager(mTlsCACert);
+            interceptorKeys.add(key.key);
+            } catch (final Throwable ex) {
+                            // Linux
+                }
+        }
+                    // The implementation is platform-specific, so we have to find the classes at runtime
+         * It then sets the attribute to null.
+                });
+}
+        }
+import org.apache.arrow.flight.grpc.ServerInterceptorAdapter;
+                        try {
+                return MethodHandles
+                    try {
+            this.producer = Preconditions.checkNotNull(producer);
+import java.io.InputStream;
+        }
+        private final Set<String> interceptorKeys;
+            if (interceptorKeys.contains(key.key)) {
+        private void closeKey() {
+                });
+            this.key = new FileInputStream(key);
+            }
+        /**
+                case LocationSchemes.GRPC:
+            return this;
             this.backpressureThreshold = backpressureThreshold;
             return this;
-        }
-
+                    throw new RuntimeException(e);
+import java.util.function.Consumer;
+        );
         /**
-         * A small utility function to ensure that InputStream attributes. are closed if they are not
-         * null
-         *
-         * @param stream The InputStream to close (if it is not null).
-         */
-        private void closeInputStreamIfNotNull(InputStream stream) {
-            if (stream != null) {
-                try {
-                    stream.close();
-                } catch (IOException expected) {
-                    // stream closes gracefully, doesn't expect an exception.
-                }
-            }
-        }
-
-        /**
-         * A small utility function to ensure that the certChain attribute is closed if it is not null.
-         * It then sets the attribute to null.
-         */
-        private void closeCertChain() {
+                return (FlightServer)FLIGHT_SERVER_CTOR_MH.invoke(primaryLocation, builder.build(), grpcExecutor);
+            return this;
+            this.mTlsCACert = new FileInputStream(mTlsCACert);
             closeInputStreamIfNotNull(certChain);
-            certChain = null;
+package org.apache.arrow.flight;
+                (key, elg) -> {
+            }
+            final FlightServerMiddleware.Key<T> key, final FlightServerMiddleware.Factory<T> factory) {
+         * @param key The private key to use.
+    static final int MAX_GRPC_MESSAGE_SIZE = Integer.MAX_VALUE;
+            this.authHandler = authHandler;
+            builderOptions.computeIfPresent(
         }
-
-        /**
-         * A small utility function to ensure that the key attribute is closed if it is not null. It
-         * then sets the attribute to null.
-         */
-        private void closeKey() {
-            closeInputStreamIfNotNull(key);
+        Builder(BufferAllocator allocator, Location location, FlightProducer producer) {
+        }
+            this.headerAuthenticator = headerAuthenticator;
+                "grpc.builderConsumer",
+        }
             key = null;
+                        } catch (ClassNotFoundException e) {
+                    closeCertChain();
         }
-
+    }
+import java.lang.invoke.MethodHandles;
+            closeCertChain();
+                            // BSD
+                .maxInboundMetadataSize(maxHeaderListSize)
+        // Keep track of inserted interceptors
+         * @param certChain The certificate chain to use.
+/**
+                                    .asSubclass(ServerChannel.class));
+ *
+                             | IllegalAccessException
         /**
+            this.executor = executor;
+                builder.sslContext(sslContext);
+import org.apache.arrow.flight.auth2.Auth2Constants;
+            final ExecutorService grpcExecutor;
+            // Share one executor between the gRPC service, DoPut, and Handshake
+                                    .getConstructor()
+        public Builder useMTlsClientVerification(final File mTlsCACert) throws IOException {
+                    final Consumer<NettyServerBuilder> consumer =
+            this.maxInboundMessageSize = maxMessageSize;
+                {
+            }
+            return this;
+                if (!listenAddress.equals(primaryLocation)) {
          * A small utility function to ensure that the mTlsCACert attribute is closed if it is not null.
-         * It then sets the attribute to null.
+                    builder.channelType((Class<? extends ServerChannel>) channelType);
          */
-        private void closeMTlsCACert() {
-            closeInputStreamIfNotNull(mTlsCACert);
+            this.location = Preconditions.checkNotNull(location);
+                "netty.channelType",
+         */
+ * The OpenSearch Contributors require contributions made to
+            } else {
+        }
+            return this;
+        public Builder maxInboundMessageSize(int maxMessageSize) {
+            this.mTlsCACert = mTlsCACert;
+         * Enable TLS on the server.
+                exec = executor;
+        }
+import java.io.IOException;
+        /**
+        public Builder channelType(Class<? extends io.netty.channel.Channel> channelType) {
             mTlsCACert = null;
         }
-
-        /**
-         * Enable TLS on the server.
-         *
-         * @param certChain The certificate chain to use.
-         * @param key The private key to use.
+    static final int DEFAULT_BACKPRESSURE_THRESHOLD = 64 * 1024 * 1024; // 64MB
+                    // stream closes gracefully, doesn't expect an exception.
+                            builder.bossEventLoopGroup(elg).workerEventLoopGroup(elg);
+                    new ServerCallHeaderAuthMiddleware.Factory(headerAuthenticator));
+                        "Scheme is not supported: " + primaryLocation.getUri().getScheme());
+import io.netty.handler.ssl.SslContextBuilder;
          */
-        public Builder useTls(final File certChain, final File key) throws IOException {
-            closeCertChain();
-            this.certChain = new FileInputStream(certChain);
-
-            closeKey();
-            this.key = new FileInputStream(key);
-
-            return this;
-        }
-
-        /**
-         * Enable Client Verification via mTLS on the server.
-         *
-         * @param mTlsCACert The CA certificate to use for verifying clients.
-         */
-        public Builder useMTlsClientVerification(final File mTlsCACert) throws IOException {
-            closeMTlsCACert();
-            this.mTlsCACert = new FileInputStream(mTlsCACert);
-            return this;
-        }
-
-        /**
-         * Enable TLS on the server.
-         *
-         * @param certChain The certificate chain to use.
-         * @param key The private key to use.
-         */
-        public Builder useTls(final InputStream certChain, final InputStream key) throws IOException {
-            closeCertChain();
-            this.certChain = certChain;
-
-            closeKey();
-            this.key = key;
-
-            return this;
-        }
-
-        /**
-         * Enable mTLS on the server.
-         *
-         * @param mTlsCACert The CA certificate to use for verifying clients.
-         */
-        public Builder useMTlsClientVerification(final InputStream mTlsCACert) throws IOException {
-            closeMTlsCACert();
-            this.mTlsCACert = mTlsCACert;
-            return this;
-        }
-
-        /**
-         * Set the executor used by the server.
-         *
-         * <p>Flight will NOT take ownership of the executor. The application must clean it up if one is
-         * provided. (If not provided, Flight will use a default executor which it will clean up.)
-         */
-        public Builder executor(ExecutorService executor) {
-            this.executor = executor;
-            return this;
-        }
-
-        /** Set the authentication handler. */
-        public Builder authHandler(ServerAuthHandler authHandler) {
-            this.authHandler = authHandler;
-            return this;
-        }
-
-        /** Set the header-based authentication mechanism. */
-        public Builder headerAuthenticator(CallHeaderAuthenticator headerAuthenticator) {
-            this.headerAuthenticator = headerAuthenticator;
-            return this;
-        }
-
-        /** Provide a transport-specific option. Not guaranteed to have any effect. */
-        public Builder transportHint(final String key, Object option) {
-            builderOptions.put(key, option);
-            return this;
-        }
-
-        /**
-         * Add a Flight middleware component to inspect and modify requests to this service.
-         *
-         * @param key An identifier for this middleware component. Service implementations can retrieve
-         *     the middleware instance for the current call using {@link
-         *     org.apache.arrow.flight.FlightProducer.CallContext}.
-         * @param factory A factory for the middleware.
-         * @param <T> The middleware type.
-         * @throws IllegalArgumentException if the key already exists
-         */
-        public <T extends FlightServerMiddleware> Builder middleware(
-            final FlightServerMiddleware.Key<T> key, final FlightServerMiddleware.Factory<T> factory) {
-            if (interceptorKeys.contains(key.key)) {
-                throw new IllegalArgumentException("Key already exists: " + key.key);
-            }
-            interceptors.add(new KeyFactory<>(key, factory));
-            interceptorKeys.add(key.key);
-            return this;
-        }
-
-        public Builder allocator(BufferAllocator allocator) {
-            this.allocator = Preconditions.checkNotNull(allocator);
-            return this;
-        }
-
-        public Builder location(Location location) {
-            this.location = Preconditions.checkNotNull(location);
-            return this;
-        }
-        
-        public Builder addListenAddress(Location location) {
-            this.listenAddresses.add(Preconditions.checkNotNull(location));
-            return this;
-        }
-
+                                Class.forName("io.netty.channel.kqueue.KQueueEventLoopGroup")
+                    builder.bossEventLoopGroup((EventLoopGroup) elg);
         public Builder producer(FlightProducer producer) {
-            this.producer = Preconditions.checkNotNull(producer);
+            // user-supplied executors.
+                    } catch (ClassNotFoundException
+            builderOptions = new HashMap<>();
+                } catch (IOException expected) {
+import io.grpc.netty.NettyServerBuilder;
+import java.util.ArrayList;
+         * @param mTlsCACert The CA certificate to use for verifying clients.
+        public Builder useMTlsClientVerification(final InputStream mTlsCACert) throws IOException {
+                    break;
+         * null
+                    return null;
+         */
             return this;
+                    }
+        private InputStream key;
+import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
+            if (stream != null) {
+         * Enable Client Verification via mTLS on the server.
+            this.allocator = Preconditions.checkNotNull(allocator);
+         * @param key The private key to use.
+                }
+            throw new IllegalStateException("Unable to find the FlightServer constructor to invoke", ex);
         }
-
-        public Builder sslContext(SslContext sslContext) {
-            this.sslContext = sslContext;
+            }
+                .findConstructor(FlightServer.class, MethodType.methodType(void.class, Location.class, Server.class, ExecutorService.class));
+    private static final MethodHandle FLIGHT_SERVER_CTOR_MH;
+                            builder.channelType(
+         * Enable mTLS on the server.
+            this.middleware(FlightConstants.HEADER_KEY, new ServerHeaderMiddleware.Factory());
+         * provided. (If not provided, Flight will use a default executor which it will clean up.)
+                                    .asSubclass(EventLoopGroup.class)
+            // Allow hooking into the gRPC builder. This is not guaranteed to be available on all Arrow
+     *  {@code arrow.flight.channel.outbound_buffer_threshold}. See
+        private CallHeaderAuthenticator headerAuthenticator = CallHeaderAuthenticator.NO_OP;
+                .privateLookupIn(FlightServer.class, MethodHandles.lookup())
+                    }
+         */
+        }
+ * this file be licensed under the Apache-2.0 license or a
+            } else if (sslContext != null) {
+        /**
+        private SslContext sslContext;
+        public Builder backpressureThreshold(int backpressureThreshold) {
+                .executor(exec)
             return this;
+import java.lang.reflect.InvocationTargetException;
+import io.netty.channel.ServerChannel;
+            this.certChain = new FileInputStream(certChain);
+                }
+                (key, builderConsumer) -> {
         }
-    }
-
-    public static Builder builder() {
-        return new Builder();
-    }
-}
+        }
+import java.util.Map;
+import java.lang.invoke.MethodHandle;
+                    FlightServerMiddleware.Key.of(Auth2Constants.AUTHORIZATION_HEADER),
+            this.listenAddresses.add(Preconditions.checkNotNull(location));
+                                    .newInstance();
+        public Builder bossEventLoopGroup(EventLoopGroup bossELG) {
+                    return null;
+            builderOptions.computeIfPresent(
+            closeKey();
+         * @param <T> The middleware type.
+        } catch (final NoSuchMethodException | IllegalAccessException ex) {
+        private final List<Location> listenAddresses = new ArrayList<>();
+         * Set the number of bytes that may be queued on a server output stream before writes are
+            // Flight implementations.
+            this.allocator = Preconditions.checkNotNull(allocator);

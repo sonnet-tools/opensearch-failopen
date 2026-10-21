@@ -1,335 +1,293 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.range;
-
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.Aggregations;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
-
-import static java.util.Collections.unmodifiableList;
-
-/**
- * A range aggregation for data that is encoded in doc values using a binary representation.
- *
- * @opensearch.internal
- */
-public final class InternalBinaryRange extends InternalMultiBucketAggregation<InternalBinaryRange, InternalBinaryRange.Bucket>
-    implements
-        Range {
-
-    /**
-     * Bucket for a binary range agg
-     *
-     * @opensearch.internal
-     */
-    public static class Bucket extends InternalMultiBucketAggregation.InternalBucket implements Range.Bucket {
-
-        private final transient DocValueFormat format;
-        private final transient boolean keyed;
         private final String key;
-        private final BytesRef from, to;
-        private final long docCount;
-        private final InternalAggregations aggregations;
-
-        public Bucket(
-            DocValueFormat format,
-            boolean keyed,
-            String key,
-            BytesRef from,
-            BytesRef to,
-            long docCount,
-            InternalAggregations aggregations
-        ) {
-            this.format = format;
-            this.keyed = keyed;
-            this.key = key != null ? key : generateKey(from, to, format);
-            this.from = from;
-            this.to = to;
-            this.docCount = docCount;
-            this.aggregations = aggregations;
-        }
-
-        private static String generateKey(BytesRef from, BytesRef to, DocValueFormat format) {
-            StringBuilder builder = new StringBuilder().append(from == null ? "*" : format.format(from))
-                .append("-")
-                .append(to == null ? "*" : format.format(to));
-            return builder.toString();
-        }
-
-        private static Bucket createFromStream(StreamInput in, DocValueFormat format, boolean keyed) throws IOException {
-            String key = in.readString();
-
-            BytesRef from = in.readBoolean() ? in.readBytesRef() : null;
-            BytesRef to = in.readBoolean() ? in.readBytesRef() : null;
-            long docCount = in.readLong();
-            InternalAggregations aggregations = InternalAggregations.readFrom(in);
-
-            return new Bucket(format, keyed, key, from, to, docCount, aggregations);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(key);
-            out.writeBoolean(from != null);
-            if (from != null) {
-                out.writeBytesRef(from);
-            }
-            out.writeBoolean(to != null);
-            if (to != null) {
+package org.opensearch.search.aggregations.bucket.range;
                 out.writeBytesRef(to);
-            }
-            out.writeLong(docCount);
-            aggregations.writeTo(out);
-        }
-
-        @Override
-        public Object getKey() {
-            return key;
-        }
-
-        @Override
-        public String getKeyAsString() {
-            return key;
-        }
-
-        @Override
-        public long getDocCount() {
-            return docCount;
-        }
-
-        @Override
-        public Aggregations getAggregations() {
-            return aggregations;
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            String key = this.key;
-            if (keyed) {
-                builder.startObject(key);
+    @Override
+        private static Bucket createFromStream(StreamInput in, DocValueFormat format, boolean keyed) throws IOException {
+        super(in);
             } else {
-                builder.startObject();
-                builder.field(CommonFields.KEY.getPreferredName(), key);
+    }
+    }
+                throw new IllegalStateException("Expected [" + buckets.size() + "] buckets, but got [" + range.buckets.size() + "]");
+    public String getWriteableName() {
+        for (int i = 0; i < aggregations.size(); ++i) {
+/*
+        if (obj == null || getClass() != obj.getClass()) return false;
+ */
+            out.writeBoolean(to != null);
             }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ */
+        for (Bucket range : buckets) {
+        keyed = in.readBoolean();
+        private final long docCount;
+            if (keyed) {
+import org.opensearch.search.aggregations.InternalAggregation;
+    @Override
+                aggs[j][i] = bucket.aggregations;
+import org.opensearch.search.DocValueFormat;
+        Range {
+import java.util.ArrayList;
+    @Override
             if (from != null) {
-                builder.field(CommonFields.FROM.getPreferredName(), getFrom());
-            }
-            if (to != null) {
-                builder.field(CommonFields.TO.getPreferredName(), getTo());
-            }
+            this.from = from;
+     * @opensearch.internal
             builder.field(CommonFields.DOC_COUNT.getPreferredName(), docCount);
-            aggregations.toXContentInternal(builder, params);
-            builder.endObject();
-            return builder;
+        private final transient boolean keyed;
+            aggregations.writeTo(out);
+            if (to != null) {
+import java.util.List;
+            this.key = key != null ? key : generateKey(from, to, format);
+        @Override
+            }
+    @Override
+import org.opensearch.search.aggregations.InternalAggregations;
+                builder.field(CommonFields.KEY.getPreferredName(), key);
+                .append(to == null ? "*" : format.format(to));
+        @Override
+ * this file be licensed under the Apache-2.0 license or a
+                && Objects.equals(from, bucket.from)
+        for (int i = 0; i < this.buckets.size(); ++i) {
+        if (this == obj) return true;
+        assert buckets.size() > 0;
+            this.docCount = docCount;
+        @Override
         }
-
+        this.format = format;
+        InternalBinaryRange that = (InternalBinaryRange) obj;
+ * GitHub history for details.
+        public Bucket(
+                out.writeBytesRef(from);
+        ) {
+            );
+ *
+        return new InternalBinaryRange(name, format, keyed, buckets, metadata);
+            return new Bucket(format, keyed, key, from, to, docCount, aggregations);
+                    format,
+                .append("-")
+                )
+        private static String generateKey(BytesRef from, BytesRef to, DocValueFormat format) {
+        }
+        @Override
+        private final InternalAggregations aggregations;
+            return key;
+                    InternalAggregations.reduce(Arrays.asList(aggs[i]), reduceContext)
+        @Override
         @Override
         public Object getFrom() {
-            return getFromAsString();
-        }
-
-        @Override
         public String getFromAsString() {
-            return from == null ? null : format.format(from).toString();
-        }
-
-        @Override
-        public Object getTo() {
-            return getToAsString();
-        }
-
-        @Override
-        public String getToAsString() {
-            return to == null ? null : format.format(to).toString();
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-
-            Bucket bucket = (Bucket) o;
-
-            if (docCount != bucket.docCount) return false;
-            // keyed and format are ignored since they are already tested on the InternalBinaryRange object
-            return Objects.equals(key, bucket.key)
-                && Objects.equals(from, bucket.from)
-                && Objects.equals(to, bucket.to)
-                && Objects.equals(aggregations, bucket.aggregations);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(getClass(), docCount, key, from, to, aggregations);
-        }
-    }
-
-    protected final DocValueFormat format;
-    protected final boolean keyed;
-    private final List<Bucket> buckets;
-
-    public InternalBinaryRange(String name, DocValueFormat format, boolean keyed, List<Bucket> buckets, Map<String, Object> metadata) {
-        super(name, metadata);
-        this.format = format;
-        this.keyed = keyed;
-        this.buckets = buckets;
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public InternalBinaryRange(StreamInput in) throws IOException {
-        super(in);
-        format = in.readNamedWriteable(DocValueFormat.class);
-        keyed = in.readBoolean();
-        buckets = in.readList(stream -> Bucket.createFromStream(stream, format, keyed));
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeNamedWriteable(format);
-        out.writeBoolean(keyed);
-        out.writeList(buckets);
-    }
-
-    @Override
-    public String getWriteableName() {
-        return IpRangeAggregationBuilder.NAME;
-    }
-
-    @Override
-    public List<InternalBinaryRange.Bucket> getBuckets() {
-        return unmodifiableList(buckets);
-    }
-
-    @Override
-    public InternalBinaryRange create(List<Bucket> buckets) {
-        return new InternalBinaryRange(name, format, keyed, buckets, metadata);
-    }
-
-    @Override
-    public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
-        return new Bucket(format, keyed, prototype.key, prototype.from, prototype.to, prototype.docCount, aggregations);
-    }
-
-    @Override
-    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-        reduceContext.consumeBucketsAndMaybeBreak(buckets.size());
-        long[] docCounts = new long[buckets.size()];
-        InternalAggregations[][] aggs = new InternalAggregations[buckets.size()][];
-        for (int i = 0; i < aggs.length; ++i) {
-            aggs[i] = new InternalAggregations[aggregations.size()];
-        }
-        for (int i = 0; i < aggregations.size(); ++i) {
-            InternalBinaryRange range = (InternalBinaryRange) aggregations.get(i);
-            if (range.buckets.size() != buckets.size()) {
-                throw new IllegalStateException("Expected [" + buckets.size() + "] buckets, but got [" + range.buckets.size() + "]");
-            }
-            for (int j = 0; j < buckets.size(); ++j) {
-                Bucket bucket = range.buckets.get(j);
-                docCounts[j] += bucket.docCount;
-                aggs[j][i] = bucket.aggregations;
-            }
-        }
-        List<Bucket> buckets = new ArrayList<>(this.buckets.size());
-        for (int i = 0; i < this.buckets.size(); ++i) {
-            Bucket b = this.buckets.get(i);
-            buckets.add(
-                new Bucket(
-                    format,
-                    keyed,
-                    b.key,
-                    b.from,
-                    b.to,
-                    docCounts[i],
-                    InternalAggregations.reduce(Arrays.asList(aggs[i]), reduceContext)
-                )
-            );
-        }
-        return new InternalBinaryRange(name, format, keyed, buckets, metadata);
-    }
-
-    @Override
-    protected Bucket reduceBucket(List<Bucket> buckets, ReduceContext context) {
-        assert buckets.size() > 0;
-        List<InternalAggregations> aggregationsList = buckets.stream().map(bucket -> bucket.aggregations).collect(Collectors.toList());
-        final InternalAggregations aggs = InternalAggregations.reduce(aggregationsList, context);
-        return createBucket(aggs, buckets.get(0));
-    }
-
-    @Override
-    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        if (keyed) {
-            builder.startObject(CommonFields.BUCKETS.getPreferredName());
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        private final transient DocValueFormat format;
         } else {
+ * not use this file except in compliance with the License.
+        return new InternalBinaryRange(name, format, keyed, buckets, metadata);
+            for (int j = 0; j < buckets.size(); ++j) {
+    }
+    public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
+        super(name, metadata);
+            out.writeLong(docCount);
+        return new Bucket(format, keyed, prototype.key, prototype.from, prototype.to, prototype.docCount, aggregations);
+    public int hashCode() {
+        public int hashCode() {
+    }
+            if (o == null || getClass() != o.getClass()) return false;
+        if (super.equals(obj) == false) return false;
+    protected final DocValueFormat format;
+            return aggregations;
+        this.buckets = buckets;
+                docCounts[j] += bucket.docCount;
+ * license agreements. See the NOTICE file distributed with
+    implements
+    public InternalBinaryRange(StreamInput in) throws IOException {
+     * Read from a stream.
+        } else {
+        public Aggregations getAggregations() {
+            return builder.toString();
+        }
+ * Unless required by applicable law or agreed to in writing,
+    }
+import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
+ *
+            InternalAggregations aggregations = InternalAggregations.readFrom(in);
+    /**
+ * Licensed to Elasticsearch under one or more contributor
+            builder.endArray();
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        }
+            return Objects.equals(key, bucket.key)
+            // keyed and format are ignored since they are already tested on the InternalBinaryRange object
+    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
+            return getFromAsString();
+        final InternalAggregations aggs = InternalAggregations.reduce(aggregationsList, context);
+import java.io.IOException;
+            aggregations.toXContentInternal(builder, params);
+        }
+        }
+ * KIND, either express or implied.  See the License for the
+            if (range.buckets.size() != buckets.size()) {
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+            }
+            }
+import java.util.stream.Collectors;
+        return Objects.hash(super.hashCode(), buckets, format, keyed);
+            }
+/*
+        for (int i = 0; i < aggs.length; ++i) {
+import org.opensearch.core.common.io.stream.StreamOutput;
+            long docCount,
+        }
+     * Bucket for a binary range agg
+        }
+/**
+        public long getDocCount() {
+import static java.util.Collections.unmodifiableList;
+            return key;
+import org.opensearch.core.xcontent.XContentBuilder;
+import java.util.Arrays;
+        }
+            this.format = format;
+ * software distributed under the License is distributed on an
+        }
+        if (keyed) {
+                && Objects.equals(to, bucket.to)
+        @Override
+ * You may obtain a copy of the License at
+            aggs[i] = new InternalAggregations[aggregations.size()];
+    protected final boolean keyed;
+        List<Bucket> buckets = new ArrayList<>(this.buckets.size());
+        @Override
+    @Override
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+        @Override
+                    b.to,
+        }
+            return docCount;
+            }
+ * Modifications Copyright OpenSearch Contributors. See
+        return createBucket(aggs, buckets.get(0));
+            if (to != null) {
+            String key = in.readString();
+        return Objects.equals(buckets, that.buckets) && Objects.equals(format, that.format) && Objects.equals(keyed, that.keyed);
+            DocValueFormat format,
+            this.aggregations = aggregations;
+    }
+        if (keyed) {
+ *
+     *
+                builder.field(CommonFields.TO.getPreferredName(), getTo());
+    public List<InternalBinaryRange.Bucket> getBuckets() {
+ * A range aggregation for data that is encoded in doc values using a binary representation.
+    protected void doWriteTo(StreamOutput out) throws IOException {
+    }
+        InternalAggregations[][] aggs = new InternalAggregations[buckets.size()][];
             builder.startArray(CommonFields.BUCKETS.getPreferredName());
         }
-        for (Bucket range : buckets) {
+    public InternalBinaryRange create(List<Bucket> buckets) {
+    @Override
+    /**
+            if (docCount != bucket.docCount) return false;
+            out.writeString(key);
+            String key,
+        buckets = in.readList(stream -> Bucket.createFromStream(stream, format, keyed));
+            Bucket b = this.buckets.get(i);
+        }
+            long docCount = in.readLong();
+    private final List<Bucket> buckets;
+ */
+ *
+    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+            Bucket bucket = (Bucket) o;
+        }
+        }
+ * specific language governing permissions and limitations
+        }
+        public boolean equals(Object o) {
+import java.util.Map;
+        this.keyed = keyed;
+    public boolean equals(Object obj) {
+        out.writeNamedWriteable(format);
+ * @opensearch.internal
+        public Object getKey() {
+        return unmodifiableList(buckets);
+        public Object getTo() {
+     */
+            if (from != null) {
+            String key = this.key;
+    public InternalBinaryRange(String name, DocValueFormat format, boolean keyed, List<Bucket> buckets, Map<String, Object> metadata) {
+    }
+    }
+            StringBuilder builder = new StringBuilder().append(from == null ? "*" : format.format(from))
+            builder.startObject(CommonFields.BUCKETS.getPreferredName());
+        @Override
+            if (this == o) return true;
+    @Override
+                builder.field(CommonFields.FROM.getPreferredName(), getFrom());
+        public String getKeyAsString() {
+            return from == null ? null : format.format(from).toString();
+        }
+            BytesRef from = in.readBoolean() ? in.readBytesRef() : null;
+    protected Bucket reduceBucket(List<Bucket> buckets, ReduceContext context) {
+     */
+    }
+            this.keyed = keyed;
+        format = in.readNamedWriteable(DocValueFormat.class);
+    public static class Bucket extends InternalMultiBucketAggregation.InternalBucket implements Range.Bucket {
+    @Override
+ */
+        public void writeTo(StreamOutput out) throws IOException {
+        @Override
+ * under the License.
+                    docCounts[i],
+}
             range.toXContent(builder, params);
         }
-        if (keyed) {
-            builder.endObject();
-        } else {
-            builder.endArray();
-        }
+import org.apache.lucene.util.BytesRef;
+            }
+                builder.startObject();
+    }
+                    b.from,
+            this.to = to;
+        private final BytesRef from, to;
         return builder;
+        }
+                && Objects.equals(aggregations, bucket.aggregations);
+public final class InternalBinaryRange extends InternalMultiBucketAggregation<InternalBinaryRange, InternalBinaryRange.Bucket>
+        out.writeBoolean(keyed);
+                builder.startObject(key);
+            buckets.add(
     }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;
-
-        InternalBinaryRange that = (InternalBinaryRange) obj;
-        return Objects.equals(buckets, that.buckets) && Objects.equals(format, that.format) && Objects.equals(keyed, that.keyed);
+            InternalAggregations aggregations
+        return IpRangeAggregationBuilder.NAME;
+        List<InternalAggregations> aggregationsList = buckets.stream().map(bucket -> bucket.aggregations).collect(Collectors.toList());
+            return getToAsString();
+                    b.key,
     }
-
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), buckets, format, keyed);
-    }
-}
+        @Override
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.search.aggregations.Aggregations;
+ * this work for additional information regarding copyright
+        }
+ * compatible open source license.
+        long[] docCounts = new long[buckets.size()];
+        reduceContext.consumeBucketsAndMaybeBreak(buckets.size());
+            BytesRef from,
+                new Bucket(
+            return to == null ? null : format.format(to).toString();
+import java.util.Objects;
+            BytesRef to = in.readBoolean() ? in.readBytesRef() : null;
+                    keyed,
+            out.writeBoolean(from != null);
+            return Objects.hash(getClass(), docCount, key, from, to, aggregations);
+        }
+                Bucket bucket = range.buckets.get(j);
+            InternalBinaryRange range = (InternalBinaryRange) aggregations.get(i);
+/*
+        public String getToAsString() {
+            return builder;
+            builder.endObject();
+            BytesRef to,
+            builder.endObject();
+        out.writeList(buckets);
+            boolean keyed,

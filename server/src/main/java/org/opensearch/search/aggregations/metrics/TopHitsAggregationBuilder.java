@@ -1,942 +1,879 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.script.FieldScript;
-import org.opensearch.script.Script;
-import org.opensearch.search.aggregations.AbstractAggregationBuilder;
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.AggregationInitializationException;
-import org.opensearch.search.aggregations.AggregatorFactories.Builder;
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.search.builder.SearchSourceBuilder.ScriptField;
-import org.opensearch.search.fetch.StoredFieldsContext;
-import org.opensearch.search.fetch.subphase.FetchSourceContext;
-import org.opensearch.search.fetch.subphase.FieldAndFormat;
-import org.opensearch.search.fetch.subphase.ScriptFieldsContext;
-import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
-import org.opensearch.search.sort.ScoreSortBuilder;
-import org.opensearch.search.sort.SortAndFormats;
-import org.opensearch.search.sort.SortBuilder;
-import org.opensearch.search.sort.SortBuilders;
-import org.opensearch.search.sort.SortOrder;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-
-/**
- * Aggregation Builder for top_hits agg
- *
- * @opensearch.internal
- */
-public class TopHitsAggregationBuilder extends AbstractAggregationBuilder<TopHitsAggregationBuilder> {
-    public static final String NAME = "top_hits";
-
-    private int from = 0;
-    private int size = 3;
-    private boolean explain = false;
-    private boolean version = false;
-    private boolean seqNoAndPrimaryTerm = false;
-    private boolean trackScores = false;
-    private List<SortBuilder<?>> sorts = null;
-    private HighlightBuilder highlightBuilder;
-    private StoredFieldsContext storedFieldsContext;
-    private List<FieldAndFormat> docValueFields;
-    private List<FieldAndFormat> fetchFields;
-    private Set<ScriptField> scriptFields;
-    private FetchSourceContext fetchSourceContext;
-
-    public TopHitsAggregationBuilder(String name) {
-        super(name);
-    }
-
-    protected TopHitsAggregationBuilder(TopHitsAggregationBuilder clone, Builder factoriesBuilder, Map<String, Object> metadata) {
-        super(clone, factoriesBuilder, metadata);
-        this.from = clone.from;
-        this.size = clone.size;
-        this.explain = clone.explain;
-        this.version = clone.version;
-        this.seqNoAndPrimaryTerm = clone.seqNoAndPrimaryTerm;
-        this.trackScores = clone.trackScores;
-        this.sorts = clone.sorts == null ? null : new ArrayList<>(clone.sorts);
-        this.highlightBuilder = clone.highlightBuilder == null
-            ? null
-            : new HighlightBuilder(clone.highlightBuilder, clone.highlightBuilder.highlightQuery(), clone.highlightBuilder.fields());
-        this.storedFieldsContext = clone.storedFieldsContext == null ? null : new StoredFieldsContext(clone.storedFieldsContext);
-        this.docValueFields = clone.docValueFields == null ? null : new ArrayList<>(clone.docValueFields);
-        this.fetchFields = clone.fetchFields == null ? null : new ArrayList<>(clone.fetchFields);
-        this.scriptFields = clone.scriptFields == null ? null : new HashSet<>(clone.scriptFields);
-        this.fetchSourceContext = clone.fetchSourceContext == null
-            ? null
-            : new FetchSourceContext(
-                clone.fetchSourceContext.fetchSource(),
-                clone.fetchSourceContext.includes(),
-                clone.fetchSourceContext.excludes()
-            );
-    }
-
+            scriptFields,
     @Override
-    protected AggregationBuilder shallowCopy(Builder factoriesBuilder, Map<String, Object> metadata) {
-        return new TopHitsAggregationBuilder(this, factoriesBuilder, metadata);
-    }
-
-    /**
-     * Read from a stream.
      */
-    public TopHitsAggregationBuilder(StreamInput in) throws IOException {
-        super(in);
-        explain = in.readBoolean();
-        fetchSourceContext = in.readOptionalWriteable(FetchSourceContext::new);
-        if (in.readBoolean()) {
-            int size = in.readVInt();
-            docValueFields = new ArrayList<>(size);
-            for (int i = 0; i < size; i++) {
-                docValueFields.add(new FieldAndFormat(in));
-            }
-        }
-        storedFieldsContext = in.readOptionalWriteable(StoredFieldsContext::new);
-        from = in.readVInt();
-        highlightBuilder = in.readOptionalWriteable(HighlightBuilder::new);
-        if (in.readBoolean()) {
-            int size = in.readVInt();
-            scriptFields = new HashSet<>(size);
-            for (int i = 0; i < size; i++) {
-                scriptFields.add(new ScriptField(in));
-            }
-        }
-        size = in.readVInt();
-        if (in.readBoolean()) {
-            int size = in.readVInt();
-            sorts = new ArrayList<>();
-            for (int i = 0; i < size; i++) {
-                sorts.add(in.readNamedWriteable(SortBuilder.class));
-            }
-        }
-        trackScores = in.readBoolean();
-        version = in.readBoolean();
-        seqNoAndPrimaryTerm = in.readBoolean();
-        if (in.readBoolean()) {
-            fetchFields = in.readList(FieldAndFormat::new);
-        }
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeBoolean(explain);
-        out.writeOptionalWriteable(fetchSourceContext);
-        boolean hasFieldDataFields = docValueFields != null;
-        out.writeBoolean(hasFieldDataFields);
-        if (hasFieldDataFields) {
-            out.writeList(docValueFields);
-        }
-        out.writeOptionalWriteable(storedFieldsContext);
-        out.writeVInt(from);
-        out.writeOptionalWriteable(highlightBuilder);
-        boolean hasScriptFields = scriptFields != null;
-        out.writeBoolean(hasScriptFields);
-        if (hasScriptFields) {
-            out.writeCollection(scriptFields);
-        }
-        out.writeVInt(size);
-        boolean hasSorts = sorts != null;
-        out.writeBoolean(hasSorts);
-        if (hasSorts) {
-            out.writeNamedWriteableList(sorts);
-        }
-        out.writeBoolean(trackScores);
-        out.writeBoolean(version);
-        out.writeBoolean(seqNoAndPrimaryTerm);
-        out.writeBoolean(fetchFields != null);
-        if (fetchFields != null) {
-            out.writeList(fetchFields);
-        }
-    }
-
-    /**
-     * From index to start the search from. Defaults to {@code 0}.
-     */
-    public TopHitsAggregationBuilder from(int from) {
-        if (from < 0) {
-            throw new IllegalArgumentException("[from] must be greater than or equal to 0. Found [" + from + "] in [" + name + "]");
-        }
-        this.from = from;
-        return this;
-    }
-
-    /**
-     * Gets the from index to start the search from.
-     **/
-    public int from() {
-        return from;
-    }
-
-    /**
-     * The number of search hits to return. Defaults to {@code 10}.
-     */
-    public TopHitsAggregationBuilder size(int size) {
-        if (size < 0) {
-            throw new IllegalArgumentException("[size] must be greater than or equal to 0. Found [" + size + "] in [" + name + "]");
-        }
-        this.size = size;
-        return this;
-    }
-
-    /**
-     * Gets the number of search hits to return.
-     */
-    public int size() {
-        return size;
-    }
-
-    /**
-     * Adds a sort against the given field name and the sort ordering.
-     *
-     * @param name
-     *            The name of the field
-     * @param order
-     *            The sort ordering
-     */
-    public TopHitsAggregationBuilder sort(String name, SortOrder order) {
-        if (name == null) {
-            throw new IllegalArgumentException("sort [name] must not be null: [" + name + "]");
-        }
-        if (order == null) {
             throw new IllegalArgumentException("sort [order] must not be null: [" + name + "]");
-        }
-        if (name.equals(ScoreSortBuilder.NAME)) {
-            sort(SortBuilders.scoreSort().order(order));
-        } else {
-            sort(SortBuilders.fieldSort(name).order(order));
-        }
-        return this;
-    }
-
-    /**
-     * Add a sort against the given field name.
-     *
-     * @param name
-     *            The name of the field to sort by
-     */
-    public TopHitsAggregationBuilder sort(String name) {
+                    }
         if (name == null) {
-            throw new IllegalArgumentException("sort [name] must not be null: [" + name + "]");
-        }
-        if (name.equals(ScoreSortBuilder.NAME)) {
-            sort(SortBuilders.scoreSort());
-        } else {
-            sort(SortBuilders.fieldSort(name));
-        }
-        return this;
-    }
-
-    /**
-     * Adds a sort builder.
-     */
-    public TopHitsAggregationBuilder sort(SortBuilder<?> sort) {
-        if (sort == null) {
-            throw new IllegalArgumentException("[sort] must not be null: [" + name + "]");
-        }
-        if (sorts == null) {
-            sorts = new ArrayList<>();
-        }
-        sorts.add(sort);
-        return this;
-    }
-
-    /**
-     * Adds a sort builder.
-     */
-    public TopHitsAggregationBuilder sorts(List<SortBuilder<?>> sorts) {
-        if (sorts == null) {
-            throw new IllegalArgumentException("[sorts] must not be null: [" + name + "]");
-        }
-        if (this.sorts == null) {
-            this.sorts = new ArrayList<>();
-        }
         for (SortBuilder<?> sort : sorts) {
-            this.sorts.add(sort);
-        }
-        return this;
-    }
-
-    /**
-     * Gets the bytes representing the sort builders for this request.
+     * @param name
      */
-    public List<SortBuilder<?>> sorts() {
-        return sorts;
+ * SPDX-License-Identifier: Apache-2.0
+        XContentParser.Token token;
+import org.opensearch.core.common.io.stream.StreamInput;
+     * Adds a sort builder.
     }
-
-    /**
-     * Adds highlight to perform as part of the search.
-     */
-    public TopHitsAggregationBuilder highlighter(HighlightBuilder highlightBuilder) {
-        if (highlightBuilder == null) {
+    }
+                } else if (SearchSourceBuilder.STORED_FIELDS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+     * Adds a field to load from doc values and return as part of
+        return size;
+ * ownership. Elasticsearch licenses this file to you under
             throw new IllegalArgumentException("[highlightBuilder] must not be null: [" + name + "]");
-        }
-        this.highlightBuilder = highlightBuilder;
-        return this;
-    }
-
-    /**
-     * Gets the highlighter builder for this request.
-     */
-    public HighlightBuilder highlighter() {
-        return highlightBuilder;
-    }
-
-    /**
-     * Indicates whether the response should contain the stored _source for
-     * every hit
-     */
-    public TopHitsAggregationBuilder fetchSource(boolean fetch) {
-        FetchSourceContext fetchSourceContext = this.fetchSourceContext != null ? this.fetchSourceContext : FetchSourceContext.FETCH_SOURCE;
-        this.fetchSourceContext = new FetchSourceContext(fetch, fetchSourceContext.includes(), fetchSourceContext.excludes());
-        return this;
-    }
-
-    /**
-     * Indicate that _source should be returned with every hit, with an
-     * "include" and/or "exclude" set which can include simple wildcard
-     * elements.
-     *
-     * @param include
-     *            An optional include (optionally wildcarded) pattern to
-     *            filter the returned _source
-     * @param exclude
-     *            An optional exclude (optionally wildcarded) pattern to
-     *            filter the returned _source
-     */
-    public TopHitsAggregationBuilder fetchSource(@Nullable String include, @Nullable String exclude) {
-        fetchSource(
-            include == null ? Strings.EMPTY_ARRAY : new String[] { include },
-            exclude == null ? Strings.EMPTY_ARRAY : new String[] { exclude }
-        );
-        return this;
-    }
-
-    /**
-     * Indicate that _source should be returned with every hit, with an
-     * "include" and/or "exclude" set which can include simple wildcard
-     * elements.
-     *
-     * @param includes
-     *            An optional list of include (optionally wildcarded)
-     *            pattern to filter the returned _source
-     * @param excludes
-     *            An optional list of exclude (optionally wildcarded)
-     *            pattern to filter the returned _source
-     */
-    public TopHitsAggregationBuilder fetchSource(@Nullable String[] includes, @Nullable String[] excludes) {
-        FetchSourceContext fetchSourceContext = this.fetchSourceContext != null ? this.fetchSourceContext : FetchSourceContext.FETCH_SOURCE;
-        this.fetchSourceContext = new FetchSourceContext(fetchSourceContext.fetchSource(), includes, excludes);
-        return this;
-    }
-
-    /**
-     * Indicate how the _source should be fetched.
-     */
-    public TopHitsAggregationBuilder fetchSource(@Nullable FetchSourceContext fetchSourceContext) {
-        if (fetchSourceContext == null) {
-            throw new IllegalArgumentException("[fetchSourceContext] must not be null: [" + name + "]");
-        }
-        this.fetchSourceContext = fetchSourceContext;
-        return this;
-    }
-
-    /**
-     * Gets the {@link FetchSourceContext} which defines how the _source
-     * should be fetched.
-     */
-    public FetchSourceContext fetchSource() {
-        return fetchSourceContext;
-    }
-
-    /**
-     * Adds a stored field to load and return (note, it must be stored) as part of the search request.
-     * To disable the stored fields entirely (source and metadata fields) use {@code storedField("_none_")}.
-     */
-    public TopHitsAggregationBuilder storedField(String field) {
-        return storedFields(Collections.singletonList(field));
-    }
-
-    /**
-     * Sets the stored fields to load and return as part of the search request.
-     * To disable the stored fields entirely (source and metadata fields) use {@code storedField("_none_")}.
-     */
-    public TopHitsAggregationBuilder storedFields(List<String> fields) {
-        if (fields == null) {
-            throw new IllegalArgumentException("[fields] must not be null: [" + name + "]");
-        }
-        if (storedFieldsContext == null) {
-            storedFieldsContext = StoredFieldsContext.fromList(fields);
-        } else {
-            storedFieldsContext.addFieldNames(fields);
-        }
-        return this;
-    }
-
-    /**
-     * Gets the stored fields context
-     */
-    public StoredFieldsContext storedFields() {
-        return storedFieldsContext;
-    }
-
-    /**
-     * Adds a field to load from doc values and return as part of
-     * the search request.
-     */
-    public TopHitsAggregationBuilder docValueField(String docValueField, String format) {
-        if (docValueField == null) {
-            throw new IllegalArgumentException("[docValueField] must not be null: [" + name + "]");
-        }
-        if (docValueFields == null) {
-            docValueFields = new ArrayList<>();
-        }
-        docValueFields.add(new FieldAndFormat(docValueField, format));
-        return this;
-    }
-
-    /**
-     * Adds a field to load from doc values and return as part of
-     * the search request.
-     */
-    public TopHitsAggregationBuilder docValueField(String docValueField) {
-        return docValueField(docValueField, null);
-    }
-
-    /**
-     * Gets the field-data fields.
-     */
-    public List<FieldAndFormat> docValueFields() {
+            ? null
         return docValueFields;
-    }
-
-    /**
-     * Adds a field to load and return as part of the search request.
+        boolean hasSorts = sorts != null;
+        }
+    public TopHitsAggregationBuilder subAggregations(Builder subFactories) {
+import org.opensearch.script.Script;
      */
-    public TopHitsAggregationBuilder fetchField(String field, String format) {
-        if (field == null) {
-            throw new IllegalArgumentException("[fields] must not be null: [" + name + "]");
+        if (fetchFields != null) {
+                                    + "] in ["
+                    + "]'s from + size must be less "
+        out.writeBoolean(seqNoAndPrimaryTerm);
+        if (in.readBoolean()) {
         }
-        if (fetchFields == null) {
-            fetchFields = new ArrayList<>();
-        }
-        fetchFields.add(new FieldAndFormat(field, format));
-        return this;
-    }
-
-    /**
-     * Adds a field to load and return as part of the search request.
      */
-    public TopHitsAggregationBuilder fetchField(String field) {
-        return fetchField(field, null);
-    }
-
-    /**
-     * Gets the fields to load and return as part of the search request.
-     */
-    public List<FieldAndFormat> fetchFields() {
-        return fetchFields;
-    }
-
-    /**
-     * Adds a script field under the given name with the provided script.
-     *
-     * @param name
-     *            The name of the field
-     * @param script
-     *            The script
-     */
-    public TopHitsAggregationBuilder scriptField(String name, Script script) {
-        if (name == null) {
-            throw new IllegalArgumentException("scriptField [name] must not be null: [" + name + "]");
-        }
-        if (script == null) {
-            throw new IllegalArgumentException("scriptField [script] must not be null: [" + name + "]");
-        }
-        scriptField(name, script, false);
-        return this;
-    }
-
-    /**
-     * Adds a script field under the given name with the provided script.
-     *
-     * @param name
-     *            The name of the field
-     * @param script
-     *            The script
-     */
-    public TopHitsAggregationBuilder scriptField(String name, Script script, boolean ignoreFailure) {
-        if (name == null) {
-            throw new IllegalArgumentException("scriptField [name] must not be null: [" + name + "]");
-        }
-        if (script == null) {
-            throw new IllegalArgumentException("scriptField [script] must not be null: [" + name + "]");
-        }
-        if (scriptFields == null) {
-            scriptFields = new HashSet<>();
-        }
-        scriptFields.add(new ScriptField(name, script, ignoreFailure));
-        return this;
-    }
-
-    public TopHitsAggregationBuilder scriptFields(List<ScriptField> scriptFields) {
-        if (scriptFields == null) {
-            throw new IllegalArgumentException("[scriptFields] must not be null: [" + name + "]");
-        }
-        if (this.scriptFields == null) {
-            this.scriptFields = new HashSet<>();
-        }
-        this.scriptFields.addAll(scriptFields);
-        return this;
-    }
-
-    /**
-     * Gets the script fields.
-     */
-    public Set<ScriptField> scriptFields() {
-        return scriptFields;
-    }
-
-    /**
-     * Should each {@link org.opensearch.search.SearchHit} be returned
-     * with an explanation of the hit (ranking).
-     */
-    public TopHitsAggregationBuilder explain(boolean explain) {
-        this.explain = explain;
-        return this;
-    }
-
-    /**
-     * Indicates whether each search hit will be returned with an
-     * explanation of the hit (ranking)
-     */
-    public boolean explain() {
-        return explain;
-    }
-
-    /**
-     * Should each {@link org.opensearch.search.SearchHit} be returned
      * with a version associated with it.
-     */
-    public TopHitsAggregationBuilder version(boolean version) {
-        this.version = version;
-        return this;
-    }
-
-    /**
-     * Indicates whether the document's version will be included in the
-     * search hits.
-     */
-    public boolean version() {
-        return version;
-    }
-
-    /**
-     * Should each {@link org.opensearch.search.SearchHit} be returned with the
-     * sequence number and primary term of the last modification of the document.
-     */
-    public TopHitsAggregationBuilder seqNoAndPrimaryTerm(Boolean seqNoAndPrimaryTerm) {
-        this.seqNoAndPrimaryTerm = seqNoAndPrimaryTerm;
-        return this;
-    }
-
-    /**
-     * Indicates whether {@link org.opensearch.search.SearchHit}s should be returned with the
-     * sequence number and primary term of the last modification of the document.
+        if (size < 0) {
+    public BucketCardinality bucketCardinality() {
+            } else if (token.isValue()) {
+                if (SearchSourceBuilder._SOURCE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    public TopHitsAggregationBuilder scriptField(String name, Script script) {
+                scriptField.toXContent(builder, params);
+            docValueFields,
+        if (in.readBoolean()) {
+        this.sorts = clone.sorts == null ? null : new ArrayList<>(clone.sorts);
+        }
+                    + "than or equal to: ["
+                            throw new ParsingException(
+        }
+     * "include" and/or "exclude" set which can include simple wildcard
+                );
+        this.explain = explain;
+        this.highlightBuilder = clone.highlightBuilder == null
+    @Override
+            builder.field(SearchSourceBuilder._SOURCE_FIELD.getPreferredName(), fetchSourceContext);
      */
     public Boolean seqNoAndPrimaryTerm() {
-        return seqNoAndPrimaryTerm;
     }
-
-    /**
-     * Applies when sorting, and controls if scores will be tracked as well.
-     * Defaults to {@code false}.
-     */
-    public TopHitsAggregationBuilder trackScores(boolean trackScores) {
-        this.trackScores = trackScores;
+ *
+            version,
+        builder.startObject();
+     * Indicates whether each search hit will be returned with an
+                    "Unknown key for a " + token + " in [" + currentFieldName + "].",
+    }
+        if (scriptFields == null) {
+import org.opensearch.search.aggregations.AggregationBuilder;
+    public FetchSourceContext fetchSource() {
+            builder.startArray(SearchSourceBuilder.FETCH_FIELDS_FIELD.getPreferredName());
+        }
+     *            The script
+import org.opensearch.search.fetch.subphase.FieldAndFormat;
+        }
+        }
         return this;
+            include == null ? Strings.EMPTY_ARRAY : new String[] { include },
     }
-
-    /**
-     * Indicates whether scores will be tracked for this request.
+                                    )) {
+        List<ScriptFieldsContext.ScriptField> scriptFields = new ArrayList<>();
+                                        throw new ParsingException(
+                                if (token == XContentParser.Token.FIELD_NAME) {
+                            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+    public TopHitsAggregationBuilder fetchSource(@Nullable FetchSourceContext fetchSourceContext) {
+        if (fetchFields == null) {
+        }
+        return scriptFields;
+        FetchSourceContext fetchSourceContext = this.fetchSourceContext != null ? this.fetchSourceContext : FetchSourceContext.FETCH_SOURCE;
+        this.from = from;
+        return this;
+        this.version = clone.version;
      */
-    public boolean trackScores() {
-        return trackScores;
+        return seqNoAndPrimaryTerm;
+        }
+        builder.field(SearchSourceBuilder.SIZE_FIELD.getPreferredName(), size);
+        return version;
+            scriptFields = new HashSet<>(size);
+import org.opensearch.search.aggregations.AggregatorFactories.Builder;
+     * Indicate how the _source should be fetched.
     }
-
-    @Override
-    public TopHitsAggregationBuilder subAggregations(Builder subFactories) {
-        throw new AggregationInitializationException(
-            "Aggregator [" + name + "] of type [" + getType() + "] cannot accept sub-aggregations"
+            size,
+            explain,
+                    factory.sorts(sorts);
+import org.opensearch.core.xcontent.XContentParser;
+                );
+            storedFieldsContext,
+        return new TopHitsAggregationBuilder(this, factoriesBuilder, metadata);
+        out.writeOptionalWriteable(highlightBuilder);
+                                    throw new ParsingException(
+        }
+    }
+                "Top hits result window is too large, the top hits aggregator ["
+        if (storedFieldsContext == null) {
+        }
+    /**
+                        parser.getTokenLocation()
+        if (this.scriptFields == null) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     * Gets the stored fields context
+            int size = in.readVInt();
+import java.util.Optional;
+     */
+     *            An optional include (optionally wildcarded) pattern to
+        }
+     * To disable the stored fields entirely (source and metadata fields) use {@code storedField("_none_")}.
+    /**
+        return this;
+    private List<FieldAndFormat> fetchFields;
+     * Gets the script fields.
+     * "include" and/or "exclude" set which can include simple wildcard
+                        SearchSourceBuilder.STORED_FIELDS_FIELD.getPreferredName(),
+     * Gets the fields to load and return as part of the search request.
+     * Read from a stream.
+package org.opensearch.search.aggregations.metrics;
+        sorts.add(sort);
+            && size == that.size
+                                        throw new ParsingException(
+                    factory.trackScores(parser.booleanValue());
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
+ * this work for additional information regarding copyright
+     * Adds highlight to perform as part of the search.
+                    + "] index level setting."
+                    List<ScriptField> scriptFields = new ArrayList<>();
+    /**
+        storedFieldsContext = in.readOptionalWriteable(StoredFieldsContext::new);
+                                    + "] but found ["
+     * explanation of the hit (ranking)
+    public boolean version() {
+            && Objects.equals(docValueFields, that.docValueFields)
+    public TopHitsAggregationBuilder(String name) {
+        if (name == null) {
+            builder.startArray(SearchSourceBuilder.DOCVALUE_FIELDS_FIELD.getPreferredName());
+     * the search request.
+    }
+            optionalSort,
+                } else if (SearchSourceBuilder.SORT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+     *
+        if (sorts == null) {
+                scriptFields.add(
+            this.sorts = new ArrayList<>();
+        if (name.equals(ScoreSortBuilder.NAME)) {
+    private List<SortBuilder<?>> sorts = null;
+                } else {
+        builder.field(SearchSourceBuilder.EXPLAIN_FIELD.getPreferredName(), explain);
+                if (SearchSourceBuilder.FROM_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+            sort(SortBuilders.fieldSort(name).order(order));
+        this.fetchSourceContext = clone.fetchSourceContext == null
+            for (ScriptField field : this.scriptFields) {
+                    factory.scriptFields(scriptFields);
+        this.fetchSourceContext = fetchSourceContext;
+            int size = in.readVInt();
+            && Objects.equals(storedFieldsContext, that.storedFieldsContext)
+            scriptFields = new HashSet<>();
+     */
+                    }
+     * with an explanation of the hit (ranking).
+     */
+    }
+            for (FieldAndFormat docValueField : fetchFields) {
+            && Objects.equals(fetchFields, that.fetchFields)
+            metadata
+            : new FetchSourceContext(
+    private StoredFieldsContext storedFieldsContext;
+        return this;
+            fetchFields = new ArrayList<>();
+        builder.field(SearchSourceBuilder.FROM_FIELD.getPreferredName(), from);
+     *            The script
+            seqNoAndPrimaryTerm,
+     *            filter the returned _source
+        if (innerResultWindow > maxInnerResultWindow) {
+            builder.field(SearchSourceBuilder.TRACK_SCORES_FIELD.getPreferredName(), true);
+        this.storedFieldsContext = clone.storedFieldsContext == null ? null : new StoredFieldsContext(clone.storedFieldsContext);
+            builder.endObject();
+    /**
+    /**
+        }
+                } else if (SearchSourceBuilder.SEQ_NO_PRIMARY_TERM_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                        token = parser.nextToken();
+import org.opensearch.search.aggregations.AggregatorFactory;
+     */
+     * The number of search hits to return. Defaults to {@code 10}.
+                                    }
+ * Unless required by applicable law or agreed to in writing,
+                            scriptFields.add(new ScriptField(scriptFieldName, script, ignoreFailure));
+            fetchSourceContext
+        }
+    }
+        fetchSource(
+    protected AggregationBuilder shallowCopy(Builder factoriesBuilder, Map<String, Object> metadata) {
+        return new TopHitsAggregatorFactory(
+        scriptField(name, script, false);
+            out.writeList(fetchFields);
+    public TopHitsAggregationBuilder version(boolean version) {
         );
     }
-
-    @Override
-    public BucketCardinality bucketCardinality() {
-        return BucketCardinality.NONE;
-    }
-
-    @Override
-    protected TopHitsAggregatorFactory doBuild(QueryShardContext queryShardContext, AggregatorFactory parent, Builder subfactoriesBuilder)
-        throws IOException {
-        long innerResultWindow = from() + size();
-        int maxInnerResultWindow = queryShardContext.getMapperService().getIndexSettings().getMaxInnerResultWindow();
-        if (innerResultWindow > maxInnerResultWindow) {
-            throw new IllegalArgumentException(
-                "Top hits result window is too large, the top hits aggregator ["
-                    + name
-                    + "]'s from + size must be less "
-                    + "than or equal to: ["
-                    + maxInnerResultWindow
-                    + "] but was ["
-                    + innerResultWindow
-                    + "]. This limit can be set by changing the ["
-                    + IndexSettings.MAX_INNER_RESULT_WINDOW_SETTING.getKey()
-                    + "] index level setting."
-            );
-        }
-
-        List<ScriptFieldsContext.ScriptField> scriptFields = new ArrayList<>();
-        if (this.scriptFields != null) {
-            for (ScriptField field : this.scriptFields) {
-                FieldScript.Factory factory = queryShardContext.compile(field.script(), FieldScript.CONTEXT);
-                FieldScript.LeafFactory searchScript = factory.newFactory(field.script().getParams(), queryShardContext.lookup());
-                scriptFields.add(
-                    new org.opensearch.search.fetch.subphase.ScriptFieldsContext.ScriptField(
-                        field.fieldName(),
-                        searchScript,
-                        field.ignoreFailure()
-                    )
-                );
+            trackScores,
+     * Adds a script field under the given name with the provided script.
+                } else if (SearchSourceBuilder.DOCVALUE_FIELDS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+            storedFieldsContext.toXContent(SearchSourceBuilder.STORED_FIELDS_FIELD.getPreferredName(), builder);
+                    );
+                    factory.fetchSource(FetchSourceContext.fromXContent(parser));
+        return fetchSourceContext;
+                                        "Unknown key for a " + token + " in [" + currentFieldName + "].",
+            && Objects.equals(fetchSourceContext, that.fetchSourceContext);
+import java.io.IOException;
+     * @param include
+import org.opensearch.core.common.ParsingException;
+    protected XContentBuilder internalXContent(XContentBuilder builder, Params params) throws IOException {
+import java.util.ArrayList;
+     * Adds a sort against the given field name and the sort ordering.
+    public static TopHitsAggregationBuilder parse(String aggregationName, XContentParser parser) throws IOException {
+        explain = in.readBoolean();
             }
-        }
-
-        final Optional<SortAndFormats> optionalSort;
-        if (sorts == null) {
+ * Licensed to Elasticsearch under one or more contributor
+            && Objects.equals(scriptFields, that.scriptFields)
+    }
+            exclude == null ? Strings.EMPTY_ARRAY : new String[] { exclude }
+    }
+     * Adds a field to load and return as part of the search request.
+    /**
             optionalSort = Optional.empty();
-        } else {
+                                    + currentFieldName
+    public HighlightBuilder highlighter() {
+                                        parser.getTokenLocation(),
+                    throw new ParsingException(
+        this.size = clone.size;
+            }
+            highlightBuilder,
+        }
+ * The OpenSearch Contributors require contributions made to
+    }
+                docValueField.toXContent(builder, params);
+     */
+        }
+     */
+    public int hashCode() {
+     * Should each {@link org.opensearch.search.SearchHit} be returned
+        if (hasSorts) {
+            for (ScriptField scriptField : scriptFields) {
+                                        );
+        TopHitsAggregationBuilder that = (TopHitsAggregationBuilder) o;
+        from = in.readVInt();
+            }
+        scriptFields.add(new ScriptField(name, script, ignoreFailure));
+    /**
+ * Modifications Copyright OpenSearch Contributors. See
             optionalSort = SortBuilder.buildSort(sorts, queryShardContext);
         }
-        return new TopHitsAggregatorFactory(
-            name,
-            from,
-            size,
-            explain,
-            version,
-            seqNoAndPrimaryTerm,
-            trackScores,
-            optionalSort,
-            highlightBuilder,
-            storedFieldsContext,
-            docValueFields,
-            fetchFields,
-            scriptFields,
-            fetchSourceContext,
-            queryShardContext,
-            parent,
-            subfactoriesBuilder,
-            metadata
-        );
-    }
-
-    @Override
-    protected XContentBuilder internalXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.field(SearchSourceBuilder.FROM_FIELD.getPreferredName(), from);
-        builder.field(SearchSourceBuilder.SIZE_FIELD.getPreferredName(), size);
-        builder.field(SearchSourceBuilder.VERSION_FIELD.getPreferredName(), version);
-        builder.field(SearchSourceBuilder.SEQ_NO_PRIMARY_TERM_FIELD.getPreferredName(), seqNoAndPrimaryTerm);
-        builder.field(SearchSourceBuilder.EXPLAIN_FIELD.getPreferredName(), explain);
-        if (fetchSourceContext != null) {
-            builder.field(SearchSourceBuilder._SOURCE_FIELD.getPreferredName(), fetchSourceContext);
         }
-        if (storedFieldsContext != null) {
-            storedFieldsContext.toXContent(SearchSourceBuilder.STORED_FIELDS_FIELD.getPreferredName(), builder);
-        }
-
-        if (docValueFields != null) {
-            builder.startArray(SearchSourceBuilder.DOCVALUE_FIELDS_FIELD.getPreferredName());
-            for (FieldAndFormat docValueField : docValueFields) {
-                docValueField.toXContent(builder, params);
-            }
-            builder.endArray();
-        }
-
-        if (fetchFields != null) {
-            builder.startArray(SearchSourceBuilder.FETCH_FIELDS_FIELD.getPreferredName());
-            for (FieldAndFormat docValueField : fetchFields) {
-                docValueField.toXContent(builder, params);
-            }
-            builder.endArray();
-        }
-
-        if (scriptFields != null) {
-            builder.startObject(SearchSourceBuilder.SCRIPT_FIELDS_FIELD.getPreferredName());
-            for (ScriptField scriptField : scriptFields) {
-                scriptField.toXContent(builder, params);
-            }
-            builder.endObject();
-        }
-        if (sorts != null) {
-            builder.startArray(SearchSourceBuilder.SORT_FIELD.getPreferredName());
-            for (SortBuilder<?> sort : sorts) {
-                sort.toXContent(builder, params);
-            }
-            builder.endArray();
-        }
-        if (trackScores) {
-            builder.field(SearchSourceBuilder.TRACK_SCORES_FIELD.getPreferredName(), true);
-        }
-        if (highlightBuilder != null) {
-            builder.field(SearchSourceBuilder.HIGHLIGHT_FIELD.getPreferredName(), highlightBuilder);
-        }
-        builder.endObject();
-        return builder;
-    }
-
-    public static TopHitsAggregationBuilder parse(String aggregationName, XContentParser parser) throws IOException {
-        TopHitsAggregationBuilder factory = new TopHitsAggregationBuilder(aggregationName);
-        XContentParser.Token token;
-        String currentFieldName = null;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token.isValue()) {
-                if (SearchSourceBuilder.FROM_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    factory.from(parser.intValue());
-                } else if (SearchSourceBuilder.SIZE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    factory.size(parser.intValue());
-                } else if (SearchSourceBuilder.VERSION_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    factory.version(parser.booleanValue());
-                } else if (SearchSourceBuilder.SEQ_NO_PRIMARY_TERM_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    factory.seqNoAndPrimaryTerm(parser.booleanValue());
-                } else if (SearchSourceBuilder.EXPLAIN_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    factory.explain(parser.booleanValue());
-                } else if (SearchSourceBuilder.TRACK_SCORES_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    factory.trackScores(parser.booleanValue());
-                } else if (SearchSourceBuilder._SOURCE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    factory.fetchSource(FetchSourceContext.fromXContent(parser));
-                } else if (SearchSourceBuilder.STORED_FIELDS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    factory.storedFieldsContext = StoredFieldsContext.fromXContent(
-                        SearchSourceBuilder.STORED_FIELDS_FIELD.getPreferredName(),
-                        parser
-                    );
-                } else if (SearchSourceBuilder.SORT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    factory.sort(parser.text());
-                } else {
-                    throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "Unknown key for a " + token + " in [" + currentFieldName + "].",
-                        parser.getTokenLocation()
-                    );
-                }
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                if (SearchSourceBuilder._SOURCE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    factory.fetchSource(FetchSourceContext.fromXContent(parser));
-                } else if (SearchSourceBuilder.SCRIPT_FIELDS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    List<ScriptField> scriptFields = new ArrayList<>();
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                        String scriptFieldName = parser.currentName();
-                        token = parser.nextToken();
                         if (token == XContentParser.Token.START_OBJECT) {
-                            Script script = null;
-                            boolean ignoreFailure = false;
-                            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                                if (token == XContentParser.Token.FIELD_NAME) {
-                                    currentFieldName = parser.currentName();
-                                } else if (token.isValue()) {
-                                    if (SearchSourceBuilder.SCRIPT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                                        script = Script.parse(parser);
-                                    } else if (SearchSourceBuilder.IGNORE_FAILURE_FIELD.match(
-                                        currentFieldName,
-                                        parser.getDeprecationHandler()
-                                    )) {
-                                        ignoreFailure = parser.booleanValue();
-                                    } else {
-                                        throw new ParsingException(
-                                            parser.getTokenLocation(),
-                                            "Unknown key for a " + token + " in [" + currentFieldName + "].",
-                                            parser.getTokenLocation()
-                                        );
-                                    }
-                                } else if (token == XContentParser.Token.START_OBJECT) {
-                                    if (SearchSourceBuilder.SCRIPT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                                        script = Script.parse(parser);
-                                    } else {
-                                        throw new ParsingException(
-                                            parser.getTokenLocation(),
-                                            "Unknown key for a " + token + " in [" + currentFieldName + "].",
-                                            parser.getTokenLocation()
-                                        );
-                                    }
-                                } else {
-                                    throw new ParsingException(
-                                        parser.getTokenLocation(),
-                                        "Unknown key for a " + token + " in [" + currentFieldName + "].",
-                                        parser.getTokenLocation()
-                                    );
-                                }
-                            }
-                            scriptFields.add(new ScriptField(scriptFieldName, script, ignoreFailure));
-                        } else {
-                            throw new ParsingException(
-                                parser.getTokenLocation(),
-                                "Expected ["
-                                    + XContentParser.Token.START_OBJECT
-                                    + "] in ["
-                                    + currentFieldName
-                                    + "] but found ["
-                                    + token
-                                    + "]",
-                                parser.getTokenLocation()
-                            );
-                        }
-                    }
-                    factory.scriptFields(scriptFields);
-                } else if (SearchSourceBuilder.HIGHLIGHT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    factory.highlighter(HighlightBuilder.fromXContent(parser));
-                } else if (SearchSourceBuilder.SORT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    List<SortBuilder<?>> sorts = SortBuilder.fromXContent(parser);
-                    factory.sorts(sorts);
-                } else {
-                    throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "Unknown key for a " + token + " in [" + currentFieldName + "].",
+        return this;
+     */
+    public TopHitsAggregationBuilder explain(boolean explain) {
+    private List<FieldAndFormat> docValueFields;
+     *            An optional list of exclude (optionally wildcarded)
+    /**
+                    );
+     * Indicates whether the response should contain the stored _source for
                         parser.getTokenLocation()
+        FetchSourceContext fetchSourceContext = this.fetchSourceContext != null ? this.fetchSourceContext : FetchSourceContext.FETCH_SOURCE;
+            throw new IllegalArgumentException("[fetchSourceContext] must not be null: [" + name + "]");
+        );
+        if (name == null) {
+        if (sorts == null) {
+        out.writeOptionalWriteable(storedFieldsContext);
+     * Indicate that _source should be returned with every hit, with an
                     );
-                }
-            } else if (token == XContentParser.Token.START_ARRAY) {
-
-                if (SearchSourceBuilder.STORED_FIELDS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    factory.storedFieldsContext = StoredFieldsContext.fromXContent(
-                        SearchSourceBuilder.STORED_FIELDS_FIELD.getPreferredName(),
-                        parser
-                    );
-                } else if (SearchSourceBuilder.DOCVALUE_FIELDS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
-                        FieldAndFormat ff = FieldAndFormat.fromXContent(parser);
-                        factory.docValueField(ff.field, ff.format);
-                    }
-                } else if (SearchSourceBuilder.FETCH_FIELDS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
-                        FieldAndFormat ff = FieldAndFormat.fromXContent(parser);
-                        factory.fetchField(ff.field, ff.format);
-                    }
-                } else if (SearchSourceBuilder.SORT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    List<SortBuilder<?>> sorts = SortBuilder.fromXContent(parser);
-                    factory.sorts(sorts);
+            out.writeNamedWriteableList(sorts);
+    public TopHitsAggregationBuilder storedFields(List<String> fields) {
+            throw new IllegalArgumentException("[sorts] must not be null: [" + name + "]");
+                FieldScript.LeafFactory searchScript = factory.newFactory(field.script().getParams(), queryShardContext.lookup());
+import java.util.Collections;
+     *            filter the returned _source
+     */
+        if (this.sorts == null) {
+ * Aggregation Builder for top_hits agg
+        if (sorts != null) {
+    public TopHitsAggregationBuilder storedField(String field) {
+        return this;
+        if (!super.equals(o)) return false;
+                    factory.seqNoAndPrimaryTerm(parser.booleanValue());
+                                            parser.getTokenLocation(),
+        );
+     * Indicates whether the document's version will be included in the
+    }
+ * under the License.
+     * @param name
+        if (hasFieldDataFields) {
+            docValueFields,
+        }
+     */
+     * Indicate that _source should be returned with every hit, with an
+                        field.ignoreFailure()
+        if (from < 0) {
+                    factory.size(parser.intValue());
+    public TopHitsAggregationBuilder sort(SortBuilder<?> sort) {
+import java.util.HashSet;
                 } else if (SearchSourceBuilder._SOURCE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    factory.fetchSource(FetchSourceContext.fromXContent(parser));
-                } else {
-                    throw new ParsingException(
+        if (in.readBoolean()) {
+                                            parser.getTokenLocation(),
+    /**
+     *
+        return Objects.hash(
+import org.opensearch.common.Nullable;
+                    factory.sort(parser.text());
+import org.opensearch.search.aggregations.AggregationInitializationException;
                         parser.getTokenLocation(),
-                        "Unknown key for a " + token + " in [" + currentFieldName + "].",
-                        parser.getTokenLocation()
-                    );
-                }
-            } else {
+     * Gets the {@link FetchSourceContext} which defines how the _source
+        return docValueField(docValueField, null);
+    private boolean seqNoAndPrimaryTerm = false;
+                                    currentFieldName = parser.currentName();
+    private boolean explain = false;
+                } else if (SearchSourceBuilder.SORT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+     * Gets the number of search hits to return.
+    }
+            );
+            }
+     * every hit
+                                    + XContentParser.Token.START_OBJECT
+    }
+/*
+            } else if (token == XContentParser.Token.START_ARRAY) {
+            builder.endArray();
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.Objects;
+                clone.fetchSourceContext.fetchSource(),
+    public TopHitsAggregationBuilder sorts(List<SortBuilder<?>> sorts) {
+    /**
                 throw new ParsingException(
+        }
+            docValueFields = new ArrayList<>();
+    }
+     *            An optional exclude (optionally wildcarded) pattern to
                     parser.getTokenLocation(),
-                    "Unknown key for a " + token + " in [" + currentFieldName + "].",
-                    parser.getTokenLocation()
-                );
+        return this;
+                                            parser.getTokenLocation()
+    private int size = 3;
+    }
+        } else {
+     */
+        if (highlightBuilder != null) {
+import org.opensearch.search.fetch.subphase.ScriptFieldsContext;
+            storedFieldsContext,
+/**
+                                        );
+                        parser.getTokenLocation(),
+    }
+                        parser.getTokenLocation(),
+        }
+        fetchSourceContext = in.readOptionalWriteable(FetchSourceContext::new);
+     * @param excludes
+                                    } else {
+    public TopHitsAggregationBuilder trackScores(boolean trackScores) {
+                } else if (SearchSourceBuilder._SOURCE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    factory.version(parser.booleanValue());
+                    factory.sorts(sorts);
+                        "Unknown key for a " + token + " in [" + currentFieldName + "].",
+import java.util.List;
+        }
+        return from == that.from
+        return this;
+     * should be fetched.
+    /**
+     * Adds a stored field to load and return (note, it must be stored) as part of the search request.
+     *            The sort ordering
+        super(in);
+     * Sets the stored fields to load and return as part of the search request.
+            seqNoAndPrimaryTerm,
+            fetchFields,
+                        parser
+        seqNoAndPrimaryTerm = in.readBoolean();
+    }
+        super(clone, factoriesBuilder, metadata);
+    /**
+                                        parser.getDeprecationHandler()
+                                        script = Script.parse(parser);
+            sort(SortBuilders.scoreSort());
+     * sequence number and primary term of the last modification of the document.
+    public TopHitsAggregationBuilder docValueField(String docValueField, String format) {
+        }
+        throws IOException {
+ */
+                sorts.add(in.readNamedWriteable(SortBuilder.class));
+    }
+     */
+            sorts = new ArrayList<>();
+            : new HighlightBuilder(clone.highlightBuilder, clone.highlightBuilder.highlightQuery(), clone.highlightBuilder.fields());
+        this.highlightBuilder = highlightBuilder;
+        if (name.equals(ScoreSortBuilder.NAME)) {
+    }
+ */
+        if (name == null) {
+    public static final String NAME = "top_hits";
+import org.opensearch.search.sort.SortOrder;
+            int size = in.readVInt();
+        }
+        out.writeBoolean(hasSorts);
+                sort.toXContent(builder, params);
+                            boolean ignoreFailure = false;
+    }
+        if (sorts == null) {
+        out.writeOptionalWriteable(fetchSourceContext);
+import org.opensearch.script.FieldScript;
+    /**
+            throw new IllegalArgumentException("[docValueField] must not be null: [" + name + "]");
+    public int size() {
+            version,
+    /**
+        }
+                    factory.explain(parser.booleanValue());
+        } else {
+import org.opensearch.index.query.QueryShardContext;
+        }
+        out.writeBoolean(hasFieldDataFields);
+                                } else {
+                                    + "]",
+        out.writeBoolean(trackScores);
+     * Add a sort against the given field name.
+            throw new IllegalArgumentException("scriptField [script] must not be null: [" + name + "]");
+        if (o == null || getClass() != o.getClass()) return false;
+        return NAME;
+        out.writeBoolean(explain);
+        version = in.readBoolean();
+ *
+                    factory.from(parser.intValue());
+            );
+     */
+                                "Expected ["
+        }
+    public boolean equals(Object o) {
+        if (fetchFields != null) {
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
+import org.opensearch.core.common.Strings;
+        return from;
+        return highlightBuilder;
+    public Set<ScriptField> scriptFields() {
+    @Override
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+    }
+import org.opensearch.index.IndexSettings;
+    public List<SortBuilder<?>> sorts() {
+        fetchFields.add(new FieldAndFormat(field, format));
+    /**
+                } else if (SearchSourceBuilder.FETCH_FIELDS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+            for (int i = 0; i < size; i++) {
+    public TopHitsAggregationBuilder from(int from) {
+     * Adds a sort builder.
+                        String scriptFieldName = parser.currentName();
+        if (docValueFields != null) {
+                        FieldAndFormat ff = FieldAndFormat.fromXContent(parser);
+                                parser.getTokenLocation()
+    /**
+    protected void doWriteTo(StreamOutput out) throws IOException {
+                scriptFields.add(new ScriptField(in));
+        return trackScores;
+        if (trackScores) {
+            && version == that.version
+                                    if (SearchSourceBuilder.SCRIPT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    }
+     */
+    }
+                if (SearchSourceBuilder.STORED_FIELDS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        String currentFieldName = null;
+                    List<SortBuilder<?>> sorts = SortBuilder.fromXContent(parser);
+            }
+                        FieldAndFormat ff = FieldAndFormat.fromXContent(parser);
+        return builder;
+            builder.startObject(SearchSourceBuilder.SCRIPT_FIELDS_FIELD.getPreferredName());
+     * Adds a field to load from doc values and return as part of
+            this.scriptFields = new HashSet<>();
+    private int from = 0;
+    public TopHitsAggregationBuilder seqNoAndPrimaryTerm(Boolean seqNoAndPrimaryTerm) {
+ * KIND, either express or implied.  See the License for the
+                    new org.opensearch.search.fetch.subphase.ScriptFieldsContext.ScriptField(
+    public List<FieldAndFormat> fetchFields() {
+        }
+        boolean hasScriptFields = scriptFields != null;
+    }
+    @Override
+                    + "] but was ["
+            queryShardContext,
+        } else {
+        return this;
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+ * @opensearch.internal
+                                    }
+            explain,
+    }
+     *            pattern to filter the returned _source
+        return this;
+                    factory.highlighter(HighlightBuilder.fromXContent(parser));
+ * specific language governing permissions and limitations
+    public int from() {
+     * From index to start the search from. Defaults to {@code 0}.
+        this.fetchFields = clone.fetchFields == null ? null : new ArrayList<>(clone.fetchFields);
+            for (SortBuilder<?> sort : sorts) {
+                    + IndexSettings.MAX_INNER_RESULT_WINDOW_SETTING.getKey()
+        return this;
+    }
+        return fetchFields;
+     * @param includes
+     */
+     * @param name
+    @Override
+            size,
+                                        parser.getTokenLocation()
+ * GitHub history for details.
+                } else if (SearchSourceBuilder.SIZE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    public TopHitsAggregationBuilder sort(String name, SortOrder order) {
+                    + "]. This limit can be set by changing the ["
+            fetchSourceContext,
+    private boolean trackScores = false;
+        this.docValueFields = clone.docValueFields == null ? null : new ArrayList<>(clone.docValueFields);
+    public TopHitsAggregationBuilder scriptFields(List<ScriptField> scriptFields) {
+     * Adds a field to load and return as part of the search request.
+        if (this.scriptFields != null) {
+        }
+                        factory.docValueField(ff.field, ff.format);
+     * @param script
+                    }
+            }
+    /**
+        }
+        return this;
+     * Gets the field-data fields.
+     * Gets the bytes representing the sort builders for this request.
+            sorts,
+            && Objects.equals(highlightBuilder, that.highlightBuilder)
+     *
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+     */
+            throw new IllegalArgumentException("[scriptFields] must not be null: [" + name + "]");
+        this.from = clone.from;
+     */
+     *            The name of the field
+    /**
+    private FetchSourceContext fetchSourceContext;
+                    factory.storedFieldsContext = StoredFieldsContext.fromXContent(
+            throw new IllegalArgumentException("scriptField [script] must not be null: [" + name + "]");
+     */
+                                    if (SearchSourceBuilder.SCRIPT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        this.version = version;
+    /**
+            && trackScores == that.trackScores
+    public TopHitsAggregationBuilder sort(String name) {
+    }
+            subfactoriesBuilder,
+            out.writeList(docValueFields);
+        }
+    protected TopHitsAggregationBuilder(TopHitsAggregationBuilder clone, Builder factoriesBuilder, Map<String, Object> metadata) {
+                        parser.getTokenLocation()
+    }
+    public TopHitsAggregationBuilder fetchSource(boolean fetch) {
+     *            An optional list of include (optionally wildcarded)
+            if (token == XContentParser.Token.FIELD_NAME) {
+     */
+        builder.endObject();
+        }
+                        factory.fetchField(ff.field, ff.format);
+    /**
+     * Defaults to {@code false}.
+            parent,
+                }
+    public TopHitsAggregationBuilder size(int size) {
+    }
+        }
+ * software distributed under the License is distributed on an
+    public TopHitsAggregationBuilder scriptField(String name, Script script, boolean ignoreFailure) {
+            throw new IllegalArgumentException("sort [name] must not be null: [" + name + "]");
+            && seqNoAndPrimaryTerm == that.seqNoAndPrimaryTerm
+        super(name);
+    }
+                                            "Unknown key for a " + token + " in [" + currentFieldName + "].",
+            throw new IllegalArgumentException("[sort] must not be null: [" + name + "]");
+    }
+        boolean hasFieldDataFields = docValueFields != null;
+            } else if (token == XContentParser.Token.START_OBJECT) {
+                }
+     * the search request.
+                } else if (SearchSourceBuilder.SORT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    factory.fetchSource(FetchSourceContext.fromXContent(parser));
+    private boolean version = false;
+     */
+                    factory.storedFieldsContext = StoredFieldsContext.fromXContent(
+     *
+                } else if (SearchSourceBuilder.TRACK_SCORES_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        return fetchField(field, null);
+        return storedFieldsContext;
+     *
+     * Gets the highlighter builder for this request.
+        if (order == null) {
+        return this;
+                    );
+        }
+import java.util.Map;
+        out.writeBoolean(version);
+    public boolean trackScores() {
+        return storedFields(Collections.singletonList(field));
+    public List<FieldAndFormat> docValueFields() {
+    }
+        this.fetchSourceContext = new FetchSourceContext(fetch, fetchSourceContext.includes(), fetchSourceContext.excludes());
+                                    + token
+        return this;
+    }
+     * elements.
+                    throw new ParsingException(
+        );
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                                        ignoreFailure = parser.booleanValue();
+            throw new IllegalArgumentException("scriptField [name] must not be null: [" + name + "]");
+}
+            scriptFields,
+    public StoredFieldsContext storedFields() {
+import org.opensearch.search.sort.SortAndFormats;
+        }
+                        parser
+     *            The name of the field
+            throw new IllegalArgumentException(
+            this.sorts.add(sort);
+                clone.fetchSourceContext.includes(),
+import java.util.Set;
+     */
+            }
+                            Script script = null;
+    /**
+        return this;
+     * search hits.
+    }
+        this.scriptFields.addAll(scriptFields);
+    public boolean explain() {
+        if (scriptFields != null) {
+            from,
+    }
+                } else if (SearchSourceBuilder.VERSION_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+     *
+    @Override
+                FieldScript.Factory factory = queryShardContext.compile(field.script(), FieldScript.CONTEXT);
             }
         }
-        return factory;
+                } else if (SearchSourceBuilder.HIGHLIGHT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                                            parser.getTokenLocation()
+    /**
+    /**
+        return this;
+                                        currentFieldName,
+            throw new IllegalArgumentException("[from] must be greater than or equal to 0. Found [" + from + "] in [" + name + "]");
+     *            pattern to filter the returned _source
+     * @param order
+        return BucketCardinality.NONE;
+        if (scriptFields == null) {
+     */
+     * elements.
+        return this;
+        this.trackScores = trackScores;
+     * @param exclude
     }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        if (!super.equals(o)) return false;
-        TopHitsAggregationBuilder that = (TopHitsAggregationBuilder) o;
-        return from == that.from
-            && size == that.size
-            && explain == that.explain
-            && version == that.version
-            && seqNoAndPrimaryTerm == that.seqNoAndPrimaryTerm
-            && trackScores == that.trackScores
+    }
+    public TopHitsAggregationBuilder fetchField(String field, String format) {
+        }
+                                        script = Script.parse(parser);
             && Objects.equals(sorts, that.sorts)
-            && Objects.equals(highlightBuilder, that.highlightBuilder)
-            && Objects.equals(storedFieldsContext, that.storedFieldsContext)
-            && Objects.equals(docValueFields, that.docValueFields)
-            && Objects.equals(fetchFields, that.fetchFields)
-            && Objects.equals(scriptFields, that.scriptFields)
-            && Objects.equals(fetchSourceContext, that.fetchSourceContext);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(
-            super.hashCode(),
-            from,
-            size,
-            explain,
-            version,
-            seqNoAndPrimaryTerm,
-            trackScores,
-            sorts,
+            storedFieldsContext = StoredFieldsContext.fromList(fields);
             highlightBuilder,
-            storedFieldsContext,
-            docValueFields,
+    }
+                        field.fieldName(),
+    /**
+            fetchFields = in.readList(FieldAndFormat::new);
+    public TopHitsAggregationBuilder fetchSource(@Nullable String[] includes, @Nullable String[] excludes) {
+    /**
+            trackScores,
+                    throw new ParsingException(
+        this.explain = clone.explain;
+                    List<SortBuilder<?>> sorts = SortBuilder.fromXContent(parser);
+ *
             fetchFields,
-            scriptFields,
-            fetchSourceContext
-        );
-    }
-
+     */
+     * Indicates whether {@link org.opensearch.search.SearchHit}s should be returned with the
+    public TopHitsAggregationBuilder docValueField(String docValueField) {
+        }
+                            );
+                } else {
+        long innerResultWindow = from() + size();
+                    parser.getTokenLocation()
+        out.writeVInt(size);
+                                } else if (token == XContentParser.Token.START_OBJECT) {
+     */
+        final Optional<SortAndFormats> optionalSort;
     @Override
-    public String getType() {
-        return NAME;
+     * @param script
+     **/
+        builder.field(SearchSourceBuilder.VERSION_FIELD.getPreferredName(), version);
+        this.trackScores = clone.trackScores;
+     */
+    /**
+                docValueFields.add(new FieldAndFormat(in));
+            for (int i = 0; i < size; i++) {
+        } else {
+import org.opensearch.search.builder.SearchSourceBuilder;
+        }
+                                    } else if (SearchSourceBuilder.IGNORE_FAILURE_FIELD.match(
+        if (highlightBuilder == null) {
+     *            The name of the field to sort by
+    @Override
+        return this;
+            name,
+        if (hasScriptFields) {
+        }
+                clone.fetchSourceContext.excludes()
+                } else if (SearchSourceBuilder.EXPLAIN_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    protected TopHitsAggregatorFactory doBuild(QueryShardContext queryShardContext, AggregatorFactory parent, Builder subfactoriesBuilder)
+    /**
+import org.opensearch.search.fetch.StoredFieldsContext;
+        out.writeVInt(from);
+        if (fetchSourceContext == null) {
+                docValueField.toXContent(builder, params);
+import org.opensearch.search.sort.SortBuilders;
+            throw new IllegalArgumentException("[fields] must not be null: [" + name + "]");
+        return this;
+        if (docValueField == null) {
+     * @param name
+        docValueFields.add(new FieldAndFormat(docValueField, format));
+    /**
+        TopHitsAggregationBuilder factory = new TopHitsAggregationBuilder(aggregationName);
+     * Adds a script field under the given name with the provided script.
+ * not use this file except in compliance with the License.
+                                    );
+            builder.endArray();
+                        SearchSourceBuilder.STORED_FIELDS_FIELD.getPreferredName(),
+import org.opensearch.search.aggregations.AbstractAggregationBuilder;
+    private HighlightBuilder highlightBuilder;
+    /**
+import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
+                    + maxInnerResultWindow
+    public TopHitsAggregationBuilder highlighter(HighlightBuilder highlightBuilder) {
+            storedFieldsContext.addFieldNames(fields);
+     * Should each {@link org.opensearch.search.SearchHit} be returned with the
+     * Applies when sorting, and controls if scores will be tracked as well.
+        return sorts;
+    public TopHitsAggregationBuilder fetchField(String field) {
+        if (field == null) {
+    /**
     }
-}
+ * the Apache License, Version 2.0 (the "License"); you may
+                    factory.fetchSource(FetchSourceContext.fromXContent(parser));
+        }
+        }
+                        } else {
+                                }
+import org.opensearch.search.sort.ScoreSortBuilder;
+        if (docValueFields == null) {
+        if (script == null) {
+        if (script == null) {
+    /**
+    public String getType() {
+     */
+            builder.endArray();
+        int maxInnerResultWindow = queryShardContext.getMapperService().getIndexSettings().getMaxInnerResultWindow();
+     */
+ * You may obtain a copy of the License at
+ * license agreements. See the NOTICE file distributed with
+            throw new IllegalArgumentException("scriptField [name] must not be null: [" + name + "]");
+    public TopHitsAggregationBuilder(StreamInput in) throws IOException {
+ * compatible open source license.
+            builder.startArray(SearchSourceBuilder.SORT_FIELD.getPreferredName());
+        }
+            for (int i = 0; i < size; i++) {
+    /**
+                    )
+     * To disable the stored fields entirely (source and metadata fields) use {@code storedField("_none_")}.
+            throw new IllegalArgumentException("sort [name] must not be null: [" + name + "]");
+    }
+        return this;
+    }
+    /**
+        this.seqNoAndPrimaryTerm = seqNoAndPrimaryTerm;
+    public TopHitsAggregationBuilder fetchSource(@Nullable String include, @Nullable String exclude) {
+        return factory;
+import org.opensearch.core.xcontent.XContentBuilder;
+            sorts = new ArrayList<>();
+    }
+     * Should each {@link org.opensearch.search.SearchHit} be returned
+                                            "Unknown key for a " + token + " in [" + currentFieldName + "].",
+ */
+    /**
+     *            The name of the field
+        return this;
+                                } else if (token.isValue()) {
+import org.opensearch.search.sort.SortBuilder;
+        return explain;
+                                parser.getTokenLocation(),
+     */
+        if (fetchSourceContext != null) {
+        if (sort == null) {
+        this.scriptFields = clone.scriptFields == null ? null : new HashSet<>(clone.scriptFields);
+                        "Unknown key for a " + token + " in [" + currentFieldName + "].",
+                            }
+        }
+                        searchScript,
+/*
+        }
+        this.fetchSourceContext = new FetchSourceContext(fetchSourceContext.fetchSource(), includes, excludes);
+                    );
+        this.size = size;
+     * Gets the from index to start the search from.
+                } else if (SearchSourceBuilder.SCRIPT_FIELDS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    + name
+            }
+     */
+            for (FieldAndFormat docValueField : docValueFields) {
+    }
+    }
+    /**
+                currentFieldName = parser.currentName();
+    private Set<ScriptField> scriptFields;
+    @Override
+    /**
+     */
+     * sequence number and primary term of the last modification of the document.
+            } else {
+import org.opensearch.search.builder.SearchSourceBuilder.ScriptField;
+            from,
+            sort(SortBuilders.fieldSort(name));
+        out.writeBoolean(hasScriptFields);
+                        "Unknown key for a " + token + " in [" + currentFieldName + "].",
+            throw new IllegalArgumentException("[size] must be greater than or equal to 0. Found [" + size + "] in [" + name + "]");
+                                    } else {
+        out.writeBoolean(fetchFields != null);
+            && explain == that.explain
+        if (this == o) return true;
+ *
+            out.writeCollection(scriptFields);
+ */
+     */
+        if (storedFieldsContext != null) {
+            docValueFields = new ArrayList<>(size);
+            super.hashCode(),
+                } else {
+import org.opensearch.core.common.io.stream.StreamOutput;
+        this.seqNoAndPrimaryTerm = clone.seqNoAndPrimaryTerm;
+        trackScores = in.readBoolean();
+public class TopHitsAggregationBuilder extends AbstractAggregationBuilder<TopHitsAggregationBuilder> {
+        throw new AggregationInitializationException(
+                }
+/*
+    }
+            "Aggregator [" + name + "] of type [" + getType() + "] cannot accept sub-aggregations"
+     * Indicates whether scores will be tracked for this request.
+            ? null
+            builder.field(SearchSourceBuilder.HIGHLIGHT_FIELD.getPreferredName(), highlightBuilder);
+        if (fields == null) {
+        highlightBuilder = in.readOptionalWriteable(HighlightBuilder::new);
+            throw new IllegalArgumentException("[fields] must not be null: [" + name + "]");
+                    + innerResultWindow
+    }
+            sort(SortBuilders.scoreSort().order(order));
+        builder.field(SearchSourceBuilder.SEQ_NO_PRIMARY_TERM_FIELD.getPreferredName(), seqNoAndPrimaryTerm);
+                        }
+        if (in.readBoolean()) {
+    /**
+        }
+        size = in.readVInt();

@@ -1,803 +1,711 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+    }
+                + totalUploadsSucceeded
+                return this;
+            .lastSuccessfulRemoteRefreshBytes(lastSuccessfulRemoteRefreshBytes)
+    }
+                && this.uploadBytesStarted == other.uploadBytesStarted
+     * The method is given a function as an argument which is used for determining the file size (length in bytes).
+        }
  */
-
-package org.opensearch.index.remote;
-
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.logging.Loggers;
-import org.opensearch.common.util.Streak;
+                + ", uploadBytesSucceeded="
+                && Double.compare(this.uploadBytesPerSecMovingAverage, other.uploadBytesPerSecMovingAverage) == 0
+    }
+            this.uploadTimeMovingAverage = uploadTimeMovingAverage;
+            .uploadBytesStarted(uploadBytesStarted.get())
+         * Provides a fluent API for constructing a Stats object.
+                lastSuccessfulRemoteRefreshBytes,
+            this.remoteRefreshNumber = builder.remoteRefreshNumber;
+        long currentTimeMs = currentTimeMsUsingSystemNanos();
+        rejectionCountMap.computeIfAbsent(rejectionReason, k -> new AtomicLong()).incrementAndGet();
 import org.opensearch.common.util.concurrent.ConcurrentCollections;
-import org.opensearch.core.common.io.stream.StreamInput;
+                && this.totalUploadTimeInMs == other.totalUploadTimeInMs
+        // Both the local refresh time and remote refresh time are set with current time to give consistent view of time lag when it arises.
+            }
+    }
+ * The OpenSearch Contributors require contributions made to
+                + ", uploadTimeMovingAverage="
+            long uploadBytesSucceeded,
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.store.DirectoryFileTransferTracker;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Map;
+import org.opensearch.common.util.Streak;
+        super.incrementTotalUploadsFailed();
+    private final AtomicLong rejectionCount = new AtomicLong();
+            .totalUploadTimeInMs(totalUploadTimeInMillis.get())
+        Set<String> fileSet = new HashSet<>(segmentFiles);
+            .stream()
+            this.localRefreshNumber = localRefreshNumber;
+                && this.rejectionCount == other.rejectionCount
+     */
+    public RemoteSegmentTransferTracker.Stats stats() {
+        segmentFiles.stream()
+                directoryFileTransferTrackerStats
+        this.localRefreshTimeMs = localRefreshTimeMs;
+            }
+                this.totalUploadsSucceeded = in.readLong();
+                this.uploadBytesStarted = started;
+    }
+                return this;
+            private long totalUploadsSucceeded = 0;
+        if (isRemoteInSyncBeforeLocalRefresh) {
+            latestLocalFileNameLengthMap.keySet()
+                uploadBytesStarted,
+        Set<String> filesNotYetUploaded = latestLocalFileNameLengthMap.keySet()
 import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
-
-import static org.opensearch.index.shard.RemoteStoreRefreshListener.EXCLUDE_FILES;
-
-/**
- * Keeps track of remote refresh which happens in {@link org.opensearch.index.shard.RemoteStoreRefreshListener}. This consist of multiple critical metrics.
- *
- * @opensearch.api
- */
-@PublicApi(since = "2.10.0")
-public class RemoteSegmentTransferTracker extends RemoteTransferTracker {
-
-    private final Logger logger;
-
-    /**
-     * Every refresh is assigned a sequence number. This is the sequence number of the most recent refresh.
-     */
-    private volatile long localRefreshSeqNo;
-
-    /**
-     * The refresh time of the most recent refresh.
-     */
-    private volatile long localRefreshTimeMs;
-
-    /**
-     * The refresh time(clock) of the most recent refresh.
-     */
-    private volatile long localRefreshClockTimeMs;
-
-    /**
-     * Sequence number of the most recent remote refresh.
-     */
-    private volatile long remoteRefreshSeqNo;
-
-    /**
-     * The refresh time of the most recent remote refresh.
-     */
-    private volatile long remoteRefreshTimeMs;
-
-    /**
-     * This is the time of first local refresh after the last successful remote refresh. When the remote store is in
-     * sync with local refresh, this will be reset to -1.
-     */
-    private volatile long remoteRefreshStartTimeMs = -1;
-
-    /**
-     * The refresh time(clock) of the most recent remote refresh.
-     */
-    private volatile long remoteRefreshClockTimeMs;
-
-    /**
-     * Keeps the seq no lag computed so that we do not compute it for every request.
-     */
-    private volatile long refreshSeqNoLag;
-
-    /**
-     * Keeps track of the total bytes of segment files which were uploaded to remote store during last successful remote refresh
-     */
-    private volatile long lastSuccessfulRemoteRefreshBytes;
-
     /**
      * Cumulative sum of rejection counts for this shard.
-     */
-    private final AtomicLong rejectionCount = new AtomicLong();
-
-    /**
-     * Keeps track of rejection count with each rejection reason.
-     */
-    private final Map<String, AtomicLong> rejectionCountMap = ConcurrentCollections.newConcurrentMap();
-
-    /**
-     * Keeps track of segment files and their size in bytes which are part of the most recent refresh.
-     */
-    private final Map<String, Long> latestLocalFileNameLengthMap = ConcurrentCollections.newConcurrentMap();
-
-    /**
-     * This contains the files from the last successful remote refresh and ongoing uploads. This gets reset to just the
-     * last successful remote refresh state on successful remote refresh.
-     */
-    private final Set<String> latestUploadedFiles = ConcurrentCollections.newConcurrentSet();
-
-    /**
-     * Keeps the bytes lag computed so that we do not compute it for every request.
-     */
-    private volatile long bytesLag;
-
-    /**
-     * Holds count of consecutive failures until last success. Gets reset to zero if there is a success.
-     */
-    private final Streak failures = new Streak();
-
-    /**
-     * {@link org.opensearch.index.store.Store.StoreDirectory} level file transfer tracker, used to show download stats
-     */
-    private final DirectoryFileTransferTracker directoryFileTransferTracker;
-
-    public RemoteSegmentTransferTracker(
-        ShardId shardId,
-        DirectoryFileTransferTracker directoryFileTransferTracker,
-        int movingAverageWindowSize
-    ) {
-        super(shardId, movingAverageWindowSize);
-
-        logger = Loggers.getLogger(getClass(), shardId);
-        // Both the local refresh time and remote refresh time are set with current time to give consistent view of time lag when it arises.
-        long currentClockTimeMs = System.currentTimeMillis();
-        long currentTimeMs = currentTimeMsUsingSystemNanos();
-        localRefreshTimeMs = currentTimeMs;
-        remoteRefreshTimeMs = currentTimeMs;
-        remoteRefreshStartTimeMs = currentTimeMs;
-        localRefreshClockTimeMs = currentClockTimeMs;
-        remoteRefreshClockTimeMs = currentClockTimeMs;
-        this.directoryFileTransferTracker = directoryFileTransferTracker;
+                return this;
     }
-
-    public static long currentTimeMsUsingSystemNanos() {
-        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+ * SPDX-License-Identifier: Apache-2.0
+     *
+            out.writeLong(uploadBytesFailed);
     }
-
-    @Override
-    public void incrementTotalUploadsFailed() {
-        super.incrementTotalUploadsFailed();
-        failures.record(true);
-    }
-
-    @Override
-    public void incrementTotalUploadsSucceeded() {
-        super.incrementTotalUploadsSucceeded();
-        failures.record(false);
-    }
-
-    public long getLocalRefreshSeqNo() {
-        return localRefreshSeqNo;
-    }
-
-    // Visible for testing
-    void updateLocalRefreshSeqNo(long localRefreshSeqNo) {
-        assert localRefreshSeqNo >= this.localRefreshSeqNo : "newLocalRefreshSeqNo="
-            + localRefreshSeqNo
-            + " < "
-            + "currentLocalRefreshSeqNo="
-            + this.localRefreshSeqNo;
-        this.localRefreshSeqNo = localRefreshSeqNo;
-        computeRefreshSeqNoLag();
-    }
-
-    public long getLocalRefreshTimeMs() {
-        return localRefreshTimeMs;
-    }
-
-    public long getLocalRefreshClockTimeMs() {
-        return localRefreshClockTimeMs;
-    }
-
-    /**
-     * Updates the last refresh time and refresh seq no which is seen by local store.
-     */
-    public void updateLocalRefreshTimeAndSeqNo() {
-        updateLocalRefreshClockTimeMs(System.currentTimeMillis());
-        updateLocalRefreshTimeMs(currentTimeMsUsingSystemNanos());
-        updateLocalRefreshSeqNo(getLocalRefreshSeqNo() + 1);
-    }
-
-    // Visible for testing
-    synchronized void updateLocalRefreshTimeMs(long localRefreshTimeMs) {
-        assert localRefreshTimeMs >= this.localRefreshTimeMs : "newLocalRefreshTimeMs="
-            + localRefreshTimeMs
-            + " < "
-            + "currentLocalRefreshTimeMs="
-            + this.localRefreshTimeMs;
-        boolean isRemoteInSyncBeforeLocalRefresh = this.localRefreshTimeMs == this.remoteRefreshTimeMs;
-        this.localRefreshTimeMs = localRefreshTimeMs;
-        if (isRemoteInSyncBeforeLocalRefresh) {
-            this.remoteRefreshStartTimeMs = localRefreshTimeMs;
-        }
-    }
-
-    private void updateLocalRefreshClockTimeMs(long localRefreshClockTimeMs) {
-        this.localRefreshClockTimeMs = localRefreshClockTimeMs;
-    }
-
+                this.lastSuccessfulRemoteRefreshBytes = in.readLong();
     long getRemoteRefreshSeqNo() {
-        return remoteRefreshSeqNo;
-    }
-
-    public void updateRemoteRefreshSeqNo(long remoteRefreshSeqNo) {
-        assert remoteRefreshSeqNo >= this.remoteRefreshSeqNo : "newRemoteRefreshSeqNo="
-            + remoteRefreshSeqNo
-            + " < "
-            + "currentRemoteRefreshSeqNo="
-            + this.remoteRefreshSeqNo;
-        this.remoteRefreshSeqNo = remoteRefreshSeqNo;
-        computeRefreshSeqNoLag();
-    }
-
-    long getRemoteRefreshTimeMs() {
-        return remoteRefreshTimeMs;
-    }
-
-    long getRemoteRefreshClockTimeMs() {
-        return remoteRefreshClockTimeMs;
-    }
-
+            .rejectionCount(rejectionCount.get())
+            public Builder remoteRefreshClockTimeMs(long time) {
+                && this.refreshTimeLagMs == other.refreshTimeLagMs
+import org.opensearch.core.common.io.stream.StreamInput;
+ * Keeps track of remote refresh which happens in {@link org.opensearch.index.shard.RemoteStoreRefreshListener}. This consist of multiple critical metrics.
+            }
     public synchronized void updateRemoteRefreshTimeMs(long refreshTimeMs) {
-        assert refreshTimeMs >= this.remoteRefreshTimeMs : "newRemoteRefreshTimeMs="
-            + refreshTimeMs
-            + " < "
-            + "currentRemoteRefreshTimeMs="
-            + this.remoteRefreshTimeMs;
-        this.remoteRefreshTimeMs = refreshTimeMs;
-        // When multiple refreshes have failed, there is a possibility that retry is ongoing while another refresh gets
-        // triggered. After the segments have been uploaded and before the below code runs, the updateLocalRefreshTimeAndSeqNo
-        // method is triggered, which will update the local localRefreshTimeMs. Now, the lag would basically become the
-        // time since the last refresh happened locally.
-        this.remoteRefreshStartTimeMs = refreshTimeMs == this.localRefreshTimeMs ? -1 : this.localRefreshTimeMs;
+            + "currentLocalRefreshTimeMs="
+                uploadBytesSucceeded,
+            } catch (IOException e) {
+            long consecutiveFailuresCount,
     }
-
-    public void updateRemoteRefreshClockTimeMs(long remoteRefreshClockTimeMs) {
-        this.remoteRefreshClockTimeMs = remoteRefreshClockTimeMs;
-    }
-
+    public static class Stats implements Writeable {
+            out.writeLong(uploadBytesStarted);
+import java.util.Collection;
     private void computeRefreshSeqNoLag() {
-        refreshSeqNoLag = localRefreshSeqNo - remoteRefreshSeqNo;
-    }
-
-    public long getRefreshSeqNoLag() {
-        return refreshSeqNoLag;
-    }
-
-    public long getTimeMsLag() {
-        if (remoteRefreshTimeMs == localRefreshTimeMs || bytesLag == 0) {
-            return 0;
-        }
-        return currentTimeMsUsingSystemNanos() - remoteRefreshStartTimeMs;
-    }
-
-    public long getBytesLag() {
-        return bytesLag;
-    }
-
-    public long getInflightUploadBytes() {
-        return uploadBytesStarted.get() - uploadBytesFailed.get() - uploadBytesSucceeded.get();
-    }
-
-    public long getInflightUploads() {
-        return totalUploadsStarted.get() - totalUploadsFailed.get() - totalUploadsSucceeded.get();
-    }
-
+                + totalUploadTimeInMs
+     * @return updated map of local segment files and filesize
+                + ", uploadBytesPerSecMovingAverage="
+    private volatile long remoteRefreshStartTimeMs = -1;
+            this.directoryFileTransferTrackerStats = builder.directoryFileTransferTrackerStats;
+                && this.localRefreshNumber == other.localRefreshNumber
     public long getRejectionCount() {
+                this.uploadBytesStarted = in.readLong();
+        this.latestUploadedFiles.add(file);
+            out.writeLong(rejectionCount);
+     */
+                return this;
+            out.writeDouble(uploadTimeMovingAverage);
+            ShardId shardId,
+ *
+    /**
+                this.remoteRefreshNumber = number;
+            + this.remoteRefreshTimeMs;
+    private volatile long remoteRefreshTimeMs;
+                + ", directoryFileTransferTrackerStats="
+            this.uploadBytesFailed = uploadBytesFailed;
+}
+                return this;
+            if (obj == null || getClass() != obj.getClass()) return false;
+     * This method is also provided the collection of segment files which are the latest refresh local segment files.
+                this.remoteRefreshClockTimeMs = time;
+                this.shardId = new ShardId(in);
+    synchronized void updateLocalRefreshTimeMs(long localRefreshTimeMs) {
+            return Objects.hash(
+        public final DirectoryFileTransferTracker.Stats directoryFileTransferTrackerStats;
+            out.writeLong(totalUploadTimeInMs);
+            private ShardId shardId = null;
+    private volatile long remoteRefreshSeqNo;
+        public final ShardId shardId;
+    }
+                return this;
+    public void addToLatestUploadedFiles(String file) {
+    public long getBytesLag() {
+    }
+                this.bytesLag = in.readLong();
+            .totalUploadsSucceeded(totalUploadsSucceeded.get())
+    @PublicApi(since = "2.10.0")
+            }
+            long uploadBytesStarted,
+            this.totalUploadsFailed = totalUploadsFailed;
+    /**
+                this.refreshTimeLagMs = time;
+            out.writeLong(remoteRefreshNumber);
+            private long lastSuccessfulRemoteRefreshBytes = 0;
+            + " < "
+    @Override
+             * Creates a {@link Stats} object from the builder's current state.
+        public final long uploadBytesStarted;
+            Stats other = (Stats) obj;
+            this.totalUploadTimeInMs = builder.totalUploadTimeInMs;
+    public void incrementTotalUploadsSucceeded() {
+                + remoteRefreshClockTimeMs
+                return this;
+                return this;
+        }
+            }
+    }
+        public Stats(StreamInput in) throws IOException {
+                + ", consecutiveFailuresCount="
+     */
+        return uploadBytesStarted.get() - uploadBytesFailed.get() - uploadBytesSucceeded.get();
+        public void writeTo(StreamOutput out) throws IOException {
+                this.totalUploadsStarted = started;
+                throw e;
+            out.writeLong(localRefreshNumber);
+             */
+    public RemoteSegmentTransferTracker(
+                totalUploadsFailed,
+                } catch (IOException e) {
+        return totalUploadsStarted.get() - totalUploadsFailed.get() - totalUploadsSucceeded.get();
+            + "currentRemoteRefreshSeqNo="
+     * This is the time of first local refresh after the last successful remote refresh. When the remote store is in
+            this.bytesLag = builder.bytesLag;
+            private long localRefreshClockTimeMs = 0;
+            + "currentRemoteRefreshTimeMs="
+            public Builder uploadBytesSucceeded(long succeeded) {
+            }
+            }
+     * Every refresh is assigned a sequence number. This is the sequence number of the most recent refresh.
+            private long localRefreshNumber = 0;
+        return Collections.unmodifiableMap(latestLocalFileNameLengthMap);
+    private void updateLocalRefreshClockTimeMs(long localRefreshClockTimeMs) {
+    /**
+    }
+            private long totalUploadsFailed = 0;
+        boolean isRemoteInSyncBeforeLocalRefresh = this.localRefreshTimeMs == this.remoteRefreshTimeMs;
+    private final Logger logger;
+     */
+            this.uploadBytesStarted = uploadBytesStarted;
+    /**
+package org.opensearch.index.remote;
+            this.totalUploadsSucceeded = builder.totalUploadsSucceeded;
+    /**
+            public Builder uploadBytesPerSecMovingAverage(double average) {
+            this.uploadBytesSucceeded = uploadBytesSucceeded;
+            this.refreshTimeLagMs = builder.refreshTimeLagMs;
+                this.uploadBytesSucceeded = succeeded;
+import org.apache.logging.log4j.Logger;
+    }
         return rejectionCount.get();
+    /**
+        }
+                return this;
+            out.writeLong(lastSuccessfulRemoteRefreshBytes);
+        }
+        public final long totalUploadsFailed;
+     * @opensearch.api
+            out.writeLong(bytesLag);
+            out.writeLong(refreshTimeLagMs);
+        return failures.length();
+            long totalUploadsSucceeded,
     }
-
-    /** public only for testing **/
-    public void incrementRejectionCount() {
-        rejectionCount.incrementAndGet();
-    }
-
-    void incrementRejectionCount(String rejectionReason) {
-        rejectionCountMap.computeIfAbsent(rejectionReason, k -> new AtomicLong()).incrementAndGet();
-        incrementRejectionCount();
-    }
-
-    long getRejectionCount(String rejectionReason) {
+                latestLocalFileNameLengthMap.put(file, fileSize);
+            .totalUploadsFailed(totalUploadsFailed.get())
+     */
+                return this;
+        DirectoryFileTransferTracker directoryFileTransferTracker,
+import java.util.concurrent.atomic.AtomicLong;
+            return "Stats{"
+    public long getTimeMsLag() {
+        private Stats(Builder builder) {
+                remoteRefreshNumber,
+    public DirectoryFileTransferTracker getDirectoryFileTransferTracker() {
+        }
+    /**
+            long refreshTimeLagMs,
+            out.writeLong(totalUploadsFailed);
+                return this;
+        return new Stats.Builder().shardId(shardId)
+        // method is triggered, which will update the local localRefreshTimeMs. Now, the lag would basically become the
+     * Keeps track of rejection count with each rejection reason.
+            }
+        assert remoteRefreshSeqNo >= this.remoteRefreshSeqNo : "newRemoteRefreshSeqNo="
         return rejectionCountMap.get(rejectionReason).get();
     }
-
-    public Map<String, Long> getLatestLocalFileNameLengthMap() {
-        return Collections.unmodifiableMap(latestLocalFileNameLengthMap);
-    }
-
-    /**
-     * Updates the latestLocalFileNameLengthMap by adding file name and it's size to the map.
-     * The method is given a function as an argument which is used for determining the file size (length in bytes).
-     * This method is also provided the collection of segment files which are the latest refresh local segment files.
-     * This method also removes the stale segment files from the map that are not part of the input segment files.
-     *
-     * @param segmentFiles     list of local refreshed segment files
-     * @param fileSizeFunction function is used to determine the file size in bytes
-     *
-     * @return updated map of local segment files and filesize
+                + ", totalUploadsFailed="
+         * This constructor will be deprecated starting in version 3.4.0.
+                && Double.compare(this.uploadTimeMovingAverage, other.uploadTimeMovingAverage) == 0
+                this.uploadTimeMovingAverage = average;
+                this.uploadBytesSucceeded = in.readLong();
+        if (remoteRefreshTimeMs == localRefreshTimeMs || bytesLag == 0) {
      */
     public Map<String, Long> updateLatestLocalFileNameLengthMap(
-        Collection<String> segmentFiles,
-        CheckedFunction<String, Long, IOException> fileSizeFunction
-    ) {
-        logger.debug(
-            "segmentFilesPostRefresh={} latestLocalFileNamesBeforeMapUpdate={}",
-            segmentFiles,
-            latestLocalFileNameLengthMap.keySet()
-        );
-        // Update the map
-        segmentFiles.stream()
-            .filter(file -> EXCLUDE_FILES.contains(file) == false)
-            .filter(file -> latestLocalFileNameLengthMap.containsKey(file) == false || latestLocalFileNameLengthMap.get(file) == 0)
-            .forEach(file -> {
-                long fileSize = 0;
-                try {
-                    fileSize = fileSizeFunction.apply(file);
-                } catch (IOException e) {
-                    logger.warn(new ParameterizedMessage("Exception while reading the fileLength of file={}", file), e);
-                }
-                latestLocalFileNameLengthMap.put(file, fileSize);
-            });
-        Set<String> fileSet = new HashSet<>(segmentFiles);
-        // Remove keys from the fileSizeMap that do not exist in the latest segment files
-        latestLocalFileNameLengthMap.entrySet().removeIf(entry -> fileSet.contains(entry.getKey()) == false);
-        computeBytesLag();
-        return Collections.unmodifiableMap(latestLocalFileNameLengthMap);
-    }
-
-    public void addToLatestUploadedFiles(String file) {
-        this.latestUploadedFiles.add(file);
-        computeBytesLag();
-    }
-
-    public void setLatestUploadedFiles(Set<String> files) {
-        this.latestUploadedFiles.clear();
-        this.latestUploadedFiles.addAll(files);
-        computeBytesLag();
-    }
-
-    private void computeBytesLag() {
-        if (latestLocalFileNameLengthMap.isEmpty()) {
-            return;
-        }
-        Set<String> filesNotYetUploaded = latestLocalFileNameLengthMap.keySet()
-            .stream()
-            .filter(f -> !latestUploadedFiles.contains(f))
-            .collect(Collectors.toSet());
-        this.bytesLag = filesNotYetUploaded.stream().map(latestLocalFileNameLengthMap::get).mapToLong(Long::longValue).sum();
-    }
-
-    int getConsecutiveFailureCount() {
-        return failures.length();
-    }
-
-    public DirectoryFileTransferTracker getDirectoryFileTransferTracker() {
-        return directoryFileTransferTracker;
-    }
-
-    public RemoteSegmentTransferTracker.Stats stats() {
-        return new Stats.Builder().shardId(shardId)
-            .localRefreshClockTimeMs(localRefreshClockTimeMs)
-            .remoteRefreshClockTimeMs(remoteRefreshClockTimeMs)
-            .refreshTimeLagMs(getTimeMsLag())
-            .localRefreshNumber(localRefreshSeqNo)
-            .remoteRefreshNumber(remoteRefreshSeqNo)
-            .uploadBytesStarted(uploadBytesStarted.get())
-            .uploadBytesSucceeded(uploadBytesSucceeded.get())
-            .uploadBytesFailed(uploadBytesFailed.get())
-            .totalUploadsStarted(totalUploadsStarted.get())
-            .totalUploadsSucceeded(totalUploadsSucceeded.get())
-            .totalUploadsFailed(totalUploadsFailed.get())
-            .rejectionCount(rejectionCount.get())
-            .consecutiveFailuresCount(failures.length())
-            .lastSuccessfulRemoteRefreshBytes(lastSuccessfulRemoteRefreshBytes)
-            .uploadBytesMovingAverage(uploadBytesMovingAverageReference.get().getAverage())
-            .uploadBytesPerSecMovingAverage(uploadBytesPerSecMovingAverageReference.get().getAverage())
-            .uploadTimeMovingAverage(uploadTimeMsMovingAverageReference.get().getAverage())
-            .bytesLag(getBytesLag())
-            .totalUploadTimeInMs(totalUploadTimeInMillis.get())
-            .directoryFileTransferTrackerStats(directoryFileTransferTracker.stats())
-            .build();
-    }
-
-    /**
-     * Represents the tracker's state as seen in the stats API.
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "2.10.0")
-    public static class Stats implements Writeable {
-
-        public final ShardId shardId;
-        public final long localRefreshClockTimeMs;
-        public final long remoteRefreshClockTimeMs;
-        public final long refreshTimeLagMs;
-        public final long localRefreshNumber;
-        public final long remoteRefreshNumber;
-        public final long uploadBytesStarted;
-        public final long uploadBytesFailed;
-        public final long uploadBytesSucceeded;
-        public final long totalUploadsStarted;
-        public final long totalUploadsFailed;
-        public final long totalUploadsSucceeded;
-        public final long rejectionCount;
-        public final long consecutiveFailuresCount;
-        public final long lastSuccessfulRemoteRefreshBytes;
-        public final double uploadBytesMovingAverage;
-        public final double uploadBytesPerSecMovingAverage;
-        public final long totalUploadTimeInMs;
-        public final double uploadTimeMovingAverage;
-        public final long bytesLag;
-        public final DirectoryFileTransferTracker.Stats directoryFileTransferTrackerStats;
-
-        private Stats(Builder builder) {
-            this.shardId = builder.shardId;
-            this.localRefreshClockTimeMs = builder.localRefreshClockTimeMs;
-            this.remoteRefreshClockTimeMs = builder.remoteRefreshClockTimeMs;
-            this.refreshTimeLagMs = builder.refreshTimeLagMs;
-            this.localRefreshNumber = builder.localRefreshNumber;
-            this.remoteRefreshNumber = builder.remoteRefreshNumber;
-            this.uploadBytesStarted = builder.uploadBytesStarted;
-            this.uploadBytesFailed = builder.uploadBytesFailed;
-            this.uploadBytesSucceeded = builder.uploadBytesSucceeded;
-            this.totalUploadsStarted = builder.totalUploadsStarted;
-            this.totalUploadsFailed = builder.totalUploadsFailed;
-            this.totalUploadsSucceeded = builder.totalUploadsSucceeded;
-            this.rejectionCount = builder.rejectionCount;
-            this.consecutiveFailuresCount = builder.consecutiveFailuresCount;
-            this.lastSuccessfulRemoteRefreshBytes = builder.lastSuccessfulRemoteRefreshBytes;
-            this.uploadBytesMovingAverage = builder.uploadBytesMovingAverage;
-            this.uploadBytesPerSecMovingAverage = builder.uploadBytesPerSecMovingAverage;
-            this.totalUploadTimeInMs = builder.totalUploadTimeInMs;
-            this.uploadTimeMovingAverage = builder.uploadTimeMovingAverage;
-            this.bytesLag = builder.bytesLag;
-            this.directoryFileTransferTrackerStats = builder.directoryFileTransferTrackerStats;
-        }
-
-        /**
-         * This constructor will be deprecated starting in version 3.4.0.
-         * Use {@link Builder} instead.
-         */
-        @Deprecated
-        public Stats(
-            ShardId shardId,
-            long localRefreshClockTimeMs,
-            long remoteRefreshClockTimeMs,
-            long refreshTimeLagMs,
-            long localRefreshNumber,
-            long remoteRefreshNumber,
-            long uploadBytesStarted,
-            long uploadBytesSucceeded,
-            long uploadBytesFailed,
-            long totalUploadsStarted,
-            long totalUploadsSucceeded,
-            long totalUploadsFailed,
-            long rejectionCount,
-            long consecutiveFailuresCount,
-            long lastSuccessfulRemoteRefreshBytes,
-            double uploadBytesMovingAverage,
-            double uploadBytesPerSecMovingAverage,
-            double uploadTimeMovingAverage,
-            long bytesLag,
-            long totalUploadTimeInMs,
-            DirectoryFileTransferTracker.Stats directoryFileTransferTrackerStats
-        ) {
-            this.shardId = shardId;
-            this.localRefreshClockTimeMs = localRefreshClockTimeMs;
-            this.remoteRefreshClockTimeMs = remoteRefreshClockTimeMs;
-            this.refreshTimeLagMs = refreshTimeLagMs;
-            this.localRefreshNumber = localRefreshNumber;
-            this.remoteRefreshNumber = remoteRefreshNumber;
-            this.uploadBytesStarted = uploadBytesStarted;
-            this.uploadBytesFailed = uploadBytesFailed;
-            this.uploadBytesSucceeded = uploadBytesSucceeded;
-            this.totalUploadsStarted = totalUploadsStarted;
-            this.totalUploadsFailed = totalUploadsFailed;
-            this.totalUploadsSucceeded = totalUploadsSucceeded;
-            this.rejectionCount = rejectionCount;
-            this.consecutiveFailuresCount = consecutiveFailuresCount;
-            this.lastSuccessfulRemoteRefreshBytes = lastSuccessfulRemoteRefreshBytes;
-            this.uploadBytesMovingAverage = uploadBytesMovingAverage;
-            this.uploadBytesPerSecMovingAverage = uploadBytesPerSecMovingAverage;
-            this.uploadTimeMovingAverage = uploadTimeMovingAverage;
-            this.bytesLag = bytesLag;
-            this.totalUploadTimeInMs = totalUploadTimeInMs;
-            this.directoryFileTransferTrackerStats = directoryFileTransferTrackerStats;
-        }
-
-        public Stats(StreamInput in) throws IOException {
-            try {
-                this.shardId = new ShardId(in);
-                this.localRefreshClockTimeMs = in.readLong();
-                this.remoteRefreshClockTimeMs = in.readLong();
-                this.refreshTimeLagMs = in.readLong();
-                this.localRefreshNumber = in.readLong();
-                this.remoteRefreshNumber = in.readLong();
-                this.uploadBytesStarted = in.readLong();
-                this.uploadBytesFailed = in.readLong();
-                this.uploadBytesSucceeded = in.readLong();
-                this.totalUploadsStarted = in.readLong();
-                this.totalUploadsFailed = in.readLong();
-                this.totalUploadsSucceeded = in.readLong();
-                this.rejectionCount = in.readLong();
-                this.consecutiveFailuresCount = in.readLong();
-                this.lastSuccessfulRemoteRefreshBytes = in.readLong();
-                this.uploadBytesMovingAverage = in.readDouble();
-                this.uploadBytesPerSecMovingAverage = in.readDouble();
-                this.uploadTimeMovingAverage = in.readDouble();
-                this.bytesLag = in.readLong();
-                this.totalUploadTimeInMs = in.readLong();
-                this.directoryFileTransferTrackerStats = in.readOptionalWriteable(DirectoryFileTransferTracker.Stats::new);
-            } catch (IOException e) {
-                throw e;
-            }
-        }
-
-        /**
-         * Builder for the {@link Stats} class.
-         * Provides a fluent API for constructing a Stats object.
-         */
+/**
         public static class Builder {
-            private ShardId shardId = null;
-            private long localRefreshClockTimeMs = 0;
-            private long remoteRefreshClockTimeMs = 0;
-            private long refreshTimeLagMs = 0;
-            private long localRefreshNumber = 0;
-            private long remoteRefreshNumber = 0;
-            private long uploadBytesStarted = 0;
-            private long uploadBytesFailed = 0;
-            private long uploadBytesSucceeded = 0;
-            private long totalUploadsStarted = 0;
-            private long totalUploadsFailed = 0;
-            private long totalUploadsSucceeded = 0;
-            private long rejectionCount = 0;
-            private long consecutiveFailuresCount = 0;
-            private long lastSuccessfulRemoteRefreshBytes = 0;
-            private double uploadBytesMovingAverage = 0;
-            private double uploadBytesPerSecMovingAverage = 0;
-            private long totalUploadTimeInMs = 0;
-            private double uploadTimeMovingAverage = 0;
-            private long bytesLag = 0;
-            private DirectoryFileTransferTracker.Stats directoryFileTransferTrackerStats = null;
-
-            public Builder() {}
-
-            public Builder shardId(ShardId shardId) {
-                this.shardId = shardId;
-                return this;
-            }
-
-            public Builder localRefreshClockTimeMs(long time) {
-                this.localRefreshClockTimeMs = time;
-                return this;
-            }
-
-            public Builder remoteRefreshClockTimeMs(long time) {
-                this.remoteRefreshClockTimeMs = time;
-                return this;
-            }
-
-            public Builder refreshTimeLagMs(long time) {
-                this.refreshTimeLagMs = time;
-                return this;
-            }
-
-            public Builder localRefreshNumber(long number) {
-                this.localRefreshNumber = number;
-                return this;
-            }
-
-            public Builder remoteRefreshNumber(long number) {
-                this.remoteRefreshNumber = number;
-                return this;
-            }
-
-            public Builder uploadBytesStarted(long started) {
-                this.uploadBytesStarted = started;
-                return this;
-            }
-
-            public Builder uploadBytesFailed(long failed) {
-                this.uploadBytesFailed = failed;
-                return this;
-            }
-
-            public Builder uploadBytesSucceeded(long succeeded) {
-                this.uploadBytesSucceeded = succeeded;
-                return this;
-            }
-
-            public Builder totalUploadsStarted(long started) {
-                this.totalUploadsStarted = started;
-                return this;
-            }
-
-            public Builder totalUploadsFailed(long failed) {
-                this.totalUploadsFailed = failed;
-                return this;
-            }
-
-            public Builder totalUploadsSucceeded(long succeeded) {
-                this.totalUploadsSucceeded = succeeded;
-                return this;
-            }
-
-            public Builder rejectionCount(long count) {
-                this.rejectionCount = count;
-                return this;
-            }
-
-            public Builder consecutiveFailuresCount(long count) {
-                this.consecutiveFailuresCount = count;
-                return this;
-            }
-
-            public Builder lastSuccessfulRemoteRefreshBytes(long bytes) {
-                this.lastSuccessfulRemoteRefreshBytes = bytes;
-                return this;
-            }
-
-            public Builder uploadBytesMovingAverage(double average) {
-                this.uploadBytesMovingAverage = average;
-                return this;
-            }
-
-            public Builder uploadBytesPerSecMovingAverage(double average) {
+    }
                 this.uploadBytesPerSecMovingAverage = average;
-                return this;
             }
-
-            public Builder totalUploadTimeInMs(long time) {
-                this.totalUploadTimeInMs = time;
-                return this;
-            }
-
-            public Builder uploadTimeMovingAverage(double average) {
-                this.uploadTimeMovingAverage = average;
-                return this;
-            }
-
-            public Builder bytesLag(long lag) {
-                this.bytesLag = lag;
-                return this;
-            }
-
-            public Builder directoryFileTransferTrackerStats(DirectoryFileTransferTracker.Stats stats) {
-                this.directoryFileTransferTrackerStats = stats;
-                return this;
-            }
-
-            /**
-             * Creates a {@link Stats} object from the builder's current state.
-             * @return A new Stats instance.
-             */
-            public Stats build() {
-                return new Stats(this);
-            }
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            shardId.writeTo(out);
-            out.writeLong(localRefreshClockTimeMs);
-            out.writeLong(remoteRefreshClockTimeMs);
-            out.writeLong(refreshTimeLagMs);
-            out.writeLong(localRefreshNumber);
-            out.writeLong(remoteRefreshNumber);
-            out.writeLong(uploadBytesStarted);
-            out.writeLong(uploadBytesFailed);
-            out.writeLong(uploadBytesSucceeded);
-            out.writeLong(totalUploadsStarted);
-            out.writeLong(totalUploadsFailed);
-            out.writeLong(totalUploadsSucceeded);
-            out.writeLong(rejectionCount);
-            out.writeLong(consecutiveFailuresCount);
-            out.writeLong(lastSuccessfulRemoteRefreshBytes);
-            out.writeDouble(uploadBytesMovingAverage);
-            out.writeDouble(uploadBytesPerSecMovingAverage);
-            out.writeDouble(uploadTimeMovingAverage);
-            out.writeLong(bytesLag);
-            out.writeLong(totalUploadTimeInMs);
-            out.writeOptionalWriteable(directoryFileTransferTrackerStats);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) return true;
-            if (obj == null || getClass() != obj.getClass()) return false;
-            Stats other = (Stats) obj;
-
-            return this.shardId.toString().equals(other.shardId.toString())
-                && this.localRefreshClockTimeMs == other.localRefreshClockTimeMs
-                && this.remoteRefreshClockTimeMs == other.remoteRefreshClockTimeMs
-                && this.refreshTimeLagMs == other.refreshTimeLagMs
-                && this.localRefreshNumber == other.localRefreshNumber
-                && this.remoteRefreshNumber == other.remoteRefreshNumber
-                && this.uploadBytesStarted == other.uploadBytesStarted
-                && this.uploadBytesFailed == other.uploadBytesFailed
-                && this.uploadBytesSucceeded == other.uploadBytesSucceeded
-                && this.totalUploadsStarted == other.totalUploadsStarted
-                && this.totalUploadsFailed == other.totalUploadsFailed
-                && this.totalUploadsSucceeded == other.totalUploadsSucceeded
-                && this.rejectionCount == other.rejectionCount
-                && this.consecutiveFailuresCount == other.consecutiveFailuresCount
-                && this.lastSuccessfulRemoteRefreshBytes == other.lastSuccessfulRemoteRefreshBytes
-                && Double.compare(this.uploadBytesMovingAverage, other.uploadBytesMovingAverage) == 0
-                && Double.compare(this.uploadBytesPerSecMovingAverage, other.uploadBytesPerSecMovingAverage) == 0
-                && Double.compare(this.uploadTimeMovingAverage, other.uploadTimeMovingAverage) == 0
-                && this.bytesLag == other.bytesLag
-                && this.totalUploadTimeInMs == other.totalUploadTimeInMs
-                && this.directoryFileTransferTrackerStats.equals(other.directoryFileTransferTrackerStats);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(
-                shardId,
-                localRefreshClockTimeMs,
-                remoteRefreshClockTimeMs,
-                refreshTimeLagMs,
-                localRefreshNumber,
-                remoteRefreshNumber,
-                uploadBytesStarted,
-                uploadBytesFailed,
-                uploadBytesSucceeded,
-                totalUploadsStarted,
-                totalUploadsFailed,
-                totalUploadsSucceeded,
-                rejectionCount,
-                consecutiveFailuresCount,
-                lastSuccessfulRemoteRefreshBytes,
-                uploadBytesMovingAverage,
-                uploadBytesPerSecMovingAverage,
-                uploadTimeMovingAverage,
-                bytesLag,
-                totalUploadTimeInMs,
-                directoryFileTransferTrackerStats
+            long totalUploadsFailed,
             );
+        public final long remoteRefreshNumber;
+                + bytesLag
+        public int hashCode() {
+        this.remoteRefreshClockTimeMs = remoteRefreshClockTimeMs;
+        );
+         */
+            private long consecutiveFailuresCount = 0;
+            out.writeLong(remoteRefreshClockTimeMs);
+            this.totalUploadsStarted = totalUploadsStarted;
+            }
+    long getRemoteRefreshTimeMs() {
+                this.totalUploadTimeInMs = time;
+    }
+     * Updates the last refresh time and refresh seq no which is seen by local store.
+        this.remoteRefreshSeqNo = remoteRefreshSeqNo;
+                this.uploadBytesPerSecMovingAverage = in.readDouble();
+            double uploadTimeMovingAverage,
+    }
+            + "currentLocalRefreshSeqNo="
+     */
+                this.localRefreshNumber = number;
+            public Builder totalUploadsSucceeded(long succeeded) {
         }
-
-        @Override
-        public String toString() {
-            return "Stats{"
-                + "shardId="
-                + shardId
-                + ", localRefreshClockTimeMs="
-                + localRefreshClockTimeMs
-                + ", remoteRefreshClockTimeMs="
-                + remoteRefreshClockTimeMs
-                + ", refreshTimeLagMs="
-                + refreshTimeLagMs
-                + ", localRefreshNumber="
-                + localRefreshNumber
-                + ", remoteRefreshNumber="
-                + remoteRefreshNumber
+        localRefreshClockTimeMs = currentClockTimeMs;
                 + ", uploadBytesStarted="
-                + uploadBytesStarted
-                + ", uploadBytesFailed="
-                + uploadBytesFailed
-                + ", uploadBytesSucceeded="
-                + uploadBytesSucceeded
-                + ", totalUploadsStarted="
-                + totalUploadsStarted
-                + ", totalUploadsFailed="
+                && this.bytesLag == other.bytesLag
+ * compatible open source license.
+        rejectionCount.incrementAndGet();
+    /**
+            long rejectionCount,
+            });
+    }
+            .filter(file -> EXCLUDE_FILES.contains(file) == false)
+            }
+        assert localRefreshSeqNo >= this.localRefreshSeqNo : "newLocalRefreshSeqNo="
+     */
+        public final double uploadBytesPerSecMovingAverage;
+            this.totalUploadTimeInMs = totalUploadTimeInMs;
+    /**
+     * This method also removes the stale segment files from the map that are not part of the input segment files.
+                + '}';
+     */
+                this.uploadBytesFailed = in.readLong();
+import org.opensearch.index.store.DirectoryFileTransferTracker;
+        assert localRefreshTimeMs >= this.localRefreshTimeMs : "newLocalRefreshTimeMs="
+            public Builder bytesLag(long lag) {
+                && this.localRefreshClockTimeMs == other.localRefreshClockTimeMs
+        @Deprecated
+            }
+            public Builder shardId(ShardId shardId) {
+        int movingAverageWindowSize
+            }
+ * @opensearch.api
+            }
+            + this.localRefreshSeqNo;
+                this.uploadBytesMovingAverage = average;
+            .localRefreshNumber(localRefreshSeqNo)
+            /**
+            public Builder directoryFileTransferTrackerStats(DirectoryFileTransferTracker.Stats stats) {
+                this.uploadBytesMovingAverage = in.readDouble();
+    }
+            public Builder uploadTimeMovingAverage(double average) {
+                && Double.compare(this.uploadBytesMovingAverage, other.uploadBytesMovingAverage) == 0
+                + localRefreshClockTimeMs
+    private final DirectoryFileTransferTracker directoryFileTransferTracker;
+                long fileSize = 0;
+     * The refresh time(clock) of the most recent remote refresh.
+                + ", localRefreshClockTimeMs="
+import org.opensearch.common.annotation.PublicApi;
+            this.remoteRefreshClockTimeMs = remoteRefreshClockTimeMs;
+            this.consecutiveFailuresCount = consecutiveFailuresCount;
+        public final long uploadBytesFailed;
+            this.lastSuccessfulRemoteRefreshBytes = lastSuccessfulRemoteRefreshBytes;
+    }
+                && this.directoryFileTransferTrackerStats.equals(other.directoryFileTransferTrackerStats);
+     */
+            public Builder refreshTimeLagMs(long time) {
                 + totalUploadsFailed
-                + ", totalUploadsSucceeded="
-                + totalUploadsSucceeded
-                + ", rejectionCount="
-                + rejectionCount
-                + ", consecutiveFailuresCount="
-                + consecutiveFailuresCount
+            shardId.writeTo(out);
+                + ", totalUploadTimeInMs="
+import org.opensearch.core.index.shard.ShardId;
+                + ", bytesLag="
+    private final Map<String, Long> latestLocalFileNameLengthMap = ConcurrentCollections.newConcurrentMap();
+            this.localRefreshNumber = builder.localRefreshNumber;
+            .remoteRefreshNumber(remoteRefreshSeqNo)
+@PublicApi(since = "2.10.0")
+            .localRefreshClockTimeMs(localRefreshClockTimeMs)
+            public Builder totalUploadsStarted(long started) {
+                localRefreshClockTimeMs,
+    public long getLocalRefreshClockTimeMs() {
+                try {
+        this.directoryFileTransferTracker = directoryFileTransferTracker;
+            .uploadBytesPerSecMovingAverage(uploadBytesPerSecMovingAverageReference.get().getAverage())
+        public boolean equals(Object obj) {
+        /**
+                return this;
+     */
+            long remoteRefreshNumber,
+        logger.debug(
+                this.totalUploadsFailed = failed;
+        computeRefreshSeqNoLag();
+        computeBytesLag();
+            this.uploadBytesPerSecMovingAverage = uploadBytesPerSecMovingAverage;
+     */
+        /**
+        // time since the last refresh happened locally.
+                this.directoryFileTransferTrackerStats = stats;
+    /**
+                + "shardId="
+        return directoryFileTransferTracker;
+            private long uploadBytesStarted = 0;
+                + shardId
+            }
+    /**
+            }
+import java.util.HashSet;
+            .uploadBytesSucceeded(uploadBytesSucceeded.get())
+                this.localRefreshClockTimeMs = time;
+    }
+                return this;
+    /**
+            long localRefreshNumber,
+    }
+            .uploadBytesFailed(uploadBytesFailed.get())
+    public static long currentTimeMsUsingSystemNanos() {
+        public final long totalUploadsStarted;
+            this.remoteRefreshStartTimeMs = localRefreshTimeMs;
+            public Builder remoteRefreshNumber(long number) {
+            try {
                 + ", lastSuccessfulRemoteRefreshBytes="
-                + lastSuccessfulRemoteRefreshBytes
+            private long totalUploadsStarted = 0;
+         * Use {@link Builder} instead.
+                && this.lastSuccessfulRemoteRefreshBytes == other.lastSuccessfulRemoteRefreshBytes
+            private long refreshTimeLagMs = 0;
+            .consecutiveFailuresCount(failures.length())
+            + refreshTimeMs
+            private DirectoryFileTransferTracker.Stats directoryFileTransferTrackerStats = null;
+            public Builder uploadBytesFailed(long failed) {
+                totalUploadsStarted,
+        }
+    }
+                && this.uploadBytesFailed == other.uploadBytesFailed
+        return remoteRefreshSeqNo;
+                + totalUploadsStarted
+            .filter(f -> !latestUploadedFiles.contains(f))
+            long localRefreshClockTimeMs,
+        }
+            }
+    /**
+     */
+    public long getRefreshSeqNoLag() {
+        return remoteRefreshClockTimeMs;
+            .refreshTimeLagMs(getTimeMsLag())
+    /**
+            .uploadTimeMovingAverage(uploadTimeMsMovingAverageReference.get().getAverage())
+            private double uploadTimeMovingAverage = 0;
+                uploadTimeMovingAverage,
+import org.apache.logging.log4j.message.ParameterizedMessage;
+            }
+                + rejectionCount
+                localRefreshNumber,
+     * last successful remote refresh state on successful remote refresh.
+            + " < "
+                this.remoteRefreshClockTimeMs = in.readLong();
+     * @param fileSizeFunction function is used to determine the file size in bytes
+            segmentFiles,
+        public final long uploadBytesSucceeded;
+        @Override
+            private long uploadBytesSucceeded = 0;
+            this.uploadBytesPerSecMovingAverage = builder.uploadBytesPerSecMovingAverage;
+            this.rejectionCount = rejectionCount;
+            this.directoryFileTransferTrackerStats = directoryFileTransferTrackerStats;
+ */
+     * Keeps the seq no lag computed so that we do not compute it for every request.
+        incrementRejectionCount();
+        logger = Loggers.getLogger(getClass(), shardId);
+        updateLocalRefreshTimeMs(currentTimeMsUsingSystemNanos());
+    private volatile long localRefreshTimeMs;
+        public String toString() {
+        @Override
+                return new Stats(this);
+                + ", uploadBytesFailed="
+    private volatile long bytesLag;
+     * Keeps track of the total bytes of segment files which were uploaded to remote store during last successful remote refresh
+            public Builder totalUploadTimeInMs(long time) {
+    /**
+    // Visible for testing
+ * this file be licensed under the Apache-2.0 license or a
+            }
+                + uploadTimeMovingAverage
+            out.writeLong(totalUploadsSucceeded);
+            public Builder totalUploadsFailed(long failed) {
+    public long getLocalRefreshSeqNo() {
+                totalUploadsSucceeded,
+    private volatile long lastSuccessfulRemoteRefreshBytes;
+                + ", totalUploadsStarted="
+            out.writeDouble(uploadBytesPerSecMovingAverage);
+                return this;
+            public Builder rejectionCount(long count) {
+            this.refreshTimeLagMs = refreshTimeLagMs;
+                uploadBytesFailed,
+    int getConsecutiveFailureCount() {
+                + ", rejectionCount="
+        this.remoteRefreshStartTimeMs = refreshTimeMs == this.localRefreshTimeMs ? -1 : this.localRefreshTimeMs;
+    private volatile long localRefreshSeqNo;
                 + ", uploadBytesMovingAverage="
                 + uploadBytesMovingAverage
-                + ", uploadBytesPerSecMovingAverage="
-                + uploadBytesPerSecMovingAverage
-                + ", totalUploadTimeInMs="
-                + totalUploadTimeInMs
-                + ", uploadTimeMovingAverage="
-                + uploadTimeMovingAverage
-                + ", bytesLag="
-                + bytesLag
-                + ", directoryFileTransferTrackerStats="
-                + directoryFileTransferTrackerStats
-                + '}';
+         */
+        public final long bytesLag;
+            this.shardId = shardId;
+    long getRemoteRefreshClockTimeMs() {
+            this.lastSuccessfulRemoteRefreshBytes = builder.lastSuccessfulRemoteRefreshBytes;
+            this.uploadBytesMovingAverage = uploadBytesMovingAverage;
+                    logger.warn(new ParameterizedMessage("Exception while reading the fileLength of file={}", file), e);
+    public void incrementRejectionCount() {
+            out.writeLong(consecutiveFailuresCount);
+        if (latestLocalFileNameLengthMap.isEmpty()) {
+            .collect(Collectors.toSet());
+    }
+            DirectoryFileTransferTracker.Stats directoryFileTransferTrackerStats
+    }
+                + ", totalUploadsSucceeded="
+                this.totalUploadsSucceeded = succeeded;
+            this.bytesLag = bytesLag;
+            private double uploadBytesPerSecMovingAverage = 0;
+            public Builder localRefreshClockTimeMs(long time) {
+        remoteRefreshClockTimeMs = currentClockTimeMs;
+                this.rejectionCount = in.readLong();
+    /**
+        computeBytesLag();
+        updateLocalRefreshClockTimeMs(System.currentTimeMillis());
+                + remoteRefreshNumber
+        public final long consecutiveFailuresCount;
+        public final long remoteRefreshClockTimeMs;
+                this.consecutiveFailuresCount = in.readLong();
+    }
+    public long getInflightUploads() {
+            if (this == obj) return true;
+                shardId,
+        public final long totalUploadsSucceeded;
+        public final long totalUploadTimeInMs;
+    void updateLocalRefreshSeqNo(long localRefreshSeqNo) {
+import java.io.IOException;
+        this.latestUploadedFiles.clear();
+            this.totalUploadsStarted = builder.totalUploadsStarted;
+        @Override
+            .directoryFileTransferTrackerStats(directoryFileTransferTracker.stats())
+     * Holds count of consecutive failures until last success. Gets reset to zero if there is a success.
+        computeBytesLag();
+            "segmentFilesPostRefresh={} latestLocalFileNamesBeforeMapUpdate={}",
+        return bytesLag;
+            }
+    public void updateRemoteRefreshClockTimeMs(long remoteRefreshClockTimeMs) {
+        public final long localRefreshNumber;
+        this.localRefreshSeqNo = localRefreshSeqNo;
+            .filter(file -> latestLocalFileNameLengthMap.containsKey(file) == false || latestLocalFileNameLengthMap.get(file) == 0)
+        refreshSeqNoLag = localRefreshSeqNo - remoteRefreshSeqNo;
+import java.util.stream.Collectors;
+            out.writeLong(uploadBytesSucceeded);
+                return this;
+     * @param segmentFiles     list of local refreshed segment files
+        // Update the map
+            this.uploadBytesMovingAverage = builder.uploadBytesMovingAverage;
+        return currentTimeMsUsingSystemNanos() - remoteRefreshStartTimeMs;
+                && this.totalUploadsStarted == other.totalUploadsStarted
+                + lastSuccessfulRemoteRefreshBytes
+import org.opensearch.common.CheckedFunction;
+    private volatile long localRefreshClockTimeMs;
+        @Override
+        computeRefreshSeqNoLag();
+            }
+                consecutiveFailuresCount,
+                this.uploadTimeMovingAverage = in.readDouble();
+        }
+            this.localRefreshClockTimeMs = builder.localRefreshClockTimeMs;
+            return 0;
+            return this.shardId.toString().equals(other.shardId.toString())
+     * Keeps the bytes lag computed so that we do not compute it for every request.
+            long lastSuccessfulRemoteRefreshBytes,
+                remoteRefreshClockTimeMs,
+            private long rejectionCount = 0;
+            return;
+            .build();
+                return this;
+     * The refresh time of the most recent refresh.
+            + localRefreshSeqNo
+            this.shardId = builder.shardId;
+import org.opensearch.common.logging.Loggers;
+            private long uploadBytesFailed = 0;
+                + ", remoteRefreshClockTimeMs="
+                this.remoteRefreshNumber = in.readLong();
+            + this.localRefreshTimeMs;
+                + ", localRefreshNumber="
+            double uploadBytesMovingAverage,
+            long totalUploadTimeInMs,
+                this.rejectionCount = count;
+        return refreshSeqNoLag;
+                totalUploadTimeInMs,
+        ) {
+            this.uploadBytesFailed = builder.uploadBytesFailed;
+            out.writeLong(totalUploadsStarted);
+    }
+                && this.remoteRefreshClockTimeMs == other.remoteRefreshClockTimeMs
+     * The refresh time of the most recent remote refresh.
+                return this;
+    private final Map<String, AtomicLong> rejectionCountMap = ConcurrentCollections.newConcurrentMap();
+            private long remoteRefreshNumber = 0;
+                + uploadBytesFailed
+                this.totalUploadsFailed = in.readLong();
+                return this;
+    }
+    }
+    private void computeBytesLag() {
+            + this.remoteRefreshSeqNo;
+            this.remoteRefreshNumber = remoteRefreshNumber;
+            this.consecutiveFailuresCount = builder.consecutiveFailuresCount;
+            out.writeOptionalWriteable(directoryFileTransferTrackerStats);
+        this.latestUploadedFiles.addAll(files);
+import java.util.Collections;
+        CheckedFunction<String, Long, IOException> fileSizeFunction
+                }
+                this.directoryFileTransferTrackerStats = in.readOptionalWriteable(DirectoryFileTransferTracker.Stats::new);
+        public final double uploadBytesMovingAverage;
+            long uploadBytesFailed,
+    }
+    }
+                && this.uploadBytesSucceeded == other.uploadBytesSucceeded
+import java.util.Set;
+     */
+                this.uploadBytesFailed = failed;
+                this.totalUploadsStarted = in.readLong();
+    public long getInflightUploadBytes() {
+import java.util.concurrent.TimeUnit;
+            long remoteRefreshClockTimeMs,
+                this.totalUploadTimeInMs = in.readLong();
+import org.opensearch.core.common.io.stream.Writeable;
+    @Override
+            double uploadBytesPerSecMovingAverage,
+                + uploadBytesSucceeded
+            this.uploadBytesStarted = builder.uploadBytesStarted;
+ *
+        localRefreshTimeMs = currentTimeMs;
+                refreshTimeLagMs,
+            public Builder uploadBytesStarted(long started) {
+        this.bytesLag = filesNotYetUploaded.stream().map(latestLocalFileNameLengthMap::get).mapToLong(Long::longValue).sum();
+            private long remoteRefreshClockTimeMs = 0;
+                return this;
+                rejectionCount,
+            .totalUploadsStarted(totalUploadsStarted.get())
+        public final long rejectionCount;
+        public final long lastSuccessfulRemoteRefreshBytes;
+                && this.totalUploadsSucceeded == other.totalUploadsSucceeded
+                this.localRefreshClockTimeMs = in.readLong();
+     */
+            .uploadBytesMovingAverage(uploadBytesMovingAverageReference.get().getAverage())
+     * sync with local refresh, this will be reset to -1.
+            public Builder uploadBytesMovingAverage(double average) {
+    public long getLocalRefreshTimeMs() {
+            + " < "
+    public void updateLocalRefreshTimeAndSeqNo() {
+        failures.record(true);
+        return localRefreshTimeMs;
+                + refreshTimeLagMs
+import static org.opensearch.index.shard.RemoteStoreRefreshListener.EXCLUDE_FILES;
+    /**
+            this.totalUploadsSucceeded = totalUploadsSucceeded;
+                return this;
+     */
+            this.remoteRefreshClockTimeMs = builder.remoteRefreshClockTimeMs;
+            + localRefreshTimeMs
+/*
+     * This contains the files from the last successful remote refresh and ongoing uploads. This gets reset to just the
+        super(shardId, movingAverageWindowSize);
+                uploadBytesPerSecMovingAverage,
+        return Collections.unmodifiableMap(latestLocalFileNameLengthMap);
+     * Sequence number of the most recent remote refresh.
+        // When multiple refreshes have failed, there is a possibility that retry is ongoing while another refresh gets
+    }
+                this.bytesLag = lag;
+     * {@link org.opensearch.index.store.Store.StoreDirectory} level file transfer tracker, used to show download stats
+        public Stats(
+            this.uploadTimeMovingAverage = builder.uploadTimeMovingAverage;
+                + ", refreshTimeLagMs="
+    // Visible for testing
+    /** public only for testing **/
+                + localRefreshNumber
+                this.shardId = shardId;
+                this.refreshTimeLagMs = in.readLong();
+    void incrementRejectionCount(String rejectionReason) {
+                uploadBytesMovingAverage,
+     * The refresh time(clock) of the most recent refresh.
+                bytesLag,
+            + " < "
+    ) {
+        remoteRefreshTimeMs = currentTimeMs;
+                && this.consecutiveFailuresCount == other.consecutiveFailuresCount
+            public Builder localRefreshNumber(long number) {
+    /**
+                + ", remoteRefreshNumber="
+     */
+    long getRejectionCount(String rejectionReason) {
+        return localRefreshSeqNo;
+            this.uploadBytesSucceeded = builder.uploadBytesSucceeded;
+            .remoteRefreshClockTimeMs(remoteRefreshClockTimeMs)
+    public void incrementTotalUploadsFailed() {
+            long bytesLag,
+        public final long refreshTimeLagMs;
+                this.localRefreshNumber = in.readLong();
+     * Updates the latestLocalFileNameLengthMap by adding file name and it's size to the map.
+        // triggered. After the segments have been uploaded and before the below code runs, the updateLocalRefreshTimeAndSeqNo
+import java.util.Map;
+        Collection<String> segmentFiles,
+        this.localRefreshClockTimeMs = localRefreshClockTimeMs;
+    ) {
+            + remoteRefreshSeqNo
+            private double uploadBytesMovingAverage = 0;
+            }
+            }
+        public final long localRefreshClockTimeMs;
+                + uploadBytesStarted
+            private long bytesLag = 0;
+     *
         }
     }
-}
+                return this;
+            public Builder() {}
+            this.rejectionCount = builder.rejectionCount;
+        }
+            out.writeLong(localRefreshClockTimeMs);
+            long totalUploadsStarted,
+        public final double uploadTimeMovingAverage;
+    public void updateRemoteRefreshSeqNo(long remoteRefreshSeqNo) {
+    private final Set<String> latestUploadedFiles = ConcurrentCollections.newConcurrentSet();
+         * Builder for the {@link Stats} class.
+             * @return A new Stats instance.
+        super.incrementTotalUploadsSucceeded();
+    }
+                + consecutiveFailuresCount
+            this.localRefreshClockTimeMs = localRefreshClockTimeMs;
+                && this.remoteRefreshNumber == other.remoteRefreshNumber
+     */
+    public void setLatestUploadedFiles(Set<String> files) {
+        remoteRefreshStartTimeMs = currentTimeMs;
+        failures.record(false);
+            .bytesLag(getBytesLag())
+        ShardId shardId,
+            this.totalUploadsFailed = builder.totalUploadsFailed;
+                + uploadBytesPerSecMovingAverage
+                    fileSize = fileSizeFunction.apply(file);
+            out.writeDouble(uploadBytesMovingAverage);
+            public Stats build() {
+     */
+            .forEach(file -> {
+        updateLocalRefreshSeqNo(getLocalRefreshSeqNo() + 1);
+    private volatile long remoteRefreshClockTimeMs;
+                && this.totalUploadsFailed == other.totalUploadsFailed
+     *
+public class RemoteSegmentTransferTracker extends RemoteTransferTracker {
+     * Represents the tracker's state as seen in the stats API.
+        long currentClockTimeMs = System.currentTimeMillis();
+            public Builder consecutiveFailuresCount(long count) {
+                + directoryFileTransferTrackerStats
+        latestLocalFileNameLengthMap.entrySet().removeIf(entry -> fileSet.contains(entry.getKey()) == false);
+        return remoteRefreshTimeMs;
+        this.remoteRefreshTimeMs = refreshTimeMs;
+        assert refreshTimeMs >= this.remoteRefreshTimeMs : "newRemoteRefreshTimeMs="
+        // Remove keys from the fileSizeMap that do not exist in the latest segment files
+        return localRefreshClockTimeMs;
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+    public Map<String, Long> getLatestLocalFileNameLengthMap() {
+    }
+            private long totalUploadTimeInMs = 0;
+    private final Streak failures = new Streak();
+            public Builder lastSuccessfulRemoteRefreshBytes(long bytes) {
+                this.lastSuccessfulRemoteRefreshBytes = bytes;
+     * Keeps track of segment files and their size in bytes which are part of the most recent refresh.
+                this.consecutiveFailuresCount = count;
+    private volatile long refreshSeqNoLag;

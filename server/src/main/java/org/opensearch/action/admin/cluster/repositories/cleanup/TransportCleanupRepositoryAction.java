@@ -1,366 +1,339 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.cluster.repositories.cleanup;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.action.ActionRunnable;
-import org.opensearch.action.StepListener;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateUpdateTask;
-import org.opensearch.cluster.RepositoryCleanupInProgress;
-import org.opensearch.cluster.SnapshotDeletionsInProgress;
-import org.opensearch.cluster.SnapshotsInProgress;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;
-import org.opensearch.index.store.RemoteSegmentStoreDirectoryFactory;
-import org.opensearch.index.store.lockmanager.RemoteStoreLockManagerFactory;
-import org.opensearch.indices.RemoteStoreSettings;
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.repositories.Repository;
-import org.opensearch.repositories.RepositoryCleanupResult;
-import org.opensearch.repositories.RepositoryData;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-import org.opensearch.snapshots.SnapshotsService;
+        final Repository repository = repositoriesService.repository(repositoryName);
 import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.Collections;
-
-/**
- * Repository cleanup action for repository implementations based on {@link BlobStoreRepository}.
- * <p>
- * The steps taken by the repository cleanup operation are as follows:
- * <ol>
- *     <li>Check that there are no running repository cleanup, snapshot create, or snapshot delete actions
- *     and add an entry for the repository that is to be cleaned up to {@link RepositoryCleanupInProgress}</li>
- *     <li>Run cleanup actions on the repository. Note, these are executed exclusively on the cluster-manager node.
- *     For the precise operations execute see {@link BlobStoreRepository#cleanup}</li>
- *     <li>Remove the entry in {@link RepositoryCleanupInProgress} in the first step.</li>
- * </ol>
- *
- * On cluster-manager failover during the cleanup operation it is simply removed from the cluster state. This is safe because the logic in
- * {@link BlobStoreRepository#cleanup} ensures that the repository state id has not changed between creation of the cluster state entry
- * and any delete/write operations. TODO: This will not work if we also want to clean up at the shard level as those will involve writes
- *                                        as well as deletes.
- *
- * @opensearch.internal
- */
-public final class TransportCleanupRepositoryAction extends TransportClusterManagerNodeAction<
-    CleanupRepositoryRequest,
-    CleanupRepositoryResponse> {
-
-    private static final Logger logger = LogManager.getLogger(TransportCleanupRepositoryAction.class);
-
-    private final RepositoriesService repositoriesService;
-
-    private final SnapshotsService snapshotsService;
-
-    private final RemoteStoreLockManagerFactory remoteStoreLockManagerFactory;
-
-    private final RemoteSegmentStoreDirectoryFactory remoteSegmentStoreDirectoryFactory;
-
-    @Override
-    protected String executor() {
+                    public void onFailure(String source, Exception e) {
+                                            () -> new ParameterizedMessage(
         return ThreadPool.Names.SAME;
-    }
-
+    CleanupRepositoryRequest,
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;
+import org.apache.logging.log4j.message.ParameterizedMessage;
+    private static final Logger logger = LogManager.getLogger(TransportCleanupRepositoryAction.class);
+                        }
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.repositories.RepositoriesService;
     @Inject
-    public TransportCleanupRepositoryAction(
-        TransportService transportService,
-        ClusterService clusterService,
-        RepositoriesService repositoriesService,
-        SnapshotsService snapshotsService,
-        ThreadPool threadPool,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        RemoteStoreSettings remoteStoreSettings,
-        @Nullable DataFormatRegistry dataFormatRegistry
-    ) {
-        super(
-            CleanupRepositoryAction.NAME,
-            transportService,
-            clusterService,
-            threadPool,
-            actionFilters,
-            CleanupRepositoryRequest::new,
-            indexNameExpressionResolver
-        );
-        this.repositoriesService = repositoriesService;
-        this.snapshotsService = snapshotsService;
-        this.remoteSegmentStoreDirectoryFactory = new RemoteSegmentStoreDirectoryFactory(
-            () -> repositoriesService,
-            threadPool,
-            remoteStoreSettings.getSegmentsPathFixedPrefix(),
-            dataFormatRegistry
-        );
-        this.remoteStoreLockManagerFactory = new RemoteStoreLockManagerFactory(
-            () -> repositoriesService,
-            remoteStoreSettings.getSegmentsPathFixedPrefix()
-        );
-        // We add a state applier that will remove any dangling repository cleanup actions on cluster-manager failover.
-        // This is safe to do since cleanups will increment the repository state id before executing any operations to prevent concurrent
-        // operations from corrupting the repository. This is the same safety mechanism used by snapshot deletes.
-        if (DiscoveryNode.isClusterManagerNode(clusterService.getSettings())) {
-            addClusterStateApplier(clusterService);
-        }
-    }
-
-    private static void addClusterStateApplier(ClusterService clusterService) {
-        clusterService.addStateApplier(event -> {
-            if (event.localNodeClusterManager() && event.previousState().nodes().isLocalNodeElectedClusterManager() == false) {
-                final RepositoryCleanupInProgress repositoryCleanupInProgress = event.state()
-                    .custom(RepositoryCleanupInProgress.TYPE, RepositoryCleanupInProgress.EMPTY);
-                if (repositoryCleanupInProgress.hasCleanupInProgress() == false) {
-                    return;
-                }
-                clusterService.submitStateUpdateTask(
-                    "clean up repository cleanup task after cluster-manager failover",
-                    new ClusterStateUpdateTask() {
-                        @Override
-                        public ClusterState execute(ClusterState currentState) {
+                                @Override
                             return removeInProgressCleanup(currentState);
-                        }
-
+import org.apache.logging.log4j.Logger;
                         @Override
-                        public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                            logger.debug("Removed repository cleanup task [{}] from cluster state", repositoryCleanupInProgress);
-                        }
-
-                        @Override
-                        public void onFailure(String source, Exception e) {
-                            logger.warn("Failed to remove repository cleanup task [{}] from cluster state", repositoryCleanupInProgress);
-                        }
+                            .putCustom(
+                                    + repositoryCleanupInProgress
+            if (event.localNodeClusterManager() && event.previousState().nodes().isLocalNodeElectedClusterManager() == false) {
+ *     <li>Run cleanup actions on the repository. Note, these are executed exclusively on the cluster-manager node.
+                clusterService.submitStateUpdateTask(
+        }
+import org.opensearch.cluster.RepositoryCleanupInProgress;
+        );
+            remoteStoreSettings.getSegmentsPathFixedPrefix()
+import org.opensearch.repositories.RepositoryData;
+                                    + "]"
+                            SnapshotDeletionsInProgress.EMPTY
+                        threadPool.executor(ThreadPool.Names.SNAPSHOT)
+                    @Override
+            remoteStoreSettings.getSegmentsPathFixedPrefix(),
                     }
-                );
-            }
-        });
     }
-
-    private static ClusterState removeInProgressCleanup(final ClusterState currentState) {
+                    private boolean startedCleanup = false;
+ */
+                                        e
+                                    }
+                                        logger.info(
+}
+                            logger.debug("No cleanup task to remove from cluster state because we failed to start one", failure);
+                                ActionRunnable.wrap(
+                        }
+            CleanupRepositoryRequest::new,
+                                }
+                            .execute(
+                        }
         return currentState.custom(RepositoryCleanupInProgress.TYPE, RepositoryCleanupInProgress.EMPTY).hasCleanupInProgress()
-            ? ClusterState.builder(currentState).putCustom(RepositoryCleanupInProgress.TYPE, RepositoryCleanupInProgress.EMPTY).build()
+    protected String executor() {
+                            logger.debug("Removed repository cleanup task [{}] from cluster state", repositoryCleanupInProgress);
+                new ClusterStateUpdateTask() {
+                            logger.warn("Failed to remove repository cleanup task [{}] from cluster state", repositoryCleanupInProgress);
+import org.opensearch.repositories.RepositoryCleanupResult;
+    private void cleanupRepo(String repositoryName, ActionListener<RepositoryCleanupResult> listener) {
+                        public ClusterState execute(ClusterState currentState) {
+        return new CleanupRepositoryResponse(in);
+import org.opensearch.cluster.service.ClusterService;
+            }
+                        }
+ * Licensed to Elasticsearch under one or more contributor
+import org.opensearch.cluster.node.DiscoveryNode;
+        clusterService.addStateApplier(event -> {
+                            "remove repository cleanup task [" + repositoryName + "][" + repositoryStateId + ']',
+                            SnapshotDeletionsInProgress.TYPE,
+                                    repositoryStateId
+                            )
+                        if (failure == null) {
+                        assert failure != null || result != null;
+ * {@link BlobStoreRepository#cleanup} ensures that the repository state id has not changed between creation of the cluster state entry
+/*
+                                        ActionListener.wrap(result -> after(null, result), e -> after(e, null))
+                                            result
+        this.remoteStoreLockManagerFactory = new RemoteStoreLockManagerFactory(
+    protected ClusterBlockException checkBlock(CleanupRepositoryRequest request, ClusterState state) {
+import org.opensearch.cluster.ClusterState;
+    @Override
+                            return;
+    }
+            listener.onFailure(new IllegalArgumentException("Repository [" + repositoryName + "] does not support repository cleanup"));
+                                        remoteStoreLockManagerFactory,
+        cleanupRepo(request.name(), ActionListener.map(listener, CleanupRepositoryResponse::new));
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+                                        e.addSuppressed(failure);
+            clusterService.submitStateUpdateTask(
+                            listener.onFailure(failure);
+ * software distributed under the License is distributed on an
+                            RepositoryCleanupInProgress.TYPE,
+import org.opensearch.cluster.SnapshotsInProgress;
+                                    + "]"
+                                        snapshotsService.minCompatibleVersion(newState.nodes().getMinNodeVersion(), repositoryData, null),
+    }
+                            );
+                                        remoteSegmentStoreDirectoryFactory,
+    private static void addClusterStateApplier(ClusterService clusterService) {
+import java.io.IOException;
+                                    + "] - a repository cleanup is already in-progress in ["
+    }
+        }, listener::onFailure);
+ */
+    private final RemoteStoreLockManagerFactory remoteStoreLockManagerFactory;
+public final class TransportCleanupRepositoryAction extends TransportClusterManagerNodeAction<
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
+ *     <li>Remove the entry in {@link RepositoryCleanupInProgress} in the first step.</li>
+                                    + repositoryName
+        });
+    CleanupRepositoryResponse> {
+            threadPool,
+ * specific language governing permissions and limitations
+                                "Cannot cleanup ["
+                                            "Done with repository cleanup on [{}][{}] with result [{}]",
+ *     <li>Check that there are no running repository cleanup, snapshot create, or snapshot delete actions
+                                        repositoryStateId,
+                        if (deletionsInProgress.hasDeletionsInProgress()) {
+                    .custom(RepositoryCleanupInProgress.TYPE, RepositoryCleanupInProgress.EMPTY);
+                                            ),
+import org.opensearch.cluster.block.ClusterBlockException;
+    ) {
+                            throw new IllegalStateException(
+                    public ClusterState execute(ClusterState currentState) {
+            CleanupRepositoryAction.NAME,
+                                public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+            addClusterStateApplier(clusterService);
+     * Runs cleanup operations on the given repository.
+ * Repository cleanup action for repository implementations based on {@link BlobStoreRepository}.
+                        public void onFailure(String source, Exception e) {
+                    @Override
+                        after(e, null);
+ * @opensearch.internal
+        super(
+    private final RemoteSegmentStoreDirectoryFactory remoteSegmentStoreDirectoryFactory;
+        ActionFilters actionFilters,
+ * The steps taken by the repository cleanup operation are as follows:
+        );
+            indexNameExpressionResolver
+                        }
+                        public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+     * @param repositoryName Repository to clean up
+                        clusterService.submitStateUpdateTask(
+                                                "Failed to run repository cleanup operations on [{}][{}]",
+            dataFormatRegistry
+        }
+import org.opensearch.cluster.ClusterStateUpdateTask;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                    "clean up repository cleanup task after cluster-manager failover",
+ * <ol>
+        ActionListener<CleanupRepositoryResponse> listener
+                        startedCleanup = true;
+        ClusterService clusterService,
+import org.opensearch.common.inject.Inject;
+import org.opensearch.action.support.ActionFilters;
+ */
+        final BlobStoreRepository blobStoreRepository = (BlobStoreRepository) repository;
+ *
+    }
+                        @Override
+                final RepositoryCleanupInProgress repositoryCleanupInProgress = event.state()
+                            );
+                                )
+        this.repositoriesService = repositoriesService;
+                                        listener.onFailure(failure);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        );
+        final StepListener<RepositoryData> repositoryDataListener = new StepListener<>();
+                        logger.debug("Initialized repository cleanup in cluster state for [{}][{}]", repositoryName, repositoryStateId);
+                        SnapshotsInProgress snapshots = currentState.custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY);
+import org.opensearch.core.action.ActionListener;
+            logger.info("Running cleanup operations on repository [{}][{}]", repositoryName, repositoryStateId);
+                                )
+            transportService,
+                                "Cannot cleanup ["
+ *     and add an entry for the repository that is to be cleaned up to {@link RepositoryCleanupInProgress}</li>
+        ThreadPool threadPool,
+            );
+        repository.getRepositoryData(repositoryDataListener);
+ * license agreements. See the NOTICE file distributed with
+        CleanupRepositoryRequest request,
+        // We add a state applier that will remove any dangling repository cleanup actions on cluster-manager failover.
+            clusterService,
+                                        () -> new ParameterizedMessage("[{}] failed to remove repository cleanup task", repositoryName),
+import java.util.Collections;
+ *
+import org.apache.logging.log4j.LogManager;
+ * </ol>
+                            logger.debug("Finished repository cleanup operations on [{}][{}]", repositoryName, repositoryStateId);
+                            );
+                    }
+            actionFilters,
+        IndexNameExpressionResolver indexNameExpressionResolver,
+                        return ClusterState.builder(currentState)
+                    return;
+ * compatible open source license.
+            return;
+ * this work for additional information regarding copyright
+                            new ClusterStateUpdateTask() {
+                    @Override
+                        if (snapshots.entries().isEmpty() == false) {
+    @Override
+                                    } else {
+                                    + "] - a snapshot is currently being deleted in ["
+                                    );
+    private final SnapshotsService snapshotsService;
+                                }
+        // operations from corrupting the repository. This is the same safety mechanism used by snapshot deletes.
+                                public ClusterState execute(ClusterState currentState) {
+            threadPool,
+    public TransportCleanupRepositoryAction(
+    protected CleanupRepositoryResponse read(StreamInput in) throws IOException {
+                                @Override
+                        final SnapshotDeletionsInProgress deletionsInProgress = currentState.custom(
+        ClusterState state,
+                            );
+import org.opensearch.cluster.block.ClusterBlockLevel;
+    ) {
+ * Modifications Copyright OpenSearch Contributors. See
+                                    Collections.singletonList(RepositoryCleanupInProgress.startedEntry(repositoryName, repositoryStateId))
+                }
+                    private void after(@Nullable Exception failure, @Nullable RepositoryCleanupResult result) {
+                                    repositoryName,
+                    }
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
+        repositoryDataListener.whenComplete(repositoryData -> {
+import org.opensearch.snapshots.SnapshotsService;
+            () -> repositoriesService,
+ *     For the precise operations execute see {@link BlobStoreRepository#cleanup}</li>
+                                    "Failed to finish repository cleanup operations on [{}][{}]",
+                                public void onFailure(String source, Exception e) {
+        if (DiscoveryNode.isClusterManagerNode(clusterService.getSettings())) {
+import org.opensearch.core.common.io.stream.StreamInput;
+                                @Override
+                                    )
+                "cleanup repository [" + repositoryName + "][" + repositoryStateId + ']',
+ * On cluster-manager failover during the cleanup operation it is simply removed from the cluster state. This is safe because the logic in
+                        } else {
+                            );
+                                    return removeInProgressCleanup(currentState);
+ * SPDX-License-Identifier: Apache-2.0
+                                        logger.warn(
+        TransportService transportService,
+                    new ClusterStateUpdateTask() {
+import org.opensearch.common.Nullable;
+ * KIND, either express or implied.  See the License for the
+ * GitHub history for details.
+import org.opensearch.index.store.lockmanager.RemoteStoreLockManagerFactory;
+                                    if (failure != null) {
+                                    + repositoryName
+                                            failure
+/*
+                            RepositoryCleanupInProgress.EMPTY
+                        }
+                                new RepositoryCleanupInProgress(
             : currentState;
     }
-
-    @Override
-    protected CleanupRepositoryResponse read(StreamInput in) throws IOException {
-        return new CleanupRepositoryResponse(in);
-    }
-
-    @Override
-    protected void clusterManagerOperation(
-        CleanupRepositoryRequest request,
-        ClusterState state,
-        ActionListener<CleanupRepositoryResponse> listener
-    ) {
-        cleanupRepo(request.name(), ActionListener.map(listener, CleanupRepositoryResponse::new));
-    }
-
-    @Override
-    protected ClusterBlockException checkBlock(CleanupRepositoryRequest request, ClusterState state) {
-        // Cluster is not affected but we look up repositories in metadata
-        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
-    }
-
-    /**
-     * Runs cleanup operations on the given repository.
-     * @param repositoryName Repository to clean up
-     * @param listener Listener for cleanup result
      */
-    private void cleanupRepo(String repositoryName, ActionListener<RepositoryCleanupResult> listener) {
-        final Repository repository = repositoriesService.repository(repositoryName);
-        if (repository instanceof BlobStoreRepository == false) {
-            listener.onFailure(new IllegalArgumentException("Repository [" + repositoryName + "] does not support repository cleanup"));
-            return;
-        }
-        final BlobStoreRepository blobStoreRepository = (BlobStoreRepository) repository;
-        final StepListener<RepositoryData> repositoryDataListener = new StepListener<>();
-        repository.getRepositoryData(repositoryDataListener);
-        repositoryDataListener.whenComplete(repositoryData -> {
-            final long repositoryStateId = repositoryData.getGenId();
-            logger.info("Running cleanup operations on repository [{}][{}]", repositoryName, repositoryStateId);
-            clusterService.submitStateUpdateTask(
-                "cleanup repository [" + repositoryName + "][" + repositoryStateId + ']',
-                new ClusterStateUpdateTask() {
-
-                    private boolean startedCleanup = false;
-
-                    @Override
-                    public ClusterState execute(ClusterState currentState) {
-                        final RepositoryCleanupInProgress repositoryCleanupInProgress = currentState.custom(
-                            RepositoryCleanupInProgress.TYPE,
-                            RepositoryCleanupInProgress.EMPTY
-                        );
-                        if (repositoryCleanupInProgress.hasCleanupInProgress()) {
-                            throw new IllegalStateException(
-                                "Cannot cleanup ["
-                                    + repositoryName
-                                    + "] - a repository cleanup is already in-progress in ["
-                                    + repositoryCleanupInProgress
-                                    + "]"
-                            );
-                        }
-                        final SnapshotDeletionsInProgress deletionsInProgress = currentState.custom(
-                            SnapshotDeletionsInProgress.TYPE,
-                            SnapshotDeletionsInProgress.EMPTY
-                        );
-                        if (deletionsInProgress.hasDeletionsInProgress()) {
-                            throw new IllegalStateException(
-                                "Cannot cleanup ["
-                                    + repositoryName
-                                    + "] - a snapshot is currently being deleted in ["
-                                    + deletionsInProgress
-                                    + "]"
-                            );
-                        }
-                        SnapshotsInProgress snapshots = currentState.custom(SnapshotsInProgress.TYPE, SnapshotsInProgress.EMPTY);
-                        if (snapshots.entries().isEmpty() == false) {
-                            throw new IllegalStateException(
-                                "Cannot cleanup [" + repositoryName + "] - a snapshot is currently running in [" + snapshots + "]"
-                            );
-                        }
-                        return ClusterState.builder(currentState)
-                            .putCustom(
-                                RepositoryCleanupInProgress.TYPE,
-                                new RepositoryCleanupInProgress(
-                                    Collections.singletonList(RepositoryCleanupInProgress.startedEntry(repositoryName, repositoryStateId))
-                                )
-                            )
-                            .build();
-                    }
-
-                    @Override
-                    public void onFailure(String source, Exception e) {
-                        after(e, null);
-                    }
-
-                    @Override
-                    public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                        startedCleanup = true;
-                        logger.debug("Initialized repository cleanup in cluster state for [{}][{}]", repositoryName, repositoryStateId);
-                        threadPool.executor(ThreadPool.Names.SNAPSHOT)
-                            .execute(
-                                ActionRunnable.wrap(
+import org.opensearch.transport.TransportService;
+     * @param listener Listener for cleanup result
+        RemoteStoreSettings remoteStoreSettings,
+                                        );
                                     listener,
-                                    l -> blobStoreRepository.cleanup(
-                                        repositoryStateId,
-                                        snapshotsService.minCompatibleVersion(newState.nodes().getMinNodeVersion(), repositoryData, null),
-                                        remoteStoreLockManagerFactory,
-                                        remoteSegmentStoreDirectoryFactory,
-                                        ActionListener.wrap(result -> after(null, result), e -> after(e, null))
-                                    )
-                                )
-                            );
-                    }
-
-                    private void after(@Nullable Exception failure, @Nullable RepositoryCleanupResult result) {
-                        if (failure == null) {
-                            logger.debug("Finished repository cleanup operations on [{}][{}]", repositoryName, repositoryStateId);
-                        } else {
-                            logger.debug(
-                                () -> new ParameterizedMessage(
-                                    "Failed to finish repository cleanup operations on [{}][{}]",
-                                    repositoryName,
-                                    repositoryStateId
-                                ),
-                                failure
-                            );
-                        }
-                        assert failure != null || result != null;
-                        if (startedCleanup == false) {
-                            logger.debug("No cleanup task to remove from cluster state because we failed to start one", failure);
-                            listener.onFailure(failure);
-                            return;
-                        }
-                        clusterService.submitStateUpdateTask(
-                            "remove repository cleanup task [" + repositoryName + "][" + repositoryStateId + ']',
-                            new ClusterStateUpdateTask() {
-                                @Override
-                                public ClusterState execute(ClusterState currentState) {
-                                    return removeInProgressCleanup(currentState);
-                                }
-
-                                @Override
-                                public void onFailure(String source, Exception e) {
-                                    if (failure != null) {
-                                        e.addSuppressed(failure);
-                                    }
-                                    logger.warn(
-                                        () -> new ParameterizedMessage("[{}] failed to remove repository cleanup task", repositoryName),
-                                        e
-                                    );
-                                    listener.onFailure(e);
-                                }
-
-                                @Override
-                                public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                                    if (failure == null) {
-                                        logger.info(
-                                            "Done with repository cleanup on [{}][{}] with result [{}]",
-                                            repositoryName,
                                             repositoryStateId,
-                                            result
-                                        );
-                                        listener.onResponse(result);
-                                    } else {
-                                        logger.warn(
-                                            () -> new ParameterizedMessage(
-                                                "Failed to run repository cleanup operations on [{}][{}]",
-                                                repositoryName,
-                                                repositoryStateId
-                                            ),
-                                            failure
-                                        );
-                                        listener.onFailure(failure);
-                                    }
-                                }
-                            }
+ *                                        as well as deletes.
+    @Override
+ * under the License.
+                                RepositoryCleanupInProgress.TYPE,
                         );
-                    }
-                }
-            );
-        }, listener::onFailure);
+ *
+                            .build();
+ *
+import org.opensearch.index.store.RemoteSegmentStoreDirectoryFactory;
     }
-}
+ * ownership. Elasticsearch licenses this file to you under
+            () -> repositoriesService,
+            final long repositoryStateId = repositoryData.getGenId();
+    private static ClusterState removeInProgressCleanup(final ClusterState currentState) {
+                                        );
+package org.opensearch.action.admin.cluster.repositories.cleanup;
+                                                repositoryName,
+                                            repositoryName,
+                                    if (failure == null) {
+        this.remoteSegmentStoreDirectoryFactory = new RemoteSegmentStoreDirectoryFactory(
+ * Unless required by applicable law or agreed to in writing,
+                                    l -> blobStoreRepository.cleanup(
+/*
+ * this file be licensed under the Apache-2.0 license or a
+        // This is safe to do since cleanups will increment the repository state id before executing any operations to prevent concurrent
+/**
+            ? ClusterState.builder(currentState).putCustom(RepositoryCleanupInProgress.TYPE, RepositoryCleanupInProgress.EMPTY).build()
+import org.opensearch.repositories.Repository;
+        SnapshotsService snapshotsService,
+                                    listener.onFailure(e);
+                    }
+    }
+ * The OpenSearch Contributors require contributions made to
+    private final RepositoriesService repositoriesService;
+import org.opensearch.action.StepListener;
+                            logger.debug(
+                if (repositoryCleanupInProgress.hasCleanupInProgress() == false) {
+ * not use this file except in compliance with the License.
+                                "Cannot cleanup [" + repositoryName + "] - a snapshot is currently running in [" + snapshots + "]"
+import org.opensearch.cluster.SnapshotDeletionsInProgress;
+                    public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+ */
+                        if (repositoryCleanupInProgress.hasCleanupInProgress()) {
+                }
+                        }
+import org.opensearch.action.ActionRunnable;
+                                ),
+        this.snapshotsService = snapshotsService;
+                        @Override
+                            }
+    protected void clusterManagerOperation(
+        @Nullable DataFormatRegistry dataFormatRegistry
+                            throw new IllegalStateException(
+                                failure
+                                        listener.onResponse(result);
+ * <p>
+ *
+                                    + deletionsInProgress
+                        }
+                        final RepositoryCleanupInProgress repositoryCleanupInProgress = currentState.custom(
+                                    logger.warn(
+                                    }
+ * and any delete/write operations. TODO: This will not work if we also want to clean up at the shard level as those will involve writes
+                                                repositoryStateId
+                );
+ * You may obtain a copy of the License at
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+                    }
+    /**
+                                }
+                        );
+        RepositoriesService repositoriesService,
+import org.opensearch.indices.RemoteStoreSettings;
+                            throw new IllegalStateException(
+                        );
+                                () -> new ParameterizedMessage(
+                        if (startedCleanup == false) {
+        // Cluster is not affected but we look up repositories in metadata
+    @Override
+        if (repository instanceof BlobStoreRepository == false) {

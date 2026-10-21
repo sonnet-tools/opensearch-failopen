@@ -1,177 +1,159 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+        assertTrue(Regex.simpleMatchOverlap("a*", "ab*")); // both match "ab"
+            );
+        // many-wildcard patterns stay cheap: simple-match only supports '*', so the automata are
+            String pattern = matchingString;
+    public void testFlags() {
+        String manyWildcards = "*" + "a*".repeat(200);
+        assertTrue(Regex.simpleMatch("fff*ddd", "fffabcddd"));
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    }
+        assertFalse(Regex.simpleMatch("**ddd", "fff"));
+                int index = random.nextInt(flags.length);
+    }
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+        }
+            final int insertPos = between(0, pattern.length());
+            assertTrue(
+        assertTrue(Regex.simpleMatchOverlap("foo*", "*bar")); // both match "foobar"
+            assertThat(Regex.flagsFromString(builder.toString()), equalTo(Regex.flagsFromString(flagsToString)));
+/*
+        assertTrue(Regex.simpleMatch("******", "a"));
+ * not use this file except in compliance with the License.
+            "LITERAL",
+        assertFalse(Regex.simpleMatchOverlap("foo*", "bar"));
+ * the Apache License, Version 2.0 (the "License"); you may
+        assertFalse(Regex.simpleMatchOverlap(null, "foo"));
+            Pattern.COMMENTS,
+            Pattern.UNICODE_CASE,
+            "UNICODE_CHARACTER_CLASS" };
+            Pattern.compile("\\w\\d{1,2}", current); // accepts the flags?
+ * GitHub history for details.
+            "CANON_EQ",
+    public void testSimpleMatch() {
+ * Modifications Copyright OpenSearch Contributors. See
+        // overlap is symmetric
+                builder.append(supportedFlags[index]);
+ * this file be licensed under the Apache-2.0 license or a
+ * ownership. Elasticsearch licenses this file to you under
+        assertFalse(Regex.simpleMatch("***xxxxxabcdxxxxx***", "xxxxxABCDxxxxx", false));
+            "COMMENTS",
+        assertTrue(Regex.simpleMatchOverlap("foo*bar", "fooXbar"));
+public class RegexTests extends OpenSearchTestCase {
+        assertFalse(Regex.simpleMatch("ddd", "Ddd"));
+            // construct a pattern that does not match this string by inserting a non-matching character (a digit)
+}
+                pattern = pattern.substring(0, shrinkStart) + "*" + pattern.substring(shrinkEnd);
+                "**w**X**y**Z**",
+            Regex.UNICODE_CHARACTER_CLASS };
+            "UNICODE_CASE",
+import org.opensearch.test.OpenSearchTestCase;
+        assertTrue(Regex.simpleMatchOverlap("*", "anything")); // "*" matches everything
+        assertTrue(Regex.simpleMatch("abCDefGH******ddd", "abCDefGHddd", false));
+        int num = 10 + random.nextInt(100);
+        assertTrue(Regex.simpleMatch("**ddd", "dddd"));
+                if (j < numFlags - 1) {
+            "UNICODE_CHAR_CLASS",
+        assertTrue(Regex.simpleMatch("fff*******ddd", "FffAbcdDd", true));
+            Pattern.UNIX_LINES,
+ * The OpenSearch Contributors require contributions made to
+        assertTrue(Regex.simpleMatch("**stephenIsSuperCool**", "ItIsTrueThatStephenIsSuperCoolSoYouShouldLetThisIn", true));
+import java.util.regex.Pattern;
+        assertTrue(Regex.simpleMatchOverlap(manyWildcards, manyWildcards));
+                Regex.simpleMatch(pattern, matchingString.toUpperCase(Locale.ROOT), true)
+ *     http://www.apache.org/licenses/LICENSE-2.0
+package org.opensearch.common.regex;
+        assertTrue(Regex.simpleMatchOverlap("foo*", "foobar"));
+                "[" + pattern + "] should match [" + matchingString.toUpperCase(Locale.ROOT) + "]",
+ * SPDX-License-Identifier: Apache-2.0
+            Regex.simpleMatch(
  * under the License.
  */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.regex;
-
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Locale;
-import java.util.Random;
-import java.util.regex.Pattern;
-
-import static org.hamcrest.Matchers.equalTo;
-
-public class RegexTests extends OpenSearchTestCase {
-    public void testFlags() {
-        String[] supportedFlags = new String[] {
-            "CASE_INSENSITIVE",
-            "MULTILINE",
-            "DOTALL",
-            "UNICODE_CASE",
-            "CANON_EQ",
-            "UNIX_LINES",
-            "LITERAL",
-            "COMMENTS",
-            "UNICODE_CHAR_CLASS",
-            "UNICODE_CHARACTER_CLASS" };
-        int[] flags = new int[] {
-            Pattern.CASE_INSENSITIVE,
-            Pattern.MULTILINE,
-            Pattern.DOTALL,
-            Pattern.UNICODE_CASE,
-            Pattern.CANON_EQ,
-            Pattern.UNIX_LINES,
-            Pattern.LITERAL,
-            Pattern.COMMENTS,
-            Regex.UNICODE_CHARACTER_CLASS };
-        Random random = random();
-        int num = 10 + random.nextInt(100);
-        for (int i = 0; i < num; i++) {
-            int numFlags = random.nextInt(flags.length + 1);
-            int current = 0;
-            StringBuilder builder = new StringBuilder();
-            for (int j = 0; j < numFlags; j++) {
-                int index = random.nextInt(flags.length);
-                current |= flags[index];
-                builder.append(supportedFlags[index]);
-                if (j < numFlags - 1) {
-                    builder.append("|");
-                }
-            }
-            String flagsToString = Regex.flagsToString(current);
-            assertThat(Regex.flagsFromString(builder.toString()), equalTo(current));
-            assertThat(Regex.flagsFromString(builder.toString()), equalTo(Regex.flagsFromString(flagsToString)));
-            Pattern.compile("\\w\\d{1,2}", current); // accepts the flags?
-        }
-    }
-
-    public void testDoubleWildcardMatch() {
-        assertTrue(Regex.simpleMatch("ddd", "ddd"));
-        assertTrue(Regex.simpleMatch("ddd", "Ddd", true));
-        assertFalse(Regex.simpleMatch("ddd", "Ddd"));
-        assertTrue(Regex.simpleMatch("d*d*d", "dadd"));
-        assertTrue(Regex.simpleMatch("**ddd", "dddd"));
-        assertTrue(Regex.simpleMatch("**ddD", "dddd", true));
-        assertFalse(Regex.simpleMatch("**ddd", "fff"));
-        assertTrue(Regex.simpleMatch("fff*ddd", "fffabcddd"));
-        assertTrue(Regex.simpleMatch("fff**ddd", "fffabcddd"));
-        assertFalse(Regex.simpleMatch("fff**ddd", "fffabcdd"));
-        assertTrue(Regex.simpleMatch("fff*******ddd", "fffabcddd"));
-        assertTrue(Regex.simpleMatch("fff*******ddd", "FffAbcdDd", true));
-        assertFalse(Regex.simpleMatch("fff*******ddd", "FffAbcdDd", false));
-        assertFalse(Regex.simpleMatch("fff******ddd", "fffabcdd"));
-        assertTrue(Regex.simpleMatch("abCDefGH******ddd", "abCDefGHddd", false));
-        assertTrue(Regex.simpleMatch("******", "a"));
-        assertTrue(Regex.simpleMatch("***WILDcard***", "aaaaaaaaWILDcardZZZZZZ", false));
-        assertFalse(Regex.simpleMatch("***xxxxx123456789xxxxxx***", "xxxxxabcdxxxxx", false));
-        assertFalse(Regex.simpleMatch("***xxxxxabcdxxxxx***", "xxxxxABCDxxxxx", false));
-        assertTrue(Regex.simpleMatch("***xxxxxabcdxxxxx***", "xxxxxABCDxxxxx", true));
-        assertTrue(Regex.simpleMatch("**stephenIsSuperCool**", "ItIsTrueThatStephenIsSuperCoolSoYouShouldLetThisIn", true));
-        assertTrue(
-            Regex.simpleMatch(
-                "**w**X**y**Z**",
-                "abcdeFGHIJKLMNOPqrstuvwabcdeFGHIJKLMNOPqrstuvwXabcdeFGHIJKLMNOPqrstuvwXyabcdeFGHIJKLMNOPqrstuvwXyZ",
-                false
-            )
-        );
-    }
-
-    public void testSimpleMatchOverlap() {
-        // two literals: overlap only when equal
-        assertTrue(Regex.simpleMatchOverlap("foo", "foo"));
         assertFalse(Regex.simpleMatchOverlap("foo", "bar"));
-
-        // literal vs pattern: literal treated as exact-match pattern
-        assertTrue(Regex.simpleMatchOverlap("foo*", "foobar"));
-        assertTrue(Regex.simpleMatchOverlap("foobar", "foo*"));
-        assertFalse(Regex.simpleMatchOverlap("foo*", "bar"));
-
-        // two patterns sharing at least one string
-        assertTrue(Regex.simpleMatchOverlap("a*", "ab*")); // both match "ab"
-        assertTrue(Regex.simpleMatchOverlap("foo*", "*bar")); // both match "foobar"
-        assertTrue(Regex.simpleMatchOverlap("*", "anything")); // "*" matches everything
-
-        // two patterns with no common string
-        assertFalse(Regex.simpleMatchOverlap("a*", "b*"));
-        assertFalse(Regex.simpleMatchOverlap("foo*", "bar*"));
-
-        // overlap is symmetric
         assertEquals(Regex.simpleMatchOverlap("a*", "ab*"), Regex.simpleMatchOverlap("ab*", "a*"));
-
-        // literal vs multi-part pattern (fast path via glob, no automaton)
-        assertTrue(Regex.simpleMatchOverlap("foo*bar", "fooXbar"));
-        assertFalse(Regex.simpleMatchOverlap("foo*bar", "fooXbaz"));
-
-        // null inputs never overlap
-        assertFalse(Regex.simpleMatchOverlap(null, "foo"));
-        assertFalse(Regex.simpleMatchOverlap("foo", null));
-        assertFalse(Regex.simpleMatchOverlap(null, null));
-
-        // many-wildcard patterns stay cheap: simple-match only supports '*', so the automata are
-        // linear and determinization does not blow up
-        String manyWildcards = "*" + "a*".repeat(200);
-        assertTrue(Regex.simpleMatchOverlap(manyWildcards, manyWildcards));
-    }
-
-    public void testSimpleMatch() {
-        for (int i = 0; i < 1000; i++) {
-            final String matchingString = randomAlphaOfLength(between(0, 50));
-
-            // construct a pattern that matches this string by repeatedly replacing random substrings with '*' characters
-            String pattern = matchingString;
-            for (int shrink = between(0, 5); shrink > 0; shrink--) {
+        assertTrue(Regex.simpleMatch("***WILDcard***", "aaaaaaaaWILDcardZZZZZZ", false));
+        // two patterns with no common string
                 final int shrinkStart = between(0, pattern.length());
+        assertTrue(
+        assertFalse(Regex.simpleMatchOverlap("a*", "b*"));
                 final int shrinkEnd = between(shrinkStart, pattern.length());
-                pattern = pattern.substring(0, shrinkStart) + "*" + pattern.substring(shrinkEnd);
-            }
             assertTrue("[" + pattern + "] should match [" + matchingString + "]", Regex.simpleMatch(pattern, matchingString));
-            assertTrue(
-                "[" + pattern + "] should match [" + matchingString.toUpperCase(Locale.ROOT) + "]",
-                Regex.simpleMatch(pattern, matchingString.toUpperCase(Locale.ROOT), true)
-            );
-
-            // construct a pattern that does not match this string by inserting a non-matching character (a digit)
-            final int insertPos = between(0, pattern.length());
-            pattern = pattern.substring(0, insertPos) + between(0, 9) + pattern.substring(insertPos);
-            assertFalse("[" + pattern + "] should not match [" + matchingString + "]", Regex.simpleMatch(pattern, matchingString));
+            )
+/*
+        assertTrue(Regex.simpleMatch("d*d*d", "dadd"));
+            int current = 0;
+            Pattern.LITERAL,
+import java.util.Random;
+            for (int shrink = between(0, 5); shrink > 0; shrink--) {
+                "abcdeFGHIJKLMNOPqrstuvwabcdeFGHIJKLMNOPqrstuvwXabcdeFGHIJKLMNOPqrstuvwXyabcdeFGHIJKLMNOPqrstuvwXyZ",
+ * You may obtain a copy of the License at
         }
+            int numFlags = random.nextInt(flags.length + 1);
     }
-}
+        );
+import static org.hamcrest.Matchers.equalTo;
+                false
+        assertFalse(Regex.simpleMatchOverlap("foo", null));
+        assertTrue(Regex.simpleMatch("**ddD", "dddd", true));
+            Pattern.CASE_INSENSITIVE,
+            "DOTALL",
+            pattern = pattern.substring(0, insertPos) + between(0, 9) + pattern.substring(insertPos);
+            // construct a pattern that matches this string by repeatedly replacing random substrings with '*' characters
+        Random random = random();
+        assertFalse(Regex.simpleMatch("***xxxxx123456789xxxxxx***", "xxxxxabcdxxxxx", false));
+ *
+        int[] flags = new int[] {
+        // null inputs never overlap
+        // linear and determinization does not blow up
+        for (int i = 0; i < num; i++) {
+    public void testSimpleMatchOverlap() {
+        assertFalse(Regex.simpleMatch("fff**ddd", "fffabcdd"));
+            for (int j = 0; j < numFlags; j++) {
+                    builder.append("|");
+                current |= flags[index];
+        assertTrue(Regex.simpleMatch("fff*******ddd", "fffabcddd"));
+        assertTrue(Regex.simpleMatch("ddd", "ddd"));
+/*
+ * compatible open source license.
+            }
+        assertFalse(Regex.simpleMatchOverlap("foo*bar", "fooXbaz"));
+        assertTrue(Regex.simpleMatchOverlap("foobar", "foo*"));
+                }
+        for (int i = 0; i < 1000; i++) {
+ * specific language governing permissions and limitations
+        assertFalse(Regex.simpleMatchOverlap(null, null));
+        assertFalse(Regex.simpleMatch("fff******ddd", "fffabcdd"));
+            Pattern.MULTILINE,
+    public void testDoubleWildcardMatch() {
+        // two literals: overlap only when equal
+            final String matchingString = randomAlphaOfLength(between(0, 50));
+            String flagsToString = Regex.flagsToString(current);
+        // literal vs multi-part pattern (fast path via glob, no automaton)
+            StringBuilder builder = new StringBuilder();
+            Pattern.DOTALL,
+ */
+            "UNIX_LINES",
+        assertTrue(Regex.simpleMatch("***xxxxxabcdxxxxx***", "xxxxxABCDxxxxx", true));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            }
+ *
+        // literal vs pattern: literal treated as exact-match pattern
+        assertFalse(Regex.simpleMatch("fff*******ddd", "FffAbcdDd", false));
+import java.util.Locale;
+        String[] supportedFlags = new String[] {
+            "MULTILINE",
+            assertThat(Regex.flagsFromString(builder.toString()), equalTo(current));
+        assertTrue(Regex.simpleMatch("ddd", "Ddd", true));
+    }
+ *
+ */
+        assertTrue(Regex.simpleMatchOverlap("foo", "foo"));
+ * this work for additional information regarding copyright
+        // two patterns sharing at least one string
+ * software distributed under the License is distributed on an
+ * Licensed to Elasticsearch under one or more contributor
+            "CASE_INSENSITIVE",
+        assertFalse(Regex.simpleMatchOverlap("foo*", "bar*"));
+ * license agreements. See the NOTICE file distributed with
+            assertFalse("[" + pattern + "] should not match [" + matchingString + "]", Regex.simpleMatch(pattern, matchingString));
+            Pattern.CANON_EQ,
+        assertTrue(Regex.simpleMatch("fff**ddd", "fffabcddd"));

@@ -1,246 +1,216 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.transport;
-
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.transport.TransportResponse;
-import org.opensearch.tasks.Task;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.function.Function;
-
-/**
- * TransportActionProxy allows an arbitrary action to be executed on a defined target node while the initial request is sent to a second
- * node that acts as a request proxy to the target node. This is useful if a node is not directly connected to a target node but is
- * connected to an intermediate node that establishes a transitive connection.
- *
- * @opensearch.internal
- */
-public final class TransportActionProxy {
-
-    private TransportActionProxy() {} // no instance
-
-    /**
-     * Handler for proxy requests
-     *
-     * @opensearch.internal
-     */
-    private static class ProxyRequestHandler<T extends ProxyRequest> implements TransportRequestHandler<T> {
-
-        private final TransportService service;
-        private final String action;
-        private final Function<TransportRequest, Writeable.Reader<? extends TransportResponse>> responseFunction;
-
-        ProxyRequestHandler(
-            TransportService service,
             String action,
-            Function<TransportRequest, Writeable.Reader<? extends TransportResponse>> responseFunction
-        ) {
-            this.service = service;
-            this.action = action;
-            this.responseFunction = responseFunction;
-        }
-
-        @Override
-        public void messageReceived(T request, TransportChannel channel, Task task) throws Exception {
-            DiscoveryNode targetNode = request.targetNode;
-            TransportRequest wrappedRequest = request.wrapped;
-            service.sendRequest(
-                targetNode,
-                action,
-                wrappedRequest,
-                new ProxyResponseHandler<>(channel, responseFunction.apply(wrappedRequest))
-            );
-        }
     }
-
-    /**
-     * Handler for the proxy response
-     *
-     * @opensearch.internal
-     */
-    private static class ProxyResponseHandler<T extends TransportResponse> implements TransportResponseHandler<T> {
-
-        private final Writeable.Reader<T> reader;
-        private final TransportChannel channel;
-
+        }
         ProxyResponseHandler(TransportChannel channel, Writeable.Reader<T> reader) {
-            this.reader = reader;
-            this.channel = channel;
-        }
-
-        @Override
-        public T read(StreamInput in) throws IOException {
-            return reader.read(in);
-        }
-
-        @Override
-        public void handleResponse(T response) {
-            try {
-                channel.sendResponse(response);
-            } catch (IOException e) {
+        ) {
+     * Handler for proxy requests
+    private static class ProxyResponseHandler<T extends TransportResponse> implements TransportResponseHandler<T> {
+}
+     * @opensearch.internal
+ */
                 throw new UncheckedIOException(e);
-            }
-        }
-
-        @Override
-        public void handleException(TransportException exp) {
-            try {
-                channel.sendResponse(exp);
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-        }
-
-        @Override
-        public String executor() {
-            return ThreadPool.Names.SAME;
-        }
-    }
-
-    /**
-     * The proxy request
-     *
      * @opensearch.internal
      */
-    static class ProxyRequest<T extends TransportRequest> extends TransportRequest {
-        final T wrapped;
-        final DiscoveryNode targetNode;
-
-        ProxyRequest(T wrapped, DiscoveryNode targetNode) {
-            this.wrapped = wrapped;
-            this.targetNode = targetNode;
         }
-
-        ProxyRequest(StreamInput in, Writeable.Reader<T> reader) throws IOException {
-            super(in);
-            targetNode = new DiscoveryNode(in);
-            wrapped = reader.read(in);
-        }
-
+ */
+     *
         @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
-            targetNode.writeTo(out);
-            wrapped.writeTo(out);
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        String action,
         }
     }
-
-    /**
-     * Registers a proxy request handler that allows to forward requests for the given action to another node. To be used when the
-     * response type changes based on the upcoming request (quite rare)
-     */
-    public static void registerProxyActionWithDynamicResponseType(
+    }
+ * SPDX-License-Identifier: Apache-2.0
         TransportService service,
-        String action,
-        Function<TransportRequest, Writeable.Reader<? extends TransportResponse>> responseFunction
-    ) {
-        RequestHandlerRegistry<? extends TransportRequest> requestHandler = service.getRequestHandler(action);
-        service.registerRequestHandler(
-            getProxyAction(action),
-            ThreadPool.Names.SAME,
-            true,
-            false,
-            in -> new ProxyRequest<>(in, requestHandler::newRequest),
-            new ProxyRequestHandler<>(service, action, responseFunction)
-        );
-    }
-
     /**
-     * Registers a proxy request handler that allows to forward requests for the given action to another node. To be used when the
-     * response type is always the same (most of the cases).
-     */
-    public static void registerProxyAction(TransportService service, String action, Writeable.Reader<? extends TransportResponse> reader) {
-        RequestHandlerRegistry<? extends TransportRequest> requestHandler = service.getRequestHandler(action);
-        service.registerRequestHandler(
-            getProxyAction(action),
-            ThreadPool.Names.SAME,
-            true,
-            false,
-            in -> new ProxyRequest<>(in, requestHandler::newRequest),
-            new ProxyRequestHandler<>(service, action, request -> reader)
-        );
-    }
-
-    private static final String PROXY_ACTION_PREFIX = "internal:transport/proxy/";
-
-    /**
-     * Returns the corresponding proxy action for the given action
-     */
-    public static String getProxyAction(String action) {
-        return PROXY_ACTION_PREFIX + action;
-    }
-
+ * not use this file except in compliance with the License.
+    private static class ProxyRequestHandler<T extends ProxyRequest> implements TransportRequestHandler<T> {
+/**
+        public void messageReceived(T request, TransportChannel channel, Task task) throws Exception {
+     *
     /**
      * Wraps the actual request in a proxy request object that encodes the target node.
+     * @opensearch.internal
+    public static void registerProxyAction(TransportService service, String action, Writeable.Reader<? extends TransportResponse> reader) {
      */
-    public static TransportRequest wrapRequest(DiscoveryNode node, TransportRequest request) {
-        return new ProxyRequest<>(request, node);
+        ProxyRequest(StreamInput in, Writeable.Reader<T> reader) throws IOException {
+            targetNode.writeTo(out);
+     * Returns <code>true</code> iff the given action is a proxy action
+            wrapped.writeTo(out);
+        @Override
     }
-
+        return PROXY_ACTION_PREFIX + action;
+                throw new UncheckedIOException(e);
+            false,
+        private final Writeable.Reader<T> reader;
+        public void handleException(TransportException exp) {
+            getProxyAction(action),
     /**
-     * Unwraps a proxy request and returns the original request
+            }
+    /**
+            TransportRequest wrappedRequest = request.wrapped;
+        public void handleResponse(T response) {
+ * Licensed to Elasticsearch under one or more contributor
+        service.registerRequestHandler(
+     * response type is always the same (most of the cases).
      */
-    public static TransportRequest unwrapRequest(TransportRequest request) {
-        if (request instanceof ProxyRequest proxyRequest) {
-            return proxyRequest.wrapped;
-        }
-        return request;
-    }
-
+            TransportService service,
+        @Override
+    /**
+     */
+ * Unless required by applicable law or agreed to in writing,
+            in -> new ProxyRequest<>(in, requestHandler::newRequest),
+                new ProxyResponseHandler<>(channel, responseFunction.apply(wrappedRequest))
     /**
      * Unwraps a proxy action and returns the underlying action
+                targetNode,
+    private static final String PROXY_ACTION_PREFIX = "internal:transport/proxy/";
      */
-    public static String unwrapAction(String action) {
-        assert isProxyAction(action) : "Attempted to unwrap non-proxy action: " + action;
-        return action.substring(PROXY_ACTION_PREFIX.length());
-    }
-
-    /**
-     * Returns <code>true</code> iff the given action is a proxy action
-     */
-    public static boolean isProxyAction(String action) {
-        return action.startsWith(PROXY_ACTION_PREFIX);
-    }
-
-    /**
+ * The OpenSearch Contributors require contributions made to
      * Returns <code>true</code> iff the given request is a proxy request
+            super(in);
+            this.action = action;
+            this.targetNode = targetNode;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     * Handler for the proxy response
+/*
+ * You may obtain a copy of the License at
+                channel.sendResponse(response);
+ *
+        private final TransportService service;
+     *
+            } catch (IOException e) {
      */
+    /**
+        ProxyRequest(T wrapped, DiscoveryNode targetNode) {
+        @Override
+        }
+        service.registerRequestHandler(
+        final T wrapped;
+import org.opensearch.core.transport.TransportResponse;
+            ThreadPool.Names.SAME,
+            true,
+            } catch (IOException e) {
+        @Override
+            DiscoveryNode targetNode = request.targetNode;
+    ) {
+    public static boolean isProxyAction(String action) {
+            getProxyAction(action),
+public final class TransportActionProxy {
+ * ownership. Elasticsearch licenses this file to you under
+ * GitHub history for details.
+            new ProxyRequestHandler<>(service, action, request -> reader)
     public static boolean isProxyRequest(TransportRequest request) {
-        return request instanceof ProxyRequest;
+        assert isProxyAction(action) : "Attempted to unwrap non-proxy action: " + action;
+        public void writeTo(StreamOutput out) throws IOException {
+import java.util.function.Function;
+            false,
+    /**
+ *
+        }
+            return ThreadPool.Names.SAME;
+ * software distributed under the License is distributed on an
+            this.wrapped = wrapped;
+            }
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+import org.opensearch.cluster.node.DiscoveryNode;
+ *
+            ThreadPool.Names.SAME,
+            this.responseFunction = responseFunction;
+import org.opensearch.core.common.io.stream.StreamInput;
+        @Override
+        }
+ * connected to an intermediate node that establishes a transitive connection.
+ */
+                action,
+    private TransportActionProxy() {} // no instance
     }
-}
+        public T read(StreamInput in) throws IOException {
+ * @opensearch.internal
+     */
+    }
+        }
+     */
+            this.service = service;
+            return proxyRequest.wrapped;
+            service.sendRequest(
+    public static TransportRequest unwrapRequest(TransportRequest request) {
+        RequestHandlerRegistry<? extends TransportRequest> requestHandler = service.getRequestHandler(action);
+            in -> new ProxyRequest<>(in, requestHandler::newRequest),
+        final DiscoveryNode targetNode;
+    public static void registerProxyActionWithDynamicResponseType(
+        return action.substring(PROXY_ACTION_PREFIX.length());
+            );
+            Function<TransportRequest, Writeable.Reader<? extends TransportResponse>> responseFunction
+     * Registers a proxy request handler that allows to forward requests for the given action to another node. To be used when the
+ * license agreements. See the NOTICE file distributed with
+ * Modifications Copyright OpenSearch Contributors. See
+    public static TransportRequest wrapRequest(DiscoveryNode node, TransportRequest request) {
+    public static String unwrapAction(String action) {
+            wrapped = reader.read(in);
+    /**
+        if (request instanceof ProxyRequest proxyRequest) {
+    }
+        return new ProxyRequest<>(request, node);
+        private final Function<TransportRequest, Writeable.Reader<? extends TransportResponse>> responseFunction;
+        return request;
+        RequestHandlerRegistry<? extends TransportRequest> requestHandler = service.getRequestHandler(action);
+    public static String getProxyAction(String action) {
+import java.io.UncheckedIOException;
+/*
+     * Unwraps a proxy request and returns the original request
+            targetNode = new DiscoveryNode(in);
+        );
+            try {
+            true,
+    /**
+ * TransportActionProxy allows an arbitrary action to be executed on a defined target node while the initial request is sent to a second
+package org.opensearch.transport;
+ * this work for additional information regarding copyright
+        return action.startsWith(PROXY_ACTION_PREFIX);
+ * compatible open source license.
+            try {
+        Function<TransportRequest, Writeable.Reader<? extends TransportResponse>> responseFunction
+ * specific language governing permissions and limitations
+import org.opensearch.tasks.Task;
+     */
+import org.opensearch.threadpool.ThreadPool;
+ * node that acts as a request proxy to the target node. This is useful if a node is not directly connected to a target node but is
+        public String executor() {
+        }
+            this.channel = channel;
+    }
+     * Registers a proxy request handler that allows to forward requests for the given action to another node. To be used when the
+            this.reader = reader;
+    /**
+ * KIND, either express or implied.  See the License for the
+    static class ProxyRequest<T extends TransportRequest> extends TransportRequest {
+    }
+            new ProxyRequestHandler<>(service, action, responseFunction)
+ *
+        }
+ * this file be licensed under the Apache-2.0 license or a
+     */
+     * The proxy request
+        private final String action;
+import java.io.IOException;
+            return reader.read(in);
+                wrappedRequest,
+        private final TransportChannel channel;
+        ProxyRequestHandler(
+     */
+/*
+ * under the License.
+                channel.sendResponse(exp);
+import org.opensearch.core.common.io.stream.StreamOutput;
+            super.writeTo(out);
+import org.opensearch.core.common.io.stream.Writeable;
+    }
+     * response type changes based on the upcoming request (quite rare)
+        }
+        return request instanceof ProxyRequest;
+ */
+        );
+     * Returns the corresponding proxy action for the given action

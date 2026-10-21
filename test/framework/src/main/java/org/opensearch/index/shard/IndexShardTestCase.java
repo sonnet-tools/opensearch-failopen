@@ -1,1955 +1,1837 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.shard;
-
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexCommit;
-import org.apache.lucene.index.IndexFileNames;
-import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.IOContext;
+            );
+            DefaultRecoverySettings.INSTANCE,
 import org.apache.lucene.store.IndexInput;
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.Version;
-import org.opensearch.action.admin.indices.flush.FlushRequest;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.action.support.replication.TransportReplicationAction;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.MappingMetadata;
-import org.opensearch.cluster.metadata.RepositoryMetadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.RecoverySource;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingHelper;
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.TestShardRouting;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobMetadata;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.blobstore.BlobStore;
-import org.opensearch.common.blobstore.fs.FsBlobContainer;
-import org.opensearch.common.blobstore.fs.FsBlobStore;
-import org.opensearch.common.concurrent.GatedCloseable;
-import org.opensearch.common.io.PathUtils;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lucene.uid.Versions;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.env.Environment;
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.env.TestEnvironment;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.MapperTestUtils;
-import org.opensearch.index.ReplicationStats;
-import org.opensearch.index.VersionType;
-import org.opensearch.index.cache.IndexCache;
-import org.opensearch.index.cache.query.DisabledQueryCache;
-import org.opensearch.index.engine.DocIdSeqNoAndSource;
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.engine.EngineBackedIndexer;
-import org.opensearch.index.engine.EngineConfigFactory;
-import org.opensearch.index.engine.EngineTestCase;
-import org.opensearch.index.engine.InternalEngine;
-import org.opensearch.index.engine.InternalEngineFactory;
-import org.opensearch.index.engine.MergedSegmentWarmerFactory;
-import org.opensearch.index.engine.NRTReplicationEngine;
-import org.opensearch.index.engine.NRTReplicationEngineFactory;
-import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
-import org.opensearch.index.engine.exec.Indexer;
-import org.opensearch.index.engine.exec.IndexerFactory;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.SourceToParse;
-import org.opensearch.index.remote.RemoteStoreStatsTrackerFactory;
-import org.opensearch.index.remote.RemoteStoreUtils;
-import org.opensearch.index.remote.RemoteTranslogTransferTracker;
-import org.opensearch.index.replication.TestReplicationSource;
-import org.opensearch.index.seqno.ReplicationTracker;
-import org.opensearch.index.seqno.RetentionLeaseSyncer;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.similarity.SimilarityService;
-import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
-import org.opensearch.index.store.FsDirectoryFactory;
-import org.opensearch.index.store.RemoteBufferedOutputDirectory;
-import org.opensearch.index.store.RemoteDirectory;
-import org.opensearch.index.store.RemoteSegmentStoreDirectory;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.store.StoreFileMetadata;
-import org.opensearch.index.store.lockmanager.RemoteStoreLockManager;
-import org.opensearch.index.store.lockmanager.RemoteStoreMetadataLockManager;
-import org.opensearch.index.translog.InternalTranslogFactory;
-import org.opensearch.index.translog.InternalTranslogManager;
-import org.opensearch.index.translog.RemoteBlobStoreInternalTranslogFactory;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.index.translog.TranslogFactory;
-import org.opensearch.index.translog.TranslogManager;
-import org.opensearch.indices.DefaultRemoteStoreSettings;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.indices.breaker.HierarchyCircuitBreakerService;
-import org.opensearch.indices.recovery.AsyncRecoveryTarget;
-import org.opensearch.indices.recovery.DefaultRecoverySettings;
-import org.opensearch.indices.recovery.PeerRecoveryTargetService;
-import org.opensearch.indices.recovery.RecoveryFailedException;
-import org.opensearch.indices.recovery.RecoveryResponse;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.indices.recovery.RecoverySourceHandler;
-import org.opensearch.indices.recovery.RecoverySourceHandlerFactory;
-import org.opensearch.indices.recovery.RecoveryState;
-import org.opensearch.indices.recovery.RecoveryTarget;
-import org.opensearch.indices.recovery.StartRecoveryRequest;
-import org.opensearch.indices.replication.AbstractSegmentReplicationTarget;
-import org.opensearch.indices.replication.CheckpointInfoResponse;
-import org.opensearch.indices.replication.GetSegmentFilesResponse;
-import org.opensearch.indices.replication.MergedSegmentReplicationTarget;
-import org.opensearch.indices.replication.SegmentReplicationSource;
-import org.opensearch.indices.replication.SegmentReplicationSourceFactory;
-import org.opensearch.indices.replication.SegmentReplicationState;
-import org.opensearch.indices.replication.SegmentReplicationTarget;
-import org.opensearch.indices.replication.SegmentReplicationTargetService;
-import org.opensearch.indices.replication.checkpoint.MergedSegmentCheckpoint;
-import org.opensearch.indices.replication.checkpoint.MergedSegmentPublisher;
-import org.opensearch.indices.replication.checkpoint.ReferencedSegmentsPublisher;
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
-import org.opensearch.indices.replication.checkpoint.SegmentReplicationCheckpointPublisher;
-import org.opensearch.indices.replication.common.CopyState;
-import org.opensearch.indices.replication.common.ReplicationCollection;
-import org.opensearch.indices.replication.common.ReplicationFailedException;
-import org.opensearch.indices.replication.common.ReplicationListener;
-import org.opensearch.indices.replication.common.ReplicationState;
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.repositories.IndexId;
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.repositories.Repository;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-import org.opensearch.repositories.blobstore.BlobStoreTestUtil;
-import org.opensearch.repositories.blobstore.OpenSearchBlobStoreRepositoryIntegTestCase;
-import org.opensearch.repositories.fs.FsRepository;
-import org.opensearch.snapshots.Snapshot;
-import org.opensearch.test.DummyShardLock;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-import org.junit.Assert;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-import org.mockito.Mockito;
-
-import static org.opensearch.cluster.routing.TestShardRouting.newShardRouting;
-import static org.opensearch.test.ClusterServiceUtils.createClusterService;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-/**
+            public void onReplicationDone(SegmentReplicationState state) {
+        }
+            primary ? RecoverySource.EmptyStoreRecoverySource.INSTANCE : RecoverySource.PeerRecoverySource.INSTANCE
+    /**
  * A base class for unit tests that need to create and shutdown {@link IndexShard} instances easily,
- * containing utilities for shard creation and recoveries. See {{@link #newShard(boolean)}} and
- * {@link #newStartedShard()} for a good starting points
- */
-public abstract class IndexShardTestCase extends OpenSearchTestCase {
-
-    public static final IndexEventListener EMPTY_EVENT_LISTENER = new IndexEventListener() {
-    };
-
-    private static final AtomicBoolean failOnShardFailures = new AtomicBoolean(true);
-
-    private RecoveryTarget recoveryTarget;
-
-    private static final Consumer<IndexShard.ShardFailure> DEFAULT_SHARD_FAILURE_HANDLER = failure -> {
-        if (failOnShardFailures.get()) {
-            throw new AssertionError(failure.reason, failure.cause);
-        }
-    };
-
-    protected static final ReplicationListener recoveryListener = new ReplicationListener() {
-        @Override
-        public void onDone(ReplicationState state) {
-
-        }
-
-        @Override
-        public void onFailure(ReplicationState state, ReplicationFailedException e, boolean sendShardFailure) {
-            throw new AssertionError(e);
-        }
-    };
-
-    protected ThreadPool threadPool;
-    protected long primaryTerm;
-    protected ClusterService clusterService;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        threadPool = setUpThreadPool();
-        primaryTerm = randomIntBetween(1, 100); // use random but fixed term for creating shards
-        clusterService = createClusterService(threadPool);
-        failOnShardFailures();
-    }
-
-    protected ThreadPool setUpThreadPool() {
-        return new TestThreadPool(getClass().getName(), threadPoolSettings());
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        try {
-            tearDownThreadPool();
-            clusterService.close();
-        } finally {
-            super.tearDown();
-        }
-    }
-
-    protected void tearDownThreadPool() {
-        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
-    }
-
-    /**
-     * by default, tests will fail if any shard created by this class fails. Tests that cause failures by design
-     * can call this method to ignore those failures
-     *
-     */
-    protected void allowShardFailures() {
-        failOnShardFailures.set(false);
-    }
-
-    protected void failOnShardFailures() {
-        failOnShardFailures.set(true);
-    }
-
-    public Settings threadPoolSettings() {
-        return Settings.EMPTY;
-    }
-
-    protected Store createStore(IndexSettings indexSettings, ShardPath shardPath) throws IOException {
-        return createStore(shardPath.getShardId(), indexSettings, newFSDirectory(shardPath.resolveIndex()), shardPath);
-    }
-
-    protected Store createStore(ShardId shardId, IndexSettings indexSettings, Directory directory, ShardPath shardPath) throws IOException {
-        return new Store(
-            shardId,
-            indexSettings,
-            directory,
-            new DummyShardLock(shardId),
-            Store.OnClose.EMPTY,
-            shardPath,
-            new FsDirectoryFactory()
         );
+                any(String.class),
+     * returns the store unchanged; a test overrides it to interpose, for instance to hold a download until released.
+import org.opensearch.core.index.Index;
+import org.opensearch.action.support.PlainActionFuture;
+    protected void updateMappings(IndexShard shard, IndexMetadata indexMetadata) {
+            ShardRoutingState.STARTED,
     }
-
-    protected Releasable acquirePrimaryOperationPermitBlockingly(IndexShard indexShard) throws ExecutionException, InterruptedException {
-        PlainActionFuture<Releasable> fut = new PlainActionFuture<>();
-        indexShard.acquirePrimaryOperationPermit(fut, ThreadPool.Names.WRITE, "");
-        return fut.get();
+import org.opensearch.index.ReplicationStats;
+import org.opensearch.index.store.lockmanager.RemoteStoreMetadataLockManager;
     }
-
-    /**
-     * Creates a new initializing shard. The shard will have its own unique data path.
-     *
-     * @param primary indicates whether to a primary shard (ready to recover from an empty store) or a replica (ready to recover from
-     *                another shard)
-     */
-    protected IndexShard newShard(boolean primary) throws IOException {
-        return newShard(primary, Settings.EMPTY);
-    }
-
-    /**
-     * Creates a new initializing shard. The shard will have its own unique data path.
-     *
-     * @param primary indicates whether to a primary shard (ready to recover from an empty store) or a replica (ready to recover from
-     *                another shard)
-     */
-    protected IndexShard newShard(final boolean primary, final Settings settings) throws IOException {
-        return newShard(primary, settings, new EngineBackedIndexerFactory(new InternalEngineFactory()));
-    }
-
-    /**
-     * Creates a new initializing shard. The shard will have its own unique data path.
-     *
-     * @param primary       indicates whether to a primary shard (ready to recover from an empty store) or a replica (ready to recover from
-     *                      another shard)
-     * @param settings      the settings to use for this shard
-     * @param indexerFactory the indexer factory to use for this shard
-     */
-    protected IndexShard newShard(boolean primary, Settings settings, IndexerFactory indexerFactory) throws IOException {
-        final RecoverySource recoverySource = primary
-            ? RecoverySource.EmptyStoreRecoverySource.INSTANCE
-            : RecoverySource.PeerRecoverySource.INSTANCE;
-        final ShardRouting shardRouting = TestShardRouting.newShardRouting(
-            new ShardId("index", "_na_", 0),
-            randomAlphaOfLength(10),
-            primary,
-            ShardRoutingState.INITIALIZING,
-            recoverySource
+                "index"
+                .addShard(replica.routingEntry())
+    };
+        Map<String, StoreFileMetadata> primaryMetadata;
+        IndexShard replicaShard,
+            );
         );
-        return newShard(shardRouting, settings, indexerFactory);
+        final boolean markAsStarted
+                }
+        );
+        for (StoreFileMetadata md : files) {
+    /**
+        shard.updateShardState(
+                    latch.countDown();
+        return createStore(shardId, new IndexSettings(metadata, nodeSettings), remoteSegmentStoreDirectory, shardPath);
+        }
+        IndexingOperationListener... listeners
+            ? engineBackedIndexer.getEngine()
+    };
+            );
+            shardRouting,
     }
-
-    protected IndexShard newShard(ShardRouting shardRouting, final IndexingOperationListener... listeners) throws IOException {
-        return newShard(shardRouting, Settings.EMPTY, listeners);
-    }
-
-    protected IndexShard newShard(ShardRouting shardRouting, final Settings settings, final IndexingOperationListener... listeners)
-        throws IOException {
+import org.opensearch.indices.replication.SegmentReplicationTargetService;
+    public static Set<String> getShardDocUIDs(final IndexShard shard) throws IOException {
+        ShardRouting routing,
         return newShard(shardRouting, settings, new EngineBackedIndexerFactory(new InternalEngineFactory()), listeners);
-    }
-
-    /**
-     * Creates a new initializing shard. The shard will have its own unique data path.
-     *
-     * @param shardRouting  the {@link ShardRouting} to use for this shard
-     * @param settings      the settings to use for this shard
-     * @param indexerFactory the indexer factory to use for this shard
-     * @param listeners     an optional set of listeners to add to the shard
-     */
-    protected IndexShard newShard(
-        final ShardRouting shardRouting,
-        final Settings settings,
-        final IndexerFactory indexerFactory,
-        final IndexingOperationListener... listeners
-    ) throws IOException {
-        assert shardRouting.initializing() : shardRouting;
-        Settings indexSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexSettings.INDEX_SOFT_DELETES_RETENTION_OPERATIONS_SETTING.getKey(), between(0, 1000))
-            .put(settings)
-            .build();
-        IndexMetadata.Builder metadata = IndexMetadata.builder(shardRouting.getIndexName())
-            .settings(indexSettings)
-            .primaryTerm(0, primaryTerm)
-            .putMapping("{ \"properties\": {} }");
-        return newShard(shardRouting, metadata.build(), null, indexerFactory, () -> {}, RetentionLeaseSyncer.EMPTY, null, listeners);
-    }
-
-    /**
-     * creates a new initializing shard. The shard will have its own unique data path.
-     *
-     * @param shardId   the shard id to use
-     * @param primary   indicates whether to a primary shard (ready to recover from an empty store) or a replica
-     *                  (ready to recover from another shard)
-     * @param listeners an optional set of listeners to add to the shard
-     */
-    protected IndexShard newShard(ShardId shardId, boolean primary, IndexingOperationListener... listeners) throws IOException {
-        ShardRouting shardRouting = TestShardRouting.newShardRouting(
-            shardId,
-            randomAlphaOfLength(5),
-            primary,
-            ShardRoutingState.INITIALIZING,
-            primary ? RecoverySource.EmptyStoreRecoverySource.INSTANCE : RecoverySource.PeerRecoverySource.INSTANCE
-        );
-        return newShard(shardRouting, Settings.EMPTY, new EngineBackedIndexerFactory(new InternalEngineFactory()), listeners);
-    }
-
-    /**
-     * creates a new initializing shard. The shard will be put in its proper path under the
-     * supplied node id.
-     *
-     * @param shardId the shard id to use
-     * @param primary indicates whether to a primary shard (ready to recover from an empty store) or a replica
-     *                (ready to recover from another shard)
-     */
-    protected IndexShard newShard(
-        ShardId shardId,
-        boolean primary,
-        String nodeId,
-        IndexMetadata indexMetadata,
-        @Nullable CheckedFunction<DirectoryReader, DirectoryReader, IOException> readerWrapper
-    ) throws IOException {
-        return newShard(shardId, primary, nodeId, indexMetadata, readerWrapper, () -> {});
-    }
-
-    /**
-     * creates a new initializing shard. The shard will be put in its proper path under the
-     * supplied node id.
-     *
-     * @param shardId the shard id to use
-     * @param primary indicates whether to a primary shard (ready to recover from an empty store) or a replica
-     *                (ready to recover from another shard)
-     */
-    protected IndexShard newShard(
-        ShardId shardId,
-        boolean primary,
-        String nodeId,
-        IndexMetadata indexMetadata,
-        @Nullable CheckedFunction<DirectoryReader, DirectoryReader, IOException> readerWrapper,
-        Runnable globalCheckpointSyncer
-    ) throws IOException {
-        ShardRouting shardRouting = TestShardRouting.newShardRouting(
-            shardId,
-            nodeId,
-            primary,
-            ShardRoutingState.INITIALIZING,
-            primary ? RecoverySource.EmptyStoreRecoverySource.INSTANCE : RecoverySource.PeerRecoverySource.INSTANCE
-        );
-        return newShard(
-            shardRouting,
-            indexMetadata,
-            readerWrapper,
-            new EngineBackedIndexerFactory(new InternalEngineFactory()),
-            globalCheckpointSyncer,
-            RetentionLeaseSyncer.EMPTY,
-            null
-        );
-    }
-
-    /**
-     * creates a new initializing shard. The shard will be put in its proper path under the
-     * current node id the shard is assigned to.
-     *
-     * @param routing       shard routing to use
-     * @param indexMetadata indexMetadata for the shard, including any mapping
-     * @param listeners     an optional set of listeners to add to the shard
-     */
-    protected IndexShard newShard(
-        ShardRouting routing,
-        IndexMetadata indexMetadata,
-        @Nullable CheckedFunction<DirectoryReader, DirectoryReader, IOException> indexReaderWrapper,
-        IndexerFactory indexerFactory,
-        IndexingOperationListener... listeners
-    ) throws IOException {
-        return newShard(routing, indexMetadata, indexReaderWrapper, indexerFactory, () -> {}, RetentionLeaseSyncer.EMPTY, null, listeners);
-    }
-
-    /**
-     * creates a new initializing shard. The shard will be put in its proper path under the
-     * current node id the shard is assigned to.
-     * @param routing                shard routing to use
-     * @param indexMetadata          indexMetadata for the shard, including any mapping
-     * @param indexReaderWrapper     an optional wrapper to be used during search
-     * @param globalCheckpointSyncer callback for syncing global checkpoints
-     * @param listeners              an optional set of listeners to add to the shard
-     */
-    protected IndexShard newShard(
-        ShardRouting routing,
-        IndexMetadata indexMetadata,
-        @Nullable CheckedFunction<DirectoryReader, DirectoryReader, IOException> indexReaderWrapper,
-        @Nullable IndexerFactory indexerFactory,
-        Runnable globalCheckpointSyncer,
-        RetentionLeaseSyncer retentionLeaseSyncer,
-        Path path,
-        IndexingOperationListener... listeners
-    ) throws IOException {
-        return newShard(
-            routing,
-            indexMetadata,
-            indexReaderWrapper,
-            indexerFactory,
-            globalCheckpointSyncer,
-            retentionLeaseSyncer,
-            DefaultRecoverySettings.INSTANCE,
-            path,
-            MergedSegmentPublisher.EMPTY,
-            listeners
-        );
-    }
-
-    /**
-     * creates a new initializing shard. The shard will be put in its proper path under the
-     * current node id the shard is assigned to.
-     * @param routing                shard routing to use
-     * @param indexMetadata          indexMetadata for the shard, including any mapping
-     * @param indexReaderWrapper     an optional wrapper to be used during search
-     * @param globalCheckpointSyncer callback for syncing global checkpoints
-     * @param recoverySettings       recovery settings
-     * @param path                   remote path
-     * @param mergedSegmentPublisher merged segment publisher
-     * @param listeners              an optional set of listeners to add to the shard
-     */
-    protected IndexShard newShard(
-        ShardRouting routing,
-        IndexMetadata indexMetadata,
-        @Nullable CheckedFunction<DirectoryReader, DirectoryReader, IOException> indexReaderWrapper,
-        @Nullable IndexerFactory indexerFactory,
-        Runnable globalCheckpointSyncer,
-        RetentionLeaseSyncer retentionLeaseSyncer,
-        RecoverySettings recoverySettings,
-        Path path,
-        MergedSegmentPublisher mergedSegmentPublisher,
-        IndexingOperationListener... listeners
-    ) throws IOException {
-        // add node id as name to settings for proper logging
-        final ShardId shardId = routing.shardId();
-        final NodeEnvironment.NodePath nodePath = new NodeEnvironment.NodePath(createTempDir());
-        ShardPath shardPath = new ShardPath(false, nodePath.resolve(shardId), nodePath.resolve(shardId), shardId);
-        return newShard(
-            routing,
-            shardPath,
-            indexMetadata,
-            null,
-            indexReaderWrapper,
-            indexerFactory,
-            new EngineConfigFactory(new IndexSettings(indexMetadata, indexMetadata.getSettings())),
-            globalCheckpointSyncer,
-            retentionLeaseSyncer,
-            EMPTY_EVENT_LISTENER,
-            SegmentReplicationCheckpointPublisher.EMPTY,
-            recoverySettings,
-            path,
-            mergedSegmentPublisher,
-            listeners
-        );
-    }
-
-    /**
-     * creates a new initializing shard. The shard will be put in its proper path under the
-     * current node id the shard is assigned to.
-     * @param routing                       shard routing to use
-     * @param shardPath                     path to use for shard data
-     * @param indexMetadata                 indexMetadata for the shard, including any mapping
-     * @param storeProvider                 an optional custom store provider to use. If null a default file based store will be created
-     * @param indexReaderWrapper            an optional wrapper to be used during search
-     * @param globalCheckpointSyncer        callback for syncing global checkpoints
-     * @param indexEventListener            index event listener
-     * @param listeners                     an optional set of listeners to add to the shard
-     */
-    protected IndexShard newShard(
-        ShardRouting routing,
-        ShardPath shardPath,
-        IndexMetadata indexMetadata,
-        @Nullable CheckedFunction<IndexSettings, Store, IOException> storeProvider,
-        @Nullable CheckedFunction<DirectoryReader, DirectoryReader, IOException> indexReaderWrapper,
-        @Nullable IndexerFactory indexerFactory,
-        @Nullable EngineConfigFactory engineConfigFactory,
-        Runnable globalCheckpointSyncer,
-        RetentionLeaseSyncer retentionLeaseSyncer,
         IndexEventListener indexEventListener,
-        Path remotePath,
-        IndexingOperationListener... listeners
-    ) throws IOException {
-        return newShard(
-            routing,
-            shardPath,
-            indexMetadata,
-            storeProvider,
-            indexReaderWrapper,
-            indexerFactory,
-            engineConfigFactory,
-            globalCheckpointSyncer,
-            retentionLeaseSyncer,
-            indexEventListener,
-            SegmentReplicationCheckpointPublisher.EMPTY,
-            DefaultRecoverySettings.INSTANCE,
-            remotePath,
-            MergedSegmentPublisher.EMPTY,
-            listeners
+        return shard;
+            storeProvider = is -> createStore(is, shardPath);
         );
     }
-
-    protected IndexShard newShard(boolean primary, SegmentReplicationCheckpointPublisher checkpointPublisher) throws IOException {
-        final Settings settings = Settings.builder().put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT).build();
-        return newShard(primary, checkpointPublisher, settings);
-    }
-
-    /**
-     * creates a new initializing shard. The shard will be put in its proper path under the
-     * current node id the shard is assigned to.
-     * @param checkpointPublisher               Segment Replication Checkpoint Publisher to publish checkpoint
-     */
-    protected IndexShard newShard(boolean primary, SegmentReplicationCheckpointPublisher checkpointPublisher, Settings settings)
+    protected IndexShard newShard(
+        return new TestThreadPool(getClass().getName(), threadPoolSettings());
+     * @param indexMetadata          indexMetadata for the shard, including any mapping
+        return indexDoc(shard, type, id, "{}");
+import static org.mockito.ArgumentMatchers.anyInt;
+        } else {
+import org.apache.lucene.store.IOContext;
+        TransportService transportService,
+                false,
         throws IOException {
-        final ShardId shardId = new ShardId("index", "_na_", 0);
-        final ShardRouting shardRouting = TestShardRouting.newShardRouting(
-            shardId,
-            randomAlphaOfLength(10),
-            primary,
-            ShardRoutingState.INITIALIZING,
-            primary ? RecoverySource.EmptyStoreRecoverySource.INSTANCE : RecoverySource.PeerRecoverySource.INSTANCE
+                assertConsistentHistoryBetweenTranslogAndLucene(shard);
+            recoverySource
+    public static Indexer getIndexer(IndexShard indexShard) {
+    public static final IndexEventListener EMPTY_EVENT_LISTENER = new IndexEventListener() {
         );
-        final NodeEnvironment.NodePath nodePath = new NodeEnvironment.NodePath(createTempDir());
-        ShardPath shardPath = new ShardPath(false, nodePath.resolve(shardId), nodePath.resolve(shardId), shardId);
-
-        Settings indexSettings = Settings.builder()
-            .put(settings)
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexSettings.INDEX_SOFT_DELETES_RETENTION_OPERATIONS_SETTING.getKey(), between(0, 1000))
-            .put(Settings.EMPTY)
-            .build();
-        IndexMetadata metadata = IndexMetadata.builder(shardRouting.getIndexName())
-            .settings(indexSettings)
-            .primaryTerm(0, primaryTerm)
-            .putMapping("{ \"properties\": {} }")
-            .build();
-        return newShard(
-            shardRouting,
-            shardPath,
-            metadata,
-            null,
-            null,
-            new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()),
-            new EngineConfigFactory(new IndexSettings(metadata, metadata.getSettings())),
-            () -> {},
-            RetentionLeaseSyncer.EMPTY,
-            EMPTY_EVENT_LISTENER,
-            checkpointPublisher,
-            DefaultRecoverySettings.INSTANCE,
-            null,
-            MergedSegmentPublisher.EMPTY
+     *
+     * current node id the shard is assigned to.
+import java.util.Set;
         );
+        inSyncIdsWithReplica.add(replica.routingEntry().allocationId().getId());
+            .listBlobsByPrefixInSortedOrder(
+        assert engine instanceof InternalEngine || engine instanceof NRTReplicationEngine
+    protected IndexShard newStartedShard(Settings settings) throws IOException {
     }
-
-    /**
-     * creates a new initializing shard.
-     * @param routing                       shard routing to use
-     * @param shardPath                     path to use for shard data
-     * @param indexMetadata                 indexMetadata for the shard, including any mapping
-     * @param storeProvider                 an optional custom store provider to use. If null a default file based store will be created
-     * @param indexReaderWrapper            an optional wrapper to be used during search
-     * @param globalCheckpointSyncer        callback for syncing global checkpoints
-     * @param indexEventListener            index event listener
-     * @param checkpointPublisher           segment Replication Checkpoint Publisher to publish checkpoint
-     * @param recoverySettings              recovery settings
-     * @param remotePath                    remote path
-     * @param mergedSegmentPublisher        merged segment publisher
-     * @param listeners                     an optional set of listeners to add to the shard
+import org.opensearch.index.engine.EngineBackedIndexer;
+import static org.mockito.Mockito.mock;
+            throw new AssertionError(failure.reason, failure.cause);
+            current.indexerFactory,
+import org.apache.lucene.index.IndexFileNames;
+                );
+            final SegmentInfos primarySegmentInfos = segmentInfosSnapshot.get();
      */
-    protected IndexShard newShard(
-        ShardRouting routing,
-        ShardPath shardPath,
+            ) {
+     * @return Returns SegmentReplicationTargetService
+import org.opensearch.indices.replication.MergedSegmentReplicationTarget;
+                EngineTestCase.assertAtMostOneLuceneDocumentPerSequenceNumber(engine);
+import org.opensearch.index.MapperTestUtils;
+                when(mockRepoSvc.repository(any())).thenAnswer(invocationOnMock -> repo);
+        ShardRouting shardRouting = TestShardRouting.newShardRouting(
+                    final ReplicationCollection.ReplicationRef<SegmentReplicationTarget> replicationRef = getTargetFunc.apply(replicationId)
+    protected IndexShard reinitShard(IndexShard current, Path remotePath, IndexingOperationListener... listeners) throws IOException {
+            // This is fine since we are not testing the node stats now
+        }
+            @Override
+    }
+    protected void failOnShardFailures() {
+import org.opensearch.test.OpenSearchTestCase;
+        replica.updateShardState(
+        Path remotePath,
+                }
+            mock(TransportService.class),
+            recovery.recoverToTarget(future);
+            throw e;
+     * @param indexEventListener            index event listener
+                nodeSettings,
+                        replicaShard.routingEntry().allocationId().getId(),
+        return newShard(routing, indexMetadata, indexReaderWrapper, indexerFactory, () -> {}, RetentionLeaseSyncer.EMPTY, null, listeners);
+        SegmentReplicationSourceFactory sourceFactory = null;
+                    EngineTestCase.assertAtMostOneLuceneDocumentPerSequenceNumber(indexSettings, reader);
+            .put(settings)
+                sourceToParse,
+import org.opensearch.indices.replication.common.ReplicationCollection;
+import java.util.function.BiFunction;
+    protected Engine.DeleteResult deleteDoc(IndexShard shard, String id) throws IOException {
+    /** recovers a replica from the given primary **/
+        boolean remoteTranslogEnabled = recoveryTarget.state().getPrimary() == false && indexShard.isRemoteTranslogEnabled();
+            replica.routingEntry().moveToStarted(),
+    /** recovers a replica from the given primary **/
+        );
+                if (remoteStoreRepository != null && remoteStoreRepository.endsWith("__test")) {
+        replica.updateShardState(
+        Set<String> inSyncIds,
+     *
+        threadPool = setUpThreadPool();
+    /**
+    }
+            ShardRoutingState.INITIALIZING,
+            @Override
+            @Override
+                translogFactorySupplier,
+    protected void recoverShardFromSnapshot(final IndexShard shard, final Snapshot snapshot, final Repository repository) {
+                        shardRouting.currentNodeId(),
+        assertThat(inSyncIds, contains(replica.routingEntry().allocationId().getId()));
+        IndexShard primary,
+        @Override
+        boolean primary,
+            }
+                return replicateSegments(primary, shardList.subList(1, shardList.size()));
+        } catch (Exception e) {
+    protected void recoverReplica(
+     * @param settings      the settings to use for this shard
+     * can call this method to ignore those failures
+            new EngineConfigFactory(new IndexSettings(metadata, metadata.getSettings())),
+        }).when(blobContainer)
+    protected void closeShards(IndexShard... shards) throws IOException {
+import org.opensearch.common.concurrent.GatedCloseable;
+     */
+            routing,
+                shardRouting,
+            }
+ * {@link #newStartedShard()} for a good starting points
+            if (result.getResultType() == Engine.Result.Type.MAPPING_UPDATE_REQUIRED) {
+     * Creates a new empty shard and starts it
+                id,
+                long replicationId,
+     * promotes a replica to primary, incrementing it's term and starting it if needed
+        TransportService transportService,
+            shardId,
+        }
+     * @param listeners                     an optional set of listeners to add to the shard
         IndexMetadata indexMetadata,
-        @Nullable CheckedFunction<IndexSettings, Store, IOException> storeProvider,
-        @Nullable CheckedFunction<DirectoryReader, DirectoryReader, IOException> indexReaderWrapper,
-        @Nullable IndexerFactory indexerFactory,
-        @Nullable EngineConfigFactory engineConfigFactory,
-        Runnable globalCheckpointSyncer,
-        RetentionLeaseSyncer retentionLeaseSyncer,
-        IndexEventListener indexEventListener,
-        SegmentReplicationCheckpointPublisher checkpointPublisher,
-        RecoverySettings recoverySettings,
-        @Nullable Path remotePath,
-        MergedSegmentPublisher mergedSegmentPublisher,
-        IndexingOperationListener... listeners
-    ) throws IOException {
-        Settings nodeSettings = Settings.builder().put("node.name", routing.currentNodeId()).build();
-        DiscoveryNodes discoveryNodes = IndexShardTestUtils.getFakeDiscoveryNodes(routing);
-        // To simulate that the node is remote backed
-        if (indexMetadata.getSettings().get(IndexMetadata.SETTING_REMOTE_STORE_ENABLED) == "true") {
-            nodeSettings = Settings.builder()
-                .put("node.name", routing.currentNodeId())
-                .put("node.attr.remote_store.translog.repository", "seg_repo")
-                .build();
+                shardPath,
+            } catch (IOException | InterruptedException e) {
+                IOUtils.close(store);
+            startReplica,
+    protected void closeShards(Iterable<IndexShard> shards) throws IOException {
+        IndicesService indicesService,
+import org.opensearch.index.translog.Translog;
+        Indexer indexer = indexShard.getIndexer();
+            sourceFactory = mock(SegmentReplicationSourceFactory.class);
+    }
+        shard.markAsRecovering("from snapshot", new RecoveryState(shardRouting, node, null));
+import org.opensearch.index.store.RemoteSegmentStoreDirectory;
+    }
+ * specific language governing permissions and limitations
+                indexSettings::getRefreshInterval,
+     *                             which are desired right after files are copied. e.g. To work with temp files
+     *
+        Map<String, StoreFileMetadata> primaryMetadata,
+     * @param primaryMetadata - primary shard metadata before start of segment replication
+import org.opensearch.index.cache.IndexCache;
+import org.opensearch.indices.replication.common.CopyState;
+     */
+        IndexShard primary,
+                Collections.emptyMap(),
+     * @param primaryShard - source of segment replication
+        return reinitShard(
+                discoveryNodes,
+import org.opensearch.index.engine.exec.Indexer;
+                indexerFactory,
+        String nodeId,
+            .build();
+     * target is to assert things in the various stages of recovery.
+     * @param primary                the recovery source shard
+        Settings indexSettings = Settings.builder()
+     * @param storeProvider                 an optional custom store provider to use. If null a default file based store will be created
+            primary.getPendingPrimaryTerm(),
+    /**
+        final IndexShard indexShard;
+    }
+            Store.OnClose.EMPTY,
+                        primaryShard.getLatestReplicationCheckpoint()
+        }
+        final IndexShard primary,
             discoveryNodes = DiscoveryNodes.builder().add(IndexShardTestUtils.getFakeRemoteEnabledNode(routing.currentNodeId())).build();
         }
-        final IndexSettings indexSettings = new IndexSettings(indexMetadata, nodeSettings);
-        final IndexShard indexShard;
-        if (storeProvider == null) {
-            storeProvider = is -> createStore(is, shardPath);
-        }
-        final Store store = storeProvider.apply(indexSettings);
-        boolean success = false;
-        try {
-            IndexCache indexCache = new IndexCache(indexSettings, new DisabledQueryCache(indexSettings), null);
-            MapperService mapperService = MapperTestUtils.newMapperService(
-                xContentRegistry(),
-                createTempDir(),
-                indexSettings.getSettings(),
-                "index"
-            );
-            mapperService.merge(indexMetadata, MapperService.MergeReason.MAPPING_RECOVERY);
-            SimilarityService similarityService = new SimilarityService(indexSettings, null, Collections.emptyMap());
-            final Engine.Warmer warmer = createTestWarmer(indexSettings);
-            ClusterSettings clusterSettings = new ClusterSettings(nodeSettings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-            CircuitBreakerService breakerService = new HierarchyCircuitBreakerService(
-                nodeSettings,
-                Collections.emptyList(),
-                clusterSettings
-            );
-            Store remoteStore;
-            RemoteStoreStatsTrackerFactory remoteStoreStatsTrackerFactory = null;
-            RepositoriesService mockRepoSvc = mock(RepositoriesService.class);
-
-            if (indexSettings.isRemoteStoreEnabled() || indexSettings.isAssignedOnRemoteNode()) {
-                String remoteStoreRepository = indexSettings.getRemoteStoreRepository();
-                // remote path via setting a repository . This is a hack used for shards are created using reset .
-                // since we can't get remote path from IndexShard directly, we are using repository to store it .
-                if (remoteStoreRepository != null && remoteStoreRepository.endsWith("__test")) {
-                    remotePath = PathUtils.get(remoteStoreRepository.replace("__test", ""));
-                } else if (remotePath == null) {
-                    remotePath = createTempDir();
-                }
-
-                remoteStore = createRemoteStore(remotePath, routing, indexMetadata, shardPath);
-
-                remoteStoreStatsTrackerFactory = new RemoteStoreStatsTrackerFactory(clusterService, indexSettings.getSettings());
-                BlobStoreRepository repo = createRepository(remotePath);
-                when(mockRepoSvc.repository(any())).thenAnswer(invocationOnMock -> repo);
-            } else {
-                remoteStore = null;
-            }
-
-            final BiFunction<IndexSettings, ShardRouting, TranslogFactory> translogFactorySupplier = (settings, shardRouting) -> {
-                if (settings.isRemoteTranslogStoreEnabled() && shardRouting.primary()) {
-                    return new RemoteBlobStoreInternalTranslogFactory(
-                        () -> mockRepoSvc,
-                        threadPool,
-                        settings.getRemoteStoreTranslogRepository(),
-                        new RemoteTranslogTransferTracker(shardRouting.shardId(), 20),
-                        DefaultRemoteStoreSettings.INSTANCE,
-                        RemoteStoreUtils.isServerSideEncryptionEnabledIndex(settings.getIndexMetadata())
-                    );
-                }
-                return new InternalTranslogFactory();
-            };
-            // This is fine since we are not testing the node stats now
-            Function<ShardId, ReplicationStats> mockReplicationStatsProvider = mock(Function.class);
-            when(mockReplicationStatsProvider.apply(any())).thenReturn(new ReplicationStats(800, 800, 500));
-            indexShard = new IndexShard(
-                routing,
-                indexSettings,
-                shardPath,
-                store,
-                () -> null,
-                indexCache,
-                mapperService,
-                similarityService,
-                indexerFactory,
-                engineConfigFactory,
-                indexEventListener,
-                indexReaderWrapper,
-                threadPool,
-                BigArrays.NON_RECYCLING_INSTANCE,
-                warmer,
-                Collections.emptyList(),
-                Arrays.asList(listeners),
-                globalCheckpointSyncer,
-                retentionLeaseSyncer,
-                breakerService,
-                translogFactorySupplier,
-                checkpointPublisher,
-                remoteStore,
-                remoteStoreStatsTrackerFactory,
-                "dummy-node",
-                recoverySettings,
-                DefaultRemoteStoreSettings.INSTANCE,
-                false,
-                discoveryNodes,
-                mockReplicationStatsProvider,
-                new MergedSegmentWarmerFactory(null, new RecoverySettings(nodeSettings, clusterSettings), clusterService),
-                false,
-                () -> Boolean.FALSE,
-                indexSettings::getRefreshInterval,
-                new Object(),
-                clusterService.getClusterApplierService(),
-                mergedSegmentPublisher,
-                ReferencedSegmentsPublisher.EMPTY,
-                Collections.emptyMap(),
-                null // TODO
-            );
-            indexShard.addShardFailureCallback(DEFAULT_SHARD_FAILURE_HANDLER);
-            if (remoteStoreStatsTrackerFactory != null) {
-                remoteStoreStatsTrackerFactory.afterIndexShardCreated(indexShard);
-            }
-            success = true;
-        } finally {
-            if (success == false) {
-                IOUtils.close(store);
-            }
-        }
-        return indexShard;
-    }
-
-    private BlobStoreRepository createRepository(Path path) {
-        Settings settings = Settings.builder().put("location", path).build();
-        RepositoryMetadata repositoryMetadata = new RepositoryMetadata(randomAlphaOfLength(10), FsRepository.TYPE, settings);
-        final ClusterService clusterService = BlobStoreTestUtil.mockClusterService(repositoryMetadata);
-        final FsRepository repository = new FsRepository(
-            repositoryMetadata,
-            createEnvironment(path),
-            xContentRegistry(),
-            clusterService,
-            new RecoverySettings(Settings.EMPTY, new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS))
-        ) {
-            @Override
-            protected void assertSnapshotOrGenericThread() {
-                // eliminate thread name check as we create repo manually
-            }
-
-            @Override
-            protected BlobStore createBlobStore() throws Exception {
-                return wrapRemoteStoreBlobStore(super.createBlobStore());
-            }
-        };
-        clusterService.addStateApplier(event -> repository.updateState(event.state()));
-        // Apply state once to initialize repo properly like RepositoriesService would
-        repository.updateState(clusterService.state());
-        repository.start();
-        return repository;
-    }
-
-    /**
-     * Hook for tests on the blob store that backs a remote-store shard's segment and translog repository. The default
-     * returns the store unchanged; a test overrides it to interpose, for instance to hold a download until released.
-     */
-    protected BlobStore wrapRemoteStoreBlobStore(BlobStore blobStore) {
-        return blobStore;
-    }
-
-    private Environment createEnvironment(Path path) {
-        Path home = createTempDir();
-        return TestEnvironment.newEnvironment(
-            Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), home.toAbsolutePath())
-                .put(Environment.PATH_REPO_SETTING.getKey(), path.toAbsolutePath())
-                .build()
-        );
-    }
-
-    protected RepositoriesService createRepositoriesService() {
-        RepositoriesService repositoriesService = Mockito.mock(RepositoriesService.class);
-        BlobStoreRepository repository = Mockito.mock(BlobStoreRepository.class);
-        when(repository.basePath()).thenReturn(new BlobPath());
-        BlobStore blobStore = Mockito.mock(BlobStore.class);
-        BlobContainer blobContainer = Mockito.mock(BlobContainer.class);
-        doAnswer(invocation -> {
-            ActionListener<List<BlobMetadata>> listener = invocation.getArgument(3);
-            listener.onResponse(new ArrayList<>());
-            return null;
-        }).when(blobContainer)
-            .listBlobsByPrefixInSortedOrder(
-                any(String.class),
-                anyInt(),
-                any(BlobContainer.BlobNameSortOrder.class),
-                any(ActionListener.class)
-            );
-        when(blobStore.blobContainer(any())).thenReturn(blobContainer);
-        when(repository.blobStore()).thenReturn(blobStore);
-        when(repositoriesService.repository(any(String.class))).thenReturn(repository);
-        return repositoriesService;
-    }
-
-    protected Store createRemoteStore(Path path, ShardRouting shardRouting, IndexMetadata metadata, ShardPath shardPath)
-        throws IOException {
-        Settings nodeSettings = Settings.builder().put("node.name", shardRouting.currentNodeId()).build();
-        ShardId shardId = shardRouting.shardId();
-        RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = createRemoteSegmentStoreDirectory(shardId, path);
-        return createStore(shardId, new IndexSettings(metadata, nodeSettings), remoteSegmentStoreDirectory, shardPath);
-    }
-
-    protected RemoteSegmentStoreDirectory createRemoteSegmentStoreDirectory(ShardId shardId, Path path) throws IOException {
-        NodeEnvironment.NodePath remoteNodePath = new NodeEnvironment.NodePath(path);
-        ShardPath remoteShardPath = new ShardPath(false, remoteNodePath.resolve(shardId), remoteNodePath.resolve(shardId), shardId);
-        RemoteDirectory dataDirectory = newRemoteDirectory(remoteShardPath.resolveIndex().resolve("data"));
-        RemoteDirectory metadataDirectory = newRemoteDirectory(remoteShardPath.resolveIndex().resolve("metadata"));
-        RemoteStoreLockManager remoteStoreLockManager = new RemoteStoreMetadataLockManager(
-            new RemoteBufferedOutputDirectory(getBlobContainer(remoteShardPath.resolveIndex().resolve("lock_files")))
-        );
-        return new RemoteSegmentStoreDirectory(
-            dataDirectory,
-            metadataDirectory,
-            remoteStoreLockManager,
-            threadPool,
-            shardId,
-            new HashMap<>()
-        );
-    }
-
-    private RemoteDirectory newRemoteDirectory(Path f) throws IOException {
-        return new RemoteDirectory(getBlobContainer(f));
-    }
-
-    protected BlobContainer getBlobContainer(Path f) throws IOException {
-        FsBlobStore fsBlobStore = new FsBlobStore(1024, f, false);
-        BlobPath blobPath = new BlobPath();
-        return new FsBlobContainer(fsBlobStore, blobPath, f);
-    }
-
-    protected IndexShard reinitShard(IndexShard current, IndexingOperationListener... listeners) throws IOException {
-        return reinitShard(current, (Path) null, listeners);
-    }
-
-    /**
-     * Takes an existing shard, closes it and starts a new initialing shard at the same location
-     *
-     * @param current The current shard to reinit
-     * @param remotePath Remote path to recover from if remote storage is used
-     * @param listeners new listerns to use for the newly created shard
-     */
-    protected IndexShard reinitShard(IndexShard current, Path remotePath, IndexingOperationListener... listeners) throws IOException {
-        final ShardRouting shardRouting = current.routingEntry();
-        return reinitShard(
-            current,
-            ShardRoutingHelper.initWithSameId(
-                shardRouting,
-                shardRouting.primary() ? RecoverySource.ExistingStoreRecoverySource.INSTANCE : RecoverySource.PeerRecoverySource.INSTANCE
-            ),
-            remotePath,
-            listeners
-        );
-    }
-
-    /**
-     * Takes an existing shard, closes it and starts a new initialing shard at the same location
-     *
-     * @param routing   the shard routing to use for the newly created shard.
-     * @param listeners new listerns to use for the newly created shard
-     */
-    protected IndexShard reinitShard(IndexShard current, ShardRouting routing, IndexingOperationListener... listeners) throws IOException {
-        return reinitShard(current, routing, null, listeners);
-    }
-
-    protected IndexShard reinitShard(IndexShard current, ShardRouting routing, Path remotePath, IndexingOperationListener... listeners)
-        throws IOException {
-        return reinitShard(
-            current,
-            routing,
-            current.indexSettings.getIndexMetadata(),
-            current.indexerFactory,
-            current.engineConfigFactory,
-            remotePath,
-            listeners
-        );
-    }
-
-    /**
-     * Takes an existing shard, closes it and starts a new initialing shard at the same location
-     *
-     * @param routing       the shard routing to use for the newly created shard.
-     * @param listeners     new listerns to use for the newly created shard
-     * @param indexMetadata the index metadata to use for the newly created shard
-     * @param indexerFactory the indexer factory for the new shard
-     */
-    protected IndexShard reinitShard(
-        IndexShard current,
-        ShardRouting routing,
-        IndexMetadata indexMetadata,
-        IndexerFactory indexerFactory,
-        EngineConfigFactory engineConfigFactory,
-        Path remotePath,
-        IndexingOperationListener... listeners
-    ) throws IOException {
-        closeShards(current);
-        return newShard(
-            routing,
-            current.shardPath(),
-            indexMetadata,
-            null,
-            null,
-            indexerFactory,
-            engineConfigFactory,
-            current.getGlobalCheckpointSyncer(),
-            current.getRetentionLeaseSyncer(),
-            EMPTY_EVENT_LISTENER,
-            remotePath,
-            listeners
-        );
-    }
-
-    /**
-     * Creates a new empty shard and starts it. The shard will randomly be a replica or a primary.
-     */
-    protected IndexShard newStartedShard() throws IOException {
-        return newStartedShard(randomBoolean());
-    }
-
-    /**
-     * Creates a new empty shard and starts it
-     * @param settings the settings to use for this shard
-     */
-    protected IndexShard newStartedShard(Settings settings) throws IOException {
-        return newStartedShard(randomBoolean(), settings, new EngineBackedIndexerFactory(new InternalEngineFactory()));
-    }
-
-    /**
-     * Creates a new empty shard and starts it.
-     *
-     * @param primary controls whether the shard will be a primary or a replica.
-     */
-    protected IndexShard newStartedShard(final boolean primary) throws IOException {
-        return newStartedShard(primary, Settings.EMPTY, new EngineBackedIndexerFactory(new InternalEngineFactory()));
-    }
-
-    /**
-     * Creates a new empty shard and starts it.
-     *
-     * @param primary controls whether the shard will be a primary or a replica.
-     * @param settings the settings to use for this shard
-     */
-    protected IndexShard newStartedShard(final boolean primary, Settings settings) throws IOException {
-        return newStartedShard(primary, settings, new EngineBackedIndexerFactory(new InternalEngineFactory()));
-    }
-
-    /**
-     * Creates a new empty shard with the specified settings and engine factory and starts it.
-     *
-     * @param primary       controls whether the shard will be a primary or a replica.
-     * @param settings      the settings to use for this shard
-     * @param indexerFactory the indexer factory to use for this shard
-     */
-    protected IndexShard newStartedShard(final boolean primary, final Settings settings, final IndexerFactory indexerFactory)
-        throws IOException {
-        return newStartedShard(p -> newShard(p, settings, indexerFactory), primary);
-    }
-
-    /**
-     * creates a new empty shard and starts it.
-     *
-     * @param shardFunction shard factory function
-     * @param primary controls whether the shard will be a primary or a replica.
-     */
-    protected IndexShard newStartedShard(CheckedFunction<Boolean, IndexShard, IOException> shardFunction, boolean primary)
-        throws IOException {
-        IndexShard shard = shardFunction.apply(primary);
-        if (primary) {
-            recoverShardFromStore(shard);
-            assertThat(shard.getMaxSeqNoOfUpdatesOrDeletes(), equalTo(shard.seqNoStats().getMaxSeqNo()));
-        } else {
-            recoveryEmptyReplica(shard, true);
-        }
-        return shard;
-    }
-
-    protected void closeShards(IndexShard... shards) throws IOException {
-        closeShards(Arrays.asList(shards));
-    }
-
-    protected void closeShard(IndexShard shard, boolean assertConsistencyBetweenTranslogAndLucene) throws IOException {
-        try {
-            if (assertConsistencyBetweenTranslogAndLucene) {
-                assertConsistentHistoryBetweenTranslogAndLucene(shard);
-            }
-            final Engine engine = shard.getIndexerOrNull() instanceof EngineBackedIndexer engineBackedIndexer
-                ? engineBackedIndexer.getEngine()
-                : null;
-            if (engine != null) {
-                EngineTestCase.assertAtMostOneLuceneDocumentPerSequenceNumber(engine);
-            }
-        } finally {
-            IOUtils.close(() -> shard.close("test", false, false), shard.store());
-        }
-    }
-
-    protected void closeShards(Iterable<IndexShard> shards) throws IOException {
-        for (IndexShard shard : shards) {
-            if (shard != null) {
-                closeShard(shard, true);
-            }
-        }
-    }
-
-    protected void recoverShardFromStore(IndexShard primary) throws IOException {
-        primary.markAsRecovering(
-            "store",
-            new RecoveryState(primary.routingEntry(), IndexShardTestUtils.getFakeDiscoNode(primary.routingEntry().currentNodeId()), null)
-        );
-        recoverFromStore(primary);
-        updateRoutingEntry(primary, ShardRoutingHelper.moveToStarted(primary.routingEntry()));
-    }
-
-    protected static AtomicLong currentClusterStateVersion = new AtomicLong();
-
-    public static void updateRoutingEntry(IndexShard shard, ShardRouting shardRouting) throws IOException {
-        Set<String> inSyncIds = shardRouting.active() ? Collections.singleton(shardRouting.allocationId().getId()) : Collections.emptySet();
-        IndexShardRoutingTable newRoutingTable = new IndexShardRoutingTable.Builder(shardRouting.shardId()).addShard(shardRouting).build();
-        shard.updateShardState(
-            shardRouting,
-            shard.getPendingPrimaryTerm(),
-            null,
-            currentClusterStateVersion.incrementAndGet(),
-            inSyncIds,
-            newRoutingTable,
-            DiscoveryNodes.builder()
-                .add(
-                    new DiscoveryNode(
-                        shardRouting.currentNodeId(),
-                        shardRouting.currentNodeId(),
-                        buildNewFakeTransportAddress(),
-                        Collections.emptyMap(),
-                        DiscoveryNodeRole.BUILT_IN_ROLES,
-                        Version.CURRENT
-                    )
-                )
-                .build()
-        );
-    }
-
-    protected void recoveryEmptyReplica(IndexShard replica, boolean startReplica) throws IOException {
-        IndexShard primary = null;
-        try {
-            primary = newStartedShard(true, replica.indexSettings.getSettings());
-            recoverReplica(replica, primary, startReplica);
-        } finally {
-            closeShards(primary);
-        }
-    }
-
-    protected void recoverReplica(IndexShard replica, IndexShard primary, boolean startReplica) throws IOException {
-        recoverReplica(replica, primary, startReplica, getReplicationFunc(replica));
-    }
-
-    /** recovers a replica from the given primary **/
-    protected void recoverReplica(
-        IndexShard replica,
-        IndexShard primary,
-        boolean startReplica,
-        Function<List<IndexShard>, List<SegmentReplicationTarget>> replicatePrimaryFunction
-    ) throws IOException {
-        recoverReplica(
-            replica,
-            primary,
-            (r, sourceNode) -> new RecoveryTarget(r, sourceNode, recoveryListener, threadPool),
-            true,
-            startReplica,
-            replicatePrimaryFunction
-        );
-    }
-
-    protected void recoverReplica(
-        final IndexShard replica,
-        final IndexShard primary,
-        final BiFunction<IndexShard, DiscoveryNode, RecoveryTarget> targetSupplier,
-        final boolean markAsRecovering,
-        final boolean markAsStarted
-    ) throws IOException {
-        recoverReplica(replica, primary, targetSupplier, markAsRecovering, markAsStarted, (a) -> null);
-    }
-
-    public Function<List<IndexShard>, List<SegmentReplicationTarget>> getReplicationFunc(final IndexShard target) {
-        return target.indexSettings().isSegRepEnabledOrRemoteNode() ? (shardList) -> {
-            try {
-                assert shardList.size() >= 2;
-                final IndexShard primary = shardList.get(0);
-                return replicateSegments(primary, shardList.subList(1, shardList.size()));
-            } catch (IOException | InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        } : (a) -> null;
-    }
-
-    /** recovers a replica from the given primary **/
-    protected void recoverReplica(
-        final IndexShard replica,
-        final IndexShard primary,
-        final BiFunction<IndexShard, DiscoveryNode, RecoveryTarget> targetSupplier,
-        final boolean markAsRecovering,
-        final boolean markAsStarted,
-        final Function<List<IndexShard>, List<SegmentReplicationTarget>> replicatePrimaryFunction
-    ) throws IOException {
-        IndexShardRoutingTable.Builder newRoutingTable = new IndexShardRoutingTable.Builder(replica.shardId());
-        newRoutingTable.addShard(primary.routingEntry());
-        if (replica.routingEntry().isRelocationTarget() == false) {
-            newRoutingTable.addShard(replica.routingEntry());
-        }
-        final Set<String> inSyncIds = Collections.singleton(primary.routingEntry().allocationId().getId());
-        final IndexShardRoutingTable routingTable = newRoutingTable.build();
-        recoverUnstartedReplica(replica, primary, targetSupplier, markAsRecovering, inSyncIds, routingTable, replicatePrimaryFunction);
-        if (markAsStarted) {
-            startReplicaAfterRecovery(replica, primary, inSyncIds, routingTable);
-        }
-    }
-
-    /**
-     * Recovers a replica from the give primary, allow the user to supply a custom recovery target. A typical usage of a custom recovery
-     * target is to assert things in the various stages of recovery.
-     * <p>
-     * Note: this method keeps the shard in {@link IndexShardState#POST_RECOVERY} and doesn't start it.
-     *
-     * @param replica                the recovery target shard
-     * @param primary                the recovery source shard
-     * @param targetSupplier         supplies an instance of {@link RecoveryTarget}
-     * @param markAsRecovering       set to {@code false} if the replica is marked as recovering
-     */
-    public final void recoverUnstartedReplica(
-        final IndexShard replica,
-        final IndexShard primary,
-        final BiFunction<IndexShard, DiscoveryNode, RecoveryTarget> targetSupplier,
-        final boolean markAsRecovering,
-        final Set<String> inSyncIds,
-        final IndexShardRoutingTable routingTable,
-        final Function<List<IndexShard>, List<SegmentReplicationTarget>> replicatePrimaryFunction
-    ) throws IOException {
-        final DiscoveryNode pNode;
-        final DiscoveryNode rNode;
-        if (primary.isRemoteTranslogEnabled()) {
-            pNode = IndexShardTestUtils.getFakeRemoteEnabledNode(primary.routingEntry().currentNodeId());
-        } else {
-            pNode = IndexShardTestUtils.getFakeDiscoNode(primary.routingEntry().currentNodeId());
-        }
-        if (replica.isRemoteTranslogEnabled()) {
-            rNode = IndexShardTestUtils.getFakeRemoteEnabledNode(replica.routingEntry().currentNodeId());
-        } else {
-            rNode = IndexShardTestUtils.getFakeDiscoNode(replica.routingEntry().currentNodeId());
-        }
-        if (markAsRecovering) {
-            replica.markAsRecovering("remote", new RecoveryState(replica.routingEntry(), pNode, rNode));
-        } else {
-            assertEquals(replica.state(), IndexShardState.RECOVERING);
-        }
-        replica.prepareForIndexRecovery();
-        final RecoveryTarget recoveryTarget = targetSupplier.apply(replica, pNode);
-        IndexShard indexShard = recoveryTarget.indexShard();
-        boolean remoteTranslogEnabled = recoveryTarget.state().getPrimary() == false && indexShard.isRemoteTranslogEnabled();
-        final long startingSeqNo = indexShard.recoverLocallyAndFetchStartSeqNo(!remoteTranslogEnabled);
-        final StartRecoveryRequest request = PeerRecoveryTargetService.getStartRecoveryRequest(
-            logger,
-            rNode,
-            recoveryTarget,
-            startingSeqNo
-        );
-        long fileChunkSizeInBytes = randomBoolean()
-            ? RecoverySettings.INDICES_RECOVERY_CHUNK_SIZE_SETTING.getDefault(Settings.EMPTY).getBytes()
-            : randomIntBetween(1, 10 * 1024 * 1024);
-        final Settings settings = Settings.builder()
-            .put("indices.recovery.max_concurrent_file_chunks", Integer.toString(between(1, 4)))
-            .put("indices.recovery.max_concurrent_operations", Integer.toString(between(1, 4)))
-            .build();
-        RecoverySettings recoverySettings = new RecoverySettings(
-            settings,
-            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-        );
-        recoverySettings.setChunkSize(new ByteSizeValue(fileChunkSizeInBytes));
-        final RecoverySourceHandler recovery = RecoverySourceHandlerFactory.create(
-            primary,
-            new AsyncRecoveryTarget(recoveryTarget, threadPool.generic(), primary, replica, replicatePrimaryFunction),
-            request,
-            recoverySettings
-        );
-        primary.updateShardState(
-            primary.routingEntry(),
-            primary.getPendingPrimaryTerm(),
-            null,
-            currentClusterStateVersion.incrementAndGet(),
-            inSyncIds,
-            routingTable,
-            primary.isRemoteTranslogEnabled()
-                ? IndexShardTestUtils.getFakeRemoteEnabledDiscoveryNodes(routingTable.getShards())
-                : IndexShardTestUtils.getFakeDiscoveryNodes(routingTable.getShards())
-        );
-        try {
-            PlainActionFuture<RecoveryResponse> future = new PlainActionFuture<>();
-            recovery.recoverToTarget(future);
-            future.actionGet();
-            recoveryTarget.markAsDone();
-        } catch (Exception e) {
-            recoveryTarget.fail(new RecoveryFailedException(request, e), false);
-            throw e;
-        }
-    }
-
-    protected void startReplicaAfterRecovery(
-        IndexShard replica,
-        IndexShard primary,
-        Set<String> inSyncIds,
-        IndexShardRoutingTable routingTable
-    ) throws IOException {
-        ShardRouting initializingReplicaRouting = replica.routingEntry();
-        IndexShardRoutingTable newRoutingTable = initializingReplicaRouting.isRelocationTarget()
-            ? new IndexShardRoutingTable.Builder(routingTable).removeShard(primary.routingEntry()).addShard(replica.routingEntry()).build()
-            : new IndexShardRoutingTable.Builder(routingTable).removeShard(initializingReplicaRouting)
-                .addShard(replica.routingEntry())
-                .build();
-        Set<String> inSyncIdsWithReplica = new HashSet<>(inSyncIds);
-        inSyncIdsWithReplica.add(replica.routingEntry().allocationId().getId());
-        // update both primary and replica shard state
-        primary.updateShardState(
-            primary.routingEntry(),
-            primary.getPendingPrimaryTerm(),
-            null,
-            currentClusterStateVersion.incrementAndGet(),
-            inSyncIdsWithReplica,
-            newRoutingTable,
-            primary.indexSettings.isRemoteTranslogStoreEnabled()
-                ? IndexShardTestUtils.getFakeRemoteEnabledDiscoveryNodes(routingTable.shards())
-                : IndexShardTestUtils.getFakeDiscoveryNodes(routingTable.shards())
-        );
-        replica.updateShardState(
-            replica.routingEntry().moveToStarted(),
-            replica.getPendingPrimaryTerm(),
-            null,
-            currentClusterStateVersion.get(),
-            inSyncIdsWithReplica,
-            newRoutingTable,
-            replica.indexSettings.isRemoteTranslogStoreEnabled()
-                ? IndexShardTestUtils.getFakeRemoteEnabledDiscoveryNodes(routingTable.shards())
-                : IndexShardTestUtils.getFakeDiscoveryNodes(routingTable.shards())
-        );
-    }
-
-    /**
-     * promotes a replica to primary, incrementing it's term and starting it if needed
-     */
-    protected void promoteReplica(IndexShard replica, Set<String> inSyncIds, IndexShardRoutingTable routingTable) throws IOException {
-        assertThat(inSyncIds, contains(replica.routingEntry().allocationId().getId()));
-        final ShardRouting routingEntry = newShardRouting(
-            replica.routingEntry().shardId(),
-            replica.routingEntry().currentNodeId(),
-            null,
-            true,
-            ShardRoutingState.STARTED,
-            replica.routingEntry().allocationId()
-        );
-
-        final IndexShardRoutingTable newRoutingTable = new IndexShardRoutingTable.Builder(routingTable).removeShard(replica.routingEntry())
-            .addShard(routingEntry)
-            .build();
-        replica.updateShardState(
-            routingEntry,
-            replica.getPendingPrimaryTerm() + 1,
-            (is, listener) -> listener.onResponse(
-                new PrimaryReplicaSyncer.ResyncTask(1, "type", "action", "desc", null, Collections.emptyMap())
-            ),
-            currentClusterStateVersion.incrementAndGet(),
-            inSyncIds,
-            newRoutingTable,
-            IndexShardTestUtils.getFakeDiscoveryNodes(routingEntry)
-        );
-    }
-
-    public static Set<String> getShardDocUIDs(final IndexShard shard) throws IOException {
-        return getDocIdAndSeqNos(shard).stream().map(DocIdSeqNoAndSource::getId).collect(Collectors.toSet());
-    }
-
-    public static List<DocIdSeqNoAndSource> getDocIdAndSeqNos(final IndexShard shard) throws IOException {
-        return EngineTestCase.getDocIds(((EngineBackedIndexer) shard.getIndexer()).getEngine(), true);
-    }
-
-    protected void assertDocCount(IndexShard shard, int docDount) throws IOException {
-        assertThat(getShardDocUIDs(shard), hasSize(docDount));
-    }
-
-    protected void assertDocs(IndexShard shard, String... ids) throws IOException {
-        final Set<String> shardDocUIDs = getShardDocUIDs(shard);
-        assertThat(shardDocUIDs, contains(ids));
-        assertThat(shardDocUIDs, hasSize(ids.length));
-    }
-
-    public static void assertConsistentHistoryBetweenTranslogAndLucene(IndexShard shard) throws IOException {
-        if (shard.state() != IndexShardState.POST_RECOVERY && shard.state() != IndexShardState.STARTED) {
-            return;
-        }
-        final Engine engine = shard.getIndexerOrNull() instanceof EngineBackedIndexer engineBackedIndexer
-            ? engineBackedIndexer.getEngine()
-            : null;
-        if (engine != null) {
-            EngineTestCase.assertConsistentHistoryBetweenTranslogAndLuceneIndex(engine);
-        }
-    }
-
-    protected Engine.IndexResult indexDoc(IndexShard shard, String type, String id) throws IOException {
-        return indexDoc(shard, type, id, "{}");
-    }
-
-    protected Engine.IndexResult indexDoc(IndexShard shard, String type, String id, String source) throws IOException {
-        return indexDoc(shard, id, source, MediaTypeRegistry.JSON, null);
-    }
-
-    protected Engine.IndexResult indexDoc(IndexShard shard, String id, String source, MediaType mediaType, String routing)
-        throws IOException {
-        SourceToParse sourceToParse = new SourceToParse(shard.shardId().getIndexName(), id, new BytesArray(source), mediaType, routing);
-        Engine.IndexResult result;
-        if (shard.routingEntry().primary()) {
-            result = shard.applyIndexOperationOnPrimary(
-                Versions.MATCH_ANY,
-                VersionType.INTERNAL,
-                sourceToParse,
-                SequenceNumbers.UNASSIGNED_SEQ_NO,
-                0,
-                IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP,
-                false
-            );
-            if (result.getResultType() == Engine.Result.Type.MAPPING_UPDATE_REQUIRED) {
-                updateMappings(
-                    shard,
-                    IndexMetadata.builder(shard.indexSettings().getIndexMetadata())
-                        .putMapping(result.getRequiredMappingUpdate().toString())
-                        .build()
-                );
-                result = shard.applyIndexOperationOnPrimary(
-                    Versions.MATCH_ANY,
-                    VersionType.INTERNAL,
-                    sourceToParse,
-                    SequenceNumbers.UNASSIGNED_SEQ_NO,
-                    0,
-                    IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP,
-                    false
-                );
-            }
-            shard.sync(); // advance local checkpoint
-            shard.updateLocalCheckpointForShard(shard.routingEntry().allocationId().getId(), shard.getLocalCheckpoint());
-        } else {
-            final long seqNo = shard.seqNoStats().getMaxSeqNo() + 1;
-            shard.advanceMaxSeqNoOfUpdatesOrDeletes(seqNo); // manually replicate max_seq_no_of_updates
-            result = shard.applyIndexOperationOnReplica(
-                UUID.randomUUID().toString(),
-                seqNo,
-                shard.getOperationPrimaryTerm(),
-                0,
-                IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP,
-                false,
-                sourceToParse
-            );
-            shard.sync(); // advance local checkpoint
-            if (result.getResultType() == Engine.Result.Type.MAPPING_UPDATE_REQUIRED) {
-                throw new TransportReplicationAction.RetryOnReplicaException(
-                    shard.shardId,
-                    "Mappings are not available on the replica yet, triggered update: " + result.getRequiredMappingUpdate()
-                );
-            }
-        }
-        return result;
-    }
-
-    protected void updateMappings(IndexShard shard, IndexMetadata indexMetadata) {
-        shard.mapperService().merge(indexMetadata, MapperService.MergeReason.MAPPING_UPDATE);
-        shard.indexSettings()
-            .updateIndexMetadata(
-                IndexMetadata.builder(indexMetadata).putMapping(new MappingMetadata(shard.mapperService().documentMapper())).build()
-            );
-    }
-
-    protected Engine.DeleteResult deleteDoc(IndexShard shard, String id) throws IOException {
-        final Engine.DeleteResult result;
-        if (shard.routingEntry().primary()) {
-            result = shard.applyDeleteOperationOnPrimary(
-                Versions.MATCH_ANY,
-                id,
-                null,
-                VersionType.INTERNAL,
-                SequenceNumbers.UNASSIGNED_SEQ_NO,
-                0
-            );
-            shard.sync(); // advance local checkpoint
-            shard.updateLocalCheckpointForShard(shard.routingEntry().allocationId().getId(), shard.getLocalCheckpoint());
-        } else {
-            final long seqNo = shard.seqNoStats().getMaxSeqNo() + 1;
-            shard.advanceMaxSeqNoOfUpdatesOrDeletes(seqNo); // manually replicate max_seq_no_of_updates
-            result = shard.applyDeleteOperationOnReplica(seqNo, shard.getOperationPrimaryTerm(), 0L, id, null);
-            shard.sync(); // advance local checkpoint
-        }
-        return result;
-    }
-
-    protected void flushShard(IndexShard shard) {
-        flushShard(shard, false);
-    }
-
-    protected void flushShard(IndexShard shard, boolean force) {
-        shard.flush(new FlushRequest(shard.shardId().getIndexName()).force(force));
-    }
-
-    public static boolean recoverFromStore(IndexShard newShard) {
+        IndexShard replicaShard,
         final PlainActionFuture<Boolean> future = PlainActionFuture.newFuture();
+            routing,
+            current,
+import org.opensearch.action.admin.indices.flush.FlushRequest;
+                    assertEquals(recoveryDiff.identical.size(), primaryMetadata.size());
+        };
         newShard.recoverFromStore(future);
-        return future.actionGet();
     }
-
-    /** Recover a shard from a snapshot using a given repository **/
-    protected void recoverShardFromSnapshot(final IndexShard shard, final Snapshot snapshot, final Repository repository) {
-        final Version version = Version.CURRENT;
-        final ShardId shardId = shard.shardId();
-        final IndexId indexId = new IndexId(shardId.getIndex().getName(), shardId.getIndex().getUUID());
-        final DiscoveryNode node = IndexShardTestUtils.getFakeDiscoNode(shard.routingEntry().currentNodeId());
-        final RecoverySource.SnapshotRecoverySource recoverySource = new RecoverySource.SnapshotRecoverySource(
-            UUIDs.randomBase64UUID(),
-            snapshot,
-            version,
-            indexId
-        );
-        final ShardRouting shardRouting = TestShardRouting.newShardRouting(
+            inSyncIdsWithReplica,
+import org.opensearch.indices.recovery.PeerRecoveryTargetService;
             shardId,
-            node.getId(),
-            true,
-            ShardRoutingState.INITIALIZING,
-            recoverySource
-        );
-        shard.markAsRecovering("from snapshot", new RecoveryState(shardRouting, node, null));
-        final PlainActionFuture<Void> future = PlainActionFuture.newFuture();
-        repository.restoreShard(shard.store(), snapshot.getSnapshotId(), indexId, shard.shardId(), shard.recoveryState(), future);
-        future.actionGet();
+        final ShardRouting routingEntry = newShardRouting(
+    protected IndexShard newShard(ShardRouting shardRouting, final Settings settings, final IndexingOperationListener... listeners)
+        ClusterService clusterService,
+                }
+            primary,
+                () -> null,
+            primary.indexSettings.isRemoteTranslogStoreEnabled()
+import org.opensearch.indices.recovery.RecoveryResponse;
+                if (settings.isRemoteTranslogStoreEnabled() && shardRouting.primary()) {
     }
-
+                checkpointPublisher,
+     *
+        return targetService;
+import java.util.HashSet;
+                : IndexShardTestUtils.getFakeDiscoveryNodes(routingTable.getShards())
+        try (GatedCloseable<IndexCommit> wrappedIndexCommit = shard.acquireLastIndexCommit(true)) {
+            shardId,
+    protected IndexShard newShard(boolean primary, SegmentReplicationCheckpointPublisher checkpointPublisher) throws IOException {
+    protected long primaryTerm;
+import org.opensearch.cluster.metadata.IndexMetadata;
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            indexReaderWrapper,
+            null,
+import org.opensearch.index.store.RemoteDirectory;
+            success = true;
+     * @param indexMetadata                 indexMetadata for the shard, including any mapping
+/*
+        assertThat(shardDocUIDs, contains(ids));
+     * @param primary indicates whether to a primary shard (ready to recover from an empty store) or a replica
+        } else {
+    protected void allowShardFailures() {
+            RepositoriesService mockRepoSvc = mock(RepositoriesService.class);
+                // remote path via setting a repository . This is a hack used for shards are created using reset .
+import org.opensearch.cluster.node.DiscoveryNodes;
+                    Set<String> replicaFiles = Arrays.stream(replicaShard.store().directory().listAll()).collect(Collectors.toSet());
+            targetService = getSegmentReplicationTargetService(transportService, indicesService, clusterService, sourceFactory);
     /**
-     * Snapshot a shard using a given repository.
+import org.opensearch.index.cache.query.DisabledQueryCache;
+    protected IndexShard newShard(ShardId shardId, boolean primary, IndexingOperationListener... listeners) throws IOException {
+    protected static AtomicLong currentClusterStateVersion = new AtomicLong();
+     *                  (ready to recover from another shard)
+    }
+                    replicationCheckpoint.getShardId(),
+        NodeEnvironment.NodePath remoteNodePath = new NodeEnvironment.NodePath(path);
+        ReplicationCheckpoint replicationCheckpoint = primaryShard.getLatestReplicationCheckpoint();
+            OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository)
+        Runnable globalCheckpointSyncer
+            new HashMap<>()
+    }
+    protected IndexShard newStartedShard(final boolean primary, Settings settings) throws IOException {
+import org.opensearch.common.util.BigArrays;
+     *                another shard)
+     * current node id the shard is assigned to.
+ */
+import org.opensearch.env.Environment;
+        return indexDoc(shard, id, source, MediaTypeRegistry.JSON, null);
+            indexId
+                Versions.MATCH_ANY,
+     * @param shardRouting  the {@link ShardRouting} to use for this shard
+            result = shard.applyIndexOperationOnReplica(
+    /**
+        PlainActionFuture<Releasable> fut = new PlainActionFuture<>();
+                indexSettings,
+        IndexingOperationListener... listeners
+     * Segment Replication specific test method - Creates a {@link SegmentReplicationTargetService} to perform replications that has
+        );
+            .settings(indexSettings)
+     * @param postGetFilesRunnable - Consumer which is executed after file copy operation. This can be used to stub operations
+            .primaryTerm(0, primaryTerm)
+ *
+        clusterService = createClusterService(threadPool);
+                recoverySettings,
+            }
+        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
+import org.opensearch.indices.replication.common.ReplicationState;
+    protected void flushShard(IndexShard shard, boolean force) {
+    public static ReplicationTracker getReplicationTracker(IndexShard indexShard) {
+        final DiscoveryNode rNode;
+     * @param shardPath                     path to use for shard data
+                .getShardGen(indexId, shard.shardId().getId())
+            new AsyncRecoveryTarget(recoveryTarget, threadPool.generic(), primary, replica, replicatePrimaryFunction),
+            indexReaderWrapper,
+    }
+     * @param latch - Latch which allows consumers of this utility to ensure segment replication completed successfully
+     */
+    protected ThreadPool threadPool;
+            }
+        return newShard(
+        ShardPath shardPath = new ShardPath(false, nodePath.resolve(shardId), nodePath.resolve(shardId), shardId);
+        );
+            indexShard = new IndexShard(
+     * @param checkpointPublisher           segment Replication Checkpoint Publisher to publish checkpoint
+        RemoteDirectory metadataDirectory = newRemoteDirectory(remoteShardPath.resolveIndex().resolve("metadata"));
+    }
+    }
+import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
+     * by default, tests will fail if any shard created by this class fails. Tests that cause failures by design
+        throws IOException, InterruptedException {
+            routingEntry,
+     */
+import org.opensearch.transport.TransportService;
+        } finally {
+        shard.flush(new FlushRequest(shard.shardId().getIndexName()).force(force));
+     */
+                .put("node.name", routing.currentNodeId())
+        final Set<String> inSyncIds,
+        ClusterService clusterService,
+import org.opensearch.repositories.fs.FsRepository;
+        final PlainActionFuture<String> future = PlainActionFuture.newFuture();
+        IndexingOperationListener... listeners
+     */
+                } finally {
+            replicatePrimaryFunction
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+import org.apache.lucene.index.IndexCommit;
+                remoteStoreStatsTrackerFactory,
+            null,
+    /**
+     */
+        Engine.IndexResult result;
+    }
+     * writes all segments directly to the target.
+    protected ThreadPool setUpThreadPool() {
+        throws IOException {
+    protected IndexShard reinitShard(IndexShard current, ShardRouting routing, IndexingOperationListener... listeners) throws IOException {
+    }
+ * GitHub history for details.
+        List<SegmentReplicationTarget> ids = new ArrayList<>();
+                int pos = 0;
+    }
+    }
+    private void writeFileChunks(AbstractSegmentReplicationTarget target, IndexShard primary, StoreFileMetadata[] files)
+            replica.markAsRecovering("remote", new RecoveryState(replica.routingEntry(), pNode, rNode));
+                null
+        } : (a) -> null;
+        final Index index = shard.shardId().getIndex();
+            listeners
+    /**
+    }
+    private Environment createEnvironment(Path path) {
+    protected IndexShard newShard(ShardRouting shardRouting, final IndexingOperationListener... listeners) throws IOException {
+                ? IndexShardTestUtils.getFakeRemoteEnabledDiscoveryNodes(routingTable.getShards())
+import java.util.Collections;
+            indexMetadata,
+        if (markAsStarted) {
+        RetentionLeaseSyncer retentionLeaseSyncer,
+        Path remotePath,
+import org.opensearch.common.util.io.IOUtils;
+     * @param recoverySettings              recovery settings
+                return wrapRemoteStoreBlobStore(super.createBlobStore());
+        }
+            shardRouting,
+     */
+     * @param indexerFactory the indexer factory to use for this shard
+     * been configured to return the given primaryShard's current segments. In order to do so, it mimics the replication
+            shard.advanceMaxSeqNoOfUpdatesOrDeletes(seqNo); // manually replicate max_seq_no_of_updates
+    public SegmentReplicationSource getSegmentReplicationSource(
+import org.opensearch.indices.replication.SegmentReplicationTarget;
+                ActionListener<GetSegmentFilesResponse> listener
+        ShardRouting shardRouting = TestShardRouting.newShardRouting(
+        final IndexShardSnapshotStatus.Copy lastSnapshotStatus = snapshotStatus.asCopy();
+                } catch (Exception e) {
+                    replicationCheckpoint.getMetadataMap(),
+            }
+    /**
+        final IndexShard replica,
+        return reinitShard(
+            MergedSegmentPublisher.EMPTY,
+import org.opensearch.index.engine.exec.IndexerFactory;
+     * creates a new initializing shard. The shard will be put in its proper path under the
+    }
+     *                      another shard)
+import org.opensearch.action.index.IndexRequest;
+        String nodeId,
+        failOnShardFailures();
+        }
+    }
+import static org.hamcrest.Matchers.contains;
+        try {
+        final ShardId shardId = new ShardId("index", "_na_", 0);
+        Settings settings = Settings.builder().put("location", path).build();
+            ShardRoutingHelper.initWithSameId(
+            shardPath,
+        } finally {
+                postGetFilesRunnable.accept(indexShard);
+import org.opensearch.index.engine.NRTReplicationEngine;
+                .put(Environment.PATH_HOME_SETTING.getKey(), home.toAbsolutePath())
+                }
+                remoteStoreStatsTrackerFactory.afterIndexShardCreated(indexShard);
+        repository.updateState(clusterService.state());
+     *
+            path,
+            );
+        shard.indexSettings()
+import org.opensearch.index.mapper.SourceToParse;
+                long replicationId,
+                result = shard.applyIndexOperationOnPrimary(
+                null,
+     * @param listeners              an optional set of listeners to add to the shard
+    public static Engine.Warmer createTestWarmer(IndexSettings indexSettings) {
+                snapshot.getSnapshotId(),
+                Assert.fail("test replication should not fail: " + e);
+        return internalTranslogManager.getTranslog();
+                mergedSegmentPublisher,
+            engineConfigFactory,
+                    byte[] buffer = new byte[length];
+        if (replica.routingEntry().isRelocationTarget() == false) {
+            @Override
+    public static boolean recoverFromStore(IndexShard newShard) {
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+     * source (to avoid transport calls) and simply copies over the segment files from primary store to replica's as part of
+            createEnvironment(path),
+                logger.error("Unexpected replication failure in test", e);
+        return repositoriesService;
+     * Takes an existing shard, closes it and starts a new initialing shard at the same location
+    }
+    /**
+        ShardId shardId,
+            ) {
+ */
+            targetService.startMergedSegmentReplication(
+        when(repository.blobStore()).thenReturn(blobStore);
+     *
+                clusterSettings
+    }
+                Collections.emptyList(),
+     * @param indexReaderWrapper            an optional wrapper to be used during search
+        } finally {
+        return new TestReplicationSource() {
+        final ShardId shardId = shard.shardId();
+            current.getGlobalCheckpointSyncer(),
+            .put(settings)
+        final boolean markAsRecovering,
+        // Apply state once to initialize repo properly like RepositoriesService would
+        IndexMetadata indexMetadata,
+     */
+                .shardGenerations()
+import org.opensearch.snapshots.Snapshot;
+    }
+    protected ClusterService clusterService;
+        IndexerFactory indexerFactory,
+                Arrays.asList(listeners),
+import org.apache.lucene.index.DirectoryReader;
+    /** Recover a shard from a snapshot using a given repository **/
+            public void getSegmentFiles(
+     */
+     * @param current The current shard to reinit
+    ) throws IOException {
+        try {
+            // This is needed for force segment sync call. Remote store uses a different recovery mechanism
+        final IndexShardRoutingTable routingTable,
+            .build();
+        return new RemoteDirectory(getBlobContainer(f));
+        final ShardRouting shardRouting = TestShardRouting.newShardRouting(
+     * Hook for tests on the blob store that backs a remote-store shard's segment and translog repository. The default
+        throws IOException {
+                postGetFilesRunnable
+import java.util.function.Function;
+        FsBlobStore fsBlobStore = new FsBlobStore(1024, f, false);
+     * @param primaryShard {@link IndexShard} - The target replica shard in segment replication.
+import org.opensearch.index.replication.TestReplicationSource;
+    /**
+import org.opensearch.cluster.routing.TestShardRouting;
+ * The OpenSearch Contributors require contributions made to
+     * current node id the shard is assigned to.
+            shard.sync(); // advance local checkpoint
+ */
+        return newShard(shardId, primary, nodeId, indexMetadata, readerWrapper, () -> {});
+     * @param replicaShards - Replicas that will be updated.
+                getMergedSegmentTargetListener(primaryShard, replica, primaryMetadata, countDownLatch)
+            final long seqNo = shard.seqNoStats().getMaxSeqNo() + 1;
+     * @param primaryShard {@link IndexShard} - The primary shard to replicate from.
+                    final SegmentInfos replicaInfos = snapshot.get();
+        final String shardGen;
+        return newStartedShard(randomBoolean());
+                assert shardList.size() >= 2;
+import org.opensearch.indices.recovery.RecoveryTarget;
+        }
+                    throw new AssertionError(e);
+        CountDownLatch latch
+                threadPool,
+        when(blobStore.blobContainer(any())).thenReturn(blobContainer);
+                    0,
+    protected String snapshotShard(final IndexShard shard, final Snapshot snapshot, final Repository repository) throws IOException {
+    protected IndexShard newShard(
+            listeners
+                indexEventListener,
+            inSyncIdsWithReplica,
+        Runnable globalCheckpointSyncer,
+     * @param remotePath                    remote path
+            newRoutingTable.addShard(replica.routingEntry());
+                VersionType.INTERNAL,
+        final IndexingOperationListener... listeners
+     * Segment Replication specific test method - Creates a {@link SegmentReplicationTargetService} to perform replications that has
+            }
+    }
+        if (indexer instanceof EngineBackedIndexer engineBackedIndexer) {
+        // Get primary metadata to verify with replica's, used to ensure replica catches up
+            primaryMetadata = primaryShard.store().getSegmentMetadataMap(primarySegmentInfos);
+            recoveryEmptyReplica(shard, true);
+import org.opensearch.common.blobstore.BlobPath;
+import org.apache.lucene.store.Directory;
+        throws IOException {
+    public SegmentReplicationTargetService.SegmentReplicationListener getTargetListener(
+                store,
+    public static Engine getEngine(IndexShard indexShard) {
+    protected Engine.IndexResult indexDoc(IndexShard shard, String id, String source, MediaType mediaType, String routing)
+        } else {
+        final CountDownLatch countDownLatch = new CountDownLatch(replicaShards.size());
+    }
+import java.util.stream.Collectors;
+            closeShards(primary);
+import org.opensearch.index.translog.InternalTranslogFactory;
+     * Get listener on started segment replication event which verifies replica shard store with primary's after completion
+    }
+        SegmentReplicationCheckpointPublisher checkpointPublisher,
+            null,
+    /**
+            if (shard != null) {
+        final IndexShard primary,
+import org.opensearch.indices.recovery.RecoverySourceHandler;
+        MergedSegmentPublisher mergedSegmentPublisher,
+            final long seqNo = shard.seqNoStats().getMaxSeqNo() + 1;
+import java.io.IOException;
+     * Note: this method keeps the shard in {@link IndexShardState#POST_RECOVERY} and doesn't start it.
+            }
+        ShardPath shardPath = new ShardPath(false, nodePath.resolve(shardId), nodePath.resolve(shardId), shardId);
+            // This isn't a warmer but sometimes verify the content in the reader
+import org.opensearch.core.common.unit.ByteSizeValue;
+        Function<List<IndexShard>, List<SegmentReplicationTarget>> replicatePrimaryFunction
+            }
+            result = shard.applyDeleteOperationOnPrimary(
+        return newShard(primary, Settings.EMPTY);
+    public static List<DocIdSeqNoAndSource> getDocIdAndSeqNos(final IndexShard shard) throws IOException {
+                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));
+                );
+    protected void closeShard(IndexShard shard, boolean assertConsistencyBetweenTranslogAndLucene) throws IOException {
+     * @param indexEventListener            index event listener
+     */
+        final Settings settings = Settings.builder().put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT).build();
+            remotePath,
+                indexId,
+            xContentRegistry(),
+     * @param primaryShard - source of segment replication
+        BlobContainer blobContainer = Mockito.mock(BlobContainer.class);
+        return null;
+        try {
+                retentionLeaseSyncer,
+                        threadPool,
+            current.indexSettings.getIndexMetadata(),
+import org.opensearch.indices.recovery.RecoverySettings;
+            indexSettings,
+            final Engine engine = shard.getIndexerOrNull() instanceof EngineBackedIndexer engineBackedIndexer
+            }
+                try (
+    protected IndexShard newShard(
+     * @param listeners                     an optional set of listeners to add to the shard
+                final IndexShard primary = shardList.get(0);
+                }
+        Consumer<IndexShard> postGetFilesRunnable
+                )
+     * @param shardId the shard id to use
+            newRoutingTable,
+ * KIND, either express or implied.  See the License for the
+            replica.getPendingPrimaryTerm(),
+        if (storeProvider == null) {
+            primaryMetadata = primaryShard.store().getSegmentMetadataMap(primarySegmentInfos);
+    }
+        if (replica.isRemoteTranslogEnabled()) {
+     * @param replicaShards - Replicas that will be updated.
+     */
+                }
+    /**
+        assertThat(shardDocUIDs, hasSize(ids.length));
+            retentionLeaseSyncer,
+        IndexShardRoutingTable.Builder newRoutingTable = new IndexShardRoutingTable.Builder(replica.shardId());
+import org.opensearch.repositories.IndexId;
+            };
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            null,
+        ClusterService clusterService
+        );
+     */
+     * Returns null if the indexer is not engine-backed (e.g., DataFormatAwareEngine).
+     * Creates a new empty shard and starts it.
+        IndexerFactory indexerFactory,
+import org.opensearch.indices.replication.SegmentReplicationSource;
+        Settings nodeSettings = Settings.builder().put("node.name", shardRouting.currentNodeId()).build();
+                .build()
+            indexMetadata,
+        Consumer<IndexShard> postGetFilesRunnable
+        return future.actionGet();
+                Collections.emptyList(),
+            RecoverySettings recoverySettings = new RecoverySettings(
+        DiscoveryNodes discoveryNodes = IndexShardTestUtils.getFakeDiscoveryNodes(routing);
+    @Override
+                false
+    protected BlobStore wrapRemoteStoreBlobStore(BlobStore blobStore) {
+            final BiFunction<IndexSettings, ShardRouting, TranslogFactory> translogFactorySupplier = (settings, shardRouting) -> {
+    protected Releasable acquirePrimaryOperationPermitBlockingly(IndexShard indexShard) throws ExecutionException, InterruptedException {
+     * @param primaryShard Primary IndexShard - source of segment replication
+            EMPTY_EVENT_LISTENER,
+     * @param replica                the recovery target shard
+    protected Store createStore(ShardId shardId, IndexSettings indexSettings, Directory directory, ShardPath shardPath) throws IOException {
+     * Recovers a replica from the give primary, allow the user to supply a custom recovery target. A typical usage of a custom recovery
+     * @param target {@link IndexShard} - The source primary shard in segment replication.
+    /**
+    }
+                } else if (remotePath == null) {
+    ) {
+            MergedSegmentPublisher.EMPTY,
+    }
+import org.opensearch.core.action.ActionListener;
+        };
+        Runnable globalCheckpointSyncer,
+        );
+     *
+     */
+     * @param markAsRecovering       set to {@code false} if the replica is marked as recovering
+                indexCache,
+     */
+                UUID.randomUUID().toString(),
+        return newShard(shardRouting, Settings.EMPTY, new EngineBackedIndexerFactory(new InternalEngineFactory()), listeners);
+            listeners
+     */
+    ) throws IOException {
+/*
+            startingSeqNo
+            readerWrapper,
+        }
+        );
+     * Utility method which creates a segment replication source, which copies files from primary shard to target shard
+            pNode = IndexShardTestUtils.getFakeRemoteEnabledNode(primary.routingEntry().currentNodeId());
+     * @param indicesService {@link IndicesService} - The indices service to be used on target
+                primaryShard.getLatestReplicationCheckpoint(),
+            sourceFactory = new SegmentReplicationSourceFactory(transportService, recoverySettings, clusterService);
+import org.opensearch.cluster.routing.RecoverySource;
+     * @param primary controls whether the shard will be a primary or a replica.
+            shard.advanceMaxSeqNoOfUpdatesOrDeletes(seqNo); // manually replicate max_seq_no_of_updates
+        closeShards(current);
+     *
+            new RecoveryState(primary.routingEntry(), IndexShardTestUtils.getFakeDiscoNode(primary.routingEntry().currentNodeId()), null)
+            SegmentReplicationCheckpointPublisher.EMPTY,
+            newRoutingTable,
+                seqNo,
+        final IndexShard replica,
+                        .putMapping(result.getRequiredMappingUpdate().toString())
+     */
+                SequenceNumbers.UNASSIGNED_SEQ_NO,
+import org.opensearch.common.UUIDs;
+            currentClusterStateVersion.get(),
+    private SegmentReplicationTargetService getSegmentReplicationTargetService(
+                0,
+                future,
+     *
+import org.opensearch.common.blobstore.fs.FsBlobStore;
+                ? IndexShardTestUtils.getFakeRemoteEnabledDiscoveryNodes(routingTable.shards())
+                .add(
+            replica.getPendingPrimaryTerm() + 1,
+            replica,
+import static org.mockito.Mockito.doAnswer;
+        recoverReplica(replica, primary, startReplica, getReplicationFunc(replica));
+    /**
+                (repId) -> targetService.get(repId),
+        throws IOException {
+            }
+            routing,
+            }
+                }
+     * @param storeProvider                 an optional custom store provider to use. If null a default file based store will be created
+            .put(IndexSettings.INDEX_SOFT_DELETES_RETENTION_OPERATIONS_SETTING.getKey(), between(0, 1000))
+/*
+        shard.mapperService().merge(indexMetadata, MapperService.MergeReason.MAPPING_UPDATE);
+     * creates a new initializing shard. The shard will have its own unique data path.
+                    shard,
+    public Function<List<IndexShard>, List<SegmentReplicationTarget>> getReplicationFunc(final IndexShard target) {
+            indexerFactory,
+            repository.snapshotShard(
+            primary.routingEntry(),
+        IndexShard target,
+import static org.hamcrest.Matchers.hasSize;
+            primary,
+        Settings indexSettings = Settings.builder()
+import org.opensearch.index.engine.MergedSegmentWarmerFactory;
+        return new SegmentReplicationTargetService(
+     * Segment Replication specific test method - Replicate merged segments to a list of replicas from a given primary.
+            path,
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
+                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+    }
+            primaryShard,
+            .build();
+            DiscoveryNodes.builder()
+                () -> Boolean.FALSE,
+            null,
+                    replicationCheckpoint.getLength(),
+        return new SegmentReplicationTargetService.SegmentReplicationListener() {
+    /**
+            retentionLeaseSyncer,
+        if (engine != null) {
+import org.opensearch.core.common.bytes.BytesArray;
+                BiConsumer<String, Long> fileProgressTracker,
+    ) {
+        };
+        for (IndexShard replica : replicaShards) {
+            );
+            recoverySource
+        IndexShardRoutingTable routingTable
+                "dummy-node",
+     * @param shardPath                     path to use for shard data
+        IndexMetadata indexMetadata,
+import java.util.UUID;
+            ? new IndexShardRoutingTable.Builder(routingTable).removeShard(primary.routingEntry()).addShard(replica.routingEntry()).build()
+            if (randomBoolean()) {
+            ShardRoutingState.INITIALIZING,
+                        .apply(replicationId)
+            DefaultRecoverySettings.INSTANCE,
+     * @param clusterService {@link ClusterService} - The cluster service to be used on target
+     * @param indexReaderWrapper            an optional wrapper to be used during search
+    protected BlobContainer getBlobContainer(Path f) throws IOException {
+import org.opensearch.indices.recovery.AsyncRecoveryTarget;
+                ReplicationCheckpoint checkpoint,
+            randomAlphaOfLength(10),
+                new MergedSegmentCheckpoint(
+            .settings(indexSettings)
+            primary.getPendingPrimaryTerm(),
+        boolean success = false;
+            currentClusterStateVersion.incrementAndGet(),
+    /**
+            }
+import org.opensearch.test.DummyShardLock;
+        final IndexShardRoutingTable newRoutingTable = new IndexShardRoutingTable.Builder(routingTable).removeShard(replica.routingEntry())
+     * creates a new initializing shard. The shard will be put in its proper path under the
+import org.opensearch.indices.recovery.DefaultRecoverySettings;
+    protected void recoverReplica(
+        @Nullable CheckedFunction<IndexSettings, Store, IOException> storeProvider,
+import org.opensearch.repositories.Repository;
+                : IndexShardTestUtils.getFakeDiscoveryNodes(routingTable.shards())
+            newRoutingTable,
+     * @param checkpointPublisher               Segment Replication Checkpoint Publisher to publish checkpoint
+     * @param shardId   the shard id to use
+import org.opensearch.repositories.blobstore.OpenSearchBlobStoreRepositoryIntegTestCase;
+            PlainActionFuture<RecoveryResponse> future = new PlainActionFuture<>();
+                .build()
+            target,
+    protected IndexShard reinitShard(IndexShard current, ShardRouting routing, Path remotePath, IndexingOperationListener... listeners)
+import org.opensearch.indices.replication.SegmentReplicationState;
+     * @return {@link List} List of target components orchestrating replication.
+            indexMetadata,
+     * @param routing                       shard routing to use
+            .putMapping("{ \"properties\": {} }")
+            );
+        );
+                BigArrays.NON_RECYCLING_INSTANCE,
+    protected IndexShard newStartedShard(final boolean primary, final Settings settings, final IndexerFactory indexerFactory)
+        countDownLatch.await(30, TimeUnit.SECONDS);
+import org.junit.Assert;
+        );
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+import org.opensearch.cluster.service.ClusterService;
+        return getDocIdAndSeqNos(shard).stream().map(DocIdSeqNoAndSource::getId).collect(Collectors.toSet());
+            shard.getPendingPrimaryTerm(),
+     * been configured to return the given primaryShard's current segments.
+    protected void assertDocCount(IndexShard shard, int docDount) throws IOException {
+        @Nullable CheckedFunction<IndexSettings, Store, IOException> storeProvider,
+        }
+ *
+    }
+    protected IndexShard newShard(
+            listeners
+    /**
+            try (IndexInput in = primary.store().directory().openInput(md.name(), IOContext.READONCE)) {
+    }
+                    IndexFileNames.parseSegmentName(replicationCheckpoint.getMetadataMap().keySet().stream().toList().getFirst())
+            final SegmentReplicationTarget target = targetService.startReplication(
+                    SequenceNumbers.UNASSIGNED_SEQ_NO,
+            storeProvider,
+ * software distributed under the License is distributed on an
+        IndexShard target,
+        final IndexId indexId = new IndexId(index.getName(), index.getUUID());
+                return new InternalTranslogFactory();
+import java.util.concurrent.atomic.AtomicBoolean;
      *
      * @return new shard generation
+        }
      */
-    protected String snapshotShard(final IndexShard shard, final Snapshot snapshot, final Repository repository) throws IOException {
-        final Index index = shard.shardId().getIndex();
-        final IndexId indexId = new IndexId(index.getName(), index.getUUID());
-        final IndexShardSnapshotStatus snapshotStatus = IndexShardSnapshotStatus.newInitializing(
-            OpenSearchBlobStoreRepositoryIntegTestCase.getRepositoryData(repository)
-                .shardGenerations()
-                .getShardGen(indexId, shard.shardId().getId())
+        return TestEnvironment.newEnvironment(
         );
-        final PlainActionFuture<String> future = PlainActionFuture.newFuture();
-        final String shardGen;
-        try (GatedCloseable<IndexCommit> wrappedIndexCommit = shard.acquireLastIndexCommit(true)) {
-            repository.snapshotShard(
-                shard.store(),
-                shard.mapperService(),
-                snapshot.getSnapshotId(),
-                indexId,
-                wrappedIndexCommit.get(),
-                null,
-                snapshotStatus,
-                Version.CURRENT,
-                Collections.emptyMap(),
-                future,
-                null
-            );
-            shardGen = future.actionGet();
-        }
-
-        final IndexShardSnapshotStatus.Copy lastSnapshotStatus = snapshotStatus.asCopy();
-        assertEquals(IndexShardSnapshotStatus.Stage.DONE, lastSnapshotStatus.getStage());
-        assertEquals(shard.snapshotStoreMetadata().size(), lastSnapshotStatus.getTotalFileCount());
-        assertNull(lastSnapshotStatus.getFailure());
-        return shardGen;
-    }
-
-    /**
-     * Helper method to access (package-protected) engine from tests.
-     * Returns null if the indexer is not engine-backed (e.g., DataFormatAwareEngine).
+                0
      */
-    public static Engine getEngine(IndexShard indexShard) {
-        Indexer indexer = indexShard.getIndexer();
-        if (indexer instanceof EngineBackedIndexer engineBackedIndexer) {
-            return engineBackedIndexer.getEngine();
-        }
-        return null;
     }
-
-    public static Indexer getIndexer(IndexShard indexShard) {
-        return indexShard.getIndexer();
+            replica.routingEntry().shardId(),
+        final NodeEnvironment.NodePath nodePath = new NodeEnvironment.NodePath(createTempDir());
     }
-
-    public static Translog getTranslog(IndexShard shard) {
-        Indexer indexer = getIndexer(shard);
-        Engine engine = getEngine(shard);
-        assert engine instanceof InternalEngine || engine instanceof NRTReplicationEngine
-            : "only InternalEngines or NRTReplicationEngines have translogs, got: " + engine.getClass();
-        indexer.ensureOpen();
-        TranslogManager translogManager = indexer.translogManager();
-        assert translogManager instanceof InternalTranslogManager : "only InternalTranslogManager have translogs, got: "
-            + engine.getClass();
-        InternalTranslogManager internalTranslogManager = (InternalTranslogManager) translogManager;
-        return internalTranslogManager.getTranslog();
-    }
-
-    public static ReplicationTracker getReplicationTracker(IndexShard indexShard) {
-        return indexShard.getReplicationTracker();
-    }
-
-    public static Engine.Warmer createTestWarmer(IndexSettings indexSettings) {
-        return reader -> {
-            // This isn't a warmer but sometimes verify the content in the reader
-            if (randomBoolean()) {
-                try {
-                    EngineTestCase.assertAtMostOneLuceneDocumentPerSequenceNumber(indexSettings, reader);
-                } catch (IOException e) {
-                    throw new AssertionError(e);
-                }
-            }
-        };
-    }
-
-    private SegmentReplicationTargetService getSegmentReplicationTargetService(
-        TransportService transportService,
-        IndicesService indicesService,
-        ClusterService clusterService,
-        SegmentReplicationSourceFactory sourceFactory
-    ) {
-        return new SegmentReplicationTargetService(
-            threadPool,
-            new RecoverySettings(Settings.EMPTY, new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)),
-            transportService,
-            sourceFactory,
-            indicesService,
-            clusterService
-        );
-    }
-
-    /**
-     * Segment Replication specific test method - Creates a {@link SegmentReplicationTargetService} to perform replications that has
-     * been configured to return the given primaryShard's current segments. In order to do so, it mimics the replication
-     * source (to avoid transport calls) and simply copies over the segment files from primary store to replica's as part of
-     * get_files calls.
-     *
-     * @param primaryShard {@link IndexShard} - The target replica shard in segment replication.
-     * @param target {@link IndexShard} - The source primary shard in segment replication.
-     * @param transportService {@link TransportService} - Transport service to be used on target
-     * @param indicesService {@link IndicesService} - The indices service to be used on target
-     * @param clusterService {@link ClusterService} - The cluster service to be used on target
-     * @param postGetFilesRunnable - Consumer which is executed after file copy operation. This can be used to stub operations
-     *                             which are desired right after files are copied. e.g. To work with temp files
-     * @return Returns SegmentReplicationTargetService
-     */
-    private SegmentReplicationTargetService prepareForReplication(
-        IndexShard primaryShard,
-        IndexShard target,
-        TransportService transportService,
-        IndicesService indicesService,
-        ClusterService clusterService,
-        Consumer<IndexShard> postGetFilesRunnable
-    ) {
-
-        SegmentReplicationSourceFactory sourceFactory = null;
-        SegmentReplicationTargetService targetService;
-        if (primaryShard.indexSettings.isRemoteStoreEnabled() || primaryShard.indexSettings.isAssignedOnRemoteNode()) {
-            RecoverySettings recoverySettings = new RecoverySettings(
-                Settings.EMPTY,
-                new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-            );
-            sourceFactory = new SegmentReplicationSourceFactory(transportService, recoverySettings, clusterService);
-            targetService = getSegmentReplicationTargetService(transportService, indicesService, clusterService, sourceFactory);
-        } else {
-            sourceFactory = mock(SegmentReplicationSourceFactory.class);
-            targetService = getSegmentReplicationTargetService(transportService, indicesService, clusterService, sourceFactory);
-            final SegmentReplicationSource replicationSource = getSegmentReplicationSource(
-                primaryShard,
-                (repId) -> targetService.get(repId),
-                (repId) -> targetService.getMergedSegmentReplicationRef(repId),
-                postGetFilesRunnable
-            );
-            when(sourceFactory.get(any())).thenReturn(replicationSource);
-            // This is needed for force segment sync call. Remote store uses a different recovery mechanism
-            when(indicesService.getShardOrNull(any())).thenReturn(target);
-        }
-        return targetService;
-    }
-
-    /**
-     * Segment Replication specific test method - Creates a {@link SegmentReplicationTargetService} to perform replications that has
-     * been configured to return the given primaryShard's current segments.
-     *
-     * @param primaryShard {@link IndexShard} - The primary shard to replicate from.
-     * @param target {@link IndexShard} - The target replica shard.
-     * @return Returns SegmentReplicationTargetService
-     */
-    public final SegmentReplicationTargetService prepareForReplication(IndexShard primaryShard, IndexShard target) {
-        return prepareForReplication(
-            primaryShard,
-            target,
-            mock(TransportService.class),
-            mock(IndicesService.class),
-            mock(ClusterService.class),
-            (indexShard) -> {}
-        );
-    }
-
-    public final SegmentReplicationTargetService prepareForReplication(
-        IndexShard primaryShard,
-        IndexShard target,
-        TransportService transportService,
-        IndicesService indicesService,
-        ClusterService clusterService
-    ) {
-        return prepareForReplication(primaryShard, target, transportService, indicesService, clusterService, (indexShard) -> {});
-    }
-
-    /**
-     * Get listener on started segment replication event which verifies replica shard store with primary's after completion
-     * @param primaryShard - source of segment replication
-     * @param replicaShard - target of segment replication
-     * @param primaryMetadata - primary shard metadata before start of segment replication
-     * @param latch - Latch which allows consumers of this utility to ensure segment replication completed successfully
-     * @return Returns SegmentReplicationTargetService.SegmentReplicationListener
-     */
-    public SegmentReplicationTargetService.SegmentReplicationListener getTargetListener(
-        IndexShard primaryShard,
-        IndexShard replicaShard,
-        Map<String, StoreFileMetadata> primaryMetadata,
-        CountDownLatch latch
-    ) {
-        return new SegmentReplicationTargetService.SegmentReplicationListener() {
+import org.opensearch.index.engine.InternalEngine;
+    protected IndexShard newShard(
             @Override
-            public void onReplicationDone(SegmentReplicationState state) {
-                try (final GatedCloseable<SegmentInfos> snapshot = replicaShard.getSegmentInfosSnapshot()) {
-                    final SegmentInfos replicaInfos = snapshot.get();
-                    final Map<String, StoreFileMetadata> replicaMetadata = replicaShard.store().getSegmentMetadataMap(replicaInfos);
-                    final Store.RecoveryDiff recoveryDiff = Store.segmentReplicationDiff(primaryMetadata, replicaMetadata);
-                    assertTrue(recoveryDiff.missing.isEmpty());
-                    assertTrue(recoveryDiff.different.isEmpty());
-                    assertEquals(recoveryDiff.identical.size(), primaryMetadata.size());
-                    primaryShard.updateVisibleCheckpointForShard(
-                        replicaShard.routingEntry().allocationId().getId(),
-                        primaryShard.getLatestReplicationCheckpoint()
-                    );
-                } catch (Exception e) {
-                    throw ExceptionsHelper.convertToRuntime(e);
-                } finally {
-                    latch.countDown();
-                }
-            }
-
-            @Override
-            public void onReplicationFailure(SegmentReplicationState state, ReplicationFailedException e, boolean sendShardFailure) {
-                logger.error("Unexpected replication failure in test", e);
-                Assert.fail("test replication should not fail: " + e);
-            }
-        };
-    }
-
-    /**
-     * Get listener on started merged segment replication event which verifies replica shard store with primary's after completion
-     * @param primaryShard - source of segment replication
-     * @param replicaShard - target of segment replication
-     * @param primaryMetadata - primary shard metadata before start of segment replication
-     * @param latch - Latch which allows consumers of this utility to ensure segment replication completed successfully
-     * @return Returns SegmentReplicationTargetService.SegmentReplicationListener
-     */
-    public SegmentReplicationTargetService.SegmentReplicationListener getMergedSegmentTargetListener(
-        IndexShard primaryShard,
-        IndexShard replicaShard,
-        Map<String, StoreFileMetadata> primaryMetadata,
-        CountDownLatch latch
-    ) {
-        return new SegmentReplicationTargetService.SegmentReplicationListener() {
-            @Override
-            public void onReplicationDone(SegmentReplicationState state) {
-                try {
-                    // After the pre-copy merged segment is completed, the merged segment is not yet visible in the replica shard, so it is
-                    // necessary to obtain the entire file list through listAll().
-                    Set<String> replicaFiles = Arrays.stream(replicaShard.store().directory().listAll()).collect(Collectors.toSet());
-                    assertTrue(replicaFiles.containsAll(primaryMetadata.keySet()));
-                } catch (Exception e) {
-                    throw ExceptionsHelper.convertToRuntime(e);
-                } finally {
-                    latch.countDown();
-                }
-            }
-
-            @Override
-            public void onReplicationFailure(SegmentReplicationState state, ReplicationFailedException e, boolean sendShardFailure) {
-                logger.error("Unexpected replication failure in test", e);
-                Assert.fail("test replication should not fail: " + e);
-            }
-        };
-    }
-
-    /**
-     * Utility method which creates a segment replication source, which copies files from primary shard to target shard
-     * @param primaryShard Primary IndexShard - source of segment replication
-     * @param getTargetFunc - provides replication target from target service using replication id
-     * @param getMergedSegmentTargetFunc - provides merged segment replication target from target service using replication id
-     * @param postGetFilesRunnable - Consumer which is executed after file copy operation. This can be used to stub operations
-     *                             which are desired right after files are copied. e.g. To work with temp files
-     * @return Return SegmentReplicationSource
-     */
-    public SegmentReplicationSource getSegmentReplicationSource(
-        IndexShard primaryShard,
-        Function<Long, ReplicationCollection.ReplicationRef<SegmentReplicationTarget>> getTargetFunc,
-        Function<Long, ReplicationCollection.ReplicationRef<MergedSegmentReplicationTarget>> getMergedSegmentTargetFunc,
-        Consumer<IndexShard> postGetFilesRunnable
-    ) {
-        return new TestReplicationSource() {
-            @Override
-            public void getCheckpointMetadata(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,
-                ActionListener<CheckpointInfoResponse> listener
-            ) {
-                try (final CopyState copyState = new CopyState(primaryShard)) {
-                    listener.onResponse(
-                        new CheckpointInfoResponse(copyState.getCheckpoint(), copyState.getMetadataMap(), copyState.getInfosBytes())
-                    );
-                } catch (IOException e) {
-                    logger.error("Unexpected error computing CopyState", e);
-                    Assert.fail("Failed to compute copyState");
-                }
-            }
-
-            @Override
-            public void getSegmentFiles(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,
-                List<StoreFileMetadata> filesToFetch,
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,
-                ActionListener<GetSegmentFilesResponse> listener
-            ) {
-                try (
-                    final ReplicationCollection.ReplicationRef<SegmentReplicationTarget> replicationRef = getTargetFunc.apply(replicationId)
-                ) {
-                    writeFileChunks(replicationRef.get(), primaryShard, filesToFetch.toArray(new StoreFileMetadata[] {}));
-                } catch (IOException e) {
-                    listener.onFailure(e);
-                }
-                postGetFilesRunnable.accept(indexShard);
-                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));
-            }
-
-            @Override
-            public void getMergedSegmentFiles(
-                long replicationId,
-                ReplicationCheckpoint checkpoint,
-                List<StoreFileMetadata> filesToFetch,
-                IndexShard indexShard,
-                BiConsumer<String, Long> fileProgressTracker,
-                ActionListener<GetSegmentFilesResponse> listener
-            ) {
-                try (
-                    final ReplicationCollection.ReplicationRef<MergedSegmentReplicationTarget> replicationRef = getMergedSegmentTargetFunc
-                        .apply(replicationId)
-                ) {
-                    writeFileChunks(replicationRef.get(), primaryShard, filesToFetch.toArray(new StoreFileMetadata[] {}));
-                } catch (IOException e) {
-                    listener.onFailure(e);
-                }
-                postGetFilesRunnable.accept(indexShard);
-                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));
-            }
-        };
-    }
-
-    /**
-     * Segment Replication specific test method - Replicate segments to a list of replicas from a given primary.
-     * This test will use a real {@link SegmentReplicationTarget} for each replica with a mock {@link SegmentReplicationSource} that
-     * writes all segments directly to the target.
-     * @param primaryShard - {@link IndexShard} The current primary shard.
-     * @param replicaShards - Replicas that will be updated.
-     * @return {@link List} List of target components orchestrating replication.
-     */
-    protected final List<SegmentReplicationTarget> replicateSegments(IndexShard primaryShard, List<IndexShard> replicaShards)
-        throws IOException, InterruptedException {
-        // Latch to block test execution until replica catches up
-        final CountDownLatch countDownLatch = new CountDownLatch(replicaShards.size());
-        // Get primary metadata to verify with replica's, used to ensure replica catches up
-        Map<String, StoreFileMetadata> primaryMetadata;
-        try (final GatedCloseable<SegmentInfos> segmentInfosSnapshot = primaryShard.getSegmentInfosSnapshot()) {
-            final SegmentInfos primarySegmentInfos = segmentInfosSnapshot.get();
-            primaryMetadata = primaryShard.store().getSegmentMetadataMap(primarySegmentInfos);
-        }
-        List<SegmentReplicationTarget> ids = new ArrayList<>();
-        for (IndexShard replica : replicaShards) {
-            final SegmentReplicationTargetService targetService = prepareForReplication(primaryShard, replica);
-            final SegmentReplicationTarget target = targetService.startReplication(
-                replica,
-                primaryShard.getLatestReplicationCheckpoint(),
-                getTargetListener(primaryShard, replica, primaryMetadata, countDownLatch)
-            );
-            ids.add(target);
-        }
-        countDownLatch.await(30, TimeUnit.SECONDS);
+     * creates a new initializing shard. The shard will be put in its proper path under the
         assertEquals("Replication should complete successfully", 0, countDownLatch.getCount());
-        return ids;
-    }
-
+        final long startingSeqNo = indexShard.recoverLocallyAndFetchStartSeqNo(!remoteTranslogEnabled);
+            new EngineConfigFactory(new IndexSettings(indexMetadata, indexMetadata.getSettings())),
+    ) throws IOException {
+            new DummyShardLock(shardId),
+        final BiFunction<IndexShard, DiscoveryNode, RecoveryTarget> targetSupplier,
     /**
-     * Segment Replication specific test method - Replicate merged segments to a list of replicas from a given primary.
-     * This test will use a real {@link SegmentReplicationTarget} for each replica with a mock {@link SegmentReplicationSource} that
-     * writes all segments directly to the target.
-     * @param primaryShard - {@link IndexShard} The current primary shard.
-     * @param replicaShards - Replicas that will be updated.
-     */
-    protected final void replicateMergedSegments(IndexShard primaryShard, List<IndexShard> replicaShards) throws IOException,
-        InterruptedException {
+import org.opensearch.index.remote.RemoteTranslogTransferTracker;
+    protected IndexShard newShard(final boolean primary, final Settings settings) throws IOException {
+                ReferencedSegmentsPublisher.EMPTY,
+    ) throws IOException {
+import java.nio.file.Path;
+            public void getMergedSegmentFiles(
+            EMPTY_EVENT_LISTENER,
+    private RemoteDirectory newRemoteDirectory(Path f) throws IOException {
+    }
+        RecoverySettings recoverySettings,
+     * @param latch - Latch which allows consumers of this utility to ensure segment replication completed successfully
+        return shardGen;
+        Runnable globalCheckpointSyncer,
+     * creates a new initializing shard. The shard will be put in its proper path under the
+        final boolean markAsRecovering,
+            .updateIndexMetadata(
+    private SegmentReplicationTargetService prepareForReplication(
+     * @param transportService {@link TransportService} - Transport service to be used on target
+            shardPath,
+import org.opensearch.env.NodeEnvironment;
+            threadPool,
+    protected IndexShard newShard(
+        return fut.get();
         // Latch to block test execution until replica catches up
-        final CountDownLatch countDownLatch = new CountDownLatch(replicaShards.size());
-        // Get primary metadata to verify with replica's, used to ensure replica catches up
-        Map<String, StoreFileMetadata> primaryMetadata;
-        try (final GatedCloseable<SegmentInfos> segmentInfosSnapshot = primaryShard.getSegmentInfosSnapshot()) {
-            final SegmentInfos primarySegmentInfos = segmentInfosSnapshot.get();
-            primaryMetadata = primaryShard.store().getSegmentMetadataMap(primarySegmentInfos);
-        }
-        ReplicationCheckpoint replicationCheckpoint = primaryShard.getLatestReplicationCheckpoint();
-        for (IndexShard replica : replicaShards) {
+            MergedSegmentPublisher.EMPTY
+            result = shard.applyDeleteOperationOnReplica(seqNo, shard.getOperationPrimaryTerm(), 0L, id, null);
             final SegmentReplicationTargetService targetService = prepareForReplication(primaryShard, replica);
-            targetService.startMergedSegmentReplication(
-                replica,
-                new MergedSegmentCheckpoint(
-                    replicationCheckpoint.getShardId(),
-                    replicationCheckpoint.getPrimaryTerm(),
-                    replicationCheckpoint.getSegmentInfosVersion(),
-                    replicationCheckpoint.getLength(),
-                    replicationCheckpoint.getCodec(),
-                    replicationCheckpoint.getMetadataMap(),
-                    IndexFileNames.parseSegmentName(replicationCheckpoint.getMetadataMap().keySet().stream().toList().getFirst())
-                ),
-                getMergedSegmentTargetListener(primaryShard, replica, primaryMetadata, countDownLatch)
-            );
+import org.opensearch.indices.replication.GetSegmentFilesResponse;
         }
-        countDownLatch.await(30, TimeUnit.SECONDS);
+            ),
+            recoverySettings
+    }
+            }
+                anyInt(),
+    ) {
+                postGetFilesRunnable.accept(indexShard);
+        assert shardRouting.initializing() : shardRouting;
+            remotePath,
+        };
+     * writes all segments directly to the target.
+            primary ? RecoverySource.EmptyStoreRecoverySource.INSTANCE : RecoverySource.PeerRecoverySource.INSTANCE
+     *
+            when(mockReplicationStatsProvider.apply(any())).thenReturn(new ReplicationStats(800, 800, 500));
+                IndexShard indexShard,
+        assertEquals(IndexShardSnapshotStatus.Stage.DONE, lastSnapshotStatus.getStage());
+        repository.restoreShard(shard.store(), snapshot.getSnapshotId(), indexId, shard.shardId(), shard.recoveryState(), future);
+        future.actionGet();
+import org.opensearch.index.VersionType;
+        return newShard(
+    /**
+            dataDirectory,
+import org.opensearch.common.io.PathUtils;
+    }
+     * Creates a new empty shard and starts it.
+     * @param mergedSegmentPublisher merged segment publisher
+        if (primary.isRemoteTranslogEnabled()) {
+        return new Store(
+            new ShardId("index", "_na_", 0),
+            .put(IndexSettings.INDEX_SOFT_DELETES_RETENTION_OPERATIONS_SETTING.getKey(), between(0, 1000))
+            indexerFactory,
+    /**
+                mockReplicationStatsProvider,
+import org.opensearch.common.blobstore.BlobMetadata;
+        return new SegmentReplicationTargetService.SegmentReplicationListener() {
+            remoteStoreLockManager,
+     * @param primary       indicates whether to a primary shard (ready to recover from an empty store) or a replica (ready to recover from
+        IndexShardRoutingTable newRoutingTable = initializingReplicaRouting.isRelocationTarget()
+            Function<ShardId, ReplicationStats> mockReplicationStatsProvider = mock(Function.class);
+                    writeFileChunks(replicationRef.get(), primaryShard, filesToFetch.toArray(new StoreFileMetadata[] {}));
+        recoverySettings.setChunkSize(new ByteSizeValue(fileChunkSizeInBytes));
+            );
+        recoverReplica(
+        BlobPath blobPath = new BlobPath();
+    ) throws IOException {
+            .putMapping("{ \"properties\": {} }");
+        final DiscoveryNode node = IndexShardTestUtils.getFakeDiscoNode(shard.routingEntry().currentNodeId());
+                        new RemoteTranslogTransferTracker(shardRouting.shardId(), 20),
+import org.opensearch.index.remote.RemoteStoreStatsTrackerFactory;
+    protected void recoverShardFromStore(IndexShard primary) throws IOException {
+import java.util.function.Consumer;
+import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
+        final ShardRouting shardRouting = current.routingEntry();
+            rNode = IndexShardTestUtils.getFakeRemoteEnabledNode(replica.routingEntry().currentNodeId());
+            @Override
+    ) {
+        // update both primary and replica shard state
+        // To simulate that the node is remote backed
+            (is, listener) -> listener.onResponse(
+    }
+            recoveryTarget.fail(new RecoveryFailedException(request, e), false);
+                        DefaultRemoteStoreSettings.INSTANCE,
+ * under the License.
+            globalCheckpointSyncer,
+    private RecoveryTarget recoveryTarget;
+                        new CheckpointInfoResponse(copyState.getCheckpoint(), copyState.getMetadataMap(), copyState.getInfosBytes())
+        Settings nodeSettings = Settings.builder().put("node.name", routing.currentNodeId()).build();
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+            current.getRetentionLeaseSyncer(),
+     *
+                try {
+        final CountDownLatch countDownLatch = new CountDownLatch(replicaShards.size());
+    /**
+    protected IndexShard newStartedShard() throws IOException {
+        final Engine.DeleteResult result;
+    }
+import org.apache.lucene.index.SegmentInfos;
+        final RecoverySource recoverySource = primary
+     * @param shardId the shard id to use
+        Runnable globalCheckpointSyncer,
+        } else {
+     * @param primary indicates whether to a primary shard (ready to recover from an empty store) or a replica (ready to recover from
+        IndexingOperationListener... listeners
+                DefaultRemoteStoreSettings.INSTANCE,
+    }
+    ) throws IOException {
+import org.opensearch.index.engine.NRTReplicationEngineFactory;
+        IndexShard primaryShard,
+        recoverFromStore(primary);
+        final Set<String> shardDocUIDs = getShardDocUIDs(shard);
+                primaryShard,
+            null,
+                Collections.emptyMap(),
+            new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()),
+        assertEquals(shard.snapshotStoreMetadata().size(), lastSnapshotStatus.getTotalFileCount());
+        @Override
+            globalCheckpointSyncer,
+        IndexingOperationListener... listeners
+    }
+     * @param routing       shard routing to use
+     * Creates a new empty shard with the specified settings and engine factory and starts it.
+        recoverUnstartedReplica(replica, primary, targetSupplier, markAsRecovering, inSyncIds, routingTable, replicatePrimaryFunction);
+                } finally {
+        } else {
+        assertThat(getShardDocUIDs(shard), hasSize(docDount));
+    ) throws IOException {
+     *                (ready to recover from another shard)
+ */
+            }
+     * get_files calls.
+     */
+            primary,
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+     * @param getTargetFunc - provides replication target from target service using replication id
+        public void onFailure(ReplicationState state, ReplicationFailedException e, boolean sendShardFailure) {
+import org.opensearch.indices.replication.AbstractSegmentReplicationTarget;
+     * @param primary indicates whether to a primary shard (ready to recover from an empty store) or a replica
+                        Version.CURRENT
+import java.util.concurrent.ExecutionException;
+                try {
+                    assertTrue(replicaFiles.containsAll(primaryMetadata.keySet()));
+                Settings.EMPTY,
+            node.getId(),
+                new PrimaryReplicaSyncer.ResyncTask(1, "type", "action", "desc", null, Collections.emptyMap())
+            protected void assertSnapshotOrGenericThread() {
+    ) throws IOException {
+import org.opensearch.repositories.blobstore.BlobStoreTestUtil;
+                remoteStore = createRemoteStore(remotePath, routing, indexMetadata, shardPath);
+            EMPTY_EVENT_LISTENER,
+     * @param indexReaderWrapper     an optional wrapper to be used during search
+            ) {
+                0,
+                null,
+            new EngineBackedIndexerFactory(new InternalEngineFactory()),
+     * @param primary controls whether the shard will be a primary or a replica.
+            @Override
+                throw new TransportReplicationAction.RetryOnReplicaException(
+import org.opensearch.index.store.RemoteBufferedOutputDirectory;
+        RetentionLeaseSyncer retentionLeaseSyncer,
+    }
+ * not use this file except in compliance with the License.
+        final Function<List<IndexShard>, List<SegmentReplicationTarget>> replicatePrimaryFunction
+                    );
+                routing,
+        return target.indexSettings().isSegRepEnabledOrRemoteNode() ? (shardList) -> {
+            null,
+        InterruptedException {
+        Function<Long, ReplicationCollection.ReplicationRef<MergedSegmentReplicationTarget>> getMergedSegmentTargetFunc,
+                    sourceToParse,
+            threadPool,
+                    replicationCheckpoint.getCodec(),
+                VersionType.INTERNAL,
+                remoteStore,
+     * @param indexerFactory the indexer factory to use for this shard
+            new RemoteBufferedOutputDirectory(getBlobContainer(remoteShardPath.resolveIndex().resolve("lock_files")))
+            indexEventListener,
+        when(repository.basePath()).thenReturn(new BlobPath());
+        );
+        IndexShard primaryShard,
+        return newShard(shardRouting, settings, indexerFactory);
+    }
+    protected IndexShard newShard(boolean primary) throws IOException {
+            IndexShardTestUtils.getFakeDiscoveryNodes(routingEntry)
+import java.util.HashMap;
+     * @param listeners     an optional set of listeners to add to the shard
+                    assertTrue(recoveryDiff.different.isEmpty());
+     * @param listeners              an optional set of listeners to add to the shard
+            remotePath,
+            indexMetadata,
+        IndexMetadata indexMetadata,
+                throw new RuntimeException(e);
+        IndexMetadata indexMetadata,
+    }
+        RemoteDirectory dataDirectory = newRemoteDirectory(remoteShardPath.resolveIndex().resolve("data"));
+                } catch (IOException e) {
+            listeners
+     */
+     * supplied node id.
+                wrappedIndexCommit.get(),
+    }
+import org.opensearch.index.IndexSettings;
+import org.opensearch.cluster.metadata.MappingMetadata;
+                : IndexShardTestUtils.getFakeDiscoveryNodes(routingTable.shards())
+        return newShard(
+        return prepareForReplication(primaryShard, target, transportService, indicesService, clusterService, (indexShard) -> {});
+        );
+        IndexMetadata indexMetadata,
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+     */
+     * @param getMergedSegmentTargetFunc - provides merged segment replication target from target service using replication id
+        @Nullable CheckedFunction<DirectoryReader, DirectoryReader, IOException> indexReaderWrapper,
+     *                (ready to recover from another shard)
+            RemoteStoreStatsTrackerFactory remoteStoreStatsTrackerFactory = null;
+            recoverySettings,
+    }
+    protected final void replicateMergedSegments(IndexShard primaryShard, List<IndexShard> replicaShards) throws IOException,
+        return EngineTestCase.getDocIds(((EngineBackedIndexer) shard.getIndexer()).getEngine(), true);
+            "store",
+        for (IndexShard shard : shards) {
+        Engine engine = getEngine(shard);
+            current.engineConfigFactory,
+        try (final GatedCloseable<SegmentInfos> segmentInfosSnapshot = primaryShard.getSegmentInfosSnapshot()) {
+        assertNull(lastSnapshotStatus.getFailure());
+            snapshot,
+     * Segment Replication specific test method - Replicate segments to a list of replicas from a given primary.
+            remotePath,
+        final Settings settings,
+                    // necessary to obtain the entire file list through listAll().
+        } else {
+            startReplicaAfterRecovery(replica, primary, inSyncIds, routingTable);
+        return reinitShard(current, routing, null, listeners);
+        final PlainActionFuture<Void> future = PlainActionFuture.newFuture();
+     * @param primary indicates whether to a primary shard (ready to recover from an empty store) or a replica (ready to recover from
+        IndexShard primaryShard,
+        final boolean markAsRecovering,
+import java.util.concurrent.atomic.AtomicLong;
+import org.opensearch.indices.replication.SegmentReplicationSourceFactory;
+                sourceToParse
+            indexerFactory,
+            if (assertConsistencyBetweenTranslogAndLucene) {
+     * Creates a new empty shard and starts it. The shard will randomly be a replica or a primary.
+                    shard.shardId,
+    protected IndexShard newStartedShard(CheckedFunction<Boolean, IndexShard, IOException> shardFunction, boolean primary)
+    }
+            ids.add(target);
+        repository.start();
+        }
+                    final Map<String, StoreFileMetadata> replicaMetadata = replicaShard.store().getSegmentMetadataMap(replicaInfos);
+     */
+        return newShard(primary, settings, new EngineBackedIndexerFactory(new InternalEngineFactory()));
+    protected final List<SegmentReplicationTarget> replicateSegments(IndexShard primaryShard, List<IndexShard> replicaShards)
+    /**
+            ShardRoutingState.INITIALIZING,
+     * @param listeners new listerns to use for the newly created shard
+                .build();
+                updateMappings(
+            if (indexSettings.isRemoteStoreEnabled() || indexSettings.isAssignedOnRemoteNode()) {
+        ShardRouting initializingReplicaRouting = replica.routingEntry();
+        Map<String, StoreFileMetadata> primaryMetadata,
+     * @param listeners an optional set of listeners to add to the shard
+        final RecoveryTarget recoveryTarget = targetSupplier.apply(replica, pNode);
+     * @param routing                shard routing to use
+    protected IndexShard newShard(
+            UUIDs.randomBase64UUID(),
+     * creates a new initializing shard. The shard will be put in its proper path under the
+            );
+            );
+            shardPath,
+                    remotePath = createTempDir();
+    }
+    protected void recoverReplica(
+            sourceFactory,
+    /**
+    protected Engine.IndexResult indexDoc(IndexShard shard, String type, String id) throws IOException {
+        IndexShard replica,
+        return indexShard.getReplicationTracker();
         assertEquals("Replication merged segment should complete successfully", 0, countDownLatch.getCount());
     }
-
-    private void writeFileChunks(AbstractSegmentReplicationTarget target, IndexShard primary, StoreFileMetadata[] files)
-        throws IOException {
-        for (StoreFileMetadata md : files) {
-            try (IndexInput in = primary.store().directory().openInput(md.name(), IOContext.READONCE)) {
-                int pos = 0;
-                while (pos < md.length()) {
-                    int length = between(1, Math.toIntExact(md.length() - pos));
-                    byte[] buffer = new byte[length];
-                    in.readBytes(buffer, 0, length);
-                    target.writeFileChunk(md, pos, new BytesArray(buffer), pos + length == md.length(), 0, mock(ActionListener.class));
-                    pos += length;
-                }
-            }
+            : null;
+import org.opensearch.core.xcontent.MediaType;
+     *                             which are desired right after files are copied. e.g. To work with temp files
+                ActionListener<CheckpointInfoResponse> listener
+import org.opensearch.indices.recovery.RecoverySourceHandlerFactory;
+     * @param primaryShard - {@link IndexShard} The current primary shard.
+                logger.error("Unexpected replication failure in test", e);
+        );
+    protected IndexShard newShard(boolean primary, SegmentReplicationCheckpointPublisher checkpointPublisher, Settings settings)
+                    false
+        closeShards(Arrays.asList(shards));
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+     * current node id the shard is assigned to.
+                ) {
+        IndexShard primary = null;
+        if (primary) {
+        indexShard.acquirePrimaryOperationPermit(fut, ThreadPool.Names.WRITE, "");
+     * @param settings the settings to use for this shard
+            recoverReplica(replica, primary, startReplica);
+    protected Engine.IndexResult indexDoc(IndexShard shard, String type, String id, String source) throws IOException {
+import org.opensearch.index.store.lockmanager.RemoteStoreLockManager;
+                IndexMetadata.builder(indexMetadata).putMapping(new MappingMetadata(shard.mapperService().documentMapper())).build()
+        IndicesService indicesService,
+    }
+    ) throws IOException {
+     * @return Return SegmentReplicationSource
+     * <p>
         }
     }
+        doAnswer(invocation -> {
+import org.opensearch.common.settings.Settings;
+    }
+                        .build()
+    }
+     */
+     */
+            mock(IndicesService.class),
+     *
+ * compatible open source license.
+        return Settings.EMPTY;
+        IndexShard shard = shardFunction.apply(primary);
+            indexMetadata,
+    }
+            primary,
+     * Creates a new initializing shard. The shard will have its own unique data path.
+            primary,
+    }
+     * @param globalCheckpointSyncer        callback for syncing global checkpoints
+            final SegmentInfos primarySegmentInfos = segmentInfosSnapshot.get();
+        RecoverySettings recoverySettings = new RecoverySettings(
+            );
+            .build();
+                .build();
+import org.opensearch.index.engine.Engine;
+                Version.CURRENT,
+public abstract class IndexShardTestCase extends OpenSearchTestCase {
+                clusterService.getClusterApplierService(),
+    protected IndexShard newShard(boolean primary, Settings settings, IndexerFactory indexerFactory) throws IOException {
+        newRoutingTable.addShard(primary.routingEntry());
+            replica.indexSettings.isRemoteTranslogStoreEnabled()
+        }
+     * @param target {@link IndexShard} - The target replica shard.
+        );
+        ShardPath remoteShardPath = new ShardPath(false, remoteNodePath.resolve(shardId), remoteNodePath.resolve(shardId), shardId);
+        );
+            new RecoverySettings(Settings.EMPTY, new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS))
+    /**
+            if (engine != null) {
+     * Takes an existing shard, closes it and starts a new initialing shard at the same location
+            settings,
+        @Nullable CheckedFunction<DirectoryReader, DirectoryReader, IOException> indexReaderWrapper,
+            MapperService mapperService = MapperTestUtils.newMapperService(
+import org.opensearch.indices.breaker.HierarchyCircuitBreakerService;
+        return newStartedShard(primary, settings, new EngineBackedIndexerFactory(new InternalEngineFactory()));
+        Set<String> inSyncIdsWithReplica = new HashSet<>(inSyncIds);
+     */
+     * @param shardFunction shard factory function
+        if (primaryShard.indexSettings.isRemoteStoreEnabled() || primaryShard.indexSettings.isAssignedOnRemoteNode()) {
+    public static void updateRoutingEntry(IndexShard shard, ShardRouting shardRouting) throws IOException {
+                try (
+        Path home = createTempDir();
+            super.tearDown();
+        primaryTerm = randomIntBetween(1, 100); // use random but fixed term for creating shards
+     *
+            null,
+        final ShardId shardId = routing.shardId();
+                replica,
+ * Licensed to Elasticsearch under one or more contributor
+            SimilarityService similarityService = new SimilarityService(indexSettings, null, Collections.emptyMap());
+        Set<String> inSyncIds = shardRouting.active() ? Collections.singleton(shardRouting.allocationId().getId()) : Collections.emptySet();
+import org.opensearch.common.lucene.uid.Versions;
+    /**
+        return indexShard.getIndexer();
+    /**
+        return reader -> {
+     */
+     * @param primary       controls whether the shard will be a primary or a replica.
+        }
+            mapperService.merge(indexMetadata, MapperService.MergeReason.MAPPING_RECOVERY);
+    }
+import org.opensearch.cluster.routing.ShardRoutingState;
+import org.opensearch.index.translog.TranslogManager;
+import org.opensearch.indices.recovery.RecoveryFailedException;
+    protected IndexShard reinitShard(
+            result = shard.applyIndexOperationOnPrimary(
+        assert translogManager instanceof InternalTranslogManager : "only InternalTranslogManager have translogs, got: "
+        for (IndexShard replica : replicaShards) {
+        boolean primary,
+                }
+import org.opensearch.index.seqno.RetentionLeaseSyncer;
+            currentClusterStateVersion.incrementAndGet(),
+        @Nullable IndexerFactory indexerFactory,
+        }
+            ActionListener<List<BlobMetadata>> listener = invocation.getArgument(3);
+            ClusterSettings clusterSettings = new ClusterSettings(nodeSettings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        // Latch to block test execution until replica catches up
+            indexReaderWrapper,
+import org.opensearch.index.seqno.SequenceNumbers;
+     * @param globalCheckpointSyncer        callback for syncing global checkpoints
+import org.opensearch.indices.IndicesService;
+                similarityService,
+                    throw ExceptionsHelper.convertToRuntime(e);
+     * current node id the shard is assigned to.
+            metadataDirectory,
+    protected void recoverReplica(IndexShard replica, IndexShard primary, boolean startReplica) throws IOException {
+        final IndexSettings indexSettings = new IndexSettings(indexMetadata, nodeSettings);
+     *
+        if (shard.routingEntry().primary()) {
+import org.opensearch.index.store.StoreFileMetadata;
+     * @return Returns SegmentReplicationTargetService.SegmentReplicationListener
+import org.opensearch.index.similarity.SimilarityService;
+            }
+        final BiFunction<IndexShard, DiscoveryNode, RecoveryTarget> targetSupplier,
+        @Nullable CheckedFunction<DirectoryReader, DirectoryReader, IOException> indexReaderWrapper,
+        }
+                ) {
+            assertEquals(replica.state(), IndexShardState.RECOVERING);
+        return ids;
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.cluster.routing.ShardRouting;
+    /**
+import org.opensearch.threadpool.ThreadPool;
+            true,
+        return prepareForReplication(
+        );
+ * containing utilities for shard creation and recoveries. See {{@link #newShard(boolean)}} and
+            @Override
+            null,
+    }
+    }
+            shardRouting,
+            .primaryTerm(0, primaryTerm)
+import org.opensearch.repositories.RepositoriesService;
+        boolean startReplica,
+    public final SegmentReplicationTargetService prepareForReplication(
+import org.opensearch.indices.replication.common.ReplicationType;
+                } catch (IOException e) {
+            shardPath,
+    }
+     */
+            tearDownThreadPool();
+            .addShard(routingEntry)
+    public Settings threadPoolSettings() {
+            indexShard.addShardFailureCallback(DEFAULT_SHARD_FAILURE_HANDLER);
+            null
+import java.util.List;
+            engineConfigFactory,
+                    target.writeFileChunk(md, pos, new BytesArray(buffer), pos + length == md.length(), 0, mock(ActionListener.class));
+                        Collections.emptyMap(),
+        final ClusterService clusterService = BlobStoreTestUtil.mockClusterService(repositoryMetadata);
+     * creates a new initializing shard. The shard will be put in its proper path under the
+     * @param postGetFilesRunnable - Consumer which is executed after file copy operation. This can be used to stub operations
+     * @param indexMetadata          indexMetadata for the shard, including any mapping
+import org.opensearch.cluster.routing.ShardRoutingHelper;
+        public void onDone(ReplicationState state) {
+            : new IndexShardRoutingTable.Builder(routingTable).removeShard(initializingReplicaRouting)
+            primary.routingEntry(),
+                globalCheckpointSyncer,
+        return newStartedShard(randomBoolean(), settings, new EngineBackedIndexerFactory(new InternalEngineFactory()));
+                createTempDir(),
+package org.opensearch.index.shard;
+import org.opensearch.common.blobstore.BlobContainer;
+            @Override
+            nodeSettings = Settings.builder()
+        ShardPath shardPath,
+                // eliminate thread name check as we create repo manually
+        SegmentReplicationTargetService targetService;
+                remoteStoreStatsTrackerFactory = new RemoteStoreStatsTrackerFactory(clusterService, indexSettings.getSettings());
+        Function<Long, ReplicationCollection.ReplicationRef<SegmentReplicationTarget>> getTargetFunc,
+                IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP,
+            indicesService,
+            true,
+        );
+    public void tearDown() throws Exception {
+                while (pos < md.length()) {
+        ShardRouting routing,
+import org.opensearch.common.settings.ClusterSettings;
+                SequenceNumbers.UNASSIGNED_SEQ_NO,
+        IndexMetadata.Builder metadata = IndexMetadata.builder(shardRouting.getIndexName())
+                        RemoteStoreUtils.isServerSideEncryptionEnabledIndex(settings.getIndexMetadata())
+        if (failOnShardFailures.get()) {
+ * Modifications Copyright OpenSearch Contributors. See
+                engineConfigFactory,
+     * @param routing                shard routing to use
+     *
+        @Nullable CheckedFunction<DirectoryReader, DirectoryReader, IOException> readerWrapper,
+        final IndexerFactory indexerFactory,
+import org.opensearch.common.lease.Releasable;
+                ActionListener<GetSegmentFilesResponse> listener
+            IOUtils.close(() -> shard.close("test", false, false), shard.store());
+            RetentionLeaseSyncer.EMPTY,
+    /**
+        if (shard.state() != IndexShardState.POST_RECOVERY && shard.state() != IndexShardState.STARTED) {
+            final SegmentReplicationTargetService targetService = prepareForReplication(primaryShard, replica);
+            randomAlphaOfLength(5),
+                false,
+        IndexShard primaryShard,
+            }
+    /**
+                        DiscoveryNodeRole.BUILT_IN_ROLES,
+            nodeId,
+            new FsDirectoryFactory()
+import org.opensearch.Version;
+        SourceToParse sourceToParse = new SourceToParse(shard.shardId().getIndexName(), id, new BytesArray(source), mediaType, routing);
+     * Creates a new initializing shard. The shard will have its own unique data path.
+        final StartRecoveryRequest request = PeerRecoveryTargetService.getStartRecoveryRequest(
+    protected IndexShard newStartedShard(final boolean primary) throws IOException {
+            indexerFactory,
+            shard.sync(); // advance local checkpoint
+                        buildNewFakeTransportAddress(),
+            : randomIntBetween(1, 10 * 1024 * 1024);
+            ? RecoverySettings.INDICES_RECOVERY_CHUNK_SIZE_SETTING.getDefault(Settings.EMPTY).getBytes()
+        IndexEventListener indexEventListener,
+            replica.routingEntry().allocationId()
+     * Get listener on started merged segment replication event which verifies replica shard store with primary's after completion
+        );
+            replica.routingEntry().currentNodeId(),
+            current,
+                try (final GatedCloseable<SegmentInfos> snapshot = replicaShard.getSegmentInfosSnapshot()) {
+import org.opensearch.indices.replication.checkpoint.SegmentReplicationCheckpointPublisher;
+            return;
+     */
+     * @param routing                       shard routing to use
+    }
+                replica,
+        IndexShardRoutingTable newRoutingTable = new IndexShardRoutingTable.Builder(shardRouting.shardId()).addShard(shardRouting).build();
+        @Nullable IndexerFactory indexerFactory,
+    protected void recoveryEmptyReplica(IndexShard replica, boolean startReplica) throws IOException {
+        RecoverySettings recoverySettings,
+        try (final GatedCloseable<SegmentInfos> segmentInfosSnapshot = primaryShard.getSegmentInfosSnapshot()) {
+            recoverShardFromStore(shard);
+                ReplicationCheckpoint checkpoint,
+    protected void tearDownThreadPool() {
+     *
+            final Engine.Warmer warmer = createTestWarmer(indexSettings);
+        Map<String, StoreFileMetadata> primaryMetadata;
+                IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP,
+        final DiscoveryNode pNode;
+            inSyncIds,
+                    replicationCheckpoint.getPrimaryTerm(),
+    }
+     *
+    }
+     * @return Returns SegmentReplicationTargetService
+        } finally {
+            logger,
+            : "only InternalEngines or NRTReplicationEngines have translogs, got: " + engine.getClass();
+        }
+ * ownership. Elasticsearch licenses this file to you under
+    /**
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+     * @param globalCheckpointSyncer callback for syncing global checkpoints
+            randomAlphaOfLength(10),
+        return newShard(
+            targetService = getSegmentReplicationTargetService(transportService, indicesService, clusterService, sourceFactory);
+            shardId,
+            .put("indices.recovery.max_concurrent_file_chunks", Integer.toString(between(1, 4)))
+        BlobStore blobStore = Mockito.mock(BlobStore.class);
+        return repository;
+        );
+import org.opensearch.common.blobstore.BlobStore;
+                shard.getOperationPrimaryTerm(),
+    }
+        RemoteSegmentStoreDirectory remoteSegmentStoreDirectory = createRemoteSegmentStoreDirectory(shardId, path);
+            directory,
+import org.opensearch.common.CheckedFunction;
+    }
+        final RecoverySource.SnapshotRecoverySource recoverySource = new RecoverySource.SnapshotRecoverySource(
+            final SegmentReplicationSource replicationSource = getSegmentReplicationSource(
+     * supplied node id.
+     * @param recoverySettings       recovery settings
+    @Override
+     * @param listeners     an optional set of listeners to add to the shard
+            Settings.builder()
+    }
+            public void getCheckpointMetadata(
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+    }
+            Store remoteStore;
+import org.opensearch.indices.replication.common.ReplicationFailedException;
+                        settings.getRemoteStoreTranslogRepository(),
+        recoverReplica(replica, primary, targetSupplier, markAsRecovering, markAsStarted, (a) -> null);
+     * @param routing       the shard routing to use for the newly created shard.
+            shardId,
+        RepositoryMetadata repositoryMetadata = new RepositoryMetadata(randomAlphaOfLength(10), FsRepository.TYPE, settings);
+        IndexShard indexShard = recoveryTarget.indexShard();
+        IndexMetadata indexMetadata,
+import org.opensearch.cluster.metadata.RepositoryMetadata;
+     *
+            if (success == false) {
+            public void onReplicationFailure(SegmentReplicationState state, ReplicationFailedException e, boolean sendShardFailure) {
+            DefaultRecoverySettings.INSTANCE,
+                    pos += length;
+        final Function<List<IndexShard>, List<SegmentReplicationTarget>> replicatePrimaryFunction
+import org.opensearch.index.engine.InternalEngineFactory;
+    protected IndexShard newShard(
+            transportService,
+    ) throws IOException {
+        if (markAsRecovering) {
+                mapperService,
+     *                another shard)
+import org.opensearch.common.Nullable;
+            primary ? RecoverySource.EmptyStoreRecoverySource.INSTANCE : RecoverySource.PeerRecoverySource.INSTANCE
+                .put(Environment.PATH_REPO_SETTING.getKey(), path.toAbsolutePath())
+        final IndexShardSnapshotStatus snapshotStatus = IndexShardSnapshotStatus.newInitializing(
+        RepositoriesService repositoriesService = Mockito.mock(RepositoriesService.class);
+                any(ActionListener.class)
+                    IndexMetadata.builder(shard.indexSettings().getIndexMetadata())
+     * @param settings the settings to use for this shard
+        clusterService.addStateApplier(event -> repository.updateState(event.state()));
+        indexer.ensureOpen();
+import org.opensearch.index.translog.InternalTranslogManager;
+            newRoutingTable,
+                    Versions.MATCH_ANY,
+import org.opensearch.index.engine.EngineTestCase;
+    }
+                Versions.MATCH_ANY,
+    }
+import org.opensearch.index.remote.RemoteStoreUtils;
+        final ShardRouting shardRouting,
+            shardGen = future.actionGet();
+        RetentionLeaseSyncer retentionLeaseSyncer,
+        IndicesService indicesService,
+import org.opensearch.index.translog.RemoteBlobStoreInternalTranslogFactory;
+            SegmentReplicationCheckpointPublisher.EMPTY,
+    public static void assertConsistentHistoryBetweenTranslogAndLucene(IndexShard shard) throws IOException {
+        final NodeEnvironment.NodePath nodePath = new NodeEnvironment.NodePath(createTempDir());
+        @Nullable CheckedFunction<DirectoryReader, DirectoryReader, IOException> readerWrapper
+            null,
+        RetentionLeaseSyncer retentionLeaseSyncer,
+            retentionLeaseSyncer,
+        IndexShard replica,
+    ) throws IOException {
+        flushShard(shard, false);
+                false,
+import org.opensearch.env.TestEnvironment;
+    private BlobStoreRepository createRepository(Path path) {
+        final ShardRouting shardRouting = TestShardRouting.newShardRouting(
+            try {
+        IndexMetadata indexMetadata,
+import org.opensearch.index.mapper.MapperService;
+    }
+import org.opensearch.ExceptionsHelper;
+        CountDownLatch latch
+            rNode,
+     * @param targetSupplier         supplies an instance of {@link RecoveryTarget}
+     * @param indexMetadata indexMetadata for the shard, including any mapping
+                // since we can't get remote path from IndexShard directly, we are using repository to store it .
+                Assert.fail("test replication should not fail: " + e);
+            protected BlobStore createBlobStore() throws Exception {
+import org.opensearch.index.engine.DocIdSeqNoAndSource;
+     * Creates a new initializing shard. The shard will have its own unique data path.
+        EngineConfigFactory engineConfigFactory,
+            (indexShard) -> {}
+     * @param indexerFactory the indexer factory for the new shard
+        return new RemoteSegmentStoreDirectory(
+    protected void flushShard(IndexShard shard) {
+    public final void recoverUnstartedReplica(
+                    );
+ * SPDX-License-Identifier: Apache-2.0
+            request,
+     * creates a new empty shard and starts it.
+                closeShard(shard, true);
+     * @param indexReaderWrapper     an optional wrapper to be used during search
+    protected void startReplicaAfterRecovery(
+     * @param settings      the settings to use for this shard
+    protected IndexShard reinitShard(IndexShard current, IndexingOperationListener... listeners) throws IOException {
+    private static final Consumer<IndexShard.ShardFailure> DEFAULT_SHARD_FAILURE_HANDLER = failure -> {
+     * @param primaryMetadata - primary shard metadata before start of segment replication
+                } catch (IOException e) {
+                snapshotStatus,
+        }
+        @Nullable CheckedFunction<DirectoryReader, DirectoryReader, IOException> indexReaderWrapper,
+    ) {
+import org.opensearch.indices.replication.common.ReplicationListener;
+import java.util.Map;
+     *
+    /**
+        try {
+            }
+        TransportService transportService,
+            clusterService,
+    }
+     */
+    protected static final ReplicationListener recoveryListener = new ReplicationListener() {
+            return null;
+     * @param primary   indicates whether to a primary shard (ready to recover from an empty store) or a replica
+    }
+    protected Store createStore(IndexSettings indexSettings, ShardPath shardPath) throws IOException {
+                    // After the pre-copy merged segment is completed, the merged segment is not yet visible in the replica shard, so it is
+        ShardId shardId,
+                ? engineBackedIndexer.getEngine()
+import static org.mockito.Mockito.when;
+/**
+    protected Store createRemoteStore(Path path, ShardRouting shardRouting, IndexMetadata metadata, ShardPath shardPath)
+                    latch.countDown();
+     * Creates a new initializing shard. The shard will have its own unique data path.
+            new RecoverySettings(Settings.EMPTY, new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)),
+                    assertTrue(recoveryDiff.missing.isEmpty());
+                    IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP,
+    /**
+    };
+import org.mockito.Mockito;
+     * @param replicaShard - target of segment replication
+                    listener.onFailure(e);
+        );
+        }
+    }
+            );
+     * @param primary controls whether the shard will be a primary or a replica.
+        primary.updateShardState(
+            metadata,
+        return createStore(shardPath.getShardId(), indexSettings, newFSDirectory(shardPath.resolveIndex()), shardPath);
+            .build();
+                    primaryShard.updateVisibleCheckpointForShard(
+        return newShard(shardRouting, Settings.EMPTY, listeners);
+        failOnShardFailures.set(true);
+            listener.onResponse(new ArrayList<>());
+                remoteStore = null;
+            return engineBackedIndexer.getEngine();
+        final FsRepository repository = new FsRepository(
+            + engine.getClass();
+        MergedSegmentPublisher mergedSegmentPublisher,
+            assertThat(shard.getMaxSeqNoOfUpdatesOrDeletes(), equalTo(shard.seqNoStats().getMaxSeqNo()));
+import org.opensearch.indices.recovery.StartRecoveryRequest;
+        );
+        TranslogManager translogManager = indexer.translogManager();
+        final Store store = storeProvider.apply(indexSettings);
+        return newShard(
+        final Version version = Version.CURRENT;
+            shard.updateLocalCheckpointForShard(shard.routingEntry().allocationId().getId(), shard.getLocalCheckpoint());
+        }
+import org.opensearch.indices.replication.checkpoint.MergedSegmentCheckpoint;
+                    in.readBytes(buffer, 0, length);
+        final BiFunction<IndexShard, DiscoveryNode, RecoveryTarget> targetSupplier,
+import org.opensearch.index.store.FsDirectoryFactory;
+import static org.mockito.ArgumentMatchers.any;
+        }
+                } catch (Exception e) {
+import org.opensearch.common.blobstore.fs.FsBlobContainer;
+        return newShard(primary, checkpointPublisher, settings);
+            primary.isRemoteTranslogEnabled()
+     * @param globalCheckpointSyncer callback for syncing global checkpoints
+        IndexShard primaryShard,
+                BiConsumer<String, Long> fileProgressTracker,
+        );
+        InternalTranslogManager internalTranslogManager = (InternalTranslogManager) translogManager;
+     * creates a new initializing shard.
+    public final SegmentReplicationTargetService prepareForReplication(IndexShard primaryShard, IndexShard target) {
+            checkpointPublisher,
+                    new DiscoveryNode(
+            routingTable,
+    ) throws IOException {
+     */
+    }
+            globalCheckpointSyncer,
+        } else {
+            repositoryMetadata,
+                    VersionType.INTERNAL,
+                (repId) -> targetService.getMergedSegmentReplicationRef(repId),
+                    final ReplicationCollection.ReplicationRef<MergedSegmentReplicationTarget> replicationRef = getMergedSegmentTargetFunc
+                    int length = between(1, Math.toIntExact(md.length() - pos));
+            globalCheckpointSyncer,
+            () -> {},
+import org.opensearch.index.store.Store;
+                ReplicationCheckpoint checkpoint,
+        ShardRouting routing,
+     * @param indexerFactory the indexer factory to use for this shard
+            }
+    ) throws IOException {
+            true,
+        // Get primary metadata to verify with replica's, used to ensure replica catches up
+import static org.opensearch.test.ClusterServiceUtils.createClusterService;
+                        shardRouting.currentNodeId(),
+                shard.store(),
+        primary.updateShardState(
+                String remoteStoreRepository = indexSettings.getRemoteStoreRepository();
+                shardRouting.primary() ? RecoverySource.ExistingStoreRecoverySource.INSTANCE : RecoverySource.PeerRecoverySource.INSTANCE
+            routing,
+        );
+                ? IndexShardTestUtils.getFakeRemoteEnabledDiscoveryNodes(routingTable.shards())
+            clusterService.close();
+            ? RecoverySource.EmptyStoreRecoverySource.INSTANCE
+import org.opensearch.index.engine.EngineConfigFactory;
+                getTargetListener(primaryShard, replica, primaryMetadata, countDownLatch)
+    private static final AtomicBoolean failOnShardFailures = new AtomicBoolean(true);
+        countDownLatch.await(30, TimeUnit.SECONDS);
+    }
+                listener.onResponse(new GetSegmentFilesResponse(filesToFetch));
+            IndexCache indexCache = new IndexCache(indexSettings, new DisabledQueryCache(indexSettings), null);
+    public static Translog getTranslog(IndexShard shard) {
+        RemoteStoreLockManager remoteStoreLockManager = new RemoteStoreMetadataLockManager(
+import org.opensearch.indices.replication.checkpoint.ReferencedSegmentsPublisher;
+    protected void promoteReplica(IndexShard replica, Set<String> inSyncIds, IndexShardRoutingTable routingTable) throws IOException {
+                xContentRegistry(),
+import org.opensearch.core.index.shard.ShardId;
+                );
+        );
+                indexReaderWrapper,
+        updateRoutingEntry(primary, ShardRoutingHelper.moveToStarted(primary.routingEntry()));
+                List<StoreFileMetadata> filesToFetch,
+            pNode = IndexShardTestUtils.getFakeDiscoNode(primary.routingEntry().currentNodeId());
+            when(sourceFactory.get(any())).thenReturn(replicationSource);
+            );
+    }
+        @Nullable EngineConfigFactory engineConfigFactory,
+     * @param settings      the settings to use for this shard
+            if (remoteStoreStatsTrackerFactory != null) {
+        ShardRouting routing,
+        try {
+        };
+                new Object(),
+        @Nullable Path remotePath,
+        return reinitShard(current, (Path) null, listeners);
+ *
+    }
+                new MergedSegmentWarmerFactory(null, new RecoverySettings(nodeSettings, clusterSettings), clusterService),
+            shardId,
+                    listener.onResponse(
+            shard.sync(); // advance local checkpoint
+            public void onReplicationFailure(SegmentReplicationState state, ReplicationFailedException e, boolean sendShardFailure) {
+    ) throws IOException {
+    }
+        return result;
+                }
+import org.opensearch.indices.replication.CheckpointInfoResponse;
+            future.actionGet();
+    }
+        ShardPath shardPath,
+            ),
+        return newShard(
+        throws IOException {
+            when(indicesService.getShardOrNull(any())).thenReturn(target);
+     * This test will use a real {@link SegmentReplicationTarget} for each replica with a mock {@link SegmentReplicationSource} that
+import static org.hamcrest.Matchers.equalTo;
+            if (result.getResultType() == Engine.Result.Type.MAPPING_UPDATE_REQUIRED) {
+                    Assert.fail("Failed to compute copyState");
+     * This test will use a real {@link SegmentReplicationTarget} for each replica with a mock {@link SegmentReplicationSource} that
+import org.opensearch.index.seqno.ReplicationTracker;
+                try (final CopyState copyState = new CopyState(primaryShard)) {
+     * creates a new initializing shard. The shard will be put in its proper path under the
+            } else {
+        IndexingOperationListener... listeners
+            mergedSegmentPublisher,
+            listeners
+        if (indexMetadata.getSettings().get(IndexMetadata.SETTING_REMOTE_STORE_ENABLED) == "true") {
+            RetentionLeaseSyncer.EMPTY,
+import java.util.ArrayList;
+                } catch (IOException e) {
+     * @param replicaShard - target of segment replication
+                any(BlobContainer.BlobNameSortOrder.class),
+     * @param mergedSegmentPublisher        merged segment publisher
+                indexSettings.getSettings(),
+            }
+import org.opensearch.action.support.replication.TransportReplicationAction;
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+                .put("node.attr.remote_store.translog.repository", "seg_repo")
+     * @param primaryShard - {@link IndexShard} The current primary shard.
+            );
+        failOnShardFailures.set(false);
+            throw new AssertionError(e);
+        final IndexId indexId = new IndexId(shardId.getIndex().getName(), shardId.getIndex().getUUID());
+        Path path,
+        ShardId shardId = shardRouting.shardId();
+        return new FsBlobContainer(fsBlobStore, blobPath, f);
+        when(repositoriesService.repository(any(String.class))).thenReturn(repository);
+            null,
+    }
+    protected RepositoriesService createRepositoriesService() {
+                        () -> mockRepoSvc,
+            EngineTestCase.assertConsistentHistoryBetweenTranslogAndLuceneIndex(engine);
+        if (shard.routingEntry().primary()) {
+        final IndexShardRoutingTable routingTable = newRoutingTable.build();
+    }
+                warmer,
 }
+        @Nullable IndexerFactory indexerFactory,
+        final IndexShard replica,
+                    replicationCheckpoint.getSegmentInfosVersion(),
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+    public SegmentReplicationTargetService.SegmentReplicationListener getMergedSegmentTargetListener(
+        return newStartedShard(primary, Settings.EMPTY, new EngineBackedIndexerFactory(new InternalEngineFactory()));
+            current.shardPath(),
+     * @param listeners new listerns to use for the newly created shard
+        }
+            ShardRoutingState.INITIALIZING,
+                List<StoreFileMetadata> filesToFetch,
+    /**
+                ),
+            (r, sourceNode) -> new RecoveryTarget(r, sourceNode, recoveryListener, threadPool),
+        }
+        return blobStore;
+                null // TODO
+ * Unless required by applicable law or agreed to in writing,
+        primary.markAsRecovering(
+        @Nullable EngineConfigFactory engineConfigFactory,
+     * Helper method to access (package-protected) engine from tests.
+import java.util.concurrent.TimeUnit;
+        BlobStoreRepository repository = Mockito.mock(BlobStoreRepository.class);
+        );
+        final boolean markAsStarted,
+     * @param listeners     new listerns to use for the newly created shard
+    }
+import org.opensearch.indices.replication.checkpoint.MergedSegmentPublisher;
+            .put(Settings.EMPTY)
+     * Snapshot a shard using a given repository.
+        return indexShard;
+            }
+        }
+    public void setUp() throws Exception {
+     * @param path                   remote path
+            primary = newStartedShard(true, replica.indexSettings.getSettings());
+import org.opensearch.indices.DefaultRemoteStoreSettings;
+        @Nullable IndexerFactory indexerFactory,
+        replica.prepareForIndexRecovery();
+            recoveryTarget,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.opensearch.threadpool.TestThreadPool;
+                    )
+        return newStartedShard(p -> newShard(p, settings, indexerFactory), primary);
+    }
+     * @param indexMetadata                 indexMetadata for the shard, including any mapping
+        final Settings settings = Settings.builder()
+     * @return Returns SegmentReplicationTargetService.SegmentReplicationListener
+                IndexShard indexShard,
+ * license agreements. See the NOTICE file distributed with
+        }
+        ShardRouting routing,
+        IndexShard current,
+        SegmentReplicationSourceFactory sourceFactory
+        final Engine engine = shard.getIndexerOrNull() instanceof EngineBackedIndexer engineBackedIndexer
+                    final Store.RecoveryDiff recoveryDiff = Store.segmentReplicationDiff(primaryMetadata, replicaMetadata);
+        IndexMetadata metadata = IndexMetadata.builder(shardRouting.getIndexName())
+        Indexer indexer = getIndexer(shard);
+            : RecoverySource.PeerRecoverySource.INSTANCE;
+                breakerService,
+                long replicationId,
+                    "Mappings are not available on the replica yet, triggered update: " + result.getRequiredMappingUpdate()
+            version,
+            routing,
+                : null;
+            mock(ClusterService.class),
+ * this work for additional information regarding copyright
+    protected void assertDocs(IndexShard shard, String... ids) throws IOException {
+            inSyncIds,
+import java.util.Arrays;
+        final IndexShard primary,
+import java.util.function.BiConsumer;
+            currentClusterStateVersion.incrementAndGet(),
+            currentClusterStateVersion.incrementAndGet(),
+        ShardRouting routing,
+    protected RemoteSegmentStoreDirectory createRemoteSegmentStoreDirectory(ShardId shardId, Path path) throws IOException {
+        );
+                BlobStoreRepository repo = createRepository(remotePath);
+    ) {
+            ShardRoutingState.INITIALIZING,
+        @Nullable CheckedFunction<DirectoryReader, DirectoryReader, IOException> indexReaderWrapper,
+            .put("indices.recovery.max_concurrent_operations", Integer.toString(between(1, 4)))
+        }
+        // add node id as name to settings for proper logging
+            clusterService
+        return result;
+import org.opensearch.indices.recovery.RecoveryState;
+    }
+        ) {
+                    remotePath = PathUtils.get(remoteStoreRepository.replace("__test", ""));
+                    writeFileChunks(replicationRef.get(), primaryShard, filesToFetch.toArray(new StoreFileMetadata[] {}));
+            shard.updateLocalCheckpointForShard(shard.routingEntry().allocationId().getId(), shard.getLocalCheckpoint());
+        final RecoverySourceHandler recovery = RecoverySourceHandlerFactory.create(
+import org.opensearch.cluster.node.DiscoveryNode;
+                    return new RemoteBlobStoreInternalTranslogFactory(
+        super.setUp();
+import java.util.concurrent.CountDownLatch;
+        throws IOException {
+     * Takes an existing shard, closes it and starts a new initialing shard at the same location
+        );
+            inSyncIds,
+            recoveryTarget.markAsDone();
+        final Set<String> inSyncIds = Collections.singleton(primary.routingEntry().allocationId().getId());
+            public void onReplicationDone(SegmentReplicationState state) {
+import static org.opensearch.cluster.routing.TestShardRouting.newShardRouting;
+                    );
+            rNode = IndexShardTestUtils.getFakeDiscoNode(replica.routingEntry().currentNodeId());
+import org.opensearch.index.translog.TranslogFactory;
+            CircuitBreakerService breakerService = new HierarchyCircuitBreakerService(
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+     * @param indexMetadata the index metadata to use for the newly created shard
+     */
+        throws IOException {
+                    listener.onFailure(e);
+                    logger.error("Unexpected error computing CopyState", e);
+        return newShard(shardRouting, metadata.build(), null, indexerFactory, () -> {}, RetentionLeaseSyncer.EMPTY, null, listeners);
+    }
+ * You may obtain a copy of the License at
+     * @param remotePath Remote path to recover from if remote storage is used
+            primary,
+    /**
+            shard.sync(); // advance local checkpoint
+        final ShardRouting shardRouting = TestShardRouting.newShardRouting(
+                    throw ExceptionsHelper.convertToRuntime(e);
+                shard.mapperService(),
+        Path path,
+     * @param routing   the shard routing to use for the newly created shard.
+     */
+        long fileChunkSizeInBytes = randomBoolean()
+     */

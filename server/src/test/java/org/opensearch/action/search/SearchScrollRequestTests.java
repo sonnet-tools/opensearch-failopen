@@ -1,165 +1,147 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.search;
-
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentHelper;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.internal.InternalScrollSearchRequest;
-import org.opensearch.search.internal.ShardSearchContextId;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-
-import static org.opensearch.test.EqualsHashCodeTestUtils.checkEqualsAndHashCode;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertToXContentEquivalent;
-import static org.hamcrest.Matchers.startsWith;
-
-public class SearchScrollRequestTests extends OpenSearchTestCase {
-
-    public void testSerialization() throws Exception {
-        SearchScrollRequest searchScrollRequest = createSearchScrollRequest();
-        try (BytesStreamOutput output = new BytesStreamOutput()) {
-            searchScrollRequest.writeTo(output);
-            try (StreamInput in = output.bytes().streamInput()) {
-                SearchScrollRequest deserializedRequest = new SearchScrollRequest(in);
-                assertEquals(deserializedRequest, searchScrollRequest);
-                assertEquals(deserializedRequest.hashCode(), searchScrollRequest.hashCode());
-                assertNotSame(deserializedRequest, searchScrollRequest);
-            }
-        }
-    }
-
-    public void testInternalScrollSearchRequestSerialization() throws IOException {
-        SearchScrollRequest searchScrollRequest = createSearchScrollRequest();
-        InternalScrollSearchRequest internalScrollSearchRequest = new InternalScrollSearchRequest(
-            searchScrollRequest,
-            new ShardSearchContextId(UUIDs.randomBase64UUID(), randomLong())
-        );
-        try (BytesStreamOutput output = new BytesStreamOutput()) {
-            internalScrollSearchRequest.writeTo(output);
-            try (StreamInput in = output.bytes().streamInput()) {
-                InternalScrollSearchRequest deserializedRequest = new InternalScrollSearchRequest(in);
-                assertEquals(deserializedRequest.contextId().getId(), internalScrollSearchRequest.contextId().getId());
-                assertEquals(deserializedRequest.scroll(), internalScrollSearchRequest.scroll());
-                assertNotSame(deserializedRequest, internalScrollSearchRequest);
-            }
-        }
-    }
-
-    public void testFromXContent() throws Exception {
-        SearchScrollRequest searchScrollRequest = new SearchScrollRequest();
-        if (randomBoolean()) {
-            // test that existing values get overridden
-            searchScrollRequest = createSearchScrollRequest();
-        }
-        try (
-            XContentParser parser = createParser(
-                XContentFactory.jsonBuilder().startObject().field("scroll_id", "SCROLL_ID").field("scroll", "1m").endObject()
-            )
-        ) {
-            searchScrollRequest.fromXContent(parser);
-        }
-        assertEquals("SCROLL_ID", searchScrollRequest.scrollId());
-        assertEquals(TimeValue.parseTimeValue("1m", null, "scroll"), searchScrollRequest.scroll().keepAlive());
-    }
-
-    public void testFromXContentWithUnknownParamThrowsException() throws Exception {
-        SearchScrollRequest searchScrollRequest = new SearchScrollRequest();
-        XContentParser invalidContent = createParser(
-            XContentFactory.jsonBuilder().startObject().field("scroll_id", "value_2").field("unknown", "keyword").endObject()
-        );
-
-        Exception e = expectThrows(IllegalArgumentException.class, () -> searchScrollRequest.fromXContent(invalidContent));
-        assertThat(e.getMessage(), startsWith("Unknown parameter [unknown]"));
-    }
-
-    public void testToXContent() throws IOException {
-        SearchScrollRequest searchScrollRequest = new SearchScrollRequest();
-        searchScrollRequest.scrollId("SCROLL_ID");
-        searchScrollRequest.scroll("1m");
-        try (XContentBuilder builder = JsonXContent.contentBuilder()) {
-            searchScrollRequest.toXContent(builder, ToXContent.EMPTY_PARAMS);
-            assertEquals("{\"scroll_id\":\"SCROLL_ID\",\"scroll\":\"1m\"}", builder.toString());
-        }
-    }
-
-    public void testToAndFromXContent() throws IOException {
-        XContentType xContentType = randomFrom(XContentType.values());
         boolean humanReadable = randomBoolean();
-        SearchScrollRequest originalRequest = createSearchScrollRequest();
-        BytesReference originalBytes = toShuffledXContent(originalRequest, xContentType, ToXContent.EMPTY_PARAMS, humanReadable);
+ * under the License.
+import org.opensearch.search.internal.ShardSearchContextId;
+ * compatible open source license.
+        SearchScrollRequest searchScrollRequest = createSearchScrollRequest();
+    }
+    public void testToXContent() throws IOException {
+                assertEquals(deserializedRequest.scroll(), internalScrollSearchRequest.scroll());
         SearchScrollRequest parsedRequest = new SearchScrollRequest();
-        try (XContentParser parser = createParser(xContentType.xContent(), originalBytes)) {
-            parsedRequest.fromXContent(parser);
+        );
+import static org.hamcrest.Matchers.startsWith;
+        if (randomBoolean()) {
+    public void testSerialization() throws Exception {
+                InternalScrollSearchRequest deserializedRequest = new InternalScrollSearchRequest(in);
+    }
         }
-        assertEquals(originalRequest, parsedRequest);
-        BytesReference parsedBytes = XContentHelper.toXContent(parsedRequest, xContentType, humanReadable);
-        assertToXContentEquivalent(originalBytes, parsedBytes, xContentType);
+        } else {
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Modifications Copyright OpenSearch Contributors. See
     }
-
-    public void testEqualsAndHashcode() {
+            try (StreamInput in = output.bytes().streamInput()) {
+            return copy.scrollId(original.scrollId() + "xyz");
+                SearchScrollRequest deserializedRequest = new SearchScrollRequest(in);
+            assertEquals("{\"scroll_id\":\"SCROLL_ID\",\"scroll\":\"1m\"}", builder.toString());
+        ) {
+            searchScrollRequest.writeTo(output);
+                assertNotSame(deserializedRequest, searchScrollRequest);
+ *
         checkEqualsAndHashCode(createSearchScrollRequest(), SearchScrollRequestTests::copyRequest, SearchScrollRequestTests::mutate);
+        );
+import org.opensearch.common.xcontent.json.JsonXContent;
+        }
+ * this file be licensed under the Apache-2.0 license or a
+            )
+        XContentType xContentType = randomFrom(XContentType.values());
+            internalScrollSearchRequest.writeTo(output);
+        searchScrollRequest.scroll("1m");
+            return copy.scroll(new TimeValue(original.scroll().keepAlive().getMillis() + 1));
+    public void testEqualsAndHashcode() {
+ * license agreements. See the NOTICE file distributed with
+                assertEquals(deserializedRequest.contextId().getId(), internalScrollSearchRequest.contextId().getId());
+        if (randomBoolean()) {
+        SearchScrollRequest copy = copyRequest(original);
+            XContentParser parser = createParser(
+ * Unless required by applicable law or agreed to in writing,
     }
-
-    public static SearchScrollRequest createSearchScrollRequest() {
-        SearchScrollRequest searchScrollRequest = new SearchScrollRequest(randomAlphaOfLengthBetween(3, 10));
-        searchScrollRequest.scroll(randomPositiveTimeValue());
-        return searchScrollRequest;
+        try (XContentBuilder builder = JsonXContent.contentBuilder()) {
+ */
+import org.opensearch.core.common.io.stream.StreamInput;
+ *
+        }
+                XContentFactory.jsonBuilder().startObject().field("scroll_id", "SCROLL_ID").field("scroll", "1m").endObject()
+            }
     }
-
+import org.opensearch.search.internal.InternalScrollSearchRequest;
+    }
+ * ownership. Elasticsearch licenses this file to you under
+    public void testFromXContent() throws Exception {
+ */
+ * not use this file except in compliance with the License.
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertToXContentEquivalent;
+                assertEquals(deserializedRequest, searchScrollRequest);
+        return result;
+    private static SearchScrollRequest mutate(SearchScrollRequest original) {
+import org.opensearch.core.xcontent.XContentBuilder;
+        Exception e = expectThrows(IllegalArgumentException.class, () -> searchScrollRequest.fromXContent(invalidContent));
+import org.opensearch.core.common.bytes.BytesReference;
+            // test that existing values get overridden
+import org.opensearch.core.xcontent.XContentParser;
+    }
     private static SearchScrollRequest copyRequest(SearchScrollRequest searchScrollRequest) {
+            }
+            searchScrollRequest.toXContent(builder, ToXContent.EMPTY_PARAMS);
+import org.opensearch.test.OpenSearchTestCase;
+import java.io.IOException;
+}
+        assertEquals(originalRequest, parsedRequest);
+        SearchScrollRequest originalRequest = createSearchScrollRequest();
+            XContentFactory.jsonBuilder().startObject().field("scroll_id", "value_2").field("unknown", "keyword").endObject()
+ */
+import org.opensearch.common.UUIDs;
+            searchScrollRequest.fromXContent(parser);
+        return searchScrollRequest;
+import org.opensearch.core.xcontent.ToXContent;
+    }
+ * KIND, either express or implied.  See the License for the
+        assertToXContentEquivalent(originalBytes, parsedBytes, xContentType);
+import org.opensearch.core.xcontent.XContentHelper;
+ * the Apache License, Version 2.0 (the "License"); you may
+        SearchScrollRequest searchScrollRequest = new SearchScrollRequest();
+            searchScrollRequest,
+    }
+        assertEquals("SCROLL_ID", searchScrollRequest.scrollId());
+            new ShardSearchContextId(UUIDs.randomBase64UUID(), randomLong())
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        assertEquals(TimeValue.parseTimeValue("1m", null, "scroll"), searchScrollRequest.scroll().keepAlive());
+/*
+        XContentParser invalidContent = createParser(
+        try (
+    public void testFromXContentWithUnknownParamThrowsException() throws Exception {
+        }
+public class SearchScrollRequestTests extends OpenSearchTestCase {
+        SearchScrollRequest searchScrollRequest = new SearchScrollRequest();
+import org.opensearch.common.unit.TimeValue;
+package org.opensearch.action.search;
+        SearchScrollRequest searchScrollRequest = new SearchScrollRequest(randomAlphaOfLengthBetween(3, 10));
+        }
+import org.opensearch.common.xcontent.XContentType;
+/*
+ * specific language governing permissions and limitations
+    public static SearchScrollRequest createSearchScrollRequest() {
+            try (StreamInput in = output.bytes().streamInput()) {
+        try (XContentParser parser = createParser(xContentType.xContent(), originalBytes)) {
+ * Licensed to Elasticsearch under one or more contributor
+ *
+ * GitHub history for details.
+        assertThat(e.getMessage(), startsWith("Unknown parameter [unknown]"));
+                assertNotSame(deserializedRequest, internalScrollSearchRequest);
+ * this work for additional information regarding copyright
+        BytesReference parsedBytes = XContentHelper.toXContent(parsedRequest, xContentType, humanReadable);
+ * software distributed under the License is distributed on an
+ * The OpenSearch Contributors require contributions made to
+        BytesReference originalBytes = toShuffledXContent(originalRequest, xContentType, ToXContent.EMPTY_PARAMS, humanReadable);
+        InternalScrollSearchRequest internalScrollSearchRequest = new InternalScrollSearchRequest(
+        searchScrollRequest.scroll(randomPositiveTimeValue());
         SearchScrollRequest result = new SearchScrollRequest();
         result.scrollId(searchScrollRequest.scrollId());
-        result.scroll(searchScrollRequest.scroll());
-        return result;
-    }
-
-    private static SearchScrollRequest mutate(SearchScrollRequest original) {
-        SearchScrollRequest copy = copyRequest(original);
-        if (randomBoolean()) {
-            return copy.scrollId(original.scrollId() + "xyz");
-        } else {
-            return copy.scroll(new TimeValue(original.scroll().keepAlive().getMillis() + 1));
+        try (BytesStreamOutput output = new BytesStreamOutput()) {
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        try (BytesStreamOutput output = new BytesStreamOutput()) {
+import static org.opensearch.test.EqualsHashCodeTestUtils.checkEqualsAndHashCode;
+/*
+import org.opensearch.common.xcontent.XContentFactory;
+ * You may obtain a copy of the License at
         }
-    }
-}
+                assertEquals(deserializedRequest.hashCode(), searchScrollRequest.hashCode());
+            searchScrollRequest = createSearchScrollRequest();
+        searchScrollRequest.scrollId("SCROLL_ID");
+    public void testInternalScrollSearchRequestSerialization() throws IOException {
+        SearchScrollRequest searchScrollRequest = createSearchScrollRequest();
+        SearchScrollRequest searchScrollRequest = new SearchScrollRequest();
+ * SPDX-License-Identifier: Apache-2.0
+        result.scroll(searchScrollRequest.scroll());
+    public void testToAndFromXContent() throws IOException {
+            parsedRequest.fromXContent(parser);

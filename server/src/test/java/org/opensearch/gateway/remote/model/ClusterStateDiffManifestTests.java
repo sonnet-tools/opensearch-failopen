@@ -1,310 +1,288 @@
-/*
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.gateway.remote.model;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.coordination.CoordinationMetadata;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexTemplateMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.metadata.TemplatesMetadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.RoutingTableIncrementalDiff;
-import org.opensearch.cluster.routing.StringKeyDiffProvider;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.gateway.remote.ClusterStateDiffManifest;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-
-import static java.util.Arrays.asList;
-import static java.util.Collections.emptyList;
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.singletonList;
-import static java.util.stream.Collectors.toList;
-import static org.opensearch.Version.CURRENT;
-import static org.opensearch.cluster.ClusterState.EMPTY_STATE;
-import static org.opensearch.core.common.transport.TransportAddress.META_ADDRESS;
-import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V3;
-import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V4;
-import static org.opensearch.gateway.remote.RemoteClusterStateServiceTests.generateClusterStateWithOneIndex;
-import static org.opensearch.gateway.remote.RemoteClusterStateServiceTests.nodesWithLocalNodeClusterManager;
-import static org.opensearch.gateway.remote.model.RemoteClusterBlocksTests.randomClusterBlocks;
-
-public class ClusterStateDiffManifestTests extends OpenSearchTestCase {
-
-    public void testClusterStateDiffManifest() {
-        ClusterState initialState = ClusterState.builder(EMPTY_STATE)
-            .metadata(
-                Metadata.builder()
-                    .put(
-                        IndexMetadata.builder("index-1")
-                            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))
-                            .numberOfShards(1)
-                            .numberOfReplicas(0)
-                    )
-            )
-            .build();
-        updateAndVerifyState(
-            initialState,
-            singletonList(
-                IndexMetadata.builder("index-2")
-                    .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))
-                    .numberOfShards(1)
-                    .numberOfReplicas(0)
-                    .build()
-            ),
-            singletonList("index-1"),
-            emptyMap(),
-            emptyList(),
-            emptyMap(),
-            emptyList(),
-            randomBoolean(),
-            randomBoolean(),
-            randomBoolean(),
-            randomBoolean(),
-            randomBoolean(),
-            randomBoolean(),
-            randomBoolean()
-        );
-    }
-
-    public void testClusterStateDiffManifestXContent() throws IOException {
-        ClusterState initialState = ClusterState.builder(EMPTY_STATE)
-            .metadata(
-                Metadata.builder()
-                    .put(
-                        IndexMetadata.builder("index-1")
-                            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))
-                            .numberOfShards(1)
-                            .numberOfReplicas(0)
-                    )
-            )
-            .build();
-        ClusterStateDiffManifest diffManifest = updateAndVerifyState(
-            initialState,
-            emptyList(),
-            singletonList("index-1"),
-            emptyMap(),
-            emptyList(),
-            emptyMap(),
-            emptyList(),
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true
-        );
-        final XContentBuilder builder = JsonXContent.contentBuilder();
-        builder.startObject();
-        diffManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final ClusterStateDiffManifest parsedManifest = ClusterStateDiffManifest.fromXContent(parser, CODEC_V4);
-            assertEquals(diffManifest, parsedManifest);
-        }
-    }
-
-    public void testClusterStateWithRoutingTableDiffInDiffManifestXContent() throws IOException {
-        ClusterState initialState = generateClusterStateWithOneIndex("test-index", 5, 1, true).nodes(nodesWithLocalNodeClusterManager())
-            .build();
-
-        ClusterState updatedState = generateClusterStateWithOneIndex("test-index", 5, 2, false).nodes(nodesWithLocalNodeClusterManager())
-            .build();
-
         ClusterStateDiffManifest diffManifest = verifyRoutingTableDiffManifest(initialState, updatedState, CODEC_V3);
-        final XContentBuilder builder = JsonXContent.contentBuilder();
-        builder.startObject();
-        diffManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final ClusterStateDiffManifest parsedManifest = ClusterStateDiffManifest.fromXContent(parser, CODEC_V3);
-            assertEquals(diffManifest, parsedManifest);
-        }
-    }
-
-    public void testClusterStateWithRoutingTableDiffInDiffManifestXContentWithDeletes() throws IOException {
-        ClusterState initialState = generateClusterStateWithOneIndex("test-index", 5, 1, true).nodes(nodesWithLocalNodeClusterManager())
-            .build();
-
-        ClusterState updatedState = generateClusterStateWithOneIndex("test-index-1", 5, 2, false).nodes(nodesWithLocalNodeClusterManager())
-            .build();
-
-        ClusterStateDiffManifest diffManifest = verifyRoutingTableDiffManifest(initialState, updatedState, CODEC_V3);
-        final XContentBuilder builder = JsonXContent.contentBuilder();
-        builder.startObject();
-        diffManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final ClusterStateDiffManifest parsedManifest = ClusterStateDiffManifest.fromXContent(parser, CODEC_V3);
-            assertEquals(diffManifest, parsedManifest);
-        }
-    }
-
-    public void testClusterStateWithRoutingTableDiffInDiffManifestXContentV4() throws IOException {
-        ClusterState initialState = generateClusterStateWithOneIndex("test-index", 5, 1, true).nodes(nodesWithLocalNodeClusterManager())
-            .build();
-
-        ClusterState updatedState = generateClusterStateWithOneIndex("test-index", 5, 2, false).nodes(nodesWithLocalNodeClusterManager())
-            .build();
-
-        ClusterStateDiffManifest diffManifest = verifyRoutingTableDiffManifest(initialState, updatedState, CODEC_V4);
-        final XContentBuilder builder = JsonXContent.contentBuilder();
-        builder.startObject();
-        diffManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final ClusterStateDiffManifest parsedManifest = ClusterStateDiffManifest.fromXContent(parser, CODEC_V4);
-            assertEquals(diffManifest, parsedManifest);
-        }
-    }
-
-    public void testClusterStateWithRoutingTableDiffInDiffManifestXContentWithDeletesV4() throws IOException {
-        ClusterState initialState = generateClusterStateWithOneIndex("test-index", 5, 1, true).nodes(nodesWithLocalNodeClusterManager())
-            .build();
-
-        ClusterState updatedState = generateClusterStateWithOneIndex("test-index-1", 5, 2, false).nodes(nodesWithLocalNodeClusterManager())
-            .build();
-
-        ClusterStateDiffManifest diffManifest = verifyRoutingTableDiffManifest(initialState, updatedState, CODEC_V4);
-        final XContentBuilder builder = JsonXContent.contentBuilder();
-        builder.startObject();
-        diffManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final ClusterStateDiffManifest parsedManifest = ClusterStateDiffManifest.fromXContent(parser, CODEC_V4);
-            assertEquals(diffManifest, parsedManifest);
-        }
-    }
-
-    private ClusterStateDiffManifest verifyRoutingTableDiffManifest(
-        ClusterState previousState,
-        ClusterState currentState,
-        int codecVersion
-    ) {
-        // Create initial and updated IndexRoutingTable maps
-        StringKeyDiffProvider<IndexRoutingTable> routingTableDiff = new RoutingTableIncrementalDiff(
-            previousState.getRoutingTable(),
-            currentState.getRoutingTable()
+        ClusterStateDiffManifest manifest = new ClusterStateDiffManifest(updatedClusterState, initialState, CODEC_V4, null, null);
         );
-        ClusterStateDiffManifest manifest = new ClusterStateDiffManifest(
-            currentState,
-            previousState,
+        ClusterState initialState = ClusterState.builder(EMPTY_STATE)
+                            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))
             codecVersion,
-            routingTableDiff,
-            "indicesRoutingDiffPath"
-        );
-        assertEquals("indicesRoutingDiffPath", manifest.getIndicesRoutingDiffPath());
-        return manifest;
-    }
-
-    private ClusterStateDiffManifest updateAndVerifyState(
-        ClusterState initialState,
-        List<IndexMetadata> indicesToAdd,
-        List<String> indicesToRemove,
-        Map<String, Metadata.Custom> customsToAdd,
-        List<String> customsToRemove,
-        Map<String, ClusterState.Custom> clusterStateCustomsToAdd,
-        List<String> clusterStateCustomsToRemove,
-        boolean updateCoordinationState,
-        boolean updatePersistentSettings,
-        boolean updateTemplates,
-        boolean updateTransientSettings,
-        boolean updateDiscoveryNodes,
-        boolean updateClusterBlocks,
-        boolean updateHashesOfConsistentSettings
+import static org.opensearch.core.common.transport.TransportAddress.META_ADDRESS;
+import static java.util.Arrays.asList;
+import org.opensearch.cluster.metadata.IndexMetadata;
+        StringKeyDiffProvider<IndexRoutingTable> routingTableDiff = new RoutingTableIncrementalDiff(
+        builder.endObject();
+        ClusterStateDiffManifest diffManifest = verifyRoutingTableDiffManifest(initialState, updatedState, CODEC_V4);
     ) {
-        ClusterState.Builder clusterStateBuilder = ClusterState.builder(initialState);
-        Metadata.Builder metadataBuilder = Metadata.builder(initialState.metadata());
-        for (IndexMetadata indexMetadata : indicesToAdd) {
-            metadataBuilder.put(indexMetadata, true);
+        updateAndVerifyState(
+        Map<String, ClusterState.Custom> clusterStateCustomsToAdd,
+            initialState,
+            .build();
+            singletonList("index-1"),
+        final XContentBuilder builder = JsonXContent.contentBuilder();
+            emptyMap(),
+    }
         }
-        indicesToRemove.forEach(metadataBuilder::remove);
-        for (String custom : customsToAdd.keySet()) {
-            metadataBuilder.putCustom(custom, customsToAdd.get(custom));
+import static org.opensearch.cluster.ClusterState.EMPTY_STATE;
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+            emptyList(),
         }
-        customsToRemove.forEach(metadataBuilder::removeCustom);
-        for (String custom : clusterStateCustomsToAdd.keySet()) {
-            clusterStateBuilder.putCustom(custom, clusterStateCustomsToAdd.get(custom));
-        }
-        clusterStateCustomsToRemove.forEach(clusterStateBuilder::removeCustom);
-        if (updateCoordinationState) {
-            metadataBuilder.coordinationMetadata(
-                CoordinationMetadata.builder(initialState.metadata().coordinationMetadata())
-                    .addVotingConfigExclusion(new CoordinationMetadata.VotingConfigExclusion("exlucdedNodeId", "excludedNodeName"))
-                    .build()
+                        IndexMetadata.builder("index-1")
+            .build();
             );
-        }
-        if (updatePersistentSettings) {
-            metadataBuilder.persistentSettings(Settings.builder().put("key", "value").build());
-        }
-        if (updateTemplates) {
-            metadataBuilder.templates(
-                TemplatesMetadata.builder()
-                    .put(
-                        IndexTemplateMetadata.builder("template" + randomAlphaOfLength(3))
-                            .patterns(asList("bar-*", "foo-*"))
-                            .settings(
-                                Settings.builder().put("random_index_setting_" + randomAlphaOfLength(3), randomAlphaOfLength(5)).build()
-                            )
+ * this file be licensed under the Apache-2.0 license or a
+    }
                             .build()
-                    )
                     .build()
-            );
-        }
-        if (updateTransientSettings) {
+    private ClusterStateDiffManifest updateAndVerifyState(
+            assertEquals(diffManifest, parsedManifest);
+                CoordinationMetadata.builder(initialState.metadata().coordinationMetadata())
+        builder.startObject();
+        builder.endObject();
+        for (String custom : clusterStateCustomsToAdd.keySet()) {
+        diffManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
+        return manifest;
+                            .settings(
+import org.opensearch.cluster.routing.IndexRoutingTable;
+                        IndexTemplateMetadata.builder("template" + randomAlphaOfLength(3))
             metadataBuilder.transientSettings(Settings.builder().put("key", "value").build());
+            emptyList(),
+            randomBoolean(),
+import org.opensearch.core.xcontent.ToXContent;
+import static org.opensearch.gateway.remote.RemoteClusterStateServiceTests.nodesWithLocalNodeClusterManager;
+                    .add(new DiscoveryNode("new-cluster-manager", new TransportAddress(META_ADDRESS, 9200), CURRENT))
+        assertEquals("indicesRoutingDiffPath", manifest.getIndicesRoutingDiffPath());
+                    .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))
+import org.opensearch.Version;
+        boolean updateDiscoveryNodes,
+        assertEquals(updatePersistentSettings, manifest.isSettingsMetadataUpdated());
+        diffManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
+        );
+            randomBoolean(),
+        }
+            metadataBuilder.put(indexMetadata, true);
+                    .numberOfReplicas(0)
+        ClusterStateDiffManifest diffManifest = updateAndVerifyState(
+        if (updateCoordinationState) {
+        if (updateTemplates) {
+        ClusterState initialState = ClusterState.builder(EMPTY_STATE)
+        final XContentBuilder builder = JsonXContent.contentBuilder();
+        ClusterState previousState,
+            singletonList("index-1"),
+public class ClusterStateDiffManifestTests extends OpenSearchTestCase {
+            assertEquals(diffManifest, parsedManifest);
+                    )
+        boolean updateCoordinationState,
+    }
+            )
+        assertEquals(new ArrayList<>(clusterStateCustomsToAdd.keySet()), manifest.getClusterStateCustomUpdated());
+        ClusterStateDiffManifest diffManifest = verifyRoutingTableDiffManifest(initialState, updatedState, CODEC_V3);
+package org.opensearch.gateway.remote.model;
+            )
+            initialState,
+        ClusterState updatedState = generateClusterStateWithOneIndex("test-index-1", 5, 2, false).nodes(nodesWithLocalNodeClusterManager())
+                Metadata.builder()
+        }
+        );
+        }
+    public void testClusterStateDiffManifest() {
+import java.util.ArrayList;
+                Metadata.builder()
+        Map<String, Metadata.Custom> customsToAdd,
+import static org.opensearch.gateway.remote.model.RemoteClusterBlocksTests.randomClusterBlocks;
+        Metadata.Builder metadataBuilder = Metadata.builder(initialState.metadata());
+            emptyList(),
+        boolean updatePersistentSettings,
+import static java.util.stream.Collectors.toList;
+                            .numberOfReplicas(0)
+        assertEquals(new ArrayList<>(customsToAdd.keySet()), manifest.getCustomMetadataUpdated());
+        }
+        boolean updateHashesOfConsistentSettings
+                    .clusterManagerNodeId("new-cluster-manager")
+                    .addVotingConfigExclusion(new CoordinationMetadata.VotingConfigExclusion("exlucdedNodeId", "excludedNodeName"))
+        ClusterState initialState = generateClusterStateWithOneIndex("test-index", 5, 1, true).nodes(nodesWithLocalNodeClusterManager())
+        assertEquals(updateDiscoveryNodes, manifest.isDiscoveryNodesUpdated());
+import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V4;
+            .build();
+                DiscoveryNodes.builder(initialState.nodes())
+            routingTableDiff,
+import org.opensearch.cluster.routing.RoutingTableIncrementalDiff;
+import org.opensearch.cluster.metadata.TemplatesMetadata;
+            "indicesRoutingDiffPath"
+        ClusterState updatedState = generateClusterStateWithOneIndex("test-index", 5, 2, false).nodes(nodesWithLocalNodeClusterManager())
+        builder.endObject();
+            emptyMap(),
         }
         if (updateDiscoveryNodes) {
-            clusterStateBuilder.nodes(
-                DiscoveryNodes.builder(initialState.nodes())
-                    .add(new DiscoveryNode("new-cluster-manager", new TransportAddress(META_ADDRESS, 9200), CURRENT))
-                    .clusterManagerNodeId("new-cluster-manager")
-            );
-        }
-        if (updateHashesOfConsistentSettings) {
-            metadataBuilder.hashesOfConsistentSettings(Collections.singletonMap("key", "value"));
-        }
-        if (updateClusterBlocks) {
+        ClusterState updatedState = generateClusterStateWithOneIndex("test-index", 5, 2, false).nodes(nodesWithLocalNodeClusterManager())
+import static java.util.Collections.singletonList;
+            .build();
+            .metadata(
+ * The OpenSearch Contributors require contributions made to
             clusterStateBuilder.blocks(randomClusterBlocks());
-        }
-        ClusterState updatedClusterState = clusterStateBuilder.metadata(metadataBuilder.build()).build();
-
-        ClusterStateDiffManifest manifest = new ClusterStateDiffManifest(updatedClusterState, initialState, CODEC_V4, null, null);
-        assertEquals(indicesToAdd.stream().map(im -> im.getIndex().getName()).collect(toList()), manifest.getIndicesUpdated());
-        assertEquals(indicesToRemove, manifest.getIndicesDeleted());
-        assertEquals(new ArrayList<>(customsToAdd.keySet()), manifest.getCustomMetadataUpdated());
-        assertEquals(customsToRemove, manifest.getCustomMetadataDeleted());
-        assertEquals(new ArrayList<>(clusterStateCustomsToAdd.keySet()), manifest.getClusterStateCustomUpdated());
-        assertEquals(clusterStateCustomsToRemove, manifest.getClusterStateCustomDeleted());
-        assertEquals(updateCoordinationState, manifest.isCoordinationMetadataUpdated());
-        assertEquals(updatePersistentSettings, manifest.isSettingsMetadataUpdated());
-        assertEquals(updateTemplates, manifest.isTemplatesMetadataUpdated());
-        assertEquals(updateTransientSettings, manifest.isTransientSettingsMetadataUpdated());
-        assertEquals(updateDiscoveryNodes, manifest.isDiscoveryNodesUpdated());
-        assertEquals(updateClusterBlocks, manifest.isClusterBlocksUpdated());
-        assertEquals(updateHashesOfConsistentSettings, manifest.isHashesOfConsistentSettingsUpdated());
-        return manifest;
+            metadataBuilder.templates(
+        boolean updateTransientSettings,
+        );
+    ) {
+                            )
+                TemplatesMetadata.builder()
+                    .put(
+            .build();
+import static org.opensearch.gateway.remote.RemoteClusterStateServiceTests.generateClusterStateWithOneIndex;
+                    )
+import java.util.Map;
+                    .build()
+        final XContentBuilder builder = JsonXContent.contentBuilder();
+            true,
+import org.opensearch.cluster.metadata.IndexTemplateMetadata;
+import org.opensearch.cluster.node.DiscoveryNode;
+        if (updateHashesOfConsistentSettings) {
+            true,
+            randomBoolean(),
     }
+    public void testClusterStateWithRoutingTableDiffInDiffManifestXContent() throws IOException {
+            metadataBuilder.persistentSettings(Settings.builder().put("key", "value").build());
+    }
+        ClusterState updatedState = generateClusterStateWithOneIndex("test-index-1", 5, 2, false).nodes(nodesWithLocalNodeClusterManager())
+                    .put(
+import org.opensearch.cluster.metadata.Metadata;
+        }
 }
+        builder.startObject();
+        List<IndexMetadata> indicesToAdd,
+    }
+        boolean updateTemplates,
+        clusterStateCustomsToRemove.forEach(clusterStateBuilder::removeCustom);
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+                    .numberOfShards(1)
+            singletonList(
+            emptyList(),
+            final ClusterStateDiffManifest parsedManifest = ClusterStateDiffManifest.fromXContent(parser, CODEC_V4);
+                            .numberOfShards(1)
+import static java.util.Collections.emptyList;
+                                Settings.builder().put("random_index_setting_" + randomAlphaOfLength(3), randomAlphaOfLength(5)).build()
+            final ClusterStateDiffManifest parsedManifest = ClusterStateDiffManifest.fromXContent(parser, CODEC_V3);
+        builder.startObject();
+            metadataBuilder.hashesOfConsistentSettings(Collections.singletonMap("key", "value"));
+        diffManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
+            );
+            .build();
+            assertEquals(diffManifest, parsedManifest);
+        builder.startObject();
+        assertEquals(updateHashesOfConsistentSettings, manifest.isHashesOfConsistentSettingsUpdated());
+            final ClusterStateDiffManifest parsedManifest = ClusterStateDiffManifest.fromXContent(parser, CODEC_V4);
+import org.opensearch.cluster.ClusterState;
+        }
+            .build();
+ *
+            .build();
+import org.opensearch.core.common.bytes.BytesReference;
+            currentState,
+/*
+import org.opensearch.cluster.coordination.CoordinationMetadata;
+        builder.endObject();
+    }
+    public void testClusterStateWithRoutingTableDiffInDiffManifestXContentV4() throws IOException {
+        assertEquals(indicesToAdd.stream().map(im -> im.getIndex().getName()).collect(toList()), manifest.getIndicesUpdated());
+import org.opensearch.test.OpenSearchTestCase;
+            true
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+        indicesToRemove.forEach(metadataBuilder::remove);
+            currentState.getRoutingTable()
+        ClusterState initialState,
+        diffManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
+            .metadata(
+            clusterStateBuilder.putCustom(custom, clusterStateCustomsToAdd.get(custom));
+        List<String> clusterStateCustomsToRemove,
+import org.opensearch.gateway.remote.ClusterStateDiffManifest;
+        ClusterState initialState = generateClusterStateWithOneIndex("test-index", 5, 1, true).nodes(nodesWithLocalNodeClusterManager())
+                    )
+import org.opensearch.common.xcontent.json.JsonXContent;
+        }
+        }
+        List<String> indicesToRemove,
+            true,
+            final ClusterStateDiffManifest parsedManifest = ClusterStateDiffManifest.fromXContent(parser, CODEC_V3);
+        }
+        builder.startObject();
+import java.io.IOException;
+            true,
+        return manifest;
+        diffManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
+        ClusterStateDiffManifest manifest = new ClusterStateDiffManifest(
+        assertEquals(customsToRemove, manifest.getCustomMetadataDeleted());
+    public void testClusterStateWithRoutingTableDiffInDiffManifestXContentWithDeletesV4() throws IOException {
+        List<String> customsToRemove,
+        ClusterStateDiffManifest diffManifest = verifyRoutingTableDiffManifest(initialState, updatedState, CODEC_V4);
+        if (updateTransientSettings) {
+                IndexMetadata.builder("index-2")
+            assertEquals(diffManifest, parsedManifest);
+import org.opensearch.core.xcontent.XContentBuilder;
+            );
+import org.opensearch.core.common.transport.TransportAddress;
+            final ClusterStateDiffManifest parsedManifest = ClusterStateDiffManifest.fromXContent(parser, CODEC_V4);
+        }
+        int codecVersion
+                            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))
+import org.opensearch.cluster.routing.StringKeyDiffProvider;
+            metadataBuilder.putCustom(custom, customsToAdd.get(custom));
+        boolean updateClusterBlocks,
+        final XContentBuilder builder = JsonXContent.contentBuilder();
+        assertEquals(updateTransientSettings, manifest.isTransientSettingsMetadataUpdated());
+import java.util.List;
+        }
+        ClusterState currentState,
+        assertEquals(indicesToRemove, manifest.getIndicesDeleted());
+            ),
+                        IndexMetadata.builder("index-1")
+    public void testClusterStateDiffManifestXContent() throws IOException {
+        assertEquals(updateClusterBlocks, manifest.isClusterBlocksUpdated());
+        customsToRemove.forEach(metadataBuilder::removeCustom);
+import org.opensearch.core.xcontent.XContentParser;
+        for (String custom : customsToAdd.keySet()) {
+ */
+            metadataBuilder.coordinationMetadata(
+            .build();
+            assertEquals(diffManifest, parsedManifest);
+        assertEquals(updateCoordinationState, manifest.isCoordinationMetadataUpdated());
+                    .put(
+    private ClusterStateDiffManifest verifyRoutingTableDiffManifest(
+                            .patterns(asList("bar-*", "foo-*"))
+            emptyList(),
+        for (IndexMetadata indexMetadata : indicesToAdd) {
+                            .numberOfShards(1)
+            randomBoolean(),
+        assertEquals(updateTemplates, manifest.isTemplatesMetadataUpdated());
+import java.util.Collections;
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+        ClusterState updatedClusterState = clusterStateBuilder.metadata(metadataBuilder.build()).build();
+            true,
+        if (updateClusterBlocks) {
+        ClusterState initialState = generateClusterStateWithOneIndex("test-index", 5, 1, true).nodes(nodesWithLocalNodeClusterManager())
+import static org.opensearch.Version.CURRENT;
+        final XContentBuilder builder = JsonXContent.contentBuilder();
+            randomBoolean()
+        builder.endObject();
+            previousState.getRoutingTable(),
+            randomBoolean(),
+            true,
+import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V3;
+        ClusterState initialState = generateClusterStateWithOneIndex("test-index", 5, 1, true).nodes(nodesWithLocalNodeClusterManager())
+            clusterStateBuilder.nodes(
+ * compatible open source license.
+    }
+        if (updatePersistentSettings) {
+import org.opensearch.cluster.node.DiscoveryNodes;
+        }
+    public void testClusterStateWithRoutingTableDiffInDiffManifestXContentWithDeletes() throws IOException {
+        assertEquals(clusterStateCustomsToRemove, manifest.getClusterStateCustomDeleted());
+import org.opensearch.common.settings.Settings;
+        // Create initial and updated IndexRoutingTable maps
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+        ClusterState.Builder clusterStateBuilder = ClusterState.builder(initialState);
+            previousState,
+            .build();
+import static java.util.Collections.emptyMap;
+            emptyMap(),
+            randomBoolean(),
+                            .numberOfReplicas(0)
+            emptyMap(),
+                    .build()

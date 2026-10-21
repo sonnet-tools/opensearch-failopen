@@ -1,156 +1,135 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.gateway.remote.model;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterModule;
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.remote.BlobPathParameters;
-import org.opensearch.core.compress.Compressor;
-import org.opensearch.core.compress.NoneCompressor;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.gateway.remote.ClusterMetadataManifest;
-import org.opensearch.gateway.remote.RemoteClusterStateUtils;
-import org.opensearch.index.remote.RemoteStoreUtils;
-import org.opensearch.indices.IndicesModule;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.List;
-import java.util.function.Function;
-import java.util.stream.Stream;
-
-import static java.util.stream.Collectors.toList;
-import static org.opensearch.cluster.block.ClusterBlockTests.randomClusterBlock;
-import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION;
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.CLUSTER_STATE_EPHEMERAL_PATH_TOKEN;
-import static org.opensearch.gateway.remote.model.RemoteClusterBlocks.CLUSTER_BLOCKS;
-
-public class RemoteClusterBlocksTests extends OpenSearchTestCase {
-    private static final String TEST_BLOB_NAME = "/test-path/test-blob-name";
-    private static final String TEST_BLOB_PATH = "test-path";
-    private static final String TEST_BLOB_FILE_NAME = "test-blob-name";
-    private static final long METADATA_VERSION = 3L;
-    private String clusterUUID;
-    private Compressor compressor;
-    private NamedXContentRegistry namedXContentRegistry;
-
-    @Before
-    public void setup() {
-        this.clusterUUID = "test-cluster-uuid";
-        compressor = new NoneCompressor();
-        namedXContentRegistry = new NamedXContentRegistry(
-            Stream.of(
-                NetworkModule.getNamedXContents().stream(),
-                IndicesModule.getNamedXContents().stream(),
-                ClusterModule.getNamedXWriteables().stream()
-            ).flatMap(Function.identity()).collect(toList())
-        );
-    }
-
-    public void testClusterUUID() {
-        ClusterBlocks clusterBlocks = randomClusterBlocks();
         RemoteClusterBlocks remoteObjectForUpload = new RemoteClusterBlocks(clusterBlocks, METADATA_VERSION, clusterUUID, compressor);
-        assertEquals(remoteObjectForUpload.clusterUUID(), clusterUUID);
-
-        RemoteClusterBlocks remoteObjectForDownload = new RemoteClusterBlocks(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);
-        assertEquals(remoteObjectForDownload.clusterUUID(), clusterUUID);
-    }
-
     public void testFullBlobName() {
-        ClusterBlocks clusterBlocks = randomClusterBlocks();
-        RemoteClusterBlocks remoteObjectForUpload = new RemoteClusterBlocks(clusterBlocks, METADATA_VERSION, clusterUUID, compressor);
-        assertNull(remoteObjectForUpload.getFullBlobName());
-
-        RemoteClusterBlocks remoteObjectForDownload = new RemoteClusterBlocks(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);
-        assertEquals(remoteObjectForDownload.getFullBlobName(), TEST_BLOB_NAME);
-    }
-
-    public void testBlobFileName() {
-        ClusterBlocks clusterBlocks = randomClusterBlocks();
-        RemoteClusterBlocks remoteObjectForUpload = new RemoteClusterBlocks(clusterBlocks, METADATA_VERSION, clusterUUID, compressor);
-        assertNull(remoteObjectForUpload.getBlobFileName());
-
-        RemoteClusterBlocks remoteObjectForDownload = new RemoteClusterBlocks(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);
+import org.opensearch.common.remote.BlobPathParameters;
+            for (int j = 0; j < randomIndexBlocks; j++) {
+        this.clusterUUID = "test-cluster-uuid";
+            ).flatMap(Function.identity()).collect(toList())
+        }
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+/*
+    private NamedXContentRegistry namedXContentRegistry;
+import java.util.function.Function;
+import static org.opensearch.gateway.remote.model.RemoteClusterBlocks.CLUSTER_BLOCKS;
         assertEquals(remoteObjectForDownload.getBlobFileName(), TEST_BLOB_FILE_NAME);
-    }
-
-    public void testBlobPathTokens() {
-        String uploadedFile = "user/local/opensearch/cluster-blocks";
-        RemoteClusterBlocks remoteObjectForDownload = new RemoteClusterBlocks(uploadedFile, clusterUUID, compressor, Version.CURRENT);
-        assertArrayEquals(remoteObjectForDownload.getBlobPathTokens(), new String[] { "user", "local", "opensearch", "cluster-blocks" });
-    }
-
-    public void testBlobPathParameters() {
-        ClusterBlocks clusterBlocks = randomClusterBlocks();
         RemoteClusterBlocks remoteObjectForUpload = new RemoteClusterBlocks(clusterBlocks, METADATA_VERSION, clusterUUID, compressor);
-        BlobPathParameters params = remoteObjectForUpload.getBlobPathParameters();
-        assertEquals(params.getPathTokens(), List.of(CLUSTER_STATE_EPHEMERAL_PATH_TOKEN));
-        assertEquals(params.getFilePrefix(), CLUSTER_BLOCKS);
+import org.opensearch.index.remote.RemoteStoreUtils;
+import java.util.stream.Stream;
     }
-
-    public void testGenerateBlobFileName() {
+            for (String index : clusterBlocks.indices().keySet()) {
         ClusterBlocks clusterBlocks = randomClusterBlocks();
-        RemoteClusterBlocks remoteObjectForUpload = new RemoteClusterBlocks(clusterBlocks, METADATA_VERSION, clusterUUID, compressor);
-        String blobFileName = remoteObjectForUpload.generateBlobFileName();
-        String[] nameTokens = blobFileName.split(RemoteClusterStateUtils.DELIMITER);
+        namedXContentRegistry = new NamedXContentRegistry(
+    private static final long METADATA_VERSION = 3L;
+import org.junit.Before;
+import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION;
+import static org.opensearch.cluster.block.ClusterBlockTests.randomClusterBlock;
         assertEquals(nameTokens[0], CLUSTER_BLOCKS);
+package org.opensearch.gateway.remote.model;
+            ClusterBlocks readClusterBlocks = remoteObjectForUpload.deserialize(inputStream);
         assertEquals(RemoteStoreUtils.invertLong(nameTokens[1]), METADATA_VERSION);
-        assertTrue(RemoteStoreUtils.invertLong(nameTokens[2]) <= System.currentTimeMillis());
-        assertEquals(nameTokens[3], String.valueOf(CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION));
-
-    }
-
+            Stream.of(
+            }
     public void testGetUploadedMetadata() throws IOException {
-        ClusterBlocks clusterBlocks = randomClusterBlocks();
-        RemoteClusterBlocks remoteObjectForUpload = new RemoteClusterBlocks(clusterBlocks, METADATA_VERSION, clusterUUID, compressor);
-        assertThrows(AssertionError.class, remoteObjectForUpload::getUploadedMetadata);
-        remoteObjectForUpload.setFullBlobName(new BlobPath().add(TEST_BLOB_PATH));
-        ClusterMetadataManifest.UploadedMetadata uploadedMetadata = remoteObjectForUpload.getUploadedMetadata();
-        assertEquals(uploadedMetadata.getComponent(), CLUSTER_BLOCKS);
-        assertEquals(uploadedMetadata.getUploadedFilename(), remoteObjectForUpload.getFullBlobName());
     }
-
-    public void testSerDe() throws IOException {
-        ClusterBlocks clusterBlocks = randomClusterBlocks();
+        assertNull(remoteObjectForUpload.getBlobFileName());
+                builder.addIndexBlock("index-" + i, randomClusterBlock());
+        assertThrows(AssertionError.class, remoteObjectForUpload::getUploadedMetadata);
         RemoteClusterBlocks remoteObjectForUpload = new RemoteClusterBlocks(clusterBlocks, METADATA_VERSION, clusterUUID, compressor);
-        try (InputStream inputStream = remoteObjectForUpload.serialize()) {
+        RemoteClusterBlocks remoteObjectForDownload = new RemoteClusterBlocks(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);
+        assertEquals(uploadedMetadata.getComponent(), CLUSTER_BLOCKS);
+    public void testClusterUUID() {
+    private String clusterUUID;
+        assertTrue(RemoteStoreUtils.invertLong(nameTokens[2]) <= System.currentTimeMillis());
+    @Before
+    public void testBlobPathTokens() {
+}
             remoteObjectForUpload.setFullBlobName(BlobPath.cleanPath());
             assertTrue(inputStream.available() > 0);
-            ClusterBlocks readClusterBlocks = remoteObjectForUpload.deserialize(inputStream);
-            assertEquals(clusterBlocks.global(), readClusterBlocks.global());
-            assertEquals(clusterBlocks.indices().keySet(), readClusterBlocks.indices().keySet());
-            for (String index : clusterBlocks.indices().keySet()) {
-                assertEquals(clusterBlocks.indices().get(index), readClusterBlocks.indices().get(index));
-            }
-
-        }
-    }
-
-    public static ClusterBlocks randomClusterBlocks() {
-        ClusterBlocks.Builder builder = ClusterBlocks.builder();
-        int randomGlobalBlocks = randomIntBetween(1, 10);
-        for (int i = 0; i < randomGlobalBlocks; i++) {
-            builder.addGlobalBlock(randomClusterBlock());
-        }
-
-        int randomIndices = randomIntBetween(1, 10);
+        String blobFileName = remoteObjectForUpload.generateBlobFileName();
+        remoteObjectForUpload.setFullBlobName(new BlobPath().add(TEST_BLOB_PATH));
+        ClusterBlocks clusterBlocks = randomClusterBlocks();
+import org.opensearch.common.network.NetworkModule;
+    private static final String TEST_BLOB_NAME = "/test-path/test-blob-name";
+import org.opensearch.cluster.ClusterModule;
+        assertEquals(remoteObjectForDownload.getFullBlobName(), TEST_BLOB_NAME);
         for (int i = 0; i < randomIndices; i++) {
-            int randomIndexBlocks = randomIntBetween(1, 10);
-            for (int j = 0; j < randomIndexBlocks; j++) {
-                builder.addIndexBlock("index-" + i, randomClusterBlock());
-            }
-        }
-        return builder.build();
+        for (int i = 0; i < randomGlobalBlocks; i++) {
+        assertEquals(nameTokens[3], String.valueOf(CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION));
+ * The OpenSearch Contributors require contributions made to
+ * SPDX-License-Identifier: Apache-2.0
     }
-}
+        int randomIndices = randomIntBetween(1, 10);
+        RemoteClusterBlocks remoteObjectForUpload = new RemoteClusterBlocks(clusterBlocks, METADATA_VERSION, clusterUUID, compressor);
+    private static final String TEST_BLOB_FILE_NAME = "test-blob-name";
+        ClusterBlocks clusterBlocks = randomClusterBlocks();
+ *
+        assertEquals(remoteObjectForUpload.clusterUUID(), clusterUUID);
+            assertEquals(clusterBlocks.global(), readClusterBlocks.global());
+    public void testSerDe() throws IOException {
+                ClusterModule.getNamedXWriteables().stream()
+        int randomGlobalBlocks = randomIntBetween(1, 10);
+        assertNull(remoteObjectForUpload.getFullBlobName());
+import org.opensearch.indices.IndicesModule;
+    public void testBlobPathParameters() {
+    public void testBlobFileName() {
+import org.opensearch.core.compress.Compressor;
+        ClusterBlocks.Builder builder = ClusterBlocks.builder();
+        String[] nameTokens = blobFileName.split(RemoteClusterStateUtils.DELIMITER);
+                IndicesModule.getNamedXContents().stream(),
+public class RemoteClusterBlocksTests extends OpenSearchTestCase {
+            int randomIndexBlocks = randomIntBetween(1, 10);
+        ClusterMetadataManifest.UploadedMetadata uploadedMetadata = remoteObjectForUpload.getUploadedMetadata();
+        ClusterBlocks clusterBlocks = randomClusterBlocks();
+        RemoteClusterBlocks remoteObjectForDownload = new RemoteClusterBlocks(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);
+        ClusterBlocks clusterBlocks = randomClusterBlocks();
+        BlobPathParameters params = remoteObjectForUpload.getBlobPathParameters();
+        assertEquals(uploadedMetadata.getUploadedFilename(), remoteObjectForUpload.getFullBlobName());
+                NetworkModule.getNamedXContents().stream(),
+    }
+        assertEquals(params.getPathTokens(), List.of(CLUSTER_STATE_EPHEMERAL_PATH_TOKEN));
+    private static final String TEST_BLOB_PATH = "test-path";
+    public void testGenerateBlobFileName() {
+        assertArrayEquals(remoteObjectForDownload.getBlobPathTokens(), new String[] { "user", "local", "opensearch", "cluster-blocks" });
+        try (InputStream inputStream = remoteObjectForUpload.serialize()) {
+    public static ClusterBlocks randomClusterBlocks() {
+ */
+            assertEquals(clusterBlocks.indices().keySet(), readClusterBlocks.indices().keySet());
+import java.io.IOException;
+        return builder.build();
+        RemoteClusterBlocks remoteObjectForUpload = new RemoteClusterBlocks(clusterBlocks, METADATA_VERSION, clusterUUID, compressor);
+    }
+import org.opensearch.core.compress.NoneCompressor;
+        ClusterBlocks clusterBlocks = randomClusterBlocks();
+        assertEquals(params.getFilePrefix(), CLUSTER_BLOCKS);
+        assertEquals(remoteObjectForDownload.clusterUUID(), clusterUUID);
+import org.opensearch.gateway.remote.RemoteClusterStateUtils;
+import org.opensearch.cluster.block.ClusterBlocks;
+        }
+            builder.addGlobalBlock(randomClusterBlock());
+import org.opensearch.common.blobstore.BlobPath;
+                assertEquals(clusterBlocks.indices().get(index), readClusterBlocks.indices().get(index));
+    }
+        RemoteClusterBlocks remoteObjectForUpload = new RemoteClusterBlocks(clusterBlocks, METADATA_VERSION, clusterUUID, compressor);
+        RemoteClusterBlocks remoteObjectForDownload = new RemoteClusterBlocks(uploadedFile, clusterUUID, compressor, Version.CURRENT);
+ * compatible open source license.
+        );
+        compressor = new NoneCompressor();
+    public void setup() {
+import org.opensearch.test.OpenSearchTestCase;
+        RemoteClusterBlocks remoteObjectForUpload = new RemoteClusterBlocks(clusterBlocks, METADATA_VERSION, clusterUUID, compressor);
+import java.util.List;
+    }
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.gateway.remote.ClusterMetadataManifest;
+import org.opensearch.Version;
+    }
+        }
+            }
+import java.io.InputStream;
+        ClusterBlocks clusterBlocks = randomClusterBlocks();
+        String uploadedFile = "user/local/opensearch/cluster-blocks";
+    }
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.CLUSTER_STATE_EPHEMERAL_PATH_TOKEN;
+    }
+        RemoteClusterBlocks remoteObjectForDownload = new RemoteClusterBlocks(TEST_BLOB_NAME, clusterUUID, compressor, Version.CURRENT);
+    private Compressor compressor;
+import static java.util.stream.Collectors.toList;

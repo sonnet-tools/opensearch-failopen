@@ -1,242 +1,209 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.IntArray;
-
-/**
- * AbstractHyperLogLogPlusPlus instance that only supports linear counting. The maximum number of hashes supported
- * by the structure is determined at construction time.
- * <p>
- * This structure expects all the added values to be distinct and therefore there are no checks
- * if an element has been previously added.
- *
- * @opensearch.internal
- */
-final class HyperLogLogPlusPlusSparse extends AbstractHyperLogLogPlusPlus implements Releasable {
-
-    private final LinearCounting lc;
-
-    /**
-     * Create an sparse HLL++ algorithm where capacity is the maximum number of hashes this structure can hold
-     * per bucket.
-     */
-    HyperLogLogPlusPlusSparse(int precision, BigArrays bigArrays, int capacity, int initialSize) {
-        super(precision);
-        this.lc = new LinearCounting(precision, bigArrays, capacity, initialSize);
-    }
-
-    @Override
-    public long maxOrd() {
-        return lc.sizes.size();
-    }
-
-    @Override
-    public long cardinality(long bucketOrd) {
-        return lc.cardinality(bucketOrd);
-    }
-
-    @Override
-    protected boolean getAlgorithm(long bucketOrd) {
-        return LINEAR_COUNTING;
-    }
-
-    @Override
-    protected AbstractLinearCounting.HashesIterator getLinearCounting(long bucketOrd) {
-        return lc.values(bucketOrd);
-    }
-
-    @Override
-    protected AbstractHyperLogLog.RunLenIterator getHyperLogLog(long bucketOrd) {
-        throw new IllegalArgumentException("Implementation does not support HLL structures");
-    }
-
-    @Override
-    public void collect(long bucket, long hash) {
-        lc.collect(bucket, hash);
-    }
-
-    @Override
-    public void close() {
-        Releasables.close(lc);
-    }
-
-    protected void addEncoded(long bucket, int encoded) {
-        lc.addEncoded(bucket, encoded);
-    }
-
-    /**
-     * The plus plus
-     *
-     * @opensearch.internal
-     */
-    private static class LinearCounting extends AbstractLinearCounting implements Releasable {
-
-        private final int capacity;
-        private final BigArrays bigArrays;
-        private final LinearCountingIterator iterator;
-        // We are actually using HyperLogLog's runLens array but interpreting it as a hash set for linear counting.
-        // Number of elements stored.
-        private IntArray values;
-        private IntArray sizes;
-
-        LinearCounting(int p, BigArrays bigArrays, int capacity, int initialSize) {
-            super(p);
-            this.bigArrays = bigArrays;
-            this.capacity = capacity;
-            IntArray values = null;
-            IntArray sizes = null;
-            boolean success = false;
-            try {
-                values = bigArrays.newIntArray(initialSize * capacity);
-                sizes = bigArrays.newIntArray(initialSize);
-                success = true;
-            } finally {
-                if (success == false) {
-                    Releasables.close(values, sizes);
-                }
-            }
-            this.values = values;
-            this.sizes = sizes;
-            iterator = new LinearCountingIterator(this, capacity);
-        }
-
-        @Override
-        protected int addEncoded(long bucketOrd, int encoded) {
-            assert encoded != 0;
-            return set(bucketOrd, encoded);
-        }
-
-        @Override
-        protected int size(long bucketOrd) {
-            if (bucketOrd >= sizes.size()) {
-                return 0;
-            }
             final int size = sizes.get(bucketOrd);
-            assert size == recomputedSize(bucketOrd);
-            return size;
-        }
-
+        return LINEAR_COUNTING;
+        throw new IllegalArgumentException("Implementation does not support HLL structures");
         @Override
-        protected HashesIterator values(long bucketOrd) {
-            iterator.reset(bucketOrd, size(bucketOrd));
-            return iterator;
-        }
-
+    @Override
+     * @opensearch.internal
         private long index(long bucketOrd, int index) {
-            return (bucketOrd * capacity) + index;
+                if (v == 0) {
+                values = bigArrays.grow(values, (bucketOrd + 1) * capacity);
+            this.start = bucketOrd * capacity;
+    }
+    @Override
+        lc.addEncoded(bucket, encoded);
         }
-
-        private int get(long bucketOrd, int index) {
-            long globalIndex = index(bucketOrd, index);
-            if (values.size() < globalIndex) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        return lc.cardinality(bucketOrd);
+     * The plus plus iterator
+        private int value, size;
                 return 0;
+    }
+                sizes = bigArrays.grow(sizes, bucketOrd + 1);
+        @Override
+ * this file be licensed under the Apache-2.0 license or a
+        }
+                values = bigArrays.newIntArray(initialSize * capacity);
+            iterator.reset(bucketOrd, size(bucketOrd));
+ * ownership. Elasticsearch licenses this file to you under
+            long globalIndex = index(bucketOrd, index);
+        }
+    protected void addEncoded(long bucket, int encoded) {
+            try {
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.common.util.BigArrays;
+            assert size == recomputedSize(bucketOrd);
+    /**
+    }
+            if (size == 0) {
             }
+            return size;
+ * This structure expects all the added values to be distinct and therefore there are no checks
+        return lc.values(bucketOrd);
+            return (bucketOrd * capacity) + index;
+        protected HashesIterator values(long bucketOrd) {
+    private final LinearCounting lc;
+            return size;
+            return false;
+            }
+        }
+                success = true;
+        private final LinearCountingIterator iterator;
+     * @opensearch.internal
+        }
+            this.end = start + size;
+            }
+ * <p>
+    @Override
+                if (success == false) {
+            this.capacity = capacity;
+        protected int addEncoded(long bucketOrd, int encoded) {
+            this.pos = start;
+            return capacity;
             return values.get(globalIndex);
         }
-
-        private int set(long bucketOrd, int value) {
-            int size = size(bucketOrd);
-            if (size == 0) {
-                sizes = bigArrays.grow(sizes, bucketOrd + 1);
-                values = bigArrays.grow(values, (bucketOrd + 1) * capacity);
-            }
-            values.set(index(bucketOrd, size), value);
-            return sizes.increment(bucketOrd, 1);
-        }
-
-        private int recomputedSize(long bucketOrd) {
-            for (int i = 0; i < capacity; ++i) {
-                final int v = get(bucketOrd, i);
-                if (v == 0) {
                     return i;
-                }
-            }
-            return capacity;
-        }
-
-        @Override
-        public void close() {
+                final int v = get(bucketOrd, i);
+ * not use this file except in compliance with the License.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
             Releasables.close(values, sizes);
-        }
-    }
-
-    /**
-     * The plus plus iterator
-     *
-     * @opensearch.internal
-     */
-    private static class LinearCountingIterator implements AbstractLinearCounting.HashesIterator {
-
-        private final LinearCounting lc;
-        private final int capacity;
         long start;
-        long end;
-        private int value, size;
-        private long pos;
-
-        LinearCountingIterator(LinearCounting lc, int capacity) {
-            this.lc = lc;
-            this.capacity = capacity;
-        }
-
-        void reset(long bucketOrd, int size) {
-            this.start = bucketOrd * capacity;
-            this.size = size;
-            this.end = start + size;
-            this.pos = start;
-        }
-
-        @Override
-        public int size() {
-            return size;
-        }
-
-        @Override
-        public boolean next() {
-            if (pos < end) {
-                value = lc.values.get(pos++);
                 return true;
-            }
-            return false;
-        }
-
-        @Override
-        public int value() {
+            if (bucketOrd >= sizes.size()) {
+     */
+        // Number of elements stored.
+        private int set(long bucketOrd, int value) {
+            super(p);
+        LinearCountingIterator(LinearCounting lc, int capacity) {
+ *
+     * The plus plus
+            IntArray values = null;
+package org.opensearch.search.aggregations.metrics;
+    @Override
+    }
+ */
+        void reset(long bucketOrd, int size) {
+            boolean success = false;
+        return lc.sizes.size();
+ * compatible open source license.
+ *
+        super(precision);
+/*
+import org.opensearch.common.lease.Releasable;
+                    Releasables.close(values, sizes);
+    }
+        private IntArray values;
+    protected boolean getAlgorithm(long bucketOrd) {
+ */
             return value;
+        protected int size(long bucketOrd) {
+            }
+ * @opensearch.internal
+    private static class LinearCounting extends AbstractLinearCounting implements Releasable {
+        }
+ * license agreements. See the NOTICE file distributed with
+            this.bigArrays = bigArrays;
+    @Override
+            if (values.size() < globalIndex) {
+                }
+            int size = size(bucketOrd);
+        private final LinearCounting lc;
+     */
+    public void close() {
+        @Override
+        }
+     */
+import org.opensearch.common.util.IntArray;
+                sizes = bigArrays.newIntArray(initialSize);
+        }
+import org.opensearch.common.lease.Releasables;
+    /**
+    private static class LinearCountingIterator implements AbstractLinearCounting.HashesIterator {
+    }
         }
     }
+ * specific language governing permissions and limitations
+ * AbstractHyperLogLogPlusPlus instance that only supports linear counting. The maximum number of hashes supported
+ * The OpenSearch Contributors require contributions made to
+        }
+    public void collect(long bucket, long hash) {
+ *
+        private IntArray sizes;
+ * this work for additional information regarding copyright
+ * SPDX-License-Identifier: Apache-2.0
+ */
+        private long pos;
+                return 0;
+            this.sizes = sizes;
+            this.size = size;
+            assert encoded != 0;
+ * Unless required by applicable law or agreed to in writing,
+            this.lc = lc;
+        public boolean next() {
+/*
+ * KIND, either express or implied.  See the License for the
+            this.values = values;
+     *
+/**
+    }
+        long end;
+/*
+ * Licensed to Elasticsearch under one or more contributor
+    @Override
+    @Override
+    }
+                }
+        this.lc = new LinearCounting(precision, bigArrays, capacity, initialSize);
+        @Override
+        lc.collect(bucket, hash);
+ * by the structure is determined at construction time.
+        private final int capacity;
+            return sizes.increment(bucketOrd, 1);
+        public void close() {
+ * You may obtain a copy of the License at
+        private int recomputedSize(long bucketOrd) {
+            if (pos < end) {
+            iterator = new LinearCountingIterator(this, capacity);
+        LinearCounting(int p, BigArrays bigArrays, int capacity, int initialSize) {
+    protected AbstractLinearCounting.HashesIterator getLinearCounting(long bucketOrd) {
+        @Override
+            values.set(index(bucketOrd, size), value);
+ *
+        public int size() {
+ * the Apache License, Version 2.0 (the "License"); you may
+    /**
+        }
+        @Override
+ * under the License.
+            }
+            return iterator;
+        public int value() {
+ * software distributed under the License is distributed on an
+    public long cardinality(long bucketOrd) {
+            } finally {
+ */
+        private final BigArrays bigArrays;
+            this.capacity = capacity;
+        private final int capacity;
+        Releasables.close(lc);
+            }
+        @Override
+        private int get(long bucketOrd, int index) {
+     * Create an sparse HLL++ algorithm where capacity is the maximum number of hashes this structure can hold
+                value = lc.values.get(pos++);
+    HyperLogLogPlusPlusSparse(int precision, BigArrays bigArrays, int capacity, int initialSize) {
 }
+            IntArray sizes = null;
+            return set(bucketOrd, encoded);
+final class HyperLogLogPlusPlusSparse extends AbstractHyperLogLogPlusPlus implements Releasable {
+        // We are actually using HyperLogLog's runLens array but interpreting it as a hash set for linear counting.
+    }
+    public long maxOrd() {
+     * per bucket.
+ * if an element has been previously added.
+        }
+    protected AbstractHyperLogLog.RunLenIterator getHyperLogLog(long bucketOrd) {
+ * GitHub history for details.
+     *
+        }
+            for (int i = 0; i < capacity; ++i) {
+    }

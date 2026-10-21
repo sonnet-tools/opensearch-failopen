@@ -1,495 +1,437 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.queries.spans.SpanNearQuery;
-import org.apache.lucene.queries.spans.SpanQuery;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.Query;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentLocation;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.mapper.MappedFieldType;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
-
-import static org.opensearch.index.query.SpanQueryBuilder.SpanQueryBuilderUtil.checkNoBoost;
-
-/**
- * Matches spans which are near one another. One can specify slop, the maximum number
- * of intervening unmatched positions, as well as whether matches are required to be in-order.
- * The span near query maps to Lucene {@link SpanNearQuery}.
- *
- * @opensearch.internal
- */
-public class SpanNearQueryBuilder extends AbstractQueryBuilder<SpanNearQueryBuilder> implements SpanQueryBuilder {
-    public static final String NAME = "span_near";
-
-    /** Default for flag controlling whether matches are required to be in-order */
-    public static boolean DEFAULT_IN_ORDER = true;
-    /** Default slop value, this is the same that lucene {@link SpanNearQuery} uses if no slop is provided */
-    public static int DEFAULT_SLOP = 0;
-
-    private static final ParseField SLOP_FIELD = new ParseField("slop");
-    private static final ParseField CLAUSES_FIELD = new ParseField("clauses");
-    private static final ParseField IN_ORDER_FIELD = new ParseField("in_order");
-
-    private final List<SpanQueryBuilder> clauses = new ArrayList<>();
-
-    private final int slop;
-
-    private boolean inOrder = DEFAULT_IN_ORDER;
-
-    /**
-     * @param initialClause an initial span query clause
-     * @param slop controls the maximum number of intervening unmatched positions permitted
-     */
-    public SpanNearQueryBuilder(SpanQueryBuilder initialClause, int slop) {
-        if (initialClause == null) {
-            throw new IllegalArgumentException("[" + NAME + "] must include at least one clause");
-        }
-        this.clauses.add(initialClause);
-        this.slop = slop;
-    }
-
-    /**
      * Read from a stream.
-     */
-    public SpanNearQueryBuilder(StreamInput in) throws IOException {
-        super(in);
-        for (QueryBuilder clause : readQueries(in)) {
-            this.clauses.add((SpanQueryBuilder) clause);
-        }
-        slop = in.readVInt();
-        inOrder = in.readBoolean();
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        writeQueries(out, clauses);
-        out.writeVInt(slop);
-        out.writeBoolean(inOrder);
-    }
-
-    /**
-     * @return the maximum number of intervening unmatched positions permitted
-     */
-    public int slop() {
-        return this.slop;
-    }
-
-    /**
-     * Add a span clause to the current list of clauses
-     */
-    public SpanNearQueryBuilder addClause(SpanQueryBuilder clause) {
-        if (clause == null) {
-            throw new IllegalArgumentException("[" + NAME + "]  clauses cannot be null");
-        }
-        clauses.add(clause);
-        return this;
-    }
-
-    /**
-     * @return the {@link SpanQueryBuilder} clauses that were set for this query
-     */
-    public List<SpanQueryBuilder> clauses() {
-        return Collections.unmodifiableList(this.clauses);
-    }
-
-    /**
-     * When <code>inOrder</code> is true, the spans from each clause
-     * must be in the same order as in <code>clauses</code> and must be non-overlapping.
-     * Defaults to <code>true</code>
-     */
-    public SpanNearQueryBuilder inOrder(boolean inOrder) {
-        this.inOrder = inOrder;
-        return this;
-    }
-
-    /**
-     * @see SpanNearQueryBuilder#inOrder(boolean)
-     */
-    public boolean inOrder() {
-        return this.inOrder;
-    }
-
-    @Override
-    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(NAME);
-        builder.startArray(CLAUSES_FIELD.getPreferredName());
-        for (SpanQueryBuilder clause : clauses) {
-            clause.toXContent(builder, params);
-        }
-        builder.endArray();
-        builder.field(SLOP_FIELD.getPreferredName(), slop);
-        builder.field(IN_ORDER_FIELD.getPreferredName(), inOrder);
-        printBoostAndQueryName(builder);
-        builder.endObject();
-    }
-
-    public static SpanNearQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
-        int slop = DEFAULT_SLOP;
-        boolean inOrder = DEFAULT_IN_ORDER;
-        String queryName = null;
-
-        List<SpanQueryBuilder> clauses = new ArrayList<>();
-
-        String currentFieldName = null;
-        XContentParser.Token token;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.START_ARRAY) {
-                if (CLAUSES_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
-                        QueryBuilder query = parseInnerQueryBuilder(parser);
-                        if (query instanceof SpanQueryBuilder == false) {
-                            throw new ParsingException(parser.getTokenLocation(), "span_near [clauses] must be of type span query");
-                        }
-                        final SpanQueryBuilder clause = (SpanQueryBuilder) query;
-                        checkNoBoost(NAME, currentFieldName, parser, clause);
-                        clauses.add(clause);
-                    }
-                } else {
-                    throw new ParsingException(parser.getTokenLocation(), "[span_near] query does not support [" + currentFieldName + "]");
-                }
-            } else if (token.isValue()) {
-                if (IN_ORDER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    inOrder = parser.booleanValue();
-                } else if (SLOP_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    slop = parser.intValue();
-                } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    boost = parser.floatValue();
-                } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    queryName = parser.text();
-                } else {
-                    throw new ParsingException(parser.getTokenLocation(), "[span_near] query does not support [" + currentFieldName + "]");
-                }
-            } else {
-                throw new ParsingException(parser.getTokenLocation(), "[span_near] query does not support [" + currentFieldName + "]");
-            }
-        }
-
-        if (clauses.isEmpty()) {
-            throw new ParsingException(parser.getTokenLocation(), "span_near must include [clauses]");
-        }
-
-        SpanNearQueryBuilder queryBuilder = new SpanNearQueryBuilder(clauses.get(0), slop);
-        for (int i = 1; i < clauses.size(); i++) {
-            queryBuilder.addClause(clauses.get(i));
-        }
-        queryBuilder.inOrder(inOrder);
-        queryBuilder.boost(boost);
-        queryBuilder.queryName(queryName);
-        return queryBuilder;
-    }
-
-    @Override
-    protected Query doToQuery(QueryShardContext context) throws IOException {
-        SpanQueryBuilder queryBuilder = clauses.get(0);
-        boolean isGap = queryBuilder instanceof SpanGapQueryBuilder;
-        Query query = null;
-        if (!isGap) {
-            query = queryBuilder.toQuery(context);
-            assert query instanceof SpanQuery;
-        }
-        if (clauses.size() == 1) {
-            assert !isGap;
-            return query;
-        }
+            return NAME;
+                throw new ParsingException(
         String spanNearFieldName = null;
-        if (isGap) {
-            String fieldName = ((SpanGapQueryBuilder) queryBuilder).fieldName();
-            spanNearFieldName = queryFieldName(context, fieldName);
-        } else {
-            spanNearFieldName = ((SpanQuery) query).getField();
-        }
-
-        SpanNearQuery.Builder builder = new SpanNearQuery.Builder(spanNearFieldName, inOrder);
-        builder.setSlop(slop);
-        /*
-         * Lucene SpanNearQuery throws exceptions for certain use cases like adding gap to a
-         * unordered SpanNearQuery. Should OpenSearch have the same checks or wrap those thrown exceptions?
-         */
-        if (isGap) {
-            int gap = ((SpanGapQueryBuilder) queryBuilder).width();
-            builder.addGap(gap);
-        } else {
-            builder.addClause((SpanQuery) query);
-        }
-
+            clause.toXContent(builder, params);
+     */
+    }
         for (int i = 1; i < clauses.size(); i++) {
-            queryBuilder = clauses.get(i);
-            isGap = queryBuilder instanceof SpanGapQueryBuilder;
-            if (isGap) {
-                String fieldName = ((SpanGapQueryBuilder) queryBuilder).fieldName();
-                String spanGapFieldName = queryFieldName(context, fieldName);
-
-                if (!spanNearFieldName.equals(spanGapFieldName)) {
-                    throw new IllegalArgumentException("[span_near] clauses must have same field");
-                }
-                int gap = ((SpanGapQueryBuilder) queryBuilder).width();
-                builder.addGap(gap);
-            } else {
-                query = clauses.get(i).toQuery(context);
-                assert query instanceof SpanQuery;
-                builder.addClause((SpanQuery) query);
-            }
+    }
+import java.io.IOException;
+                        clauses.add(clause);
+                } else if (token.isValue()) {
+     */
+                if (token == XContentParser.Token.FIELD_NAME) {
+    public static int DEFAULT_SLOP = 0;
+ */
+     */
+            return Objects.hash(getClass(), fieldName, width);
+/*
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
         }
-        return builder.build();
     }
-
-    private String queryFieldName(QueryShardContext context, String fieldName) {
-        MappedFieldType fieldType = context.fieldMapper(fieldName);
-        return fieldType != null ? fieldType.name() : fieldName;
+        }
+                }
+                } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    fieldName = currentFieldName;
+                }
+        }
+    /**
+        /**
+        public String fieldName() {
+            builder.addClause((SpanQuery) query);
+    public int slop() {
+            }
+            assert query instanceof SpanQuery;
+     */
+         * unordered SpanNearQuery. Should OpenSearch have the same checks or wrap those thrown exceptions?
+        this.inOrder = inOrder;
+            int width = 0;
     }
-
-    @Override
+            if (isGap) {
     protected int doHashCode() {
-        return Objects.hash(clauses, slop, inOrder);
+import org.opensearch.core.common.io.stream.StreamInput;
+         */
+        public String getWriteableName() {
+     */
+        if (!isGap) {
+        }
+        public String queryName() {
+        }
+ * specific language governing permissions and limitations
+            spanNearFieldName = queryFieldName(context, fieldName);
+                assert query instanceof SpanQuery;
+import org.opensearch.core.common.io.stream.StreamOutput;
+            builder.addGap(gap);
+    private static final ParseField IN_ORDER_FIELD = new ParseField("in_order");
+            return fieldName;
     }
-
+            String processedFieldName,
+        out.writeVInt(slop);
+            } else {
+/*
+     * be used to generate a Query (SpanGapQuery) like another QueryBuilder.
+        } else {
+        @Override
+ * compatible open source license.
+            } else if (token.isValue()) {
+import org.opensearch.index.mapper.MappedFieldType;
+        for (SpanQueryBuilder clause : clauses) {
+        return Collections.unmodifiableList(this.clauses);
+import java.util.List;
+    }
+        @Override
+public class SpanNearQueryBuilder extends AbstractQueryBuilder<SpanNearQueryBuilder> implements SpanQueryBuilder {
+        }
+ *
+        ) {
+            width = in.readInt();
+                        + "] query doesn't support multiple fields, found ["
+                        + "] and ["
+        if (clauses.size() == 1) {
+            throw new UnsupportedOperationException();
+import org.opensearch.core.common.Strings;
+    }
+        int slop = DEFAULT_SLOP;
+        builder.startArray(CLAUSES_FIELD.getPreferredName());
+        public QueryBuilder boost(float boost) {
     @Override
-    protected boolean doEquals(SpanNearQueryBuilder other) {
+    public SpanNearQueryBuilder inOrder(boolean inOrder) {
+            throw new UnsupportedOperationException();
+            return Objects.equals(fieldName, other.fieldName) && Objects.equals(width, other.width);
+            if (this == obj) {
+        return fieldType != null ? fieldType.name() : fieldName;
+     * Add a span clause to the current list of clauses
+        /** Width of the gap introduced. */
         return Objects.equals(clauses, other.clauses) && Objects.equals(slop, other.slop) && Objects.equals(inOrder, other.inOrder);
     }
-
-    @Override
-    public String getWriteableName() {
-        return NAME;
-    }
-
-    @Override
-    public void visit(QueryBuilderVisitor visitor) {
-        visitor.accept(this);
-        if (this.clauses.isEmpty() == false) {
-            QueryBuilderVisitor subVisitor = visitor.getChildVisitor(BooleanClause.Occur.MUST);
-            for (QueryBuilder subQb : this.clauses) {
-                subVisitor.accept(subQb);
-            }
-        }
-    }
-
-    @Override
-    public boolean supportsIntraSegmentSearch() {
-        return true;
-    }
-
-    /**
-     * SpanGapQueryBuilder enables gaps in a SpanNearQuery.
-     * Since, SpanGapQuery is private to SpanNearQuery, SpanGapQueryBuilder cannot
-     * be used to generate a Query (SpanGapQuery) like another QueryBuilder.
+import java.util.Objects;
+                        + "]"
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        public String getName() {
+        SpanNearQueryBuilder queryBuilder = new SpanNearQueryBuilder(clauses.get(0), slop);
+import org.opensearch.core.xcontent.XContentParser;
      * Instead, it just identifies a span_gap clause so that SpanNearQuery.addGap(int)
-     * can be invoked for it.
-     * This QueryBuilder is only applicable as a clause in SpanGapQueryBuilder but
-     * yet to enforce this restriction.
-     *
-     * @opensearch.internal
-     */
-    public static class SpanGapQueryBuilder implements SpanQueryBuilder, WithFieldName {
-        public static final String NAME = "span_gap";
-
-        /** Name of field to match against. */
         private final String fieldName;
-
-        /** Width of the gap introduced. */
-        private final int width;
-
-        /**
-         * Constructs a new SpanGapQueryBuilder term query.
-         *
-         * @param fieldName  The name of the field
-         * @param width The width of the gap introduced
-         */
-        public SpanGapQueryBuilder(String fieldName, int width) {
-            if (Strings.isEmpty(fieldName)) {
-                throw new IllegalArgumentException("[span_gap] field name is null or empty");
-            }
-            // lucene has not coded any restriction on value of width.
-            // to-do : find if theoretically it makes sense to apply restrictions.
-            this.fieldName = fieldName;
-            this.width = width;
         }
-
-        /**
-         * Read from a stream.
-         */
-        public SpanGapQueryBuilder(StreamInput in) throws IOException {
-            fieldName = in.readString();
-            width = in.readInt();
-        }
-
-        /**
-         * @return fieldName  The name of the field
-         */
-        @Override
-        public String fieldName() {
-            return fieldName;
-        }
-
-        /**
-         * @return width The width of the gap introduced
-         */
-        public int width() {
-            return width;
-        }
-
-        @Override
+    public boolean supportsIntraSegmentSearch() {
         public Query toQuery(QueryShardContext context) throws IOException {
             throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public QueryBuilder filter(QueryBuilder filter) {
-            throw new UnsupportedOperationException("You can't add a filter to a SpanGapQueryBuilder");
-        }
-
-        @Override
-        public String queryName() {
+            } else {
+            }
+        queryBuilder.queryName(queryName);
+                    }
+        return Objects.hash(clauses, slop, inOrder);
+                    inOrder = parser.booleanValue();
+        for (int i = 1; i < clauses.size(); i++) {
+ */
+    @Override
+        writeQueries(out, clauses);
+ * under the License.
+    @Override
+            return result;
+    public SpanNearQueryBuilder(SpanQueryBuilder initialClause, int slop) {
+        slop = in.readVInt();
+            // to-do : find if theoretically it makes sense to apply restrictions.
+     * yet to enforce this restriction.
+            String fieldName = null;
+        boolean isGap = queryBuilder instanceof SpanGapQueryBuilder;
             throw new UnsupportedOperationException();
+            assert !isGap;
+    @Override
+     * @return the maximum number of intervening unmatched positions permitted
         }
-
-        @Override
-        public QueryBuilder queryName(String queryName) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public float boost() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public QueryBuilder boost(float boost) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public String getName() {
-            return NAME;
-        }
-
-        @Override
-        public String getWriteableName() {
-            return NAME;
-        }
-
-        @Override
-        public final void writeTo(StreamOutput out) throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
             out.writeString(fieldName);
+            queryBuilder.addClause(clauses.get(i));
+            XContentParser.Token token;
+        }
+            return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
+         * @return fieldName  The name of the field
+     * Defaults to <code>true</code>
+                } else {
+ * Licensed to Elasticsearch under one or more contributor
+        boolean inOrder = DEFAULT_IN_ORDER;
+                    currentFieldName = parser.currentName();
+        builder.endArray();
+    public List<SpanQueryBuilder> clauses() {
+         */
+                    width = parser.intValue();
+ * GitHub history for details.
+        if (initialClause == null) {
+        return true;
+        @Override
+                    throw new IllegalArgumentException("[span_near] clauses must have same field");
+        }
+            this.width = width;
+            String queryName,
+            throw new UnsupportedOperationException();
+            throw new ParsingException(parser.getTokenLocation(), "span_near must include [clauses]");
+    }
+        queryBuilder.inOrder(inOrder);
+            String fieldName = ((SpanGapQueryBuilder) queryBuilder).fieldName();
+         * @param fieldName  The name of the field
+        builder.field(IN_ORDER_FIELD.getPreferredName(), inOrder);
+    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
+        public final String toString() {
+         */
+ * this work for additional information regarding copyright
+        protected static void throwParsingExceptionOnMultipleFields(
+        visitor.accept(this);
+    }
+        }
+                        final SpanQueryBuilder clause = (SpanQueryBuilder) query;
+        SpanNearQuery.Builder builder = new SpanNearQuery.Builder(spanNearFieldName, inOrder);
+            }
+ * of intervening unmatched positions, as well as whether matches are required to be in-order.
+    private boolean inOrder = DEFAULT_IN_ORDER;
+         *
+    protected void doWriteTo(StreamOutput out) throws IOException {
+        @Override
+     *
+        public final void writeTo(StreamOutput out) throws IOException {
+        /**
+import org.opensearch.core.xcontent.XContentBuilder;
+ * The span near query maps to Lucene {@link SpanNearQuery}.
+        /**
+        }
+                int gap = ((SpanGapQueryBuilder) queryBuilder).width();
+            query = queryBuilder.toQuery(context);
+        SpanQueryBuilder queryBuilder = clauses.get(0);
+        public SpanGapQueryBuilder(String fieldName, int width) {
+        queryBuilder.boost(boost);
+        @Override
+            throw new IllegalArgumentException("[" + NAME + "] must include at least one clause");
+         */
+    public void visit(QueryBuilderVisitor visitor) {
+            if (processedFieldName != null) {
+                    throw new ParsingException(parser.getTokenLocation(), "[span_near] query does not support [" + currentFieldName + "]");
+ * not use this file except in compliance with the License.
+            throw new UnsupportedOperationException("You can't add a filter to a SpanGapQueryBuilder");
+                        + processedFieldName
+        if (isGap) {
+    @Override
+                        checkNoBoost(NAME, currentFieldName, parser, clause);
+                    throw new ParsingException(parser.getTokenLocation(), "[span_near] query does not support [" + currentFieldName + "]");
+         * @return width The width of the gap introduced
+            QueryBuilderVisitor subVisitor = visitor.getChildVisitor(BooleanClause.Occur.MUST);
+    @Override
+        return NAME;
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+    public static class SpanGapQueryBuilder implements SpanQueryBuilder, WithFieldName {
+        private final int width;
+        } else {
+    /**
+    private final List<SpanQueryBuilder> clauses = new ArrayList<>();
+        @Override
+            builder.startObject(getName());
+        public final boolean equals(Object obj) {
+                    throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, currentFieldName);
+        this.slop = slop;
+                String spanGapFieldName = queryFieldName(context, fieldName);
+        builder.startObject(NAME);
+        public QueryBuilder filter(QueryBuilder filter) {
+            int gap = ((SpanGapQueryBuilder) queryBuilder).width();
+                builder.addClause((SpanQuery) query);
+            queryBuilder = clauses.get(i);
+        }
+                subVisitor.accept(subQb);
+                } else {
+     * @param initialClause an initial span query clause
+                throw new IllegalArgumentException("[span_gap] field name is null or empty");
+        return this.slop;
+        inOrder = in.readBoolean();
+    protected boolean doEquals(SpanNearQueryBuilder other) {
+     * This QueryBuilder is only applicable as a clause in SpanGapQueryBuilder but
+        }
+        }
+        if (this.clauses.isEmpty() == false) {
+ *
+        }
+        printBoostAndQueryName(builder);
+         * @param width The width of the gap introduced
+ *
+        this.clauses.add(initialClause);
+    private String queryFieldName(QueryShardContext context, String fieldName) {
+    public static final String NAME = "span_near";
+            SpanGapQueryBuilder other = (SpanGapQueryBuilder) obj;
+/**
+        if (clause == null) {
+        public final int hashCode() {
+     * @see SpanNearQueryBuilder#inOrder(boolean)
+            builder.endObject();
+                throw new ParsingException(parser.getTokenLocation(), "[span_near] query does not support [" + currentFieldName + "]");
+                } else if (SLOP_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    public String getWriteableName() {
+    public static SpanNearQueryBuilder fromXContent(XContentParser parser) throws IOException {
+                    slop = parser.intValue();
+    /**
+        // copied from AbstractQueryBuilder
+    public boolean inOrder() {
+        @Override
+            }
+                if (!spanNearFieldName.equals(spanGapFieldName)) {
+            for (QueryBuilder subQb : this.clauses) {
+    /** Default for flag controlling whether matches are required to be in-order */
+     * must be in the same order as in <code>clauses</code> and must be non-overlapping.
+import org.apache.lucene.queries.spans.SpanNearQuery;
+    }
+        }
+ * ownership. Elasticsearch licenses this file to you under
+import org.opensearch.core.xcontent.XContentLocation;
+package org.opensearch.index.query;
+        String queryName = null;
+    protected Query doToQuery(QueryShardContext context) throws IOException {
+        super(in);
+        public float boost() {
+    }
+        }
+ * software distributed under the License is distributed on an
+        }
+        String currentFieldName = null;
+                builder.addGap(gap);
+    }
+         * Read from a stream.
+            return width;
+import org.apache.lucene.search.BooleanClause;
+        @Override
+ * The OpenSearch Contributors require contributions made to
+            SpanGapQueryBuilder result = new SpanGapQueryBuilder(fieldName, width);
+import static org.opensearch.index.query.SpanQueryBuilder.SpanQueryBuilderUtil.checkNoBoost;
+     * @return the {@link SpanQueryBuilder} clauses that were set for this query
+            fieldName = in.readString();
+        clauses.add(clause);
+ */
+     */
+            this.clauses.add((SpanQueryBuilder) clause);
+        public int width() {
+        }
+         * Lucene SpanNearQuery throws exceptions for certain use cases like adding gap to a
+            // lucene has not coded any restriction on value of width.
+ */
+ * KIND, either express or implied.  See the License for the
+        return this;
+        for (QueryBuilder clause : readQueries(in)) {
+     * SpanGapQueryBuilder enables gaps in a SpanNearQuery.
+            if (obj == null || getClass() != obj.getClass()) {
+     * can be invoked for it.
+    private static final ParseField SLOP_FIELD = new ParseField("slop");
+    /**
+                if (IN_ORDER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+     */
+            }
+    @Override
+        List<SpanQueryBuilder> clauses = new ArrayList<>();
+                    "["
+                return true;
+        builder.field(SLOP_FIELD.getPreferredName(), slop);
+        XContentParser.Token token;
+        }
+        Query query = null;
+            if (token == XContentParser.Token.FIELD_NAME) {
+    }
+        public SpanGapQueryBuilder(StreamInput in) throws IOException {
+    public static boolean DEFAULT_IN_ORDER = true;
+        return this.inOrder;
+        }
+        }
+            String currentFieldName = null;
+            return NAME;
+                );
+    }
+    }
+    @Override
+    public SpanNearQueryBuilder addClause(SpanQueryBuilder clause) {
+        /** Name of field to match against. */
+            }
+import org.opensearch.core.ParseField;
+        /**
+        @Override
+        }
+            return builder;
+        public QueryBuilder queryName(String queryName) {
+        }
+                        if (query instanceof SpanQueryBuilder == false) {
+                        + currentFieldName
+        return this;
+                }
+        return builder.build();
+                            throw new ParsingException(parser.getTokenLocation(), "span_near [clauses] must be of type span query");
+                return false;
+            String currentFieldName
+        public static SpanGapQueryBuilder fromXContent(XContentParser parser) throws IOException {
+            return query;
+            throw new IllegalArgumentException("[" + NAME + "]  clauses cannot be null");
+ * Modifications Copyright OpenSearch Contributors. See
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+    private static final ParseField CLAUSES_FIELD = new ParseField("clauses");
+ * Matches spans which are near one another. One can specify slop, the maximum number
+                String fieldName = ((SpanGapQueryBuilder) queryBuilder).fieldName();
+     */
+        if (isGap) {
+            XContentLocation contentLocation,
+            builder.endObject();
+        MappedFieldType fieldType = context.fieldMapper(fieldName);
+ * Unless required by applicable law or agreed to in writing,
+        @Override
+    /** Default slop value, this is the same that lucene {@link SpanNearQuery} uses if no slop is provided */
+        builder.endObject();
+     * When <code>inOrder</code> is true, the spans from each clause
+        }
+    private final int slop;
+            isGap = queryBuilder instanceof SpanGapQueryBuilder;
+    /**
+                }
+    /**
+            }
+        out.writeBoolean(inOrder);
+import java.util.Collections;
+            if (Strings.isEmpty(fieldName)) {
+         */
+                    queryName = parser.text();
+     * Since, SpanGapQuery is private to SpanNearQuery, SpanGapQueryBuilder cannot
+            }
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                if (CLAUSES_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+ * this file be licensed under the Apache-2.0 license or a
+        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
+import org.opensearch.core.common.ParsingException;
+                    boost = parser.floatValue();
+                        QueryBuilder query = parseInnerQueryBuilder(parser);
+                } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        builder.setSlop(slop);
+        if (clauses.isEmpty()) {
+                query = clauses.get(i).toQuery(context);
+        @Override
+    public SpanNearQueryBuilder(StreamInput in) throws IOException {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        /*
+ *
+            this.fieldName = fieldName;
+                currentFieldName = parser.currentName();
+    /**
+ * @opensearch.internal
+                    contentLocation,
+            builder.startObject();
+        }
+                        }
+    }
+    /**
+     * @opensearch.internal
             out.writeInt(width);
         }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            builder.startObject(getName());
+import org.apache.lucene.queries.spans.SpanQuery;
             builder.field(fieldName, width);
-            builder.endObject();
-            builder.endObject();
-            return builder;
-        }
-
-        public static SpanGapQueryBuilder fromXContent(XContentParser parser) throws IOException {
-            String fieldName = null;
-            int width = 0;
-            String currentFieldName = null;
-            XContentParser.Token token;
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                if (token == XContentParser.Token.FIELD_NAME) {
-                    currentFieldName = parser.currentName();
-                    throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, currentFieldName);
-                    fieldName = currentFieldName;
-                } else if (token.isValue()) {
-                    width = parser.intValue();
-                }
-            }
-            SpanGapQueryBuilder result = new SpanGapQueryBuilder(fieldName, width);
-            return result;
-        }
-
-        @Override
-        public final boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (obj == null || getClass() != obj.getClass()) {
-                return false;
-            }
-            SpanGapQueryBuilder other = (SpanGapQueryBuilder) obj;
-            return Objects.equals(fieldName, other.fieldName) && Objects.equals(width, other.width);
-        }
-
-        @Override
-        public final int hashCode() {
-            return Objects.hash(getClass(), fieldName, width);
-        }
-
-        @Override
-        public final String toString() {
-            return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
-        }
-
-        // copied from AbstractQueryBuilder
-        protected static void throwParsingExceptionOnMultipleFields(
-            String queryName,
-            XContentLocation contentLocation,
-            String processedFieldName,
-            String currentFieldName
-        ) {
-            if (processedFieldName != null) {
-                throw new ParsingException(
-                    contentLocation,
-                    "["
-                        + queryName
-                        + "] query doesn't support multiple fields, found ["
-                        + processedFieldName
-                        + "] and ["
-                        + currentFieldName
-                        + "]"
-                );
-            }
-        }
+/*
+     * @param slop controls the maximum number of intervening unmatched positions permitted
     }
+        @Override
+        }
+            spanNearFieldName = ((SpanQuery) query).getField();
+        public static final String NAME = "span_gap";
+ * You may obtain a copy of the License at
+ * license agreements. See the NOTICE file distributed with
+                        + queryName
+import java.util.ArrayList;
+            } else if (token == XContentParser.Token.START_ARRAY) {
 }
+        @Override
+        }
+import org.apache.lucene.search.Query;
+        return queryBuilder;
+ * the Apache License, Version 2.0 (the "License"); you may
+        @Override
+        }
+        }
+         * Constructs a new SpanGapQueryBuilder term query.

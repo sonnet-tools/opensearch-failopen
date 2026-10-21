@@ -1,251 +1,220 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
+    }
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.fetch;
-
-import org.apache.lucene.search.Query;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.query.ParsedQuery;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.SearchExtBuilder;
-import org.opensearch.search.fetch.subphase.FetchDocValuesContext;
-import org.opensearch.search.fetch.subphase.FetchFieldsContext;
-import org.opensearch.search.fetch.subphase.FetchSourceContext;
-import org.opensearch.search.fetch.subphase.FieldAndFormat;
-import org.opensearch.search.fetch.subphase.InnerHitsContext;
-import org.opensearch.search.fetch.subphase.InnerHitsContext.InnerHitSubContext;
-import org.opensearch.search.fetch.subphase.ScriptFieldsContext;
-import org.opensearch.search.fetch.subphase.highlight.SearchHighlightContext;
-import org.opensearch.search.internal.ContextIndexSearcher;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.lookup.SearchLookup;
-import org.opensearch.search.lookup.SourceLookup;
-import org.opensearch.search.rescore.RescoreContext;
-
-import java.util.Collections;
-import java.util.List;
-
-/**
- * Encapsulates state required to execute fetch phases
- *
- * @opensearch.internal
- */
-public class FetchContext {
-
-    private final SearchContext searchContext;
-    private final SearchLookup searchLookup;
-
-    /**
-     * Create a FetchContext based on a SearchContext
-     */
-    public FetchContext(SearchContext searchContext) {
-        this.searchContext = searchContext;
-        this.searchLookup = searchContext.getQueryShardContext().newFetchLookup();
-    }
-
-    /**
-     * The name of the index that documents are being fetched from
-     */
-    public String getIndexName() {
-        return searchContext.indexShard().shardId().getIndexName();
-    }
-
-    /**
-     * The point-in-time searcher the original query was executed against
-     */
-    public ContextIndexSearcher searcher() {
-        return searchContext.searcher();
-    }
-
-    /**
-     * The mapper service for the index we are fetching documents from
-     */
-    public MapperService mapperService() {
-        return searchContext.mapperService();
-    }
-
-    /**
-     * The index settings for the index we are fetching documents from
-     */
-    public IndexSettings getIndexSettings() {
-        return mapperService().getIndexSettings();
-    }
-
-    /**
-     * The {@code SearchLookup} for the this context
-     */
-    public SearchLookup searchLookup() {
-        return searchLookup;
-    }
-
-    /**
-     * The original query
-     */
-    public Query query() {
-        return searchContext.query();
-    }
-
-    /**
-     * The original query with additional filters and named queries
-     */
-    public ParsedQuery parsedQuery() {
-        return searchContext.parsedQuery();
-    }
-
-    /**
-     * Any post-filters run as part of the search
-     */
-    public ParsedQuery parsedPostFilter() {
-        return searchContext.parsedPostFilter();
-    }
-
-    /**
-     * Configuration for fetching _source
-     */
-    public FetchSourceContext fetchSourceContext() {
-        return searchContext.fetchSourceContext();
-    }
-
-    /**
-     * Should the response include `explain` output
-     */
     public boolean explain() {
+    public List<RescoreContext> rescore() {
         return searchContext.explain() && searchContext.query() != null;
     }
-
-    /**
-     * The rescorers included in the original search, used for explain output
-     */
-    public List<RescoreContext> rescore() {
-        return searchContext.rescore();
-    }
-
-    /**
-     * Should the response include sequence number and primary term metadata
-     */
-    public boolean seqNoAndPrimaryTerm() {
-        return searchContext.seqNoAndPrimaryTerm();
-    }
-
-    /**
-     * Configuration for fetching docValues fields
-     */
+import org.opensearch.search.fetch.subphase.FieldAndFormat;
     public FetchDocValuesContext docValuesContext() {
-        FetchDocValuesContext dvContext = searchContext.docValuesContext();
-        if (searchContext.collapse() != null) {
-            // retrieve the `doc_value` associated with the collapse field
-            String name = searchContext.collapse().getFieldName();
-            if (dvContext == null) {
-                return new FetchDocValuesContext(Collections.singletonList(new FieldAndFormat(name, null)));
-            } else if (searchContext.docValuesContext().fields().stream().map(ff -> ff.field).anyMatch(name::equals) == false) {
-                dvContext.fields().add(new FieldAndFormat(name, null));
-            }
-        }
-        return dvContext;
-    }
-
-    /**
-     * Configuration for highlighting
+ * under the License.
+import org.opensearch.search.fetch.subphase.InnerHitsContext;
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
      */
-    public SearchHighlightContext highlight() {
-        return searchContext.highlight();
-    }
-
+ *
+import org.opensearch.search.fetch.subphase.highlight.SearchHighlightContext;
+        return searchContext.seqNoAndPrimaryTerm();
+ */
     /**
-     * Should the response include scores, even if scores were not calculated in the original query
+        // Usually the root source simply belongs to the hit we're processing. But if
      */
-    public boolean fetchScores() {
-        return searchContext.sort() != null && searchContext.trackScores();
-    }
-
-    public boolean includeNamedQueriesScore() {
-        return searchContext.includeNamedQueriesScore();
-    }
-
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.index.mapper.MapperService;
+    public SearchExtBuilder getSearchExt(String name) {
     /**
-     * Configuration for returning inner hits
+    }
+    }
      */
-    public InnerHitsContext innerHits() {
+ * license agreements. See the NOTICE file distributed with
+     * For a hit document that's being processed, return the source lookup representing the
+     */
+    /**
+public class FetchContext {
+    public Query query() {
+import org.opensearch.search.internal.SearchContext;
+import org.opensearch.search.lookup.SourceLookup;
         return searchContext.innerHits();
     }
-
+ * compatible open source license.
+        FetchDocValuesContext dvContext = searchContext.docValuesContext();
     /**
-     * Should the response include version metadata
-     */
-    public boolean version() {
-        return searchContext.version();
+    /**
+     * Configuration for fetching _source
+            return innerHitsContext.getRootLookup();
+    private final SearchContext searchContext;
+ * You may obtain a copy of the License at
+ * ownership. Elasticsearch licenses this file to you under
+        return searchLookup;
     }
-
-    /**
+ */
+        return searchContext.getSearchExt(name);
+     * The original query
+ * this file be licensed under the Apache-2.0 license or a
+        return searchContext.getQueryShardContext();
+    private final SearchLookup searchLookup;
+ * Modifications Copyright OpenSearch Contributors. See
+ *
+     */
      * Configuration for the 'fields' response
      */
-    public FetchFieldsContext fetchFieldsContext() {
-        return searchContext.fetchFieldsContext();
-    }
-
+import org.opensearch.search.fetch.subphase.InnerHitsContext.InnerHitSubContext;
+}
     /**
-     * Configuration for script fields
-     */
-    public ScriptFieldsContext scriptFields() {
-        return searchContext.scriptFields();
-    }
-
+        // the root source is found on the inner hits context.
+                dvContext.fields().add(new FieldAndFormat(name, null));
     /**
-     * Configuration for external fetch phase plugins
-     */
-    public SearchExtBuilder getSearchExt(String name) {
-        return searchContext.getSearchExt(name);
-    }
-
+     * The {@code SearchLookup} for the this context
+    /**
+    public boolean version() {
+            // retrieve the `doc_value` associated with the collapse field
+import org.opensearch.index.IndexSettings;
     public QueryShardContext getQueryShardContext() {
-        return searchContext.getQueryShardContext();
-    }
-
-    /**
-     * For a hit document that's being processed, return the source lookup representing the
-     * root document. This method is used to pass down the root source when processing this
+     */
+     */
+     * Configuration for returning inner hits
+        return searchContext.version();
+     * Configuration for fetching docValues fields
+/*
+        return searchContext.query();
+import org.opensearch.index.query.QueryShardContext;
+ * GitHub history for details.
+        return searchContext.fetchSourceContext();
+        return searchContext.highlight();
+/**
+            String name = searchContext.collapse().getFieldName();
+        this.searchContext = searchContext;
+        } else {
+import org.opensearch.search.fetch.subphase.ScriptFieldsContext;
+    public String getIndexName() {
+    public SearchHighlightContext highlight() {
+     */
+ * KIND, either express or implied.  See the License for the
+    public IndexSettings getIndexSettings() {
+        return searchContext.includeNamedQueriesScore();
+        return searchContext.rescore();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
      * document's nested inner hits.
+        return searchContext.parsedQuery();
+        return dvContext;
+     * The rescorers included in the original search, used for explain output
      *
+     * Create a FetchContext based on a SearchContext
+     * root document. This method is used to pass down the root source when processing this
+    public FetchContext(SearchContext searchContext) {
+    }
+        return searchContext.indexShard().shardId().getIndexName();
+import org.opensearch.search.rescore.RescoreContext;
+     * The point-in-time searcher the original query was executed against
+    /**
+    public ContextIndexSearcher searcher() {
+            }
+    }
+ * specific language governing permissions and limitations
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+    /**
+     */
+     * Configuration for external fetch phase plugins
+     * Configuration for highlighting
+     */
+        if (searchContext instanceof InnerHitSubContext innerHitsContext && hitContext.hit().getNestedIdentity() != null) {
+    public InnerHitsContext innerHits() {
+    public MapperService mapperService() {
+        return searchContext.fetchFieldsContext();
+    public FetchSourceContext fetchSourceContext() {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+     * Should the response include `explain` output
+    /**
+    }
+        return searchContext.sort() != null && searchContext.trackScores();
+    /**
+ * SPDX-License-Identifier: Apache-2.0
+    /**
+     * The index settings for the index we are fetching documents from
+ * Unless required by applicable law or agreed to in writing,
+        return mapperService().getIndexSettings();
+    /**
+     * Should the response include version metadata
+        // there are multiple layers of inner hits and we're in a nested context, then
+    public boolean fetchScores() {
+    }
+     */
+     */
+    public ParsedQuery parsedQuery() {
+    /**
+ * Licensed to Elasticsearch under one or more contributor
+        this.searchLookup = searchContext.getQueryShardContext().newFetchLookup();
+                return new FetchDocValuesContext(Collections.singletonList(new FieldAndFormat(name, null)));
+import java.util.List;
+     * The original query with additional filters and named queries
+    public boolean seqNoAndPrimaryTerm() {
+    }
+        return searchContext.scriptFields();
+    /**
+     * Should the response include sequence number and primary term metadata
+import org.opensearch.search.fetch.subphase.FetchDocValuesContext;
      * @param hitContext The context of the hit that's being processed.
      */
-    public SourceLookup getRootSourceLookup(FetchSubPhase.HitContext hitContext) {
-        // Usually the root source simply belongs to the hit we're processing. But if
-        // there are multiple layers of inner hits and we're in a nested context, then
-        // the root source is found on the inner hits context.
-        if (searchContext instanceof InnerHitSubContext innerHitsContext && hitContext.hit().getNestedIdentity() != null) {
-            return innerHitsContext.getRootLookup();
-        } else {
-            return hitContext.sourceLookup();
-        }
+ */
+import java.util.Collections;
+ * this work for additional information regarding copyright
+     */
+     * Any post-filters run as part of the search
+import org.opensearch.search.fetch.subphase.FetchFieldsContext;
     }
-}
+    /**
+    /**
+     * The name of the index that documents are being fetched from
+        if (searchContext.collapse() != null) {
+import org.apache.lucene.search.Query;
+    }
+    /**
+    public SourceLookup getRootSourceLookup(FetchSubPhase.HitContext hitContext) {
+import org.opensearch.search.lookup.SearchLookup;
+     */
+     * Should the response include scores, even if scores were not calculated in the original query
+ * software distributed under the License is distributed on an
+package org.opensearch.search.fetch;
+ * @opensearch.internal
+    }
+     * The mapper service for the index we are fetching documents from
+    }
+            if (dvContext == null) {
+ * not use this file except in compliance with the License.
+    public ScriptFieldsContext scriptFields() {
+     * Configuration for script fields
+    }
+    /**
+    }
+     */
+            } else if (searchContext.docValuesContext().fields().stream().map(ff -> ff.field).anyMatch(name::equals) == false) {
+        return searchContext.parsedPostFilter();
+    /**
+    }
+/*
+ */
+     */
+import org.opensearch.search.internal.ContextIndexSearcher;
+ * Encapsulates state required to execute fetch phases
+    }
+     */
+    /**
+/*
+     */
+    }
+import org.opensearch.index.query.ParsedQuery;
+     */
+import org.opensearch.search.SearchExtBuilder;
+        return searchContext.searcher();
+    public FetchFieldsContext fetchFieldsContext() {
+    public SearchLookup searchLookup() {
+    }
+ *
+        }
+    public boolean includeNamedQueriesScore() {
+    }
+    }
+     */
+    public ParsedQuery parsedPostFilter() {
+            return hitContext.sourceLookup();
+        return searchContext.mapperService();

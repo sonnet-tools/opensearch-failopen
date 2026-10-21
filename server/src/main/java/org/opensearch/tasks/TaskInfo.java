@@ -1,448 +1,405 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.tasks;
-
-import org.opensearch.Version;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.core.tasks.resourcetracker.TaskResourceStats;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ObjectParserHelper;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.TimeUnit;
-
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
-
+        TaskId id = new TaskId((String) a[i++], (Long) a[i++]);
 /**
- * Information about a currently running task.
- * <p>
- * Tasks are used for communication with transport actions. As a result, they can contain callback
- * references as well as mutable state. That makes it impractical to send tasks over transport channels
- * and use in APIs. Instead, immutable and writeable TaskInfo objects are used to represent
- * snapshot information about currently running tasks.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public final class TaskInfo implements Writeable, ToXContentFragment {
-    private final TaskId taskId;
-
-    private final String type;
-
-    private final String action;
-
-    private final String description;
-
-    private final long startTime;
-
-    private final long runningTimeNanos;
-
-    private final Task.Status status;
-
-    private final boolean cancellable;
-
-    private final boolean cancelled;
-
-    private final Long cancellationStartTime;
-
-    private final TaskId parentTaskId;
-
-    private final Map<String, String> headers;
-
-    private final TaskResourceStats resourceStats;
-
-    public TaskInfo(
-        TaskId taskId,
-        String type,
-        String action,
-        String description,
-        Task.Status status,
-        long startTime,
-        long runningTimeNanos,
-        boolean cancellable,
-        boolean cancelled,
-        TaskId parentTaskId,
-        Map<String, String> headers,
-        TaskResourceStats resourceStats
-    ) {
-        this(
-            taskId,
-            type,
-            action,
-            description,
-            status,
-            startTime,
-            runningTimeNanos,
-            cancellable,
-            cancelled,
-            parentTaskId,
-            headers,
-            resourceStats,
-            null
-        );
-    }
-
-    public TaskInfo(
-        TaskId taskId,
-        String type,
-        String action,
-        String description,
-        Task.Status status,
-        long startTime,
-        long runningTimeNanos,
-        boolean cancellable,
-        boolean cancelled,
-        TaskId parentTaskId,
-        Map<String, String> headers,
-        TaskResourceStats resourceStats,
-        Long cancellationStartTime
-    ) {
-        if (cancellable == false && cancelled == true) {
-            throw new IllegalArgumentException("task cannot be cancelled");
-        }
-        this.taskId = taskId;
-        this.type = type;
-        this.action = action;
-        this.description = description;
-        this.status = status;
-        this.startTime = startTime;
-        this.runningTimeNanos = runningTimeNanos;
-        this.cancellable = cancellable;
-        this.cancelled = cancelled;
-        this.parentTaskId = parentTaskId;
-        this.headers = headers;
-        this.resourceStats = resourceStats;
-        this.cancellationStartTime = cancellationStartTime;
-    }
-
-    /**
-     * Read from a stream.
-     */
-    @SuppressWarnings("unchecked")
-    public TaskInfo(StreamInput in) throws IOException {
-        taskId = TaskId.readFromStream(in);
-        type = in.readString();
-        action = in.readString();
-        description = in.readOptionalString();
-        status = in.readOptionalNamedWriteable(Task.Status.class);
-        startTime = in.readLong();
-        runningTimeNanos = in.readLong();
-        cancellable = in.readBoolean();
-        if (in.getVersion().onOrAfter(Version.V_2_0_0)) {
-            cancelled = in.readBoolean();
-        } else {
-            cancelled = false;
-        }
-        if (cancellable == false && cancelled == true) {
-            throw new IllegalArgumentException("task cannot be cancelled");
-        }
-        parentTaskId = TaskId.readFromStream(in);
-        headers = in.readMap(StreamInput::readString, StreamInput::readString);
-        if (in.getVersion().onOrAfter(Version.V_2_1_0)) {
-            resourceStats = in.readOptionalWriteable(TaskResourceStats::new);
-        } else {
-            resourceStats = null;
-        }
-        if (in.getVersion().onOrAfter(Version.V_2_8_0)) {
-            cancellationStartTime = in.readOptionalLong();
-        } else {
-            cancellationStartTime = null;
-        }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        taskId.writeTo(out);
         out.writeString(type);
-        out.writeString(action);
-        out.writeOptionalString(description);
-        out.writeOptionalNamedWriteable(status);
-        out.writeLong(startTime);
-        out.writeLong(runningTimeNanos);
-        out.writeBoolean(cancellable);
-        if (out.getVersion().onOrAfter(Version.V_2_0_0)) {
-            out.writeBoolean(cancelled);
-        }
-        parentTaskId.writeTo(out);
-        out.writeMap(headers, StreamOutput::writeString, StreamOutput::writeString);
-        if (out.getVersion().onOrAfter(Version.V_2_1_0)) {
-            out.writeOptionalWriteable(resourceStats);
-        }
-        if (out.getVersion().onOrAfter(Version.V_2_8_0)) {
-            out.writeOptionalLong(cancellationStartTime);
-        }
-    }
-
-    public TaskId getTaskId() {
-        return taskId;
-    }
-
-    public long getId() {
-        return taskId.getId();
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public String getAction() {
-        return action;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
+        RawTaskStatus status = statusBytes == null ? null : new RawTaskStatus(statusBytes);
+import org.opensearch.core.tasks.TaskId;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        if (obj == null || obj.getClass() != TaskInfo.class) {
     /**
+    private final long runningTimeNanos;
+        if (builder.humanReadable()) {
+        TaskInfo other = (TaskInfo) obj;
+        } else {
+    /**
+        String description,
+        String description = (String) a[i++];
+import org.opensearch.Version;
+        return Objects.hash(
+        for (Map.Entry<String, String> attribute : headers.entrySet()) {
+        PARSER.declareString(constructorArg(), new ParseField("action"));
+        if (in.getVersion().onOrAfter(Version.V_2_1_0)) {
+        status = in.readOptionalNamedWriteable(Task.Status.class);
+        long runningTimeNanos = (Long) a[i++];
      * The status of the running task. Only available if TaskInfos were build
-     * with the detailed flag.
+        if (out.getVersion().onOrAfter(Version.V_2_0_0)) {
+        if (cancellationStartTime != null) {
+ *
      */
-    public Task.Status getStatus() {
-        return status;
-    }
-
-    /**
-     * Returns the task start time
-     */
-    public long getStartTime() {
-        return startTime;
-    }
-
-    /**
-     * Returns the task running time
-     */
-    public long getRunningTimeNanos() {
-        return runningTimeNanos;
-    }
-
-    /**
-     * Returns true if the task supports cancellation
-     */
-    public boolean isCancellable() {
-        return cancellable;
-    }
-
-    /**
      * Returns true if the task has been cancelled
+            throw new IllegalArgumentException("task cannot be cancelled");
+            cancellationStartTime
+ * Licensed to Elasticsearch under one or more contributor
+        this(
+        }
+            builder.startObject("resource_stats");
+ * specific language governing permissions and limitations
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+    public String getType() {
      */
-    public boolean isCancelled() {
-        return cancelled;
+     */
+        TaskId parentTaskId,
+        }
     }
-
-    public Long getCancellationStartTime() {
-        return cancellationStartTime;
-    }
-
     /**
-     * Returns the parent task id
-     */
-    public TaskId getParentTaskId() {
-        return parentTaskId;
-    }
-
-    /**
-     * Returns the task headers
-     */
-    public Map<String, String> getHeaders() {
-        return headers;
-    }
-
-    /**
-     * Returns the task resource information
-     */
-    public TaskResourceStats getResourceStats() {
-        return resourceStats;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field("node", taskId.getNodeId());
-        builder.field("id", taskId.getId());
-        builder.field("type", type);
+        this.description = description;
+        parentTaskId = TaskId.readFromStream(in);
         builder.field("action", action);
-        if (status != null) {
+            resourceStats,
+     * Returns the task running time
+            && Objects.equals(status, other.status)
+    @Override
+        builder.field("type", type);
+            null
+        TaskId taskId,
+/*
+    public void writeTo(StreamOutput out) throws IOException {
+    @Override
+     */
+        @SuppressWarnings("unchecked")
+ * references as well as mutable state. That makes it impractical to send tasks over transport channels
+import org.opensearch.core.common.bytes.BytesReference;
+        }
+        }
+        out.writeLong(startTime);
+        );
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+        PARSER.declareString(optionalConstructorArg(), new ParseField("parent_task_id"));
+            builder.field(attribute.getKey(), attribute.getValue());
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+        builder.endObject();
+        if (headers == null) {
+    }
+            taskId,
+     * Returns the task resource information
+    public String getAction() {
+ * snapshot information about currently running tasks.
+        @SuppressWarnings("unchecked")
+    private final boolean cancellable;
+        if (resourceStats != null) {
+        headers = in.readMap(StreamInput::readString, StreamInput::readString);
+        return resourceStats;
+        if (in.getVersion().onOrAfter(Version.V_2_8_0)) {
+ *
+        out.writeString(action);
+        String type,
+import java.util.concurrent.TimeUnit;
+        PARSER.declareLong(constructorArg(), new ParseField("start_time_in_millis"));
+        );
+        builder.field("id", taskId.getId());
+    }
+    /**
+            cancellable,
+        return cancelled;
+        this.action = action;
+        type = in.readString();
+        TaskId parentTaskId = parentTaskIdString == null ? TaskId.EMPTY_TASK_ID : new TaskId(parentTaskIdString);
+            parentTaskId,
+        PARSER.declareString(optionalConstructorArg(), new ParseField("description"));
+            parentTaskId,
+        out.writeBoolean(cancellable);
+            headers,
+     * Returns the parent task id
+        String action,
+            cancelled = in.readBoolean();
+        String type = (String) a[i++];
+        if (cancellable == false && cancelled == true) {
+    private final TaskId taskId;
+    /**
+            type,
+            runningTimeNanos,
+        out.writeOptionalString(description);
+    public TaskId getTaskId() {
+            resourceStats,
+        }
+            id,
+ * compatible open source license.
+    @Override
+import org.opensearch.common.unit.TimeValue;
+    private final Long cancellationStartTime;
+        return parentTaskId;
+        }
+}
+        // Note for the future: this has to be backwards and forwards compatible with all changes to the task storage format
+        return action;
+    /**
+        this.parentTaskId = parentTaskId;
+     * Read from a stream.
+        long runningTimeNanos,
+        Map<String, String> headers,
+    }
+            out.writeOptionalLong(cancellationStartTime);
+            resourceStats = in.readOptionalWriteable(TaskResourceStats::new);
+     */
+    public static TaskInfo fromXContent(XContentParser parser) {
+    }
+/*
+import org.opensearch.core.xcontent.ObjectParserHelper;
+        TaskResourceStats resourceStats = (TaskResourceStats) a[i++];
+        this.runningTimeNanos = runningTimeNanos;
+    public TaskInfo(
+            builder.field("parent_task_id", parentTaskId.toString());
+            && Objects.equals(cancellable, other.cancellable)
+        String action = (String) a[i++];
+    @SuppressWarnings("unchecked")
+        return startTime;
+ * software distributed under the License is distributed on an
+        return PARSER.apply(parser, null);
+        return cancellable;
+            out.writeBoolean(cancelled);
+        return type;
+        }
+        this.cancellationStartTime = cancellationStartTime;
+ * Tasks are used for communication with transport actions. As a result, they can contain callback
+    private final TaskResourceStats resourceStats;
+    /**
+ *
+        this.taskId = taskId;
+ *
+    private final String description;
+    private final Task.Status status;
+        long runningTimeNanos,
+        }
+            && Objects.equals(resourceStats, other.resourceStats)
+        long startTime,
+    /**
+            && Objects.equals(type, other.type)
+ * and use in APIs. Instead, immutable and writeable TaskInfo objects are used to represent
             builder.field("status", status, params);
         }
+    public TaskId getParentTaskId() {
+        this.headers = headers;
+ * KIND, either express or implied.  See the License for the
+            status,
+        return cancellationStartTime;
+        taskId.writeTo(out);
         if (description != null) {
-            builder.field("description", description);
-        }
-        builder.timeField("start_time_in_millis", "start_time", startTime);
-        if (builder.humanReadable()) {
-            builder.field("running_time", new TimeValue(runningTimeNanos, TimeUnit.NANOSECONDS).toString());
-        }
-        builder.field("running_time_in_nanos", runningTimeNanos);
-        builder.field("cancellable", cancellable);
-        builder.field("cancelled", cancelled);
-        if (parentTaskId.isSet()) {
-            builder.field("parent_task_id", parentTaskId.toString());
-        }
-        builder.startObject("headers");
-        for (Map.Entry<String, String> attribute : headers.entrySet()) {
-            builder.field(attribute.getKey(), attribute.getValue());
-        }
-        builder.endObject();
-        if (resourceStats != null) {
-            builder.startObject("resource_stats");
-            resourceStats.toXContent(builder, params);
-            builder.endObject();
-        }
-        if (cancellationStartTime != null) {
-            builder.humanReadableField("cancellation_time_millis", "cancellation_time", new TimeValue(cancellationStartTime));
-        }
-        return builder;
-    }
-
-    public static TaskInfo fromXContent(XContentParser parser) {
-        return PARSER.apply(parser, null);
-    }
-
-    public static final ConstructingObjectParser<TaskInfo, Void> PARSER = new ConstructingObjectParser<>("task_info", true, a -> {
-        int i = 0;
-        TaskId id = new TaskId((String) a[i++], (Long) a[i++]);
-        String type = (String) a[i++];
-        String action = (String) a[i++];
-        String description = (String) a[i++];
-        BytesReference statusBytes = (BytesReference) a[i++];
-        long startTime = (Long) a[i++];
-        long runningTimeNanos = (Long) a[i++];
-        boolean cancellable = (Boolean) a[i++];
-        boolean cancelled = a[i++] == Boolean.TRUE;
-        String parentTaskIdString = (String) a[i++];
-        @SuppressWarnings("unchecked")
-        Map<String, String> headers = (Map<String, String>) a[i++];
-        if (headers == null) {
-            // This might happen if we are reading an old version of task info
-            headers = Collections.emptyMap();
-        }
-        @SuppressWarnings("unchecked")
-        TaskResourceStats resourceStats = (TaskResourceStats) a[i++];
-        Long cancellationStartTime = (Long) a[i++];
-        RawTaskStatus status = statusBytes == null ? null : new RawTaskStatus(statusBytes);
-        TaskId parentTaskId = parentTaskIdString == null ? TaskId.EMPTY_TASK_ID : new TaskId(parentTaskIdString);
-        return new TaskInfo(
-            id,
-            type,
-            action,
-            description,
-            status,
-            startTime,
-            runningTimeNanos,
-            cancellable,
-            cancelled,
-            parentTaskId,
-            headers,
-            resourceStats,
-            cancellationStartTime
-        );
-    });
-    static {
-        // Note for the future: this has to be backwards and forwards compatible with all changes to the task storage format
-        PARSER.declareString(constructorArg(), new ParseField("node"));
-        PARSER.declareLong(constructorArg(), new ParseField("id"));
-        PARSER.declareString(constructorArg(), new ParseField("type"));
-        PARSER.declareString(constructorArg(), new ParseField("action"));
-        PARSER.declareString(optionalConstructorArg(), new ParseField("description"));
-        ObjectParserHelper<TaskInfo, Void> parserHelper = new ObjectParserHelper<>();
-        parserHelper.declareRawObject(PARSER, optionalConstructorArg(), new ParseField("status"));
-        PARSER.declareLong(constructorArg(), new ParseField("start_time_in_millis"));
-        PARSER.declareLong(constructorArg(), new ParseField("running_time_in_nanos"));
-        PARSER.declareBoolean(constructorArg(), new ParseField("cancellable"));
-        PARSER.declareBoolean(optionalConstructorArg(), new ParseField("cancelled"));
-        PARSER.declareString(optionalConstructorArg(), new ParseField("parent_task_id"));
-        PARSER.declareObject(optionalConstructorArg(), (p, c) -> p.mapStrings(), new ParseField("headers"));
-        PARSER.declareObject(optionalConstructorArg(), (p, c) -> TaskResourceStats.fromXContent(p), new ParseField("resource_stats"));
-        PARSER.declareLong(optionalConstructorArg(), new ParseField("cancellation_time_millis"));
-    }
-
-    @Override
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
-    }
-
-    // Implements equals and hashCode for testing
-    @Override
-    public boolean equals(Object obj) {
-        if (obj == null || obj.getClass() != TaskInfo.class) {
-            return false;
-        }
-        TaskInfo other = (TaskInfo) obj;
+        parentTaskId.writeTo(out);
         return Objects.equals(taskId, other.taskId)
-            && Objects.equals(type, other.type)
-            && Objects.equals(action, other.action)
-            && Objects.equals(description, other.description)
-            && Objects.equals(startTime, other.startTime)
-            && Objects.equals(runningTimeNanos, other.runningTimeNanos)
-            && Objects.equals(parentTaskId, other.parentTaskId)
-            && Objects.equals(cancellable, other.cancellable)
-            && Objects.equals(cancelled, other.cancelled)
-            && Objects.equals(status, other.status)
-            && Objects.equals(headers, other.headers)
-            && Objects.equals(resourceStats, other.resourceStats)
-            && Objects.equals(cancellationStartTime, other.cancellationStartTime);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(
-            taskId,
-            type,
-            action,
-            description,
-            startTime,
-            runningTimeNanos,
-            parentTaskId,
-            cancellable,
-            cancelled,
-            status,
-            headers,
-            resourceStats,
+ */
             cancellationStartTime
-        );
     }
-}
+import org.opensearch.core.common.io.stream.Writeable;
+import org.opensearch.common.annotation.PublicApi;
+    ) {
+            builder.field("running_time", new TimeValue(runningTimeNanos, TimeUnit.NANOSECONDS).toString());
+        TaskResourceStats resourceStats,
+            description,
+            out.writeOptionalWriteable(resourceStats);
+            description,
+        PARSER.declareBoolean(optionalConstructorArg(), new ParseField("cancelled"));
+        if (cancellable == false && cancelled == true) {
+public final class TaskInfo implements Writeable, ToXContentFragment {
+        return runningTimeNanos;
+            // This might happen if we are reading an old version of task info
+        action = in.readString();
+ */
+        builder.timeField("start_time_in_millis", "start_time", startTime);
+            cancellable,
+        int i = 0;
+        boolean cancelled = a[i++] == Boolean.TRUE;
+    public long getStartTime() {
+import org.opensearch.core.xcontent.XContentBuilder;
+            && Objects.equals(description, other.description)
+            cancelled,
+        builder.startObject("headers");
+    }
+        }
+package org.opensearch.tasks;
+        startTime = in.readLong();
+        builder.field("cancelled", cancelled);
+        runningTimeNanos = in.readLong();
+        PARSER.declareLong(optionalConstructorArg(), new ParseField("cancellation_time_millis"));
+            startTime,
+        } else {
+        boolean cancellable = (Boolean) a[i++];
+ */
+            && Objects.equals(parentTaskId, other.parentTaskId)
+import org.opensearch.core.common.io.stream.StreamOutput;
+    private final TaskId parentTaskId;
+            runningTimeNanos,
+            builder.endObject();
+    static {
+        }
+        }
+        return status;
+        String type,
+        Task.Status status,
+            status,
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import org.opensearch.core.tasks.resourcetracker.TaskResourceStats;
+        TaskId parentTaskId,
+            startTime,
+            startTime,
+            resourceStats = null;
+    @Override
+    }
+    }
+    }
+        if (out.getVersion().onOrAfter(Version.V_2_8_0)) {
+            && Objects.equals(headers, other.headers)
+        PARSER.declareLong(constructorArg(), new ParseField("id"));
+    }
+    public Map<String, String> getHeaders() {
+ * @opensearch.api
+    public long getRunningTimeNanos() {
+        if (parentTaskId.isSet()) {
+        builder.field("cancellable", cancellable);
+        String description,
+import java.util.Objects;
+@PublicApi(since = "1.0.0")
+    public Task.Status getStatus() {
+        builder.field("node", taskId.getNodeId());
+    }
+        this.cancelled = cancelled;
+        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
+            status,
+        if (status != null) {
+import org.opensearch.core.common.Strings;
+        out.writeLong(runningTimeNanos);
+    private final long startTime;
+    // Implements equals and hashCode for testing
+ * Information about a currently running task.
+            headers,
+        } else {
+        PARSER.declareObject(optionalConstructorArg(), (p, c) -> p.mapStrings(), new ParseField("headers"));
+    public boolean isCancellable() {
+            description,
+            return false;
+        PARSER.declareObject(optionalConstructorArg(), (p, c) -> TaskResourceStats.fromXContent(p), new ParseField("resource_stats"));
+ * GitHub history for details.
+            && Objects.equals(startTime, other.startTime)
+            action,
+        this.startTime = startTime;
+            headers = Collections.emptyMap();
+     */
+    private final String type;
+import org.opensearch.core.common.io.stream.StreamInput;
+        ObjectParserHelper<TaskInfo, Void> parserHelper = new ObjectParserHelper<>();
+    public int hashCode() {
+    public long getId() {
+            throw new IllegalArgumentException("task cannot be cancelled");
+    }
+        TaskId taskId,
+            type,
+            taskId,
+        }
+            cancelled,
+        PARSER.declareString(constructorArg(), new ParseField("type"));
+        return new TaskInfo(
+    private final Map<String, String> headers;
+ * Unless required by applicable law or agreed to in writing,
+            action,
+        );
+        return headers;
+            cancellationStartTime = in.readOptionalLong();
+    ) {
+    /**
+    public boolean equals(Object obj) {
+        cancellable = in.readBoolean();
+ * SPDX-License-Identifier: Apache-2.0
+    });
+    public TaskResourceStats getResourceStats() {
+        return description;
+    public Long getCancellationStartTime() {
+        TaskResourceStats resourceStats
+            action,
+        long startTime = (Long) a[i++];
+import org.opensearch.core.ParseField;
+    }
+        PARSER.declareLong(constructorArg(), new ParseField("running_time_in_nanos"));
+        long startTime,
+    public TaskInfo(
+     */
+        return builder;
+    public String toString() {
+    }
+        return taskId;
+import java.io.IOException;
+            resourceStats.toXContent(builder, params);
+        return taskId.getId();
+    }
+            cancellable,
+            runningTimeNanos,
+        this.resourceStats = resourceStats;
+import org.opensearch.core.xcontent.ToXContentFragment;
+        builder.field("running_time_in_nanos", runningTimeNanos);
+ * <p>
+        PARSER.declareBoolean(constructorArg(), new ParseField("cancellable"));
+        BytesReference statusBytes = (BytesReference) a[i++];
+ * Modifications Copyright OpenSearch Contributors. See
+    public TaskInfo(StreamInput in) throws IOException {
+     * Returns the task headers
+        Map<String, String> headers,
+    public boolean isCancelled() {
+        }
+        this.cancellable = cancellable;
+        description = in.readOptionalString();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            cancellationStartTime = null;
+        String parentTaskIdString = (String) a[i++];
+     * Returns true if the task supports cancellation
+        boolean cancelled,
+            headers,
+/*
+ * not use this file except in compliance with the License.
+import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
+ * You may obtain a copy of the License at
+            && Objects.equals(action, other.action)
+import org.opensearch.core.xcontent.XContentParser;
+        boolean cancelled,
+        this.status = status;
+    }
+    }
+        out.writeMap(headers, StreamOutput::writeString, StreamOutput::writeString);
+        }
+            && Objects.equals(cancelled, other.cancelled)
+    @Override
+            parentTaskId,
+    public String getDescription() {
+        boolean cancellable,
+     * Returns the task start time
+            builder.field("description", description);
+        Long cancellationStartTime
+        }
+    public static final ConstructingObjectParser<TaskInfo, Void> PARSER = new ConstructingObjectParser<>("task_info", true, a -> {
+    }
+    }
+            cancelled = false;
+        if (in.getVersion().onOrAfter(Version.V_2_0_0)) {
+    private final String action;
+ * this work for additional information regarding copyright
+            cancelled,
+        String action,
+        this.type = type;
+ * ownership. Elasticsearch licenses this file to you under
+        taskId = TaskId.readFromStream(in);
+import java.util.Map;
+        Map<String, String> headers = (Map<String, String>) a[i++];
+    private final boolean cancelled;
+     */
+            builder.humanReadableField("cancellation_time_millis", "cancellation_time", new TimeValue(cancellationStartTime));
+    }
+    }
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        }
+        PARSER.declareString(constructorArg(), new ParseField("node"));
+ * The OpenSearch Contributors require contributions made to
+        if (out.getVersion().onOrAfter(Version.V_2_1_0)) {
+ * this file be licensed under the Apache-2.0 license or a
+ */
+            type,
+import java.util.Collections;
+     */
+            && Objects.equals(runningTimeNanos, other.runningTimeNanos)
+        parserHelper.declareRawObject(PARSER, optionalConstructorArg(), new ParseField("status"));
+        Task.Status status,
+        Long cancellationStartTime = (Long) a[i++];
+            resourceStats,
+     * with the detailed flag.
+        boolean cancellable,
+ * license agreements. See the NOTICE file distributed with
+    }
+            && Objects.equals(cancellationStartTime, other.cancellationStartTime);
+ * under the License.
+        out.writeOptionalNamedWriteable(status);

@@ -1,2312 +1,1953 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.storage.tiering;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterChangedEvent;
-import org.opensearch.cluster.ClusterInfoService;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateUpdateTask;
-import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.cluster.routing.allocation.DiskThresholdSettings;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Priority;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.index.Index;
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.index.IndexModule;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.store.remote.filecache.FileCacheSettings;
-import org.opensearch.indices.ShardLimitValidator;
-import org.opensearch.storage.action.tiering.CancelTieringRequest;
-import org.opensearch.storage.action.tiering.IndexTieringRequest;
-import org.opensearch.storage.action.tiering.status.model.TieringStatus;
-import org.opensearch.storage.common.tiering.TieringUtils;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;
-
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import org.mockito.ArgumentCaptor;
-
-import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING;
-import static org.opensearch.common.settings.ClusterSettings.BUILT_IN_CLUSTER_SETTINGS;
-import static org.opensearch.index.IndexModule.INDEX_TIERING_STATE;
-import static org.opensearch.index.IndexModule.TieringState.HOT_TO_WARM;
-import static org.opensearch.storage.common.tiering.TieringUtils.TIERING_CUSTOM_KEY;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyInt;
-import static org.mockito.Mockito.anyString;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-@SuppressWarnings("unchecked")
-public class TieringServiceTests extends OpenSearchTestCase {
-
-    private TestTieringService tieringService;
-    private ClusterService clusterService;
-    private ClusterState clusterState;
-    private Index testIndex;
-    private IndexMetadata indexMetadata;
-    private IndexNameExpressionResolver indexNameExpressionResolver;
-    private NodeEnvironment nodeEnvironment;
-    private ShardLimitValidator shardLimitValidator;
-
-    Setting<Integer> maxConcurrentTieringRequestsSetting = Setting.intSetting(
-        "test_max_tiering_requests",
-        50,
-        0,
-        1000,
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-
-    private class TestTieringService extends TieringService {
-        public TestTieringService(
-            Settings settings,
-            ClusterService clusterService,
-            ClusterInfoService clusterInfoService,
-            IndexNameExpressionResolver indexNameExpressionResolver,
-            AllocationService allocationService,
-            NodeEnvironment nodeEnvironment,
-            ShardLimitValidator shardLimitValidator
-        ) {
-            super(
-                settings,
-                clusterService,
-                clusterInfoService,
-                indexNameExpressionResolver,
-                allocationService,
-                nodeEnvironment,
-                shardLimitValidator
-            );
-        }
-
-        @Override
-        protected Settings getTieringStartSettingsToAdd(IndexMetadata indexMetadata) {
-            return Settings.builder()
-                .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true)
-                .put(INDEX_TIERING_STATE.getKey(), HOT_TO_WARM)
-                .build();
-        }
-
-        @Override
-        protected org.opensearch.cluster.block.ClusterBlocks.Builder getTieringStartClusterBlocksToAdd(
-            org.opensearch.cluster.block.ClusterBlocks.Builder blocksBuilder,
-            String indexName,
-            IndexMetadata indexMetadata
-        ) {
-            return blocksBuilder;
-        }
-
-        // getIndexTierClusterBlocksToRestoreAfterCancellation intentionally uses the base class no-op:
-        // the write block is kept during cancel and removed later by removeWriteBlockForCancelledDfaIndices().
-
-        @Override
-        protected Settings getIndexTierSettingsToRestoreAfterCancellation(IndexMetadata indexMetadata) {
-            return Settings.builder()
-                .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), false)
-                .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT)
-                .build();
-        }
-
-        @Override
-        protected String getTieringStartTimeKey() {
-            return "test_tiering_start_time";
-        }
-
-        @Override
-        protected Setting<Integer> getMaxConcurrentTieringRequestsSetting() {
-            return maxConcurrentTieringRequestsSetting;
-        }
-
-        @Override
-        protected IndexModule.TieringState getTargetTieringState() {
-            return IndexModule.TieringState.WARM;
-        }
-
-        @Override
-        protected IndexModule.TieringState getTieringType() {
-            return HOT_TO_WARM;
-        }
-
-        @Override
-        protected void validateTieringRequest(
-            ClusterState clusterState,
-            ClusterInfoService service,
-            Set<Index> tieringEntries,
-            Integer maxConcurrentTieringRequests,
-            Integer jvmActiveUsageThresholdPercent,
-            Index index
-        ) {}
     }
-
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        clusterService = mock(ClusterService.class);
-        clusterState = mock(ClusterState.class);
-        nodeEnvironment = newNodeEnvironment();
-        shardLimitValidator = mock(ShardLimitValidator.class);
-        indexNameExpressionResolver = mock(IndexNameExpressionResolver.class);
-
-        testIndex = new Index("test-index", "uuid");
-        Settings indexSettings = Settings.builder()
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 2)
-            .put(INDEX_TIERING_STATE.getKey(), "HOT")
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .build();
-
-        indexMetadata = IndexMetadata.builder("test-index").settings(indexSettings).numberOfShards(1).numberOfReplicas(2).build();
-
-        Set<Setting<?>> clusterSettingsToAdd = new HashSet<>(BUILT_IN_CLUSTER_SETTINGS);
-        clusterSettingsToAdd.add(maxConcurrentTieringRequestsSetting);
-        clusterSettingsToAdd.add(TieringUtils.JVM_USAGE_TIERING_THRESHOLD_PERCENT);
-        clusterSettingsToAdd.add(FileCacheSettings.DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING);
-
-        Settings defaultSettings = Settings.builder()
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_THRESHOLD_ENABLED_SETTING.getKey(), true)
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "300b")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "200b")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "100b")
-            .put(maxConcurrentTieringRequestsSetting.getKey(), 50)
-            .put(TieringUtils.JVM_USAGE_TIERING_THRESHOLD_PERCENT.getKey(), 90)
-            .put(FileCacheSettings.DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 5.0)
-            .build();
-
-        ClusterSettings mockSettings = new ClusterSettings(Settings.EMPTY, clusterSettingsToAdd);
-        when(clusterService.getClusterSettings()).thenReturn(mockSettings);
-
-        tieringService = new TestTieringService(
-            defaultSettings,
-            clusterService,
-            mock(ClusterInfoService.class),
-            indexNameExpressionResolver,
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        IOUtils.close(nodeEnvironment);
-        super.tearDown();
-    }
-
-    public void testProcessTieringInProgress_HandlesDeletedIndex() {
-        tieringService.tieringIndices.add(testIndex);
-        RoutingTable routingTable = mock(RoutingTable.class);
-        when(clusterState.routingTable()).thenReturn(routingTable);
-        when(routingTable.hasIndex(testIndex)).thenReturn(false);
-
-        tieringService.processTieringInProgress(clusterState, "test_source");
-
-        verify(clusterService, never()).submitStateUpdateTask(anyString(), any(ClusterStateUpdateTask.class));
-        assertTrue("Index should be removed from tieringIndices", tieringService.tieringIndices.isEmpty());
-    }
-
-    public void testProcessTieringInProgress_HandlesIncompleteShardRelocation() {
-        tieringService.tieringIndices.add(testIndex);
-        RoutingTable routingTable = mock(RoutingTable.class);
-        ShardRouting shard = mock(ShardRouting.class);
-        List<ShardRouting> shardRoutings = Collections.singletonList(shard);
-
-        when(clusterState.routingTable()).thenReturn(routingTable);
-        when(routingTable.hasIndex(testIndex)).thenReturn(true);
-        when(routingTable.allShards(testIndex.getName())).thenReturn(shardRoutings);
-
-        // Stub shard so isShardStateValidForTier doesn't NPE
-        when(shard.unassigned()).thenReturn(false);
-        when(shard.started()).thenReturn(true);
-        when(shard.currentNodeId()).thenReturn("node1");
-
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        DiscoveryNode node = mock(DiscoveryNode.class);
-        when(clusterState.getNodes()).thenReturn(nodes);
-        when(nodes.get("node1")).thenReturn(node);
-        // Shard is on a hot node, target is WARM → not in target tier
-        when(node.isWarmNode()).thenReturn(false);
-
-        tieringService.processTieringInProgress(clusterState, "test_source");
-
-        verify(clusterService, never()).submitStateUpdateTask(anyString(), any(ClusterStateUpdateTask.class));
-        assertTrue("Index should remain in tieringIndices", tieringService.tieringIndices.contains(testIndex));
-    }
-
-    public void testProcessTieringInProgress_CompletesSuccessfully() throws Exception {
-        tieringService.tieringIndices.add(testIndex);
-        RoutingTable routingTable = mock(RoutingTable.class);
-        ShardRouting shard = mock(ShardRouting.class);
-        List<ShardRouting> shardRoutings = Collections.singletonList(shard);
-        Metadata metadata = mock(Metadata.class);
-
-        when(clusterState.routingTable()).thenReturn(routingTable);
-        when(clusterState.metadata()).thenReturn(metadata);
-        when(metadata.index(testIndex)).thenReturn(indexMetadata);
-        when(routingTable.hasIndex(testIndex)).thenReturn(true);
-        when(routingTable.allShards(testIndex.getName())).thenReturn(shardRoutings);
-
-        // Stub shard as started on a warm node → in target tier (WARM)
-        when(shard.unassigned()).thenReturn(false);
-        when(shard.started()).thenReturn(true);
-        when(shard.currentNodeId()).thenReturn("node1");
-
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        DiscoveryNode node = mock(DiscoveryNode.class);
-        when(clusterState.getNodes()).thenReturn(nodes);
-        when(nodes.get("node1")).thenReturn(node);
-        when(node.isWarmNode()).thenReturn(true);
-
-        tieringService.processTieringInProgress(clusterState, "test_source");
-
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
-
-        ClusterStateUpdateTask capturedTask = taskCaptor.getValue();
-        assertEquals(Priority.NORMAL, capturedTask.priority());
-
-        // Execute the task to cover the execute() method
-        Metadata realMetadata = Metadata.builder().put(indexMetadata, false).build();
-        RoutingTable realRt = RoutingTable.builder().addAsNew(realMetadata.index("test-index")).build();
-        ClusterState realState = ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT)
-            .metadata(realMetadata)
-            .routingTable(realRt)
-            .build();
-        ClusterState result = capturedTask.execute(realState);
-        assertNotNull(result);
-
-        capturedTask.clusterStateProcessed("test_source", clusterState, clusterState);
-        assertFalse("Index should be removed after processing", tieringService.tieringIndices.contains(testIndex));
-    }
-
-    public void testUpdateClusterStateTask_OnFailure() {
-        tieringService.tieringIndices.add(testIndex);
-        RoutingTable routingTable = mock(RoutingTable.class);
-        ShardRouting shard = mock(ShardRouting.class);
-        Metadata metadata = mock(Metadata.class);
-
-        when(clusterState.routingTable()).thenReturn(routingTable);
-        when(clusterState.metadata()).thenReturn(metadata);
-        when(metadata.index(testIndex)).thenReturn(indexMetadata);
-        when(routingTable.hasIndex(testIndex)).thenReturn(true);
-        when(routingTable.allShards(testIndex.getName())).thenReturn(Collections.singletonList(shard));
-        when(shard.unassigned()).thenReturn(false);
-        when(shard.started()).thenReturn(true);
-        when(shard.currentNodeId()).thenReturn("node1");
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        DiscoveryNode node = mock(DiscoveryNode.class);
-        when(clusterState.getNodes()).thenReturn(nodes);
-        when(nodes.get("node1")).thenReturn(node);
-        when(node.isWarmNode()).thenReturn(true);
-
-        tieringService.processTieringInProgress(clusterState, "test_source");
-
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
-
-        // Cover onFailure — should not throw
-        taskCaptor.getValue().onFailure("test_source", new RuntimeException("simulated"));
-    }
-
-    public void testUpdateClusterStateTask_IndexDeletedDuringExecution() throws Exception {
-        tieringService.tieringIndices.add(testIndex);
-        RoutingTable routingTable = mock(RoutingTable.class);
-        ShardRouting shard = mock(ShardRouting.class);
-        Metadata metadata = mock(Metadata.class);
-
-        when(clusterState.routingTable()).thenReturn(routingTable);
-        when(clusterState.metadata()).thenReturn(metadata);
-        // Return null for index metadata during execute() → covers the null branch
-        when(metadata.index(testIndex)).thenReturn(null);
-        when(routingTable.hasIndex(testIndex)).thenReturn(true);
-        when(routingTable.allShards(testIndex.getName())).thenReturn(Collections.singletonList(shard));
-        when(shard.unassigned()).thenReturn(false);
-        when(shard.started()).thenReturn(true);
-        when(shard.currentNodeId()).thenReturn("node1");
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        DiscoveryNode node = mock(DiscoveryNode.class);
-        when(clusterState.getNodes()).thenReturn(nodes);
-        when(nodes.get("node1")).thenReturn(node);
-        when(node.isWarmNode()).thenReturn(true);
-
-        tieringService.processTieringInProgress(clusterState, "test_source");
-
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
-
-        // Execute with null indexMetadata — covers the null check branch
-        // Use a real ClusterState where the index doesn't exist in metadata
-        Metadata emptyMetadata = Metadata.builder().build();
-        ClusterState realState = ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT).metadata(emptyMetadata).build();
-        ClusterState result = taskCaptor.getValue().execute(realState);
-        assertNotNull(result);
-        assertFalse("Index should be removed from tieringIndices", tieringService.tieringIndices.contains(testIndex));
-    }
-
-    public void testTier_InitiatesSuccessfully() throws Exception {
-        IndexTieringRequest request = new IndexTieringRequest("WARM", "test-index");
-        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-        AllocationService allocationSvc = mock(AllocationService.class);
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            resolver,
-            allocationSvc,
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        when(resolver.concreteIndices(any(), any(), eq("test-index"))).thenReturn(new Index[] { testIndex });
-
-        // Build a real cluster state so execute() works
-        Settings idxSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), "HOT")
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .build();
-        IndexMetadata idxMeta = IndexMetadata.builder("test-index").settings(idxSettings).numberOfShards(1).numberOfReplicas(1).build();
-        Metadata meta = Metadata.builder().put(idxMeta, false).build();
-        RoutingTable rt = RoutingTable.builder().addAsNew(meta.index("test-index")).build();
-        ClusterState realState = ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT).metadata(meta).routingTable(rt).build();
-
-        when(allocationSvc.reroute(any(ClusterState.class), anyString())).thenAnswer(inv -> inv.getArgument(0));
-
-        service.tier(request, listener, realState);
-
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
-
-        ClusterStateUpdateTask capturedTask = taskCaptor.getValue();
-        assertEquals(Priority.URGENT, capturedTask.priority());
-
-        // Cover execute()
-        ClusterState result = capturedTask.execute(realState);
-        assertNotNull(result);
-
-        // Cover timeout()
-        assertNotNull(capturedTask.timeout());
-
-        capturedTask.clusterStateProcessed("test_source", realState, realState);
-        assertTrue("Index should be added to tieringIndices", service.tieringIndices.contains(testIndex));
-    }
-
-    public void testTier_FailsOnResolveException() {
-        IndexTieringRequest request = new IndexTieringRequest("WARM", "bad-index");
-        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            resolver,
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        when(resolver.concreteIndices(any(), any(), eq("bad-index"))).thenThrow(new IllegalArgumentException("Index not found"));
-
-        service.tier(request, listener, clusterState);
-
-        verify(listener).onFailure(any(IllegalArgumentException.class));
-    }
-
-    public void testTier_AlreadyBeingTiered_ReturnsCurrentState() throws Exception {
-        IndexTieringRequest request = new IndexTieringRequest("WARM", "test-index");
-        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            resolver,
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        // Pre-add index so execute() hits the early return
-        service.tieringIndices.add(testIndex);
-
-        when(resolver.concreteIndices(any(), any(), eq("test-index"))).thenReturn(new Index[] { testIndex });
-
-        Metadata metadata = mock(Metadata.class);
-        when(clusterState.metadata()).thenReturn(metadata);
-
-        service.tier(request, listener, clusterState);
-
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
-
-        // execute() should return currentState unchanged
-        ClusterState result = taskCaptor.getValue().execute(clusterState);
-        assertSame(clusterState, result);
-    }
-
-    public void testTier_HandlesValidationFailure() {
-        IndexTieringRequest request = new IndexTieringRequest("WARM", "test-index");
-        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-
-        TestTieringService spyService = spy(
-            new TestTieringService(
-                Settings.EMPTY,
-                clusterService,
-                mock(ClusterInfoService.class),
-                resolver,
-                mock(AllocationService.class),
-                nodeEnvironment,
-                shardLimitValidator
-            )
-        );
-
-        when(resolver.concreteIndices(any(), any(), eq("test-index"))).thenReturn(new Index[] { testIndex });
-
-        Metadata metadata = mock(Metadata.class);
-        when(clusterState.metadata()).thenReturn(metadata);
-        when(metadata.index(testIndex)).thenReturn(indexMetadata);
-
-        spyService.tier(request, listener, clusterState);
-
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
-
-        ClusterStateUpdateTask task = taskCaptor.getValue();
-        doThrow(new IllegalArgumentException("Index is already in target tier")).when(spyService)
-            .validateTieringRequest(any(), any(), any(), any(), any(), any());
-
-        Exception thrown = expectThrows(IllegalArgumentException.class, () -> task.execute(clusterState));
-        assertEquals("Index is already in target tier", thrown.getMessage());
-
-        task.onFailure("test_source", thrown);
-        verify(listener).onFailure(thrown);
-        assertTrue("Index should not be in tieringIndices", spyService.tieringIndices.isEmpty());
-    }
-
-    public void testUpdateIndexMetadataForTieringStart_SetsNumberOfReplicasToOneAndUpdatesRoutingTable() {
-        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
-        RoutingTable.Builder routingTableBuilder = mock(RoutingTable.Builder.class);
-
-        tieringService.updateIndexMetadataForTieringStart(metadataBuilder, routingTableBuilder, indexMetadata, testIndex);
-
-        // number_of_replicas=1 is applied atomically via both metadataBuilder and routingTableBuilder
-        verify(routingTableBuilder).updateNumberOfReplicas(eq(1), any(String[].class));
-        verify(metadataBuilder).updateNumberOfReplicas(eq(1), any(String[].class));
-
-        ArgumentCaptor<IndexMetadata.Builder> captor = ArgumentCaptor.forClass(IndexMetadata.Builder.class);
-        verify(metadataBuilder).put(captor.capture());
-        IndexMetadata updatedMetadata = captor.getValue().build();
-        // Confirm number_of_replicas is set to 1 in metadata settings
-        assertEquals("1", updatedMetadata.getSettings().get(IndexMetadata.SETTING_NUMBER_OF_REPLICAS));
-    }
-
-    public void testUpdateIndexMetadataPostTiering_UpdatesCorrectly() {
-        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
-        when(metadataBuilder.put(any(IndexMetadata.Builder.class))).thenReturn(metadataBuilder);
-
-        tieringService.updateIndexMetadataPostTiering(metadataBuilder, indexMetadata);
-
-        ArgumentCaptor<IndexMetadata.Builder> captor = ArgumentCaptor.forClass(IndexMetadata.Builder.class);
-        verify(metadataBuilder).put(captor.capture());
-
-        IndexMetadata updatedMetadata = captor.getValue().build();
-        assertEquals(tieringService.getTargetTieringState().toString(), updatedMetadata.getSettings().get(INDEX_TIERING_STATE.getKey()));
-        assertNull("Tiering custom metadata should be removed", updatedMetadata.getCustomData(TIERING_CUSTOM_KEY));
-    }
-
-    public void testIsIndexBeingTiered() {
-        assertFalse(tieringService.isIndexBeingTiered(testIndex));
-        tieringService.tieringIndices.add(testIndex);
-        assertTrue(tieringService.isIndexBeingTiered(testIndex));
-    }
-
-    public void testReconstructInProgressTieringRequests() {
-        Settings tieringSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), HOT_TO_WARM.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .build();
-
-        IndexMetadata tieringIndexMetadata = IndexMetadata.builder("tiering-index")
-            .settings(tieringSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        Metadata metadata = Metadata.builder().put(tieringIndexMetadata, false).build();
-        when(clusterState.metadata()).thenReturn(metadata);
-
-        tieringService.reconstructInProgressTieringRequests(clusterState, HOT_TO_WARM, "test_source");
-
-        assertEquals(1, tieringService.tieringIndices.size());
-    }
-
-    public void testReconstructInProgressTieringRequests_HandlesException() {
-        IndexMetadata badMetadata = mock(IndexMetadata.class);
-        when(badMetadata.getSettings()).thenThrow(new RuntimeException("simulated error"));
-        when(badMetadata.getIndex()).thenReturn(new Index("bad-index", "bad-uuid"));
-
-        Metadata metadata = mock(Metadata.class);
-        when(metadata.indices()).thenReturn(Map.of("bad-index", badMetadata));
-        when(clusterState.metadata()).thenReturn(metadata);
-
-        // Should not throw — error is caught and logged
-        tieringService.reconstructInProgressTieringRequests(clusterState, HOT_TO_WARM, "test_source");
-
-        assertTrue("Bad index should not be added", tieringService.tieringIndices.isEmpty());
-    }
-
-    public void testValidateTieringCancelRequest_IndexNotBeingTiered() {
-        RoutingTable routingTable = mock(RoutingTable.class);
-        when(clusterState.routingTable()).thenReturn(routingTable);
-
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> tieringService.validateTieringCancelRequest(testIndex, indexMetadata, clusterState)
-        );
-        assertThat(e.getMessage(), org.hamcrest.Matchers.containsString("not currently undergoing tiering operation"));
-    }
-
-    public void testValidateTieringCancelRequest_AlreadyReachedTargetTier() {
-        tieringService.tieringIndices.add(testIndex);
-
-        Settings warmSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .build();
-
-        IndexMetadata warmIndexMetadata = IndexMetadata.builder("test-index")
-            .settings(warmSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> tieringService.validateTieringCancelRequest(testIndex, warmIndexMetadata, clusterState)
-        );
-        assertThat(e.getMessage(), org.hamcrest.Matchers.containsString("already reached its target tier"));
-    }
-
-    public void testValidateTieringCancelRequest_IndexDeleted() {
-        tieringService.tieringIndices.add(testIndex);
-        RoutingTable routingTable = mock(RoutingTable.class);
-        when(clusterState.routingTable()).thenReturn(routingTable);
-        when(routingTable.hasIndex(testIndex)).thenReturn(false);
-
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> tieringService.validateTieringCancelRequest(testIndex, indexMetadata, clusterState)
-        );
-        assertThat(e.getMessage(), org.hamcrest.Matchers.containsString("deleted before tiering cancellation"));
-    }
-
-    /**
-     * Failover case: the in-memory tiering set was lost (e.g., cluster-manager change), but the
-     * persisted state shows a HOT_TO_WARM migration in progress. Cancel must be accepted (no throw)
-     * via the isMigrationInProgress fallback.
-     */
-    public void testValidateTieringCancelRequest_NotInMemoryButHotToWarm_Accepted() {
-        Settings h2wSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), HOT_TO_WARM.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .build();
-        IndexMetadata h2wMetadata = IndexMetadata.builder("test-index").settings(h2wSettings).numberOfShards(1).numberOfReplicas(1).build();
-
-        RoutingTable routingTable = mock(RoutingTable.class);
-        when(clusterState.routingTable()).thenReturn(routingTable);
-        when(routingTable.hasIndex(testIndex)).thenReturn(true);
-
-        assertFalse("Precondition: index must not be tracked in memory", tieringService.isIndexBeingTiered(testIndex));
-        // Must NOT throw — the persisted HOT_TO_WARM state makes the index cancellable after failover.
-        tieringService.validateTieringCancelRequest(testIndex, h2wMetadata, clusterState);
-    }
-
-    /**
-     * Direction-agnostic fallback: a WARM_TO_HOT index not tracked in memory is also accepted.
-     * (The target tier here is WARM, so the "already reached target" guard does not trip.)
-     */
-    public void testValidateTieringCancelRequest_NotInMemoryButWarmToHot_Accepted() {
-        Settings w2hSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM_TO_HOT.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .build();
-        IndexMetadata w2hMetadata = IndexMetadata.builder("test-index").settings(w2hSettings).numberOfShards(1).numberOfReplicas(1).build();
-
-        RoutingTable routingTable = mock(RoutingTable.class);
-        when(clusterState.routingTable()).thenReturn(routingTable);
-        when(routingTable.hasIndex(testIndex)).thenReturn(true);
-
-        assertFalse("Precondition: index must not be tracked in memory", tieringService.isIndexBeingTiered(testIndex));
-        // Must NOT throw.
-        tieringService.validateTieringCancelRequest(testIndex, w2hMetadata, clusterState);
-    }
-
-    /**
-     * Boundary: a terminal WARM index that is NOT tracked in memory must still be rejected —
-     * isMigrationInProgress returns false for terminal states, so the fallback does not apply.
-     */
-    public void testValidateTieringCancelRequest_NotInMemoryAndTerminalWarm_Rejected() {
-        Settings warmSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .build();
-        IndexMetadata warmMetadata = IndexMetadata.builder("test-index")
-            .settings(warmSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        RoutingTable routingTable = mock(RoutingTable.class);
-        when(clusterState.routingTable()).thenReturn(routingTable);
-
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> tieringService.validateTieringCancelRequest(testIndex, warmMetadata, clusterState)
-        );
-        assertThat(e.getMessage(), org.hamcrest.Matchers.containsString("not currently undergoing tiering operation"));
-    }
-
-    public void testCancelTiering_SubmitsClusterStateTask() {
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-        AllocationService allocationSvc = mock(AllocationService.class);
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            resolver,
-            allocationSvc,
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        when(resolver.concreteIndices(any(), any(), eq("test-index"))).thenReturn(new Index[] { testIndex });
-
-        CancelTieringRequest request = new CancelTieringRequest("test-index");
-        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
-
-        service.cancelTiering(request, listener, clusterState);
-
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
-        ClusterStateUpdateTask task = taskCaptor.getValue();
-
-        // Cover timeout()
-        assertNotNull(task.timeout());
-
-        // Cover onFailure()
-        task.onFailure("cancel_source", new RuntimeException("simulated"));
-        verify(listener).onFailure(any(RuntimeException.class));
-
-        // Cover clusterStateProcessed()
-        service.tieringIndices.add(testIndex);
-        task.clusterStateProcessed("cancel_source", clusterState, clusterState);
-        assertFalse("Index should be removed after cancel", service.tieringIndices.contains(testIndex));
-        verify(listener).onResponse(any(ClusterStateUpdateResponse.class));
-    }
-
-    public void testCancelTiering_ExecuteTask() throws Exception {
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-        AllocationService allocationSvc = mock(AllocationService.class);
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            resolver,
-            allocationSvc,
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        service.tieringIndices.add(testIndex);
-        when(resolver.concreteIndices(any(), any(), eq("test-index"))).thenReturn(new Index[] { testIndex });
-
-        // Build a real cluster state with the index in HOT_TO_WARM state
-        Settings tieringSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT_TO_WARM.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .build();
-
-        IndexMetadata tieringMeta = IndexMetadata.builder("test-index")
-            .settings(tieringSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        Metadata metadata = Metadata.builder().put(tieringMeta, false).build();
-        RoutingTable routingTable = RoutingTable.builder().addAsNew(metadata.index("test-index")).build();
-        ClusterState realState = ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT)
-            .metadata(metadata)
-            .routingTable(routingTable)
-            .build();
-
-        when(allocationSvc.reroute(any(ClusterState.class), anyString())).thenAnswer(inv -> inv.getArgument(0));
-
-        CancelTieringRequest request = new CancelTieringRequest("test-index");
-        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
-
-        service.cancelTiering(request, listener, realState);
-
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
-
-        ClusterState result = taskCaptor.getValue().execute(realState);
-        assertNotNull(result);
-    }
-
-    public void testCancelTiering_FailsOnResolveException() {
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            resolver,
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        when(resolver.concreteIndices(any(), any(), eq("bad-index"))).thenThrow(new IllegalArgumentException("Index not found"));
-
-        CancelTieringRequest request = new CancelTieringRequest("bad-index");
-        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
-
-        service.cancelTiering(request, listener, clusterState);
-
-        verify(listener).onFailure(any(IllegalArgumentException.class));
-    }
-
-    public void testUpdateIndexMetadataForTieringCancel() {
-        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
-        when(metadataBuilder.put(any(IndexMetadata.Builder.class))).thenReturn(metadataBuilder);
-
-        tieringService.updateIndexMetadataForTieringCancel(metadataBuilder, indexMetadata);
-
-        ArgumentCaptor<IndexMetadata.Builder> captor = ArgumentCaptor.forClass(IndexMetadata.Builder.class);
-        verify(metadataBuilder).put(captor.capture());
-
-        IndexMetadata updatedMetadata = captor.getValue().build();
-        assertNull("Tiering custom metadata should be removed", updatedMetadata.getCustomData(TIERING_CUSTOM_KEY));
-    }
-
-    public void testUpdateIndexMetadataForTieringStart_ThrowsOnError() {
-        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
-        RoutingTable.Builder routingTableBuilder = mock(RoutingTable.Builder.class);
-        IndexMetadata badMetadata = mock(IndexMetadata.class);
-        when(badMetadata.getSettings()).thenThrow(new RuntimeException("simulated"));
-
-        expectThrows(
-            OpenSearchException.class,
-            () -> tieringService.updateIndexMetadataForTieringStart(metadataBuilder, routingTableBuilder, badMetadata, testIndex)
-        );
-    }
-
-    public void testUpdateIndexMetadataPostTiering_ThrowsOnError() {
-        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
-        IndexMetadata badMetadata = mock(IndexMetadata.class);
-        when(badMetadata.getSettings()).thenThrow(new RuntimeException("simulated"));
-
-        expectThrows(OpenSearchException.class, () -> tieringService.updateIndexMetadataPostTiering(metadataBuilder, badMetadata));
-    }
-
-    public void testUpdateIndexMetadataForTieringCancel_ThrowsOnError() {
-        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
-        IndexMetadata badMetadata = mock(IndexMetadata.class);
-        when(badMetadata.getSettings()).thenThrow(new RuntimeException("simulated"));
-
-        expectThrows(OpenSearchException.class, () -> tieringService.updateIndexMetadataForTieringCancel(metadataBuilder, badMetadata));
-    }
-
-    public void testListTieringStatus_Empty() {
-        assertEquals(0, tieringService.listTieringStatus().size());
-    }
-
-    public void testGetTieringStatus_IndexNotBeingTiered() {
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            resolver,
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        when(resolver.concreteIndices(any(), any(), eq("test-index"))).thenReturn(new Index[] { testIndex });
-        when(clusterService.state()).thenReturn(clusterState);
-
-        expectThrows(IllegalArgumentException.class, () -> service.getTieringStatus("test-index", false));
-    }
-
-    public void testGetTieringStatus_IndexBeingTiered() {
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            resolver,
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        service.tieringIndices.add(testIndex);
-
-        // Build index metadata with tiering custom data
-        java.util.HashMap<String, String> tieringCustomData = new java.util.HashMap<>();
-        tieringCustomData.put("test_tiering_start_time", "1234567");
-
-        Settings idxSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), HOT_TO_WARM.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .build();
-
-        IndexMetadata idxMeta = IndexMetadata.builder("test-index")
-            .settings(idxSettings)
-            .putCustom(TIERING_CUSTOM_KEY, tieringCustomData)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        Metadata metadata = mock(Metadata.class);
-        when(metadata.getIndexSafe(testIndex)).thenReturn(idxMeta);
-        ClusterState state = mock(ClusterState.class);
-        when(state.getMetadata()).thenReturn(metadata);
-        RoutingTable rt = mock(RoutingTable.class);
-        when(state.routingTable()).thenReturn(rt);
-        when(rt.allShards("test-index")).thenReturn(Collections.emptyList());
-        when(clusterService.state()).thenReturn(state);
-        when(resolver.concreteIndices(any(), any(), eq("test-index"))).thenReturn(new Index[] { testIndex });
-
-        TieringStatus status = service.getTieringStatus("test-index", false);
-        assertNotNull(status);
-        assertEquals("test-index", status.getIndexName());
-    }
-
-    public void testListTieringStatus_WithTieringIndex() {
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            resolver,
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        service.tieringIndices.add(testIndex);
-
-        java.util.HashMap<String, String> tieringCustomData = new java.util.HashMap<>();
-        tieringCustomData.put("test_tiering_start_time", "1234567");
-
-        Settings idxSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), HOT_TO_WARM.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .build();
-
-        IndexMetadata idxMeta = IndexMetadata.builder("test-index")
-            .settings(idxSettings)
-            .putCustom(TIERING_CUSTOM_KEY, tieringCustomData)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        Metadata metadata = mock(Metadata.class);
-        when(metadata.getIndexSafe(testIndex)).thenReturn(idxMeta);
-        ClusterState state = mock(ClusterState.class);
-        when(state.getMetadata()).thenReturn(metadata);
-        when(clusterService.state()).thenReturn(state);
-
-        List<TieringStatus> statuses = service.listTieringStatus();
-        assertEquals(1, statuses.size());
-        assertEquals("test-index", statuses.get(0).getIndexName());
-    }
-
-    public void testClusterChanged_NewClusterManager_ReconstructsRequests() {
-        ClusterChangedEvent event = mock(ClusterChangedEvent.class);
-        ClusterState currentState = mock(ClusterState.class);
-        ClusterState previousState = mock(ClusterState.class);
-        DiscoveryNodes currentNodes = mock(DiscoveryNodes.class);
-        DiscoveryNodes previousNodes = mock(DiscoveryNodes.class);
-        Metadata metadata = mock(Metadata.class);
-
-        when(event.localNodeClusterManager()).thenReturn(true);
         when(event.state()).thenReturn(currentState);
-        when(event.previousState()).thenReturn(previousState);
-        when(previousState.nodes()).thenReturn(previousNodes);
-        when(previousNodes.isLocalNodeElectedClusterManager()).thenReturn(false);
-        when(event.routingTableChanged()).thenReturn(false);
-        when(currentState.metadata()).thenReturn(metadata);
-        when(metadata.indices()).thenReturn(Map.of());
-
-        tieringService.clusterChanged(event);
-        // No exception means reconstruction was called successfully
-    }
-
-    public void testClusterChanged_RoutingTableChanged_ProcessesTiering() {
-        tieringService.tieringIndices.add(testIndex);
-
-        ClusterChangedEvent event = mock(ClusterChangedEvent.class);
-        ClusterState currentState = mock(ClusterState.class);
-        ClusterState previousState = mock(ClusterState.class);
-        DiscoveryNodes previousNodes = mock(DiscoveryNodes.class);
-        RoutingTable routingTable = mock(RoutingTable.class);
-        Metadata metadata = mock(Metadata.class);
-        ShardRouting shard = mock(ShardRouting.class);
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        DiscoveryNode node = mock(DiscoveryNode.class);
-
-        when(event.localNodeClusterManager()).thenReturn(true);
-        when(event.state()).thenReturn(currentState);
-        when(event.previousState()).thenReturn(previousState);
-        when(previousState.nodes()).thenReturn(previousNodes);
-        when(previousNodes.isLocalNodeElectedClusterManager()).thenReturn(true);
-        when(event.routingTableChanged()).thenReturn(true);
-
-        when(currentState.routingTable()).thenReturn(routingTable);
-        when(routingTable.hasIndex(testIndex)).thenReturn(true);
-        when(routingTable.allShards(testIndex.getName())).thenReturn(Collections.singletonList(shard));
-
-        // Shard on warm node → in target tier
-        when(shard.unassigned()).thenReturn(false);
-        when(shard.started()).thenReturn(true);
-        when(shard.currentNodeId()).thenReturn("node1");
-        when(currentState.getNodes()).thenReturn(nodes);
-        when(nodes.get("node1")).thenReturn(node);
-        when(node.isWarmNode()).thenReturn(true);
-        when(currentState.metadata()).thenReturn(metadata);
-        when(metadata.index(testIndex)).thenReturn(indexMetadata);
-        // removeWriteBlockForCancelledDfaIndices iterates over all index metadata;
-        // stub the iterator so the enhanced-for loop doesn't NPE on the mock.
-        when(metadata.iterator()).thenReturn(Collections.emptyIterator());
-
-        tieringService.clusterChanged(event);
-
-        verify(clusterService).submitStateUpdateTask(anyString(), any(ClusterStateUpdateTask.class));
-    }
-
-    public void testClusterChanged_NotClusterManager_DoesNothing() {
-        ClusterChangedEvent event = mock(ClusterChangedEvent.class);
-        when(event.localNodeClusterManager()).thenReturn(false);
-
-        tieringService.clusterChanged(event);
-
-        verify(clusterService, never()).submitStateUpdateTask(anyString(), any(ClusterStateUpdateTask.class));
-    }
-
-    public void testUpdateIndexMetadataForTieringStart_ZeroReplicas_SetsNumberOfReplicasToOne() {
-        // When user has replicas: 0, number_of_replicas should be forced to 1 for routing table consistency.
-        // The ReplicationTracker requires a replica to avoid assertion failures on warm nodes.
+        tieringService.processTieringInProgress(clusterState, "test_source");
+        RoutingTable rtMock = mock(RoutingTable.class);
+            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
         Settings zeroReplicaSettings = Settings.builder()
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
-            .put(INDEX_TIERING_STATE.getKey(), "HOT")
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid-zero-replicas")
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            clusterService,
+            clusterService,
+        );
+        ClusterState resultState = taskCaptor.getValue().execute(initialState);
+        String dfaIndexName = "dfa-unassigned-replica";
+    public void testIsIndexBeingTiered() {
+            nodeEnvironment,
+    public void testRemoveWriteBlock_DfaHotIndexWithBlock_AllShardsOnHot_SubmitsTask() throws Exception {
+        ClusterState result = taskCaptor.getValue().execute(realState);
+        when(primaryShard.unassigned()).thenReturn(false);
+            () -> tieringService.validateTieringCancelRequest(testIndex, indexMetadata, clusterState)
+import static org.mockito.Mockito.anyString;
+            IllegalArgumentException.class,
+        DiscoveryNode node = mock(DiscoveryNode.class);
+        when(badMetadata.getSettings()).thenThrow(new RuntimeException("simulated"));
+    public void testReconstructInProgressTieringRequests_HandlesException() {
+        protected Setting<Integer> getMaxConcurrentTieringRequestsSetting() {
+        // Use a W2H-style tiering service (target = HOT)
+     * Happy-path execute(): task actually removes INDEX_WRITE_BLOCK from ClusterBlocks
+    public void testTier_DfaIndex_HotToWarm_DoesNotModifyClusterBlocks() throws Exception {
+     * (actively tiering) — must be skipped.
+        ClusterBlocks blocks = ClusterBlocks.builder().addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK).build();
+        @Override
+        Settings h2wSettings = Settings.builder()
+    private ClusterChangedEvent buildRoutingTableChangedEvent(ClusterState currentState) {
+    public void testProcessTieringInProgress_HandlesDeletedIndex() {
+        String dfaIndexName = "dfa-execute-index";
+     */
+        when(primaryShard.started()).thenReturn(true);
+        RoutingTable rt = RoutingTable.builder().addAsNew(meta.index(dfaIndexName)).build();
             .build();
-
-        IndexMetadata zeroReplicaMetadata = IndexMetadata.builder("zero-replica-index")
-            .settings(zeroReplicaSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
-
-        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
-        RoutingTable.Builder routingTableBuilder = mock(RoutingTable.Builder.class);
-
-        tieringService.updateIndexMetadataForTieringStart(
-            metadataBuilder,
-            routingTableBuilder,
-            zeroReplicaMetadata,
             new Index("zero-replica-index", "uuid-zero-replicas")
         );
-
-        // Verify number_of_replicas=1 is set atomically in both metadata and routing table
-        verify(routingTableBuilder).updateNumberOfReplicas(eq(1), any(String[].class));
-        verify(metadataBuilder).updateNumberOfReplicas(eq(1), any(String[].class));
-
+    public void testValidateTieringCancelRequest_NotInMemoryAndTerminalWarm_Rejected() {
         ArgumentCaptor<IndexMetadata.Builder> captor = ArgumentCaptor.forClass(IndexMetadata.Builder.class);
-        verify(metadataBuilder).put(captor.capture());
-        IndexMetadata updatedMetadata = captor.getValue().build();
-        assertEquals("1", updatedMetadata.getSettings().get(IndexMetadata.SETTING_NUMBER_OF_REPLICAS));
-    }
-
-    public void testUpdateIndexMetadataForTieringStart_TwoReplicas_SetsNumberOfReplicasToOne() {
-        // When user has replicas: 2, number_of_replicas is forced to 1 during tiering start
-        // to ensure routing table consistency with the ReplicationTracker on warm nodes.
-        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
-        RoutingTable.Builder routingTableBuilder = mock(RoutingTable.Builder.class);
-
-        tieringService.updateIndexMetadataForTieringStart(metadataBuilder, routingTableBuilder, indexMetadata, testIndex);
-
-        // Verify number_of_replicas=1 is set atomically in both metadata and routing table
-        verify(routingTableBuilder).updateNumberOfReplicas(eq(1), any(String[].class));
-        verify(metadataBuilder).updateNumberOfReplicas(eq(1), any(String[].class));
-
-        ArgumentCaptor<IndexMetadata.Builder> captor = ArgumentCaptor.forClass(IndexMetadata.Builder.class);
-        verify(metadataBuilder).put(captor.capture());
-        IndexMetadata updatedMetadata = captor.getValue().build();
-        assertEquals("1", updatedMetadata.getSettings().get(IndexMetadata.SETTING_NUMBER_OF_REPLICAS));
-    }
-
-    public void testUpdateIndexMetadataForTieringStart_OneReplica_DoesNotUpdateRoutingTable() {
-        // When user already has replicas: 1, updateNumberOfReplicas must NOT be called —
-        // the conditional branch `if (currentReplicas != 1)` is not entered.
-        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
-        RoutingTable.Builder routingTableBuilder = mock(RoutingTable.Builder.class);
-
-        // Build index with 1 replica (already at target)
-        Settings oneReplicaSettings = Settings.builder()
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .put(INDEX_TIERING_STATE.getKey(), "HOT")
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .build();
-        IndexMetadata oneReplicaIndex = IndexMetadata.builder("test-index")
-            .settings(oneReplicaSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        tieringService.updateIndexMetadataForTieringStart(metadataBuilder, routingTableBuilder, oneReplicaIndex, testIndex);
-
-        // Routing table and metadata must NOT have updateNumberOfReplicas called
-        verify(routingTableBuilder, never()).updateNumberOfReplicas(anyInt(), any(String[].class));
-        verify(metadataBuilder, never()).updateNumberOfReplicas(anyInt(), any(String[].class));
-
-        // IndexMetadata.Builder must still be put with the tiering settings applied
-        verify(metadataBuilder).put(any(IndexMetadata.Builder.class));
-    }
-
-    public void testUpdateIndexMetadataPostTiering_DoesNotModifyAutoExpandReplicas() {
-        // updateIndexMetadataPostTiering only updates INDEX_TIERING_STATE and removes tiering custom data.
-        // It does NOT modify SETTING_AUTO_EXPAND_REPLICAS — that setting retains whatever value
-        // was in the original index metadata (null if never explicitly set).
-        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
-        when(metadataBuilder.put(any(IndexMetadata.Builder.class))).thenReturn(metadataBuilder);
-
-        tieringService.updateIndexMetadataPostTiering(metadataBuilder, indexMetadata);
-
-        ArgumentCaptor<IndexMetadata.Builder> captor = ArgumentCaptor.forClass(IndexMetadata.Builder.class);
-        verify(metadataBuilder).put(captor.capture());
-
-        IndexMetadata updatedMetadata = captor.getValue().build();
-        // auto_expand_replicas is not modified by updateIndexMetadataPostTiering —
-        // it carries over from the source indexMetadata unchanged.
-        assertNull(
-            "updateIndexMetadataPostTiering must not set auto_expand_replicas",
-            updatedMetadata.getSettings().get(IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS)
-        );
-        // The tiering state must be updated to the target tier
-        assertEquals(
-            tieringService.getTargetTieringState().toString(),
-            updatedMetadata.getSettings().get(org.opensearch.index.IndexModule.INDEX_TIERING_STATE.getKey())
-        );
-    }
-
-    public void testWarmToHotTieringStart_DisablesAutoExpandReplicas() {
-        // Verify that WarmToHotTieringService's getTieringStartSettingsToAdd includes
-        // auto_expand_replicas: false. The base class updateIndexMetadataForTieringStart
-        // overrides this with "0-{max(1, currentReplicas)}" for the tiering start phase,
-        // but the setting is correctly applied in the final tiering completion step.
-        TestWarmToHotTieringService warmToHotService = new TestWarmToHotTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            indexNameExpressionResolver,
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        // Pass a DFA index metadata so the W2H subclass returns its full settings
-        Settings tieringStartSettings = warmToHotService.getTieringStartSettingsToAdd(buildDfaIndexMetadata("w2h-check-idx", "w2h-uuid"));
-        assertEquals(
-            "Warm-to-hot getTieringStartSettingsToAdd should include auto_expand_replicas: false",
-            "false",
-            tieringStartSettings.get(IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS)
-        );
-    }
-
-    public void testWarmToHotTieringStart_RemovesReadOnlyAllowDeleteBlock() {
-        // Create a WarmToHot-style tiering service that sets read_only_allow_delete: false on start
-        TestWarmToHotTieringService warmToHotService = new TestWarmToHotTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            indexNameExpressionResolver,
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
-        RoutingTable.Builder routingTableBuilder = mock(RoutingTable.Builder.class);
-
-        warmToHotService.updateIndexMetadataForTieringStart(metadataBuilder, routingTableBuilder, indexMetadata, testIndex);
-
-        ArgumentCaptor<IndexMetadata.Builder> captor = ArgumentCaptor.forClass(IndexMetadata.Builder.class);
-        verify(metadataBuilder).put(captor.capture());
-        IndexMetadata updatedMetadata = captor.getValue().build();
-        assertEquals(
-            "Warm-to-hot tiering start should set blocks.write to false",
-            "false",
-            updatedMetadata.getSettings().get(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey())
-        );
-    }
-
-    /**
-     * Builds a DFA (pluggable dataformat enabled) IndexMetadata for block tests.
-     * isDfaIndex() checks IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING = true.
-     */
-    private IndexMetadata buildDfaIndexMetadata(String indexName, String uuid) {
-        Settings dfaSettings = Settings.builder()
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .put(INDEX_TIERING_STATE.getKey(), "HOT")
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, uuid)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            .build();
-        return IndexMetadata.builder(indexName).settings(dfaSettings).numberOfShards(1).numberOfReplicas(1).build();
-    }
-
-    /**
-     * Test: tier() for a DFA index hot→warm does NOT add write blocks to ClusterBlocks.
-     *
-     * The write blocks are added by TransportHotToWarmTierAction.addReadOnlyBlockAndPrepare()
-     * BEFORE tier() is called. tier() only handles W2H block removal — H2W blocking is owned
-     * entirely by TransportHotToWarmTierAction.
-     *
-     * This test verifies that tier() completes successfully for DFA H2W without touching ClusterBlocks.
-     */
-    public void testTier_DfaIndex_HotToWarm_DoesNotModifyClusterBlocks() throws Exception {
-        String dfaIndexName = "dfa-index";
-        String dfaUuid = "dfa-uuid";
-        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
-        IndexMetadata dfaMeta = buildDfaIndexMetadata(dfaIndexName, dfaUuid);
-
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-        AllocationService allocationSvc = mock(AllocationService.class);
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            resolver,
-            allocationSvc,
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        when(resolver.concreteIndices(any(), any(), eq(dfaIndexName))).thenReturn(new Index[] { dfaIndex });
-
-        Metadata meta = Metadata.builder().put(dfaMeta, false).build();
-        RoutingTable rt = RoutingTable.builder().addAsNew(meta.index(dfaIndexName)).build();
-        ClusterState initialState = ClusterState.builder(ClusterName.DEFAULT)
-            .metadata(meta)
-            .routingTable(rt)
-            .blocks(ClusterBlocks.EMPTY_CLUSTER_BLOCK)
-            .build();
-
-        when(allocationSvc.reroute(any(ClusterState.class), anyString())).thenAnswer(inv -> inv.getArgument(0));
-
-        IndexTieringRequest request = new IndexTieringRequest("WARM", dfaIndexName);
-        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
-
-        service.tier(request, listener, initialState);
-
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
-
-        ClusterState resultState = taskCaptor.getValue().execute(initialState);
-
-        // tier() does NOT add write blocks for H2W DFA — that's TransportHotToWarmTierAction's responsibility.
-        // ClusterBlocks should remain unchanged (empty).
-        assertFalse(
-            "tier() must NOT add INDEX_WRITE_BLOCK for H2W DFA — TransportHotToWarmTierAction handles that",
-            resultState.blocks().hasIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
-        );
-        assertFalse(
-            "tier() must NOT add INDEX_WRITE_BLOCK for H2W DFA — TransportHotToWarmTierAction handles that",
-            resultState.blocks().hasIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
-        );
-    }
-
-    /**
-     * Test: When cancelling H2W tiering for a DFA index, the cancelTiering() execute() method must
-     * KEEP the INDEX_WRITE_BLOCK in ClusterBlocks and KEEP blocks.write=true in IndexMetadata settings.
-     *
-     * The write block is intentionally deferred — it must not be lifted during cancel because some
-     * shards may still be on warm nodes running a read-only engine. The block is removed later by
-     * TieringService.removeWriteBlockForCancelledDfaIndices() once all shards are confirmed started
-     * on hot nodes (writable engine). Lifting it immediately would cause write errors on warm-engine shards.
-     */
-    public void testCancelTiering_DfaIndex_KeepsWriteBlocksDuringCancel() throws Exception {
-        String dfaIndexName = "dfa-cancel-index";
-        String dfaUuid = "dfa-cancel-uuid";
-        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
-
-        // Build DFA index metadata in HOT_TO_WARM state WITH write blocks already set
-        // (simulates the state after tiering started but before it completed)
-        Settings dfaTieringSettings = Settings.builder()
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT_TO_WARM.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
-            .build();
-        IndexMetadata dfaTieringMeta = IndexMetadata.builder(dfaIndexName)
-            .settings(dfaTieringSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-        AllocationService allocationSvc = mock(AllocationService.class);
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            resolver,
-            allocationSvc,
-            nodeEnvironment,
-            shardLimitValidator
-        );
-        service.tieringIndices.add(dfaIndex);
-
-        when(resolver.concreteIndices(any(), any(), eq(dfaIndexName))).thenReturn(new Index[] { dfaIndex });
-
-        // Build cluster state with write blocks already present in ClusterBlocks
-        Metadata meta = Metadata.builder().put(dfaTieringMeta, false).build();
-        RoutingTable rt = RoutingTable.builder().addAsNew(meta.index(dfaIndexName)).build();
-        ClusterBlocks blocksWithWriteBlock = ClusterBlocks.builder()
-            .addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
-            .addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
-            .build();
-        ClusterState stateWithBlocks = ClusterState.builder(ClusterName.DEFAULT)
-            .metadata(meta)
-            .routingTable(rt)
-            .blocks(blocksWithWriteBlock)
-            .build();
-
-        when(allocationSvc.reroute(any(ClusterState.class), anyString())).thenAnswer(inv -> inv.getArgument(0));
-
-        CancelTieringRequest cancelRequest = new CancelTieringRequest(dfaIndexName);
-        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
-
-        service.cancelTiering(cancelRequest, listener, stateWithBlocks);
-
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
-
-        ClusterState resultState = taskCaptor.getValue().execute(stateWithBlocks);
-
-        // Verify ClusterBlocks: write block must be KEPT (deferred to removeWriteBlockForCancelledDfaIndices)
-        assertTrue(
-            "INDEX_WRITE_BLOCK must be KEPT in ClusterBlocks during H2W cancel — deferred removal until shards on hot",
-            resultState.blocks().hasIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
-        );
-
-        // Verify IndexMetadata settings: blocks.write must remain unchanged (not set to false during cancel)
-        // The cancel task only sets IS_WARM=false and TIERING_STATE=HOT — it does not touch blocks.write.
-        // The deferred cleanup reads blocks.write=true + TIERING_STATE=HOT to identify orphaned blocks.
-        IndexMetadata updatedMeta = resultState.metadata().index(dfaIndexName);
-        assertNotEquals(
-            "blocks.write must NOT be set to false during cancel — deferred to removeWriteBlockForCancelledDfaIndices()",
-            "false",
-            updatedMeta.getSettings().get(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey())
-        );
-    }
-
-    /**
-     * Test: When tiering a DFA index warm→hot, the tier() execute() method must REMOVE
-     * INDEX_WRITE_BLOCK and INDEX_WRITE_BLOCK from ClusterBlocks AND
-     * set blocks.write=false and blocks.read_only_allow_delete=false in IndexMetadata settings.
-     *
-     * This ensures that after warm→hot migration, the index becomes fully writable again.
-     */
-    public void testTier_DfaIndex_WarmToHot_RemovesWriteBlocksFromClusterBlocksAndSettings() throws Exception {
-        String dfaIndexName = "dfa-w2h-index";
-        String dfaUuid = "dfa-w2h-uuid";
-        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
-
-        // Build warm DFA index metadata WITH write blocks set (it was warm, writes blocked)
-        Settings dfaWarmSettings = Settings.builder()
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM.toString())
-            .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true)
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
-            .build();
-        IndexMetadata dfaWarmMeta = IndexMetadata.builder(dfaIndexName)
-            .settings(dfaWarmSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-        AllocationService allocationSvc = mock(AllocationService.class);
-
-        // Use a W2H-style tiering service (target = HOT)
-        TestWarmToHotTieringService w2hService = new TestWarmToHotTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            resolver,
-            allocationSvc,
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        when(resolver.concreteIndices(any(), any(), eq(dfaIndexName))).thenReturn(new Index[] { dfaIndex });
-
-        // Build cluster state with write blocks already present in ClusterBlocks
-        Metadata meta = Metadata.builder().put(dfaWarmMeta, false).build();
-        RoutingTable rt = RoutingTable.builder().addAsNew(meta.index(dfaIndexName)).build();
-        ClusterBlocks blocksWithWriteBlock = ClusterBlocks.builder()
-            .addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
-            .addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
-            .build();
-        ClusterState warmState = ClusterState.builder(ClusterName.DEFAULT)
-            .metadata(meta)
-            .routingTable(rt)
-            .blocks(blocksWithWriteBlock)
-            .build();
-
-        when(allocationSvc.reroute(any(ClusterState.class), anyString())).thenAnswer(inv -> inv.getArgument(0));
-
-        IndexTieringRequest request = new IndexTieringRequest("HOT", dfaIndexName);
-        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
-
-        w2hService.tier(request, listener, warmState);
-
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
-
-        ClusterState resultState = taskCaptor.getValue().execute(warmState);
-
-        // Verify ClusterBlocks: write blocks must be REMOVED (index becomes writable on hot tier)
-        assertFalse(
-            "INDEX_WRITE_BLOCK must be REMOVED from ClusterBlocks after W2H tier start for DFA index",
-            resultState.blocks().hasIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
-        );
-        assertFalse(
-            "INDEX_WRITE_BLOCK must be REMOVED from ClusterBlocks after W2H tier start for DFA index",
-            resultState.blocks().hasIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
-        );
-
-        // Verify IndexMetadata settings: blocks.write=false so index stays writable after restart
-        IndexMetadata updatedMeta = resultState.metadata().index(dfaIndexName);
-        assertNotEquals(
-            "blocks.write must be false in IndexMetadata settings after W2H tier start for DFA index",
-            "true",
-            updatedMeta.getSettings().get(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey())
-        );
-        assertNotEquals(
-            "blocks.blocks.write must be false in IndexMetadata settings after W2H tier start for DFA index",
-            "true",
-            updatedMeta.getSettings().get(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey())
-        );
-    }
-
-    /**
-     * Test: Non-DFA index should NOT have write blocks added to ClusterBlocks during tiering.
-     * Only DFA (pluggable dataformat) indices get write-blocked during tiering.
-     */
-    public void testTier_NonDfaIndex_DoesNotAddWriteBlocksToClusterBlocks() throws Exception {
-        // non-DFA index: PLUGGABLE_DATAFORMAT_ENABLED_SETTING = false (default)
-        Index nonDfaIndex = new Index("non-dfa-index", "non-dfa-uuid");
-        Settings nonDfaSettings = Settings.builder()
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .put(INDEX_TIERING_STATE.getKey(), "HOT")
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "non-dfa-uuid")
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            // PLUGGABLE_DATAFORMAT_ENABLED_SETTING not set → defaults to false
-            .build();
-        IndexMetadata nonDfaMeta = IndexMetadata.builder("non-dfa-index")
-            .settings(nonDfaSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-        AllocationService allocationSvc = mock(AllocationService.class);
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            resolver,
-            allocationSvc,
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        when(resolver.concreteIndices(any(), any(), eq("non-dfa-index"))).thenReturn(new Index[] { nonDfaIndex });
-
-        Metadata meta = Metadata.builder().put(nonDfaMeta, false).build();
-        RoutingTable rt = RoutingTable.builder().addAsNew(meta.index("non-dfa-index")).build();
-        ClusterState initialState = ClusterState.builder(ClusterName.DEFAULT)
-            .metadata(meta)
-            .routingTable(rt)
-            .blocks(ClusterBlocks.EMPTY_CLUSTER_BLOCK)
-            .build();
-
-        when(allocationSvc.reroute(any(ClusterState.class), anyString())).thenAnswer(inv -> inv.getArgument(0));
-
-        IndexTieringRequest request = new IndexTieringRequest("WARM", "non-dfa-index");
-        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
-
-        service.tier(request, listener, initialState);
-
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
-
-        ClusterState resultState = taskCaptor.getValue().execute(initialState);
-
-        // Non-DFA index should NOT have write blocks added
-        assertFalse(
-            "INDEX_WRITE_BLOCK must NOT be added for non-DFA index",
-            resultState.blocks().hasIndexBlock("non-dfa-index", IndexMetadata.INDEX_WRITE_BLOCK)
-        );
-        assertFalse(
-            "INDEX_WRITE_BLOCK must NOT be added for non-DFA index",
-            resultState.blocks().hasIndexBlock("non-dfa-index", IndexMetadata.INDEX_WRITE_BLOCK)
-        );
-    }
-
-    // ── removeWriteBlockForCancelledDfaIndices tests ──────────────────────────
-    //
-    // The method is private and triggered via clusterChanged() when
-    // routingTableChanged() || metadataChanged() is true.
-    // We trigger it by building a ClusterChangedEvent and calling clusterChanged().
-
-    /**
-     * Happy path: DFA index in HOT state with write block, all shards started on hot nodes.
-     * Expects a cluster state task to be submitted to remove the write block.
-     */
-    public void testRemoveWriteBlock_DfaHotIndexWithBlock_AllShardsOnHot_SubmitsTask() throws Exception {
-        String dfaIndexName = "dfa-cleanup-index";
-        String dfaUuid = "dfa-cleanup-uuid";
-        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
-
-        // DFA index in HOT state with write block still set (orphaned from H2W cancel)
-        Settings dfaHotSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
-            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
-            .build();
         IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
-            .settings(dfaHotSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
-
-        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
-        AllocationService allocationSvc = mock(AllocationService.class);
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            resolver,
-            allocationSvc,
-            nodeEnvironment,
-            shardLimitValidator
-        );
-        // index is NOT in tieringIndices (cancel completed)
-
-        // Build cluster state: shard started on a hot node
-        Metadata meta = Metadata.builder().put(dfaHotMeta, false).build();
-        RoutingTable rt = RoutingTable.builder().addAsNew(meta.index(dfaIndexName)).build();
-        ClusterBlocks blocks = ClusterBlocks.builder().addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK).build();
-
-        ShardRouting shard = mock(ShardRouting.class);
-        DiscoveryNode hotNode = mock(DiscoveryNode.class);
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-
-        when(shard.unassigned()).thenReturn(false);
-        when(shard.started()).thenReturn(true);
-        when(shard.currentNodeId()).thenReturn("hot1");
-        when(hotNode.isWarmNode()).thenReturn(false);
-        when(nodes.get("hot1")).thenReturn(hotNode);
-
-        ClusterState clusterState = mock(ClusterState.class);
-        RoutingTable rtMock = mock(RoutingTable.class);
-        when(clusterState.metadata()).thenReturn(meta);
-        when(clusterState.routingTable()).thenReturn(rtMock);
-        when(clusterState.blocks()).thenReturn(blocks);
-        when(clusterState.getNodes()).thenReturn(nodes);
-        when(rtMock.hasIndex(dfaIndex)).thenReturn(true);
-        when(rtMock.allShards(dfaIndexName)).thenReturn(Collections.singletonList(shard));
-
-        // Trigger via clusterChanged
-        ClusterChangedEvent event = buildRoutingTableChangedEvent(clusterState);
-        service.clusterChanged(event);
-
-        // A task must have been submitted to remove the write block
-        verify(clusterService, org.mockito.Mockito.atLeastOnce()).submitStateUpdateTask(anyString(), any(ClusterStateUpdateTask.class));
-    }
-
-    /**
-     * Shards are still relocating (not all started on hot) — no task submitted, block kept.
-     */
-    public void testRemoveWriteBlock_DfaHotIndexWithBlock_ShardsStillRelocating_NoTask() {
-        String dfaIndexName = "dfa-relocating";
-        String dfaUuid = "dfa-relocating-uuid";
-        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
-
-        Settings dfaHotSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
-            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
-            .build();
-        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
-            .settings(dfaHotSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            mock(IndexNameExpressionResolver.class),
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        Metadata meta = Metadata.builder().put(dfaHotMeta, false).build();
-        ShardRouting shard = mock(ShardRouting.class);
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        // Shard is initializing (not started) — relocation not complete
-        when(shard.unassigned()).thenReturn(false);
-        when(shard.started()).thenReturn(false);
-
-        ClusterState clusterState = mock(ClusterState.class);
-        RoutingTable rtMock = mock(RoutingTable.class);
-        when(clusterState.metadata()).thenReturn(meta);
-        when(clusterState.routingTable()).thenReturn(rtMock);
-        when(clusterState.getNodes()).thenReturn(nodes);
-        when(rtMock.hasIndex(dfaIndex)).thenReturn(true);
-        when(rtMock.allShards(dfaIndexName)).thenReturn(Collections.singletonList(shard));
-
-        ClusterChangedEvent event = buildRoutingTableChangedEvent(clusterState);
-        service.clusterChanged(event);
-
-        // No task submitted — shards not yet all on hot
-        verify(clusterService, never()).submitStateUpdateTask(org.mockito.Mockito.contains("remove-write-block"), any());
-    }
-
-    /**
-     * Replica shard is unassigned (e.g. no available node) while the primary is started on a hot node.
-     * The condition {@code s.unassigned() && !s.primary()} must treat the unassigned replica as
-     * "acceptable" so that {@code allOnHot=true} and the write-block removal task IS submitted.
-     *
-     * <p>This is the canonical scenario after H2W cancel with auto_expand_replicas: the primary
-     * snaps back to hot quickly but one replica may remain unassigned until a node becomes available.
-     * We must not block write-block removal waiting for those replicas.
-     */
-    public void testRemoveWriteBlock_UnassignedReplica_PrimaryOnHot_SubmitsTask() {
-        String dfaIndexName = "dfa-unassigned-replica";
-        String dfaUuid = "dfa-unassigned-replica-uuid";
-        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
-
-        Settings dfaHotSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
-            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
-            .build();
-        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
-            .settings(dfaHotSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(1)
-            .build();
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            mock(IndexNameExpressionResolver.class),
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-        // index is NOT in tieringIndices (cancel completed)
-
-        Metadata meta = Metadata.builder().put(dfaHotMeta, false).build();
-
-        // Primary shard: started on a hot node
-        ShardRouting primaryShard = mock(ShardRouting.class);
-        when(primaryShard.unassigned()).thenReturn(false);
-        when(primaryShard.started()).thenReturn(true);
-        when(primaryShard.primary()).thenReturn(true);
-        when(primaryShard.currentNodeId()).thenReturn("hot1");
-
-        // Replica shard: unassigned and NOT primary — satisfies s.unassigned() && !s.primary()
-        ShardRouting replicaShard = mock(ShardRouting.class);
-        when(replicaShard.unassigned()).thenReturn(true);
-        when(replicaShard.primary()).thenReturn(false);
-
-        DiscoveryNode hotNode = mock(DiscoveryNode.class);
-        when(hotNode.isWarmNode()).thenReturn(false);
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        when(nodes.get("hot1")).thenReturn(hotNode);
-
-        ClusterState clusterState = mock(ClusterState.class);
-        RoutingTable rtMock = mock(RoutingTable.class);
-        when(clusterState.metadata()).thenReturn(meta);
-        when(clusterState.routingTable()).thenReturn(rtMock);
-        when(clusterState.getNodes()).thenReturn(nodes);
-        when(rtMock.hasIndex(dfaIndex)).thenReturn(true);
-        when(rtMock.allShards(dfaIndexName)).thenReturn(java.util.Arrays.asList(primaryShard, replicaShard));
-
-        ClusterChangedEvent event = buildRoutingTableChangedEvent(clusterState);
-        service.clusterChanged(event);
-
-        // allOnHot=true (primary on hot + replica unassigned-non-primary) → task must be submitted
-        verify(clusterService, org.mockito.Mockito.atLeastOnce()).submitStateUpdateTask(
-            org.mockito.Mockito.contains("remove-write-block"),
-            any(ClusterStateUpdateTask.class)
-        );
-    }
-
-    /**
-     * Primary shard itself is unassigned — {@code s.unassigned() && !s.primary()} is false
-     * (primary IS a primary), and {@code s.started()} is also false.
-     * Therefore {@code allOnHot=false} and no write-block removal task must be submitted.
-     *
-     * <p>This is the negative complement of the unassigned-replica case: we must NOT lift
-     * the write block when the primary is not yet running on a hot node.
-     */
-    public void testRemoveWriteBlock_UnassignedPrimary_DoesNotSubmitTask() {
-        String dfaIndexName = "dfa-unassigned-primary";
-        String dfaUuid = "dfa-unassigned-primary-uuid";
-        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
-
-        Settings dfaHotSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
-            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
-            .build();
-        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
-            .settings(dfaHotSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            mock(IndexNameExpressionResolver.class),
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        Metadata meta = Metadata.builder().put(dfaHotMeta, false).build();
-
-        // Primary shard is unassigned — neither branch of the allMatch predicate is satisfied:
-        // s.unassigned() && !s.primary() → false (it IS the primary)
-        // s.started() && ... → false (not started)
-        ShardRouting primaryShard = mock(ShardRouting.class);
-        when(primaryShard.unassigned()).thenReturn(true);
-        when(primaryShard.primary()).thenReturn(true);
-        when(primaryShard.started()).thenReturn(false);
-
-        ClusterState clusterState = mock(ClusterState.class);
-        RoutingTable rtMock = mock(RoutingTable.class);
-        when(clusterState.metadata()).thenReturn(meta);
-        when(clusterState.routingTable()).thenReturn(rtMock);
-        when(clusterState.getNodes()).thenReturn(mock(DiscoveryNodes.class));
-        when(rtMock.hasIndex(dfaIndex)).thenReturn(true);
-        when(rtMock.allShards(dfaIndexName)).thenReturn(Collections.singletonList(primaryShard));
-
-        ClusterChangedEvent event = buildRoutingTableChangedEvent(clusterState);
-        service.clusterChanged(event);
-
-        // allOnHot=false → no task submitted
-        verify(clusterService, never()).submitStateUpdateTask(org.mockito.Mockito.contains("remove-write-block"), any());
-    }
-
-    /**
-     * Non-DFA index with write block in HOT state — must be completely ignored.
-     */
-    public void testRemoveWriteBlock_NonDfaIndex_Skipped() {
-        String indexName = "non-dfa-hot";
-        String uuid = "non-dfa-hot-uuid";
-        Index idx = new Index(indexName, uuid);
-
-        Settings hotSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, uuid)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
-            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
-            // PLUGGABLE_DATAFORMAT_ENABLED_SETTING not set → non-DFA
-            .build();
-        IndexMetadata meta = IndexMetadata.builder(indexName).settings(hotSettings).numberOfShards(1).numberOfReplicas(0).build();
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            mock(IndexNameExpressionResolver.class),
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        Metadata clusterMeta = Metadata.builder().put(meta, false).build();
-        ClusterState clusterState = mock(ClusterState.class);
-        when(clusterState.metadata()).thenReturn(clusterMeta);
-        when(clusterState.routingTable()).thenReturn(mock(RoutingTable.class));
-
-        ClusterChangedEvent event = buildRoutingTableChangedEvent(clusterState);
-        service.clusterChanged(event);
-
-        verify(clusterService, never()).submitStateUpdateTask(org.mockito.Mockito.contains("remove-write-block"), any());
-    }
-
-    /**
-     * DFA index in HOT state with write block, but it's still in tieringIndices
-     * (actively tiering) — must be skipped.
-     */
-    public void testRemoveWriteBlock_IndexStillInTieringIndices_Skipped() {
-        String dfaIndexName = "dfa-still-tiering";
-        String dfaUuid = "dfa-still-tiering-uuid";
-        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
-
-        Settings dfaHotSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
-            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
-            .build();
-        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
-            .settings(dfaHotSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            mock(IndexNameExpressionResolver.class),
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-        // Index IS in tieringIndices — still tiering, must not be cleaned up
-        service.tieringIndices.add(dfaIndex);
-
-        Metadata meta = Metadata.builder().put(dfaHotMeta, false).build();
-        ClusterState clusterState = mock(ClusterState.class);
-        when(clusterState.metadata()).thenReturn(meta);
-        when(clusterState.routingTable()).thenReturn(mock(RoutingTable.class));
-
-        ClusterChangedEvent event = buildRoutingTableChangedEvent(clusterState);
-        service.clusterChanged(event);
-
-        verify(clusterService, never()).submitStateUpdateTask(org.mockito.Mockito.contains("remove-write-block"), any());
-    }
-
-    /**
-     * DFA index in HOT state but write block already removed — no task submitted.
-     */
-    public void testRemoveWriteBlock_DfaHotIndex_NoWriteBlock_Skipped() {
-        String dfaIndexName = "dfa-hot-no-block";
-        String dfaUuid = "dfa-hot-no-block-uuid";
-
-        Settings dfaHotSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
-            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            // INDEX_BLOCKS_WRITE not set → false (block already removed)
-            .build();
-        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
-            .settings(dfaHotSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            mock(IndexNameExpressionResolver.class),
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        Metadata meta = Metadata.builder().put(dfaHotMeta, false).build();
-        ClusterState clusterState = mock(ClusterState.class);
-        when(clusterState.metadata()).thenReturn(meta);
-        when(clusterState.routingTable()).thenReturn(mock(RoutingTable.class));
-
-        ClusterChangedEvent event = buildRoutingTableChangedEvent(clusterState);
-        service.clusterChanged(event);
-
-        verify(clusterService, never()).submitStateUpdateTask(org.mockito.Mockito.contains("remove-write-block"), any());
-    }
-
-    /**
-     * Happy-path execute(): task actually removes INDEX_WRITE_BLOCK from ClusterBlocks
-     * and sets INDEX_BLOCKS_WRITE=false in IndexMetadata settings.
-     */
-    public void testRemoveWriteBlock_Execute_RemovesBlockAndUpdatesMetadata() throws Exception {
-        String dfaIndexName = "dfa-execute-index";
-        String dfaUuid = "dfa-execute-uuid";
-        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
-
-        Settings dfaHotSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
-            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
-            .build();
-        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
-            .settings(dfaHotSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
-
-        Metadata meta = Metadata.builder().put(dfaHotMeta, false).build();
-        RoutingTable rt = RoutingTable.builder().addAsNew(meta.index(dfaIndexName)).build();
-        ClusterBlocks blocks = ClusterBlocks.builder().addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK).build();
-        ClusterState realState = ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT)
-            .metadata(meta)
-            .routingTable(rt)
-            .blocks(blocks)
-            .build();
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            mock(IndexNameExpressionResolver.class),
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        // Capture the submitted task so we can execute it
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-
-        ShardRouting shard = mock(ShardRouting.class);
-        DiscoveryNode hotNode = mock(DiscoveryNode.class);
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        when(shard.unassigned()).thenReturn(false);
-        when(shard.started()).thenReturn(true);
-        when(shard.currentNodeId()).thenReturn("hot1");
-        when(hotNode.isWarmNode()).thenReturn(false);
-        when(nodes.get("hot1")).thenReturn(hotNode);
-
-        ClusterState mockState = mock(ClusterState.class);
-        RoutingTable rtMock = mock(RoutingTable.class);
-        when(mockState.metadata()).thenReturn(meta);
-        when(mockState.routingTable()).thenReturn(rtMock);
-        when(mockState.blocks()).thenReturn(blocks);
-        when(mockState.getNodes()).thenReturn(nodes);
-        when(rtMock.hasIndex(dfaIndex)).thenReturn(true);
-        when(rtMock.allShards(dfaIndexName)).thenReturn(Collections.singletonList(shard));
-
-        ClusterChangedEvent event = buildRoutingTableChangedEvent(mockState);
-        service.clusterChanged(event);
-
-        verify(clusterService, org.mockito.Mockito.atLeastOnce()).submitStateUpdateTask(anyString(), taskCaptor.capture());
-
-        // Execute the captured task against a real cluster state that still has the block
-        ClusterState result = taskCaptor.getValue().execute(realState);
-
-        // INDEX_WRITE_BLOCK must be removed from ClusterBlocks
-        assertFalse(
-            "INDEX_WRITE_BLOCK must be absent from ClusterBlocks after execute()",
-            result.blocks().hasIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
-        );
-        // INDEX_BLOCKS_WRITE setting must be false in IndexMetadata
-        assertEquals("false", result.metadata().index(dfaIndexName).getSettings().get(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey()));
-    }
-
-    /**
-     * TOCTOU guard inside execute(): index condition changed between scan and task execution
-     * (write block already removed by another task) — execute() must skip and produce no change.
-     */
-    public void testRemoveWriteBlock_Execute_ToctouGuard_SkipsIfBlockAlreadyRemoved() throws Exception {
-        String dfaIndexName = "dfa-toctou-index";
-        String dfaUuid = "dfa-toctou-uuid";
-        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
-
-        // Settings without write block (already removed before execute runs)
-        Settings dfaHotSettingsNoBlock = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
-            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            // INDEX_BLOCKS_WRITE not set = false (block already removed)
-            .build();
-        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
-            .settings(dfaHotSettingsNoBlock)
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
-
-        // Settings WITH block for the initial scan (so the task gets submitted)
-        Settings dfaHotSettingsWithBlock = Settings.builder()
-            .put(dfaHotSettingsNoBlock)
-            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
-            .build();
-        IndexMetadata dfaHotMetaWithBlock = IndexMetadata.builder(dfaIndexName)
-            .settings(dfaHotSettingsWithBlock)
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
-
-        // Scan state has the block (triggers task submission)
-        Metadata scanMeta = Metadata.builder().put(dfaHotMetaWithBlock, false).build();
-        ClusterBlocks blocksWithBlock = ClusterBlocks.builder().addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK).build();
-
-        // Execute state: block already gone (TOCTOU)
-        Metadata executeMeta = Metadata.builder().put(dfaHotMeta, false).build();
-        RoutingTable rt = RoutingTable.builder().addAsNew(executeMeta.index(dfaIndexName)).build();
-        ClusterState executeState = ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT)
-            .metadata(executeMeta)
-            .routingTable(rt)
-            .blocks(ClusterBlocks.EMPTY_CLUSTER_BLOCK)
-            .build();
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            mock(IndexNameExpressionResolver.class),
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-
-        ShardRouting shard = mock(ShardRouting.class);
-        DiscoveryNode hotNode = mock(DiscoveryNode.class);
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        when(shard.unassigned()).thenReturn(false);
-        when(shard.started()).thenReturn(true);
-        when(shard.currentNodeId()).thenReturn("hot1");
-        when(hotNode.isWarmNode()).thenReturn(false);
-        when(nodes.get("hot1")).thenReturn(hotNode);
-
-        ClusterState mockScanState = mock(ClusterState.class);
-        RoutingTable rtMock = mock(RoutingTable.class);
-        when(mockScanState.metadata()).thenReturn(scanMeta);
-        when(mockScanState.routingTable()).thenReturn(rtMock);
-        when(mockScanState.blocks()).thenReturn(blocksWithBlock);
-        when(mockScanState.getNodes()).thenReturn(nodes);
-        when(rtMock.hasIndex(dfaIndex)).thenReturn(true);
-        when(rtMock.allShards(dfaIndexName)).thenReturn(Collections.singletonList(shard));
-
-        ClusterChangedEvent event = buildRoutingTableChangedEvent(mockScanState);
-        service.clusterChanged(event);
-
-        verify(clusterService, org.mockito.Mockito.atLeastOnce()).submitStateUpdateTask(anyString(), taskCaptor.capture());
-
-        // Execute with the state where block is already gone (TOCTOU scenario)
-        ClusterState result = taskCaptor.getValue().execute(executeState);
-
-        // Result must equal the input state unchanged (no index block was found to remove)
-        assertFalse(
-            "No INDEX_WRITE_BLOCK should be present — TOCTOU guard must have skipped this index",
-            result.blocks().hasIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
-        );
-        // INDEX_BLOCKS_WRITE must remain null/false (was never set by the task)
-        assertNotEquals("true", result.metadata().index(dfaIndexName).getSettings().get(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey()));
-    }
-
-    /**
-     * Null guard inside execute(): index deleted between scan and task execution —
-     * execute() must skip gracefully and not throw NPE.
-     */
-    public void testRemoveWriteBlock_Execute_NullGuard_IndexDeletedBetweenScanAndTask() throws Exception {
-        String dfaIndexName = "dfa-deleted-index";
-        String dfaUuid = "dfa-deleted-uuid";
-        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
-
-        Settings dfaHotSettings = Settings.builder()
-            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
-            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
-            .build();
-        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
-            .settings(dfaHotSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
-
-        // Scan state: index exists with write block
-        Metadata scanMeta = Metadata.builder().put(dfaHotMeta, false).build();
-        ClusterBlocks blocksWithBlock = ClusterBlocks.builder().addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK).build();
-
-        // Execute state: index has been deleted
-        ClusterState executeState = ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT)
-            .metadata(Metadata.EMPTY_METADATA)
-            .routingTable(RoutingTable.EMPTY_ROUTING_TABLE)
-            .blocks(ClusterBlocks.EMPTY_CLUSTER_BLOCK)
-            .build();
-
-        TestTieringService service = new TestTieringService(
-            Settings.EMPTY,
-            clusterService,
-            mock(ClusterInfoService.class),
-            mock(IndexNameExpressionResolver.class),
-            mock(AllocationService.class),
-            nodeEnvironment,
-            shardLimitValidator
-        );
-
-        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
-
-        ShardRouting shard = mock(ShardRouting.class);
-        DiscoveryNode hotNode = mock(DiscoveryNode.class);
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        when(shard.unassigned()).thenReturn(false);
-        when(shard.started()).thenReturn(true);
-        when(shard.currentNodeId()).thenReturn("hot1");
-        when(hotNode.isWarmNode()).thenReturn(false);
-        when(nodes.get("hot1")).thenReturn(hotNode);
-
-        ClusterState mockScanState = mock(ClusterState.class);
-        RoutingTable rtMock = mock(RoutingTable.class);
-        when(mockScanState.metadata()).thenReturn(scanMeta);
-        when(mockScanState.routingTable()).thenReturn(rtMock);
-        when(mockScanState.blocks()).thenReturn(blocksWithBlock);
-        when(mockScanState.getNodes()).thenReturn(nodes);
-        when(rtMock.hasIndex(dfaIndex)).thenReturn(true);
-        when(rtMock.allShards(dfaIndexName)).thenReturn(Collections.singletonList(shard));
-
-        ClusterChangedEvent event = buildRoutingTableChangedEvent(mockScanState);
-        service.clusterChanged(event);
-
-        verify(clusterService, org.mockito.Mockito.atLeastOnce()).submitStateUpdateTask(anyString(), taskCaptor.capture());
-
-        // execute() with deleted-index state must not throw
-        ClusterState result = taskCaptor.getValue().execute(executeState);
-        assertNotNull("execute() must return a non-null state even when index was deleted", result);
-    }
-
-    /**
-     * Helper: builds a ClusterChangedEvent where routingTableChanged()=true and
-     * localNodeClusterManager()=true but previousNodes.isLocalNodeElectedClusterManager()=true
-     * (so reconstruction is skipped and only the cleanup path runs).
-     */
-    private ClusterChangedEvent buildRoutingTableChangedEvent(ClusterState currentState) {
-        ClusterChangedEvent event = mock(ClusterChangedEvent.class);
-        ClusterState previousState = mock(ClusterState.class);
-        DiscoveryNodes previousNodes = mock(DiscoveryNodes.class);
-
-        when(event.localNodeClusterManager()).thenReturn(true);
-        when(event.state()).thenReturn(currentState);
-        when(event.previousState()).thenReturn(previousState);
-        when(previousState.nodes()).thenReturn(previousNodes);
         when(previousNodes.isLocalNodeElectedClusterManager()).thenReturn(true);
-        when(event.routingTableChanged()).thenReturn(true);
-        when(event.metadataChanged()).thenReturn(false);
-        when(event.blocksChanged()).thenReturn(false);
-        return event;
-    }
-
-    /**
-     * A test tiering service that mimics WarmToHotTieringService behavior.
-     * Sets auto_expand_replicas: false and read_only_allow_delete: false on tiering start.
-     */
-    private class TestWarmToHotTieringService extends TieringService {
-        public TestWarmToHotTieringService(
-            Settings settings,
+            .addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
+            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
+        ClusterChangedEvent event = buildRoutingTableChangedEvent(mockState);
             ClusterService clusterService,
-            ClusterInfoService clusterInfoService,
-            IndexNameExpressionResolver indexNameExpressionResolver,
-            AllocationService allocationService,
-            NodeEnvironment nodeEnvironment,
-            ShardLimitValidator shardLimitValidator
-        ) {
-            super(
-                settings,
-                clusterService,
-                clusterInfoService,
-                indexNameExpressionResolver,
-                allocationService,
-                nodeEnvironment,
-                shardLimitValidator
-            );
-        }
-
-        @Override
-        protected Settings getTieringStartSettingsToAdd(IndexMetadata indexMetadata) {
-            return Settings.builder()
-                .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), false)
-                .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM_TO_HOT)
-                .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), false)
-                .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), false)
-                .put(IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS, "false")
-                .build();
-        }
-
-        @Override
-        protected org.opensearch.cluster.block.ClusterBlocks.Builder getTieringStartClusterBlocksToAdd(
-            org.opensearch.cluster.block.ClusterBlocks.Builder blocksBuilder,
-            String indexName,
-            IndexMetadata indexMetadata
-        ) {
-            return blocksBuilder.removeIndexBlock(indexName, IndexMetadata.INDEX_WRITE_BLOCK)
-                .removeIndexBlock(indexName, IndexMetadata.INDEX_WRITE_BLOCK);
-        }
-
-        @Override
-        protected Settings getIndexTierSettingsToRestoreAfterCancellation(IndexMetadata indexMetadata) {
-            return Settings.builder()
-                .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true)
-                .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM)
-                .build();
-        }
-
-        @Override
-        protected String getTieringStartTimeKey() {
-            return "w2h_tiering_start_time";
-        }
-
-        @Override
-        protected Setting<Integer> getMaxConcurrentTieringRequestsSetting() {
-            return maxConcurrentTieringRequestsSetting;
-        }
-
-        @Override
-        protected IndexModule.TieringState getTargetTieringState() {
-            return IndexModule.TieringState.HOT;
-        }
-
-        @Override
-        protected IndexModule.TieringState getTieringType() {
-            return IndexModule.TieringState.WARM_TO_HOT;
-        }
-
-        @Override
-        protected void validateTieringRequest(
-            ClusterState clusterState,
-            ClusterInfoService clusterInfoService,
-            Set<Index> tieringEntries,
-            Integer maxConcurrentTieringRequests,
-            Integer jvmActiveUsageThresholdPercent,
-            Index index
-        ) {}
+            // INDEX_BLOCKS_WRITE not set = false (block already removed)
+            .numberOfReplicas(0)
+            .settings(warmSettings)
+    public void testCancelTiering_SubmitsClusterStateTask() {
+            .build();
+        // Must NOT throw.
+            Settings.EMPTY,
+        when(rtMock.hasIndex(dfaIndex)).thenReturn(true);
+        when(clusterState.metadata()).thenReturn(metadata);
+        tieringService.tieringIndices.add(testIndex);
+        );
+        // It does NOT modify SETTING_AUTO_EXPAND_REPLICAS — that setting retains whatever value
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            .routingTable(rt)
+            .settings(dfaHotSettings)
+        task.onFailure("cancel_source", new RuntimeException("simulated"));
+        IndexMetadata nonDfaMeta = IndexMetadata.builder("non-dfa-index")
+     * (The target tier here is WARM, so the "already reached target" guard does not trip.)
+        when(shard.started()).thenReturn(true);
+        // Build cluster state: shard started on a hot node
+        expectThrows(OpenSearchException.class, () -> tieringService.updateIndexMetadataPostTiering(metadataBuilder, badMetadata));
+        // Execute the task to cover the execute() method
+        String dfaIndexName = "dfa-cancel-index";
+    public void testTier_AlreadyBeingTiered_ReturnsCurrentState() throws Exception {
+        // Verify number_of_replicas=1 is set atomically in both metadata and routing table
+            .settings(dfaHotSettings)
+        assertEquals("1", updatedMetadata.getSettings().get(IndexMetadata.SETTING_NUMBER_OF_REPLICAS));
+    /**
+            clusterService,
+     * shards may still be on warm nodes running a read-only engine. The block is removed later by
+        Metadata metadata = Metadata.builder().put(tieringMeta, false).build();
+            .settings(idxSettings)
+        return event;
+        TestTieringService service = new TestTieringService(
+            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
+import java.util.Collections;
+     */
     }
+    public void testUpdateIndexMetadataPostTiering_DoesNotModifyAutoExpandReplicas() {
+        when(shard.currentNodeId()).thenReturn("hot1");
+            allocationSvc,
+    }
+            .settings(dfaHotSettings)
+            .putCustom(TIERING_CUSTOM_KEY, tieringCustomData)
+     * on hot nodes (writable engine). Lifting it immediately would cause write errors on warm-engine shards.
+            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
+        RoutingTable routingTable = mock(RoutingTable.class);
+        when(replicaShard.primary()).thenReturn(false);
+        Settings idxSettings = Settings.builder()
+        when(mockScanState.blocks()).thenReturn(blocksWithBlock);
+        assertEquals(
+        protected IndexModule.TieringState getTieringType() {
+        IndexMetadata dfaTieringMeta = IndexMetadata.builder(dfaIndexName)
+        assertNotNull(result);
+        tieringService.tieringIndices.add(testIndex);
+        assertFalse(
+        RoutingTable rtMock = mock(RoutingTable.class);
+                .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), false)
+        tieringService.tieringIndices.add(testIndex);
+        );
+    private class TestWarmToHotTieringService extends TieringService {
+        assertEquals(Priority.NORMAL, capturedTask.priority());
+        java.util.HashMap<String, String> tieringCustomData = new java.util.HashMap<>();
+        verify(metadataBuilder).put(captor.capture());
+            .numberOfShards(1)
+        doThrow(new IllegalArgumentException("Index is already in target tier")).when(spyService)
+        TestTieringService service = new TestTieringService(
+            shardLimitValidator
+            resolver,
+        when(routingTable.allShards(testIndex.getName())).thenReturn(Collections.singletonList(shard));
+            .settings(dfaHotSettings)
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        service.clusterChanged(event);
+    }
+                clusterInfoService,
+import org.opensearch.env.NodeEnvironment;
+import org.opensearch.cluster.routing.allocation.AllocationService;
+    }
+        // The tiering state must be updated to the target tier
+        when(resolver.concreteIndices(any(), any(), eq("test-index"))).thenReturn(new Index[] { testIndex });
+import org.opensearch.cluster.service.ClusterService;
+    }
+import static org.mockito.Mockito.never;
+        shardLimitValidator = mock(ShardLimitValidator.class);
+            shardLimitValidator
+        verify(clusterService, org.mockito.Mockito.atLeastOnce()).submitStateUpdateTask(anyString(), any(ClusterStateUpdateTask.class));
+    public void testValidateTieringCancelRequest_IndexNotBeingTiered() {
+        when(previousState.nodes()).thenReturn(previousNodes);
+            nodeEnvironment,
+        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
+            mock(AllocationService.class),
+        expectThrows(IllegalArgumentException.class, () -> service.getTieringStatus("test-index", false));
+        verify(metadataBuilder).updateNumberOfReplicas(eq(1), any(String[].class));
+            .numberOfReplicas(1)
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        when(mockState.metadata()).thenReturn(meta);
+            mock(AllocationService.class),
+        ClusterChangedEvent event = buildRoutingTableChangedEvent(mockScanState);
+    // We trigger it by building a ClusterChangedEvent and calling clusterChanged().
+        ClusterStateUpdateTask capturedTask = taskCaptor.getValue();
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+    // routingTableChanged() || metadataChanged() is true.
+        when(metadata.index(testIndex)).thenReturn(indexMetadata);
+            indexNameExpressionResolver,
+        IndexMetadata h2wMetadata = IndexMetadata.builder("test-index").settings(h2wSettings).numberOfShards(1).numberOfReplicas(1).build();
+            clusterService,
+    public void testRemoveWriteBlock_DfaHotIndexWithBlock_ShardsStillRelocating_NoTask() {
+        assertFalse(
+    /**
+            return IndexModule.TieringState.WARM;
+        service.cancelTiering(request, listener, realState);
+        service.tier(request, listener, initialState);
+        String dfaUuid = "dfa-unassigned-primary-uuid";
+        when(hotNode.isWarmNode()).thenReturn(false);
+        // Return null for index metadata during execute() → covers the null branch
+            .build();
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
+        // index is NOT in tieringIndices (cancel completed)
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            String indexName,
+        tieringService.updateIndexMetadataForTieringStart(
+        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
+            .routingTable(routingTable)
+            "true",
+            .build();
+            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
+        when(shard.currentNodeId()).thenReturn("hot1");
+        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
+                mock(AllocationService.class),
+    }
+        IndexMetadata idxMeta = IndexMetadata.builder("test-index")
+    public void testRemoveWriteBlock_Execute_RemovesBlockAndUpdatesMetadata() throws Exception {
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        assertEquals("1", updatedMetadata.getSettings().get(IndexMetadata.SETTING_NUMBER_OF_REPLICAS));
+        // the write block is kept during cancel and removed later by removeWriteBlockForCancelledDfaIndices().
+     * the write block when the primary is not yet running on a hot node.
+        @Override
+     *
+        // Verify ClusterBlocks: write blocks must be REMOVED (index becomes writable on hot tier)
+        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
+            mock(IndexNameExpressionResolver.class),
+            .numberOfReplicas(1)
+     */
+        // Stub shard so isShardStateValidForTier doesn't NPE
+    }
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+        when(clusterState.getNodes()).thenReturn(nodes);
+            clusterService,
+            ShardLimitValidator shardLimitValidator
+        @Override
+        RoutingTable routingTable = RoutingTable.builder().addAsNew(metadata.index("test-index")).build();
+        // Stub shard as started on a warm node → in target tier (WARM)
+        protected IndexModule.TieringState getTieringType() {
+    }
+            .numberOfReplicas(1)
+        tieringService.clusterChanged(event);
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+        DiscoveryNodes previousNodes = mock(DiscoveryNodes.class);
+        verify(metadataBuilder).updateNumberOfReplicas(eq(1), any(String[].class));
+            Settings.EMPTY,
+            IllegalArgumentException.class,
+            Settings.EMPTY,
+            shardLimitValidator
+        when(shard.unassigned()).thenReturn(false);
+        );
+            clusterService,
+        Settings dfaHotSettings = Settings.builder()
+     * BEFORE tier() is called. tier() only handles W2H block removal — H2W blocking is owned
+        Exception thrown = expectThrows(IllegalArgumentException.class, () -> task.execute(clusterState));
+        when(clusterService.state()).thenReturn(state);
+            nodeEnvironment,
+import org.opensearch.OpenSearchException;
+        IndexMetadata meta = IndexMetadata.builder(indexName).settings(hotSettings).numberOfShards(1).numberOfReplicas(0).build();
+        assertNotNull(status);
+            .build();
+            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
+    }
+            .numberOfShards(1)
+        // Cover timeout()
+        when(mockScanState.blocks()).thenReturn(blocksWithBlock);
+            shardLimitValidator
+            super(
+        String dfaUuid = "dfa-hot-no-block-uuid";
+        RoutingTable routingTable = mock(RoutingTable.class);
+        // Build a real cluster state with the index in HOT_TO_WARM state
+    }
+        AllocationService allocationSvc = mock(AllocationService.class);
+        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
+        0,
+        // INDEX_BLOCKS_WRITE must remain null/false (was never set by the task)
+        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
+        // Build a real cluster state so execute() works
+     * This ensures that after warm→hot migration, the index becomes fully writable again.
+            mock(ClusterInfoService.class),
+        assertEquals(Priority.URGENT, capturedTask.priority());
+        when(resolver.concreteIndices(any(), any(), eq("bad-index"))).thenThrow(new IllegalArgumentException("Index not found"));
+        IndexMetadata badMetadata = mock(IndexMetadata.class);
+            ClusterInfoService clusterInfoService,
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        // Execute with the state where block is already gone (TOCTOU scenario)
+     * Therefore {@code allOnHot=false} and no write-block removal task must be submitted.
+        Metadata metadata = mock(Metadata.class);
+    public void testListTieringStatus_Empty() {
+            .numberOfShards(1)
+            clusterService,
+            Settings settings,
+        TestTieringService spyService = spy(
+        );
+            mock(IndexNameExpressionResolver.class),
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+            mock(ClusterInfoService.class),
+            .numberOfReplicas(0)
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        assertEquals("test-index", statuses.get(0).getIndexName());
+    /**
+                mock(ClusterInfoService.class),
+        }
+        TestTieringService service = new TestTieringService(
+        // number_of_replicas=1 is applied atomically via both metadataBuilder and routingTableBuilder
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM.toString())
+        String dfaUuid = "dfa-relocating-uuid";
+        verify(routingTableBuilder).updateNumberOfReplicas(eq(1), any(String[].class));
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 2)
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+            shardLimitValidator
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+            .metadata(metadata)
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        // Should not throw — error is caught and logged
+            .routingTable(realRt)
+            defaultSettings,
+            .numberOfShards(1)
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            .build();
+        Metadata metadata = Metadata.builder().put(tieringIndexMetadata, false).build();
+            .build();
+        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
+        Metadata meta = Metadata.builder().put(dfaHotMeta, false).build();
+                shardLimitValidator
+        when(routingTable.hasIndex(testIndex)).thenReturn(true);
+        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
+            mock(ClusterInfoService.class),
+        ClusterState result = capturedTask.execute(realState);
+            .numberOfShards(1)
+        Settings idxSettings = Settings.builder()
+            mock(IndexNameExpressionResolver.class),
+        assertEquals("Index is already in target tier", thrown.getMessage());
+            // PLUGGABLE_DATAFORMAT_ENABLED_SETTING not set → non-DFA
+            mock(ClusterInfoService.class),
+        Settings defaultSettings = Settings.builder()
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
+            .numberOfReplicas(0)
+            resultState.blocks().hasIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
+        Settings dfaSettings = Settings.builder()
+            .put(INDEX_TIERING_STATE.getKey(), "HOT")
+        when(clusterState.routingTable()).thenReturn(rtMock);
+            nodeEnvironment,
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        Settings dfaHotSettings = Settings.builder()
+            .build();
+        // Capture the submitted task so we can execute it
+        tieringService.processTieringInProgress(clusterState, "test_source");
+        // Settings WITH block for the initial scan (so the task gets submitted)
+    public void testRemoveWriteBlock_UnassignedPrimary_DoesNotSubmitTask() {
+            mock(AllocationService.class),
+            .settings(tieringSettings)
+    }
+        when(replicaShard.unassigned()).thenReturn(true);
+        @Override
+        verify(listener).onFailure(any(IllegalArgumentException.class));
+        );
+            .build();
+        DiscoveryNode hotNode = mock(DiscoveryNode.class);
+            IllegalArgumentException.class,
+        when(hotNode.isWarmNode()).thenReturn(false);
+        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
+            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
+            .numberOfShards(1)
+        }
+            .addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
+        taskCaptor.getValue().onFailure("test_source", new RuntimeException("simulated"));
+        List<ShardRouting> shardRoutings = Collections.singletonList(shard);
+        Metadata scanMeta = Metadata.builder().put(dfaHotMeta, false).build();
+        capturedTask.clusterStateProcessed("test_source", clusterState, clusterState);
+            "tier() must NOT add INDEX_WRITE_BLOCK for H2W DFA — TransportHotToWarmTierAction handles that",
+        Metadata metadata = mock(Metadata.class);
+        service.clusterChanged(event);
+        when(shard.currentNodeId()).thenReturn("node1");
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        when(resolver.concreteIndices(any(), any(), eq(dfaIndexName))).thenReturn(new Index[] { dfaIndex });
+            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
+        // Build cluster state with write blocks already present in ClusterBlocks
+        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
+            .numberOfShards(1)
+            return maxConcurrentTieringRequestsSetting;
+        // tier() does NOT add write blocks for H2W DFA — that's TransportHotToWarmTierAction's responsibility.
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            nodeEnvironment,
+                shardLimitValidator
+        CancelTieringRequest request = new CancelTieringRequest("test-index");
+            .build();
+        );
+            Index index
+        when(shard.currentNodeId()).thenReturn("node1");
+        when(clusterState.routingTable()).thenReturn(routingTable);
+            .routingTable(RoutingTable.EMPTY_ROUTING_TABLE)
+import org.opensearch.common.util.io.IOUtils;
+        Settings dfaHotSettings = Settings.builder()
+            shardLimitValidator
+        RoutingTable rt = RoutingTable.builder().addAsNew(meta.index(dfaIndexName)).build();
+            allocationSvc,
+    private Index testIndex;
+        // removeWriteBlockForCancelledDfaIndices iterates over all index metadata;
+            .build();
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        when(routingTable.allShards(testIndex.getName())).thenReturn(shardRoutings);
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+import java.util.HashSet;
+            .numberOfReplicas(0)
+        RoutingTable.Builder routingTableBuilder = mock(RoutingTable.Builder.class);
+        Settings dfaHotSettings = Settings.builder()
+        IndexMetadata updatedMeta = resultState.metadata().index(dfaIndexName);
+        when(clusterState.getNodes()).thenReturn(mock(DiscoveryNodes.class));
+        @Override
+            .numberOfReplicas(0)
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM.toString())
+        // auto_expand_replicas: false. The base class updateIndexMetadataForTieringStart
+    }
+            shardLimitValidator
+        ClusterState result = taskCaptor.getValue().execute(executeState);
+        IndexMetadata updatedMetadata = captor.getValue().build();
+            mock(ClusterInfoService.class),
+        Settings warmSettings = Settings.builder()
+        when(rtMock.allShards(dfaIndexName)).thenReturn(Collections.singletonList(shard));
+    private IndexNameExpressionResolver indexNameExpressionResolver;
+        // Verify IndexMetadata settings: blocks.write=false so index stays writable after restart
+        when(rtMock.hasIndex(dfaIndex)).thenReturn(true);
+        when(routingTable.hasIndex(testIndex)).thenReturn(true);
+        ClusterState result = taskCaptor.getValue().execute(realState);
+        when(event.localNodeClusterManager()).thenReturn(true);
+        ShardRouting replicaShard = mock(ShardRouting.class);
+            metadataBuilder,
+        ClusterBlocks blocksWithWriteBlock = ClusterBlocks.builder()
+            .build();
+        assertNotEquals(
+    public void testUpdateIndexMetadataPostTiering_ThrowsOnError() {
+     * "acceptable" so that {@code allOnHot=true} and the write-block removal task IS submitted.
+        }
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
+    /**
+        );
+import org.opensearch.cluster.ClusterState;
+        when(resolver.concreteIndices(any(), any(), eq("test-index"))).thenReturn(new Index[] { testIndex });
+        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "200b")
+        TieringStatus status = service.getTieringStatus("test-index", false);
+                clusterInfoService,
+                nodeEnvironment,
+            shardLimitValidator
+        tieringService.clusterChanged(event);
+        when(clusterState.routingTable()).thenReturn(routingTable);
+        when(allocationSvc.reroute(any(ClusterState.class), anyString())).thenAnswer(inv -> inv.getArgument(0));
+        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
+     * isMigrationInProgress returns false for terminal states, so the fallback does not apply.
+        tieringService.tieringIndices.add(testIndex);
+        );
+            .numberOfReplicas(1)
+            .numberOfShards(1)
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+        when(routingTable.hasIndex(testIndex)).thenReturn(true);
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+        // Index IS in tieringIndices — still tiering, must not be cleaned up
+            .put(maxConcurrentTieringRequestsSetting.getKey(), 50)
+        ShardRouting primaryShard = mock(ShardRouting.class);
+            Settings.EMPTY,
+        ClusterState result = taskCaptor.getValue().execute(clusterState);
+     * Test: When tiering a DFA index warm→hot, the tier() execute() method must REMOVE
+    /**
+        );
+            AllocationService allocationService,
+            .settings(warmSettings)
+import org.mockito.ArgumentCaptor;
+        Settings dfaHotSettingsNoBlock = Settings.builder()
+            "blocks.write must NOT be set to false during cancel — deferred to removeWriteBlockForCancelledDfaIndices()",
+    /**
+        when(nodes.get("hot1")).thenReturn(hotNode);
+            .put(INDEX_TIERING_STATE.getKey(), HOT_TO_WARM.toString())
+    public void testUpdateClusterStateTask_OnFailure() {
+        assertThat(e.getMessage(), org.hamcrest.Matchers.containsString("not currently undergoing tiering operation"));
+            clusterService,
+    public void testClusterChanged_NewClusterManager_ReconstructsRequests() {
+        when(clusterState.routingTable()).thenReturn(routingTable);
+        when(clusterState.routingTable()).thenReturn(mock(RoutingTable.class));
+        // execute() should return currentState unchanged
+        when(node.isWarmNode()).thenReturn(true);
+    private ClusterService clusterService;
+            .build();
+            .put(INDEX_TIERING_STATE.getKey(), "HOT")
+ */
+            nodeEnvironment,
+            shardLimitValidator
+        );
+            .addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
+        }
+        ClusterState clusterState = mock(ClusterState.class);
+        Settings w2hSettings = Settings.builder()
+    /**
+        IndexTieringRequest request = new IndexTieringRequest("WARM", "test-index");
+        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
+        when(event.localNodeClusterManager()).thenReturn(true);
+        protected org.opensearch.cluster.block.ClusterBlocks.Builder getTieringStartClusterBlocksToAdd(
+        // s.started() && ... → false (not started)
+     */
+        verify(clusterService, never()).submitStateUpdateTask(anyString(), any(ClusterStateUpdateTask.class));
+        );
+            nodeEnvironment,
+        Set<Setting<?>> clusterSettingsToAdd = new HashSet<>(BUILT_IN_CLUSTER_SETTINGS);
+        );
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        // The deferred cleanup reads blocks.write=true + TIERING_STATE=HOT to identify orphaned blocks.
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+        when(mockState.blocks()).thenReturn(blocks);
+        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
+            shardLimitValidator
+        tieringService.processTieringInProgress(clusterState, "test_source");
+        );
+        when(event.routingTableChanged()).thenReturn(true);
+            .routingTable(rt)
+        when(metadata.getIndexSafe(testIndex)).thenReturn(idxMeta);
+            "Warm-to-hot getTieringStartSettingsToAdd should include auto_expand_replicas: false",
+        Metadata metadata = mock(Metadata.class);
+     * Test: Non-DFA index should NOT have write blocks added to ClusterBlocks during tiering.
+        ArgumentCaptor<IndexMetadata.Builder> captor = ArgumentCaptor.forClass(IndexMetadata.Builder.class);
+        TestTieringService service = new TestTieringService(
+    }
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
+    /**
+        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
+        protected void validateTieringRequest(
+        );
+        Metadata emptyMetadata = Metadata.builder().build();
+        String dfaUuid = "dfa-deleted-uuid";
+            .build();
+     * DFA index in HOT state with write block, but it's still in tieringIndices
+        Metadata metadata = mock(Metadata.class);
+        when(node.isWarmNode()).thenReturn(true);
+import org.opensearch.indices.ShardLimitValidator;
+            IndexNameExpressionResolver indexNameExpressionResolver,
+        when(shard.started()).thenReturn(true);
+        when(clusterState.routingTable()).thenReturn(routingTable);
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
+            String indexName,
+            org.opensearch.cluster.block.ClusterBlocks.Builder blocksBuilder,
+            .build();
+            Settings.EMPTY,
+        when(badMetadata.getSettings()).thenThrow(new RuntimeException("simulated error"));
+    /**
+        RoutingTable rt = RoutingTable.builder().addAsNew(executeMeta.index(dfaIndexName)).build();
+        when(clusterState.metadata()).thenReturn(meta);
+    }
+        when(mockState.routingTable()).thenReturn(rtMock);
+        );
+                allocationService,
+        TestTieringService service = new TestTieringService(
+        assertEquals(1, statuses.size());
+        ClusterState executeState = ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT)
+        // Verify ClusterBlocks: write block must be KEPT (deferred to removeWriteBlockForCancelledDfaIndices)
+        IndexTieringRequest request = new IndexTieringRequest("WARM", "bad-index");
+        when(allocationSvc.reroute(any(ClusterState.class), anyString())).thenAnswer(inv -> inv.getArgument(0));
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+        tieringService = new TestTieringService(
+            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
+        when(resolver.concreteIndices(any(), any(), eq(dfaIndexName))).thenReturn(new Index[] { dfaIndex });
+        when(state.getMetadata()).thenReturn(metadata);
+            nodeEnvironment,
+    // ── removeWriteBlockForCancelledDfaIndices tests ──────────────────────────
+        @Override
+            .numberOfShards(1)
+            .build();
+        RoutingTable routingTable = mock(RoutingTable.class);
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "300b")
+        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
+            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+    }
+        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
+        Metadata meta = Metadata.builder().put(idxMeta, false).build();
+        when(badMetadata.getSettings()).thenThrow(new RuntimeException("simulated"));
+        when(rtMock.hasIndex(dfaIndex)).thenReturn(true);
+import org.opensearch.Version;
+        RoutingTable.Builder routingTableBuilder = mock(RoutingTable.Builder.class);
+        );
+            Index index
+        verify(routingTableBuilder, never()).updateNumberOfReplicas(anyInt(), any(String[].class));
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
+    /**
+     */
+        ClusterSettings mockSettings = new ClusterSettings(Settings.EMPTY, clusterSettingsToAdd);
+        verify(metadataBuilder).put(captor.capture());
+        assertNull(
+            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+        when(routingTable.allShards(testIndex.getName())).thenReturn(shardRoutings);
+        ClusterChangedEvent event = mock(ClusterChangedEvent.class);
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        service.cancelTiering(request, listener, clusterState);
+        // (simulates the state after tiering started but before it completed)
+            .blocks(blocksWithWriteBlock)
+            Settings.EMPTY,
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
+        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
+import org.opensearch.storage.action.tiering.status.model.TieringStatus;
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        );
+        ClusterChangedEvent event = buildRoutingTableChangedEvent(clusterState);
+            nodeEnvironment,
+    public void testTier_DfaIndex_WarmToHot_RemovesWriteBlocksFromClusterBlocksAndSettings() throws Exception {
+import org.opensearch.core.index.Index;
+        TestTieringService service = new TestTieringService(
+        when(resolver.concreteIndices(any(), any(), eq("non-dfa-index"))).thenReturn(new Index[] { nonDfaIndex });
+        tieringCustomData.put("test_tiering_start_time", "1234567");
+import org.opensearch.cluster.routing.allocation.DiskThresholdSettings;
+            .numberOfShards(1)
+            allocationSvc,
+            resolver,
+            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
+        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
+            ShardLimitValidator shardLimitValidator
+            nodeEnvironment,
+        }
+        protected Settings getTieringStartSettingsToAdd(IndexMetadata indexMetadata) {
+        // auto_expand_replicas is not modified by updateIndexMetadataPostTiering —
+import org.opensearch.cluster.routing.RoutingTable;
+    }
+        assertFalse("Index should be removed after processing", tieringService.tieringIndices.contains(testIndex));
+ * SPDX-License-Identifier: Apache-2.0
+        );
+        verify(metadataBuilder, never()).updateNumberOfReplicas(anyInt(), any(String[].class));
+     */
+        when(shard.unassigned()).thenReturn(false);
+        ShardRouting shard = mock(ShardRouting.class);
+        @Override
+    }
+        ClusterBlocks blocks = ClusterBlocks.builder().addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK).build();
+            .build();
+        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
+     * TOCTOU guard inside execute(): index condition changed between scan and task execution
+            .put(INDEX_TIERING_STATE.getKey(), "HOT")
+            clusterService,
+            .build();
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
+            .metadata(realMetadata)
+            tieringStartSettings.get(IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS)
+        DiscoveryNode hotNode = mock(DiscoveryNode.class);
+            return Settings.builder()
+        // to ensure routing table consistency with the ReplicationTracker on warm nodes.
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT_TO_WARM.toString())
+            .build();
+     * The condition {@code s.unassigned() && !s.primary()} must treat the unassigned replica as
+                resolver,
+        ClusterStateUpdateTask task = taskCaptor.getValue();
+    }
+    @Before
+import static org.opensearch.common.settings.ClusterSettings.BUILT_IN_CLUSTER_SETTINGS;
+        when(shard.unassigned()).thenReturn(false);
+    }
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+    }
+        @Override
+        IndexMetadata updatedMetadata = captor.getValue().build();
+                .build();
+        "test_max_tiering_requests",
+        TestWarmToHotTieringService w2hService = new TestWarmToHotTieringService(
+        expectThrows(OpenSearchException.class, () -> tieringService.updateIndexMetadataForTieringCancel(metadataBuilder, badMetadata));
+        }
+        when(clusterState.routingTable()).thenReturn(rtMock);
+            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+        Settings tieringSettings = Settings.builder()
+            return maxConcurrentTieringRequestsSetting;
+            return HOT_TO_WARM;
+        TestTieringService service = new TestTieringService(
+            .numberOfReplicas(0)
+            .numberOfShards(1)
+        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
+            mock(AllocationService.class),
+        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
+        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
+    }
+            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+    }
+            .numberOfShards(1)
+            "blocks.write must be false in IndexMetadata settings after W2H tier start for DFA index",
+        AllocationService allocationSvc = mock(AllocationService.class);
+            IllegalArgumentException.class,
+    }
+            Settings.EMPTY,
+        ShardRouting shard = mock(ShardRouting.class);
+            shardLimitValidator
+    /**
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+            .settings(dfaTieringSettings)
+        ClusterBlocks blocksWithWriteBlock = ClusterBlocks.builder()
+        );
+        assertSame(clusterState, result);
+        // allOnHot=true (primary on hot + replica unassigned-non-primary) → task must be submitted
+            indexNameExpressionResolver,
+            ClusterState clusterState,
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+            mock(IndexNameExpressionResolver.class),
+            "INDEX_WRITE_BLOCK must be KEPT in ClusterBlocks during H2W cancel — deferred removal until shards on hot",
+            .build();
+        assertTrue(
+        TestTieringService service = new TestTieringService(
+        when(clusterState.getNodes()).thenReturn(nodes);
+            clusterService,
+        when(currentState.metadata()).thenReturn(metadata);
+        protected String getTieringStartTimeKey() {
+        }
+        when(metadataBuilder.put(any(IndexMetadata.Builder.class))).thenReturn(metadataBuilder);
+            nodeEnvironment,
+import org.opensearch.cluster.block.ClusterBlocks;
+        TestTieringService service = new TestTieringService(
+            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
+import static org.mockito.Mockito.mock;
+        when(metadata.index(testIndex)).thenReturn(indexMetadata);
+        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
+        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
+        DiscoveryNode hotNode = mock(DiscoveryNode.class);
+            return IndexModule.TieringState.WARM_TO_HOT;
+     *
+            return "test_tiering_start_time";
+        // Shard on warm node → in target tier
+        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
+        ) {}
+        when(metadata.indices()).thenReturn(Map.of());
+        assertNotEquals(
+        );
+            mock(AllocationService.class),
+                clusterService,
+    public void testUpdateIndexMetadataForTieringStart_ThrowsOnError() {
+     * Primary shard itself is unassigned — {@code s.unassigned() && !s.primary()} is false
+        protected void validateTieringRequest(
+        // A task must have been submitted to remove the write block
+            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
+        Metadata clusterMeta = Metadata.builder().put(meta, false).build();
+        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
+            nodeEnvironment,
+        assertTrue("Bad index should not be added", tieringService.tieringIndices.isEmpty());
+        when(clusterState.metadata()).thenReturn(meta);
+        TestTieringService service = new TestTieringService(
+            .putCustom(TIERING_CUSTOM_KEY, tieringCustomData)
+        when(hotNode.isWarmNode()).thenReturn(false);
+        RoutingTable routingTable = mock(RoutingTable.class);
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+        when(clusterState.routingTable()).thenReturn(routingTable);
+     */
+     * entirely by TransportHotToWarmTierAction.
+    }
+        assertTrue("Index should be removed from tieringIndices", tieringService.tieringIndices.isEmpty());
+            mock(ClusterInfoService.class),
+        IndexMetadata zeroReplicaMetadata = IndexMetadata.builder("zero-replica-index")
+        }
+            nodeEnvironment,
+import static org.mockito.Mockito.when;
+        // IndexMetadata.Builder must still be put with the tiering settings applied
+        Index nonDfaIndex = new Index("non-dfa-index", "non-dfa-uuid");
+        when(shard.currentNodeId()).thenReturn("hot1");
+        when(routingTable.hasIndex(testIndex)).thenReturn(false);
+        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
+            .put(FileCacheSettings.DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING.getKey(), 5.0)
+        when(clusterState.routingTable()).thenReturn(routingTable);
+            () -> tieringService.validateTieringCancelRequest(testIndex, indexMetadata, clusterState)
+            Settings.EMPTY,
+        warmToHotService.updateIndexMetadataForTieringStart(metadataBuilder, routingTableBuilder, indexMetadata, testIndex);
+     * KEEP the INDEX_WRITE_BLOCK in ClusterBlocks and KEEP blocks.write=true in IndexMetadata settings.
+        // Cover clusterStateProcessed()
+        TestTieringService service = new TestTieringService(
+            .build();
+        assertEquals(0, tieringService.listTieringStatus().size());
+        when(event.localNodeClusterManager()).thenReturn(true);
+            Settings.EMPTY,
+                settings,
+        ClusterState initialState = ClusterState.builder(ClusterName.DEFAULT)
+        String dfaUuid = "dfa-w2h-uuid";
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+    public void testCancelTiering_FailsOnResolveException() {
+            nodeEnvironment,
+            routingTableBuilder,
+        DiscoveryNode hotNode = mock(DiscoveryNode.class);
+            .put(INDEX_TIERING_STATE.getKey(), "HOT")
+        verify(metadataBuilder).put(captor.capture());
+    public void testRemoveWriteBlock_DfaHotIndex_NoWriteBlock_Skipped() {
+        // Pre-add index so execute() hits the early return
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
+        ArgumentCaptor<IndexMetadata.Builder> captor = ArgumentCaptor.forClass(IndexMetadata.Builder.class);
+    public void setUp() throws Exception {
+            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
+        when(event.routingTableChanged()).thenReturn(true);
+        String dfaIndexName = "dfa-cleanup-index";
+            shardLimitValidator
+        when(resolver.concreteIndices(any(), any(), eq("test-index"))).thenReturn(new Index[] { testIndex });
+        AllocationService allocationSvc = mock(AllocationService.class);
+        Settings tieringStartSettings = warmToHotService.getTieringStartSettingsToAdd(buildDfaIndexMetadata("w2h-check-idx", "w2h-uuid"));
+            return Settings.builder()
+    public void testGetTieringStatus_IndexNotBeingTiered() {
+        when(resolver.concreteIndices(any(), any(), eq(dfaIndexName))).thenReturn(new Index[] { dfaIndex });
+    private TestTieringService tieringService;
+        when(shard.currentNodeId()).thenReturn("node1");
+        String dfaUuid = "dfa-toctou-uuid";
+        when(hotNode.isWarmNode()).thenReturn(false);
+        // but the setting is correctly applied in the final tiering completion step.
+            Settings.EMPTY,
+            .metadata(meta)
+        ShardRouting shard = mock(ShardRouting.class);
+        // Non-DFA index should NOT have write blocks added
+    /**
+            );
+        assertNull("Tiering custom metadata should be removed", updatedMetadata.getCustomData(TIERING_CUSTOM_KEY));
+            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
+        tieringService.tieringIndices.add(testIndex);
+        IOUtils.close(nodeEnvironment);
+        when(shard.started()).thenReturn(true);
+            clusterService,
+            .numberOfReplicas(0)
+            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+        assertFalse(
+        );
+        Settings oneReplicaSettings = Settings.builder()
+        when(clusterState.routingTable()).thenReturn(rtMock);
+            allocationSvc,
+        Metadata metadata = mock(Metadata.class);
+     * Test: When cancelling H2W tiering for a DFA index, the cancelTiering() execute() method must
+        ClusterChangedEvent event = mock(ClusterChangedEvent.class);
+        Settings dfaHotSettingsWithBlock = Settings.builder()
+     */
+            .build();
+        verify(clusterService, org.mockito.Mockito.atLeastOnce()).submitStateUpdateTask(anyString(), taskCaptor.capture());
+    }
+        IndexMetadata tieringIndexMetadata = IndexMetadata.builder("tiering-index")
+            mock(AllocationService.class),
+        clusterSettingsToAdd.add(TieringUtils.JVM_USAGE_TIERING_THRESHOLD_PERCENT);
+        ArgumentCaptor<IndexMetadata.Builder> captor = ArgumentCaptor.forClass(IndexMetadata.Builder.class);
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+            "tier() must NOT add INDEX_WRITE_BLOCK for H2W DFA — TransportHotToWarmTierAction handles that",
+@SuppressWarnings("unchecked")
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
+        TestWarmToHotTieringService warmToHotService = new TestWarmToHotTieringService(
+    }
+        // Shard is initializing (not started) — relocation not complete
+            .put(TieringUtils.JVM_USAGE_TIERING_THRESHOLD_PERCENT.getKey(), 90)
+            mock(AllocationService.class),
+    public void testValidateTieringCancelRequest_IndexDeleted() {
+        when(clusterState.metadata()).thenReturn(metadata);
+        );
+        protected Settings getIndexTierSettingsToRestoreAfterCancellation(IndexMetadata indexMetadata) {
+        TestTieringService service = new TestTieringService(
+        IndexMetadata dfaWarmMeta = IndexMetadata.builder(dfaIndexName)
+ * The OpenSearch Contributors require contributions made to
+            shardLimitValidator
+        clusterSettingsToAdd.add(maxConcurrentTieringRequestsSetting);
+            clusterService,
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        @Override
+            .build();
+/*
+        when(clusterState.routingTable()).thenReturn(routingTable);
+        when(node.isWarmNode()).thenReturn(false);
+        clusterSettingsToAdd.add(FileCacheSettings.DATA_TO_FILE_CACHE_SIZE_RATIO_SETTING);
+public class TieringServiceTests extends OpenSearchTestCase {
+        when(event.state()).thenReturn(currentState);
+            Settings.EMPTY,
+            Settings.EMPTY,
+            clusterService,
+            ClusterService clusterService,
+        RoutingTable rt = RoutingTable.builder().addAsNew(meta.index("non-dfa-index")).build();
+import org.junit.Before;
+        CancelTieringRequest request = new CancelTieringRequest("bad-index");
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        );
+        ShardRouting shard = mock(ShardRouting.class);
+     * DFA index in HOT state but write block already removed — no task submitted.
+        verify(clusterService, never()).submitStateUpdateTask(org.mockito.Mockito.contains("remove-write-block"), any());
+        Metadata metadata = mock(Metadata.class);
+            clusterService,
+            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
+        DiscoveryNode hotNode = mock(DiscoveryNode.class);
+    public void testTier_FailsOnResolveException() {
+            mock(ClusterInfoService.class),
+        when(metadata.index(testIndex)).thenReturn(null);
+        verify(clusterService, never()).submitStateUpdateTask(org.mockito.Mockito.contains("remove-write-block"), any());
+            mock(AllocationService.class),
+            .build();
+    public void testRemoveWriteBlock_UnassignedReplica_PrimaryOnHot_SubmitsTask() {
+        // When user has replicas: 2, number_of_replicas is forced to 1 during tiering start
+        when(shard.unassigned()).thenReturn(false);
+        assertNotNull(capturedTask.timeout());
+                indexNameExpressionResolver,
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+            .addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
+        when(metadata.indices()).thenReturn(Map.of("bad-index", badMetadata));
+                .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), false)
+                clusterService,
+        Metadata metadata = mock(Metadata.class);
+            "true",
+        verify(metadataBuilder).put(captor.capture());
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        String dfaIndexName = "dfa-w2h-index";
+        String dfaIndexName = "dfa-index";
+    @Override
+     */
+        RoutingTable rt = RoutingTable.builder().addAsNew(meta.index("test-index")).build();
+import static org.opensearch.storage.common.tiering.TieringUtils.TIERING_CUSTOM_KEY;
+    }
+import org.opensearch.storage.action.tiering.IndexTieringRequest;
+        tieringService.tieringIndices.add(testIndex);
+        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
+ * this file be licensed under the Apache-2.0 license or a
+        );
+        when(shard.started()).thenReturn(true);
+            ClusterInfoService clusterInfoService,
+            mock(AllocationService.class),
+            .numberOfShards(1)
+        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
+        AllocationService allocationSvc = mock(AllocationService.class);
+        AllocationService allocationSvc = mock(AllocationService.class);
+        IndexTieringRequest request = new IndexTieringRequest("WARM", dfaIndexName);
+        task.onFailure("test_source", thrown);
+        TestTieringService service = new TestTieringService(
+        );
+     */
+        }
+     * A test tiering service that mimics WarmToHotTieringService behavior.
+        ClusterState result = capturedTask.execute(realState);
+    public void testClusterChanged_RoutingTableChanged_ProcessesTiering() {
+    public void testUpdateIndexMetadataForTieringStart_TwoReplicas_SetsNumberOfReplicasToOne() {
+        assertNotEquals(
+        verify(clusterService, never()).submitStateUpdateTask(org.mockito.Mockito.contains("remove-write-block"), any());
+            mock(ClusterInfoService.class),
+            clusterService,
+            .build();
+        when(primaryShard.started()).thenReturn(false);
+            mock(ClusterInfoService.class),
+            clusterService,
+        // Verify IndexMetadata settings: blocks.write must remain unchanged (not set to false during cancel)
+            nodeEnvironment,
+        IndexTieringRequest request = new IndexTieringRequest("WARM", "test-index");
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        when(clusterState.getNodes()).thenReturn(nodes);
+            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+        AllocationService allocationSvc = mock(AllocationService.class);
+            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
+            .build();
+            mock(IndexNameExpressionResolver.class),
+    }
+        when(clusterState.getNodes()).thenReturn(nodes);
+        when(rtMock.allShards(dfaIndexName)).thenReturn(java.util.Arrays.asList(primaryShard, replicaShard));
+        // Routing table and metadata must NOT have updateNumberOfReplicas called
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        ShardRouting shard = mock(ShardRouting.class);
+        );
+     */
+            shardLimitValidator
+        String dfaUuid = "dfa-uuid";
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+     */
+            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+        );
+        when(clusterState.getNodes()).thenReturn(nodes);
+            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
+        IllegalArgumentException e = expectThrows(
+            mock(AllocationService.class),
+import org.opensearch.storage.action.tiering.CancelTieringRequest;
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        when(allocationSvc.reroute(any(ClusterState.class), anyString())).thenAnswer(inv -> inv.getArgument(0));
+        verify(clusterService, never()).submitStateUpdateTask(anyString(), any(ClusterStateUpdateTask.class));
+            mock(IndexNameExpressionResolver.class),
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+        ClusterState state = mock(ClusterState.class);
+        // Execute state: block already gone (TOCTOU)
+            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
+        capturedTask.clusterStateProcessed("test_source", realState, realState);
+import org.opensearch.cluster.node.DiscoveryNodes;
+    private class TestTieringService extends TieringService {
+            mock(ClusterInfoService.class),
+        ClusterChangedEvent event = buildRoutingTableChangedEvent(clusterState);
+        Settings dfaHotSettings = Settings.builder()
+        when(rtMock.allShards(dfaIndexName)).thenReturn(Collections.singletonList(primaryShard));
+            IndexNameExpressionResolver indexNameExpressionResolver,
+        when(rtMock.hasIndex(dfaIndex)).thenReturn(true);
+                indexNameExpressionResolver,
+        ClusterState realState = ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT)
+            resolver,
+        IllegalArgumentException e = expectThrows(
+            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+        DiscoveryNode node = mock(DiscoveryNode.class);
+            "INDEX_WRITE_BLOCK must be REMOVED from ClusterBlocks after W2H tier start for DFA index",
+     */
+        when(mockScanState.metadata()).thenReturn(scanMeta);
+        Settings indexSettings = Settings.builder()
+            .build();
+import org.opensearch.common.Priority;
+        // stub the iterator so the enhanced-for loop doesn't NPE on the mock.
+     *
+        );
+            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
+        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
+            .numberOfReplicas(0)
+        when(shard.started()).thenReturn(true);
+    public void testTier_InitiatesSuccessfully() throws Exception {
+     * (so reconstruction is skipped and only the cleanup path runs).
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM.toString())
+import org.opensearch.test.OpenSearchTestCase;
+        when(primaryShard.primary()).thenReturn(true);
+            .settings(dfaHotSettings)
+        tieringService.updateIndexMetadataForTieringStart(metadataBuilder, routingTableBuilder, indexMetadata, testIndex);
+            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
+    /**
+            "INDEX_WRITE_BLOCK must NOT be added for non-DFA index",
+        // Primary shard is unassigned — neither branch of the allMatch predicate is satisfied:
+            "Warm-to-hot tiering start should set blocks.write to false",
+        Settings idxSettings = Settings.builder()
+            .build();
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
+        when(event.previousState()).thenReturn(previousState);
+            shardLimitValidator
+            IndexMetadata indexMetadata
+        when(event.previousState()).thenReturn(previousState);
+        List<TieringStatus> statuses = service.listTieringStatus();
+        String dfaUuid = "dfa-cancel-uuid";
+        Settings dfaHotSettings = Settings.builder()
+        ClusterState realState = ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT).metadata(meta).routingTable(rt).build();
+        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
+        String dfaUuid = "dfa-unassigned-replica-uuid";
+            .build();
+            mock(ClusterInfoService.class),
+     * Only DFA (pluggable dataformat) indices get write-blocked during tiering.
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+    public void testProcessTieringInProgress_CompletesSuccessfully() throws Exception {
+            resolver,
+            .build();
+import static org.opensearch.index.IndexModule.TieringState.HOT_TO_WARM;
+            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
+            .routingTable(rt)
+        IndexTieringRequest request = new IndexTieringRequest("HOT", dfaIndexName);
+        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
+        service.tieringIndices.add(testIndex);
+     */
+        when(resolver.concreteIndices(any(), any(), eq("test-index"))).thenReturn(new Index[] { testIndex });
+        IndexTieringRequest request = new IndexTieringRequest("WARM", "non-dfa-index");
+            .build();
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+        ClusterState clusterState = mock(ClusterState.class);
+            "INDEX_WRITE_BLOCK must NOT be added for non-DFA index",
+            Settings.EMPTY,
+import org.opensearch.cluster.routing.ShardRouting;
+        clusterState = mock(ClusterState.class);
+            .build();
+            updatedMetadata.getSettings().get(IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS)
+        ClusterState clusterState = mock(ClusterState.class);
+            .put(IndexMetadata.SETTING_INDEX_UUID, uuid)
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        RoutingTable.Builder routingTableBuilder = mock(RoutingTable.Builder.class);
+            return Settings.builder()
+        service.clusterChanged(event);
+     * Test: tier() for a DFA index hot→warm does NOT add write blocks to ClusterBlocks.
+            () -> tieringService.validateTieringCancelRequest(testIndex, warmMetadata, clusterState)
+        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
+            "INDEX_WRITE_BLOCK must be absent from ClusterBlocks after execute()",
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            mock(ClusterInfoService.class),
+            Settings.EMPTY,
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+        );
+        );
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            mock(ClusterInfoService.class),
+        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
+        // updateIndexMetadataPostTiering only updates INDEX_TIERING_STATE and removes tiering custom data.
+        IndexMetadata badMetadata = mock(IndexMetadata.class);
+            resultState.blocks().hasIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
+        ClusterBlocks blocksWithBlock = ClusterBlocks.builder().addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK).build();
+        50,
+        java.util.HashMap<String, String> tieringCustomData = new java.util.HashMap<>();
+                .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), false)
+            updatedMetadata.getSettings().get(org.opensearch.index.IndexModule.INDEX_TIERING_STATE.getKey())
+                .removeIndexBlock(indexName, IndexMetadata.INDEX_WRITE_BLOCK);
+        when(shard.unassigned()).thenReturn(false);
+        );
+        when(clusterState.routingTable()).thenReturn(routingTable);
+     * execute() must skip gracefully and not throw NPE.
+                .build();
+        when(rtMock.allShards(dfaIndexName)).thenReturn(Collections.singletonList(shard));
+            .put(INDEX_TIERING_STATE.getKey(), HOT_TO_WARM.toString())
+        when(primaryShard.unassigned()).thenReturn(true);
+        RoutingTable rt = RoutingTable.builder().addAsNew(meta.index(dfaIndexName)).build();
+        protected Settings getTieringStartSettingsToAdd(IndexMetadata indexMetadata) {
+            .build();
+        RoutingTable routingTable = mock(RoutingTable.class);
+        when(routingTable.allShards(testIndex.getName())).thenReturn(Collections.singletonList(shard));
+     * Replica shard is unassigned (e.g. no available node) while the primary is started on a hot node.
+import org.opensearch.common.settings.Setting;
+            .build();
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+        // Confirm number_of_replicas is set to 1 in metadata settings
+        tieringService.validateTieringCancelRequest(testIndex, w2hMetadata, clusterState);
+            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
+            ClusterState clusterState,
+    public void testRemoveWriteBlock_NonDfaIndex_Skipped() {
+        expectThrows(
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
 }
+            nodeEnvironment,
+     *
+            "false",
+            .numberOfShards(1)
+        tieringService.validateTieringCancelRequest(testIndex, h2wMetadata, clusterState);
+        assertFalse("Index should be removed from tieringIndices", tieringService.tieringIndices.contains(testIndex));
+        ShardRouting shard = mock(ShardRouting.class);
+            .blocks(ClusterBlocks.EMPTY_CLUSTER_BLOCK)
+        // No task submitted — shards not yet all on hot
+            return blocksBuilder;
+        assertEquals(tieringService.getTargetTieringState().toString(), updatedMetadata.getSettings().get(INDEX_TIERING_STATE.getKey()));
+        when(shard.unassigned()).thenReturn(false);
+        tieringService.clusterChanged(event);
+        // Build warm DFA index metadata WITH write blocks set (it was warm, writes blocked)
+        ) {
+            shardLimitValidator
+    }
+        }
+            .build();
+            result.blocks().hasIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
+    }
+import org.opensearch.storage.common.tiering.TieringUtils;
+            Settings.EMPTY,
+        when(clusterState.metadata()).thenReturn(meta);
+        Settings hotSettings = Settings.builder()
+        ShardRouting shard = mock(ShardRouting.class);
+        when(metadataBuilder.put(any(IndexMetadata.Builder.class))).thenReturn(metadataBuilder);
+            clusterService,
+        verify(clusterService, never()).submitStateUpdateTask(anyString(), any(ClusterStateUpdateTask.class));
+            .numberOfReplicas(0)
+        when(metadata.index(testIndex)).thenReturn(indexMetadata);
+        verify(metadataBuilder).put(captor.capture());
+        }
+            resultState.blocks().hasIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
+     * Expects a cluster state task to be submitted to remove the write block.
+        IndexMetadata idxMeta = IndexMetadata.builder("test-index")
+import org.opensearch.core.action.ActionListener;
+            Integer jvmActiveUsageThresholdPercent,
+            .numberOfShards(1)
+            nodeEnvironment,
+        );
+        // Build index metadata with tiering custom data
+            "updateIndexMetadataPostTiering must not set auto_expand_replicas",
+import org.opensearch.index.IndexSettings;
+        ClusterState currentState = mock(ClusterState.class);
+                settings,
+        Metadata meta = Metadata.builder().put(dfaHotMeta, false).build();
+import static org.opensearch.index.IndexModule.INDEX_TIERING_STATE;
+        when(primaryShard.currentNodeId()).thenReturn("hot1");
+        ClusterState clusterState = mock(ClusterState.class);
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+            resolver,
+        when(rtMock.allShards(dfaIndexName)).thenReturn(Collections.singletonList(shard));
+        when(nodes.get("node1")).thenReturn(node);
+    /**
+        ClusterState previousState = mock(ClusterState.class);
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+        );
+    private IndexMetadata buildDfaIndexMetadata(String indexName, String uuid) {
+        when(shard.started()).thenReturn(true);
+            updatedMeta.getSettings().get(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey())
+            org.opensearch.cluster.block.ClusterBlocks.Builder blocksBuilder,
+            clusterService,
+        // index is NOT in tieringIndices (cancel completed)
+        ShardRouting shard = mock(ShardRouting.class);
+            Settings.EMPTY,
+            .blocks(blocks)
+        service.clusterChanged(event);
+    public void testWarmToHotTieringStart_DisablesAutoExpandReplicas() {
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
+        RoutingTable rtMock = mock(RoutingTable.class);
+        // Must NOT throw — the persisted HOT_TO_WARM state makes the index cancellable after failover.
+            shardLimitValidator
+    public void testUpdateIndexMetadataPostTiering_UpdatesCorrectly() {
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+            resultState.blocks().hasIndexBlock("non-dfa-index", IndexMetadata.INDEX_WRITE_BLOCK)
+        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
+        task.clusterStateProcessed("cancel_source", clusterState, clusterState);
+        when(shard.unassigned()).thenReturn(false);
+        testIndex = new Index("test-index", "uuid");
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_THRESHOLD_ENABLED_SETTING.getKey(), true)
+        // non-DFA index: PLUGGABLE_DATAFORMAT_ENABLED_SETTING = false (default)
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
+        // Result must equal the input state unchanged (no index block was found to remove)
+            Settings.EMPTY,
+     * Sets auto_expand_replicas: false and read_only_allow_delete: false on tiering start.
+            any(ClusterStateUpdateTask.class)
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+            shardLimitValidator
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
+        // Build DFA index metadata in HOT_TO_WARM state WITH write blocks already set
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+    }
+            .build();
+import java.util.Map;
+            Settings.EMPTY,
+        when(state.getMetadata()).thenReturn(metadata);
+            .build();
+        when(metadata.index(testIndex)).thenReturn(indexMetadata);
+    }
+        assertNotEquals("true", result.metadata().index(dfaIndexName).getSettings().get(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey()));
+        );
+        }
+        when(nodes.get("hot1")).thenReturn(hotNode);
+            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
+        when(allocationSvc.reroute(any(ClusterState.class), anyString())).thenAnswer(inv -> inv.getArgument(0));
+        );
+        // Replica shard: unassigned and NOT primary — satisfies s.unassigned() && !s.primary()
+            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
+        TestTieringService service = new TestTieringService(
+    public void testClusterChanged_NotClusterManager_DoesNothing() {
+        CancelTieringRequest request = new CancelTieringRequest("test-index");
+            resolver,
+import static org.opensearch.cluster.metadata.IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING;
+        }
+            .settings(dfaHotSettingsWithBlock)
+            NodeEnvironment nodeEnvironment,
+import org.opensearch.cluster.node.DiscoveryNode;
+            .numberOfShards(1)
+        when(allocationSvc.reroute(any(ClusterState.class), anyString())).thenAnswer(inv -> inv.getArgument(0));
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
+        when(currentState.metadata()).thenReturn(metadata);
+import org.opensearch.common.settings.ClusterSettings;
+        ) {
+        IndexMetadata updatedMeta = resultState.metadata().index(dfaIndexName);
+        TestTieringService service = new TestTieringService(
+import org.opensearch.cluster.metadata.IndexMetadata;
+        service.clusterChanged(event);
+            mock(ClusterInfoService.class),
+        String dfaUuid = "dfa-cleanup-uuid";
+        tieringService.updateIndexMetadataForTieringCancel(metadataBuilder, indexMetadata);
+        // Cover onFailure()
+            clusterService,
+        Settings dfaTieringSettings = Settings.builder()
+        when(metadata.getIndexSafe(testIndex)).thenReturn(idxMeta);
+        when(nodes.get("node1")).thenReturn(node);
+            allocationSvc,
+    }
+            allocationSvc,
+        verify(clusterService).submitStateUpdateTask(anyString(), any(ClusterStateUpdateTask.class));
+        // it carries over from the source indexMetadata unchanged.
+        ClusterState clusterState = mock(ClusterState.class);
+        // Scan state has the block (triggers task submission)
+        ShardRouting shard = mock(ShardRouting.class);
+            () -> tieringService.validateTieringCancelRequest(testIndex, warmIndexMetadata, clusterState)
+        when(clusterState.metadata()).thenReturn(meta);
+        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
+    public void testProcessTieringInProgress_HandlesIncompleteShardRelocation() {
+     * Helper: builds a ClusterChangedEvent where routingTableChanged()=true and
+        nodeEnvironment = newNodeEnvironment();
+        when(metadata.iterator()).thenReturn(Collections.emptyIterator());
+        service.cancelTiering(request, listener, clusterState);
+    public void testUpdateIndexMetadataForTieringCancel() {
+        // Build cluster state with write blocks already present in ClusterBlocks
+            ClusterInfoService service,
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+        ClusterChangedEvent event = mock(ClusterChangedEvent.class);
+            clusterService,
+            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
+    public void testValidateTieringCancelRequest_AlreadyReachedTargetTier() {
+        service.tieringIndices.add(dfaIndex);
+            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
+            Set<Index> tieringEntries,
+        DiscoveryNode node = mock(DiscoveryNode.class);
+        Settings dfaWarmSettings = Settings.builder()
+        protected Setting<Integer> getMaxConcurrentTieringRequestsSetting() {
+        IllegalArgumentException e = expectThrows(
+            .metadata(meta)
+            .build();
+        protected org.opensearch.cluster.block.ClusterBlocks.Builder getTieringStartClusterBlocksToAdd(
+        when(node.isWarmNode()).thenReturn(true);
+     * Direction-agnostic fallback: a WARM_TO_HOT index not tracked in memory is also accepted.
+        service.clusterChanged(event);
+            mock(ClusterInfoService.class),
+            resolver,
+        ClusterChangedEvent event = buildRoutingTableChangedEvent(clusterState);
+        when(clusterService.state()).thenReturn(clusterState);
+    }
+        Setting.Property.NodeScope
+    }
+        when(nodes.get("node1")).thenReturn(node);
+        public TestTieringService(
+        );
+            .settings(dfaHotSettings)
+        assertNotNull(result);
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
+        when(shard.unassigned()).thenReturn(false);
+    }
+            resolver,
+        Settings tieringSettings = Settings.builder()
+            shardLimitValidator
+            .routingTable(rt)
+        ) {
+        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
+        TestTieringService service = new TestTieringService(
+        when(clusterState.metadata()).thenReturn(meta);
+        ClusterChangedEvent event = buildRoutingTableChangedEvent(mockScanState);
+            mock(ClusterInfoService.class),
+    public void testUpdateIndexMetadataForTieringStart_ZeroReplicas_SetsNumberOfReplicasToOne() {
+     * (write block already removed by another task) — execute() must skip and produce no change.
+            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
+            .numberOfShards(1)
+            nodeEnvironment,
+        verify(metadataBuilder).put(captor.capture());
+    /**
+    public void testValidateTieringCancelRequest_NotInMemoryButHotToWarm_Accepted() {
+            () -> tieringService.updateIndexMetadataForTieringStart(metadataBuilder, routingTableBuilder, badMetadata, testIndex)
+            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid")
+        when(clusterState.metadata()).thenReturn(clusterMeta);
+        protected Settings getIndexTierSettingsToRestoreAfterCancellation(IndexMetadata indexMetadata) {
+                .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true)
+        when(mockScanState.metadata()).thenReturn(scanMeta);
+        w2hService.tier(request, listener, warmState);
+    }
+            .numberOfShards(1)
+        when(resolver.concreteIndices(any(), any(), eq("test-index"))).thenReturn(new Index[] { testIndex });
+            .validateTieringRequest(any(), any(), any(), any(), any(), any());
+    /**
+        TestTieringService service = new TestTieringService(
+        assertNotNull(result);
+        @Override
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+ *
+            .numberOfShards(1)
+            clusterService,
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+        // The ReplicationTracker requires a replica to avoid assertion failures on warm nodes.
+import org.opensearch.index.IndexModule;
+        when(routingTable.hasIndex(testIndex)).thenReturn(false);
+    public void testUpdateIndexMetadataForTieringStart_OneReplica_DoesNotUpdateRoutingTable() {
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+    }
+        tieringService.processTieringInProgress(clusterState, "test_source");
+        assertEquals(
+        @Override
+        IndexMetadata badMetadata = mock(IndexMetadata.class);
+        // Create a WarmToHot-style tiering service that sets read_only_allow_delete: false on start
+            .numberOfShards(1)
+        assertEquals(
+            clusterService,
+            nodeEnvironment,
+        assertEquals(1, tieringService.tieringIndices.size());
+        TestTieringService service = new TestTieringService(
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+            return Settings.builder()
+     * persisted state shows a HOT_TO_WARM migration in progress. Cancel must be accepted (no throw)
+        verify(metadataBuilder).put(captor.capture());
+     */
+                .put(IndexMetadata.SETTING_AUTO_EXPAND_REPLICAS, "false")
+        when(rtMock.allShards(dfaIndexName)).thenReturn(Collections.singletonList(shard));
+        ClusterChangedEvent event = buildRoutingTableChangedEvent(clusterState);
+    private ShardLimitValidator shardLimitValidator;
+        when(clusterState.routingTable()).thenReturn(mock(RoutingTable.class));
+    public void testTier_NonDfaIndex_DoesNotAddWriteBlocksToClusterBlocks() throws Exception {
+            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+        DiscoveryNodes currentNodes = mock(DiscoveryNodes.class);
+        service.tieringIndices.add(testIndex);
+        when(nodes.get("hot1")).thenReturn(hotNode);
+            Settings.EMPTY,
+        RoutingTable.Builder routingTableBuilder = mock(RoutingTable.Builder.class);
+        when(event.routingTableChanged()).thenReturn(false);
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+            resultState.blocks().hasIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
+            .blocks(ClusterBlocks.EMPTY_CLUSTER_BLOCK)
+        IndexMetadata updatedMetadata = captor.getValue().build();
+            .build();
+        Metadata meta = Metadata.builder().put(dfaHotMeta, false).build();
+        String dfaIndexName = "dfa-unassigned-primary";
+            .build();
+            .settings(zeroReplicaSettings)
+        IndexMetadata w2hMetadata = IndexMetadata.builder("test-index").settings(w2hSettings).numberOfShards(1).numberOfReplicas(1).build();
+    private ClusterState clusterState;
+                Settings.EMPTY,
+import java.util.Set;
+        ClusterStateUpdateTask capturedTask = taskCaptor.getValue();
+        assertFalse(
+        // Settings without write block (already removed before execute runs)
+            Integer jvmActiveUsageThresholdPercent,
+        ClusterStateUpdateTask task = taskCaptor.getValue();
+        IndexMetadata tieringMeta = IndexMetadata.builder("test-index")
+            .numberOfReplicas(1)
+        when(clusterState.metadata()).thenReturn(meta);
+        when(nodes.get("hot1")).thenReturn(hotNode);
+     * This test verifies that tier() completes successfully for DFA H2W without touching ClusterBlocks.
+import org.opensearch.index.store.remote.filecache.FileCacheSettings;
+            .build();
+        tieringService.updateIndexMetadataPostTiering(metadataBuilder, indexMetadata);
+            .build();
+        verify(metadataBuilder).updateNumberOfReplicas(eq(1), any(String[].class));
+        String dfaUuid = "dfa-execute-uuid";
+        super.tearDown();
+        when(shard.started()).thenReturn(false);
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+    public void testWarmToHotTieringStart_RemovesReadOnlyAllowDeleteBlock() {
+            nodeEnvironment,
+        RoutingTable.Builder routingTableBuilder = mock(RoutingTable.Builder.class);
+            .metadata(meta)
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+        // INDEX_WRITE_BLOCK must be removed from ClusterBlocks
+        return IndexMetadata.builder(indexName).settings(dfaSettings).numberOfShards(1).numberOfReplicas(1).build();
+            .settings(nonDfaSettings)
+        // DFA index in HOT state with write block still set (orphaned from H2W cancel)
+import org.opensearch.cluster.ClusterStateUpdateTask;
+    public void testTier_HandlesValidationFailure() {
+        ClusterState currentState = mock(ClusterState.class);
+    public void testGetTieringStatus_IndexBeingTiered() {
+            resultState.blocks().hasIndexBlock("non-dfa-index", IndexMetadata.INDEX_WRITE_BLOCK)
+        when(nodes.get("hot1")).thenReturn(hotNode);
+            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
+        when(currentState.getNodes()).thenReturn(nodes);
+        when(node.isWarmNode()).thenReturn(true);
+        verify(clusterService, org.mockito.Mockito.atLeastOnce()).submitStateUpdateTask(anyString(), taskCaptor.capture());
+        RoutingTable routingTable = mock(RoutingTable.class);
+        tieringService.updateIndexMetadataForTieringStart(metadataBuilder, routingTableBuilder, indexMetadata, testIndex);
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
+    }
+import static org.mockito.Mockito.eq;
+    public void testReconstructInProgressTieringRequests() {
+     * localNodeClusterManager()=true but previousNodes.isLocalNodeElectedClusterManager()=true
+        verify(clusterService, never()).submitStateUpdateTask(org.mockito.Mockito.contains("remove-write-block"), any());
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+     * Shards are still relocating (not all started on hot) — no task submitted, block kept.
+            resultState.blocks().hasIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
+        RoutingTable rtMock = mock(RoutingTable.class);
+        assertThat(e.getMessage(), org.hamcrest.Matchers.containsString("already reached its target tier"));
+        when(previousState.nodes()).thenReturn(previousNodes);
+            tieringService.getTargetTieringState().toString(),
+        service.tier(request, listener, initialState);
+        assertTrue("Index should be added to tieringIndices", service.tieringIndices.contains(testIndex));
+        TestTieringService service = new TestTieringService(
+        Metadata realMetadata = Metadata.builder().put(indexMetadata, false).build();
+        DiscoveryNode node = mock(DiscoveryNode.class);
+    //
+    public void testRemoveWriteBlock_Execute_NullGuard_IndexDeletedBetweenScanAndTask() throws Exception {
+            resolver,
+     */
+        RoutingTable routingTable = mock(RoutingTable.class);
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            "INDEX_WRITE_BLOCK must be REMOVED from ClusterBlocks after W2H tier start for DFA index",
+            Integer maxConcurrentTieringRequests,
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+            Settings.EMPTY,
+import org.opensearch.cluster.ClusterInfoService;
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
+     * Failover case: the in-memory tiering set was lost (e.g., cluster-manager change), but the
+        RoutingTable realRt = RoutingTable.builder().addAsNew(realMetadata.index("test-index")).build();
+        when(nodes.get("node1")).thenReturn(node);
+        assertEquals("1", updatedMetadata.getSettings().get(IndexMetadata.SETTING_NUMBER_OF_REPLICAS));
+            super(
+        assertFalse(
+    }
+        ClusterState executeState = ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT)
+        // Verify that WarmToHotTieringService's getTieringStartSettingsToAdd includes
+        when(mockScanState.routingTable()).thenReturn(rtMock);
+    private IndexMetadata indexMetadata;
+        TestWarmToHotTieringService warmToHotService = new TestWarmToHotTieringService(
+        ClusterState warmState = ClusterState.builder(ClusterName.DEFAULT)
+        ClusterState resultState = taskCaptor.getValue().execute(initialState);
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+            .put(INDEX_TIERING_STATE.getKey(), "HOT")
+        ClusterState result = taskCaptor.getValue().execute(realState);
+     * snaps back to hot quickly but one replica may remain unassigned until a node becomes available.
+        indexNameExpressionResolver = mock(IndexNameExpressionResolver.class);
+    /**
+import org.opensearch.common.settings.Settings;
+        );
+        RoutingTable rt = RoutingTable.builder().addAsNew(meta.index(dfaIndexName)).build();
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+    }
+     * Non-DFA index with write block in HOT state — must be completely ignored.
+            allocationSvc,
+            NodeEnvironment nodeEnvironment,
+import static org.mockito.Mockito.anyInt;
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        IndexMetadata dfaMeta = buildDfaIndexMetadata(dfaIndexName, dfaUuid);
+    public void testRemoveWriteBlock_IndexStillInTieringIndices_Skipped() {
+        DiscoveryNodes previousNodes = mock(DiscoveryNodes.class);
+        ArgumentCaptor<IndexMetadata.Builder> captor = ArgumentCaptor.forClass(IndexMetadata.Builder.class);
+        when(mockState.getNodes()).thenReturn(nodes);
+            .numberOfReplicas(1)
+        ClusterState mockState = mock(ClusterState.class);
+        when(clusterState.metadata()).thenReturn(metadata);
+    }
+        Metadata executeMeta = Metadata.builder().put(dfaHotMeta, false).build();
+        }
+    public void testCancelTiering_DfaIndex_KeepsWriteBlocksDuringCancel() throws Exception {
+        when(clusterState.metadata()).thenReturn(metadata);
+            mock(AllocationService.class),
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        verify(listener).onFailure(any(IllegalArgumentException.class));
+     */
+     */
+            Integer maxConcurrentTieringRequests,
+            shardLimitValidator
+            resolver,
+        // Cover timeout()
+        tieringService.tieringIndices.add(testIndex);
+        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
+            mock(ClusterInfoService.class),
+        when(allocationSvc.reroute(any(ClusterState.class), anyString())).thenAnswer(inv -> inv.getArgument(0));
+    }
+        IndexMetadata badMetadata = mock(IndexMetadata.class);
+        when(clusterState.metadata()).thenReturn(metadata);
+            mock(AllocationService.class),
+            .numberOfShards(1)
+    /**
+     */
+            mock(IndexNameExpressionResolver.class),
+            mock(IndexNameExpressionResolver.class),
+            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+        ClusterState realState = ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT)
+        Metadata metadata = mock(Metadata.class);
+            .build();
+        }
+                shardLimitValidator
+        );
+            clusterService,
+        when(shard.currentNodeId()).thenReturn("node1");
+            // INDEX_BLOCKS_WRITE not set → false (block already removed)
+        IndexMetadata oneReplicaIndex = IndexMetadata.builder("test-index")
+            mock(ClusterInfoService.class),
+            "blocks.blocks.write must be false in IndexMetadata settings after W2H tier start for DFA index",
+     * <p>This is the negative complement of the unassigned-replica case: we must NOT lift
+            mock(AllocationService.class),
+            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+        service.tier(request, listener, clusterState);
+        DiscoveryNode node = mock(DiscoveryNode.class);
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+            .put(dfaHotSettingsNoBlock)
+        List<ShardRouting> shardRoutings = Collections.singletonList(shard);
+            resolver,
+ * compatible open source license.
+            shardLimitValidator
+            .numberOfReplicas(1)
+        tieringService.updateIndexMetadataForTieringStart(metadataBuilder, routingTableBuilder, oneReplicaIndex, testIndex);
+        IndexMetadata updatedMetadata = captor.getValue().build();
+            .routingTable(rt)
+    // The method is private and triggered via clusterChanged() when
+        service.clusterChanged(event);
+            mock(IndexNameExpressionResolver.class),
+        when(clusterState.blocks()).thenReturn(blocks);
+        // When user already has replicas: 1, updateNumberOfReplicas must NOT be called —
+    }
+        ClusterState realState = ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT)
+        ClusterState initialState = ClusterState.builder(ClusterName.DEFAULT)
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+            mock(ClusterInfoService.class),
+            .blocks(blocksWithWriteBlock)
+            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM_TO_HOT.toString())
+            .metadata(executeMeta)
+            .build();
+                clusterService,
+        when(clusterService.getClusterSettings()).thenReturn(mockSettings);
+    }
+            updatedMetadata.getSettings().get(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey())
+    }
+    /**
+            .routingTable(rt)
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+        RoutingTable rt = mock(RoutingTable.class);
+            clusterService,
+            .put(INDEX_TIERING_STATE.getKey(), HOT_TO_WARM.toString())
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+            nodeEnvironment,
+        // INDEX_BLOCKS_WRITE setting must be false in IndexMetadata
+        when(event.state()).thenReturn(currentState);
+        service.tieringIndices.add(testIndex);
+        String dfaIndexName = "dfa-deleted-index";
+    }
+            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
+        verify(listener).onFailure(thrown);
+        ArgumentCaptor<ClusterStateUpdateTask> taskCaptor = ArgumentCaptor.forClass(ClusterStateUpdateTask.class);
+            .settings(dfaHotSettings)
+    }
+     * <p>This is the canonical scenario after H2W cancel with auto_expand_replicas: the primary
+        when(previousState.nodes()).thenReturn(previousNodes);
+        Metadata metadata = mock(Metadata.class);
+        // getIndexTierClusterBlocksToRestoreAfterCancellation intentionally uses the base class no-op:
+            shardLimitValidator
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        tieringCustomData.put("test_tiering_start_time", "1234567");
+            nodeEnvironment,
+            mock(AllocationService.class),
+            .build();
+            mock(AllocationService.class),
+            return blocksBuilder.removeIndexBlock(indexName, IndexMetadata.INDEX_WRITE_BLOCK)
+        assertFalse("Index should be removed after cancel", service.tieringIndices.contains(testIndex));
+        );
+        when(primaryShard.primary()).thenReturn(true);
+                .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM_TO_HOT)
+            shardLimitValidator
+        assertTrue("Index should remain in tieringIndices", tieringService.tieringIndices.contains(testIndex));
+     * TieringService.removeWriteBlockForCancelledDfaIndices() once all shards are confirmed started
+            shardLimitValidator
+        RoutingTable routingTable = mock(RoutingTable.class);
+        clusterService = mock(ClusterService.class);
+        when(resolver.concreteIndices(any(), any(), eq("test-index"))).thenReturn(new Index[] { testIndex });
+package org.opensearch.storage.tiering;
+        @Override
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        service.clusterChanged(event);
+    }
+            return "w2h_tiering_start_time";
+            .metadata(meta)
+        protected IndexModule.TieringState getTargetTieringState() {
+        // No exception means reconstruction was called successfully
+        ClusterState previousState = mock(ClusterState.class);
+    Setting<Integer> maxConcurrentTieringRequestsSetting = Setting.intSetting(
+        ClusterChangedEvent event = buildRoutingTableChangedEvent(clusterState);
+        // allOnHot=false → no task submitted
+     * set blocks.write=false and blocks.read_only_allow_delete=false in IndexMetadata settings.
+            "false",
+        when(clusterState.routingTable()).thenReturn(routingTable);
+        Index dfaIndex = new Index(dfaIndexName, dfaUuid);
+        // the conditional branch `if (currentReplicas != 1)` is not entered.
+        service.tieringIndices.add(dfaIndex);
+                .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true)
+     * Happy path: DFA index in HOT state with write block, all shards started on hot nodes.
+     * INDEX_WRITE_BLOCK and INDEX_WRITE_BLOCK from ClusterBlocks AND
+        assertFalse(tieringService.isIndexBeingTiered(testIndex));
+        assertTrue("Index should not be in tieringIndices", spyService.tieringIndices.isEmpty());
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "100b")
+            .metadata(Metadata.EMPTY_METADATA)
+            mock(ClusterInfoService.class),
+    }
+            .numberOfReplicas(1)
+        ClusterState clusterState = mock(ClusterState.class);
+        RoutingTable rtMock = mock(RoutingTable.class);
+        assertEquals("test-index", status.getIndexName());
+                nodeEnvironment,
+        when(event.blocksChanged()).thenReturn(false);
+        Metadata meta = Metadata.builder().put(dfaHotMeta, false).build();
+                .put(INDEX_TIERING_STATE.getKey(), HOT_TO_WARM)
+        String dfaIndexName = "dfa-still-tiering";
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
+import org.opensearch.cluster.ClusterChangedEvent;
+            nodeEnvironment,
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        // s.unassigned() && !s.primary() → false (it IS the primary)
+import static org.mockito.Mockito.spy;
+        RoutingTable routingTable = mock(RoutingTable.class);
+            .settings(dfaWarmSettings)
+            mock(AllocationService.class),
+        when(shard.started()).thenReturn(true);
+        @Override
+        Metadata meta = Metadata.builder().put(nonDfaMeta, false).build();
+        when(clusterState.metadata()).thenReturn(metadata);
+        Metadata scanMeta = Metadata.builder().put(dfaHotMetaWithBlock, false).build();
+        assertThat(e.getMessage(), org.hamcrest.Matchers.containsString("deleted before tiering cancellation"));
+        Metadata meta = Metadata.builder().put(dfaTieringMeta, false).build();
+        Index idx = new Index(indexName, uuid);
+        Metadata meta = Metadata.builder().put(dfaHotMeta, false).build();
+        assertNotNull("execute() must return a non-null state even when index was deleted", result);
+        IndexTieringRequest request = new IndexTieringRequest("WARM", "test-index");
+        Settings warmSettings = Settings.builder()
+        );
+        ClusterState result = taskCaptor.getValue().execute(executeState);
+        String dfaIndexName = "dfa-relocating";
+                .build();
+            resolver,
+        when(clusterState.getNodes()).thenReturn(nodes);
+            shardLimitValidator
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+    public void testValidateTieringCancelRequest_NotInMemoryButWarmToHot_Accepted() {
+        verify(metadataBuilder).put(any(IndexMetadata.Builder.class));
+        when(clusterState.routingTable()).thenReturn(mock(RoutingTable.class));
+            // PLUGGABLE_DATAFORMAT_ENABLED_SETTING not set → defaults to false
+            indexNameExpressionResolver,
+        ClusterState clusterState = mock(ClusterState.class);
+        Settings dfaHotSettings = Settings.builder()
+    public void testRemoveWriteBlock_Execute_ToctouGuard_SkipsIfBlockAlreadyRemoved() throws Exception {
+     * via the isMigrationInProgress fallback.
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            .build();
+        assertFalse(
+            zeroReplicaMetadata,
+import static org.mockito.Mockito.any;
+        RoutingTable rt = RoutingTable.builder().addAsNew(meta.index(dfaIndexName)).build();
+            nodeEnvironment,
+        ClusterChangedEvent event = mock(ClusterChangedEvent.class);
+            .numberOfReplicas(0)
+            .numberOfReplicas(1)
+        when(previousNodes.isLocalNodeElectedClusterManager()).thenReturn(true);
+        );
+    }
+        ClusterState realState = ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT).metadata(emptyMetadata).build();
+        assertFalse("Precondition: index must not be tracked in memory", tieringService.isIndexBeingTiered(testIndex));
+        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
+        ClusterState mockScanState = mock(ClusterState.class);
+        assertFalse(
+        service.clusterChanged(event);
+     * Boundary: a terminal WARM index that is NOT tracked in memory must still be rejected —
+        // Build index with 1 replica (already at target)
+        Metadata meta = Metadata.builder().put(dfaWarmMeta, false).build();
+        ClusterState mockScanState = mock(ClusterState.class);
+        RoutingTable.Builder routingTableBuilder = mock(RoutingTable.Builder.class);
+    public void testListTieringStatus_WithTieringIndex() {
+        when(event.localNodeClusterManager()).thenReturn(false);
+            .blocks(ClusterBlocks.EMPTY_CLUSTER_BLOCK)
+            new TestTieringService(
+        ClusterState resultState = taskCaptor.getValue().execute(warmState);
+     * and sets INDEX_BLOCKS_WRITE=false in IndexMetadata settings.
+        when(mockScanState.getNodes()).thenReturn(nodes);
+        when(routingTable.hasIndex(testIndex)).thenReturn(true);
+        when(clusterState.routingTable()).thenReturn(rtMock);
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+        ClusterChangedEvent event = buildRoutingTableChangedEvent(clusterState);
+        when(metadataBuilder.put(any(IndexMetadata.Builder.class))).thenReturn(metadataBuilder);
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+        when(shard.currentNodeId()).thenReturn("hot1");
+            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid-zero-replicas")
+        assertNotNull(result);
+    }
+        when(shard.unassigned()).thenReturn(false);
+            .build();
+        IndexMetadata warmIndexMetadata = IndexMetadata.builder("test-index")
+    public void testUpdateClusterStateTask_IndexDeletedDuringExecution() throws Exception {
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+        verify(routingTableBuilder).updateNumberOfReplicas(eq(1), any(String[].class));
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        // When user has replicas: 0, number_of_replicas should be forced to 1 for routing table consistency.
+import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
+        super.setUp();
+        // Execute the captured task against a real cluster state that still has the block
+        @Override
+            result.blocks().hasIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK)
+        when(event.metadataChanged()).thenReturn(false);
+        CancelTieringRequest cancelRequest = new CancelTieringRequest(dfaIndexName);
+    public void tearDown() throws Exception {
+     *
+            mock(ClusterInfoService.class),
+        // Execute state: index has been deleted
+            Settings.EMPTY,
+        );
+        tieringService.updateIndexMetadataPostTiering(metadataBuilder, indexMetadata);
+            updatedMeta.getSettings().get(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey())
+        service.cancelTiering(cancelRequest, listener, stateWithBlocks);
+        );
+        @Override
+        String indexName = "non-dfa-hot";
+        assertFalse("Precondition: index must not be tracked in memory", tieringService.isIndexBeingTiered(testIndex));
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        IndexMetadata updatedMetadata = captor.getValue().build();
+            .build();
+        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT_TO_WARM.toString())
+        when(state.routingTable()).thenReturn(rt);
+            .settings(dfaHotSettingsNoBlock)
+    }
+        TestTieringService service = new TestTieringService(
+        Settings nonDfaSettings = Settings.builder()
+        );
+        ClusterState previousState = mock(ClusterState.class);
+        ClusterBlocks blocksWithBlock = ClusterBlocks.builder().addIndexBlock(dfaIndexName, IndexMetadata.INDEX_WRITE_BLOCK).build();
+        // Primary shard: started on a hot node
+        ClusterState resultState = taskCaptor.getValue().execute(stateWithBlocks);
+            .build();
+    );
+        // execute() with deleted-index state must not throw
+        tieringService.reconstructInProgressTieringRequests(clusterState, HOT_TO_WARM, "test_source");
+        RoutingTable rtMock = mock(RoutingTable.class);
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        @Override
+        // Pass a DFA index metadata so the W2H subclass returns its full settings
+        RoutingTable routingTable = mock(RoutingTable.class);
+        protected String getTieringStartTimeKey() {
+        );
+            .numberOfReplicas(1)
+                .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM)
+            OpenSearchException.class,
+            nodeEnvironment,
+    }
+        ClusterState state = mock(ClusterState.class);
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+            Settings.EMPTY,
+        IndexMetadata warmMetadata = IndexMetadata.builder("test-index")
+        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
+        spyService.tier(request, listener, clusterState);
+            Settings.EMPTY,
+        when(mockScanState.routingTable()).thenReturn(rtMock);
+        Metadata meta = Metadata.builder().put(dfaHotMeta, false).build();
+        verify(routingTableBuilder).updateNumberOfReplicas(eq(1), any(String[].class));
+            "No INDEX_WRITE_BLOCK should be present — TOCTOU guard must have skipped this index",
+        ArgumentCaptor<IndexMetadata.Builder> captor = ArgumentCaptor.forClass(IndexMetadata.Builder.class);
+        // Use a real ClusterState where the index doesn't exist in metadata
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
+        service.tieringIndices.add(testIndex);
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            mock(AllocationService.class),
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
+            mock(ClusterInfoService.class),
+        when(routingTable.hasIndex(testIndex)).thenReturn(true);
+            "false",
+            Settings settings,
+            AllocationService allocationService,
+        verify(clusterService, never()).submitStateUpdateTask(org.mockito.Mockito.contains("remove-write-block"), any());
+        Metadata meta = Metadata.builder().put(dfaMeta, false).build();
+            .build();
+            .put(IndexMetadata.SETTING_INDEX_UUID, uuid)
+        when(nodes.get("node1")).thenReturn(node);
+        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
+        );
+        assertEquals("false", result.metadata().index(dfaIndexName).getSettings().get(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey()));
+        RoutingTable routingTable = mock(RoutingTable.class);
+            .settings(tieringSettings)
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 1)
+     * The write blocks are added by TransportHotToWarmTierAction.addReadOnlyBlockAndPrepare()
+        tieringService.tieringIndices.add(testIndex);
+        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
+        tieringService.processTieringInProgress(clusterState, "test_source");
+        protected IndexModule.TieringState getTargetTieringState() {
+        when(resolver.concreteIndices(any(), any(), eq("bad-index"))).thenThrow(new IllegalArgumentException("Index not found"));
+            mock(ClusterInfoService.class),
+        when(routingTable.hasIndex(testIndex)).thenReturn(true);
+            .build();
+        Metadata meta = Metadata.builder().put(dfaHotMeta, false).build();
+        when(clusterState.routingTable()).thenReturn(routingTable);
+            IndexMetadata indexMetadata
+            .build();
+     * The write block is intentionally deferred — it must not be lifted during cancel because some
+    public void testUpdateIndexMetadataForTieringCancel_ThrowsOnError() {
+        TestTieringService service = new TestTieringService(
+        verify(clusterService, org.mockito.Mockito.atLeastOnce()).submitStateUpdateTask(
+        when(shard.started()).thenReturn(true);
+        );
+        // was in the original index metadata (null if never explicitly set).
+        // Verify number_of_replicas=1 is set atomically in both metadata and routing table
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            Settings.EMPTY,
+     */
+            mock(ClusterInfoService.class),
+        when(rtMock.hasIndex(dfaIndex)).thenReturn(true);
+        when(hotNode.isWarmNode()).thenReturn(false);
+        indexMetadata = IndexMetadata.builder("test-index").settings(indexSettings).numberOfShards(1).numberOfReplicas(2).build();
+            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
+            .blocks(ClusterBlocks.EMPTY_CLUSTER_BLOCK)
+            nodeEnvironment,
+        // The cancel task only sets IS_WARM=false and TIERING_STATE=HOT — it does not touch blocks.write.
+            .build();
+        String dfaIndexName = "dfa-toctou-index";
+            )
+        when(event.previousState()).thenReturn(previousState);
+        IllegalArgumentException e = expectThrows(
+            mock(ClusterInfoService.class),
+        when(badMetadata.getIndex()).thenReturn(new Index("bad-index", "bad-uuid"));
+        ClusterChangedEvent event = buildRoutingTableChangedEvent(clusterState);
+        ) {
+        tieringService.reconstructInProgressTieringRequests(clusterState, HOT_TO_WARM, "test_source");
+        Metadata.Builder metadataBuilder = mock(Metadata.Builder.class);
+            org.mockito.Mockito.contains("remove-write-block"),
+        when(clusterService.state()).thenReturn(state);
+     * Builds a DFA (pluggable dataformat enabled) IndexMetadata for block tests.
+        service.tieringIndices.add(testIndex);
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        }
+                allocationService,
+            );
+        IndexMetadata dfaHotMetaWithBlock = IndexMetadata.builder(dfaIndexName)
+            .build();
+            .put(IndexModule.IS_WARM_INDEX_SETTING.getKey(), true)
+        IndexMetadata dfaHotMeta = IndexMetadata.builder(dfaIndexName)
+            .put(INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), 0)
+        // Scan state: index exists with write block
+        public TestWarmToHotTieringService(
+            updatedMeta.getSettings().get(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey())
+            .build();
+        when(shard.currentNodeId()).thenReturn("node1");
+        );
+        String uuid = "non-dfa-hot-uuid";
+        when(rtMock.hasIndex(dfaIndex)).thenReturn(true);
+        // Cover execute()
+    }
+        assertFalse(
+        RoutingTable rtMock = mock(RoutingTable.class);
+        when(routingTable.allShards(testIndex.getName())).thenReturn(Collections.singletonList(shard));
+        ShardRouting shard = mock(ShardRouting.class);
+        when(rtMock.hasIndex(dfaIndex)).thenReturn(true);
+        service.tier(request, listener, clusterState);
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        tieringService.tieringIndices.add(testIndex);
+import org.opensearch.cluster.ClusterName;
+        verify(listener).onFailure(any(RuntimeException.class));
+            .numberOfReplicas(1)
+        1000,
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        Setting.Property.Dynamic,
+            .settings(oneReplicaSettings)
+            .build();
+        verify(listener).onResponse(any(ClusterStateUpdateResponse.class));
+            mock(AllocationService.class),
+        TestTieringService service = new TestTieringService(
+     * isDfaIndex() checks IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING = true.
+        assertNull("Tiering custom metadata should be removed", updatedMetadata.getCustomData(TIERING_CUSTOM_KEY));
+            .settings(idxSettings)
+            shardLimitValidator
+        ClusterState stateWithBlocks = ClusterState.builder(ClusterName.DEFAULT)
+        // Execute with null indexMetadata — covers the null check branch
+    }
+        Metadata metadata = mock(Metadata.class);
+            .put(INDEX_TIERING_STATE.getKey(), HOT_TO_WARM.toString())
+        when(routingTable.hasIndex(testIndex)).thenReturn(true);
+            mock(ClusterInfoService.class),
+        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
+        DiscoveryNodes previousNodes = mock(DiscoveryNodes.class);
+     * We must not block write-block removal waiting for those replicas.
+        IndexMetadata updatedMetadata = captor.getValue().build();
+    }
+    }
+        when(mockScanState.getNodes()).thenReturn(nodes);
+        assertNotNull(task.timeout());
+        assertTrue(tieringService.isIndexBeingTiered(testIndex));
+            .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT.toString())
+        when(clusterState.getNodes()).thenReturn(nodes);
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        IndexMetadata updatedMetadata = captor.getValue().build();
+        assertThat(e.getMessage(), org.hamcrest.Matchers.containsString("not currently undergoing tiering operation"));
+        Settings dfaHotSettings = Settings.builder()
+        // Trigger via clusterChanged
+            .build();
+            clusterService,
+        ArgumentCaptor<IndexMetadata.Builder> captor = ArgumentCaptor.forClass(IndexMetadata.Builder.class);
+                nodeEnvironment,
+            return IndexModule.TieringState.HOT;
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        // overrides this with "0-{max(1, currentReplicas)}" for the tiering start phase,
+        IndexMetadata idxMeta = IndexMetadata.builder("test-index").settings(idxSettings).numberOfShards(1).numberOfReplicas(1).build();
+            .put(IndexMetadata.SETTING_INDEX_UUID, "non-dfa-uuid")
+        when(clusterState.metadata()).thenReturn(metadata);
+        // Shard is on a hot node, target is WARM → not in target tier
+        // Cover onFailure — should not throw
+     * Null guard inside execute(): index deleted between scan and task execution —
+        when(resolver.concreteIndices(any(), any(), eq("test-index"))).thenReturn(new Index[] { testIndex });
+        service.tier(request, listener, realState);
+            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+        when(badMetadata.getSettings()).thenThrow(new RuntimeException("simulated"));
+        when(shard.unassigned()).thenReturn(false);
+            .build();
+            resolver,
+        service.clusterChanged(event);
+            .settings(dfaHotSettings)
+     *
+                .build();
+            .build();
+import java.util.List;
+    /**
+            Settings.EMPTY,
+        verify(clusterService).submitStateUpdateTask(anyString(), taskCaptor.capture());
+        AllocationService allocationSvc = mock(AllocationService.class);
+            .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), true)
+        // ClusterBlocks should remain unchanged (empty).
+    public void testCancelTiering_ExecuteTask() throws Exception {
+        verify(clusterService, org.mockito.Mockito.atLeastOnce()).submitStateUpdateTask(anyString(), taskCaptor.capture());
+            Set<Index> tieringEntries,
+            .metadata(meta)
+            .put(INDEX_TIERING_STATE.getKey(), "HOT")
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+        when(previousNodes.isLocalNodeElectedClusterManager()).thenReturn(false);
+        when(rtMock.allShards(dfaIndexName)).thenReturn(Collections.singletonList(shard));
+        ActionListener<ClusterStateUpdateResponse> listener = mock(ActionListener.class);
+            .put(IndexMetadata.SETTING_INDEX_UUID, dfaUuid)
+    private NodeEnvironment nodeEnvironment;
+     * (primary IS a primary), and {@code s.started()} is also false.
+            ClusterInfoService clusterInfoService,
+    public void testUpdateIndexMetadataForTieringStart_SetsNumberOfReplicasToOneAndUpdatesRoutingTable() {
+import org.opensearch.cluster.metadata.Metadata;
+            allocationSvc,
+    }
+        String dfaIndexName = "dfa-hot-no-block";
+            resolver,
+        when(rt.allShards("test-index")).thenReturn(Collections.emptyList());
+            clusterService,
+        ) {}
+        when(shard.started()).thenReturn(true);
+            .build();
+                .put(IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.getKey(), false)
+        when(currentState.routingTable()).thenReturn(routingTable);
+        AllocationService allocationSvc = mock(AllocationService.class);
+                .put(INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT)
+        ShardRouting primaryShard = mock(ShardRouting.class);
+        String dfaUuid = "dfa-still-tiering-uuid";

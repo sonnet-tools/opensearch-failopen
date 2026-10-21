@@ -1,203 +1,182 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
+import java.util.LinkedHashMap;
+                if (valuesAsString && value.isNaN() == false) {
+ * A single percentiles agg result parsed between nodes
  * not use this file except in compliance with the License.
+                            aggregation.addPercentileAsString(key, valueAsString);
+            for (Map.Entry<Double, Double> percentile : percentiles.entrySet()) {
+import org.opensearch.core.xcontent.XContentBuilder;
+    }
+    }
+        };
+ */
+                        if (valueAsString != null) {
+/*
+ * ownership. Elasticsearch licenses this file to you under
+    }
+                builder.startObject();
+            @Override
+                            parser.skipChildren(); // skip potential inner objects and arrays for forward compatibility
+ * KIND, either express or implied.  See the License for the
+    void addPercentileAsString(Double key, String valueAsString) {
+            builder.startObject(CommonFields.VALUES.getPreferredName());
+                    }
+                        builder.field(CommonFields.VALUE_AS_STRING.getPreferredName(), getPercentileAsString(key));
+        }
+                while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+                            }
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.aggregations.ParsedAggregation;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
-/**
- * A single percentiles agg result parsed between nodes
- *
+ * SPDX-License-Identifier: Apache-2.0
  * @opensearch.internal
- */
-public abstract class ParsedPercentiles extends ParsedAggregation implements Iterable<Percentile> {
-
-    protected final Map<Double, Double> percentiles = new LinkedHashMap<>();
-    protected final Map<Double, String> percentilesAsString = new HashMap<>();
-
-    private boolean keyed;
-
-    void addPercentile(Double key, Double value) {
-        percentiles.put(key, value);
-    }
-
-    void addPercentileAsString(Double key, String valueAsString) {
-        percentilesAsString.put(key, valueAsString);
-    }
-
-    protected Double getPercentile(double percent) {
-        if (percentiles.isEmpty()) {
-            return Double.NaN;
-        }
-        return percentiles.get(percent);
-    }
-
-    protected String getPercentileAsString(double percent) {
-        String valueAsString = percentilesAsString.get(percent);
-        if (valueAsString != null) {
-            return valueAsString;
-        }
-        Double value = getPercentile(percent);
-        if (value != null) {
-            return Double.toString(value);
-        }
-        return null;
-    }
-
-    void setKeyed(boolean keyed) {
-        this.keyed = keyed;
-    }
-
-    @Override
-    public Iterator<Percentile> iterator() {
-        return new Iterator<Percentile>() {
-            final Iterator<Map.Entry<Double, Double>> iterator = percentiles.entrySet().iterator();
-
-            @Override
-            public boolean hasNext() {
-                return iterator.hasNext();
-            }
-
-            @Override
-            public Percentile next() {
-                Map.Entry<Double, Double> next = iterator.next();
-                return new Percentile(next.getKey(), next.getValue());
-            }
-        };
-    }
-
-    @Override
-    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        final boolean valuesAsString = (percentilesAsString.isEmpty() == false);
-        if (keyed) {
-            builder.startObject(CommonFields.VALUES.getPreferredName());
-            for (Map.Entry<Double, Double> percentile : percentiles.entrySet()) {
-                Double key = percentile.getKey();
-                Double value = percentile.getValue();
-                builder.field(String.valueOf(key), value.isNaN() ? null : value);
-                if (valuesAsString && value.isNaN() == false) {
-                    builder.field(key + "_as_string", getPercentileAsString(key));
-                }
-            }
-            builder.endObject();
-        } else {
-            builder.startArray(CommonFields.VALUES.getPreferredName());
-            for (Map.Entry<Double, Double> percentile : percentiles.entrySet()) {
-                Double key = percentile.getKey();
-                builder.startObject();
-                {
-                    builder.field(CommonFields.KEY.getPreferredName(), key);
-                    Double value = percentile.getValue();
-                    builder.field(CommonFields.VALUE.getPreferredName(), value.isNaN() ? null : value);
-                    if (valuesAsString && value.isNaN() == false) {
-                        builder.field(CommonFields.VALUE_AS_STRING.getPreferredName(), getPercentileAsString(key));
-                    }
-                }
-                builder.endObject();
-            }
-            builder.endArray();
-        }
-        return builder;
-    }
-
-    protected static void declarePercentilesFields(ObjectParser<? extends ParsedPercentiles, Void> objectParser) {
-        ParsedAggregation.declareAggregationFields(objectParser);
-
-        objectParser.declareField((parser, aggregation, context) -> {
-            XContentParser.Token token = parser.currentToken();
-            if (token == XContentParser.Token.START_OBJECT) {
-                aggregation.setKeyed(true);
-                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                    if (token.isValue()) {
-                        if (token == XContentParser.Token.VALUE_NUMBER) {
-                            aggregation.addPercentile(Double.valueOf(parser.currentName()), parser.doubleValue());
-                        } else if (token == XContentParser.Token.VALUE_STRING) {
-                            int i = parser.currentName().indexOf("_as_string");
-                            if (i > 0) {
-                                double key = Double.valueOf(parser.currentName().substring(0, i));
-                                aggregation.addPercentileAsString(key, parser.text());
-                            } else {
-                                aggregation.addPercentile(Double.valueOf(parser.currentName()), Double.valueOf(parser.text()));
-                            }
-                        }
-                    } else if (token == XContentParser.Token.VALUE_NULL) {
-                        aggregation.addPercentile(Double.valueOf(parser.currentName()), Double.NaN);
-                    } else {
-                        parser.skipChildren(); // skip potential inner objects and arrays for forward compatibility
-                    }
-                }
-            } else if (token == XContentParser.Token.START_ARRAY) {
-                aggregation.setKeyed(false);
-
                 String currentFieldName = null;
-                while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+    @Override
+            builder.endArray();
+                    if (token.isValue()) {
+                        } else if (token == XContentParser.Token.VALUE_STRING) {
                     Double key = null;
-                    Double value = null;
+        if (keyed) {
+ *
+        return new Iterator<Percentile>() {
+            @Override
+            builder.startArray(CommonFields.VALUES.getPreferredName());
                     String valueAsString = null;
-
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                        if (token == XContentParser.Token.FIELD_NAME) {
-                            currentFieldName = parser.currentName();
-                        } else if (token.isValue()) {
-                            if (CommonFields.KEY.getPreferredName().equals(currentFieldName)) {
-                                key = parser.doubleValue();
-                            } else if (CommonFields.VALUE.getPreferredName().equals(currentFieldName)) {
-                                value = parser.doubleValue();
-                            } else if (CommonFields.VALUE_AS_STRING.getPreferredName().equals(currentFieldName)) {
-                                valueAsString = parser.text();
-                            }
-                        } else if (token == XContentParser.Token.VALUE_NULL) {
-                            value = Double.NaN;
-                        } else {
-                            parser.skipChildren(); // skip potential inner objects and arrays for forward compatibility
-                        }
-                    }
-                    if (key != null) {
-                        aggregation.addPercentile(key, value);
-                        if (valueAsString != null) {
-                            aggregation.addPercentileAsString(key, valueAsString);
-                        }
-                    }
+import org.opensearch.core.xcontent.ObjectParser;
                 }
-            }
-        }, CommonFields.VALUES, ObjectParser.ValueType.OBJECT_ARRAY);
     }
+            builder.endObject();
+                        parser.skipChildren(); // skip potential inner objects and arrays for forward compatibility
+    }
+import java.util.HashMap;
+        final boolean valuesAsString = (percentilesAsString.isEmpty() == false);
+        }
+    void addPercentile(Double key, Double value) {
+public abstract class ParsedPercentiles extends ParsedAggregation implements Iterable<Percentile> {
+                            value = Double.NaN;
+                    if (valuesAsString && value.isNaN() == false) {
+                            aggregation.addPercentile(Double.valueOf(parser.currentName()), parser.doubleValue());
+ *
+                    Double value = null;
+ * under the License.
+            final Iterator<Map.Entry<Double, Double>> iterator = percentiles.entrySet().iterator();
+ * compatible open source license.
+                        aggregation.addPercentile(Double.valueOf(parser.currentName()), Double.NaN);
+                return iterator.hasNext();
+/**
+                {
+ */
+                    builder.field(CommonFields.KEY.getPreferredName(), key);
+            if (token == XContentParser.Token.START_OBJECT) {
+            }
+        } else {
+                Double value = percentile.getValue();
+    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+                        if (token == XContentParser.Token.VALUE_NUMBER) {
+        return builder;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+            return Double.toString(value);
+                aggregation.setKeyed(false);
+                builder.endObject();
+                                valueAsString = parser.text();
+        }
+                    Double value = percentile.getValue();
+        return percentiles.get(percent);
+            for (Map.Entry<Double, Double> percentile : percentiles.entrySet()) {
+                            } else if (CommonFields.VALUE_AS_STRING.getPreferredName().equals(currentFieldName)) {
+    protected final Map<Double, String> percentilesAsString = new HashMap<>();
+ * the Apache License, Version 2.0 (the "License"); you may
+            }
+ * Licensed to Elasticsearch under one or more contributor
+ * specific language governing permissions and limitations
+ * GitHub history for details.
+    protected String getPercentileAsString(double percent) {
+                }
+                        } else if (token.isValue()) {
+                                key = parser.doubleValue();
+    protected final Map<Double, Double> percentiles = new LinkedHashMap<>();
+                            currentFieldName = parser.currentName();
+                    } else if (token == XContentParser.Token.VALUE_NULL) {
+            XContentParser.Token token = parser.currentToken();
+ * software distributed under the License is distributed on an
+    public Iterator<Percentile> iterator() {
+            return Double.NaN;
+ * The OpenSearch Contributors require contributions made to
+ */
+                                aggregation.addPercentile(Double.valueOf(parser.currentName()), Double.valueOf(parser.text()));
+                Double key = percentile.getKey();
+        }, CommonFields.VALUES, ObjectParser.ValueType.OBJECT_ARRAY);
+                        }
+                builder.field(String.valueOf(key), value.isNaN() ? null : value);
+                        if (token == XContentParser.Token.FIELD_NAME) {
+            public boolean hasNext() {
+                }
+        percentiles.put(key, value);
+            }
+    }
+                    builder.field(key + "_as_string", getPercentileAsString(key));
+        this.keyed = keyed;
+                            } else {
+                            }
+                        aggregation.addPercentile(key, value);
+ * license agreements. See the NOTICE file distributed with
+/*
+                Map.Entry<Double, Double> next = iterator.next();
+                    builder.field(CommonFields.VALUE.getPreferredName(), value.isNaN() ? null : value);
+import java.util.Map;
+                        } else {
+        if (valueAsString != null) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * Unless required by applicable law or agreed to in writing,
+        if (value != null) {
+        objectParser.declareField((parser, aggregation, context) -> {
+            }
+    protected Double getPercentile(double percent) {
+        return null;
+                    }
+package org.opensearch.search.aggregations.metrics;
+            }
+                        }
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+                        }
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                            int i = parser.currentName().indexOf("_as_string");
+                    }
+    private boolean keyed;
+ */
+            return valueAsString;
+                                value = parser.doubleValue();
+                    } else {
+ * this work for additional information regarding copyright
+import java.io.IOException;
+    }
+                                aggregation.addPercentileAsString(key, parser.text());
+                            if (i > 0) {
+                return new Percentile(next.getKey(), next.getValue());
+ *
+                    }
+                            } else if (CommonFields.VALUE.getPreferredName().equals(currentFieldName)) {
+ * this file be licensed under the Apache-2.0 license or a
+            public Percentile next() {
+                aggregation.setKeyed(true);
+        ParsedAggregation.declareAggregationFields(objectParser);
+    void setKeyed(boolean keyed) {
+    protected static void declarePercentilesFields(ObjectParser<? extends ParsedPercentiles, Void> objectParser) {
+                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                                double key = Double.valueOf(parser.currentName().substring(0, i));
+        percentilesAsString.put(key, valueAsString);
+    @Override
+        Double value = getPercentile(percent);
+import org.opensearch.core.xcontent.XContentParser;
+        if (percentiles.isEmpty()) {
+                            if (CommonFields.KEY.getPreferredName().equals(currentFieldName)) {
+/*
+                        } else if (token == XContentParser.Token.VALUE_NULL) {
+                    if (key != null) {
+import java.util.Iterator;
 }
+                }
+        String valueAsString = percentilesAsString.get(percent);
+                Double key = percentile.getKey();
+import org.opensearch.search.aggregations.ParsedAggregation;
+            } else if (token == XContentParser.Token.START_ARRAY) {

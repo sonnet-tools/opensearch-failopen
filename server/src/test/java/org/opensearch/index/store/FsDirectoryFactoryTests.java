@@ -1,254 +1,236 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.store;
-
-import org.apache.lucene.store.DataAccessHint;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.MMapDirectory;
-import org.apache.lucene.store.MergeInfo;
-import org.apache.lucene.store.NIOFSDirectory;
-import org.apache.lucene.store.NoLockFactory;
-import org.apache.lucene.store.ReadAdvice;
-import org.apache.lucene.util.Constants;
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexModule;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.shard.ShardPath;
-import org.opensearch.test.IndexSettingsModule;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.lang.reflect.Field;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Locale;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.BiFunction;
-import java.util.function.BiPredicate;
-
-import static org.opensearch.test.store.MockFSDirectoryFactory.FILE_SYSTEM_BASED_STORE_TYPES;
-
-public class FsDirectoryFactoryTests extends OpenSearchTestCase {
-
-    public void testPreload() throws IOException {
-        doTestPreload();
-        doTestPreload("nvd", "dvd", "tim");
-        doTestPreload("*");
-        Settings build = Settings.builder()
-            .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.HYBRIDFS.name().toLowerCase(Locale.ROOT))
-            .putList(IndexModule.INDEX_STORE_PRE_LOAD_SETTING.getKey(), "dvd", "bar")
-            .build();
-        try (Directory directory = newDirectory(build)) {
-            assertTrue(FsDirectoryFactory.isHybridFs(directory));
-            FsDirectoryFactory.HybridDirectory hybridDirectory = (FsDirectoryFactory.HybridDirectory) directory;
-            // test default hybrid extensions
-            // true->mmap, false->nio
-            assertTrue(hybridDirectory.useDelegate("foo.nvd"));
-            assertTrue(hybridDirectory.useDelegate("foo.dvd"));
-            assertTrue(hybridDirectory.useDelegate("foo.tim"));
-            assertTrue(hybridDirectory.useDelegate("foo.tip"));
-            assertTrue(hybridDirectory.useDelegate("foo.dim"));
-            assertTrue(hybridDirectory.useDelegate("foo.kdd"));
-            assertTrue(hybridDirectory.useDelegate("foo.kdi"));
-            assertTrue(hybridDirectory.useDelegate("foo.cfs"));
-            assertTrue(hybridDirectory.useDelegate("foo.doc"));
-            assertTrue(hybridDirectory.useDelegate("foo.new"));
-            assertFalse(hybridDirectory.useDelegate("foo.pos"));
-            assertFalse(hybridDirectory.useDelegate("foo.pay"));
-        }
-        build = Settings.builder()
-            .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.HYBRIDFS.name().toLowerCase(Locale.ROOT))
-            .putList(IndexModule.INDEX_STORE_PRE_LOAD_SETTING.getKey(), "nvd", "dvd", "cfs")
-            .putList(IndexModule.INDEX_STORE_HYBRID_NIO_EXTENSIONS.getKey(), "tip", "dim", "kdd", "kdi", "cfs", "doc", "new")
-            .build();
-        try (Directory directory = newDirectory(build)) {
-            assertTrue(FsDirectoryFactory.isHybridFs(directory));
-            FsDirectoryFactory.HybridDirectory hybridDirectory = (FsDirectoryFactory.HybridDirectory) directory;
-            // test custom hybrid nio extensions
-            // true->mmap, false->nio
-            assertTrue(hybridDirectory.useDelegate("foo.nvd"));
-            assertTrue(hybridDirectory.useDelegate("foo.dvd"));
-            assertTrue(hybridDirectory.useDelegate("foo.tim"));
-            assertTrue(hybridDirectory.useDelegate("foo.pos"));
-            assertTrue(hybridDirectory.useDelegate("foo.pay"));
-            assertFalse(hybridDirectory.useDelegate("foo.new"));
-            assertFalse(hybridDirectory.useDelegate("foo.tip"));
-            assertFalse(hybridDirectory.useDelegate("foo.dim"));
-            assertFalse(hybridDirectory.useDelegate("foo.kdd"));
-            assertFalse(hybridDirectory.useDelegate("foo.kdi"));
-            assertFalse(hybridDirectory.useDelegate("foo.cfs"));
-            assertFalse(hybridDirectory.useDelegate("foo.doc"));
-        }
-        build = Settings.builder()
-            .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.HYBRIDFS.name().toLowerCase(Locale.ROOT))
-            .putList(IndexModule.INDEX_STORE_PRE_LOAD_SETTING.getKey(), "nvd", "dvd", "cfs")
-            .putList(IndexModule.INDEX_STORE_HYBRID_NIO_EXTENSIONS.getKey())
-            .build();
-        try (Directory directory = newDirectory(build)) {
-            assertTrue(FsDirectoryFactory.isHybridFs(directory));
-            FsDirectoryFactory.HybridDirectory hybridDirectory = (FsDirectoryFactory.HybridDirectory) directory;
-            // test custom hybrid mmap extensions
-            // true->mmap, false->nio
-            assertTrue(hybridDirectory.useDelegate("foo.new"));
-            assertTrue(hybridDirectory.useDelegate("foo.nvd"));
-            assertTrue(hybridDirectory.useDelegate("foo.dvd"));
-            assertTrue(hybridDirectory.useDelegate("foo.cfs"));
-            assertTrue(hybridDirectory.useDelegate("foo.doc"));
-        }
-    }
-
-    private Directory newDirectory(Settings settings) throws IOException {
-        IndexSettings idxSettings = IndexSettingsModule.newIndexSettings("foo", settings);
-        Path tempDir = createTempDir().resolve(idxSettings.getUUID()).resolve("0");
-        Files.createDirectories(tempDir);
-        ShardPath path = new ShardPath(false, tempDir, tempDir, new ShardId(idxSettings.getIndex(), 0));
-        return new FsDirectoryFactory().newDirectory(idxSettings, path);
-    }
-
-    private void doTestPreload(String... preload) {
-        Set<String> preloadSet = Set.of(preload);
-        if (preload.length == 0) {
-            assertFalse(FsDirectoryFactory.createPreloadPredicate(preloadSet).test("file", null));
-        } else if (Arrays.asList(preload).contains("*")) {
-            assertTrue(FsDirectoryFactory.createPreloadPredicate(preloadSet).test("file", null));
-        } else {
-            BiPredicate<String, IOContext> preloadPredicate = FsDirectoryFactory.createPreloadPredicate(preloadSet);
-            for (String ext : preload) {
-                assertTrue("ext: " + ext, preloadPredicate.test("foo." + ext, null));
-            }
-            assertFalse(preloadPredicate.test("XXX", null));
-        }
-    }
-
-    public void testStoreDirectory() throws IOException {
-        Index index = new Index("foo", "fooUUID");
-        final Path tempDir = createTempDir().resolve(index.getUUID()).resolve("0");
-        // default
-        doTestStoreDirectory(tempDir, null, IndexModule.Type.FS);
-        // explicit directory impls
-        for (IndexModule.Type type : FILE_SYSTEM_BASED_STORE_TYPES) {
-            doTestStoreDirectory(tempDir, type.name().toLowerCase(Locale.ROOT), type);
-        }
-    }
-
-    private void doTestStoreDirectory(Path tempDir, String typeSettingValue, IndexModule.Type type) throws IOException {
-        Settings.Builder settingsBuilder = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT);
-        if (typeSettingValue != null) {
-            settingsBuilder.put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), typeSettingValue);
-        }
-        Settings settings = settingsBuilder.build();
-        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings("foo", settings);
-        FsDirectoryFactory service = new FsDirectoryFactory();
         try (Directory directory = service.newFSDirectory(tempDir, NoLockFactory.INSTANCE, indexSettings)) {
-            switch (type) {
-                case HYBRIDFS:
-                    assertTrue(FsDirectoryFactory.isHybridFs(directory));
-                    mMapDirectoryHasReadAdviceByContext(((FsDirectoryFactory.HybridDirectory) directory).getDelegate());
-                    break;
+import org.opensearch.index.IndexModule;
+            assertTrue(FsDirectoryFactory.isHybridFs(directory));
                 // simplefs was removed in Lucene 9; support for enum is maintained for bwc
-                case SIMPLEFS:
-                case NIOFS:
-                    assertTrue(type + " " + directory.toString(), directory instanceof NIOFSDirectory);
-                    break;
-                case MMAPFS:
-                    assertTrue(type + " " + directory.toString(), directory instanceof MMapDirectory);
-                    mMapDirectoryHasReadAdviceByContext((MMapDirectory) directory);
-                    break;
-                case FS:
-                    if (Constants.JRE_IS_64BIT) {
-                        assertTrue(FsDirectoryFactory.isHybridFs(directory));
-                    } else {
-                        assertTrue(directory.toString(), directory instanceof NIOFSDirectory);
-                    }
-                    break;
-                default:
                     fail();
-            }
-        }
-    }
-
-    @SuppressForbidden(reason = "Need to check the readAdvise as there is no getter on read advise")
-    private void mMapDirectoryHasReadAdviceByContext(MMapDirectory mapDirectory) {
-        try {
-            @SuppressWarnings("unchecked")
-            BiFunction<String, IOContext, Optional<ReadAdvice>> readAdvice = (BiFunction<
-                String,
-                IOContext,
-                Optional<ReadAdvice>>) getReadAdviceField(mapDirectory);
-
-            // Verify the function behaves identically to ADVISE_BY_CONTEXT
-            // ADVISE_BY_CONTEXT returns the ReadAdvice from the IOContext
             assertEquals(
-                "Advise By context is not set",
-                MMapDirectory.ADVISE_BY_CONTEXT.apply("test.dvd", IOContext.DEFAULT),
-                readAdvice.apply("test.dvd", IOContext.DEFAULT)
-            );
-            assertEquals(
-                "Advise By context is not set",
-                MMapDirectory.ADVISE_BY_CONTEXT.apply("test.tim", IOContext.READONCE),
-                readAdvice.apply("test.tim", IOContext.READONCE)
-            );
-            MergeInfo mergeInfo = new MergeInfo(100, 100L, false, 1);
-            assertEquals(
-                "Advise By context is not set",
-                MMapDirectory.ADVISE_BY_CONTEXT.apply("test.vec", IOContext.merge(mergeInfo)),
                 readAdvice.apply("test.vec", IOContext.merge(mergeInfo).withHints())
+        doTestPreload();
+            assertTrue(hybridDirectory.useDelegate("foo.cfs"));
+            .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.HYBRIDFS.name().toLowerCase(Locale.ROOT))
+import java.io.IOException;
+        try (Directory directory = newDirectory(build)) {
+                    if (Constants.JRE_IS_64BIT) {
             );
-
-            assertEquals(
+/*
+        Files.createDirectories(tempDir);
+            .build();
+import org.apache.lucene.store.NoLockFactory;
+                    } else {
+        try (Directory directory = newDirectory(build)) {
+            @SuppressWarnings("unchecked")
+import org.apache.lucene.store.MMapDirectory;
+            assertTrue(hybridDirectory.useDelegate("foo.new"));
+import org.apache.lucene.store.DataAccessHint;
+                    }
+        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings("foo", settings);
+            MergeInfo mergeInfo = new MergeInfo(100, 100L, false, 1);
+            assertFalse(hybridDirectory.useDelegate("foo.new"));
+            settingsBuilder.put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), typeSettingValue);
+            assertTrue(hybridDirectory.useDelegate("foo.dvd"));
+ * compatible open source license.
+        return new FsDirectoryFactory().newDirectory(idxSettings, path);
+            assertTrue(hybridDirectory.useDelegate("foo.doc"));
                 "Advise By context is not set",
-                MMapDirectory.ADVISE_BY_CONTEXT.apply("test.vec", IOContext.DEFAULT.withHints(DataAccessHint.RANDOM)),
-                readAdvice.apply("test.vec", IOContext.DEFAULT.withHints(DataAccessHint.RANDOM))
-            );
-
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to verify read advice is set to ADVISE_BY_CONTEXT: ", e);
+                    break;
+        IndexSettings idxSettings = IndexSettingsModule.newIndexSettings("foo", settings);
+            assertFalse(hybridDirectory.useDelegate("foo.dim"));
+                case SIMPLEFS:
+                    assertTrue(type + " " + directory.toString(), directory instanceof NIOFSDirectory);
+                readAdvice.apply("test.tim", IOContext.READONCE)
+public class FsDirectoryFactoryTests extends OpenSearchTestCase {
+import org.opensearch.common.settings.Settings;
+        Index index = new Index("foo", "fooUUID");
+                default:
+            assertTrue(FsDirectoryFactory.isHybridFs(directory));
+            assertFalse(hybridDirectory.useDelegate("foo.tip"));
+            assertTrue(hybridDirectory.useDelegate("foo.nvd"));
+            .build();
+            // true->mmap, false->nio
+            // test default hybrid extensions
+                    break;
+ *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * not use this file except in compliance with the License.
+                        assertTrue(FsDirectoryFactory.isHybridFs(directory));
+        if (preload.length == 0) {
+        build = Settings.builder()
+ */
+        FsDirectoryFactory service = new FsDirectoryFactory();
+            switch (type) {
         }
-
-    }
-
-    @SuppressForbidden(reason = "need reflection to access private readAdvice field for testing")
-    private Object getReadAdviceField(MMapDirectory mMapDirectory) throws Exception {
+                case FS:
+            throw new RuntimeException("Failed to verify read advice is set to ADVISE_BY_CONTEXT: ", e);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            // test custom hybrid mmap extensions
+ * Modifications Copyright OpenSearch Contributors. See
         Field readAdviceField = MMapDirectory.class.getDeclaredField("readAdvice");
-        readAdviceField.setAccessible(true);
-        return readAdviceField.get(mMapDirectory);
+            assertTrue(hybridDirectory.useDelegate("foo.kdd"));
+            FsDirectoryFactory.HybridDirectory hybridDirectory = (FsDirectoryFactory.HybridDirectory) directory;
+                "Advise By context is not set",
     }
-
+                case NIOFS:
+                MMapDirectory.ADVISE_BY_CONTEXT.apply("test.vec", IOContext.DEFAULT.withHints(DataAccessHint.RANDOM)),
+        }
+                "Advise By context is not set",
+import org.opensearch.test.OpenSearchTestCase;
+    private Object getReadAdviceField(MMapDirectory mMapDirectory) throws Exception {
+        doTestPreload("nvd", "dvd", "tim");
+    private void mMapDirectoryHasReadAdviceByContext(MMapDirectory mapDirectory) {
+            // true->mmap, false->nio
+import org.opensearch.test.IndexSettingsModule;
+        }
+            .putList(IndexModule.INDEX_STORE_PRE_LOAD_SETTING.getKey(), "nvd", "dvd", "cfs")
+        Settings.Builder settingsBuilder = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT);
+import static org.opensearch.test.store.MockFSDirectoryFactory.FILE_SYSTEM_BASED_STORE_TYPES;
+                    mMapDirectoryHasReadAdviceByContext((MMapDirectory) directory);
+ * GitHub history for details.
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.Version;
+import java.lang.reflect.Field;
+        // explicit directory impls
+ * Unless required by applicable law or agreed to in writing,
+import java.nio.file.Files;
+            assertTrue(hybridDirectory.useDelegate("foo.doc"));
+import org.apache.lucene.store.Directory;
+            assertFalse(hybridDirectory.useDelegate("foo.kdi"));
+ * specific language governing permissions and limitations
+            .putList(IndexModule.INDEX_STORE_HYBRID_NIO_EXTENSIONS.getKey(), "tip", "dim", "kdd", "kdi", "cfs", "doc", "new")
+            assertFalse(hybridDirectory.useDelegate("foo.doc"));
+            assertTrue(hybridDirectory.useDelegate("foo.new"));
+            BiPredicate<String, IOContext> preloadPredicate = FsDirectoryFactory.createPreloadPredicate(preloadSet);
+import java.util.function.BiFunction;
+            assertFalse(hybridDirectory.useDelegate("foo.pay"));
+import org.apache.lucene.util.Constants;
+                case MMAPFS:
+            assertEquals(
+            assertTrue(hybridDirectory.useDelegate("foo.pos"));
 }
+            assertFalse(FsDirectoryFactory.createPreloadPredicate(preloadSet).test("file", null));
+ * this work for additional information regarding copyright
+    public void testStoreDirectory() throws IOException {
+import java.util.Arrays;
+import org.apache.lucene.store.IOContext;
+            assertTrue(hybridDirectory.useDelegate("foo.nvd"));
+        final Path tempDir = createTempDir().resolve(index.getUUID()).resolve("0");
+ *
+ */
+                MMapDirectory.ADVISE_BY_CONTEXT.apply("test.dvd", IOContext.DEFAULT),
+        if (typeSettingValue != null) {
+            .build();
+                readAdvice.apply("test.vec", IOContext.DEFAULT.withHints(DataAccessHint.RANDOM))
+ */
+            );
+                IOContext,
+package org.opensearch.index.store;
+        } else {
+            FsDirectoryFactory.HybridDirectory hybridDirectory = (FsDirectoryFactory.HybridDirectory) directory;
+            for (String ext : preload) {
+ * ownership. Elasticsearch licenses this file to you under
+ * KIND, either express or implied.  See the License for the
+import org.apache.lucene.store.MergeInfo;
+            assertFalse(hybridDirectory.useDelegate("foo.pos"));
+            }
+ *
+import java.util.Optional;
+        for (IndexModule.Type type : FILE_SYSTEM_BASED_STORE_TYPES) {
+        readAdviceField.setAccessible(true);
+/*
+ * under the License.
+            assertTrue(hybridDirectory.useDelegate("foo.cfs"));
+            assertTrue(hybridDirectory.useDelegate("foo.dvd"));
+import org.apache.lucene.store.NIOFSDirectory;
+            .putList(IndexModule.INDEX_STORE_PRE_LOAD_SETTING.getKey(), "nvd", "dvd", "cfs")
+        // default
+import org.apache.lucene.store.ReadAdvice;
+                MMapDirectory.ADVISE_BY_CONTEXT.apply("test.tim", IOContext.READONCE),
+                    assertTrue(FsDirectoryFactory.isHybridFs(directory));
+    @SuppressForbidden(reason = "need reflection to access private readAdvice field for testing")
+        }
+        Settings build = Settings.builder()
+    public void testPreload() throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+    }
+import org.opensearch.index.shard.ShardPath;
+            }
+    }
+            .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.HYBRIDFS.name().toLowerCase(Locale.ROOT))
+                case HYBRIDFS:
+        build = Settings.builder()
+                assertTrue("ext: " + ext, preloadPredicate.test("foo." + ext, null));
+            .put(IndexModule.INDEX_STORE_TYPE_SETTING.getKey(), IndexModule.Type.HYBRIDFS.name().toLowerCase(Locale.ROOT))
+                        assertTrue(directory.toString(), directory instanceof NIOFSDirectory);
+            BiFunction<String, IOContext, Optional<ReadAdvice>> readAdvice = (BiFunction<
+            assertTrue(hybridDirectory.useDelegate("foo.nvd"));
+                "Advise By context is not set",
+            );
+    private void doTestStoreDirectory(Path tempDir, String typeSettingValue, IndexModule.Type type) throws IOException {
+                    break;
+                Optional<ReadAdvice>>) getReadAdviceField(mapDirectory);
+                    break;
+            assertTrue(FsDirectoryFactory.isHybridFs(directory));
+    private void doTestPreload(String... preload) {
+            doTestStoreDirectory(tempDir, type.name().toLowerCase(Locale.ROOT), type);
+            assertTrue(hybridDirectory.useDelegate("foo.tim"));
+                readAdvice.apply("test.dvd", IOContext.DEFAULT)
+import org.opensearch.common.SuppressForbidden;
+        try (Directory directory = newDirectory(build)) {
+            );
+    }
+            // Verify the function behaves identically to ADVISE_BY_CONTEXT
+            FsDirectoryFactory.HybridDirectory hybridDirectory = (FsDirectoryFactory.HybridDirectory) directory;
+    }
+    @SuppressForbidden(reason = "Need to check the readAdvise as there is no getter on read advise")
+            assertFalse(hybridDirectory.useDelegate("foo.cfs"));
+ * license agreements. See the NOTICE file distributed with
+ * You may obtain a copy of the License at
+        } else if (Arrays.asList(preload).contains("*")) {
+            assertTrue(hybridDirectory.useDelegate("foo.dim"));
+import java.util.function.BiPredicate;
+        Path tempDir = createTempDir().resolve(idxSettings.getUUID()).resolve("0");
+import java.util.Locale;
+        return readAdviceField.get(mMapDirectory);
+                MMapDirectory.ADVISE_BY_CONTEXT.apply("test.vec", IOContext.merge(mergeInfo)),
+        }
+        ShardPath path = new ShardPath(false, tempDir, tempDir, new ShardId(idxSettings.getIndex(), 0));
+            // true->mmap, false->nio
+            assertEquals(
+                    mMapDirectoryHasReadAdviceByContext(((FsDirectoryFactory.HybridDirectory) directory).getDelegate());
+        Set<String> preloadSet = Set.of(preload);
+            assertTrue(hybridDirectory.useDelegate("foo.pay"));
+import org.opensearch.core.index.Index;
+ * this file be licensed under the Apache-2.0 license or a
+            assertTrue(hybridDirectory.useDelegate("foo.tip"));
+            assertTrue(hybridDirectory.useDelegate("foo.dvd"));
+            assertTrue(FsDirectoryFactory.createPreloadPredicate(preloadSet).test("file", null));
+ * Licensed to Elasticsearch under one or more contributor
+        } catch (Exception e) {
+            // ADVISE_BY_CONTEXT returns the ReadAdvice from the IOContext
+        }
+            assertEquals(
+        Settings settings = settingsBuilder.build();
+    }
+            .putList(IndexModule.INDEX_STORE_PRE_LOAD_SETTING.getKey(), "dvd", "bar")
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+                String,
+/*
+    private Directory newDirectory(Settings settings) throws IOException {
+ * software distributed under the License is distributed on an
+            assertFalse(preloadPredicate.test("XXX", null));
+        doTestStoreDirectory(tempDir, null, IndexModule.Type.FS);
+            assertTrue(hybridDirectory.useDelegate("foo.kdi"));
+        doTestPreload("*");
+            .putList(IndexModule.INDEX_STORE_HYBRID_NIO_EXTENSIONS.getKey())
+        try {
+import java.util.Set;
+                    assertTrue(type + " " + directory.toString(), directory instanceof MMapDirectory);
+import java.nio.file.Path;
+        }
+    }
+            assertTrue(hybridDirectory.useDelegate("foo.tim"));
+            // test custom hybrid nio extensions
+import org.opensearch.index.IndexSettings;
+            assertFalse(hybridDirectory.useDelegate("foo.kdd"));
+import org.opensearch.core.index.shard.ShardId;

@@ -1,272 +1,239 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.transport;
-
-import org.opensearch.common.bytes.ReleasableBytesReference;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.breaker.CircuitBreakingException;
 import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.bytes.CompositeBytesReference;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
-
-/**
- * Aggregates inbound data
- *
- * @opensearch.internal
- */
-public class InboundAggregator implements Releasable {
-
-    private final Supplier<CircuitBreaker> circuitBreaker;
-    private final Predicate<String> requestCanTripBreaker;
-
-    private ReleasableBytesReference firstContent;
-    private ArrayList<ReleasableBytesReference> contentAggregation;
-    private Header currentHeader;
-    private Exception aggregationException;
-    private boolean canTripBreaker = true;
-    private boolean isClosed = false;
-
-    public InboundAggregator(
-        Supplier<CircuitBreaker> circuitBreaker,
-        Function<String, RequestHandlerRegistry<TransportRequest>> registryFunction
-    ) {
-        this(circuitBreaker, (Predicate<String>) actionName -> {
-            final RequestHandlerRegistry<TransportRequest> reg = registryFunction.apply(actionName);
-            if (reg == null) {
-                throw new ActionNotFoundTransportException(actionName);
-            } else {
-                return reg.canTripCircuitBreaker();
-            }
-        });
-    }
-
-    // Visible for testing
-    InboundAggregator(Supplier<CircuitBreaker> circuitBreaker, Predicate<String> requestCanTripBreaker) {
-        this.circuitBreaker = circuitBreaker;
-        this.requestCanTripBreaker = requestCanTripBreaker;
-    }
-
-    public void headerReceived(Header header) {
-        ensureOpen();
-        assert isAggregating() == false;
-        assert firstContent == null && contentAggregation == null;
-        currentHeader = header;
-        if (currentHeader.isRequest() && currentHeader.needsToReadVariableHeader() == false) {
-            initializeRequestState();
-        }
-    }
-
-    public void aggregate(ReleasableBytesReference content) {
-        ensureOpen();
-        assert isAggregating();
-        if (isShortCircuited() == false) {
-            if (isFirstContent()) {
-                firstContent = content.retain();
-            } else {
-                if (contentAggregation == null) {
-                    contentAggregation = new ArrayList<>(4);
-                    assert firstContent != null;
-                    contentAggregation.add(firstContent);
-                    firstContent = null;
-                }
-                contentAggregation.add(content.retain());
-            }
-        }
-    }
-
-    public InboundMessage finishAggregation() throws IOException {
-        ensureOpen();
-        final ReleasableBytesReference releasableContent;
         if (isFirstContent()) {
-            releasableContent = ReleasableBytesReference.wrap(BytesArray.EMPTY);
-        } else if (contentAggregation == null) {
-            releasableContent = firstContent;
-        } else {
-            final ReleasableBytesReference[] references = contentAggregation.toArray(new ReleasableBytesReference[0]);
-            final BytesReference content = CompositeBytesReference.of(references);
-            releasableContent = new ReleasableBytesReference(content, () -> Releasables.close(references));
-        }
-
-        final BreakerControl breakerControl = new BreakerControl(circuitBreaker);
-        final InboundMessage aggregated = new InboundMessage(currentHeader, releasableContent, breakerControl);
-        boolean success = false;
-        try {
-            if (aggregated.getHeader().needsToReadVariableHeader()) {
-                aggregated.getHeader().finishParsingHeader(aggregated.openOrGetStreamInput());
-                if (aggregated.getHeader().isRequest()) {
-                    initializeRequestState();
-                }
-            }
-            if (isShortCircuited() == false) {
-                checkBreaker(aggregated.getHeader(), aggregated.getContentLength(), breakerControl);
-            }
-            if (isShortCircuited()) {
-                aggregated.close();
-                success = true;
-                return new InboundMessage(aggregated.getHeader(), aggregationException);
-            } else {
-                success = true;
-                return aggregated;
-            }
-        } finally {
-            resetCurrentAggregation();
-            if (success == false) {
-                aggregated.close();
-            }
-        }
-    }
-
-    public boolean isAggregating() {
-        return currentHeader != null;
-    }
-
-    private void shortCircuit(Exception exception) {
-        this.aggregationException = exception;
-    }
-
-    private boolean isShortCircuited() {
-        return aggregationException != null;
-    }
-
-    private boolean isFirstContent() {
-        return firstContent == null && contentAggregation == null;
-    }
-
-    @Override
-    public void close() {
-        isClosed = true;
-        closeCurrentAggregation();
-    }
-
-    private void closeCurrentAggregation() {
-        releaseContent();
-        resetCurrentAggregation();
-    }
-
-    private void releaseContent() {
-        if (contentAggregation == null) {
-            Releasables.close(firstContent);
-        } else {
-            Releasables.close(contentAggregation);
-        }
-    }
-
-    private void resetCurrentAggregation() {
-        firstContent = null;
-        contentAggregation = null;
-        currentHeader = null;
-        aggregationException = null;
         canTripBreaker = true;
-    }
-
-    private void ensureOpen() {
-        if (isClosed) {
-            throw new IllegalStateException("Aggregator is already closed");
-        }
-    }
-
-    private void initializeRequestState() {
-        assert currentHeader.needsToReadVariableHeader() == false;
-        assert currentHeader.isRequest();
-        if (currentHeader.isHandshake()) {
-            canTripBreaker = false;
-            return;
-        }
-
-        final String actionName = currentHeader.getActionName();
-        try {
-            canTripBreaker = requestCanTripBreaker.test(actionName);
-        } catch (ActionNotFoundTransportException e) {
+                firstContent = content.retain();
+        assert isAggregating();
+        Supplier<CircuitBreaker> circuitBreaker,
+/*
             shortCircuit(e);
-        }
-    }
-
-    private void checkBreaker(final Header header, final int contentLength, final BreakerControl breakerControl) {
-        if (header.isRequest() == false) {
-            return;
-        }
-        assert header.needsToReadVariableHeader() == false;
-
-        if (canTripBreaker) {
-            try {
-                circuitBreaker.get().addEstimateBytesAndMaybeBreak(contentLength, header.getActionName());
-                breakerControl.setReservedBytes(contentLength);
-            } catch (CircuitBreakingException e) {
-                shortCircuit(e);
-            }
-        } else {
-            circuitBreaker.get().addWithoutBreaking(contentLength);
-            breakerControl.setReservedBytes(contentLength);
-        }
-    }
-
-    /**
      * Internal circuit breaker control
-     *
-     * @opensearch.internal
-     */
-    private static class BreakerControl implements Releasable {
-
-        private static final int CLOSED = -1;
-
-        private final Supplier<CircuitBreaker> circuitBreaker;
-        private final AtomicInteger bytesToRelease = new AtomicInteger(0);
-
-        private BreakerControl(Supplier<CircuitBreaker> circuitBreaker) {
-            this.circuitBreaker = circuitBreaker;
-        }
-
-        private void setReservedBytes(int reservedBytes) {
-            final boolean set = bytesToRelease.compareAndSet(0, reservedBytes);
+                aggregated.close();
+        try {
+        } else {
+            final RequestHandlerRegistry<TransportRequest> reg = registryFunction.apply(actionName);
+ * this file be licensed under the Apache-2.0 license or a
+                if (contentAggregation == null) {
+        return currentHeader != null;
+    @Override
+import java.util.function.Function;
             assert set : "Expected bytesToRelease to be 0, found " + bytesToRelease.get();
-        }
-
-        @Override
-        public void close() {
+        ensureOpen();
+                    firstContent = null;
+        aggregationException = null;
+            if (isShortCircuited() == false) {
+            if (aggregated.getHeader().needsToReadVariableHeader()) {
+        this.requestCanTripBreaker = requestCanTripBreaker;
+            circuitBreaker.get().addWithoutBreaking(contentLength);
+     */
+        this.aggregationException = exception;
+            if (isShortCircuited()) {
+            } else {
+            releasableContent = ReleasableBytesReference.wrap(BytesArray.EMPTY);
+        final InboundMessage aggregated = new InboundMessage(currentHeader, releasableContent, breakerControl);
+    }
+    }
+    }
+                return aggregated;
+        if (contentAggregation == null) {
+ * the Apache License, Version 2.0 (the "License"); you may
             final int toRelease = bytesToRelease.getAndSet(CLOSED);
-            assert toRelease != CLOSED;
-            if (toRelease > 0) {
-                circuitBreaker.get().addWithoutBreaking(-toRelease);
+        Function<String, RequestHandlerRegistry<TransportRequest>> registryFunction
+        private void setReservedBytes(int reservedBytes) {
+    private void releaseContent() {
+    }
+    }
+    }
+ */
+            if (isFirstContent()) {
+        assert isAggregating() == false;
+        }
+                    initializeRequestState();
             }
         }
+        if (isShortCircuited() == false) {
+        }
+        } catch (ActionNotFoundTransportException e) {
+        if (currentHeader.isHandshake()) {
+        });
+        }
     }
+    public void headerReceived(Header header) {
+            assert toRelease != CLOSED;
+ *
+        ensureOpen();
+        if (currentHeader.isRequest() && currentHeader.needsToReadVariableHeader() == false) {
+        resetCurrentAggregation();
+                success = true;
+    private final Supplier<CircuitBreaker> circuitBreaker;
+     * @opensearch.internal
+        if (canTripBreaker) {
+            Releasables.close(firstContent);
+        releaseContent();
+ * @opensearch.internal
+    InboundAggregator(Supplier<CircuitBreaker> circuitBreaker, Predicate<String> requestCanTripBreaker) {
+        assert currentHeader.needsToReadVariableHeader() == false;
+        } else {
+/**
+/*
+    public InboundMessage finishAggregation() throws IOException {
+            return;
+ * ownership. Elasticsearch licenses this file to you under
+        boolean success = false;
+    // Visible for testing
+import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.common.breaker.CircuitBreaker;
+    private void closeCurrentAggregation() {
+        final String actionName = currentHeader.getActionName();
+            canTripBreaker = requestCanTripBreaker.test(actionName);
+        }
+                    contentAggregation = new ArrayList<>(4);
+            initializeRequestState();
+        firstContent = null;
+ *
+import java.util.function.Supplier;
+ *
+        private static final int CLOSED = -1;
+ * Licensed to Elasticsearch under one or more contributor
+            breakerControl.setReservedBytes(contentLength);
+            if (success == false) {
+import org.opensearch.common.lease.Releasables;
+ * software distributed under the License is distributed on an
+    /**
+            return;
+        if (header.isRequest() == false) {
+        contentAggregation = null;
+            canTripBreaker = false;
+    private Header currentHeader;
+            }
+        closeCurrentAggregation();
+        currentHeader = header;
+package org.opensearch.transport;
+            releasableContent = firstContent;
 }
+        } else if (contentAggregation == null) {
+import java.util.function.Predicate;
+    private void checkBreaker(final Header header, final int contentLength, final BreakerControl breakerControl) {
+import org.opensearch.common.bytes.ReleasableBytesReference;
+            }
+    public boolean isAggregating() {
+ * GitHub history for details.
+            } catch (CircuitBreakingException e) {
+    }
+        }
+            }
+    public void aggregate(ReleasableBytesReference content) {
+            Releasables.close(contentAggregation);
+ * not use this file except in compliance with the License.
+    private boolean canTripBreaker = true;
+/*
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    }
+                checkBreaker(aggregated.getHeader(), aggregated.getContentLength(), breakerControl);
+        }
+                return new InboundMessage(aggregated.getHeader(), aggregationException);
+                contentAggregation.add(content.retain());
+        }
+    }
+        currentHeader = null;
+import org.opensearch.core.common.bytes.CompositeBytesReference;
+ * Modifications Copyright OpenSearch Contributors. See
+    private ReleasableBytesReference firstContent;
+            }
+                if (aggregated.getHeader().isRequest()) {
+    }
+    private boolean isShortCircuited() {
+        private final AtomicInteger bytesToRelease = new AtomicInteger(0);
+        private BreakerControl(Supplier<CircuitBreaker> circuitBreaker) {
+                success = true;
+    private boolean isFirstContent() {
+ * compatible open source license.
+            } else {
+ * specific language governing permissions and limitations
+                circuitBreaker.get().addWithoutBreaking(-toRelease);
+    }
+            resetCurrentAggregation();
+ * Unless required by applicable law or agreed to in writing,
+public class InboundAggregator implements Releasable {
+        assert header.needsToReadVariableHeader() == false;
+                }
+                }
+        ensureOpen();
+        }
+        return firstContent == null && contentAggregation == null;
+        this.circuitBreaker = circuitBreaker;
+                throw new ActionNotFoundTransportException(actionName);
+                shortCircuit(e);
+        private final Supplier<CircuitBreaker> circuitBreaker;
+    }
+    }
+        return aggregationException != null;
+        }
+            final BytesReference content = CompositeBytesReference.of(references);
+    ) {
+        } else {
+        assert firstContent == null && contentAggregation == null;
+            final boolean set = bytesToRelease.compareAndSet(0, reservedBytes);
+            }
+ * under the License.
+        if (isClosed) {
+    private static class BreakerControl implements Releasable {
+    private void initializeRequestState() {
+    private void resetCurrentAggregation() {
+            final ReleasableBytesReference[] references = contentAggregation.toArray(new ReleasableBytesReference[0]);
+    private boolean isClosed = false;
+     *
+            } else {
+            if (toRelease > 0) {
+    }
+        public void close() {
+ * The OpenSearch Contributors require contributions made to
+                breakerControl.setReservedBytes(contentLength);
+import org.opensearch.core.common.breaker.CircuitBreakingException;
+    private void ensureOpen() {
+        @Override
+            if (reg == null) {
+ * Aggregates inbound data
+        }
+            }
+ */
+        final BreakerControl breakerControl = new BreakerControl(circuitBreaker);
+                    assert firstContent != null;
+        } finally {
+    private void shortCircuit(Exception exception) {
+    public InboundAggregator(
+import java.util.ArrayList;
+                return reg.canTripCircuitBreaker();
+import java.io.IOException;
+        try {
+        final ReleasableBytesReference releasableContent;
+ */
+import java.util.concurrent.atomic.AtomicInteger;
+    private Exception aggregationException;
+                aggregated.close();
+        }
+                aggregated.getHeader().finishParsingHeader(aggregated.openOrGetStreamInput());
+        isClosed = true;
+        }
+import org.opensearch.common.lease.Releasable;
+    public void close() {
+ * KIND, either express or implied.  See the License for the
+ * You may obtain a copy of the License at
+        this(circuitBreaker, (Predicate<String>) actionName -> {
+                    contentAggregation.add(firstContent);
+            }
+    }
+ * this work for additional information regarding copyright
+ *
+    private ArrayList<ReleasableBytesReference> contentAggregation;
+            try {
+    private final Predicate<String> requestCanTripBreaker;
+ * SPDX-License-Identifier: Apache-2.0
+            throw new IllegalStateException("Aggregator is already closed");
+            this.circuitBreaker = circuitBreaker;
+                circuitBreaker.get().addEstimateBytesAndMaybeBreak(contentLength, header.getActionName());
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        assert currentHeader.isRequest();
+    }
+            releasableContent = new ReleasableBytesReference(content, () -> Releasables.close(references));
+ */

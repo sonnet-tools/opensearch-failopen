@@ -1,188 +1,160 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.be.lucene;
-
-import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.SqlFunction;
-import org.apache.calcite.sql.SqlFunctionCategory;
-import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.sql.type.OperandTypes;
-import org.apache.calcite.sql.type.ReturnTypes;
-import org.apache.calcite.sql.type.SqlTypeName;
-import org.opensearch.analytics.spi.FieldStorageInfo;
-import org.opensearch.analytics.spi.FieldType;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
-
-/**
- * Property-based test for multi-field extraction order preservation.
- *
- * <p>Feature: lucene-fulltext-serializers, Property 3: Multi-field extraction preserves all fields in order
- *
- * <p>For any MAP_VALUE_CONSTRUCTOR RexCall operand containing N >= 1 RexInputRef entries,
- * {@code extractFieldsFromRelevanceMap} shall return a list of exactly N field names, each matching
- * the field name resolved from the corresponding FieldStorageInfo entry, in the same order as they
- * appear in the operand.
- *
- * <p>Validates: Requirements 9.1, 9.2
- */
-public class MultiFieldExtractionOrderPropertyTests extends OpenSearchTestCase {
-
-    private static final SqlFunction MULTI_MATCH_FUNCTION = new SqlFunction(
-        "MULTI_MATCH",
-        SqlKind.OTHER_FUNCTION,
-        ReturnTypes.BOOLEAN,
-        null,
-        OperandTypes.ANY,
-        SqlFunctionCategory.USER_DEFINED_FUNCTION
-    );
-
-    private RelDataTypeFactory typeFactory;
-    private RexBuilder rexBuilder;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        typeFactory = new JavaTypeFactoryImpl();
-        rexBuilder = new RexBuilder(typeFactory);
-    }
-
-    /**
-     * Property 3: Multi-field extraction preserves all fields in order (nested MAP literal path).
-     *
-     * Generate a random list of 1-10 field names, construct a mock MAP_VALUE_CONSTRUCTOR RexCall
-     * with the nested MAP structure (field name literals at even indices, boost literals at odd indices),
-     * invoke extractFieldsFromRelevanceMap, and assert the returned list matches expected field names
-     * in exact order.
-     */
-    public void testExtractionPreservesOrderNestedMapLiteralPath() {
-        int fieldCount = randomIntBetween(1, 10);
-        List<String> expectedFields = generateUniqueFieldNames(fieldCount);
-
-        RexCall call = buildNestedMapLiteralCall(expectedFields);
-        List<FieldStorageInfo> fieldStorage = List.of(); // not used in nested MAP literal path
-
-        List<String> result = ConversionUtils.extractFieldsFromRelevanceMap(call, 0, fieldStorage);
-
-        assertEquals("field count mismatch", expectedFields.size(), result.size());
-        for (int i = 0; i < expectedFields.size(); i++) {
-            assertEquals("field at index " + i + " mismatch", expectedFields.get(i), result.get(i));
-        }
-    }
-
-    /**
-     * Property 3: Multi-field extraction preserves all fields in order (RexInputRef fallback path).
-     *
-     * Generate a random list of 1-10 field names, construct a mock MAP_VALUE_CONSTRUCTOR RexCall
-     * with RexInputRef entries at odd indices and a corresponding FieldStorageInfo list,
-     * invoke extractFieldsFromRelevanceMap, and assert the returned list matches expected field names
-     * in exact order.
-     */
-    public void testExtractionPreservesOrderRexInputRefPath() {
-        int fieldCount = randomIntBetween(1, 10);
-        List<String> expectedFields = generateUniqueFieldNames(fieldCount);
-
-        List<FieldStorageInfo> fieldStorage = new ArrayList<>();
-        for (String fieldName : expectedFields) {
-            fieldStorage.add(new FieldStorageInfo(fieldName, "text", FieldType.TEXT, List.of(), List.of("lucene"), List.of(), false));
-        }
-
-        RexCall call = buildRexInputRefCall(fieldCount);
-
-        List<String> result = ConversionUtils.extractFieldsFromRelevanceMap(call, 0, fieldStorage);
-
-        assertEquals("field count mismatch", expectedFields.size(), result.size());
-        for (int i = 0; i < expectedFields.size(); i++) {
-            assertEquals("field at index " + i + " mismatch", expectedFields.get(i), result.get(i));
-        }
-    }
-
-    /**
-     * Generates a list of unique random field names.
-     */
-    private List<String> generateUniqueFieldNames(int count) {
-        List<String> names = new ArrayList<>();
-        while (names.size() < count) {
-            String candidate = randomAlphaOfLengthBetween(1, 50);
-            if (names.contains(candidate) == false) {
-                names.add(candidate);
-            }
-        }
-        return names;
-    }
-
-    /**
-     * Builds a mock RexCall using the nested MAP literal structure:
-     * MULTI_MATCH(MAP('fields', MAP('field1', 1.0, 'field2', 1.0, ...)), MAP('query', 'text'))
-     *
-     * The nested MAP has alternating field name literals (even indices) and boost literals (odd indices).
-     */
-    private RexCall buildNestedMapLiteralCall(List<String> fieldNames) {
-        RelDataType doubleType = typeFactory.createSqlType(SqlTypeName.DOUBLE);
-
-        // Build nested MAP operands: field1, boost1, field2, boost2, ...
-        List<RexNode> nestedMapOperands = new ArrayList<>();
-        for (String field : fieldNames) {
-            nestedMapOperands.add(rexBuilder.makeLiteral(field));
-            nestedMapOperands.add(rexBuilder.makeExactLiteral(new BigDecimal("1.0"), doubleType));
-        }
-
-        // Nested MAP: MAP_VALUE_CONSTRUCTOR(field1, 1.0, field2, 1.0, ...)
-        RexNode nestedMap = rexBuilder.makeCall(SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR, nestedMapOperands.toArray(new RexNode[0]));
-
-        // Outer MAP: MAP('fields', nestedMap)
-        RexNode outerMap = rexBuilder.makeCall(SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR, rexBuilder.makeLiteral("fields"), nestedMap);
-
-        // Query MAP: MAP('query', 'text')
-        RexNode queryMap = rexBuilder.makeCall(
-            SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR,
-            rexBuilder.makeLiteral("query"),
-            rexBuilder.makeLiteral("test query")
-        );
-
-        return (RexCall) rexBuilder.makeCall(MULTI_MATCH_FUNCTION, outerMap, queryMap);
-    }
-
-    /**
-     * Builds a mock RexCall using the RexInputRef fallback structure:
-     * MULTI_MATCH(MAP('field', $0, 'field', $1, ...), MAP('query', 'text'))
-     *
-     * The MAP has alternating key literals ('field') at even indices and RexInputRef at odd indices.
-     */
-    private RexCall buildRexInputRefCall(int fieldCount) {
         RelDataType varcharType = typeFactory.createSqlType(SqlTypeName.VARCHAR);
-
-        // Build MAP operands: 'field', $0, 'field', $1, ...
-        List<RexNode> mapOperands = new ArrayList<>();
-        for (int i = 0; i < fieldCount; i++) {
-            mapOperands.add(rexBuilder.makeLiteral("field"));
-            mapOperands.add(rexBuilder.makeInputRef(varcharType, i));
-        }
-
-        RexNode fieldMap = rexBuilder.makeCall(SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR, mapOperands.toArray(new RexNode[0]));
-
-        // Query MAP: MAP('query', 'text')
-        RexNode queryMap = rexBuilder.makeCall(
-            SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR,
-            rexBuilder.makeLiteral("query"),
-            rexBuilder.makeLiteral("test query")
-        );
-
-        return (RexCall) rexBuilder.makeCall(MULTI_MATCH_FUNCTION, fieldMap, queryMap);
+import org.apache.calcite.sql.SqlFunction;
     }
+    public void testExtractionPreservesOrderRexInputRefPath() {
+     */
+        // Build MAP operands: 'field', $0, 'field', $1, ...
+ * compatible open source license.
+        for (String fieldName : expectedFields) {
+ */
+package org.opensearch.be.lucene;
+import org.opensearch.test.OpenSearchTestCase;
+ * The OpenSearch Contributors require contributions made to
+            nestedMapOperands.add(rexBuilder.makeExactLiteral(new BigDecimal("1.0"), doubleType));
+     * Builds a mock RexCall using the nested MAP literal structure:
+     */
+     * Builds a mock RexCall using the RexInputRef fallback structure:
+     *
+        List<String> expectedFields = generateUniqueFieldNames(fieldCount);
+     * invoke extractFieldsFromRelevanceMap, and assert the returned list matches expected field names
+     * The MAP has alternating key literals ('field') at even indices and RexInputRef at odd indices.
+        SqlKind.OTHER_FUNCTION,
+     * Generate a random list of 1-10 field names, construct a mock MAP_VALUE_CONSTRUCTOR RexCall
+    private RexBuilder rexBuilder;
+        RexNode outerMap = rexBuilder.makeCall(SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR, rexBuilder.makeLiteral("fields"), nestedMap);
+import org.apache.calcite.sql.SqlKind;
+        List<String> result = ConversionUtils.extractFieldsFromRelevanceMap(call, 0, fieldStorage);
+ *
+        ReturnTypes.BOOLEAN,
+        "MULTI_MATCH",
+import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
+        // Query MAP: MAP('query', 'text')
+        List<FieldStorageInfo> fieldStorage = List.of(); // not used in nested MAP literal path
+            fieldStorage.add(new FieldStorageInfo(fieldName, "text", FieldType.TEXT, List.of(), List.of("lucene"), List.of(), false));
+     * invoke extractFieldsFromRelevanceMap, and assert the returned list matches expected field names
+        RexNode queryMap = rexBuilder.makeCall(
+/*
+            assertEquals("field at index " + i + " mismatch", expectedFields.get(i), result.get(i));
+import java.util.List;
+        for (int i = 0; i < fieldCount; i++) {
+    private RexCall buildNestedMapLiteralCall(List<String> fieldNames) {
+        return names;
+ *
+ */
+        for (String field : fieldNames) {
+     */
+    }
+        null,
+        List<RexNode> nestedMapOperands = new ArrayList<>();
+    }
+        }
+ * the field name resolved from the corresponding FieldStorageInfo entry, in the same order as they
+     * Generate a random list of 1-10 field names, construct a mock MAP_VALUE_CONSTRUCTOR RexCall
+        List<String> expectedFields = generateUniqueFieldNames(fieldCount);
+        super.setUp();
+            mapOperands.add(rexBuilder.makeLiteral("field"));
+            rexBuilder.makeLiteral("test query")
+    /**
+            rexBuilder.makeLiteral("query"),
+     *
+ *
+    /**
+import org.apache.calcite.rel.type.RelDataType;
+        assertEquals("field count mismatch", expectedFields.size(), result.size());
+ * this file be licensed under the Apache-2.0 license or a
+        );
+        for (int i = 0; i < expectedFields.size(); i++) {
+     * with the nested MAP structure (field name literals at even indices, boost literals at odd indices),
+        RexCall call = buildNestedMapLiteralCall(expectedFields);
+        rexBuilder = new RexBuilder(typeFactory);
+        assertEquals("field count mismatch", expectedFields.size(), result.size());
+        List<RexNode> mapOperands = new ArrayList<>();
+            rexBuilder.makeLiteral("test query")
+        }
+        List<FieldStorageInfo> fieldStorage = new ArrayList<>();
+import java.util.ArrayList;
+    public void setUp() throws Exception {
+        int fieldCount = randomIntBetween(1, 10);
+            SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR,
+        typeFactory = new JavaTypeFactoryImpl();
+    @Override
+     * with RexInputRef entries at odd indices and a corresponding FieldStorageInfo list,
+        RexCall call = buildRexInputRefCall(fieldCount);
+        for (int i = 0; i < expectedFields.size(); i++) {
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.SqlFunctionCategory;
+            mapOperands.add(rexBuilder.makeInputRef(varcharType, i));
+    private RexCall buildRexInputRefCall(int fieldCount) {
+        SqlFunctionCategory.USER_DEFINED_FUNCTION
+ * <p>Feature: lucene-fulltext-serializers, Property 3: Multi-field extraction preserves all fields in order
+import org.apache.calcite.rex.RexNode;
+        // Query MAP: MAP('query', 'text')
+     * in exact order.
+        // Outer MAP: MAP('fields', nestedMap)
+        );
+    /**
+        List<String> result = ConversionUtils.extractFieldsFromRelevanceMap(call, 0, fieldStorage);
+            nestedMapOperands.add(rexBuilder.makeLiteral(field));
+    private RelDataTypeFactory typeFactory;
+        // Nested MAP: MAP_VALUE_CONSTRUCTOR(field1, 1.0, field2, 1.0, ...)
+        // Build nested MAP operands: field1, boost1, field2, boost2, ...
+ *
+     * in exact order.
+/**
+     * Property 3: Multi-field extraction preserves all fields in order (RexInputRef fallback path).
+import org.apache.calcite.rel.type.RelDataTypeFactory;
+        RexNode queryMap = rexBuilder.makeCall(
+import org.apache.calcite.rex.RexBuilder;
 }
+                names.add(candidate);
+    /**
+ * {@code extractFieldsFromRelevanceMap} shall return a list of exactly N field names, each matching
+     *
+            String candidate = randomAlphaOfLengthBetween(1, 50);
+            }
+import org.apache.calcite.rex.RexCall;
+        }
+        RexNode fieldMap = rexBuilder.makeCall(SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR, mapOperands.toArray(new RexNode[0]));
+        int fieldCount = randomIntBetween(1, 10);
+import org.apache.calcite.sql.type.ReturnTypes;
+     * The nested MAP has alternating field name literals (even indices) and boost literals (odd indices).
+        return (RexCall) rexBuilder.makeCall(MULTI_MATCH_FUNCTION, fieldMap, queryMap);
+        }
+            SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR,
+    private static final SqlFunction MULTI_MATCH_FUNCTION = new SqlFunction(
+    }
+     * Property 3: Multi-field extraction preserves all fields in order (nested MAP literal path).
+ * <p>Validates: Requirements 9.1, 9.2
+ * Property-based test for multi-field extraction order preservation.
+    }
+     * Generates a list of unique random field names.
+ * SPDX-License-Identifier: Apache-2.0
+        RexNode nestedMap = rexBuilder.makeCall(SqlStdOperatorTable.MAP_VALUE_CONSTRUCTOR, nestedMapOperands.toArray(new RexNode[0]));
+     *
+        }
+        while (names.size() < count) {
+            if (names.contains(candidate) == false) {
+     * MULTI_MATCH(MAP('fields', MAP('field1', 1.0, 'field2', 1.0, ...)), MAP('query', 'text'))
+import java.math.BigDecimal;
+ * appear in the operand.
+            assertEquals("field at index " + i + " mismatch", expectedFields.get(i), result.get(i));
+    );
+    private List<String> generateUniqueFieldNames(int count) {
+ * <p>For any MAP_VALUE_CONSTRUCTOR RexCall operand containing N >= 1 RexInputRef entries,
+     */
+        return (RexCall) rexBuilder.makeCall(MULTI_MATCH_FUNCTION, outerMap, queryMap);
+import org.apache.calcite.sql.type.OperandTypes;
+        List<String> names = new ArrayList<>();
+    public void testExtractionPreservesOrderNestedMapLiteralPath() {
+     */
+    }
+     * MULTI_MATCH(MAP('field', $0, 'field', $1, ...), MAP('query', 'text'))
+import org.opensearch.analytics.spi.FieldType;
+    /**
+        OperandTypes.ANY,
+public class MultiFieldExtractionOrderPropertyTests extends OpenSearchTestCase {
+            rexBuilder.makeLiteral("query"),
+import org.opensearch.analytics.spi.FieldStorageInfo;
+        }
+        RelDataType doubleType = typeFactory.createSqlType(SqlTypeName.DOUBLE);

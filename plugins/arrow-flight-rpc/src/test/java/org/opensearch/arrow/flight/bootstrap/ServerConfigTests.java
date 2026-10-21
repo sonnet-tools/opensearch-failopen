@@ -1,149 +1,125 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-package org.opensearch.arrow.flight.bootstrap;
-
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.ScalingExecutorBuilder;
-
+    public void testOutboundBufferThresholdBounds() {
 import java.util.Set;
-
-import static org.opensearch.arrow.flight.bootstrap.ServerConfig.SETTING_FLIGHT_PUBLISH_PORT;
-
-public class ServerConfigTests extends OpenSearchTestCase {
-
-    private Settings settings;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        settings = Settings.builder()
-            .put("arrow.allocation.manager.type", "Netty")
-            .put("arrow.enable_null_check_for_get", false)
-            .put("arrow.enable_unsafe_memory_access", true)
-            .put("arrow.memory.debug.allocator", false)
-            .put("flight.ssl.enable", true)
-            .put("thread_pool.flight-server.min", 1)
-            .put("thread_pool.flight-server.max", 4)
-            .put("thread_pool.flight-server.keep_alive", TimeValue.timeValueMinutes(5))
-            .build();
-    }
-
-    public void testInit() {
-        ServerConfig.init(settings);
-
-        // Verify system properties are set correctly
-        assertEquals("Netty", System.getProperty("arrow.allocation.manager.type"));
-        assertEquals("false", System.getProperty("arrow.enable_null_check_for_get"));
-        assertEquals("true", System.getProperty("arrow.enable_unsafe_memory_access"));
-        assertEquals("false", System.getProperty("arrow.memory.debug.allocator"));
-
-        // Verify SSL settings
-        assertTrue(ServerConfig.isSslEnabled());
-
-        ScalingExecutorBuilder serverExecutorBuilder = ServerConfig.getServerExecutorBuilder();
-        ScalingExecutorBuilder flightGrpcExecutorBuilder = ServerConfig.getGrpcExecutorBuilder();
-
-        assertNotNull(serverExecutorBuilder);
-        assertNotNull(flightGrpcExecutorBuilder);
-
-        assertEquals(3, serverExecutorBuilder.getRegisteredSettings().size());
-        assertEquals(1, serverExecutorBuilder.getRegisteredSettings().get(0).get(settings)); // min
-        assertEquals(4, serverExecutorBuilder.getRegisteredSettings().get(1).get(settings)); // max
-        assertEquals(TimeValue.timeValueMinutes(5), serverExecutorBuilder.getRegisteredSettings().get(2).get(settings)); // keep alive
-    }
-
-    public void testGetSettings() {
-        var settings = ServerConfig.getSettings();
-        assertNotNull(settings);
-        assertFalse(settings.isEmpty());
-
-        assertTrue(settings.contains(ServerConfig.ARROW_ALLOCATION_MANAGER_TYPE));
-        assertTrue(settings.contains(ServerConfig.ARROW_ENABLE_NULL_CHECK_FOR_GET));
-        assertTrue(settings.contains(ServerConfig.ARROW_ENABLE_UNSAFE_MEMORY_ACCESS));
         assertTrue(settings.contains(ServerConfig.ARROW_ENABLE_DEBUG_ALLOCATOR));
-        assertTrue(settings.contains(ServerConfig.ARROW_SSL_ENABLE));
-        assertTrue(settings.contains(ServerConfig.FLIGHT_READY_TIMEOUT));
-        assertTrue(settings.contains(ServerConfig.FLIGHT_OUTBOUND_BUFFER_THRESHOLD));
-    }
-
-    public void testDefaultSettings() {
-        Settings defaultSettings = Settings.EMPTY;
-        ServerConfig.init(defaultSettings);
-
-        // Verify default values
+        assertEquals(TimeValue.timeValueSeconds(20), ServerConfig.FLIGHT_KEEPALIVE_TIMEOUT.get(Settings.EMPTY));
         assertEquals(-1, SETTING_FLIGHT_PUBLISH_PORT.get(defaultSettings).intValue());
-        assertEquals("Netty", ServerConfig.ARROW_ALLOCATION_MANAGER_TYPE.get(defaultSettings));
-        assertFalse(ServerConfig.ARROW_ENABLE_NULL_CHECK_FOR_GET.get(defaultSettings));
-        assertTrue(ServerConfig.ARROW_ENABLE_UNSAFE_MEMORY_ACCESS.get(defaultSettings));
-        assertFalse(ServerConfig.ARROW_ENABLE_DEBUG_ALLOCATOR.get(defaultSettings));
-        assertFalse(ServerConfig.ARROW_SSL_ENABLE.get(defaultSettings));
-        assertEquals(TimeValue.timeValueSeconds(60), ServerConfig.FLIGHT_READY_TIMEOUT.get(defaultSettings));
-        assertEquals(512L * 1024, ServerConfig.FLIGHT_OUTBOUND_BUFFER_THRESHOLD.get(defaultSettings).getBytes());
+        );
+    public void testReadyTimeoutMinimum() {
     }
-
-    public void testBackpressureSettingsParse() {
-        Settings overridden = Settings.builder()
-            .put(ServerConfig.FLIGHT_READY_TIMEOUT.getKey(), TimeValue.timeValueSeconds(5))
-            .put(ServerConfig.FLIGHT_OUTBOUND_BUFFER_THRESHOLD.getKey(), new ByteSizeValue(16, ByteSizeUnit.MB))
+    public void testKeepAliveTimeoutMustBeLessThanTime() {
+        assertFalse(ServerConfig.ARROW_ENABLE_DEBUG_ALLOCATOR.get(defaultSettings));
+            .put(ServerConfig.FLIGHT_KEEPALIVE_TIME.getKey(), TimeValue.timeValueSeconds(60))
+        Settings defaultSettings = Settings.EMPTY;
+        assertEquals("true", System.getProperty("arrow.enable_unsafe_memory_access"));
+        assertFalse(ServerConfig.ARROW_SSL_ENABLE.get(defaultSettings));
+        clusterSettings.validate(ok, false);
+        assertFalse(settings.isEmpty());
+        super.setUp();
             .build();
-        assertEquals(TimeValue.timeValueSeconds(5), ServerConfig.FLIGHT_READY_TIMEOUT.get(overridden));
+        settings = Settings.builder()
+package org.opensearch.arrow.flight.bootstrap;
+    public void testGetSettings() {
+        Settings tooLow = Settings.builder()
+        // Verify system properties are set correctly
+    }
+        assertNotNull(flightGrpcExecutorBuilder);
+            .put(ServerConfig.FLIGHT_KEEPALIVE_TIMEOUT.getKey(), TimeValue.timeValueSeconds(40))
+            Settings.EMPTY,
+        assertTrue(ServerConfig.isSslEnabled());
+ * The OpenSearch Contributors require contributions made to
+    private Settings settings;
+        assertEquals("false", System.getProperty("arrow.memory.debug.allocator"));
+            .put("arrow.enable_unsafe_memory_access", true)
+}
+        assertEquals(TimeValue.timeValueSeconds(60), ServerConfig.FLIGHT_READY_TIMEOUT.get(defaultSettings));
+ */
+        ServerConfig.init(settings);
+/*
+        Settings ok = Settings.builder()
+        assertTrue(settings.contains(ServerConfig.ARROW_ALLOCATION_MANAGER_TYPE));
+        expectThrows(IllegalArgumentException.class, () -> clusterSettings.validate(greater, false));
+    }
+    }
+import org.opensearch.common.settings.ClusterSettings;
+            .put(ServerConfig.FLIGHT_OUTBOUND_BUFFER_THRESHOLD.getKey(), new ByteSizeValue(16, ByteSizeUnit.MB))
+ * this file be licensed under the Apache-2.0 license or a
+            .put(ServerConfig.FLIGHT_KEEPALIVE_TIMEOUT.getKey(), TimeValue.timeValueSeconds(30))
+        expectThrows(IllegalArgumentException.class, () -> ServerConfig.FLIGHT_OUTBOUND_BUFFER_THRESHOLD.get(tooLow));
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+    }
+ *
+    }
+        expectThrows(IllegalArgumentException.class, () -> ServerConfig.FLIGHT_READY_TIMEOUT.get(tooLow));
+        assertEquals(TimeValue.timeValueHours(2), ServerConfig.FLIGHT_KEEPALIVE_TIME.get(Settings.EMPTY));
+            .put(ServerConfig.FLIGHT_READY_TIMEOUT.getKey(), TimeValue.timeValueSeconds(5))
+        Settings tooHigh = Settings.builder()
         assertEquals(16L * 1024 * 1024, ServerConfig.FLIGHT_OUTBOUND_BUFFER_THRESHOLD.get(overridden).getBytes());
     }
-
-    public void testKeepAliveDefaultsMatchGrpc() {
-        assertEquals(TimeValue.timeValueHours(2), ServerConfig.FLIGHT_KEEPALIVE_TIME.get(Settings.EMPTY));
-        assertEquals(TimeValue.timeValueSeconds(20), ServerConfig.FLIGHT_KEEPALIVE_TIMEOUT.get(Settings.EMPTY));
+import org.opensearch.core.common.unit.ByteSizeUnit;
+        ScalingExecutorBuilder flightGrpcExecutorBuilder = ServerConfig.getGrpcExecutorBuilder();
+            .put("thread_pool.flight-server.keep_alive", TimeValue.timeValueMinutes(5))
     }
-
-    public void testKeepAliveTimeoutMustBeLessThanTime() {
-        ClusterSettings clusterSettings = new ClusterSettings(
-            Settings.EMPTY,
-            Set.of(ServerConfig.FLIGHT_KEEPALIVE_TIME, ServerConfig.FLIGHT_KEEPALIVE_TIMEOUT)
-        );
+        assertEquals("Netty", ServerConfig.ARROW_ALLOCATION_MANAGER_TYPE.get(defaultSettings));
+    }
+import org.opensearch.common.settings.Settings;
+import org.opensearch.threadpool.ScalingExecutorBuilder;
+    public void testBackpressureSettingsParse() {
+        ScalingExecutorBuilder serverExecutorBuilder = ServerConfig.getServerExecutorBuilder();
+        assertEquals(3, serverExecutorBuilder.getRegisteredSettings().size());
+        assertTrue(settings.contains(ServerConfig.ARROW_ENABLE_NULL_CHECK_FOR_GET));
         Settings equal = Settings.builder()
-            .put(ServerConfig.FLIGHT_KEEPALIVE_TIME.getKey(), TimeValue.timeValueSeconds(30))
-            .put(ServerConfig.FLIGHT_KEEPALIVE_TIMEOUT.getKey(), TimeValue.timeValueSeconds(30))
-            .build();
-        expectThrows(IllegalArgumentException.class, () -> clusterSettings.validate(equal, false));
-
-        Settings greater = Settings.builder()
-            .put(ServerConfig.FLIGHT_KEEPALIVE_TIME.getKey(), TimeValue.timeValueSeconds(30))
-            .put(ServerConfig.FLIGHT_KEEPALIVE_TIMEOUT.getKey(), TimeValue.timeValueSeconds(40))
-            .build();
-        expectThrows(IllegalArgumentException.class, () -> clusterSettings.validate(greater, false));
-
-        Settings ok = Settings.builder()
-            .put(ServerConfig.FLIGHT_KEEPALIVE_TIME.getKey(), TimeValue.timeValueSeconds(60))
-            .put(ServerConfig.FLIGHT_KEEPALIVE_TIMEOUT.getKey(), TimeValue.timeValueSeconds(20))
-            .build();
-        clusterSettings.validate(ok, false);
-    }
-
-    public void testReadyTimeoutMinimum() {
-        // 100ms minimum is enforced; lower values must be rejected at parse.
-        Settings tooLow = Settings.builder().put(ServerConfig.FLIGHT_READY_TIMEOUT.getKey(), TimeValue.timeValueMillis(50)).build();
-        expectThrows(IllegalArgumentException.class, () -> ServerConfig.FLIGHT_READY_TIMEOUT.get(tooLow));
-    }
-
-    public void testOutboundBufferThresholdBounds() {
-        Settings tooLow = Settings.builder()
+        assertEquals(512L * 1024, ServerConfig.FLIGHT_OUTBOUND_BUFFER_THRESHOLD.get(defaultSettings).getBytes());
+public class ServerConfigTests extends OpenSearchTestCase {
+        assertEquals(4, serverExecutorBuilder.getRegisteredSettings().get(1).get(settings)); // max
+import org.opensearch.common.unit.TimeValue;
+ * compatible open source license.
+        // Verify SSL settings
+        assertEquals(TimeValue.timeValueSeconds(5), ServerConfig.FLIGHT_READY_TIMEOUT.get(overridden));
             .put(ServerConfig.FLIGHT_OUTBOUND_BUFFER_THRESHOLD.getKey(), new ByteSizeValue(64, ByteSizeUnit.KB))
-            .build();
-        expectThrows(IllegalArgumentException.class, () -> ServerConfig.FLIGHT_OUTBOUND_BUFFER_THRESHOLD.get(tooLow));
-
-        Settings tooHigh = Settings.builder()
-            .put(ServerConfig.FLIGHT_OUTBOUND_BUFFER_THRESHOLD.getKey(), new ByteSizeValue(3, ByteSizeUnit.GB))
-            .build();
+        assertTrue(settings.contains(ServerConfig.ARROW_SSL_ENABLE));
+        assertTrue(ServerConfig.ARROW_ENABLE_UNSAFE_MEMORY_ACCESS.get(defaultSettings));
+        ClusterSettings clusterSettings = new ClusterSettings(
+import org.opensearch.core.common.unit.ByteSizeValue;
+            Set.of(ServerConfig.FLIGHT_KEEPALIVE_TIME, ServerConfig.FLIGHT_KEEPALIVE_TIMEOUT)
+        var settings = ServerConfig.getSettings();
+        Settings overridden = Settings.builder()
+    public void testKeepAliveDefaultsMatchGrpc() {
+    public void testInit() {
         expectThrows(IllegalArgumentException.class, () -> ServerConfig.FLIGHT_OUTBOUND_BUFFER_THRESHOLD.get(tooHigh));
-    }
-}
+        assertTrue(settings.contains(ServerConfig.FLIGHT_READY_TIMEOUT));
+            .put("arrow.allocation.manager.type", "Netty")
+            .build();
+        Settings tooLow = Settings.builder().put(ServerConfig.FLIGHT_READY_TIMEOUT.getKey(), TimeValue.timeValueMillis(50)).build();
+        // Verify default values
+            .put(ServerConfig.FLIGHT_KEEPALIVE_TIME.getKey(), TimeValue.timeValueSeconds(30))
+        // 100ms minimum is enforced; lower values must be rejected at parse.
+            .put("thread_pool.flight-server.min", 1)
+import org.opensearch.test.OpenSearchTestCase;
+        assertFalse(ServerConfig.ARROW_ENABLE_NULL_CHECK_FOR_GET.get(defaultSettings));
+        assertEquals(TimeValue.timeValueMinutes(5), serverExecutorBuilder.getRegisteredSettings().get(2).get(settings)); // keep alive
+    public void testDefaultSettings() {
+            .put("thread_pool.flight-server.max", 4)
+        expectThrows(IllegalArgumentException.class, () -> clusterSettings.validate(equal, false));
+        ServerConfig.init(defaultSettings);
+            .put("arrow.enable_null_check_for_get", false)
+        assertNotNull(serverExecutorBuilder);
+            .build();
+            .build();
+            .build();
+import static org.opensearch.arrow.flight.bootstrap.ServerConfig.SETTING_FLIGHT_PUBLISH_PORT;
+    public void setUp() throws Exception {
+            .put(ServerConfig.FLIGHT_KEEPALIVE_TIME.getKey(), TimeValue.timeValueSeconds(30))
+        assertNotNull(settings);
+            .put("arrow.memory.debug.allocator", false)
+        assertTrue(settings.contains(ServerConfig.ARROW_ENABLE_UNSAFE_MEMORY_ACCESS));
+        assertEquals(1, serverExecutorBuilder.getRegisteredSettings().get(0).get(settings)); // min
+        assertEquals("Netty", System.getProperty("arrow.allocation.manager.type"));
+            .build();
+        Settings greater = Settings.builder()
+        assertEquals("false", System.getProperty("arrow.enable_null_check_for_get"));
+            .put(ServerConfig.FLIGHT_KEEPALIVE_TIMEOUT.getKey(), TimeValue.timeValueSeconds(20))
+            .put(ServerConfig.FLIGHT_OUTBOUND_BUFFER_THRESHOLD.getKey(), new ByteSizeValue(3, ByteSizeUnit.GB))
+            .put("flight.ssl.enable", true)
+        assertTrue(settings.contains(ServerConfig.FLIGHT_OUTBOUND_BUFFER_THRESHOLD));
+            .build();

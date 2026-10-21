@@ -1,542 +1,482 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterState.Custom;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.snapshots.Snapshot;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
+         * Constructs new state
+            );
+         */
 import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
-
-/**
- * Meta data about restore processes that are currently executing
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class RestoreInProgress extends AbstractNamedDiffable<Custom> implements Custom, Iterable<RestoreInProgress.Entry> {
-
-    /**
-     * Fallback UUID used for restore operations that were started before v6.6 and don't have a uuid in the cluster state.
+ * not use this file except in compliance with the License.
+    }
+            out.writeString(entry.uuid);
+    }
+                case 3:
+         *
+         * Returns state corresponding to state code
+            }
+ * this file be licensed under the Apache-2.0 license or a
+    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
      */
-    public static final String BWC_UUID = new UUID(0, 0).toString();
-
-    public static final String TYPE = "restore";
-
-    public static final RestoreInProgress EMPTY = new RestoreInProgress(Map.of());
-
-    private final Map<String, Entry> entries;
-
-    /**
-     * Constructs new restore metadata
-     *
-     * @param entries map of currently running restore processes keyed by their restore uuid
-     */
+import org.opensearch.core.xcontent.XContentBuilder;
+    }
+ * under the License.
     private RestoreInProgress(final Map<String, Entry> entries) {
-        this.entries = Collections.unmodifiableMap(entries);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        return entries.equals(((RestoreInProgress) o).entries);
-    }
-
-    @Override
-    public int hashCode() {
-        return entries.hashCode();
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder builder = new StringBuilder("RestoreInProgress[");
-        entries.forEach((s, entry) -> builder.append("{").append(s).append("}{").append(entry.snapshot).append("},"));
-        builder.setCharAt(builder.length() - 1, ']');
-        return builder.toString();
-    }
-
-    public Entry get(String restoreUUID) {
-        return entries.get(restoreUUID);
-    }
-
-    public boolean isEmpty() {
-        return entries.isEmpty();
-    }
-
-    @Override
-    public Iterator<Entry> iterator() {
-        return entries.values().iterator();
-    }
-
-    /**
-     * Builder of the restore.
-     *
-     * @opensearch.internal
-     */
-    public static final class Builder {
-
-        private final Map<String, Entry> entries = new HashMap<>();
-
-        public Builder() {}
-
-        public Builder(RestoreInProgress restoreInProgress) {
-            entries.putAll(restoreInProgress.entries);
-        }
-
-        public Builder add(Entry entry) {
-            entries.put(entry.uuid, entry);
-            return this;
-        }
-
-        public RestoreInProgress build() {
-            return entries.isEmpty() ? EMPTY : new RestoreInProgress(entries);
-        }
-    }
-
-    /**
-     * Restore metadata
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class Entry {
-        private final String uuid;
-        private final State state;
-        private final Snapshot snapshot;
-        private final Map<ShardId, ShardRestoreStatus> shards;
-        private final List<String> indices;
-
+                case 0:
+         * @param nodeId node id
+         * Returns state code
+         * @return state
         /**
-         * Creates new restore metadata
-         *
-         * @param uuid       uuid of the restore
-         * @param snapshot   snapshot
-         * @param state      current state of the restore process
-         * @param indices    list of indices being restored
-         * @param shards     map of shards being restored to their current restore status
          */
-        public Entry(String uuid, Snapshot snapshot, State state, List<String> indices, final Map<ShardId, ShardRestoreStatus> shards) {
-            this.snapshot = Objects.requireNonNull(snapshot);
-            this.state = Objects.requireNonNull(state);
-            this.indices = Objects.requireNonNull(indices);
-            if (shards == null) {
-                this.shards = Map.of();
-            } else {
-                this.shards = Collections.unmodifiableMap(shards);
-            }
-            this.uuid = Objects.requireNonNull(uuid);
-        }
-
-        /**
-         * Returns restore uuid
-         * @return restore uuid
-         */
-        public String uuid() {
-            return uuid;
-        }
-
-        /**
-         * Returns snapshot
-         *
-         * @return snapshot
-         */
-        public Snapshot snapshot() {
-            return this.snapshot;
-        }
-
-        /**
-         * Returns list of shards that being restore and their status
-         *
-         * @return map of shard id to shard restore status
-         */
-        public Map<ShardId, ShardRestoreStatus> shards() {
-            return this.shards;
-        }
-
-        /**
-         * Returns current restore state
-         *
-         * @return restore state
-         */
-        public State state() {
             return state;
-        }
-
-        /**
-         * Returns list of indices
-         *
-         * @return list of indices
+         * @param value stat code
+        State(byte value) {
+ */
          */
-        public List<String> indices() {
-            return indices;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-            Entry entry = (Entry) o;
-            return uuid.equals(entry.uuid)
-                && snapshot.equals(entry.snapshot)
-                && state == entry.state
-                && indices.equals(entry.indices)
-                && shards.equals(entry.shards);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(uuid, snapshot, state, indices, shards);
-        }
-    }
-
+}
+    @Override
+        FAILURE((byte) 3);
+        /**
     /**
-     * Represents status of a restored shard
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class ShardRestoreStatus implements Writeable {
-        private State state;
-        private String nodeId;
-        private String reason;
-
-        private ShardRestoreStatus() {}
-
-        /**
-         * Constructs a new shard restore status in initializing state on the given node
+        private final List<String> indices;
+        private final byte value;
          *
-         * @param nodeId node id
-         */
-        public ShardRestoreStatus(String nodeId) {
-            this(nodeId, State.INIT);
         }
-
-        /**
-         * Constructs a new shard restore status in with specified state on the given node
-         *
-         * @param nodeId node id
-         * @param state  restore state
+            }
          */
+     * @param builder XContent builder
+         *
+        }
+ * Unless required by applicable law or agreed to in writing,
+        }
+            entries.put(entry.uuid, entry);
+         *
+        public int hashCode() {
+         */
+         * @return map of shard id to shard restore status
+         * Restore failed
+    @PublicApi(since = "1.0.0")
+            return uuid;
+    public Entry get(String restoreUUID) {
+         * @param snapshot   snapshot
+                    return FAILURE;
+ * You may obtain a copy of the License at
+        /**
+        }
+        }
+            this.reason = reason;
+    public static final String BWC_UUID = new UUID(0, 0).toString();
+                return false;
+        /**
+         *
+                    uuid,
+         */
+public class RestoreInProgress extends AbstractNamedDiffable<Custom> implements Custom, Iterable<RestoreInProgress.Entry> {
+    }
+        return Version.CURRENT.minimumCompatibilityVersion();
+                this.shards = Map.of();
+            ShardRestoreStatus shardSnapshotStatus = new ShardRestoreStatus();
+import org.opensearch.core.common.io.stream.Writeable;
+            final String uuid;
         public ShardRestoreStatus(String nodeId, State state) {
+    public String toString() {
+import org.opensearch.common.annotation.PublicApi;
+        builder.endArray();
+            out.writeOptionalString(reason);
+        return builder.toString();
+         */
+    public boolean isEmpty() {
+            return uuid.equals(entry.uuid)
+        public Snapshot snapshot() {
+        builder.setCharAt(builder.length() - 1, ']');
+     */
+        /**
+        /**
+         * @param state  restore state
+    public RestoreInProgress(StreamInput in) throws IOException {
+         * @return node id
+     * Shard restore process state
+        @Override
+        /**
+                default:
+            this.indices = Objects.requireNonNull(indices);
+    }
+     */
+     *
+        }
+ *
+        return entries.isEmpty();
+                && state == entry.state
+import org.opensearch.cluster.ClusterState.Custom;
+            nodeId = in.readOptionalString();
+                builder.endObject();
+     * {@inheritDoc}
+        public ShardRestoreStatus(String nodeId, State state, String reason) {
+         * @return restore status
+            }
+    @Override
+ * license agreements. See the NOTICE file distributed with
+        return entries.equals(((RestoreInProgress) o).entries);
+    public String getWriteableName() {
+        }
+        /**
+                case 1:
+        public Entry(String uuid, Snapshot snapshot, State state, List<String> indices, final Map<ShardId, ShardRestoreStatus> shards) {
+import java.util.HashMap;
+         *
+            if (shards == null) {
+                builder.startObject();
+         * Constructs a new shard restore status in with specified state on the given node with specified failure reason
+            }
+         * @param out stream input
+        }
+     * Builder of the restore.
+        public Map<ShardId, ShardRestoreStatus> shards() {
+            return indices;
+        {
+                new Entry(
+     */
+            return this.shards;
+            this(nodeId, State.INIT);
+ * GitHub history for details.
+        }
+            toXContent(entry, builder);
+            this.snapshot = Objects.requireNonNull(snapshot);
+            return shardSnapshotStatus;
+        builder.startArray("snapshots");
+            switch (value) {
+        public ShardRestoreStatus(String nodeId) {
+         */
+         */
+        return readDiffFrom(Custom.class, TYPE, in);
+         */
+            out.writeOptionalString(nodeId);
+import java.util.Objects;
+     */
+ * the Apache License, Version 2.0 (the "License"); you may
+        return TYPE;
+        }
+        INIT((byte) 0),
+     * Represents status of a restored shard
+         * @param state      current state of the restore process
+                    builder.field("index", shardId.getIndex());
+        public static State fromValue(byte value) {
+        @Override
+        private State state;
+    @Override
+ * KIND, either express or implied.  See the License for the
+/*
             this(nodeId, state, null);
         }
-
-        /**
-         * Constructs a new shard restore status in with specified state on the given node with specified failure reason
-         *
-         * @param nodeId node id
-         * @param state  restore state
-         * @param reason failure reason
          */
-        public ShardRestoreStatus(String nodeId, State state, String reason) {
-            this.nodeId = nodeId;
-            this.state = state;
-            this.reason = reason;
-        }
-
-        /**
-         * Returns current state
-         *
-         * @return current state
-         */
-        public State state() {
-            return state;
-        }
-
-        /**
          * Returns node id of the node where shared is getting restored
-         *
-         * @return node id
-         */
-        public String nodeId() {
-            return nodeId;
-        }
-
-        /**
-         * Returns failure reason
-         *
-         * @return failure reason
-         */
-        public String reason() {
-            return reason;
-        }
-
-        /**
-         * Reads restore status from stream input
-         *
-         * @param in stream input
-         * @return restore status
-         */
-        public static ShardRestoreStatus readShardRestoreStatus(StreamInput in) throws IOException {
-            ShardRestoreStatus shardSnapshotStatus = new ShardRestoreStatus();
-            shardSnapshotStatus.readFrom(in);
-            return shardSnapshotStatus;
-        }
-
-        /**
-         * Reads restore status from stream input
-         *
-         * @param in stream input
-         */
-        public void readFrom(StreamInput in) throws IOException {
-            nodeId = in.readOptionalString();
-            state = State.fromValue(in.readByte());
-            reason = in.readOptionalString();
-        }
-
-        /**
-         * Writes restore status to stream output
-         *
-         * @param out stream input
-         */
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeOptionalString(nodeId);
-            out.writeByte(state.value);
-            out.writeOptionalString(reason);
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-
-            ShardRestoreStatus status = (ShardRestoreStatus) o;
-            return state == status.state && Objects.equals(nodeId, status.nodeId) && Objects.equals(reason, status.reason);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(state, nodeId, reason);
-        }
-    }
-
-    /**
-     * Shard restore process state
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public enum State {
-        /**
-         * Initializing state
-         */
-        INIT((byte) 0),
-        /**
-         * Started state
-         */
         STARTED((byte) 1),
         /**
-         * Restore finished successfully
-         */
-        SUCCESS((byte) 2),
+        }
+        @Override
+         * @return restore uuid
+     * @param entry   restore operation metadata
+     * Fallback UUID used for restore operations that were started before v6.6 and don't have a uuid in the cluster state.
+        private final Map<String, Entry> entries = new HashMap<>();
+            return this;
+    }
+            return this == SUCCESS || this == FAILURE;
+/*
+     * Restore metadata
+         * @param shards     map of shards being restored to their current restore status
+         * Returns current restore state
         /**
-         * Restore failed
-         */
-        FAILURE((byte) 3);
-
-        private final byte value;
-
-        /**
-         * Constructs new state
+         * @param reason failure reason
          *
-         * @param value state code
+import java.util.Map;
+                builder.value(index);
+            this.state = Objects.requireNonNull(state);
+        public Builder() {}
+        }
+            if (this == o) {
+        }
+     *
+                    in.readMap(ShardId::new, ShardRestoreStatus::readShardRestoreStatus)
+                    return SUCCESS;
+    @Deprecated(forRemoval = true) // Implementation is identical to NamedDiffable
+        public void readFrom(StreamInput in) throws IOException {
+    public boolean equals(Object o) {
+            entriesBuilder.put(
+        public Builder add(Entry entry) {
+         * Constructs a new shard restore status in with specified state on the given node
+     */
+        for (final Entry entry : entries.values()) {
+         * @param in stream input
+     * @opensearch.api
+         *
+        public int hashCode() {
+        public State state() {
+        }
+    }
+        public byte value() {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    public static class ShardRestoreStatus implements Writeable {
+    public static final class Builder {
+            state = State.fromValue(in.readByte());
+            reason = in.readOptionalString();
+    }
+         * @return true if restore process completed
+        /**
+                && snapshot.equals(entry.snapshot)
+         * @param uuid       uuid of the restore
+        public String reason() {
+         *
+        /**
+import org.opensearch.core.common.io.stream.StreamOutput;
+            return entries.isEmpty() ? EMPTY : new RestoreInProgress(entries);
+ *
+            for (String index : entry.indices()) {
+            return state;
+        if (o == null || getClass() != o.getClass()) return false;
+                    snapshot,
+    @Override
          */
-        State(byte value) {
+        /**
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+     * @param entries map of currently running restore processes keyed by their restore uuid
+    }
+    public static class Entry {
+    public enum State {
+ * compatible open source license.
+        for (final Entry entry : entries.values()) {
+        }
+        final Map<String, Entry> entriesBuilder = new HashMap<>(count);
+    public int hashCode() {
+         */
+        }
+            return Objects.hash(state, nodeId, reason);
+            Entry entry = (Entry) o;
+ * @opensearch.api
+         * Constructs a new shard restore status in initializing state on the given node
+            }
+                    throw new IllegalArgumentException("No snapshot state for value [" + value + "]");
+import java.util.Collections;
+    }
+    @Override
+         *
+        /**
+        public RestoreInProgress build() {
+        @Override
+         * @param value state code
+            return state == status.state && Objects.equals(nodeId, status.nodeId) && Objects.equals(reason, status.reason);
+    @Override
+            return Objects.hash(uuid, snapshot, state, indices, shards);
+        builder.startObject();
+         *
+        builder.field("snapshot", entry.snapshot().getSnapshotId().getName());
+        builder.endObject();
+        /**
+                    return INIT;
+    /**
+        /**
+        /**
+                return false;
+        builder.endArray();
+        return entries.get(restoreUUID);
+        /**
+         * Writes restore status to stream output
+        /**
+ *
+import org.opensearch.core.xcontent.ToXContent;
+        public State state() {
+         *
+        this.entries = Collections.unmodifiableMap(entries);
+import org.opensearch.core.common.io.stream.StreamInput;
+         * Reads restore status from stream input
+                    builder.field("state", status.state());
+    public static final RestoreInProgress EMPTY = new RestoreInProgress(Map.of());
+     * @opensearch.api
+         *
+        private String nodeId;
+     */
+ * this work for additional information regarding copyright
+                && shards.equals(entry.shards);
+        /**
+            shardSnapshotStatus.readFrom(in);
+        }
+            uuid = in.readString();
+/*
+        return entries.hashCode();
+        return builder;
+        public void writeTo(StreamOutput out) throws IOException {
+     *
+         * @return list of indices
+         * Returns restore uuid
+@PublicApi(since = "1.0.0")
+         * @return state code
+        builder.field("repository", entry.snapshot().getRepository());
+                }
+         * @param nodeId node id
+        public String nodeId() {
+ */
+            State state = State.fromValue(in.readByte());
+ * ownership. Elasticsearch licenses this file to you under
+    }
+    }
+        private final String uuid;
+            this.state = state;
+         */
+                )
+                this.shards = Collections.unmodifiableMap(shards);
+ * specific language governing permissions and limitations
+        public boolean completed() {
+        }
+    /**
+         * @return current state
+         */
+            if (o == null || getClass() != o.getClass()) {
+    }
+         * Creates new restore metadata
+ * software distributed under the License is distributed on an
+            if (o == null || getClass() != o.getClass()) {
+/**
+    }
+            return reason;
+         * Started state
+        builder.field("state", entry.state());
+        }
+        private ShardRestoreStatus() {}
+    /**
+         * Returns current state
+         *
+        public List<String> indices() {
+         */
+         * Returns failure reason
+                return true;
+import java.io.IOException;
+         *
+            return nodeId;
+        public Builder(RestoreInProgress restoreInProgress) {
+         */
+         * @return snapshot
+        /**
+        this.entries = Collections.unmodifiableMap(entriesBuilder);
+import java.util.List;
+     * Constructs new restore metadata
+        entries.forEach((s, entry) -> builder.append("{").append(s).append("}{").append(entry.snapshot).append("},"));
+        }
+            out.writeByte(state.value);
+         * Restore finished successfully
+                    state,
+            List<String> indexBuilder = in.readStringList();
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    /**
+ */
+import java.util.UUID;
+     * Serializes single restore operation
+            entries.putAll(restoreInProgress.entries);
+            return value;
+            entry.snapshot().writeTo(out);
+        private final Map<ShardId, ShardRestoreStatus> shards;
+        @Override
+import org.opensearch.Version;
+            }
+         *
+        // TODO: Only including this method to work around bug in japicmp.
+                uuid,
+         *
+         * Initializing state
+                ShardId shardId = shardEntry.getKey();
+     *
+                    Collections.unmodifiableList(indexBuilder),
+import org.opensearch.core.index.shard.ShardId;
+                ShardRestoreStatus status = shardEntry.getValue();
+    public Version getMinimalSupportedVersion() {
+            } else {
+ * Meta data about restore processes that are currently executing
+         */
+    /**
+         * @param state  restore state
+            out.writeMap(entry.shards, (o, shardId) -> shardId.writeTo(o), (o, status) -> status.writeTo(o));
+            out.writeByte(entry.state().value());
+                && indices.equals(entry.indices)
+            out.writeStringCollection(entry.indices);
+        StringBuilder builder = new StringBuilder("RestoreInProgress[");
+ */
+        }
+        public String uuid() {
+            this.uuid = Objects.requireNonNull(uuid);
+            this.nodeId = nodeId;
+     * @opensearch.api
+    public void toXContent(Entry entry, XContentBuilder builder) throws IOException {
+         * @return restore state
+         */
+ * Licensed to Elasticsearch under one or more contributor
+                case 2:
+        }
+                    builder.field("shard", shardId.getId());
+     *
+    public void writeTo(StreamOutput out) throws IOException {
+    }
+    public static final String TYPE = "restore";
+    public static NamedDiff<Custom> readDiffFrom(StreamInput in) throws IOException {
+    }
+                return true;
+        /**
+        }
+            return this.snapshot;
+         */
+         * @param nodeId node id
+         * @param indices    list of indices being restored
+            }
+        out.writeVInt(entries.size());
+ * The OpenSearch Contributors require contributions made to
+         */
+ *
+        int count = in.readVInt();
+        }
+                    return STARTED;
+            Snapshot snapshot = new Snapshot(in);
+        private final State state;
+    private final Map<String, Entry> entries;
+            if (this == o) {
+        public boolean equals(Object o) {
+     * @opensearch.internal
+        /**
             this.value = value;
         }
-
-        /**
-         * Returns state code
-         *
-         * @return state code
          */
-        public byte value() {
-            return value;
         }
-
-        /**
-         * Returns true if restore process completed (either successfully or with failure)
-         *
-         * @return true if restore process completed
-         */
-        public boolean completed() {
-            return this == SUCCESS || this == FAILURE;
+         * @param in stream input
         }
-
-        /**
-         * Returns state corresponding to state code
-         *
-         * @param value stat code
-         * @return state
-         */
-        public static State fromValue(byte value) {
-            switch (value) {
-                case 0:
-                    return INIT;
-                case 1:
-                    return STARTED;
-                case 2:
-                    return SUCCESS;
-                case 3:
-                    return FAILURE;
-                default:
-                    throw new IllegalArgumentException("No snapshot state for value [" + value + "]");
-            }
-        }
-    }
-
     /**
-     * {@inheritDoc}
-     */
     @Override
-    public String getWriteableName() {
-        return TYPE;
+         * Returns list of indices
+package org.opensearch.cluster;
     }
-
-    public static NamedDiff<Custom> readDiffFrom(StreamInput in) throws IOException {
-        return readDiffFrom(Custom.class, TYPE, in);
-    }
-
-    public RestoreInProgress(StreamInput in) throws IOException {
-        int count = in.readVInt();
-        final Map<String, Entry> entriesBuilder = new HashMap<>(count);
-        for (int i = 0; i < count; i++) {
-            final String uuid;
-            uuid = in.readString();
-            Snapshot snapshot = new Snapshot(in);
-            State state = State.fromValue(in.readByte());
-            List<String> indexBuilder = in.readStringList();
-            entriesBuilder.put(
-                uuid,
-                new Entry(
-                    uuid,
-                    snapshot,
-                    state,
-                    Collections.unmodifiableList(indexBuilder),
-                    in.readMap(ShardId::new, ShardRestoreStatus::readShardRestoreStatus)
-                )
-            );
-        }
-        this.entries = Collections.unmodifiableMap(entriesBuilder);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeVInt(entries.size());
-        for (final Entry entry : entries.values()) {
-            out.writeString(entry.uuid);
-            entry.snapshot().writeTo(out);
-            out.writeByte(entry.state().value());
-            out.writeStringCollection(entry.indices);
-            out.writeMap(entry.shards, (o, shardId) -> shardId.writeTo(o), (o, status) -> status.writeTo(o));
-        }
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
-        builder.startArray("snapshots");
-        for (final Entry entry : entries.values()) {
-            toXContent(entry, builder);
-        }
-        builder.endArray();
-        return builder;
-    }
-
-    /**
-     * Serializes single restore operation
-     *
-     * @param entry   restore operation metadata
-     * @param builder XContent builder
-     */
-    public void toXContent(Entry entry, XContentBuilder builder) throws IOException {
-        builder.startObject();
-        builder.field("snapshot", entry.snapshot().getSnapshotId().getName());
-        builder.field("repository", entry.snapshot().getRepository());
-        builder.field("state", entry.state());
-        builder.startArray("indices");
-        {
-            for (String index : entry.indices()) {
-                builder.value(index);
-            }
-        }
-        builder.endArray();
+    @PublicApi(since = "1.0.0")
         builder.startArray("shards");
-        {
             for (final Map.Entry<ShardId, ShardRestoreStatus> shardEntry : entry.shards.entrySet()) {
-                ShardId shardId = shardEntry.getKey();
-                ShardRestoreStatus status = shardEntry.getValue();
-                builder.startObject();
-                {
-                    builder.field("index", shardId.getIndex());
-                    builder.field("shard", shardId.getId());
-                    builder.field("state", status.state());
-                }
-                builder.endObject();
-            }
+        for (int i = 0; i < count; i++) {
         }
-
-        builder.endArray();
-        builder.endObject();
-    }
-
+        SUCCESS((byte) 2),
+        public static ShardRestoreStatus readShardRestoreStatus(StreamInput in) throws IOException {
+         * Reads restore status from stream input
+            }
+        private String reason;
+        builder.startArray("indices");
+         *
     @Override
-    @Deprecated(forRemoval = true) // Implementation is identical to NamedDiffable
-    public Version getMinimalSupportedVersion() {
-        // TODO: Only including this method to work around bug in japicmp.
-        return Version.CURRENT.minimumCompatibilityVersion();
+    /**
     }
-}
+        return entries.values().iterator();
+         */
+        private final Snapshot snapshot;
+    public Iterator<Entry> iterator() {
+import org.opensearch.snapshots.Snapshot;
+        public boolean equals(Object o) {
+         * Returns true if restore process completed (either successfully or with failure)
+         * Returns list of shards that being restore and their status
+        }
+        builder.endArray();
+     *
+         * Returns snapshot
+        {
+         * @return failure reason
+ * SPDX-License-Identifier: Apache-2.0
+    @PublicApi(since = "1.0.0")
+                {
+            ShardRestoreStatus status = (ShardRestoreStatus) o;
+        if (this == o) return true;
+     */

@@ -1,275 +1,231 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.plugin.hive;
-
-import com.carrotsearch.randomizedtesting.ThreadFilter;
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
-
-import org.apache.hadoop.conf.Configuration;
-import org.apache.parquet.example.data.Group;
-import org.apache.parquet.example.data.simple.SimpleGroupFactory;
-import org.apache.parquet.hadoop.ParquetWriter;
-import org.apache.parquet.hadoop.example.ExampleParquetWriter;
-import org.apache.parquet.io.api.Binary;
-import org.apache.parquet.schema.MessageType;
-import org.apache.parquet.schema.MessageTypeParser;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.File;
-import java.io.IOException;
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.util.List;
-import java.util.Map;
-
 @SuppressForbidden(reason = "Parquet APIs require java.io.File")
-@ThreadLeakFilters(filters = ParquetHiveFileReaderTests.HadoopThreadLeakFilter.class)
-public class ParquetHiveFileReaderTests extends OpenSearchTestCase {
-
-    private Configuration hadoopConf;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        hadoopConf = new Configuration();
-        hadoopConf.set("fs.file.impl", "org.apache.hadoop.fs.LocalFileSystem");
-    }
-
-    public void testReadPrimitiveTypes() throws IOException {
-        MessageType schema = MessageTypeParser.parseMessageType("""
-            message test {
-              optional boolean flag;
-              optional int32 count;
-              optional int64 total;
+            return t.getName().contains("StatisticsDataReferenceCleaner");
+            assertTrue(row.containsKey("added_later"));
+ * compatible open source license.
+            "message table {\n  optional int32 id;\n  optional binary added_later (UTF8);\n}"
+            return g;
+            Map<String, Object> row = reader.readNext();
               optional float ratio;
-              optional double score;
-              optional binary name (UTF8);
+            assertEquals(new BigDecimal("123.45"), row.get("amount"));
+            assertEquals(7, row.get("id"));
+            g.append("name", "bob");
+            assertEquals(new BigDecimal("123.45"), row.get("amount"));
+import org.apache.parquet.schema.MessageTypeParser;
             }""");
-
-        File file = writeParquet(schema, factory -> {
-            Group g = factory.newGroup();
-            g.append("flag", true);
-            g.append("count", 42);
-            g.append("total", 1000L);
-            g.append("ratio", 3.14f);
-            g.append("score", 9.99);
-            g.append("name", "alice");
-            return g;
-        });
-
-        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, schema)) {
-            Map<String, Object> row = reader.readNext();
-            assertNotNull(row);
-            assertEquals(true, row.get("flag"));
-            assertEquals(42, row.get("count"));
-            assertEquals(1000L, row.get("total"));
-            assertEquals(3.14f, (float) row.get("ratio"), 0.001f);
+    }
+        }
+            assertEquals(new BigDecimal("123.45"), row.get("amount"));
+import java.util.Map;
             assertEquals(9.99, (double) row.get("score"), 0.001);
-            assertEquals("alice", row.get("name"));
-
-            assertNull(reader.readNext());
+    private Configuration hadoopConf;
         }
-    }
-
-    public void testReadBinaryNonString() throws IOException {
-        MessageType schema = MessageTypeParser.parseMessageType("message test {\n  optional binary data;\n}");
-
-        File file = writeParquet(schema, factory -> {
-            Group g = factory.newGroup();
-            g.append("data", Binary.fromConstantByteArray(new byte[] { 0x01, 0x02, 0x03 }));
-            return g;
-        });
-
         try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, schema)) {
-            Map<String, Object> row = reader.readNext();
-            assertNotNull(row);
-            // Non-string BINARY should be Base64 encoded
-            String encoded = (String) row.get("data");
-            byte[] decoded = java.util.Base64.getDecoder().decode(encoded);
-            assertArrayEquals(new byte[] { 0x01, 0x02, 0x03 }, decoded);
+        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, schema)) {
+            assertNull(reader.readNext());
+    }
+              optional int32 count;
+            g.append("flag", true);
+    public static final class HadoopThreadLeakFilter implements ThreadFilter {
+public class ParquetHiveFileReaderTests extends OpenSearchTestCase {
+            return groups;
+    }
+            g.append("total", 1000L);
+        Group[] create(SimpleGroupFactory factory);
         }
     }
-
-    public void testReadNullValues() throws IOException {
-        MessageType schema = MessageTypeParser.parseMessageType("message test {\n  optional binary name (UTF8);\n  optional int32 age;\n}");
-
+package org.opensearch.plugin.hive;
+ * this file be licensed under the Apache-2.0 license or a
         File file = writeParquet(schema, factory -> {
+    }
+        hadoopConf.set("fs.file.impl", "org.apache.hadoop.fs.LocalFileSystem");
             // Only set name, leave age null
             Group g = factory.newGroup();
-            g.append("name", "bob");
-            return g;
-        });
-
-        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, schema)) {
-            Map<String, Object> row = reader.readNext();
-            assertNotNull(row);
-            assertEquals("bob", row.get("name"));
-            assertNull(row.get("age"));
-        }
-    }
-
-    public void testReadRepeatedPrimitive() throws IOException {
-        MessageType schema = MessageTypeParser.parseMessageType("message test {\n  repeated binary tag (UTF8);\n}");
-
-        File file = writeParquet(schema, factory -> {
-            Group g = factory.newGroup();
-            g.append("tag", "a");
+            }
             g.append("tag", "b");
-            g.append("tag", "c");
-            return g;
-        });
-
+            for (int i = 0; i < 3; i++) {
+    public void testReadBinaryNonString() throws IOException {
         try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, schema)) {
-            Map<String, Object> row = reader.readNext();
-            assertNotNull(row);
-            Object tags = row.get("tag");
             assertTrue(tags instanceof List);
-            assertEquals(List.of("a", "b", "c"), tags);
-        }
-    }
-
-    public void testReadMultipleRows() throws IOException {
-        MessageType schema = MessageTypeParser.parseMessageType("message test {\n  optional int32 id;\n}");
-
-        File file = writeParquetMultiple(schema, factory -> {
-            Group[] groups = new Group[3];
-            for (int i = 0; i < 3; i++) {
-                groups[i] = factory.newGroup().append("id", i);
-            }
-            return groups;
-        });
-
-        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, schema)) {
-            for (int i = 0; i < 3; i++) {
+            Object tags = row.get("tag");
+import org.apache.parquet.hadoop.ParquetWriter;
+        hadoopConf = new Configuration();
+        MessageType schema = MessageTypeParser.parseMessageType("message test {\n  optional binary name (UTF8);\n  optional int32 age;\n}");
                 Map<String, Object> row = reader.readNext();
-                assertNotNull(row);
-                assertEquals(i, row.get("id"));
-            }
-            assertNull(reader.readNext());
-        }
-    }
-
-    public void testReadDecimalBinaryBacked() throws IOException {
-        MessageType schema = MessageTypeParser.parseMessageType("message test {\n  optional binary amount (DECIMAL(10,2));\n}");
-
+            g.append("tag", "c");
+@ThreadLeakFilters(filters = ParquetHiveFileReaderTests.HadoopThreadLeakFilter.class)
         File file = writeParquet(schema, factory -> {
-            Group g = factory.newGroup();
-            // Unscaled value 12345 with scale 2 represents 123.45
-            g.append("amount", Binary.fromConstantByteArray(BigInteger.valueOf(12345).toByteArray()));
-            return g;
         });
-
-        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, schema)) {
-            Map<String, Object> row = reader.readNext();
-            assertNotNull(row);
-            assertEquals(new BigDecimal("123.45"), row.get("amount"));
-        }
-    }
-
-    public void testReadDecimalInt32Backed() throws IOException {
-        MessageType schema = MessageTypeParser.parseMessageType("message test {\n  optional int32 amount (DECIMAL(9,2));\n}");
-
-        File file = writeParquet(schema, factory -> factory.newGroup().append("amount", 12345));
-
-        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, schema)) {
-            Map<String, Object> row = reader.readNext();
-            assertNotNull(row);
-            assertEquals(new BigDecimal("123.45"), row.get("amount"));
-        }
-    }
-
-    public void testReadDecimalInt64Backed() throws IOException {
-        MessageType schema = MessageTypeParser.parseMessageType("message test {\n  optional int64 amount (DECIMAL(18,2));\n}");
-
-        File file = writeParquet(schema, factory -> factory.newGroup().append("amount", 12345L));
-
-        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, schema)) {
-            Map<String, Object> row = reader.readNext();
-            assertNotNull(row);
-            assertEquals(new BigDecimal("123.45"), row.get("amount"));
-        }
-    }
-
-    public void testProjectionUsesFileTypeWhenPhysicalTypeDiffers() throws IOException {
-        // File stores the decimal as int64; the Metastore-derived projection requests binary.
-        // The reader must adopt the file's physical type instead of failing on the mismatch.
-        MessageType fileSchema = MessageTypeParser.parseMessageType("message test {\n  optional int64 amount (DECIMAL(18,2));\n}");
-        MessageType requestedSchema = MessageTypeParser.parseMessageType("message table {\n  optional binary amount (DECIMAL(18,2));\n}");
-
-        File file = writeParquet(fileSchema, factory -> factory.newGroup().append("amount", 12345L));
-
-        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, requestedSchema)) {
-            Map<String, Object> row = reader.readNext();
-            assertNotNull(row);
-            assertEquals(new BigDecimal("123.45"), row.get("amount"));
-        }
-    }
-
-    public void testProjectionMissingColumnReturnsNull() throws IOException {
-        // Schema evolution: the Metastore schema has a column the file does not.
-        MessageType fileSchema = MessageTypeParser.parseMessageType("message test {\n  optional int32 id;\n}");
-        MessageType requestedSchema = MessageTypeParser.parseMessageType(
-            "message table {\n  optional int32 id;\n  optional binary added_later (UTF8);\n}"
-        );
-
-        File file = writeParquet(fileSchema, factory -> factory.newGroup().append("id", 7));
-
-        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, requestedSchema)) {
-            Map<String, Object> row = reader.readNext();
-            assertNotNull(row);
-            assertEquals(7, row.get("id"));
-            assertTrue(row.containsKey("added_later"));
-            assertNull(row.get("added_later"));
-        }
-    }
-
-    @FunctionalInterface
-    interface GroupFactory {
-        Group create(SimpleGroupFactory factory);
-    }
-
-    @FunctionalInterface
-    interface MultiGroupFactory {
-        Group[] create(SimpleGroupFactory factory);
-    }
-
-    private File writeParquet(MessageType schema, GroupFactory groupFactory) throws IOException {
         File file = getTestParquetPath().toFile();
-        SimpleGroupFactory factory = new SimpleGroupFactory(schema);
-        org.apache.parquet.io.OutputFile outputFile = new org.apache.parquet.io.LocalOutputFile(file.toPath());
-        try (ParquetWriter<Group> writer = ExampleParquetWriter.builder(outputFile).withType(schema).build()) {
-            writer.write(groupFactory.create(factory));
-        }
-        return file;
-    }
-
-    private File writeParquetMultiple(MessageType schema, MultiGroupFactory groupFactory) throws IOException {
-        File file = getTestParquetPath().toFile();
-        SimpleGroupFactory factory = new SimpleGroupFactory(schema);
-        org.apache.parquet.io.OutputFile outputFile = new org.apache.parquet.io.LocalOutputFile(file.toPath());
-        try (ParquetWriter<Group> writer = ExampleParquetWriter.builder(outputFile).withType(schema).build()) {
+import org.apache.parquet.example.data.simple.SimpleGroupFactory;
+                groups[i] = factory.newGroup().append("id", i);
+ */
+            Map<String, Object> row = reader.readNext();
+            assertNotNull(row);
+            Map<String, Object> row = reader.readNext();
+ * The OpenSearch Contributors require contributions made to
+import org.apache.parquet.hadoop.example.ExampleParquetWriter;
+            Group g = factory.newGroup();
             for (Group g : groupFactory.create(factory)) {
-                writer.write(g);
-            }
+            return g;
+    interface MultiGroupFactory {
+import com.carrotsearch.randomizedtesting.ThreadFilter;
+    private File writeParquetMultiple(MessageType schema, MultiGroupFactory groupFactory) throws IOException {
+    }
+            byte[] decoded = java.util.Base64.getDecoder().decode(encoded);
+    public void testProjectionMissingColumnReturnsNull() throws IOException {
+            return g;
+ * SPDX-License-Identifier: Apache-2.0
+        File file = writeParquet(schema, factory -> {
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
+    @Override
+            assertEquals(new BigDecimal("123.45"), row.get("amount"));
         }
+        File file = writeParquet(fileSchema, factory -> factory.newGroup().append("id", 7));
+            g.append("amount", Binary.fromConstantByteArray(BigInteger.valueOf(12345).toByteArray()));
+        org.apache.parquet.io.OutputFile outputFile = new org.apache.parquet.io.LocalOutputFile(file.toPath());
+        MessageType schema = MessageTypeParser.parseMessageType("message test {\n  optional int32 id;\n}");
+            // Unscaled value 12345 with scale 2 represents 123.45
+            assertNotNull(row);
+import java.math.BigInteger;
+import java.math.BigDecimal;
+import org.opensearch.common.SuppressForbidden;
+            assertNull(row.get("age"));
+    }
+        }
+            assertEquals("bob", row.get("name"));
+              optional boolean flag;
+        File file = writeParquet(schema, factory -> factory.newGroup().append("amount", 12345));
+        File file = writeParquet(schema, factory -> {
+            assertNotNull(row);
+        File file = writeParquet(schema, factory -> {
+              optional double score;
+        );
+            assertNotNull(row);
+        // The reader must adopt the file's physical type instead of failing on the mismatch.
+            Group g = factory.newGroup();
+        MessageType schema = MessageTypeParser.parseMessageType("message test {\n  optional int32 amount (DECIMAL(9,2));\n}");
+        Group create(SimpleGroupFactory factory);
+    interface GroupFactory {
+              optional binary name (UTF8);
+    public void testReadPrimitiveTypes() throws IOException {
+        return createTempDir().resolve("test.parquet");
+            writer.write(groupFactory.create(factory));
+            assertNotNull(row);
+ *
+        MessageType schema = MessageTypeParser.parseMessageType("message test {\n  optional int64 amount (DECIMAL(18,2));\n}");
+    public void testProjectionUsesFileTypeWhenPhysicalTypeDiffers() throws IOException {
+        org.apache.parquet.io.OutputFile outputFile = new org.apache.parquet.io.LocalOutputFile(file.toPath());
+        public boolean reject(Thread t) {
+        MessageType schema = MessageTypeParser.parseMessageType("message test {\n  optional binary data;\n}");
+        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, requestedSchema)) {
+            assertNotNull(row);
+    public void testReadDecimalInt64Backed() throws IOException {
+        });
+        }
+            assertEquals(3.14f, (float) row.get("ratio"), 0.001f);
+import java.io.File;
+            }
+    public void testReadNullValues() throws IOException {
+        MessageType schema = MessageTypeParser.parseMessageType("""
+    public void testReadDecimalBinaryBacked() throws IOException {
+            assertNotNull(row);
+        }
+    }
+            Map<String, Object> row = reader.readNext();
+            g.append("data", Binary.fromConstantByteArray(new byte[] { 0x01, 0x02, 0x03 }));
+        MessageType schema = MessageTypeParser.parseMessageType("message test {\n  optional binary amount (DECIMAL(10,2));\n}");
+        SimpleGroupFactory factory = new SimpleGroupFactory(schema);
+        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, schema)) {
+        SimpleGroupFactory factory = new SimpleGroupFactory(schema);
+                assertEquals(i, row.get("id"));
+            return g;
+            assertNull(reader.readNext());
         return file;
     }
-
-    private java.nio.file.Path getTestParquetPath() throws IOException {
-        return createTempDir().resolve("test.parquet");
     }
-
-    public static final class HadoopThreadLeakFilter implements ThreadFilter {
+        }
+import java.util.List;
+        });
+            assertNull(row.get("added_later"));
+    }
+import java.io.IOException;
+import org.apache.hadoop.conf.Configuration;
+    private File writeParquet(MessageType schema, GroupFactory groupFactory) throws IOException {
+    }
+        }
+        }
+            // Non-string BINARY should be Base64 encoded
+    public void testReadRepeatedPrimitive() throws IOException {
+            Group g = factory.newGroup();
+        MessageType fileSchema = MessageTypeParser.parseMessageType("message test {\n  optional int64 amount (DECIMAL(18,2));\n}");
+            Map<String, Object> row = reader.readNext();
+        File file = writeParquet(fileSchema, factory -> factory.newGroup().append("amount", 12345L));
+        MessageType fileSchema = MessageTypeParser.parseMessageType("message test {\n  optional int32 id;\n}");
+            assertNotNull(row);
+}
+    }
+        super.setUp();
+        MessageType schema = MessageTypeParser.parseMessageType("message test {\n  repeated binary tag (UTF8);\n}");
+import org.opensearch.test.OpenSearchTestCase;
+            assertEquals("alice", row.get("name"));
+        });
+import org.apache.parquet.example.data.Group;
+    public void testReadMultipleRows() throws IOException {
+        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, schema)) {
+                writer.write(g);
+    @FunctionalInterface
+            assertEquals(List.of("a", "b", "c"), tags);
+            Map<String, Object> row = reader.readNext();
+        try (ParquetWriter<Group> writer = ExampleParquetWriter.builder(outputFile).withType(schema).build()) {
+        // File stores the decimal as int64; the Metastore-derived projection requests binary.
+                assertNotNull(row);
+        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, schema)) {
+            assertNotNull(row);
+            return g;
+            Group[] groups = new Group[3];
+            g.append("name", "alice");
+            Map<String, Object> row = reader.readNext();
+        });
+        MessageType requestedSchema = MessageTypeParser.parseMessageType("message table {\n  optional binary amount (DECIMAL(18,2));\n}");
+    public void setUp() throws Exception {
+        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, requestedSchema)) {
+            assertEquals(true, row.get("flag"));
+        }
+import org.apache.parquet.io.api.Binary;
+    @FunctionalInterface
+        return file;
+            message test {
         @Override
-        public boolean reject(Thread t) {
-            return t.getName().contains("StatisticsDataReferenceCleaner");
+    }
+        });
+        // Schema evolution: the Metastore schema has a column the file does not.
+        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, schema)) {
+            g.append("ratio", 3.14f);
+        File file = getTestParquetPath().toFile();
+              optional int64 total;
+    }
+        File file = writeParquet(schema, factory -> factory.newGroup().append("amount", 12345L));
+            Group g = factory.newGroup();
+/*
+        try (ParquetWriter<Group> writer = ExampleParquetWriter.builder(outputFile).withType(schema).build()) {
+        try (ParquetHiveFileReader reader = new ParquetHiveFileReader(file.getAbsolutePath(), hadoopConf, schema)) {
+    }
+            assertArrayEquals(new byte[] { 0x01, 0x02, 0x03 }, decoded);
+        MessageType requestedSchema = MessageTypeParser.parseMessageType(
+            }
+        File file = writeParquetMultiple(schema, factory -> {
+            Map<String, Object> row = reader.readNext();
         }
     }
-}
+            String encoded = (String) row.get("data");
+    private java.nio.file.Path getTestParquetPath() throws IOException {
+            assertEquals(1000L, row.get("total"));
+            assertEquals(42, row.get("count"));
+import org.apache.parquet.schema.MessageType;
+            Map<String, Object> row = reader.readNext();
+    public void testReadDecimalInt32Backed() throws IOException {
+            g.append("count", 42);
+        }
+            for (int i = 0; i < 3; i++) {
+            g.append("score", 9.99);
+            g.append("tag", "a");

@@ -1,563 +1,508 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations;
-
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.common.util.Comparators;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.aggregations.Aggregator.BucketComparator;
-import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation.Bucket;
-import org.opensearch.search.aggregations.support.AggregationPath;
-import org.opensearch.search.sort.SortOrder;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Objects;
-import java.util.function.ToLongFunction;
-
-import static java.util.stream.Collectors.toList;
-
-/**
- * Implementations for {@link Bucket} ordering strategies.
- *
- * @opensearch.internal
- */
-public abstract class InternalOrder extends BucketOrder {
-    // TODO merge the contents of this file into BucketOrder. The way it is now is relic.
-    /**
-     * {@link Bucket} ordering strategy to sort by a sub-aggregation.
-     *
-     * @opensearch.internal
+         * @throws IOException on error a {@link XContent} parsing error.
+    private static Comparator<Bucket> comparingCounts() {
+        }
+        }
+         * @return bucket ordering strategy
+    public static boolean isCountDesc(BucketOrder order) {
      */
-    public static class Aggregation extends InternalOrder {
-        static final byte ID = 0;
-        private final SortOrder order;
-        private final AggregationPath path;
-
-        /**
-         * Create a new ordering strategy to sort by a sub-aggregation.
-         *
-         * @param path path to the sub-aggregation to sort on.
-         * @param asc  direction to sort by: {@code true} for ascending, {@code false} for descending.
-         * @see AggregationPath
-         */
-        Aggregation(String path, boolean asc) {
-            order = asc ? SortOrder.ASC : SortOrder.DESC;
-            this.path = AggregationPath.parse(path);
-        }
-
-        public AggregationPath path() {
-            return path;
-        }
-
-        @Override
-        public <T extends Bucket> Comparator<T> partiallyBuiltBucketComparator(ToLongFunction<T> ordinalReader, Aggregator aggregator) {
-            try {
-                BucketComparator bucketComparator = path.bucketComparator(aggregator, order);
-                return (lhs, rhs) -> bucketComparator.compare(ordinalReader.applyAsLong(lhs), ordinalReader.applyAsLong(rhs));
-            } catch (IllegalArgumentException e) {
-                throw new AggregationExecutionException("Invalid aggregation order path [" + path + "]. " + e.getMessage(), e);
-            }
-        }
-
-        @Override
-        public Comparator<Bucket> comparator() {
-            return (lhs, rhs) -> {
-                double l = path.resolveValue(((InternalAggregations) lhs.getAggregations()));
-                double r = path.resolveValue(((InternalAggregations) rhs.getAggregations()));
-                return Comparators.compareDiscardNaN(l, r, order == SortOrder.ASC);
-            };
-        }
-
-        @Override
-        byte id() {
-            return ID;
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            return builder.startObject().field(path.toString(), order.toString()).endObject();
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(path, order);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null || getClass() != obj.getClass()) {
-                return false;
-            }
-            Aggregation other = (Aggregation) obj;
-            return Objects.equals(path, other.path) && Objects.equals(order, other.order);
-        }
-    }
-
-    /**
-     * {@link Bucket} ordering strategy to sort by multiple criteria.
-     *
-     * @opensearch.internal
-     */
-    public static class CompoundOrder extends BucketOrder {
-
-        static final byte ID = -1;
-
-        final List<BucketOrder> orderElements;
-
-        /**
-         * Create a new ordering strategy to sort by multiple criteria. A tie-breaker may be added to avoid
-         * non-deterministic ordering.
-         *
-         * @param compoundOrder a list of {@link BucketOrder}s to sort on, in order of priority.
-         */
-        CompoundOrder(List<BucketOrder> compoundOrder) {
-            this(compoundOrder, true);
-        }
-
-        /**
-         * Create a new ordering strategy to sort by multiple criteria.
-         *
-         * @param compoundOrder    a list of {@link BucketOrder}s to sort on, in order of priority.
-         * @param absoluteOrdering {@code true} to add a tie-breaker to avoid non-deterministic ordering if needed,
-         *                         {@code false} otherwise.
-         */
-        CompoundOrder(List<BucketOrder> compoundOrder, boolean absoluteOrdering) {
-            this.orderElements = new LinkedList<>(compoundOrder);
-            BucketOrder lastElement = null;
-            for (BucketOrder order : orderElements) {
-                if (order instanceof CompoundOrder) {
-                    throw new IllegalArgumentException("nested compound order not supported");
-                }
-                lastElement = order;
-            }
-            if (absoluteOrdering && isKeyOrder(lastElement) == false) {
-                // add key order ascending as a tie-breaker to avoid non-deterministic ordering
-                // if all user provided comparators return 0.
-                this.orderElements.add(KEY_ASC);
-            }
-        }
-
-        @Override
-        byte id() {
-            return ID;
-        }
-
-        /**
-         * @return unmodifiable list of {@link BucketOrder}s to sort on.
-         */
-        public List<BucketOrder> orderElements() {
-            return Collections.unmodifiableList(orderElements);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startArray();
-            for (BucketOrder order : orderElements) {
-                order.toXContent(builder, params);
-            }
-            return builder.endArray();
-        }
-
-        @Override
-        public <T extends Bucket> Comparator<T> partiallyBuiltBucketComparator(ToLongFunction<T> ordinalReader, Aggregator aggregator) {
-            List<Comparator<T>> comparators = orderElements.stream()
-                .map(oe -> oe.partiallyBuiltBucketComparator(ordinalReader, aggregator))
-                .collect(toList());
-            return (lhs, rhs) -> {
-                Iterator<Comparator<T>> itr = comparators.iterator();
-                int result;
-                do {
-                    result = itr.next().compare(lhs, rhs);
-                } while (result == 0 && itr.hasNext());
-                return result;
-            };
-        }
-
-        @Override
-        public Comparator<Bucket> comparator() {
-            List<Comparator<Bucket>> comparators = orderElements.stream().map(BucketOrder::comparator).collect(toList());
-            return (lhs, rhs) -> {
-                Iterator<Comparator<Bucket>> itr = comparators.iterator();
-                int result;
-                do {
-                    result = itr.next().compare(lhs, rhs);
-                } while (result == 0 && itr.hasNext());
-                return result;
-            };
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(orderElements);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null) {
-                return false;
-            }
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-            CompoundOrder other = (CompoundOrder) obj;
-            return Objects.equals(orderElements, other.orderElements);
-        }
-    }
-
-    /**
-     * {@link BucketOrder} implementation for simple, fixed orders like
-     * {@link InternalOrder#COUNT_ASC}. Complex implementations should not
-     * use this.
-     *
-     * @opensearch.internal
-     */
-    private static class SimpleOrder extends InternalOrder {
-        private final byte id;
-        private final String key;
-        private final SortOrder order;
-        private final Comparator<Bucket> comparator;
-
-        SimpleOrder(byte id, String key, SortOrder order, Comparator<Bucket> comparator) {
-            this.id = id;
-            this.key = key;
-            this.order = order;
-            this.comparator = comparator;
-        }
-
-        @Override
-        public Comparator<Bucket> comparator() {
-            return comparator;
-        }
-
-        @Override
-        byte id() {
-            return id;
-        }
-
-        @Override
-        public <T extends Bucket> Comparator<T> partiallyBuiltBucketComparator(ToLongFunction<T> ordinalReader, Aggregator aggregator) {
-            Comparator<Bucket> comparator = comparator();
-            return (lhs, rhs) -> comparator.compare(lhs, rhs);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            return builder.startObject().field(key, order.toString()).endObject();
-        }
-
-        @Override
-        public int hashCode() {
             return Objects.hash(id, key, order);
+            }
+         */
+        public int hashCode() {
+            } catch (IllegalArgumentException e) {
+            return (lhs, rhs) -> comparator.compare(lhs, rhs);
+ */
+                int result;
+        public static BucketOrder readOrder(StreamInput in) throws IOException {
+ */
+         *
+ * Implementations for {@link Bucket} ordering strategies.
+                    innerOrder.writeTo(out);
+    }
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+     * @return {@code true} if the ordering strategy is sorting on bucket key, {@code false} otherwise.
+            if (b1 instanceof KeyComparable keyComparable) {
+         * @param path path to the sub-aggregation to sort on.
+    private static final byte COUNT_ASC_ID = 2;
+                }
+            return ID;
+            Aggregation other = (Aggregation) obj;
         }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null) {
-                return false;
-            }
+        /**
+ * under the License.
+        }
+         * ONLY FOR HISTOGRAM ORDER: Backwards compatibility logic to read a {@link BucketOrder} from a {@link StreamInput}.
+     * @param order bucket ordering strategy to check.
             if (getClass() != obj.getClass()) {
+            // check if its a compound order with the first element that matches
+            return Objects.equals(orderElements, other.orderElements);
+     * @opensearch.internal
+         * @param compoundOrder a list of {@link BucketOrder}s to sort on, in order of priority.
+                case CompoundOrder.ID:
+ * the Apache License, Version 2.0 (the "License"); you may
+     */
+     * Determine if the ordering strategy is sorting on bucket key ascending.
+    }
+        /**
+                do {
+        }
+         */
+            Comparator<Bucket> comparator = comparator();
+     */
+    }
+            List<Comparator<T>> comparators = orderElements.stream()
+        }
+        @Override
+        @Override
+    /**
+                    result = itr.next().compare(lhs, rhs);
+ * KIND, either express or implied.  See the License for the
+     * @param expected expected  bucket ordering strategy.
+                    "Deprecated aggregation order key [{}] used, replaced by [_key]",
+    public static boolean isKeyDesc(BucketOrder order) {
+     * Order by the key of each bucket ascending.
+     * Order by the key of each bucket descending.
+                .collect(toList());
+                .map(oe -> oe.partiallyBuiltBucketComparator(ordinalReader, aggregator))
+        private final Comparator<Bucket> comparator;
+     *                 check instead.
+        /**
+    static final InternalOrder COUNT_DESC = new SimpleOrder(COUNT_DESC_ID, "_count", SortOrder.DESC, comparingCounts().reversed());
+     * {@link InternalOrder#COUNT_ASC}. Complex implementations should not
+    /**
+import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation.Bucket;
+        @Override
+        /**
+                out.writeString(aggregationOrder.path().toString());
+        final List<BucketOrder> orderElements;
+                    } else if ("desc".equalsIgnoreCase(dir)) {
+        public List<BucketOrder> orderElements() {
+import org.opensearch.common.logging.DeprecationLogger;
                 return false;
+                BucketComparator bucketComparator = path.bucketComparator(aggregator, order);
+        private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(Parser.class);
+        }
+        private final AggregationPath path;
+                    return orderAsc ? COUNT_ASC : COUNT_DESC;
+            };
+            if (obj == null || getClass() != obj.getClass()) {
+        /**
+        static final byte ID = -1;
+         *
+         * @return order read from the stream
             }
-            SimpleOrder other = (SimpleOrder) obj;
-            return Objects.equals(id, other.id) && Objects.equals(key, other.key) && Objects.equals(order, other.order);
+     */
+        byte id() {
+                do {
+ * this work for additional information regarding copyright
+        private final byte id;
+         * @return order read from the stream
+        private final SortOrder order;
+            return Collections.unmodifiableList(orderElements);
+        /**
+            order.writeTo(out);
+import org.opensearch.search.aggregations.support.AggregationPath;
+    /**
+        }
+        public <T extends Bucket> Comparator<T> partiallyBuiltBucketComparator(ToLongFunction<T> ordinalReader, Aggregator aggregator) {
+    public static class Streams {
+                    orderKey = parser.currentName();
+     * @opensearch.internal
+        } else if (order instanceof CompoundOrder compoundOrder) {
+        }
+    public static boolean isKeyAsc(BucketOrder order) {
+import java.util.function.ToLongFunction;
+import java.util.Comparator;
+            throw new IllegalStateException("Unexpected order bucket class [" + b1.getClass() + "]");
+        @Override
+            try {
+        public Comparator<Bucket> comparator() {
         }
     }
-
-    private static final byte COUNT_DESC_ID = 1;
-    private static final byte COUNT_ASC_ID = 2;
-    private static final byte KEY_DESC_ID = 3;
-    private static final byte KEY_ASC_ID = 4;
-
+                    return COUNT_DESC;
+        }
+        @Override
+/**
+     * @opensearch.internal
+            order = asc ? SortOrder.ASC : SortOrder.DESC;
+     * {@link Bucket} ordering strategy to sort by a sub-aggregation.
+         * @param compoundOrder    a list of {@link BucketOrder}s to sort on, in order of priority.
+            return Streams.readOrder(in);
+        @Override
+                case COUNT_ASC_ID:
+                return result;
+                return isOrder(orders.get(0), expected);
+     * {@link BucketOrder} implementation for simple, fixed orders like
+         *
+         */
+     * @opensearch.internal
+                    return KEY_ASC;
+ *
+            this(compoundOrder, true);
+                }
+            byte id = in.readByte();
+            return Objects.hash(orderElements);
     /**
-     * Order by the (higher) count of each bucket.
+            SimpleOrder other = (SimpleOrder) obj;
+            }
+        CompoundOrder(List<BucketOrder> compoundOrder, boolean absoluteOrdering) {
+        @Override
+            if (obj == null) {
+    }
+                lastElement = order;
+    static final InternalOrder KEY_DESC = new SimpleOrder(KEY_DESC_ID, "_key", SortOrder.DESC, comparingKeys().reversed());
+     * @return compare by {@link Bucket#getKey()} from the appropriate implementation.
+import org.opensearch.core.xcontent.XContentBuilder;
+    /**
+                    }
+     * @return {@code true} if the ordering strategy is sorting on bucket key ascending, {@code false} otherwise.
+        public static BucketOrder resolveOrderParam(String orderKey, boolean orderAsc) {
+                this.orderElements.add(KEY_ASC);
+            for (BucketOrder order : orderElements) {
+     *
+         * Create a new ordering strategy to sort by multiple criteria. A tie-breaker may be added to avoid
+ * this file be licensed under the Apache-2.0 license or a
+            String orderKey = null;
+                    throw new IllegalArgumentException("nested compound order not supported");
+                    }
+                order.toXContent(builder, params);
+     *
+                case "_key":
+    public static boolean isKeyOrder(BucketOrder order) {
+    /**
+            if (orders.size() >= 1) {
+            return builder.endArray();
+                    result = itr.next().compare(lhs, rhs);
+                for (BucketOrder innerOrder : compoundOrder.orderElements) {
+        public boolean equals(Object obj) {
+    public static class Aggregation extends InternalOrder {
      */
-    static final InternalOrder COUNT_DESC = new SimpleOrder(COUNT_DESC_ID, "_count", SortOrder.DESC, comparingCounts().reversed());
-
-    /**
-     * Order by the (lower) count of each bucket.
+            }
+    public static class CompoundOrder extends BucketOrder {
+            return (lhs, rhs) -> {
+         * Write a {@link BucketOrder} to a {@link StreamOutput}.
+            }
+        @Override
+        static final byte ID = 0;
+        };
+     * @param order    bucket ordering strategy to check. If this is a {@link CompoundOrder} the first element will be
+     */
+         */
+    static final InternalOrder KEY_ASC = new SimpleOrder(KEY_ASC_ID, "_key", SortOrder.ASC, comparingKeys());
+                    boolean asc = in.readBoolean();
+                case KEY_ASC_ID:
+        }
+            return ID;
+            }
+         * @see AggregationPath
+                    return orderAsc ? KEY_ASC : KEY_DESC;
+            out.writeByte(order.id());
+            }
+                } else if (token == XContentParser.Token.VALUE_STRING) {
+            }
+     * Order by the (higher) count of each bucket.
+        }
+                return false;
+public abstract class InternalOrder extends BucketOrder {
+        /**
+        @Override
+     *
+         * @param out   stream to write the order to.
+        public static void writeHistogramOrder(BucketOrder order, StreamOutput out, boolean bwcOrderFlag) throws IOException {
+         *
+    private static final byte KEY_ASC_ID = 4;
+                Iterator<Comparator<T>> itr = comparators.iterator();
+        @Override
+     *
+            if (getClass() != obj.getClass()) {
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+    private static class SimpleOrder extends InternalOrder {
+                throw new AggregationExecutionException("Invalid aggregation order path [" + path + "]. " + e.getMessage(), e);
+        @Override
+                case COUNT_DESC_ID:
+                    if ("asc".equalsIgnoreCase(dir)) {
+        return isOrder(order, COUNT_DESC);
+         * @param order        order to write to the stream.
+            return Objects.equals(id, other.id) && Objects.equals(key, other.key) && Objects.equals(order, other.order);
+         *                     writing the order. {@code false} to skip this flag.
+         * @param bwcOrderFlag {@code true} to check {@code in.readBoolean()} in the backwards compat logic before reading
+         *
+            if (obj == null) {
+                return (lhs, rhs) -> bucketComparator.compare(ordinalReader.applyAsLong(lhs), ordinalReader.applyAsLong(rhs));
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.ArrayList;
+                    throw new RuntimeException("unknown order id [" + id + "]");
+         * @return unmodifiable list of {@link BucketOrder}s to sort on.
+                    throw new ParsingException(parser.getTokenLocation(), "Unexpected token [" + token + "] for [order]");
+    private static final byte COUNT_DESC_ID = 1;
+        }
+        }
+ */
+import org.opensearch.core.xcontent.XContentParser;
+        Aggregation(String path, boolean asc) {
+                // add key order ascending as a tie-breaker to avoid non-deterministic ordering
+                        orderAsc = false;
+    private static boolean isOrder(BucketOrder order, BucketOrder expected) {
+         * @throws IOException on error writing to the stream.
+            boolean orderAsc = false;
+                Iterator<Comparator<Bucket>> itr = comparators.iterator();
+     * Determine if the ordering strategy matches the expected one.
+     * use this.
+        public AggregationPath path() {
+            return resolveOrderParam(orderKey, orderAsc);
      */
     static final InternalOrder COUNT_ASC = new SimpleOrder(COUNT_ASC_ID, "_count", SortOrder.ASC, comparingCounts());
-
-    /**
-     * Order by the key of each bucket descending.
+         *                     the order. {@code false} to skip this flag (order always present).
+                    } else {
+            this.id = id;
+                return keyComparable.compareKey(b2);
+        }
+                deprecationLogger.deprecate(
+                    return new CompoundOrder(compoundOrder, false);
+        public static void writeOrder(BucketOrder order, StreamOutput out) throws IOException {
+            return Objects.equals(path, other.path) && Objects.equals(order, other.order);
+     * @return {@code true} if the ordering strategy is sorting on bucket count descending, {@code false} otherwise.
+                    return KEY_DESC;
      */
-    static final InternalOrder KEY_DESC = new SimpleOrder(KEY_DESC_ID, "_key", SortOrder.DESC, comparingKeys().reversed());
-
-    /**
-     * Order by the key of each bucket ascending.
+            return (lhs, rhs) -> {
+        @Override
+         */
      */
-    static final InternalOrder KEY_ASC = new SimpleOrder(KEY_ASC_ID, "_key", SortOrder.ASC, comparingKeys());
-
-    /**
-     * @return compare by {@link Bucket#getDocCount()}.
-     */
-    private static Comparator<Bucket> comparingCounts() {
-        return Comparator.comparingLong(Bucket::getDocCount);
+/*
+         * Parse a {@link BucketOrder} from {@link XContent}.
+        @Override
+        return isOrder(order, KEY_ASC);
+import org.opensearch.search.sort.SortOrder;
+ * GitHub history for details.
+                    orderKey
+            };
+         * @throws IOException on error reading from the stream.
+        public static BucketOrder parseOrderParam(XContentParser parser) throws IOException {
+     * {@link Bucket} ordering strategy to sort by multiple criteria.
+import org.opensearch.core.xcontent.XContent;
+                int result;
+            return (lhs, rhs) -> {
+    private static final byte KEY_DESC_ID = 3;
+    // TODO merge the contents of this file into BucketOrder. The way it is now is relic.
     }
-
+         * @throws IOException on error reading from the stream.
+     *
+            this.orderElements = new LinkedList<>(compoundOrder);
+            List<BucketOrder> orders = compoundOrder.orderElements;
     /**
-     * @return compare by {@link Bucket#getKey()} from the appropriate implementation.
+        public boolean equals(Object obj) {
+                out.writeVInt(compoundOrder.orderElements.size());
+        public boolean equals(Object obj) {
+        SimpleOrder(byte id, String key, SortOrder order, Comparator<Bucket> comparator) {
+            this.key = key;
+        }
+import java.util.List;
+            this.order = order;
+    }
+            return Objects.hash(path, order);
+                return false;
+        }
+                    String key = in.readString();
      */
-    @SuppressWarnings("unchecked")
+            // _term and _time order deprecated in 6.0; replaced by _key
+     * Contains logic for parsing a {@link BucketOrder} from a {@link XContentParser}.
+ */
+         * @throws IOException on error writing to the stream.
+                    String dir = parser.text();
+        @Override
+        private final SortOrder order;
+     * Determine if the ordering strategy is sorting on bucket count descending.
+     */
+ *
+        public int hashCode() {
+/*
+                } else {
+    }
+            return true;
+                );
+    /**
+ * @opensearch.internal
+                    int size = in.readVInt();
+ * specific language governing permissions and limitations
+                throw new ParsingException(parser.getTokenLocation(), "Must specify at least one field for [order]");
+import org.opensearch.core.common.io.stream.StreamOutput;
+         * @param in           stream with order data to read.
+                out.writeBoolean(aggregationOrder.order == SortOrder.ASC);
+ * compatible open source license.
+                        throw new ParsingException(parser.getTokenLocation(), "Unknown order direction [" + dir + "]");
+    }
+                        orderAsc = true;
+        }
+        if (order == expected) {
+        return false;
+            }
+    /**
+        }
+         * Create a new ordering strategy to sort by multiple criteria.
+            CompoundOrder other = (CompoundOrder) obj;
+        return isOrder(order, KEY_DESC);
+        public <T extends Bucket> Comparator<T> partiallyBuiltBucketComparator(ToLongFunction<T> ordinalReader, Aggregator aggregator) {
+                default:
+            for (BucketOrder order : orderElements) {
+     *
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            }
+                double l = path.resolveValue(((InternalAggregations) lhs.getAggregations()));
+    }
+     *
+ *
+    /**
+         * @param in stream with order data to read.
+                return false;
+         *
+                    for (int i = 0; i < size; i++) {
+    /**
+         */
+            return path;
+                default: // assume all other orders are sorting on a sub-aggregation. Validation occurs later.
+                case KEY_DESC_ID:
+/*
+        }
+        return Comparator.comparingLong(Bucket::getDocCount);
+        @Override
+     * @opensearch.internal
+    }
+ * The OpenSearch Contributors require contributions made to
+     *
+                        compoundOrder.add(Streams.readOrder(in));
+            BucketOrder lastElement = null;
+ * ownership. Elasticsearch licenses this file to you under
+        }
+import java.util.Collections;
+         *
+            }
+         * Create a new ordering strategy to sort by a sub-aggregation.
+            } else if (order instanceof CompoundOrder compoundOrder) {
     private static Comparator<Bucket> comparingKeys() {
         return (b1, b2) -> {
-            if (b1 instanceof KeyComparable keyComparable) {
-                return keyComparable.compareKey(b2);
-            }
-            throw new IllegalStateException("Unexpected order bucket class [" + b1.getClass() + "]");
-        };
-    }
-
-    /**
-     * Determine if the ordering strategy is sorting on bucket count descending.
-     *
-     * @param order bucket ordering strategy to check.
-     * @return {@code true} if the ordering strategy is sorting on bucket count descending, {@code false} otherwise.
-     */
-    public static boolean isCountDesc(BucketOrder order) {
-        return isOrder(order, COUNT_DESC);
-    }
-
-    /**
-     * Determine if the ordering strategy is sorting on bucket key (ascending or descending).
-     *
-     * @param order bucket ordering strategy to check.
-     * @return {@code true} if the ordering strategy is sorting on bucket key, {@code false} otherwise.
-     */
-    public static boolean isKeyOrder(BucketOrder order) {
-        return isOrder(order, KEY_ASC) || isOrder(order, KEY_DESC);
-    }
-
-    /**
-     * Determine if the ordering strategy is sorting on bucket key ascending.
-     *
-     * @param order bucket ordering strategy to check.
-     * @return {@code true} if the ordering strategy is sorting on bucket key ascending, {@code false} otherwise.
-     */
-    public static boolean isKeyAsc(BucketOrder order) {
-        return isOrder(order, KEY_ASC);
-    }
-
-    /**
-     * Determine if the ordering strategy is sorting on bucket key descending.
-     *
-     * @param order bucket ordering strategy to check.
-     * @return {@code true} if the ordering strategy is sorting on bucket key descending, {@code false} otherwise.
-     */
-    public static boolean isKeyDesc(BucketOrder order) {
-        return isOrder(order, KEY_DESC);
-    }
-
-    /**
-     * Determine if the ordering strategy matches the expected one.
-     *
-     * @param order    bucket ordering strategy to check. If this is a {@link CompoundOrder} the first element will be
-     *                 check instead.
-     * @param expected expected  bucket ordering strategy.
-     * @return {@code true} if the order matches, {@code false} otherwise.
-     */
-    private static boolean isOrder(BucketOrder order, BucketOrder expected) {
-        if (order == expected) {
-            return true;
-        } else if (order instanceof CompoundOrder compoundOrder) {
-            // check if its a compound order with the first element that matches
-            List<BucketOrder> orders = compoundOrder.orderElements;
-            if (orders.size() >= 1) {
-                return isOrder(orders.get(0), expected);
-            }
         }
-        return false;
-    }
-
-    /**
-     * Contains logic for reading/writing {@link BucketOrder} from/to streams.
-     *
-     * @opensearch.internal
-     */
-    public static class Streams {
-
-        /**
-         * Read a {@link BucketOrder} from a {@link StreamInput}.
-         *
-         * @param in stream with order data to read.
-         * @return order read from the stream
-         * @throws IOException on error reading from the stream.
-         */
-        public static BucketOrder readOrder(StreamInput in) throws IOException {
-            byte id = in.readByte();
-            switch (id) {
-                case COUNT_DESC_ID:
-                    return COUNT_DESC;
-                case COUNT_ASC_ID:
-                    return COUNT_ASC;
-                case KEY_DESC_ID:
-                    return KEY_DESC;
-                case KEY_ASC_ID:
-                    return KEY_ASC;
-                case Aggregation.ID:
-                    boolean asc = in.readBoolean();
-                    String key = in.readString();
-                    return new Aggregation(key, asc);
-                case CompoundOrder.ID:
-                    int size = in.readVInt();
-                    List<BucketOrder> compoundOrder = new ArrayList<>(size);
-                    for (int i = 0; i < size; i++) {
-                        compoundOrder.add(Streams.readOrder(in));
-                    }
-                    return new CompoundOrder(compoundOrder, false);
-                default:
-                    throw new RuntimeException("unknown order id [" + id + "]");
-            }
-        }
-
-        /**
-         * ONLY FOR HISTOGRAM ORDER: Backwards compatibility logic to read a {@link BucketOrder} from a {@link StreamInput}.
-         *
-         * @param in           stream with order data to read.
-         * @param bwcOrderFlag {@code true} to check {@code in.readBoolean()} in the backwards compat logic before reading
-         *                     the order. {@code false} to skip this flag (order always present).
-         * @return order read from the stream
-         * @throws IOException on error reading from the stream.
-         */
-        public static BucketOrder readHistogramOrder(StreamInput in, boolean bwcOrderFlag) throws IOException {
-            return Streams.readOrder(in);
-        }
-
-        /**
-         * Write a {@link BucketOrder} to a {@link StreamOutput}.
-         *
-         * @param order order to write to the stream.
-         * @param out   stream to write the order to.
-         * @throws IOException on error writing to the stream.
-         */
-        public static void writeOrder(BucketOrder order, StreamOutput out) throws IOException {
-            out.writeByte(order.id());
             if (order instanceof Aggregation aggregationOrder) {
-                out.writeBoolean(aggregationOrder.order == SortOrder.ASC);
-                out.writeString(aggregationOrder.path().toString());
-            } else if (order instanceof CompoundOrder compoundOrder) {
-                out.writeVInt(compoundOrder.orderElements.size());
-                for (BucketOrder innerOrder : compoundOrder.orderElements) {
-                    innerOrder.writeTo(out);
-                }
-            }
-        }
-
-        /**
-         * ONLY FOR HISTOGRAM ORDER: Backwards compatibility logic to write a {@link BucketOrder} to a stream.
-         *
-         * @param order        order to write to the stream.
-         * @param out          stream to write the order to.
-         * @param bwcOrderFlag {@code true} to always {@code out.writeBoolean(true)} for the backwards compat logic before
-         *                     writing the order. {@code false} to skip this flag.
-         * @throws IOException on error writing to the stream.
-         */
-        public static void writeHistogramOrder(BucketOrder order, StreamOutput out, boolean bwcOrderFlag) throws IOException {
-            order.writeTo(out);
-        }
-    }
-
     /**
-     * Contains logic for parsing a {@link BucketOrder} from a {@link XContentParser}.
-     *
-     * @opensearch.internal
-     */
-    public static class Parser {
-
-        private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(Parser.class);
-
+        byte id() {
+     * @param order bucket ordering strategy to check.
+        }
         /**
-         * Parse a {@link BucketOrder} from {@link XContent}.
-         *
-         * @param parser  for parsing {@link XContent} that contains the order.
-         * @return bucket ordering strategy
-         * @throws IOException on error a {@link XContent} parsing error.
-         */
-        public static BucketOrder parseOrderParam(XContentParser parser) throws IOException {
-            XContentParser.Token token;
-            String orderKey = null;
-            boolean orderAsc = false;
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                if (token == XContentParser.Token.FIELD_NAME) {
-                    orderKey = parser.currentName();
-                } else if (token == XContentParser.Token.VALUE_STRING) {
-                    String dir = parser.text();
-                    if ("asc".equalsIgnoreCase(dir)) {
-                        orderAsc = true;
-                    } else if ("desc".equalsIgnoreCase(dir)) {
-                        orderAsc = false;
-                    } else {
-                        throw new ParsingException(parser.getTokenLocation(), "Unknown order direction [" + dir + "]");
-                    }
-                } else {
-                    throw new ParsingException(parser.getTokenLocation(), "Unexpected token [" + token + "] for [order]");
-                }
+        public Comparator<Bucket> comparator() {
+     */
+ * software distributed under the License is distributed on an
+     * Order by the (lower) count of each bucket.
+         * non-deterministic ordering.
+    @SuppressWarnings("unchecked")
+     *
+    /**
             }
-            if (orderKey == null) {
-                throw new ParsingException(parser.getTokenLocation(), "Must specify at least one field for [order]");
-            }
-            return resolveOrderParam(orderKey, orderAsc);
-        }
-
-        public static BucketOrder resolveOrderParam(String orderKey, boolean orderAsc) {
-            // _term and _time order deprecated in 6.0; replaced by _key
-            if ("_term".equals(orderKey) || "_time".equals(orderKey)) {
-                deprecationLogger.deprecate(
-                    "aggregation_order_key",
-                    "Deprecated aggregation order key [{}] used, replaced by [_key]",
-                    orderKey
-                );
-            }
-            switch (orderKey) {
-                case "_term":
+        public static BucketOrder readHistogramOrder(StreamInput in, boolean bwcOrderFlag) throws IOException {
                 case "_time":
-                case "_key":
-                    return orderAsc ? KEY_ASC : KEY_DESC;
-                case "_count":
-                    return orderAsc ? COUNT_ASC : COUNT_DESC;
-                default: // assume all other orders are sorting on a sub-aggregation. Validation occurs later.
-                    return aggregation(orderKey, orderAsc);
-            }
+         *
         }
-    }
 }
+            if ("_term".equals(orderKey) || "_time".equals(orderKey)) {
+        public Comparator<Bucket> comparator() {
+         * Read a {@link BucketOrder} from a {@link StreamInput}.
+        CompoundOrder(List<BucketOrder> compoundOrder) {
+import static java.util.stream.Collectors.toList;
+    /**
+ *
+        }
+    public static class Parser {
+     *
+     * Determine if the ordering strategy is sorting on bucket key (ascending or descending).
+                return result;
+import java.io.IOException;
+            XContentParser.Token token;
+                    return new Aggregation(key, asc);
+            return builder.startObject().field(key, order.toString()).endObject();
+                } while (result == 0 && itr.hasNext());
+import org.opensearch.core.common.io.stream.StreamInput;
+         * @param parser  for parsing {@link XContent} that contains the order.
+                    List<BucketOrder> compoundOrder = new ArrayList<>(size);
+        @Override
+            }
+     * Contains logic for reading/writing {@link BucketOrder} from/to streams.
+            if (absoluteOrdering && isKeyOrder(lastElement) == false) {
+            return builder.startObject().field(path.toString(), order.toString()).endObject();
+                    return COUNT_ASC;
+import java.util.Iterator;
+ * Modifications Copyright OpenSearch Contributors. See
+                return Comparators.compareDiscardNaN(l, r, order == SortOrder.ASC);
+     */
+            this.path = AggregationPath.parse(path);
+ * license agreements. See the NOTICE file distributed with
+            };
+            }
+                    "aggregation_order_key",
+     * @param order bucket ordering strategy to check.
+         * @param out          stream to write the order to.
+import org.opensearch.core.common.ParsingException;
+    /**
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+         * @param order order to write to the stream.
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+     * Determine if the ordering strategy is sorting on bucket key descending.
+            switch (orderKey) {
+        }
+     * @return {@code true} if the ordering strategy is sorting on bucket key descending, {@code false} otherwise.
+                if (token == XContentParser.Token.FIELD_NAME) {
+        }
+        private final String key;
+                return false;
+        byte id() {
+     * @param order bucket ordering strategy to check.
+            }
+                }
+        @Override
+                double r = path.resolveValue(((InternalAggregations) rhs.getAggregations()));
+                case "_term":
+            builder.startArray();
+     */
+            if (orderKey == null) {
+                    return aggregation(orderKey, orderAsc);
+ * not use this file except in compliance with the License.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        public int hashCode() {
+            return id;
+         * ONLY FOR HISTOGRAM ORDER: Backwards compatibility logic to write a {@link BucketOrder} to a stream.
+            }
+            }
+     * @return {@code true} if the order matches, {@code false} otherwise.
+         */
+import java.util.LinkedList;
+                // if all user provided comparators return 0.
+        @Override
+                case Aggregation.ID:
+ * You may obtain a copy of the License at
+     * @return compare by {@link Bucket#getDocCount()}.
+         * @param asc  direction to sort by: {@code true} for ascending, {@code false} for descending.
+                if (order instanceof CompoundOrder) {
+         */
+            this.comparator = comparator;
+                } while (result == 0 && itr.hasNext());
+         */
+import org.opensearch.common.util.Comparators;
+         * @param bwcOrderFlag {@code true} to always {@code out.writeBoolean(true)} for the backwards compat logic before
+ * Licensed to Elasticsearch under one or more contributor
+import org.opensearch.search.aggregations.Aggregator.BucketComparator;
+     */
+        /**
+                case "_count":
+         * @param absoluteOrdering {@code true} to add a tie-breaker to avoid non-deterministic ordering if needed,
+    /**
+            switch (id) {
+         *                         {@code false} otherwise.
+        public <T extends Bucket> Comparator<T> partiallyBuiltBucketComparator(ToLongFunction<T> ordinalReader, Aggregator aggregator) {
+            return comparator;
+    }
+     */
+        }
+        }
+ * Unless required by applicable law or agreed to in writing,
+        }
+        return isOrder(order, KEY_ASC) || isOrder(order, KEY_DESC);
+package org.opensearch.search.aggregations;
+            List<Comparator<Bucket>> comparators = orderElements.stream().map(BucketOrder::comparator).collect(toList());
+import java.util.Objects;

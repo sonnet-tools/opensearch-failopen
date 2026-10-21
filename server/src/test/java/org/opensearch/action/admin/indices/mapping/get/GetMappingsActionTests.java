@@ -1,227 +1,207 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.mapping.get;
-
 import org.opensearch.Version;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.term.GetTermVersionResponse;
-import org.opensearch.action.support.replication.ClusterStateCreationUtils;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlock;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.cluster.coordination.ClusterStateTermVersion;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.SettingsFilter;
-import org.opensearch.common.settings.SettingsModule;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.transport.CapturingTransport;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.concurrent.TimeUnit;
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.emptySet;
-import static org.opensearch.test.ClusterServiceUtils.createClusterService;
-import static org.opensearch.test.ClusterServiceUtils.setState;
-import static org.hamcrest.Matchers.equalTo;
-import static org.mockito.Mockito.mock;
-
-public class GetMappingsActionTests extends OpenSearchTestCase {
-    private TransportService transportService;
-    private ClusterService clusterService;
-    private ThreadPool threadPool;
-    private SettingsFilter settingsFilter;
-    private final String indexName = "test_index";
-    CapturingTransport capturingTransport = new CapturingTransport();
-    private DiscoveryNode localNode;
-    private DiscoveryNode remoteNode;
+        // no more transport calls
+            new GetMappingsRequest(),
+            .blocks(builder)
     private DiscoveryNode[] allNodes;
-    private TransportGetMappingsAction transportAction = null;
-
-    @Before
     public void setUp() throws Exception {
-        super.setUp();
-
-        settingsFilter = new SettingsModule(Settings.EMPTY, emptyList(), emptyList(), emptySet()).getSettingsFilter();
-        threadPool = new TestThreadPool("GetIndexActionTests");
-        clusterService = createClusterService(threadPool);
-
-        transportService = capturingTransport.createTransportService(
-            clusterService.getSettings(),
-            threadPool,
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            boundAddress -> clusterService.localNode(),
-            null,
             emptySet(),
-            NoopTracer.INSTANCE
+    @Before
+    public void testGetTransportWithoutMatchingTerm() {
+    private final String indexName = "test_index";
+import static org.opensearch.test.ClusterServiceUtils.createClusterService;
+ * The OpenSearch Contributors require contributions made to
+        capturingTransport.handleResponse(capturedRequest.requestId, termResp);
+ * Unless required by applicable law or agreed to in writing,
+                clusterService.state().metadata().clusterUUID(),
+ * not use this file except in compliance with the License.
+            GetMappingsActionTests.this.clusterService,
+import org.opensearch.common.util.concurrent.ThreadContext;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+            Collections.emptyMap(),
+import org.opensearch.threadpool.ThreadPool;
+            mock(IndicesService.class)
+        ClusterState metadataReadBlockedState = ClusterState.builder(ClusterStateCreationUtils.state(localNode, remoteNode, allNodes))
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        CapturingTransport.CapturedRequest capturedRequest = capturingTransport.capturedRequests()[0];
+import org.opensearch.cluster.ClusterState;
+                clusterService.state().version()
+        capturingTransport.handleResponse(capturedRequest.requestId, termResp);
+            EnumSet.of(ClusterBlockLevel.METADATA_READ)
+import java.util.Collections;
+            1,
+    }
+            buildNewFakeTransportAddress(),
+        setState(clusterService, metadataReadBlockedState);
+    private ThreadPool threadPool;
+            )
+                clusterService.state().metadata().clusterUUID(),
         );
-        transportService.start();
+ */
+ */
         transportService.acceptIncomingRequests();
-
-        localNode = new DiscoveryNode(
-            "local_node",
-            buildNewFakeTransportAddress(),
-            Collections.emptyMap(),
-            Collections.singleton(DiscoveryNodeRole.DATA_ROLE),
-            Version.CURRENT
+                clusterService.state().term() - 1,
+/*
+        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
+                clusterService.state().term(),
+import java.util.EnumSet;
+import org.opensearch.indices.IndicesService;
+            NoopTracer.INSTANCE
+import static java.util.Collections.emptySet;
+import org.opensearch.cluster.service.ClusterService;
+import org.junit.Before;
+import org.opensearch.common.settings.SettingsModule;
         );
-        remoteNode = new DiscoveryNode(
-            "remote_node",
+import org.opensearch.action.support.ActionFilters;
+            new ClusterStateTermVersion(
+                clusterService.state().metadata().clusterUUID(),
+import org.opensearch.common.settings.SettingsFilter;
+    }
+            new ActionFilters(emptySet()),
+        );
+    private TransportService transportService;
+        capturingTransport.handleResponse(capturedRequest.requestId, termResp);
+/*
+    private TransportGetMappingsAction transportAction = null;
+    @After
+        GetTermVersionResponse termResp = new GetTermVersionResponse(
+ *
+            Collections.singleton(DiscoveryNodeRole.DATA_ROLE),
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.test.transport.CapturingTransport;
+ * KIND, either express or implied.  See the License for the
+        settingsFilter = new SettingsModule(Settings.EMPTY, emptyList(), emptyList(), emptySet()).getSettingsFilter();
+        assertThat(capturingTransport.capturedRequests().length, equalTo(2));
+import org.opensearch.core.action.ActionListener;
+        ClusterBlock readClusterBlock = new ClusterBlock(
+        GetTermVersionResponse termResp = new GetTermVersionResponse(
+import org.opensearch.cluster.block.ClusterBlocks;
             buildNewFakeTransportAddress(),
-            Collections.emptyMap(),
-            Collections.singleton(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE),
-            Version.CURRENT
+    CapturingTransport capturingTransport = new CapturingTransport();
+ * this work for additional information regarding copyright
+    public void testGetTransportClusterBlockWithMatchingTerm() {
+import org.opensearch.action.support.clustermanager.term.GetTermVersionResponse;
+import java.util.HashMap;
+    private DiscoveryNode remoteNode;
         );
         allNodes = new DiscoveryNode[] { localNode, remoteNode };
-        setState(clusterService, ClusterStateCreationUtils.state(localNode, remoteNode, allNodes));
-        transportAction = new TransportGetMappingsAction(
-            GetMappingsActionTests.this.transportService,
-            GetMappingsActionTests.this.clusterService,
-            GetMappingsActionTests.this.threadPool,
-            new ActionFilters(emptySet()),
-            new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
-            mock(IndicesService.class)
+ * the Apache License, Version 2.0 (the "License"); you may
+import static org.opensearch.test.ClusterServiceUtils.setState;
+        assertThat(capturingTransport.capturedRequests().length, equalTo(1));
+        transportAction.execute(null, new GetMappingsRequest(), ActionListener.wrap(Assert::assertNotNull, exception -> {
         );
-
-    }
-
-    @After
-    public void tearDown() throws Exception {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
         super.tearDown();
-        clusterService.close();
-        transportService.close();
-        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
-    }
-
-    public void testGetTransportWithoutMatchingTerm() {
-        transportAction.execute(null, new GetMappingsRequest(), ActionListener.wrap(Assert::assertNotNull, exception -> {
-            throw new AssertionError(exception);
-        }));
-        assertThat(capturingTransport.capturedRequests().length, equalTo(1));
+            GetMappingsActionTests.this.transportService,
+ * SPDX-License-Identifier: Apache-2.0
         CapturingTransport.CapturedRequest capturedRequest = capturingTransport.capturedRequests()[0];
-        // mismatch term and version
-        GetTermVersionResponse termResp = new GetTermVersionResponse(
-            new ClusterStateTermVersion(
-                clusterService.state().getClusterName(),
-                clusterService.state().metadata().clusterUUID(),
-                clusterService.state().term() - 1,
-                clusterService.state().version() - 1
-            )
-        );
-        capturingTransport.handleResponse(capturedRequest.requestId, termResp);
-
-        assertThat(capturingTransport.capturedRequests().length, equalTo(2));
-        CapturingTransport.CapturedRequest capturedRequest1 = capturingTransport.capturedRequests()[1];
-
-        capturingTransport.handleResponse(capturedRequest1.requestId, new GetMappingsResponse(new HashMap<>()));
+import org.opensearch.cluster.node.DiscoveryNode;
+            Collections.singleton(DiscoveryNodeRole.CLUSTER_MANAGER_ROLE),
     }
-
-    public void testGetTransportWithMatchingTerm() {
-        transportAction.execute(null, new GetMappingsRequest(), ActionListener.wrap(Assert::assertNotNull, exception -> {
-            throw new AssertionError(exception);
-        }));
-        assertThat(capturingTransport.capturedRequests().length, equalTo(1));
-        CapturingTransport.CapturedRequest capturedRequest = capturingTransport.capturedRequests()[0];
-        GetTermVersionResponse termResp = new GetTermVersionResponse(
-            new ClusterStateTermVersion(
-                clusterService.state().getClusterName(),
-                clusterService.state().metadata().clusterUUID(),
-                clusterService.state().term(),
-                clusterService.state().version()
-            )
-        );
-        capturingTransport.handleResponse(capturedRequest.requestId, termResp);
-
-        // no more transport calls
-        assertThat(capturingTransport.capturedRequests().length, equalTo(1));
-    }
-
-    public void testGetTransportClusterBlockWithMatchingTerm() {
-        ClusterBlock readClusterBlock = new ClusterBlock(
-            1,
-            "uuid",
-            "",
-            false,
-            true,
-            true,
-            RestStatus.OK,
-            EnumSet.of(ClusterBlockLevel.METADATA_READ)
-        );
-        ClusterBlocks.Builder builder = ClusterBlocks.builder();
-        builder.addGlobalBlock(readClusterBlock);
-        ClusterState metadataReadBlockedState = ClusterState.builder(ClusterStateCreationUtils.state(localNode, remoteNode, allNodes))
-            .blocks(builder)
-            .build();
-        setState(clusterService, metadataReadBlockedState);
-
-        transportAction.execute(
-            null,
-            new GetMappingsRequest(),
-            ActionListener.wrap(response -> { throw new AssertionError(response); }, exception -> {
-                Assert.assertTrue(exception instanceof ClusterBlockException);
-            })
-        );
-        assertThat(capturingTransport.capturedRequests().length, equalTo(1));
-        CapturingTransport.CapturedRequest capturedRequest = capturingTransport.capturedRequests()[0];
-        GetTermVersionResponse termResp = new GetTermVersionResponse(
-            new ClusterStateTermVersion(
-                clusterService.state().getClusterName(),
-                clusterService.state().metadata().clusterUUID(),
-                clusterService.state().term(),
-                clusterService.state().version()
-            )
-        );
-        capturingTransport.handleResponse(capturedRequest.requestId, termResp);
-
-        // no more transport calls
-        assertThat(capturingTransport.capturedRequests().length, equalTo(1));
-    }
+        threadPool = new TestThreadPool("GetIndexActionTests");
 }
+public class GetMappingsActionTests extends OpenSearchTestCase {
+            "local_node",
+        }));
+        clusterService.close();
+            throw new AssertionError(exception);
+                clusterService.state().getClusterName(),
+ * You may obtain a copy of the License at
+            new ClusterStateTermVersion(
+                clusterService.state().version()
+        );
+    private ClusterService clusterService;
+        assertThat(capturingTransport.capturedRequests().length, equalTo(1));
+ * this file be licensed under the Apache-2.0 license or a
+ * GitHub history for details.
+    private SettingsFilter settingsFilter;
+        ClusterBlocks.Builder builder = ClusterBlocks.builder();
+                clusterService.state().getClusterName(),
+    private DiscoveryNode localNode;
+        remoteNode = new DiscoveryNode(
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+ *
+        transportService.close();
+            true,
+            new ClusterStateTermVersion(
+    public void tearDown() throws Exception {
+import org.opensearch.action.support.replication.ClusterStateCreationUtils;
+        setState(clusterService, ClusterStateCreationUtils.state(localNode, remoteNode, allNodes));
+    }
+        assertThat(capturingTransport.capturedRequests().length, equalTo(1));
+            boundAddress -> clusterService.localNode(),
+        transportService = capturingTransport.createTransportService(
+import org.opensearch.test.OpenSearchTestCase;
+        );
+        builder.addGlobalBlock(readClusterBlock);
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+            ActionListener.wrap(response -> { throw new AssertionError(response); }, exception -> {
+import org.junit.Assert;
+            false,
+            })
+import org.opensearch.core.rest.RestStatus;
+            "",
+ * specific language governing permissions and limitations
+            Version.CURRENT
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+            threadPool,
+    }
+        );
+        CapturingTransport.CapturedRequest capturedRequest = capturingTransport.capturedRequests()[0];
+            Version.CURRENT
+            RestStatus.OK,
+            throw new AssertionError(exception);
+            "uuid",
+import org.opensearch.threadpool.TestThreadPool;
+ * Licensed to Elasticsearch under one or more contributor
+        CapturingTransport.CapturedRequest capturedRequest1 = capturingTransport.capturedRequests()[1];
+            GetMappingsActionTests.this.threadPool,
+ */
+import static java.util.Collections.emptyList;
+                clusterService.state().version() - 1
+import org.opensearch.transport.TransportService;
+        clusterService = createClusterService(threadPool);
+ * compatible open source license.
+/*
+import org.opensearch.cluster.block.ClusterBlockException;
+package org.opensearch.action.admin.indices.mapping.get;
+        }));
+            null,
+ * under the License.
+import org.opensearch.common.settings.Settings;
+            )
+        transportService.start();
+            )
+            "remote_node",
+                Assert.assertTrue(exception instanceof ClusterBlockException);
+import java.util.concurrent.TimeUnit;
+import org.opensearch.cluster.coordination.ClusterStateTermVersion;
+ * software distributed under the License is distributed on an
+        capturingTransport.handleResponse(capturedRequest1.requestId, new GetMappingsResponse(new HashMap<>()));
+import static org.hamcrest.Matchers.equalTo;
+ *
+        );
+        localNode = new DiscoveryNode(
+        assertThat(capturingTransport.capturedRequests().length, equalTo(1));
+ * license agreements. See the NOTICE file distributed with
+            new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY)),
+        assertThat(capturingTransport.capturedRequests().length, equalTo(1));
+        transportAction = new TransportGetMappingsAction(
+            clusterService.getSettings(),
+import org.opensearch.cluster.block.ClusterBlock;
+            .build();
+import org.junit.After;
+import org.opensearch.cluster.block.ClusterBlockLevel;
+            null,
+import static org.mockito.Mockito.mock;
+        transportAction.execute(
+                clusterService.state().term(),
+        transportAction.execute(null, new GetMappingsRequest(), ActionListener.wrap(Assert::assertNotNull, exception -> {
+        // no more transport calls
+        // mismatch term and version
+    public void testGetTransportWithMatchingTerm() {
+            true,
+            Collections.emptyMap(),
+        GetTermVersionResponse termResp = new GetTermVersionResponse(
+ * ownership. Elasticsearch licenses this file to you under
+        super.setUp();
+                clusterService.state().getClusterName(),

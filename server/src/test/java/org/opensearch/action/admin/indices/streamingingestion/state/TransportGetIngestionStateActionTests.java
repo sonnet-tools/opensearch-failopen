@@ -1,231 +1,195 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.action.admin.indices.streamingingestion.state;
-
-import org.apache.lucene.store.AlreadyClosedException;
-import org.opensearch.Version;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.IngestionSource;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardsIterator;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.ShardNotFoundException;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.util.Collections;
-import java.util.List;
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class TransportGetIngestionStateActionTests extends OpenSearchTestCase {
-
-    private TestThreadPool threadPool;
-    private ClusterService clusterService;
-    private TransportService transportService;
-    private IndicesService indicesService;
-    private ActionFilters actionFilters;
-    private IndexNameExpressionResolver indexNameExpressionResolver;
-    private TransportGetIngestionStateAction action;
-    private NodeClient client;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        threadPool = new TestThreadPool(getClass().getName());
-        clusterService = mock(ClusterService.class);
-        transportService = MockTransportService.createNewService(Settings.EMPTY, Version.CURRENT, threadPool, NoopTracer.INSTANCE);
-        indicesService = mock(IndicesService.class);
-        actionFilters = mock(ActionFilters.class);
-        indexNameExpressionResolver = mock(IndexNameExpressionResolver.class);
-        client = mock(NodeClient.class);
-
-        action = new TransportGetIngestionStateAction(
-            clusterService,
-            transportService,
             indicesService,
-            actionFilters,
-            indexNameExpressionResolver,
-            client
-        );
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        super.tearDown();
-        ThreadPool.terminate(threadPool, 30, java.util.concurrent.TimeUnit.SECONDS);
-    }
-
-    public void testShards() {
-        GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
-        request.setShards(new int[] { 0, 1 });
-        ClusterState clusterState = mock(ClusterState.class);
-        ShardsIterator shardsIterator = mock(ShardsIterator.class);
-        when(clusterState.routingTable()).thenReturn(mock(org.opensearch.cluster.routing.RoutingTable.class));
-        when(clusterState.routingTable().allShardsSatisfyingPredicate(any(), any())).thenReturn(shardsIterator);
-
-        Metadata metadata = mock(Metadata.class);
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-        Settings settings = Settings.builder().put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT.toString()).build();
-
-        // Set up the mocks
-        when(clusterState.metadata()).thenReturn(metadata);
-        when(metadata.index("test-index")).thenReturn(indexMetadata);
-        when(indexMetadata.getSettings()).thenReturn(settings);
-
-        ShardsIterator result = action.shards(clusterState, request, new String[] { "test-index" });
-        assertThat(result, equalTo(shardsIterator));
-    }
-
-    public void testCheckGlobalBlock() {
-        GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
-        ClusterState clusterState = mock(ClusterState.class);
-        when(clusterState.blocks()).thenReturn(mock(org.opensearch.cluster.block.ClusterBlocks.class));
-        when(clusterState.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ)).thenReturn(null);
-
-        ClusterBlockException result = action.checkGlobalBlock(clusterState, request);
-        assertThat(result, equalTo(null));
-    }
-
-    public void testCheckRequestBlock() {
-        GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
-        ClusterState clusterState = mock(ClusterState.class);
-        when(clusterState.blocks()).thenReturn(mock(org.opensearch.cluster.block.ClusterBlocks.class));
-        when(clusterState.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_READ, request.indices())).thenReturn(null);
-
-        ClusterBlockException result = action.checkRequestBlock(clusterState, request, new String[] { "test-index" });
-        assertThat(result, equalTo(null));
-    }
-
-    public void testShardOperation() {
-        GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
-        ShardRouting shardRouting = mock(ShardRouting.class);
-        IndexService indexService = mock(IndexService.class);
-        IndexShard indexShard = mock(IndexShard.class);
-        ShardIngestionState expectedState = new ShardIngestionState("test-index", 0, "POLLING", "DROP", true, false, "", true, "node_name");
-
-        when(shardRouting.shardId()).thenReturn(mock(ShardId.class));
-        when(shardRouting.shardId().getIndex()).thenReturn(mock(Index.class));
-        when(shardRouting.shardId().id()).thenReturn(0);
-        when(indicesService.indexServiceSafe(any())).thenReturn(indexService);
-        when(indexService.getShard(0)).thenReturn(indexShard);
-        when(indexShard.routingEntry()).thenReturn(mock(org.opensearch.cluster.routing.ShardRouting.class));
-        when(indexShard.getIngestionState()).thenReturn(expectedState);
-
-        DiscoveryNode localNode = mock(DiscoveryNode.class);
-        when(localNode.getName()).thenReturn("node_name");
-        when(clusterService.localNode()).thenReturn(localNode);
-
-        ShardIngestionState result = action.shardOperation(request, shardRouting);
-        assertThat(result.getIndex(), equalTo(expectedState.getIndex()));
-        assertThat(result.getShardId(), equalTo(expectedState.getShardId()));
-        assertThat(result.getPollerState(), equalTo(expectedState.getPollerState()));
-        assertThat(result.getErrorPolicy(), equalTo(expectedState.getErrorPolicy()));
-        assertThat(result.getNodeName(), equalTo(expectedState.getNodeName()));
-
-    }
-
-    public void testShardOperationWithShardNotFoundException() {
-        GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
-        ShardRouting shardRouting = mock(ShardRouting.class);
-        IndexService indexService = mock(IndexService.class);
-        IndexShard indexShard = mock(IndexShard.class);
-
-        when(shardRouting.shardId()).thenReturn(mock(ShardId.class));
-        when(shardRouting.shardId().getIndex()).thenReturn(mock(Index.class));
-        when(shardRouting.shardId().id()).thenReturn(0);
-        when(indicesService.indexServiceSafe(any())).thenReturn(indexService);
-        when(indexService.getShard(0)).thenReturn(indexShard);
-        when(indexShard.routingEntry()).thenReturn(null);
-
-        expectThrows(ShardNotFoundException.class, () -> action.shardOperation(request, shardRouting));
-    }
-
-    public void testShardOperationWithAlreadyClosedException() {
-        GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
-        ShardRouting shardRouting = mock(ShardRouting.class);
-        IndexService indexService = mock(IndexService.class);
-        IndexShard indexShard = mock(IndexShard.class);
-
-        when(shardRouting.shardId()).thenReturn(mock(ShardId.class));
-        when(shardRouting.shardId().getIndex()).thenReturn(mock(Index.class));
-        when(shardRouting.shardId().id()).thenReturn(0);
-        when(indicesService.indexServiceSafe(any())).thenReturn(indexService);
-        when(indexService.getShard(0)).thenReturn(indexShard);
-        when(indexShard.routingEntry()).thenReturn(mock(org.opensearch.cluster.routing.ShardRouting.class));
-        when(indexShard.getIngestionState()).thenThrow(new AlreadyClosedException("shard is closed"));
-
-        expectThrows(ShardNotFoundException.class, () -> action.shardOperation(request, shardRouting));
-    }
-
-    public void testNewResponse() {
-        GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
-        List<ShardIngestionState> responses = Collections.singletonList(
-            new ShardIngestionState("test-index", 0, "POLLING", "DROP", true, false, "", true, "node")
-        );
-        List<DefaultShardOperationFailedException> shardFailures = Collections.emptyList();
-        ClusterState clusterState = mock(ClusterState.class);
-
         GetIngestionStateResponse response = action.newResponse(request, 1, 1, 0, responses, shardFailures, clusterState);
-
-        assertThat(response.getTotalShards(), equalTo(1));
-        assertThat(response.getSuccessfulShards(), equalTo(1));
-        assertThat(response.getFailedShards(), equalTo(0));
-        assertThat(response.getShardStates().length, equalTo(1));
-        assertThat(response.getShardStates()[0].getIndex(), equalTo("test-index"));
+        when(clusterState.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ)).thenReturn(null);
+        IngestionSource ingestionSource = mock(IngestionSource.class);
+ * The OpenSearch Contributors require contributions made to
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT.toString()).build();
+    public void testNewResponse() {
         assertThat(response.getShardStates()[0].getShardId(), equalTo(0));
+import org.opensearch.cluster.metadata.IndexMetadata;
+package org.opensearch.action.admin.indices.streamingingestion.state;
+        assertThat(result.getNodeName(), equalTo(expectedState.getNodeName()));
+import org.opensearch.cluster.node.DiscoveryNode;
+        GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
+        ThreadPool.terminate(threadPool, 30, java.util.concurrent.TimeUnit.SECONDS);
+        assertThat(result, equalTo(shardsIterator));
+import org.opensearch.core.index.Index;
+            clusterService,
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;
+import org.opensearch.cluster.block.ClusterBlockLevel;
+        when(clusterState.blocks()).thenReturn(mock(org.opensearch.cluster.block.ClusterBlocks.class));
+        assertThat(result.getIndex(), equalTo(expectedState.getIndex()));
+import static org.mockito.ArgumentMatchers.any;
+        when(shardRouting.shardId().getIndex()).thenReturn(mock(Index.class));
+            new ShardIngestionState("test-index", 0, "POLLING", "DROP", true, false, "", true, "node")
+        when(indexService.getShard(0)).thenReturn(indexShard);
+    public void tearDown() throws Exception {
+    private TransportService transportService;
+    private TestThreadPool threadPool;
+ * this file be licensed under the Apache-2.0 license or a
+        Metadata metadata = mock(Metadata.class);
+        IndexShard indexShard = mock(IndexShard.class);
+/*
+        GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
+        when(clusterState.routingTable()).thenReturn(mock(org.opensearch.cluster.routing.RoutingTable.class));
     }
-
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(shardRouting.shardId().getIndex()).thenReturn(mock(Index.class));
+        when(clusterService.localNode()).thenReturn(localNode);
+ * compatible open source license.
+    }
+public class TransportGetIngestionStateActionTests extends OpenSearchTestCase {
+        ClusterBlockException result = action.checkRequestBlock(clusterState, request, new String[] { "test-index" });
+    private IndexNameExpressionResolver indexNameExpressionResolver;
+    private NodeClient client;
+        // Set up the mocks
+        assertThat(response.getTotalShards(), equalTo(1));
+        assertThat(result, equalTo(null));
     public void testShardsWithAllActiveIngestionEnabled() {
+        assertThat(result.getShardId(), equalTo(expectedState.getShardId()));
+    private TransportGetIngestionStateAction action;
+import org.opensearch.core.index.shard.ShardId;
+        when(shardRouting.shardId().getIndex()).thenReturn(mock(Index.class));
+import org.opensearch.test.OpenSearchTestCase;
+}
+        indexNameExpressionResolver = mock(IndexNameExpressionResolver.class);
+        ShardIngestionState result = action.shardOperation(request, shardRouting);
+        DiscoveryNode localNode = mock(DiscoveryNode.class);
+        when(shardRouting.shardId()).thenReturn(mock(ShardId.class));
+        when(clusterState.blocks()).thenReturn(mock(org.opensearch.cluster.block.ClusterBlocks.class));
+        ClusterState clusterState = mock(ClusterState.class);
+        when(indexShard.getIngestionState()).thenReturn(expectedState);
+        ShardsIterator shardsIterator = mock(ShardsIterator.class);
+        ClusterBlockException result = action.checkGlobalBlock(clusterState, request);
+        when(indexMetadata.useIngestionSource()).thenReturn(true);
+        assertThat(response.getFailedShards(), equalTo(0));
+        List<ShardIngestionState> responses = Collections.singletonList(
+        client = mock(NodeClient.class);
+        when(shardRouting.shardId().id()).thenReturn(0);
+    }
+            transportService,
+import org.opensearch.index.shard.IndexShard;
+    private ActionFilters actionFilters;
+        assertThat(result, equalTo(shardsIterator));
+        when(localNode.getName()).thenReturn("node_name");
+import org.opensearch.test.transport.MockTransportService;
+    private ClusterService clusterService;
+        when(clusterState.routingTable()).thenReturn(mock(org.opensearch.cluster.routing.RoutingTable.class));
+            client
+        assertThat(result.getPollerState(), equalTo(expectedState.getPollerState()));
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+    @Override
         GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
         request.setShards(new int[] { 0, 1 });
-        ClusterState clusterState = mock(ClusterState.class);
-        ShardsIterator shardsIterator = mock(ShardsIterator.class);
-
-        when(clusterState.routingTable()).thenReturn(mock(org.opensearch.cluster.routing.RoutingTable.class));
-        when(clusterState.routingTable().allShardsSatisfyingPredicate(any(), any())).thenReturn(shardsIterator);
-
-        Metadata metadata = mock(Metadata.class);
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-        IngestionSource ingestionSource = mock(IngestionSource.class);
-
-        // Set up mocks for all-active ingestion enabled
-        when(clusterState.metadata()).thenReturn(metadata);
+import org.opensearch.threadpool.ThreadPool;
+        IndexService indexService = mock(IndexService.class);
         when(metadata.index("test-index")).thenReturn(indexMetadata);
-        when(indexMetadata.useIngestionSource()).thenReturn(true);
-        when(indexMetadata.getIngestionSource()).thenReturn(ingestionSource);
+        clusterService = mock(ClusterService.class);
         when(ingestionSource.isAllActiveIngestionEnabled()).thenReturn(true);
-
-        ShardsIterator result = action.shards(clusterState, request, new String[] { "test-index" });
-        assertThat(result, equalTo(shardsIterator));
+        ShardsIterator shardsIterator = mock(ShardsIterator.class);
+        GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
     }
-}
+import static org.mockito.Mockito.when;
+        );
+        ShardRouting shardRouting = mock(ShardRouting.class);
+        ShardsIterator result = action.shards(clusterState, request, new String[] { "test-index" });
+        GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
+        when(indexShard.routingEntry()).thenReturn(mock(org.opensearch.cluster.routing.ShardRouting.class));
+    public void testShardOperation() {
+import org.opensearch.common.settings.Settings;
+        action = new TransportGetIngestionStateAction(
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.transport.client.node.NodeClient;
+        expectThrows(ShardNotFoundException.class, () -> action.shardOperation(request, shardRouting));
+        when(metadata.index("test-index")).thenReturn(indexMetadata);
+        GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
+        // Set up mocks for all-active ingestion enabled
+        IndexService indexService = mock(IndexService.class);
+import org.opensearch.index.IndexService;
+        when(indexShard.routingEntry()).thenReturn(null);
+    }
+import org.opensearch.cluster.service.ClusterService;
+        expectThrows(ShardNotFoundException.class, () -> action.shardOperation(request, shardRouting));
+        super.tearDown();
+        assertThat(response.getShardStates()[0].getIndex(), equalTo("test-index"));
+        IndexService indexService = mock(IndexService.class);
+import org.opensearch.cluster.routing.ShardRouting;
+import org.opensearch.Version;
+import org.opensearch.cluster.block.ClusterBlockException;
+        ClusterState clusterState = mock(ClusterState.class);
+    public void testShards() {
+        when(clusterState.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_READ, request.indices())).thenReturn(null);
+        when(shardRouting.shardId().id()).thenReturn(0);
+import org.opensearch.cluster.metadata.Metadata;
+    private IndicesService indicesService;
+ */
+        IndexShard indexShard = mock(IndexShard.class);
+        Metadata metadata = mock(Metadata.class);
+    public void testShardOperationWithAlreadyClosedException() {
+import java.util.List;
+import static org.mockito.Mockito.mock;
+        ShardRouting shardRouting = mock(ShardRouting.class);
+    }
+        when(indicesService.indexServiceSafe(any())).thenReturn(indexService);
+import org.opensearch.action.support.ActionFilters;
+        threadPool = new TestThreadPool(getClass().getName());
+        List<DefaultShardOperationFailedException> shardFailures = Collections.emptyList();
+        when(shardRouting.shardId().id()).thenReturn(0);
+        when(clusterState.routingTable().allShardsSatisfyingPredicate(any(), any())).thenReturn(shardsIterator);
+        ShardsIterator result = action.shards(clusterState, request, new String[] { "test-index" });
+import java.util.Collections;
+import org.opensearch.transport.TransportService;
+        assertThat(result.getErrorPolicy(), equalTo(expectedState.getErrorPolicy()));
+        assertThat(response.getSuccessfulShards(), equalTo(1));
+import org.opensearch.indices.replication.common.ReplicationType;
+    public void testCheckRequestBlock() {
+import org.opensearch.cluster.metadata.IngestionSource;
+        ClusterState clusterState = mock(ClusterState.class);
+import org.opensearch.threadpool.TestThreadPool;
+        when(indicesService.indexServiceSafe(any())).thenReturn(indexService);
+        super.setUp();
+        when(clusterState.routingTable().allShardsSatisfyingPredicate(any(), any())).thenReturn(shardsIterator);
+    }
+    public void testCheckGlobalBlock() {
+ *
+        request.setShards(new int[] { 0, 1 });
+        indicesService = mock(IndicesService.class);
+        when(indexShard.getIngestionState()).thenThrow(new AlreadyClosedException("shard is closed"));
+        ClusterState clusterState = mock(ClusterState.class);
+        when(indexService.getShard(0)).thenReturn(indexShard);
+    }
+import org.opensearch.index.shard.ShardNotFoundException;
+import org.opensearch.cluster.routing.ShardsIterator;
+    @Override
+        ClusterState clusterState = mock(ClusterState.class);
+        IndexMetadata indexMetadata = mock(IndexMetadata.class);
+            actionFilters,
+import static org.hamcrest.Matchers.equalTo;
+        when(shardRouting.shardId()).thenReturn(mock(ShardId.class));
+        when(shardRouting.shardId()).thenReturn(mock(ShardId.class));
+        when(indexShard.routingEntry()).thenReturn(mock(org.opensearch.cluster.routing.ShardRouting.class));
+        ShardIngestionState expectedState = new ShardIngestionState("test-index", 0, "POLLING", "DROP", true, false, "", true, "node_name");
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        when(clusterState.metadata()).thenReturn(metadata);
+    public void testShardOperationWithShardNotFoundException() {
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+        ShardRouting shardRouting = mock(ShardRouting.class);
+import org.opensearch.indices.IndicesService;
+        GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
+        when(indexMetadata.getSettings()).thenReturn(settings);
+        when(indexMetadata.getIngestionSource()).thenReturn(ingestionSource);
+        assertThat(result, equalTo(null));
+        transportService = MockTransportService.createNewService(Settings.EMPTY, Version.CURRENT, threadPool, NoopTracer.INSTANCE);
+        IndexMetadata indexMetadata = mock(IndexMetadata.class);
+    public void setUp() throws Exception {
+        GetIngestionStateRequest request = new GetIngestionStateRequest(new String[] { "test-index" });
+        when(indicesService.indexServiceSafe(any())).thenReturn(indexService);
+import org.apache.lucene.store.AlreadyClosedException;
+        when(indexService.getShard(0)).thenReturn(indexShard);
+        actionFilters = mock(ActionFilters.class);
+    }
+        );
+        IndexShard indexShard = mock(IndexShard.class);
+            indexNameExpressionResolver,
+        assertThat(response.getShardStates().length, equalTo(1));

@@ -1,299 +1,276 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.ingest.common;
-
-import org.opensearch.common.util.set.Sets;
-import org.opensearch.ingest.IngestDocument;
-import org.opensearch.ingest.IngestDocument.Metadata;
-import org.opensearch.ingest.Processor;
-import org.opensearch.ingest.RandomDocumentPicks;
-import org.opensearch.ingest.TestTemplateService;
-import org.opensearch.ingest.ValueSource;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.ArrayList;
-import java.util.Collections;
+        } else {
+        },
+        },
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.not;
-import static org.hamcrest.CoreMatchers.sameInstance;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-
-public class AppendProcessorTests extends OpenSearchTestCase {
-
-    public void testAppendValuesToExistingList() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        Scalar scalar = randomFrom(Scalar.values());
-        List<Object> list = new ArrayList<>();
-        int size = randomIntBetween(0, 10);
-        for (int i = 0; i < size; i++) {
-            list.add(scalar.randomValue());
-        }
-        List<Object> checkList = new ArrayList<>(list);
-        String field = RandomDocumentPicks.addRandomField(random(), ingestDocument, list);
-        List<Object> values = new ArrayList<>();
-        Processor appendProcessor;
-        if (randomBoolean()) {
-            Object value = scalar.randomValue();
-            values.add(value);
-            appendProcessor = createAppendProcessor(field, value, true);
-        } else {
-            int valuesSize = randomIntBetween(0, 10);
-            for (int i = 0; i < valuesSize; i++) {
-                values.add(scalar.randomValue());
-            }
-            appendProcessor = createAppendProcessor(field, values, true);
-        }
-        appendProcessor.execute(ingestDocument);
-        Object fieldValue = ingestDocument.getFieldValue(field, Object.class);
-        assertThat(fieldValue, sameInstance(list));
-        assertThat(list.size(), equalTo(size + values.size()));
-        for (int i = 0; i < size; i++) {
-            assertThat(list.get(i), equalTo(checkList.get(i)));
-        }
-        for (int i = size; i < size + values.size(); i++) {
-            assertThat(list.get(i), equalTo(values.get(i - size)));
-        }
-    }
-
-    public void testAppendValuesToNonExistingList() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), new HashMap<>());
-        String field = RandomDocumentPicks.randomFieldName(random());
-        Scalar scalar = randomFrom(Scalar.values());
-        List<Object> values = new ArrayList<>();
-        Processor appendProcessor;
-        if (randomBoolean()) {
-            Object value = scalar.randomValue();
-            values.add(value);
-            appendProcessor = createAppendProcessor(field, value, true);
-        } else {
-            int valuesSize = randomIntBetween(0, 10);
-            for (int i = 0; i < valuesSize; i++) {
-                values.add(scalar.randomValue());
-            }
-            appendProcessor = createAppendProcessor(field, values, true);
-        }
-        appendProcessor.execute(ingestDocument);
-        List<?> list = ingestDocument.getFieldValue(field, List.class);
-        assertThat(list, not(sameInstance(values)));
-        assertThat(list, equalTo(values));
-    }
-
-    public void testConvertScalarToList() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        Scalar scalar = randomFrom(Scalar.values());
-        Object initialValue = scalar.randomValue();
-        String field = RandomDocumentPicks.addRandomField(random(), ingestDocument, initialValue);
-        List<Object> values = new ArrayList<>();
-        Processor appendProcessor;
-        if (randomBoolean()) {
-            Object value = scalar.randomValue();
-            values.add(value);
-            appendProcessor = createAppendProcessor(field, value, true);
-        } else {
-            int valuesSize = randomIntBetween(0, 10);
-            for (int i = 0; i < valuesSize; i++) {
-                values.add(scalar.randomValue());
-            }
-            appendProcessor = createAppendProcessor(field, values, true);
-        }
-        appendProcessor.execute(ingestDocument);
-        List<?> fieldValue = ingestDocument.getFieldValue(field, List.class);
-        assertThat(fieldValue.size(), equalTo(values.size() + 1));
-        assertThat(fieldValue.get(0), equalTo(initialValue));
-        for (int i = 1; i < values.size() + 1; i++) {
-            assertThat(fieldValue.get(i), equalTo(values.get(i - 1)));
-        }
-    }
-
-    public void testAppendMetadataExceptVersion() throws Exception {
-        // here any metadata field value becomes a list, which won't make sense in most of the cases,
-        // but support for append is streamlined like for set so we test it
-        Metadata randomMetadata = randomFrom(Metadata.INDEX, Metadata.ID, Metadata.ROUTING);
-        List<String> values = new ArrayList<>();
-        Processor appendProcessor;
-        if (randomBoolean()) {
-            String value = randomAlphaOfLengthBetween(1, 10);
-            values.add(value);
-            appendProcessor = createAppendProcessor(randomMetadata.getFieldName(), value, true);
-        } else {
-            int valuesSize = randomIntBetween(0, 10);
-            for (int i = 0; i < valuesSize; i++) {
-                values.add(randomAlphaOfLengthBetween(1, 10));
-            }
-            appendProcessor = createAppendProcessor(randomMetadata.getFieldName(), values, true);
-        }
-
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        Object initialValue = ingestDocument.getSourceAndMetadata().get(randomMetadata.getFieldName());
-        appendProcessor.execute(ingestDocument);
-        List<?> list = ingestDocument.getFieldValue(randomMetadata.getFieldName(), List.class);
-        if (initialValue == null) {
-            assertThat(list, equalTo(values));
-        } else {
-            assertThat(list.size(), equalTo(values.size() + 1));
-            assertThat(list.get(0), equalTo(initialValue));
-            for (int i = 1; i < list.size(); i++) {
-                assertThat(list.get(i), equalTo(values.get(i - 1)));
-            }
-        }
-    }
-
-    public void testAppendingDuplicateValueToScalarDoesNotModifyDocument() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        String originalValue = randomAlphaOfLengthBetween(1, 10);
-        String field = RandomDocumentPicks.addRandomField(random(), ingestDocument, originalValue);
-
-        List<Object> valuesToAppend = new ArrayList<>();
-        valuesToAppend.add(originalValue);
-        Processor appendProcessor = createAppendProcessor(field, valuesToAppend, false);
-        appendProcessor.execute(ingestDocument);
-        Object fieldValue = ingestDocument.getFieldValue(field, Object.class);
-        assertThat(fieldValue, not(instanceOf(List.class)));
-        assertThat(fieldValue, equalTo(originalValue));
-    }
-
-    public void testAppendingUniqueValueToScalar() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        String originalValue = randomAlphaOfLengthBetween(1, 10);
-        String field = RandomDocumentPicks.addRandomField(random(), ingestDocument, originalValue);
-
-        List<Object> valuesToAppend = new ArrayList<>();
-        String newValue = randomValueOtherThan(originalValue, () -> randomAlphaOfLengthBetween(1, 10));
-        valuesToAppend.add(newValue);
-        Processor appendProcessor = createAppendProcessor(field, valuesToAppend, false);
-        appendProcessor.execute(ingestDocument);
-        List<?> list = ingestDocument.getFieldValue(field, List.class);
-        assertThat(list.size(), equalTo(2));
-        assertThat(list, equalTo(List.of(originalValue, newValue)));
-    }
-
-    public void testAppendingToListWithDuplicatesDisallowed() throws Exception {
-        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
-        int size = randomIntBetween(0, 10);
-        List<String> list = Stream.generate(() -> randomAlphaOfLengthBetween(1, 10)).limit(size).collect(Collectors.toList());
-        String originalField = RandomDocumentPicks.addRandomField(random(), ingestDocument, list);
-        List<String> expectedValues = new ArrayList<>(list);
-        List<String> existingValues = randomSubsetOf(list);
-
-        // generate new values
-        int nonexistingValuesSize = randomIntBetween(0, 10);
-        Set<String> newValues = Stream.generate(() -> randomAlphaOfLengthBetween(1, 10))
-            .limit(nonexistingValuesSize)
-            .collect(Collectors.toSet());
-
-        // create a set using the new values making sure there are no overlapping values already present in the existing values
-        Set<String> nonexistingValues = Sets.difference(newValues, new HashSet<>(list));
-        List<String> valuesToAppend = new ArrayList<>(existingValues);
-        valuesToAppend.addAll(nonexistingValues);
-        expectedValues.addAll(nonexistingValues);
-        Collections.sort(valuesToAppend);
-
-        // attempt to append both new and existing values
-        Processor appendProcessor = createAppendProcessor(originalField, valuesToAppend, false);
-        appendProcessor.execute(ingestDocument);
-        List<?> fieldValue = ingestDocument.getFieldValue(originalField, List.class);
-        assertThat(fieldValue, sameInstance(list));
-        assertThat(fieldValue, containsInAnyOrder(expectedValues.toArray()));
-    }
-
-    private static Processor createAppendProcessor(String fieldName, Object fieldValue, boolean allowDuplicates) {
-        return new AppendProcessor(
-            randomAlphaOfLength(10),
-            null,
-            new TestTemplateService.MockTemplateScript.Factory(fieldName),
-            ValueSource.wrap(fieldValue, TestTemplateService.instance()),
-            allowDuplicates
-        );
-    }
-
-    private enum Scalar {
-        INTEGER {
-            @Override
-            Object randomValue() {
-                return randomInt();
-            }
-        },
-        DOUBLE {
-            @Override
-            Object randomValue() {
-                return randomDouble();
-            }
-        },
-        FLOAT {
-            @Override
-            Object randomValue() {
-                return randomFloat();
-            }
-        },
-        BOOLEAN {
-            @Override
-            Object randomValue() {
-                return randomBoolean();
-            }
-        },
-        STRING {
-            @Override
-            Object randomValue() {
-                return randomAlphaOfLengthBetween(1, 10);
-            }
-        },
-        MAP {
-            @Override
-            Object randomValue() {
-                int numItems = randomIntBetween(1, 10);
-                Map<String, Object> map = new HashMap<>(numItems);
-                for (int i = 0; i < numItems; i++) {
-                    map.put(randomAlphaOfLengthBetween(1, 10), randomFrom(Scalar.values()).randomValue());
-                }
-                return map;
-            }
-        },
         NULL {
-            @Override
-            Object randomValue() {
-                return null;
+            appendProcessor = createAppendProcessor(field, value, true);
+        appendProcessor.execute(ingestDocument);
+            Object value = scalar.randomValue();
+            appendProcessor = createAppendProcessor(randomMetadata.getFieldName(), values, true);
+            assertThat(list, equalTo(values));
+        Processor appendProcessor = createAppendProcessor(field, valuesToAppend, false);
+                for (int i = 0; i < numItems; i++) {
+import org.opensearch.ingest.TestTemplateService;
+        int size = randomIntBetween(0, 10);
+                Map<String, Object> map = new HashMap<>(numItems);
+        }
+            appendProcessor = createAppendProcessor(field, value, true);
             }
-        };
-
-        abstract Object randomValue();
+        Processor appendProcessor;
+        assertThat(fieldValue.size(), equalTo(values.size() + 1));
+            for (int i = 0; i < valuesSize; i++) {
+        },
+import org.opensearch.ingest.ValueSource;
+                values.add(scalar.randomValue());
+                assertThat(list.get(i), equalTo(values.get(i - 1)));
+        }
     }
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        abstract Object randomValue();
+            String value = randomAlphaOfLengthBetween(1, 10);
+        Object fieldValue = ingestDocument.getFieldValue(field, Object.class);
+            allowDuplicates
+public class AppendProcessorTests extends OpenSearchTestCase {
+        } else {
+        }
+                values.add(randomAlphaOfLengthBetween(1, 10));
+            Object value = scalar.randomValue();
+        BOOLEAN {
+        assertThat(fieldValue, sameInstance(list));
+        List<?> list = ingestDocument.getFieldValue(randomMetadata.getFieldName(), List.class);
+                return randomInt();
+            appendProcessor = createAppendProcessor(field, values, true);
+            assertThat(list.size(), equalTo(values.size() + 1));
+            list.add(scalar.randomValue());
+            @Override
+        int nonexistingValuesSize = randomIntBetween(0, 10);
 }
+        // but support for append is streamlined like for set so we test it
+        appendProcessor.execute(ingestDocument);
+            values.add(value);
+import org.opensearch.ingest.IngestDocument.Metadata;
+        for (int i = 1; i < values.size() + 1; i++) {
+        if (randomBoolean()) {
+        List<Object> values = new ArrayList<>();
+    public void testConvertScalarToList() throws Exception {
+import org.opensearch.ingest.RandomDocumentPicks;
+        for (int i = 0; i < size; i++) {
+        int size = randomIntBetween(0, 10);
+ *
+        appendProcessor.execute(ingestDocument);
+        Metadata randomMetadata = randomFrom(Metadata.INDEX, Metadata.ID, Metadata.ROUTING);
+            }
+        assertThat(list, equalTo(List.of(originalValue, newValue)));
+                return randomDouble();
+            @Override
+    }
+    }
+import java.util.Collections;
+        },
+        Set<String> nonexistingValues = Sets.difference(newValues, new HashSet<>(list));
+        List<?> fieldValue = ingestDocument.getFieldValue(originalField, List.class);
+            int valuesSize = randomIntBetween(0, 10);
+        Object fieldValue = ingestDocument.getFieldValue(field, Object.class);
+            Object randomValue() {
+        assertThat(list, equalTo(values));
+ */
+            Object randomValue() {
+        assertThat(list.size(), equalTo(2));
+        FLOAT {
+        }
+        List<Object> valuesToAppend = new ArrayList<>();
+        }
+ * specific language governing permissions and limitations
+            }
+import org.opensearch.test.OpenSearchTestCase;
+ * this work for additional information regarding copyright
+        for (int i = 0; i < size; i++) {
+    public void testAppendingDuplicateValueToScalarDoesNotModifyDocument() throws Exception {
+                values.add(scalar.randomValue());
+import static org.hamcrest.CoreMatchers.instanceOf;
+    }
+ * Licensed to Elasticsearch under one or more contributor
+        Processor appendProcessor = createAppendProcessor(originalField, valuesToAppend, false);
+                return randomFloat();
+import java.util.stream.Stream;
+            @Override
+        INTEGER {
+import java.util.ArrayList;
+        if (randomBoolean()) {
+            assertThat(list.get(0), equalTo(initialValue));
+        },
+ * under the License.
+        List<Object> checkList = new ArrayList<>(list);
+ * license agreements. See the NOTICE file distributed with
+            for (int i = 0; i < valuesSize; i++) {
+        String field = RandomDocumentPicks.addRandomField(random(), ingestDocument, originalValue);
+                values.add(scalar.randomValue());
+        String originalValue = randomAlphaOfLengthBetween(1, 10);
+        STRING {
+        List<?> fieldValue = ingestDocument.getFieldValue(field, List.class);
+            @Override
+        expectedValues.addAll(nonexistingValues);
+        if (randomBoolean()) {
+            values.add(value);
+    }
+        valuesToAppend.add(originalValue);
+ * this file be licensed under the Apache-2.0 license or a
+ *
+            }
+            appendProcessor = createAppendProcessor(randomMetadata.getFieldName(), value, true);
+    }
+        List<Object> list = new ArrayList<>();
+        };
+import static org.hamcrest.CoreMatchers.not;
+            }
+/*
+        assertThat(fieldValue.get(0), equalTo(initialValue));
+        // generate new values
+        DOUBLE {
+    }
+            appendProcessor = createAppendProcessor(field, values, true);
+        Set<String> newValues = Stream.generate(() -> randomAlphaOfLengthBetween(1, 10))
+        String field = RandomDocumentPicks.addRandomField(random(), ingestDocument, list);
+package org.opensearch.ingest.common;
+        assertThat(fieldValue, equalTo(originalValue));
+            @Override
+        List<Object> values = new ArrayList<>();
+    public void testAppendingUniqueValueToScalar() throws Exception {
+ */
+        appendProcessor.execute(ingestDocument);
+        List<Object> valuesToAppend = new ArrayList<>();
+import static org.hamcrest.CoreMatchers.sameInstance;
+        List<String> expectedValues = new ArrayList<>(list);
+import java.util.Map;
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
+        }
+        assertThat(list.size(), equalTo(size + values.size()));
+import java.util.HashSet;
+        valuesToAppend.add(newValue);
+import org.opensearch.ingest.IngestDocument;
+ * Modifications Copyright OpenSearch Contributors. See
+        if (randomBoolean()) {
+        String newValue = randomValueOtherThan(originalValue, () -> randomAlphaOfLengthBetween(1, 10));
+        // create a set using the new values making sure there are no overlapping values already present in the existing values
+            int valuesSize = randomIntBetween(0, 10);
+                return randomAlphaOfLengthBetween(1, 10);
+            int valuesSize = randomIntBetween(0, 10);
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
+            @Override
+        Processor appendProcessor = createAppendProcessor(field, valuesToAppend, false);
+        Scalar scalar = randomFrom(Scalar.values());
+        }
+            Object randomValue() {
+    public void testAppendingToListWithDuplicatesDisallowed() throws Exception {
+            for (int i = 1; i < list.size(); i++) {
+        Processor appendProcessor;
+ * the Apache License, Version 2.0 (the "License"); you may
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
+ * not use this file except in compliance with the License.
+            values.add(value);
+            int valuesSize = randomIntBetween(0, 10);
+ */
+                return map;
+        },
+import java.util.List;
+        assertThat(list, not(sameInstance(values)));
+        Scalar scalar = randomFrom(Scalar.values());
+import static org.hamcrest.CoreMatchers.equalTo;
+        // attempt to append both new and existing values
+            Object value = scalar.randomValue();
+        }
+            for (int i = 0; i < valuesSize; i++) {
+        Processor appendProcessor;
+                return null;
+    public void testAppendValuesToExistingList() throws Exception {
+            appendProcessor = createAppendProcessor(field, value, true);
+        List<String> existingValues = randomSubsetOf(list);
+        String originalValue = randomAlphaOfLengthBetween(1, 10);
+        }
+        } else {
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
+ * You may obtain a copy of the License at
+            }
+ * GitHub history for details.
+            ValueSource.wrap(fieldValue, TestTemplateService.instance()),
+    }
+            Object randomValue() {
+        String field = RandomDocumentPicks.addRandomField(random(), ingestDocument, initialValue);
+            }
+        List<String> valuesToAppend = new ArrayList<>(existingValues);
+            }
+        Scalar scalar = randomFrom(Scalar.values());
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            Object randomValue() {
+                    map.put(randomAlphaOfLengthBetween(1, 10), randomFrom(Scalar.values()).randomValue());
+    public void testAppendValuesToNonExistingList() throws Exception {
+import java.util.Set;
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
+            .limit(nonexistingValuesSize)
+            Object randomValue() {
+            Object randomValue() {
+        List<?> list = ingestDocument.getFieldValue(field, List.class);
+import org.opensearch.ingest.Processor;
+        for (int i = size; i < size + values.size(); i++) {
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random());
+ *
+        } else {
+            assertThat(list.get(i), equalTo(checkList.get(i)));
+            }
+        assertThat(fieldValue, not(instanceOf(List.class)));
+        MAP {
+import org.opensearch.common.util.set.Sets;
+        List<?> list = ingestDocument.getFieldValue(field, List.class);
+        Object initialValue = scalar.randomValue();
+        appendProcessor.execute(ingestDocument);
+        valuesToAppend.addAll(nonexistingValues);
+                return randomBoolean();
+import java.util.stream.Collectors;
+        String originalField = RandomDocumentPicks.addRandomField(random(), ingestDocument, list);
+ * compatible open source license.
+            }
+        Collections.sort(valuesToAppend);
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), new HashMap<>());
+        assertThat(fieldValue, containsInAnyOrder(expectedValues.toArray()));
+    private enum Scalar {
+        if (initialValue == null) {
+ * software distributed under the License is distributed on an
+            assertThat(fieldValue.get(i), equalTo(values.get(i - 1)));
+import static org.hamcrest.Matchers.containsInAnyOrder;
+    private static Processor createAppendProcessor(String fieldName, Object fieldValue, boolean allowDuplicates) {
+        String field = RandomDocumentPicks.addRandomField(random(), ingestDocument, originalValue);
+        List<String> list = Stream.generate(() -> randomAlphaOfLengthBetween(1, 10)).limit(size).collect(Collectors.toList());
+        return new AppendProcessor(
+            @Override
+ * KIND, either express or implied.  See the License for the
+            null,
+        // here any metadata field value becomes a list, which won't make sense in most of the cases,
+            }
+            assertThat(list.get(i), equalTo(values.get(i - size)));
+        appendProcessor.execute(ingestDocument);
+/*
+        List<Object> values = new ArrayList<>();
+        String field = RandomDocumentPicks.randomFieldName(random());
+        Processor appendProcessor;
+            }
+            new TestTemplateService.MockTemplateScript.Factory(fieldName),
+ * Unless required by applicable law or agreed to in writing,
+        Object initialValue = ingestDocument.getSourceAndMetadata().get(randomMetadata.getFieldName());
+    public void testAppendMetadataExceptVersion() throws Exception {
+            values.add(value);
+                int numItems = randomIntBetween(1, 10);
+        List<String> values = new ArrayList<>();
+        } else {
+            .collect(Collectors.toSet());
+            appendProcessor = createAppendProcessor(field, values, true);
+        assertThat(fieldValue, sameInstance(list));
+ * ownership. Elasticsearch licenses this file to you under
+            randomAlphaOfLength(10),
+/*
+        appendProcessor.execute(ingestDocument);
+            for (int i = 0; i < valuesSize; i++) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        );
+                }

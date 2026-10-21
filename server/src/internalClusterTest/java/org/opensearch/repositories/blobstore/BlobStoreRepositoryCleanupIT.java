@@ -1,180 +1,150 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.repositories.blobstore;
-
-import org.opensearch.action.ActionRunnable;
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.cluster.RepositoryCleanupInProgress;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.snapshots.AbstractSnapshotIntegTestCase;
-import org.opensearch.snapshots.SnapshotState;
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.io.ByteArrayInputStream;
-import java.util.concurrent.ExecutionException;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertFutureThrows;
-import static org.hamcrest.Matchers.is;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-public class BlobStoreRepositoryCleanupIT extends AbstractSnapshotIntegTestCase {
-
-    public void testClusterManagerFailoverDuringCleanup() throws Exception {
-        startBlockedCleanup("test-repo");
-
-        final int nodeCount = internalCluster().numDataAndClusterManagerNodes();
-        logger.info("-->  stopping cluster-manager node");
-        internalCluster().stopCurrentClusterManagerNode();
-
-        ensureStableCluster(nodeCount - 1);
-
-        logger.info("-->  wait for cleanup to finish and disappear from cluster state");
-        awaitClusterState(
-            state -> state.custom(RepositoryCleanupInProgress.TYPE, RepositoryCleanupInProgress.EMPTY).hasCleanupInProgress() == false
-        );
-    }
-
-    public void testRepeatCleanupsDontRemove() throws Exception {
-        final String clusterManagerNode = startBlockedCleanup("test-repo");
-
-        logger.info("-->  sending another cleanup");
-        assertFutureThrows(client().admin().cluster().prepareCleanupRepository("test-repo").execute(), IllegalStateException.class);
-
-        logger.info("-->  ensure cleanup is still in progress");
-        final RepositoryCleanupInProgress cleanup = client().admin()
-            .cluster()
-            .prepareState()
-            .get()
-            .getState()
-            .custom(RepositoryCleanupInProgress.TYPE);
-        assertTrue(cleanup.hasCleanupInProgress());
-
-        logger.info("-->  unblocking cluster-manager node");
-        unblockNode("test-repo", clusterManagerNode);
-
-        logger.info("-->  wait for cleanup to finish and disappear from cluster state");
-        awaitClusterState(
-            state -> state.custom(RepositoryCleanupInProgress.TYPE, RepositoryCleanupInProgress.EMPTY).hasCleanupInProgress() == false
-        );
-    }
-
-    private String startBlockedCleanup(String repoName) throws Exception {
-        logger.info("-->  starting two cluster-manager nodes and one data node");
-        internalCluster().startClusterManagerOnlyNodes(2);
-        internalCluster().startDataOnlyNodes(1);
-
-        createRepository(repoName, "mock");
-
-        logger.info("-->  snapshot");
-        client().admin().cluster().prepareCreateSnapshot(repoName, "test-snap").setWaitForCompletion(true).get();
-
-        final RepositoriesService service = internalCluster().getInstance(
-            RepositoriesService.class,
-            internalCluster().getClusterManagerName()
-        );
-        final BlobStoreRepository repository = (BlobStoreRepository) service.repository(repoName);
-
-        logger.info("--> creating a garbage data blob");
-        final PlainActionFuture<Void> garbageFuture = PlainActionFuture.newFuture();
-        repository.threadPool()
-            .generic()
-            .execute(
-                ActionRunnable.run(
-                    garbageFuture,
-                    () -> repository.blobStore()
-                        .blobContainer(repository.basePath())
-                        .writeBlob("snap-foo.dat", new ByteArrayInputStream(new byte[1]), 1, true)
-                )
-            );
-        garbageFuture.get();
-
         final String clusterManagerNode = blockClusterManagerFromFinalizingSnapshotOnIndexFile(repoName);
-
-        logger.info("--> starting repository cleanup");
-        client().admin().cluster().prepareCleanupRepository(repoName).execute();
-
-        logger.info("--> waiting for block to kick in on " + clusterManagerNode);
-        waitForBlock(clusterManagerNode, repoName, TimeValue.timeValueSeconds(60));
-        awaitClusterState(
-            state -> state.custom(RepositoryCleanupInProgress.TYPE, RepositoryCleanupInProgress.EMPTY).hasCleanupInProgress()
         );
-        return clusterManagerNode;
-    }
-
-    public void testCleanupOldIndexN() throws ExecutionException, InterruptedException {
-        internalCluster().startNodes(Settings.EMPTY);
-
-        final String repoName = "test-repo";
+        startBlockedCleanup("test-repo");
         createRepository(repoName, "fs");
-
-        logger.info("--> create three snapshots");
-        for (int i = 0; i < 3; ++i) {
-            CreateSnapshotResponse createSnapshotResponse = client().admin()
-                .cluster()
+        logger.info("-->  stopping cluster-manager node");
                 .prepareCreateSnapshot(repoName, "test-snap-" + i)
-                .setWaitForCompletion(true)
+        logger.info("--> cleanup repository");
+            .cluster()
+        internalCluster().startDataOnlyNodes(1);
+                    () -> repository.blobStore()
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        assertTrue(cleanup.hasCleanupInProgress());
+        );
+        awaitClusterState(
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.snapshots.AbstractSnapshotIntegTestCase;
+        awaitClusterState(
+        logger.info("-->  ensure cleanup is still in progress");
+        logger.info("--> create three snapshots");
+        final RepositoryCleanupInProgress cleanup = client().admin()
+        );
+            .generic()
                 .get();
-            assertThat(createSnapshotResponse.getSnapshotInfo().state(), is(SnapshotState.SUCCESS));
-        }
-
-        final RepositoriesService service = internalCluster().getInstance(
-            RepositoriesService.class,
+        awaitClusterState(
+                        createOldIndexNFuture,
+        logger.info("--> write two outdated index-N blobs");
+            createOldIndexNFuture.get();
+        logger.info("--> waiting for block to kick in on " + clusterManagerNode);
+                        () -> repository.blobStore()
+            repository.threadPool()
+ *
+import org.opensearch.common.unit.TimeValue;
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
             internalCluster().getClusterManagerName()
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertFutureThrows;
+            assertThat(createSnapshotResponse.getSnapshotInfo().state(), is(SnapshotState.SUCCESS));
+            state -> state.custom(RepositoryCleanupInProgress.TYPE, RepositoryCleanupInProgress.EMPTY).hasCleanupInProgress() == false
+            internalCluster().getClusterManagerName()
+        ensureStableCluster(nodeCount - 1);
+ * this work for additional information regarding copyright
+        final PlainActionFuture<Void> garbageFuture = PlainActionFuture.newFuture();
+        logger.info("-->  starting two cluster-manager nodes and one data node");
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                .generic()
+            state -> state.custom(RepositoryCleanupInProgress.TYPE, RepositoryCleanupInProgress.EMPTY).hasCleanupInProgress() == false
+        internalCluster().startClusterManagerOnlyNodes(2);
+import org.opensearch.snapshots.SnapshotState;
+ * Unless required by applicable law or agreed to in writing,
+ *
+            RepositoriesService.class,
+        internalCluster().startNodes(Settings.EMPTY);
+ * software distributed under the License is distributed on an
+import org.opensearch.test.OpenSearchIntegTestCase;
+        logger.info("--> starting repository cleanup");
+                .setWaitForCompletion(true)
+    public void testClusterManagerFailoverDuringCleanup() throws Exception {
+            .execute(
+        }
+    }
+            .custom(RepositoryCleanupInProgress.TYPE);
+                            .writeBlob(BlobStoreRepository.INDEX_FILE_PREFIX + generation, new ByteArrayInputStream(new byte[1]), 1, true)
+        return clusterManagerNode;
+        );
+                    garbageFuture,
+}
+            );
+/*
+ * specific language governing permissions and limitations
+                        .writeBlob("snap-foo.dat", new ByteArrayInputStream(new byte[1]), 1, true)
+                    ActionRunnable.run(
+                    )
+import static org.hamcrest.Matchers.is;
+        waitForBlock(clusterManagerNode, repoName, TimeValue.timeValueSeconds(60));
+ */
+    private String startBlockedCleanup(String repoName) throws Exception {
+                        .blobContainer(repository.basePath())
+    public void testRepeatCleanupsDontRemove() throws Exception {
+            .get()
+        for (int i = 0; i < 3; ++i) {
+ */
+ * ownership. Elasticsearch licenses this file to you under
+        logger.info("-->  sending another cleanup");
+        createRepository(repoName, "mock");
+        client().admin().cluster().prepareCleanupRepository(repoName).get();
+/*
+    }
+            final int generation = i;
+import org.opensearch.repositories.RepositoriesService;
+            state -> state.custom(RepositoryCleanupInProgress.TYPE, RepositoryCleanupInProgress.EMPTY).hasCleanupInProgress()
+                )
+        final RepositoriesService service = internalCluster().getInstance(
+import org.opensearch.common.settings.Settings;
+ * this file be licensed under the Apache-2.0 license or a
+ * You may obtain a copy of the License at
+        }
+            .prepareState()
+            final PlainActionFuture<Void> createOldIndexNFuture = PlainActionFuture.newFuture();
+import org.opensearch.action.support.PlainActionFuture;
+                            .blobContainer(repository.basePath())
+        logger.info("-->  wait for cleanup to finish and disappear from cluster state");
+        final int nodeCount = internalCluster().numDataAndClusterManagerNodes();
+ * Licensed to Elasticsearch under one or more contributor
+        for (int i = 0; i < 2; ++i) {
+ * GitHub history for details.
+        assertFutureThrows(client().admin().cluster().prepareCleanupRepository("test-repo").execute(), IllegalStateException.class);
+            CreateSnapshotResponse createSnapshotResponse = client().admin()
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
+        final BlobStoreRepository repository = (BlobStoreRepository) service.repository(repoName);
+    }
+ * under the License.
+        garbageFuture.get();
+ * license agreements. See the NOTICE file distributed with
+        logger.info("-->  snapshot");
+                );
+        client().admin().cluster().prepareCreateSnapshot(repoName, "test-snap").setWaitForCompletion(true).get();
+ */
+import java.util.concurrent.ExecutionException;
+package org.opensearch.repositories.blobstore;
+    }
+            RepositoriesService.class,
+        logger.info("-->  unblocking cluster-manager node");
+            .getState()
+        internalCluster().stopCurrentClusterManagerNode();
+ * The OpenSearch Contributors require contributions made to
+        final String repoName = "test-repo";
+        logger.info("--> creating a garbage data blob");
+ * compatible open source license.
+        final String clusterManagerNode = startBlockedCleanup("test-repo");
+    public void testCleanupOldIndexN() throws ExecutionException, InterruptedException {
+        client().admin().cluster().prepareCleanupRepository(repoName).execute();
+/*
+                .execute(
+        final RepositoriesService service = internalCluster().getInstance(
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Modifications Copyright OpenSearch Contributors. See
+public class BlobStoreRepositoryCleanupIT extends AbstractSnapshotIntegTestCase {
+        BlobStoreTestUtil.assertConsistency(repository, repository.threadPool().generic());
+import org.opensearch.cluster.RepositoryCleanupInProgress;
+        repository.threadPool()
         );
         final BlobStoreRepository repository = (BlobStoreRepository) service.repository(repoName);
-
-        logger.info("--> write two outdated index-N blobs");
-        for (int i = 0; i < 2; ++i) {
-            final PlainActionFuture<Void> createOldIndexNFuture = PlainActionFuture.newFuture();
-            final int generation = i;
-            repository.threadPool()
-                .generic()
-                .execute(
-                    ActionRunnable.run(
-                        createOldIndexNFuture,
-                        () -> repository.blobStore()
-                            .blobContainer(repository.basePath())
-                            .writeBlob(BlobStoreRepository.INDEX_FILE_PREFIX + generation, new ByteArrayInputStream(new byte[1]), 1, true)
-                    )
-                );
-            createOldIndexNFuture.get();
-        }
-
-        logger.info("--> cleanup repository");
-        client().admin().cluster().prepareCleanupRepository(repoName).get();
-
-        BlobStoreTestUtil.assertConsistency(repository, repository.threadPool().generic());
-    }
-}
+import java.io.ByteArrayInputStream;
+                .cluster()
+ * not use this file except in compliance with the License.
+                ActionRunnable.run(
+import org.opensearch.action.ActionRunnable;
+ * SPDX-License-Identifier: Apache-2.0
+        unblockNode("test-repo", clusterManagerNode);
+        logger.info("-->  wait for cleanup to finish and disappear from cluster state");

@@ -1,354 +1,307 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.arrow.flight.transport;
-
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.IntVector;
-import org.apache.arrow.vector.VarBinaryVector;
-import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.arrow.vector.types.pojo.FieldType;
-import org.apache.arrow.vector.types.pojo.Schema;
-import org.opensearch.arrow.transport.ArrowBatchResponse;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-
-public class VectorStreamInputTests extends OpenSearchTestCase {
-
-    private BufferAllocator allocator;
-    private NamedWriteableRegistry registry;
-
-    @Before
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        allocator = new RootAllocator();
-        registry = new NamedWriteableRegistry(Collections.emptyList());
-    }
-
-    @After
-    @Override
-    public void tearDown() throws Exception {
-        allocator.close();
-        super.tearDown();
-    }
-
-    public void testByteSerializedReadsFromSharedRoot() throws IOException {
-        VectorSchemaRoot shared = newByteSerializedRoot();
-        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
-            assertTrue(input instanceof VectorStreamInput.ByteSerialized);
-            assertSame("ByteSerialized holds the stream root — no transfer", shared, input.getRoot());
-        }
-        shared.close();
-    }
-
-    public void testNativeArrowTransfersIntoOwnedRoot() throws IOException {
         VectorSchemaRoot shared = newNativeArrowRoot();
-        IntVector srcVec = (IntVector) shared.getVector("val");
-        srcVec.allocateNew();
-        srcVec.setSafe(0, 42);
-        srcVec.setValueCount(1);
-        shared.setRowCount(1);
-
-        VectorStreamInput.NativeArrow input = (VectorStreamInput.NativeArrow) VectorStreamInput.forNativeArrow(shared, registry);
-        try {
-            assertNotSame("NativeArrow transfers into a fresh consumer root", shared, input.getRoot());
-            IntVector dstVec = (IntVector) input.getRoot().getVector("val");
-            assertEquals(1, input.getRoot().getRowCount());
-            assertEquals(42, dstVec.get(0));
-            assertEquals("source must be drained", 0, shared.getRowCount());
-
-            // Close the stream root immediately — consumer root must survive.
-            shared.close();
-            assertEquals("consumer root survives stream root close", 42, dstVec.get(0));
-
-            // Simulate ArrowBatchResponse taking ownership, then close the consumer root on the response side.
-            input.claimOwnership();
-        } finally {
-            input.close(); // no-op after claimOwnership
-            input.getRoot().close();
-        }
-    }
-
-    public void testByteSerializedCloseIsNoOpOnSharedRoot() throws IOException {
-        VectorSchemaRoot shared = newByteSerializedRoot();
-        VarBinaryVector vec = (VarBinaryVector) shared.getVector("0");
-        vec.allocateNew();
-        vec.setSafe(0, new byte[] { 1, 2, 3 });
-        vec.setValueCount(1);
-        shared.setRowCount(1);
-
-        VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry);
-        input.close();
-
-        // Shared root must remain fully usable — the transport owns its lifecycle.
-        assertEquals(1, shared.getRowCount());
-        assertEquals(3, ((VarBinaryVector) shared.getVector("0")).get(0).length);
-        shared.close();
-    }
-
-    public void testNativeArrowCloseReleasesRootIfNotTransferred() throws IOException {
-        // read() throws or never runs: the consumer root must be released by close(), not leaked.
-        VectorSchemaRoot shared = newNativeArrowRoot();
-        IntVector srcVec = (IntVector) shared.getVector("val");
-        srcVec.allocateNew();
-        srcVec.setSafe(0, 7);
-        srcVec.setValueCount(1);
-        shared.setRowCount(1);
-
-        long beforeClose;
-        try (VectorStreamInput.NativeArrow input = (VectorStreamInput.NativeArrow) VectorStreamInput.forNativeArrow(shared, registry)) {
-            beforeClose = allocator.getAllocatedMemory();
-            assertTrue("consumer root should hold memory before close", beforeClose > 0);
-        }
-        // After try-with-resources: close() ran, transferred==false, root should be released.
-        assertTrue(
-            "consumer root must be released when not transferred (was " + beforeClose + ", now " + allocator.getAllocatedMemory() + ")",
-            allocator.getAllocatedMemory() < beforeClose
-        );
-        shared.close();
-    }
-
-    public void testNativeArrowCloseIsNoOpAfterMarkTransferred() throws IOException {
-        // ArrowBatchResponse(StreamInput) calls claimOwnership to take ownership.
-        // After that, close() must leave the root alone so the response can use it.
-        VectorSchemaRoot shared = newNativeArrowRoot();
-        IntVector srcVec = (IntVector) shared.getVector("val");
-        srcVec.allocateNew();
-        srcVec.setSafe(0, 7);
-        srcVec.setValueCount(1);
-        shared.setRowCount(1);
-
-        VectorStreamInput.NativeArrow input = (VectorStreamInput.NativeArrow) VectorStreamInput.forNativeArrow(shared, registry);
-        VectorSchemaRoot consumerRoot = input.getRoot();
-        input.claimOwnership();
-        input.close();
-
-        // Consumer root must remain usable — ArrowBatchResponse owns it after handoff.
-        assertEquals(1, consumerRoot.getRowCount());
-        assertEquals(7, ((IntVector) consumerRoot.getVector("val")).get(0));
-        consumerRoot.close();
-        shared.close();
-    }
-
-    public void testForNativeArrowRejectsEmptySchema() {
-        Schema emptySchema = new Schema(List.<Field>of());
-        VectorSchemaRoot shared = VectorSchemaRoot.create(emptySchema, allocator);
-        try {
-            IllegalStateException e = expectThrows(IllegalStateException.class, () -> VectorStreamInput.forNativeArrow(shared, registry));
-            assertTrue(e.getMessage().contains("no field vectors"));
-        } finally {
-            shared.close();
-        }
-    }
-
-    public void testByteSerializedReadsBytesFromSharedVector() throws IOException {
-        VectorSchemaRoot shared = newByteSerializedRoot();
-        VarBinaryVector vec = (VarBinaryVector) shared.getVector("0");
-        vec.allocateNew();
-        vec.setSafe(0, new byte[] { 10, 20, 30 });
-        vec.setValueCount(1);
-        shared.setRowCount(1);
-
-        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
-            assertEquals((byte) 10, input.readByte());
-            assertEquals((byte) 20, input.readByte());
-            assertEquals((byte) 30, input.readByte());
-        }
-        shared.close();
-    }
-
-    public void testNativeArrowRejectsByteReads() throws IOException {
-        VectorSchemaRoot shared = newNativeArrowRoot();
-        try (VectorStreamInput input = VectorStreamInput.forNativeArrow(shared, registry)) {
-            expectThrows(UnsupportedOperationException.class, input::readByte);
-            expectThrows(UnsupportedOperationException.class, () -> input.readBytes(new byte[1], 0, 1));
-            // Do not call input.getRoot().close() — the try-with-resources close() releases the
-            // consumer root (transferred==false).
-        }
-        shared.close();
-    }
-
-    public void testReadByteEofWhenRowsExhausted() throws IOException {
-        VectorSchemaRoot shared = newByteSerializedRoot();
-        ((VarBinaryVector) shared.getVector("0")).allocateNew();
-        shared.setRowCount(0);
-        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
-            expectThrows(java.io.EOFException.class, input::readByte);
-        }
-        shared.close();
-    }
-
-    public void testReadByteRejectsEmptyRow() throws IOException {
-        VectorSchemaRoot shared = newByteSerializedRoot();
-        VarBinaryVector vec = (VarBinaryVector) shared.getVector("0");
-        vec.allocateNew();
-        vec.setSafe(0, new byte[0]);
-        vec.setValueCount(1);
-        shared.setRowCount(1);
-        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
-            expectThrows(IOException.class, input::readByte);
-        }
-        shared.close();
-    }
-
-    public void testReadBytesInvalidOffsetThrows() throws IOException {
-        VectorSchemaRoot shared = newByteSerializedRoot();
-        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
-            byte[] target = new byte[4];
-            expectThrows(IllegalArgumentException.class, () -> input.readBytes(target, -1, 2));
-            expectThrows(IllegalArgumentException.class, () -> input.readBytes(target, 0, -1));
-            expectThrows(IllegalArgumentException.class, () -> input.readBytes(target, 3, 5));
-        }
-        shared.close();
-    }
-
-    public void testReadBytesSpansMultipleRowsWithLeftover() throws IOException {
-        // Row 0: 3 bytes, row 1: 4 bytes. Read 5 bytes — spans both rows, leaves 2 in buffer
-        // for a follow-up readByte.
-        VectorSchemaRoot shared = newByteSerializedRoot();
-        VarBinaryVector vec = (VarBinaryVector) shared.getVector("0");
-        vec.allocateNew();
-        vec.setSafe(0, new byte[] { 1, 2, 3 });
-        vec.setSafe(1, new byte[] { 4, 5, 6, 7 });
-        vec.setValueCount(2);
-        shared.setRowCount(2);
-
-        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
+    // ArrowBatchResponse integration — verifies NativeArrow satisfies ArrowStreamInput.
             byte[] out = new byte[5];
-            input.readBytes(out, 0, 5);
+        VarBinaryVector vec = (VarBinaryVector) shared.getVector("0");
+        TestResponse response = new TestResponse(in);
+        srcVec.setValueCount(1);
+            byte[] out = new byte[4];
+        vec.allocateNew();
+        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
+        shared.close();
+        shared.setRowCount(1);
+        VectorStreamInput.NativeArrow in = (VectorStreamInput.NativeArrow) VectorStreamInput.forNativeArrow(shared, registry);
+        srcVec.setSafe(0, 42);
+        VectorSchemaRoot shared = newByteSerializedRoot();
+        srcVec.setValueCount(1);
             assertArrayEquals(new byte[] { 1, 2, 3, 4, 5 }, out);
-            // Remaining buffered bytes from row 1 feed readByte.
-            assertEquals((byte) 6, input.readByte());
+            // Close the stream root immediately — consumer root must survive.
+            // consumer root (transferred==false).
+import java.util.List;
+            byte[] out = new byte[2];
+            assertEquals((byte) 30, input.readByte());
+        assertEquals(3, ((VarBinaryVector) shared.getVector("0")).get(0).length);
+        long beforeClose;
+        shared.close();
+        );
+    }
+        shared.close();
+    public void testNativeArrowRejectsByteReads() throws IOException {
+        vec.allocateNew();
+import org.opensearch.core.common.io.stream.StreamInput;
+        // buffer (1 byte left) before pulling row 1.
+            expectThrows(IOException.class, () -> input.readBytes(out, 0, 2));
+    private VectorSchemaRoot newByteSerializedRoot() {
+        vec.setValueCount(2);
+            input.getRoot().close();
+        VectorSchemaRoot shared = newNativeArrowRoot();
+import org.apache.arrow.vector.VarBinaryVector;
+        VectorSchemaRoot consumerRoot = input.getRoot();
+            assertEquals(42, dstVec.get(0));
+        vec.setValueCount(1);
+        VarBinaryVector vec = (VarBinaryVector) shared.getVector("0");
+    public void testReadBytesEofWhenRowsExhausted() throws IOException {
+    private BufferAllocator allocator;
+        shared.close();
+        in.close();
+            assertEquals(1, input.getRoot().getRowCount());
+        shared.setRowCount(1);
+            IllegalStateException e = expectThrows(IllegalStateException.class, () -> VectorStreamInput.forNativeArrow(shared, registry));
+    public void testReadBytesSpansMultipleRowsWithLeftover() throws IOException {
+    public void tearDown() throws Exception {
+            assertNotSame("NativeArrow transfers into a fresh consumer root", shared, input.getRoot());
+ * The OpenSearch Contributors require contributions made to
+        VectorSchemaRoot shared = newByteSerializedRoot();
+            expectThrows(IllegalArgumentException.class, () -> input.readBytes(target, 0, -1));
+            input.readBytes(out, 0, 5);
+        } finally {
+    public void testForNativeArrowRejectsEmptySchema() {
+            assertTrue("message should point at skipsDeserialization()", e.getMessage().contains("skipsDeserialization"));
+        vec.setSafe(0, new byte[] { 1, 2, 3 });
+import org.apache.arrow.vector.types.pojo.ArrowType;
+import org.apache.arrow.vector.VectorSchemaRoot;
+        input.close();
+    }
+        } finally {
+        }
+        shared.close();
+        vec.setValueCount(1);
+import org.apache.arrow.memory.RootAllocator;
+        VectorSchemaRoot shared = newNativeArrowRoot();
+        Schema schema = new Schema(List.of(new Field("val", FieldType.nullable(new ArrowType.Int(32, true)), null)));
+        }
+            input.readBytes(out, 0, 3);
+        shared.close();
+import org.apache.arrow.vector.types.pojo.FieldType;
+        }
+        shared.setRowCount(1);
+    @Before
+            expectThrows(IllegalArgumentException.class, () -> input.readBytes(target, 3, 5));
+    }
+            assertEquals("source must be drained", 0, shared.getRowCount());
+import org.apache.arrow.vector.IntVector;
+import org.junit.Before;
+    }
+        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
+        vec.setSafe(0, new byte[] { 1, 2, 3 });
+        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
+        }
+            assertEquals("consumer root survives stream root close", 42, dstVec.get(0));
+        try {
+        // readByte advances row 0 into the internal buffer; readBytes must then drain the
+        VectorSchemaRoot shared = VectorSchemaRoot.create(emptySchema, allocator);
+        // Shared root must remain fully usable — the transport owns its lifecycle.
+        try (VectorStreamInput.NativeArrow input = (VectorStreamInput.NativeArrow) VectorStreamInput.forNativeArrow(shared, registry)) {
+        VectorSchemaRoot shared = newByteSerializedRoot();
+    public void testByteSerializedReadsBytesFromSharedVector() throws IOException {
+            allocator.getAllocatedMemory() < beforeClose
+            "consumer root must be released when not transferred (was " + beforeClose + ", now " + allocator.getAllocatedMemory() + ")",
+    public void testReadByteEofWhenRowsExhausted() throws IOException {
+        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        shared.close();
+            assertEquals((byte) 10, input.readByte());
+        vec.allocateNew();
+ * SPDX-License-Identifier: Apache-2.0
+            expectThrows(java.io.EOFException.class, input::readByte);
+    public void testByteSerializedReadsFromSharedRoot() throws IOException {
+            shared.close();
+        shared.setRowCount(0);
+    }
+import java.io.IOException;
+        }
+        VectorSchemaRoot shared = newByteSerializedRoot();
+        VectorSchemaRoot shared = newByteSerializedRoot();
+        allocator = new RootAllocator();
+        vec.allocateNew();
+        vec.allocateNew();
+            expectThrows(UnsupportedOperationException.class, input::readByte);
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        super.tearDown();
+        vec.setSafe(0, new byte[0]);
+    public void setUp() throws Exception {
+import org.opensearch.test.OpenSearchTestCase;
+        shared.setRowCount(1);
+        srcVec.allocateNew();
+        try {
+        }
+        IntVector vec = (IntVector) shared.getVector("val");
             assertEquals((byte) 7, input.readByte());
         }
-        shared.close();
-    }
-
-    public void testReadBytesEofWhenRowsExhausted() throws IOException {
-        VectorSchemaRoot shared = newByteSerializedRoot();
-        VarBinaryVector vec = (VarBinaryVector) shared.getVector("0");
-        vec.allocateNew();
-        vec.setSafe(0, new byte[] { 1, 2 });
-        vec.setValueCount(1);
-        shared.setRowCount(1);
-
-        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
-            byte[] out = new byte[4];
-            expectThrows(java.io.EOFException.class, () -> input.readBytes(out, 0, 4));
-        }
-        shared.close();
-    }
-
-    public void testReadBytesRejectsEmptyRow() throws IOException {
-        VectorSchemaRoot shared = newByteSerializedRoot();
-        VarBinaryVector vec = (VarBinaryVector) shared.getVector("0");
-        vec.allocateNew();
-        vec.setSafe(0, new byte[0]);
-        vec.setValueCount(1);
-        shared.setRowCount(1);
-
-        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
-            byte[] out = new byte[2];
-            expectThrows(IOException.class, () -> input.readBytes(out, 0, 2));
-        }
-        shared.close();
-    }
-
-    public void testReadBytesZeroLengthIsNoOp() throws IOException {
-        VectorSchemaRoot shared = newByteSerializedRoot();
-        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
-            input.readBytes(new byte[4], 0, 0); // must not throw, must not advance
-        }
-        shared.close();
-    }
-
-    public void testReadBytesDrainsBufferThenAdvancesRow() throws IOException {
-        // readByte advances row 0 into the internal buffer; readBytes must then drain the
-        // buffer (1 byte left) before pulling row 1.
-        VectorSchemaRoot shared = newByteSerializedRoot();
-        VarBinaryVector vec = (VarBinaryVector) shared.getVector("0");
-        vec.allocateNew();
-        vec.setSafe(0, new byte[] { 10, 20 });
-        vec.setSafe(1, new byte[] { 30, 40 });
-        vec.setValueCount(2);
-        shared.setRowCount(2);
-
-        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
-            assertEquals((byte) 10, input.readByte());
-            byte[] out = new byte[3];
-            input.readBytes(out, 0, 3);
-            assertArrayEquals(new byte[] { 20, 30, 40 }, out);
-        }
-        shared.close();
-    }
-
-    // ArrowBatchResponse integration — verifies NativeArrow satisfies ArrowStreamInput.
-
-    static class TestResponse extends ArrowBatchResponse {
-        TestResponse(VectorSchemaRoot root) {
-            super(root);
-        }
-
-        TestResponse(StreamInput in) throws IOException {
-            super(in);
-        }
-    }
-
-    public void testArrowBatchResponseClaimsNativeArrowInput() throws IOException {
-        VectorSchemaRoot shared = newNativeArrowRoot();
-        IntVector vec = (IntVector) shared.getVector("val");
-        vec.allocateNew();
         vec.setSafe(0, 42);
-        vec.setValueCount(1);
-        shared.setRowCount(1);
-
-        VectorStreamInput.NativeArrow in = (VectorStreamInput.NativeArrow) VectorStreamInput.forNativeArrow(shared, registry);
-        VectorSchemaRoot consumerRoot = in.getRoot();
-
-        TestResponse response = new TestResponse(in);
+        vec.setSafe(1, new byte[] { 30, 40 });
+        try (VectorStreamInput in = VectorStreamInput.forByteSerialized(shared, registry)) {
+import org.opensearch.arrow.transport.ArrowBatchResponse;
+    }
         assertSame(consumerRoot, response.getRoot());
-
-        // claimOwnership must have fired — close() is a no-op, consumer root survives.
-        in.close();
-        assertEquals(42, ((IntVector) response.getRoot().getVector("val")).get(0));
-
-        response.getRoot().close();
+    }
+import org.apache.arrow.vector.types.pojo.Schema;
+        }
+        }
+        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
+        VectorSchemaRoot shared = newNativeArrowRoot();
+            assertTrue("consumer root should hold memory before close", beforeClose > 0);
+        }
+        ((VarBinaryVector) shared.getVector("0")).allocateNew();
+        IntVector srcVec = (IntVector) shared.getVector("val");
+        vec.setValueCount(2);
+            shared.close();
+        srcVec.setSafe(0, 7);
+        VarBinaryVector vec = (VarBinaryVector) shared.getVector("0");
+        srcVec.allocateNew();
+        input.claimOwnership();
+        // read() throws or never runs: the consumer root must be released by close(), not leaked.
+    @Override
+    }
+        VectorSchemaRoot shared = newByteSerializedRoot();
+    }
+            byte[] out = new byte[3];
+    public void testNativeArrowCloseReleasesRootIfNotTransferred() throws IOException {
+    public void testReadBytesZeroLengthIsNoOp() throws IOException {
+    }
+        vec.allocateNew();
+ * compatible open source license.
+        VarBinaryVector vec = (VarBinaryVector) shared.getVector("0");
+        }
+            assertTrue(input instanceof VectorStreamInput.ByteSerialized);
+    }
+    public void testByteSerializedCloseIsNoOpOnSharedRoot() throws IOException {
+        shared.close();
+        shared.close();
+            assertEquals((byte) 20, input.readByte());
         shared.close();
     }
-
-    public void testArrowBatchResponseRejectsByteSerializedInput() throws IOException {
-        VectorSchemaRoot shared = newByteSerializedRoot();
-        try (VectorStreamInput in = VectorStreamInput.forByteSerialized(shared, registry)) {
-            IllegalStateException e = expectThrows(IllegalStateException.class, () -> new TestResponse(in));
-            assertTrue("message should point at skipsDeserialization()", e.getMessage().contains("skipsDeserialization"));
-        } finally {
-            shared.close();
+        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
+    public void testReadByteRejectsEmptyRow() throws IOException {
+        VarBinaryVector vec = (VarBinaryVector) shared.getVector("0");
+        assertEquals(1, consumerRoot.getRowCount());
         }
+        allocator.close();
+package org.opensearch.arrow.flight.transport;
+        srcVec.setSafe(0, 7);
+    public void testReadBytesRejectsEmptyRow() throws IOException {
+            expectThrows(java.io.EOFException.class, () -> input.readBytes(out, 0, 4));
+    public void testArrowBatchResponseRejectsByteSerializedInput() throws IOException {
+        TestResponse(VectorSchemaRoot root) {
+        super.setUp();
+    public void testArrowBatchResponseClaimsNativeArrowInput() throws IOException {
+        }
+            expectThrows(IllegalArgumentException.class, () -> input.readBytes(target, -1, 2));
+        VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry);
+        shared.close();
+        srcVec.allocateNew();
+        vec.setSafe(0, new byte[] { 10, 20, 30 });
+            super(root);
+            // Remaining buffered bytes from row 1 feed readByte.
+        vec.setSafe(0, new byte[0]);
+        shared.close();
+    public void testReadBytesInvalidOffsetThrows() throws IOException {
     }
-
-    private VectorSchemaRoot newByteSerializedRoot() {
-        Schema schema = new Schema(List.of(new Field("0", FieldType.nullable(new ArrowType.Binary()), null)));
+ *
+    }
+        VectorSchemaRoot consumerRoot = in.getRoot();
+    }
+            input.claimOwnership();
+    }
         return VectorSchemaRoot.create(schema, allocator);
+        // After try-with-resources: close() ran, transferred==false, root should be released.
+        assertEquals(42, ((IntVector) response.getRoot().getVector("val")).get(0));
+        IntVector srcVec = (IntVector) shared.getVector("val");
+        }
+        try (VectorStreamInput input = VectorStreamInput.forNativeArrow(shared, registry)) {
+import org.junit.After;
+            assertTrue(e.getMessage().contains("no field vectors"));
+        TestResponse(StreamInput in) throws IOException {
+        shared.setRowCount(1);
+/*
+        srcVec.setValueCount(1);
+public class VectorStreamInputTests extends OpenSearchTestCase {
+        VarBinaryVector vec = (VarBinaryVector) shared.getVector("0");
+        VectorStreamInput.NativeArrow input = (VectorStreamInput.NativeArrow) VectorStreamInput.forNativeArrow(shared, registry);
+        VectorSchemaRoot shared = newByteSerializedRoot();
+        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
+        } finally {
+            assertSame("ByteSerialized holds the stream root — no transfer", shared, input.getRoot());
+            assertEquals((byte) 10, input.readByte());
+        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
+        IntVector srcVec = (IntVector) shared.getVector("val");
+            shared.close();
+            // Simulate ArrowBatchResponse taking ownership, then close the consumer root on the response side.
+            IllegalStateException e = expectThrows(IllegalStateException.class, () -> new TestResponse(in));
+        VectorStreamInput.NativeArrow input = (VectorStreamInput.NativeArrow) VectorStreamInput.forNativeArrow(shared, registry);
+            input.close(); // no-op after claimOwnership
+        vec.setSafe(1, new byte[] { 4, 5, 6, 7 });
+        // claimOwnership must have fired — close() is a no-op, consumer root survives.
+        vec.setValueCount(1);
+        // Consumer root must remain usable — ArrowBatchResponse owns it after handoff.
+        VectorSchemaRoot shared = newByteSerializedRoot();
     }
-
+    }
+        assertEquals(1, shared.getRowCount());
+            expectThrows(IOException.class, input::readByte);
+    }
+    public void testReadBytesDrainsBufferThenAdvancesRow() throws IOException {
+        shared.close();
+            expectThrows(UnsupportedOperationException.class, () -> input.readBytes(new byte[1], 0, 1));
+        // After that, close() must leave the root alone so the response can use it.
+        vec.setValueCount(1);
+        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
+    static class TestResponse extends ArrowBatchResponse {
+            super(in);
+        VectorSchemaRoot shared = newByteSerializedRoot();
+        VectorSchemaRoot shared = newByteSerializedRoot();
+        assertTrue(
+    }
     private VectorSchemaRoot newNativeArrowRoot() {
-        Schema schema = new Schema(List.of(new Field("val", FieldType.nullable(new ArrowType.Int(32, true)), null)));
+ */
+        vec.setSafe(0, new byte[] { 1, 2 });
+        VarBinaryVector vec = (VarBinaryVector) shared.getVector("0");
+        }
+        consumerRoot.close();
+    public void testNativeArrowCloseIsNoOpAfterMarkTransferred() throws IOException {
+        response.getRoot().close();
         return VectorSchemaRoot.create(schema, allocator);
+            assertEquals((byte) 6, input.readByte());
+        vec.setValueCount(1);
+    @Override
+            assertArrayEquals(new byte[] { 20, 30, 40 }, out);
     }
+import org.apache.arrow.vector.types.pojo.Field;
+        shared.setRowCount(1);
+        // Row 0: 3 bytes, row 1: 4 bytes. Read 5 bytes — spans both rows, leaves 2 in buffer
+            byte[] target = new byte[4];
+        // ArrowBatchResponse(StreamInput) calls claimOwnership to take ownership.
+        }
+        VectorSchemaRoot shared = newNativeArrowRoot();
+import java.util.Collections;
+        Schema emptySchema = new Schema(List.<Field>of());
+    private NamedWriteableRegistry registry;
+        VectorSchemaRoot shared = newByteSerializedRoot();
+            input.readBytes(new byte[4], 0, 0); // must not throw, must not advance
+        shared.setRowCount(1);
+        shared.setRowCount(2);
+        try (VectorStreamInput input = VectorStreamInput.forByteSerialized(shared, registry)) {
+        input.close();
+            // Do not call input.getRoot().close() — the try-with-resources close() releases the
+        // for a follow-up readByte.
+        VectorSchemaRoot shared = newByteSerializedRoot();
+        shared.setRowCount(1);
+        vec.setValueCount(1);
+    public void testNativeArrowTransfersIntoOwnedRoot() throws IOException {
+        shared.setRowCount(2);
+    @After
+            IntVector dstVec = (IntVector) input.getRoot().getVector("val");
+        shared.close();
+        registry = new NamedWriteableRegistry(Collections.emptyList());
+        Schema schema = new Schema(List.of(new Field("0", FieldType.nullable(new ArrowType.Binary()), null)));
 }
+        assertEquals(7, ((IntVector) consumerRoot.getVector("val")).get(0));
+        shared.close();
+            beforeClose = allocator.getAllocatedMemory();
+        vec.setSafe(0, new byte[] { 10, 20 });
+        vec.allocateNew();
+        }
+import org.apache.arrow.memory.BufferAllocator;
+    }
+        shared.setRowCount(1);
+        vec.allocateNew();

@@ -1,219 +1,186 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.profile;
-
-import org.opensearch.search.profile.query.QueryProfileBreakdown;
-
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.List;
-
-/**
- * Base class for a profiling tree.
- *
  * @opensearch.internal
- */
-public abstract class AbstractInternalProfileTree<PB extends AbstractProfileBreakdown, E> {
-
-    protected ArrayList<PB> breakdowns;
-    /** Maps the Query to it's list of children.  This is basically the dependency tree */
-    protected ArrayList<ArrayList<Integer>> tree;
-    /** A list of the original queries, keyed by index position */
-    protected ArrayList<E> elements;
-    /** A list of top-level "roots".  Each root can have its own tree of profiles */
-    protected ArrayList<Integer> roots;
-    /** A temporary stack used to record where we are in the dependency tree. */
-    protected Deque<Integer> stack;
-    private int currentToken = 0;
-
-    public AbstractInternalProfileTree() {
-        breakdowns = new ArrayList<>(10);
-        stack = new ArrayDeque<>(10);
-        tree = new ArrayList<>(10);
-        elements = new ArrayList<>(10);
-        roots = new ArrayList<>(10);
-    }
-
-    /**
-     * Returns a {@link QueryProfileBreakdown} for a scoring query.  Scoring queries (e.g. those
-     * that are past the rewrite phase and are now being wrapped by createWeight() ) follow
-     * a recursive progression.  We can track the dependency tree by a simple stack
-     * <p>
-     * The only hiccup is that the first scoring query will be identical to the last rewritten
-     * query, so we need to take special care to fix that
+            type,
      *
-     * @param query The scoring query we wish to profile
-     * @return      A ProfileBreakdown for this query
-     */
-    public PB getProfileBreakdown(E query) {
+ * this work for additional information regarding copyright
+        // calculating the same times over and over...but worth the effort?
+            }
         int token = currentToken;
-
-        boolean stackEmpty = stack.isEmpty();
-
-        // If the stack is empty, we are a new root query
-        if (stackEmpty) {
-
-            // We couldn't find a rewritten query to attach to, so just add it as a
-            // top-level root. This is just a precaution: it really shouldn't happen.
-            // We would only get here if a top-level query that never rewrites for some reason.
-            roots.add(token);
-
-            // Increment the token since we are adding a new node, but notably, do not
-            // updateParent() because this was added as a root
-            currentToken += 1;
-            stack.add(token);
-
-            return addDependencyNode(query, token);
-        }
-
-        updateParent(token);
-
-        // Increment the token since we are adding a new node
-        currentToken += 1;
-        stack.add(token);
-
-        return addDependencyNode(query, token);
-    }
-
     /**
-     * Helper method to add a new node to the dependency tree.
+    public PB getProfileBreakdown(E query) {
+     * The only hiccup is that the first scoring query will be identical to the last rewritten
+    private int currentToken = 0;
      * <p>
      * Initializes a new list in the dependency tree, saves the query and
-     * generates a new {@link AbstractProfileBreakdown} to track the timings
-     * of this element.
-     *
-     * @param element
-     *            The element to profile
-     * @param token
-     *            The assigned token for this element
-     * @return A {@link AbstractProfileBreakdown} to profile this element
      */
-    private PB addDependencyNode(E element, int token) {
-
-        // Add a new slot in the dependency tree
-        tree.add(new ArrayList<>(5));
-
-        // Save our query for lookup later
-        elements.add(element);
-
-        PB breakdown = createProfileBreakdown(element);
-        breakdowns.add(token, breakdown);
+    }
         return breakdown;
-    }
-
-    protected abstract PB createProfileBreakdown(E element);
-
-    /**
-     * Removes the last (e.g. most recent) value on the stack
-     */
-    public void pollLast() {
-        stack.pollLast();
-    }
-
-    /**
-     * After the element has been run and profiled, we need to merge the flat timing map
-     * with the dependency graph to build a data structure that mirrors the original
-     * query tree
-     *
-     * @return a hierarchical representation of the profiled query tree
-     */
-    public List<ProfileResult> getTree() {
-        ArrayList<ProfileResult> results = new ArrayList<>(roots.size());
-        for (Integer root : roots) {
-            results.add(doGetTree(root));
-        }
-        return results;
-    }
-
-    /**
-     * Recursive helper to finalize a node in the dependency tree
-     * @param token  The node we are currently finalizing
-     * @return       A hierarchical representation of the tree inclusive of children at this level
-     */
-    private ProfileResult doGetTree(int token) {
-        E element = elements.get(token);
-        PB breakdown = breakdowns.get(token);
-        List<Integer> children = tree.get(token);
-        List<ProfileResult> childrenProfileResults = Collections.emptyList();
-
-        if (children != null) {
-            childrenProfileResults = new ArrayList<>(children.size());
-            for (Integer child : children) {
-                ProfileResult childNode = doGetTree(child);
-                childrenProfileResults.add(childNode);
-            }
-        }
-
-        // TODO this would be better done bottom-up instead of top-down to avoid
-        // calculating the same times over and over...but worth the effort?
-        String type = getTypeFromElement(element);
-        String description = getDescriptionFromElement(element);
-        return createProfileResult(type, description, breakdown, childrenProfileResults);
-    }
-
-    protected ProfileResult createProfileResult(String type, String description, PB breakdown, List<ProfileResult> childrenProfileResults) {
-        return new ProfileResult(
-            type,
-            description,
-            breakdown.toBreakdownMap(),
-            breakdown.toDebugMap(),
-            breakdown.toNodeTime(),
-            childrenProfileResults
-        );
-    }
-
-    protected abstract String getTypeFromElement(E element);
-
-    protected abstract String getDescriptionFromElement(E element);
-
-    /**
-     * Internal helper to add a child to the current parent node
-     *
-     * @param childToken The child to add to the current parent
-     */
-    private void updateParent(int childToken) {
-        Integer parent = stack.peekLast();
-        ArrayList<Integer> parentNode = tree.get(parent);
-        parentNode.add(childToken);
+    protected ArrayList<ArrayList<Integer>> tree;
+            return addDependencyNode(query, token);
+    /** Maps the Query to it's list of children.  This is basically the dependency tree */
+ * specific language governing permissions and limitations
         tree.set(parent, parentNode);
+        E element = elements.get(token);
+     * <p>
+    public AbstractInternalProfileTree() {
+ */
+ */
+ * Licensed to Elasticsearch under one or more contributor
+     * After the element has been run and profiled, we need to merge the flat timing map
+        String description = getDescriptionFromElement(element);
+     * generates a new {@link AbstractProfileBreakdown} to track the timings
+    public List<ProfileResult> getTree() {
+        parentNode.add(childToken);
+            for (Integer child : children) {
     }
-
-    public PB findProfileBreakdown(E query) {
-        int index = elements.indexOf(query);
-        assert index != -1;
-        return breakdowns.get(index);
+    protected abstract PB createProfileBreakdown(E element);
+            // We would only get here if a top-level query that never rewrites for some reason.
     }
-
+    protected ArrayList<E> elements;
+     * a recursive progression.  We can track the dependency tree by a simple stack
+ * compatible open source license.
+            stack.add(token);
+        PB breakdown = breakdowns.get(token);
+        updateParent(token);
+     * @param token  The node we are currently finalizing
+    }
+     * @return A {@link AbstractProfileBreakdown} to profile this element
+ * You may obtain a copy of the License at
+        breakdowns.add(token, breakdown);
+     * @return       A hierarchical representation of the tree inclusive of children at this level
+            // We couldn't find a rewritten query to attach to, so just add it as a
+        return createProfileResult(type, description, breakdown, childrenProfileResults);
+            results.add(doGetTree(root));
+import java.util.Collections;
+    /**
+ * software distributed under the License is distributed on an
+     * Helper method to add a new node to the dependency tree.
 }
+        tree = new ArrayList<>(10);
+        // If the stack is empty, we are a new root query
+ * license agreements. See the NOTICE file distributed with
+     * with the dependency graph to build a data structure that mirrors the original
+ *
+    protected Deque<Integer> stack;
+public abstract class AbstractInternalProfileTree<PB extends AbstractProfileBreakdown, E> {
+            childrenProfileResults
+        breakdowns = new ArrayList<>(10);
+            description,
+    }
+        PB breakdown = createProfileBreakdown(element);
+ * GitHub history for details.
+ * SPDX-License-Identifier: Apache-2.0
+     * @param childToken The child to add to the current parent
+/*
+        ArrayList<ProfileResult> results = new ArrayList<>(roots.size());
+/*
+     *            The assigned token for this element
+        // Save our query for lookup later
+     * query tree
+     * Removes the last (e.g. most recent) value on the stack
+    }
+     * @param query The scoring query we wish to profile
+        List<ProfileResult> childrenProfileResults = Collections.emptyList();
+     * @param element
+    private PB addDependencyNode(E element, int token) {
+ */
+        elements = new ArrayList<>(10);
+ * this file be licensed under the Apache-2.0 license or a
+ * Base class for a profiling tree.
+        if (children != null) {
+    /**
+        // Increment the token since we are adding a new node
+            breakdown.toBreakdownMap(),
+                ProfileResult childNode = doGetTree(child);
+        if (stackEmpty) {
+     * that are past the rewrite phase and are now being wrapped by createWeight() ) follow
+    /** A temporary stack used to record where we are in the dependency tree. */
+        stack = new ArrayDeque<>(10);
+     * @param token
+        return addDependencyNode(query, token);
+            // top-level root. This is just a precaution: it really shouldn't happen.
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+    /** A list of top-level "roots".  Each root can have its own tree of profiles */
+     * Returns a {@link QueryProfileBreakdown} for a scoring query.  Scoring queries (e.g. those
+    public void pollLast() {
+        tree.add(new ArrayList<>(5));
+     * @return      A ProfileBreakdown for this query
+        stack.add(token);
+            // updateParent() because this was added as a root
+import java.util.ArrayList;
+            childrenProfileResults = new ArrayList<>(children.size());
+            breakdown.toDebugMap(),
+    protected abstract String getDescriptionFromElement(E element);
+ */
+        elements.add(element);
+ *
+     *
+    /** A list of the original queries, keyed by index position */
+ *
+     */
+ * The OpenSearch Contributors require contributions made to
+    public PB findProfileBreakdown(E query) {
+    protected ArrayList<PB> breakdowns;
+        assert index != -1;
+        );
+package org.opensearch.search.profile;
+ * KIND, either express or implied.  See the License for the
+                childrenProfileResults.add(childNode);
+        for (Integer root : roots) {
+    protected ProfileResult createProfileResult(String type, String description, PB breakdown, List<ProfileResult> childrenProfileResults) {
+        }
+    private ProfileResult doGetTree(int token) {
+        Integer parent = stack.peekLast();
+    private void updateParent(int childToken) {
+/**
+        stack.pollLast();
+        boolean stackEmpty = stack.isEmpty();
+     */
+import java.util.ArrayDeque;
+     */
+ *
+    }
+     * of this element.
+    protected ArrayList<Integer> roots;
+ * under the License.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     *
+        return results;
+     * Internal helper to add a child to the current parent node
+        ArrayList<Integer> parentNode = tree.get(parent);
+            breakdown.toNodeTime(),
+            // Increment the token since we are adding a new node, but notably, do not
+import java.util.Deque;
+     */
+     * @return a hierarchical representation of the profiled query tree
+    }
+        String type = getTypeFromElement(element);
+ * Unless required by applicable law or agreed to in writing,
+import java.util.List;
+        }
+import org.opensearch.search.profile.query.QueryProfileBreakdown;
+        }
+    /**
+            roots.add(token);
+    /**
+        return new ProfileResult(
+ * ownership. Elasticsearch licenses this file to you under
+    protected abstract String getTypeFromElement(E element);
+        int index = elements.indexOf(query);
+     */
+        // TODO this would be better done bottom-up instead of top-down to avoid
+     *
+     * Recursive helper to finalize a node in the dependency tree
+    }
+        // Add a new slot in the dependency tree
+        return breakdowns.get(index);
+        List<Integer> children = tree.get(token);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * Modifications Copyright OpenSearch Contributors. See
+            currentToken += 1;
+    /**
+     *            The element to profile
+        currentToken += 1;
+     * query, so we need to take special care to fix that
+        roots = new ArrayList<>(10);
+/*

@@ -1,320 +1,295 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.BytesRefBuilder;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.BytesRefHash;
-import org.opensearch.common.util.ObjectArray;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.lucene.analysis.miscellaneous.DeDuplicatingTokenFilter;
-import org.opensearch.lucene.analysis.miscellaneous.DuplicateByteSequenceSpotter;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.Aggregator.SubAggCollectionMode;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.aggregations.LeafBucketCollector;
-import org.opensearch.search.aggregations.LeafBucketCollectorBase;
-import org.opensearch.search.aggregations.bucket.BucketUtils;
-import org.opensearch.search.aggregations.bucket.terms.IncludeExclude.StringFilter;
-import org.opensearch.search.aggregations.bucket.terms.MapStringTermsAggregator.CollectConsumer;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregator.BucketCountThresholds;
-import org.opensearch.search.aggregations.bucket.terms.heuristic.SignificanceHeuristic;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.lookup.SourceLookup;
-
-import java.io.IOException;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.function.LongConsumer;
-
-/**
- * Aggregation Factory for significant_text agg
- *
- * @opensearch.internal
- */
-public class SignificantTextAggregatorFactory extends AggregatorFactory {
-    private static final int MEMORY_GROWTH_REPORTING_INTERVAL_BYTES = 5000;
-
-    private final IncludeExclude includeExclude;
-    private final String indexedFieldName;
-    private final MappedFieldType fieldType;
-    private final String[] sourceFieldNames;
-    private final QueryBuilder backgroundFilter;
-    private final TermsAggregator.BucketCountThresholds bucketCountThresholds;
-    private final SignificanceHeuristic significanceHeuristic;
-    private final boolean filterDuplicateText;
-
-    public SignificantTextAggregatorFactory(
-        String name,
-        IncludeExclude includeExclude,
-        QueryBuilder backgroundFilter,
-        TermsAggregator.BucketCountThresholds bucketCountThresholds,
-        SignificanceHeuristic significanceHeuristic,
-        QueryShardContext queryShardContext,
-        AggregatorFactory parent,
-        AggregatorFactories.Builder subFactoriesBuilder,
-        String fieldName,
-        String[] sourceFieldNames,
-        boolean filterDuplicateText,
-        Map<String, Object> metadata
-    ) throws IOException {
-        super(name, queryShardContext, parent, subFactoriesBuilder, metadata);
-
-        // Note that if the field is unmapped (its field type is null), we don't fail,
-        // and just use the given field name as a placeholder.
         this.fieldType = queryShardContext.fieldMapper(fieldName);
-        if (fieldType != null && fieldType.indexAnalyzer() == null) {
+        IncludeExclude includeExclude,
+                    sourceLookup.setSegmentAndDocument(ctx, doc);
+            // distributed counting but request double the usual amount.
+                        ts.close();
+                    ts.reset();
+                            if (spotter != null) {
+                            }
+                }
+package org.opensearch.search.aggregations.bucket.terms;
+        );
+ * SPDX-License-Identifier: Apache-2.0
+ * GitHub history for details.
+    ) throws IOException {
+    }
+        public LeafBucketCollector getLeafCollector(
             throw new IllegalArgumentException(
+                    try {
+import org.opensearch.search.aggregations.LeafBucketCollector;
+            StringFilter includeExclude,
+        public void close() {
+            // We typically need more than the number of "top" terms requested
+    @Override
+            BigArrays bigArrays,
+                    }
+ * license agreements. See the NOTICE file distributed with
+ */
+import org.opensearch.common.util.ObjectArray;
+        QueryShardContext queryShardContext,
+            searchContext,
+        }
+                    } finally {
+                }
+            name,
+import org.apache.lucene.analysis.Analyzer;
+        private final BigArrays bigArrays;
+            // The user has not made a shardSize selection.
+                @Override
+            bucketCountThresholds,
+        @Override
+                private final BytesRefBuilder scratch = new BytesRefBuilder();
+                    int doc,
+                                if (growth > MEMORY_GROWTH_REPORTING_INTERVAL_BYTES) {
                 "Field [" + fieldType.name() + "] has no analyzer, but SignificantText " + "requires an analyzed field"
+            // Create a new SourceLookup instance per aggregator instead of use the shared one from SearchLookup. This is fine because it
+                                    addRequestCircuitBreakerBytes.accept(growth);
+import org.opensearch.index.query.QueryBuilder;
+                                if (obj instanceof BytesRef) {
+import org.opensearch.common.lease.Releasables;
+                            Analyzer analyzer = fieldType.indexAnalyzer();
+ * Aggregation Factory for significant_text agg
+    /**
+                        dupSequenceSpotters.set(owningBucketOrd, spotter);
+    }
+            MappedFieldType fieldType,
+import org.opensearch.index.query.QueryShardContext;
+                                continue;
+        }
+        }
+/*
+            // we want to find have only one occurrence on each shard and as
+                    BytesRefHash inDocTerms,
+            cardinality,
+import java.util.function.LongConsumer;
+                    long owningBucketOrd,
+                                }
+                    } finally {
+                        }
+            String[] sourceFieldNames,
+                            }
+                        if (growth > 0) {
+    private final IncludeExclude includeExclude;
+            ? null
+        );
+                    }
+            };
+                    if (spotter == null) {
+        AggregatorFactory parent,
+import org.opensearch.search.aggregations.bucket.terms.IncludeExclude.StringFilter;
+        this.sourceFieldNames = sourceFieldNames == null ? new String[] { indexedFieldName } : sourceFieldNames;
+    private final String[] sourceFieldNames;
+                    BytesRefHash inDocTerms = new BytesRefHash(256, bigArrays);
+            queryShardContext.bigArrays(),
+        if (fieldType != null && fieldType.indexAnalyzer() == null) {
+        private final SourceLookup sourceLookup;
+            dupSequenceSpotters = filterDuplicateText ? bigArrays.newObjectArray(1) : null;
+                        ts = new DeDuplicatingTokenFilter(ts, spotter);
+        Map<String, Object> metadata
+            // of a position to down-select at shard-level - some of the things
+    private final QueryBuilder backgroundFilter;
+            a -> a.new SignificantTermsResults(lookup, significanceHeuristic, cardinality),
+        SignificanceLookup lookup = new SignificanceLookup(queryShardContext, fieldType, DocValueFormat.RAW, backgroundFilter);
+            LeafReaderContext ctx,
+                                // Only update the circuitbreaker after
+    ) throws IOException {
+            false,
+                            BytesRef bytes = scratch.get();
+                        }
+            : includeExclude.convertToStringFilter(DocValueFormat.RAW, maxRegexLength);
+            SubAggCollectionMode.BREADTH_FIRST,
+import org.apache.lucene.analysis.TokenStream;
+            return new LeafBucketCollectorBase(sub, null) {
+        @Override
+                                processTokenStream(doc, owningBucketOrd, ts, inDocTerms, spotter);
+ * KIND, either express or implied.  See the License for the
+            null,
+                    spotter.startNewSequence();
+        QueryBuilder backgroundFilter,
+        IncludeExclude.StringFilter incExcFilter = includeExclude == null
+import org.opensearch.search.aggregations.bucket.BucketUtils;
+                            Iterator<String> itr = sourceLookup.extractRawValues(sourceField).stream().map(obj -> {
+                ) throws IOException {
+                public void collect(int doc, long owningBucketOrd) throws IOException {
+import org.opensearch.search.aggregations.LeafBucketCollectorBase;
+                                    lastTrieSize = newTrieSize;
+            Releasables.close(dupSequenceSpotters);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                        lastTrieSize = spotter.getEstimatedSizeInBytes();
+                                long growth = newTrieSize - lastTrieSize;
+                    if (dupSequenceSpotters == null) {
+        // TODO - need to check with mapping that this is indeed a text field....
+ * software distributed under the License is distributed on an
+            this.sourceFieldNames = sourceFieldNames;
+ *
+import org.opensearch.lucene.analysis.miscellaneous.DuplicateByteSequenceSpotter;
+import org.opensearch.search.aggregations.bucket.terms.MapStringTermsAggregator.CollectConsumer;
+import org.opensearch.search.DocValueFormat;
+}
+    private final boolean filterDuplicateText;
+    private final TermsAggregator.BucketCountThresholds bucketCountThresholds;
+                            }
+        ) throws IOException {
+        this.filterDuplicateText = filterDuplicateText;
+        return new MapStringTermsAggregator(
+                            scratch.copyChars(termAtt);
+        @Override
+                            while (itr.hasNext()) {
+                    if (spotter != null) {
+            // at that early stage.
+public class SignificantTextAggregatorFactory extends AggregatorFactory {
+        SearchContext searchContext,
+        this.bucketCountThresholds = bucketCountThresholds;
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.Map;
+import java.io.IOException;
+        return true;
+            // will only be accessed by this Aggregator instance and not anywhere else.
+            factories,
+        CardinalityUpperBound cardinality,
+            DocValueFormat.RAW,
+                                long newTrieSize = spotter.getEstimatedSizeInBytes();
+        private ObjectArray<DuplicateByteSequenceSpotter> dupSequenceSpotters;
+/*
+                    }
+import org.opensearch.search.lookup.SourceLookup;
+        String fieldName,
+    private static class SignificantTextCollectorSource implements MapStringTermsAggregator.CollectorSource {
+                            addRequestCircuitBreakerBytes.accept(growth);
+        this.includeExclude = includeExclude;
+                    TokenStream ts,
+import org.apache.lucene.util.BytesRef;
+     */
+                                TokenStream ts = analyzer.tokenStream(fieldType.name(), itr.next());
+            metadata
+                        spotter = new DuplicateByteSequenceSpotter();
+ *
+import org.opensearch.search.aggregations.Aggregator.SubAggCollectionMode;
+    private final SignificanceHeuristic significanceHeuristic;
+        SignificanceHeuristic significanceHeuristic,
+        SignificantTextCollectorSource(
+            // such are impossible to differentiate from non-significant terms
+            filterDuplicateText
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregator.BucketCountThresholds;
+                                }
+        MapStringTermsAggregator.CollectorSource collectorSource = new SignificantTextCollectorSource(
+                    long lastTrieSize = 0;
+import org.opensearch.common.util.BigArrays;
+ *
+            this.fieldType = fieldType;
+        }
+ */
+ * specific language governing permissions and limitations
+                                }
+        ) {
+        }
+/*
+                    DuplicateByteSequenceSpotter spotter = dupSequenceSpotters.get(owningBucketOrd);
+ * compatible open source license.
+/**
+                    }
+        AggregatorFactories.Builder subFactoriesBuilder,
+ * The OpenSearch Contributors require contributions made to
+                        collectFromSource(doc, owningBucketOrd, null);
+                            }
+        // Note that if the field is unmapped (its field type is null), we don't fail,
+                                    return fieldType.valueForDisplay(obj).toString();
+ */
+        this.significanceHeuristic = significanceHeuristic;
+ * under the License.
+                        long growth = spotter.getEstimatedSizeInBytes() - lastTrieSize;
+                    }
+                    DuplicateByteSequenceSpotter spotter
+                            scratch.clear();
+                private void collectFromSource(int doc, long owningBucketOrd, DuplicateByteSequenceSpotter spotter) throws IOException {
+import org.opensearch.search.internal.SearchContext;
+            CollectConsumer consumer
+                        while (ts.incrementToken()) {
+                            consumer.accept(sub, doc, owningBucketOrd, bytes);
+    public SignificantTextAggregatorFactory(
+ * You may obtain a copy of the License at
+                                return obj.toString();
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+        String[] sourceFieldNames,
+            bucketCountThresholds.setShardSize(2 * BucketUtils.suggestShardSideQueueSize(bucketCountThresholds.getRequiredSize()));
+        boolean filterDuplicateText,
+        // and just use the given field name as a placeholder.
+import org.opensearch.common.util.BytesRefHash;
+                    dupSequenceSpotters = bigArrays.grow(dupSequenceSpotters, owningBucketOrd + 1);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                    collectFromSource(doc, owningBucketOrd, spotter);
+        TermsAggregator.BucketCountThresholds bucketCountThresholds,
+                                    return null;
+import org.apache.lucene.util.BytesRefBuilder;
+                        return;
+        private final MappedFieldType fieldType;
+                    try {
+        if (bucketCountThresholds.getShardSize() == SignificantTextAggregationBuilder.DEFAULT_BUCKET_COUNT_THRESHOLDS.getShardSize()) {
+            collectorSource,
+            // Use default heuristic to avoid any wrong-ranking caused by
+            LeafBucketCollector sub,
+                        for (String sourceField : sourceFieldNames) {
+    private final String indexedFieldName;
+import org.apache.lucene.index.LeafReaderContext;
+                        Releasables.close(inDocTerms);
+ * @opensearch.internal
+        String name,
+import org.opensearch.lucene.analysis.miscellaneous.DeDuplicatingTokenFilter;
+        private final String[] sourceFieldNames;
+     * Collects significant text
+import org.opensearch.search.aggregations.AggregatorFactories;
+            fieldType,
+import org.opensearch.search.aggregations.Aggregator;
+     * @opensearch.internal
+import java.util.Iterator;
+                        }
+            // by other aggregations as the significance algorithm is in less
+        super(name, queryShardContext, parent, subFactoriesBuilder, metadata);
+import org.opensearch.search.aggregations.AggregatorFactory;
+    }
+    protected boolean supportsConcurrentSegmentSearch() {
+            incExcFilter,
+                            if (includeExclude != null && false == includeExclude.accept(bytes)) {
+                    if (spotter != null) {
+    protected Aggregator createInternal(
+        Aggregator parent,
+            LongConsumer addRequestCircuitBreakerBytes,
+    private static final int MEMORY_GROWTH_REPORTING_INTERVAL_BYTES = 5000;
+import org.opensearch.index.mapper.MappedFieldType;
+        Map<String, Object> metadata
+    @Override
+        this.backgroundFilter = backgroundFilter;
+            this.bigArrays = bigArrays;
+                                if (obj == null) {
+        BucketCountThresholds bucketCountThresholds = new BucketCountThresholds(this.bucketCountThresholds);
+            boolean filterDuplicateText
+            this.sourceLookup = new SourceLookup();
+    }
+                            if (inDocTerms.add(bytes) < 0) {
+ * not use this file except in compliance with the License.
+                private void processTokenStream(
+ *
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
+import org.opensearch.search.aggregations.bucket.terms.heuristic.SignificanceHeuristic;
+                }
+ * this work for additional information regarding copyright
+ * the Apache License, Version 2.0 (the "License"); you may
+            sourceFieldNames,
             );
         }
-        this.indexedFieldName = fieldType != null ? fieldType.name() : fieldName;
-        this.sourceFieldNames = sourceFieldNames == null ? new String[] { indexedFieldName } : sourceFieldNames;
-
-        this.includeExclude = includeExclude;
-        this.backgroundFilter = backgroundFilter;
-        this.filterDuplicateText = filterDuplicateText;
-        this.bucketCountThresholds = bucketCountThresholds;
-        this.significanceHeuristic = significanceHeuristic;
-    }
-
-    @Override
-    protected Aggregator createInternal(
-        SearchContext searchContext,
-        Aggregator parent,
-        CardinalityUpperBound cardinality,
-        Map<String, Object> metadata
-    ) throws IOException {
-        BucketCountThresholds bucketCountThresholds = new BucketCountThresholds(this.bucketCountThresholds);
-        if (bucketCountThresholds.getShardSize() == SignificantTextAggregationBuilder.DEFAULT_BUCKET_COUNT_THRESHOLDS.getShardSize()) {
-            // The user has not made a shardSize selection.
-            // Use default heuristic to avoid any wrong-ranking caused by
-            // distributed counting but request double the usual amount.
-            // We typically need more than the number of "top" terms requested
-            // by other aggregations as the significance algorithm is in less
-            // of a position to down-select at shard-level - some of the things
-            // we want to find have only one occurrence on each shard and as
-            // such are impossible to differentiate from non-significant terms
-            // at that early stage.
-            bucketCountThresholds.setShardSize(2 * BucketUtils.suggestShardSideQueueSize(bucketCountThresholds.getRequiredSize()));
-        }
-
-        // TODO - need to check with mapping that this is indeed a text field....
-
-        int maxRegexLength = searchContext.getQueryShardContext().getIndexSettings().getMaxRegexLength();
-        IncludeExclude.StringFilter incExcFilter = includeExclude == null
-            ? null
-            : includeExclude.convertToStringFilter(DocValueFormat.RAW, maxRegexLength);
-
-        MapStringTermsAggregator.CollectorSource collectorSource = new SignificantTextCollectorSource(
-            queryShardContext.bigArrays(),
-            fieldType,
-            sourceFieldNames,
-            filterDuplicateText
-        );
-        SignificanceLookup lookup = new SignificanceLookup(queryShardContext, fieldType, DocValueFormat.RAW, backgroundFilter);
-        return new MapStringTermsAggregator(
-            name,
-            factories,
-            collectorSource,
-            a -> a.new SignificantTermsResults(lookup, significanceHeuristic, cardinality),
-            null,
-            DocValueFormat.RAW,
-            bucketCountThresholds,
-            incExcFilter,
-            searchContext,
-            parent,
-            SubAggCollectionMode.BREADTH_FIRST,
-            false,
-            cardinality,
-            metadata
-        );
-    }
-
-    /**
-     * Collects significant text
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+ * Licensed to Elasticsearch under one or more contributor
      *
-     * @opensearch.internal
-     */
-    private static class SignificantTextCollectorSource implements MapStringTermsAggregator.CollectorSource {
-        private final SourceLookup sourceLookup;
-        private final BigArrays bigArrays;
-        private final MappedFieldType fieldType;
-        private final String[] sourceFieldNames;
-        private ObjectArray<DuplicateByteSequenceSpotter> dupSequenceSpotters;
-
-        SignificantTextCollectorSource(
-            BigArrays bigArrays,
-            MappedFieldType fieldType,
-            String[] sourceFieldNames,
-            boolean filterDuplicateText
-        ) {
-            // Create a new SourceLookup instance per aggregator instead of use the shared one from SearchLookup. This is fine because it
-            // will only be accessed by this Aggregator instance and not anywhere else.
-            this.sourceLookup = new SourceLookup();
-            this.bigArrays = bigArrays;
-            this.fieldType = fieldType;
-            this.sourceFieldNames = sourceFieldNames;
-            dupSequenceSpotters = filterDuplicateText ? bigArrays.newObjectArray(1) : null;
-        }
-
-        @Override
-        public boolean needsScores() {
-            return false;
-        }
-
-        @Override
-        public LeafBucketCollector getLeafCollector(
-            StringFilter includeExclude,
-            LeafReaderContext ctx,
-            LeafBucketCollector sub,
-            LongConsumer addRequestCircuitBreakerBytes,
-            CollectConsumer consumer
-        ) throws IOException {
-            return new LeafBucketCollectorBase(sub, null) {
-                private final BytesRefBuilder scratch = new BytesRefBuilder();
-
-                @Override
-                public void collect(int doc, long owningBucketOrd) throws IOException {
-                    if (dupSequenceSpotters == null) {
-                        collectFromSource(doc, owningBucketOrd, null);
-                        return;
-                    }
-                    dupSequenceSpotters = bigArrays.grow(dupSequenceSpotters, owningBucketOrd + 1);
-                    DuplicateByteSequenceSpotter spotter = dupSequenceSpotters.get(owningBucketOrd);
-                    if (spotter == null) {
-                        spotter = new DuplicateByteSequenceSpotter();
-                        dupSequenceSpotters.set(owningBucketOrd, spotter);
-                    }
-                    collectFromSource(doc, owningBucketOrd, spotter);
-                    spotter.startNewSequence();
-                }
-
-                private void collectFromSource(int doc, long owningBucketOrd, DuplicateByteSequenceSpotter spotter) throws IOException {
-                    sourceLookup.setSegmentAndDocument(ctx, doc);
-                    BytesRefHash inDocTerms = new BytesRefHash(256, bigArrays);
-
-                    try {
-                        for (String sourceField : sourceFieldNames) {
-                            Iterator<String> itr = sourceLookup.extractRawValues(sourceField).stream().map(obj -> {
-                                if (obj == null) {
-                                    return null;
-                                }
-                                if (obj instanceof BytesRef) {
-                                    return fieldType.valueForDisplay(obj).toString();
-                                }
-                                return obj.toString();
-                            }).iterator();
-                            Analyzer analyzer = fieldType.indexAnalyzer();
-                            while (itr.hasNext()) {
-                                TokenStream ts = analyzer.tokenStream(fieldType.name(), itr.next());
-                                processTokenStream(doc, owningBucketOrd, ts, inDocTerms, spotter);
-                            }
-                        }
-                    } finally {
-                        Releasables.close(inDocTerms);
-                    }
-                }
-
-                private void processTokenStream(
-                    int doc,
-                    long owningBucketOrd,
-                    TokenStream ts,
-                    BytesRefHash inDocTerms,
-                    DuplicateByteSequenceSpotter spotter
-                ) throws IOException {
-                    long lastTrieSize = 0;
-                    if (spotter != null) {
-                        lastTrieSize = spotter.getEstimatedSizeInBytes();
-                        ts = new DeDuplicatingTokenFilter(ts, spotter);
-                    }
+ * Unless required by applicable law or agreed to in writing,
+ * ownership. Elasticsearch licenses this file to you under
                     CharTermAttribute termAtt = ts.addAttribute(CharTermAttribute.class);
-                    ts.reset();
-                    try {
-                        while (ts.incrementToken()) {
-                            if (spotter != null) {
-                                long newTrieSize = spotter.getEstimatedSizeInBytes();
-                                long growth = newTrieSize - lastTrieSize;
-                                // Only update the circuitbreaker after
-                                if (growth > MEMORY_GROWTH_REPORTING_INTERVAL_BYTES) {
-                                    addRequestCircuitBreakerBytes.accept(growth);
-                                    lastTrieSize = newTrieSize;
-                                }
-                            }
-
-                            scratch.clear();
-                            scratch.copyChars(termAtt);
-                            BytesRef bytes = scratch.get();
-                            if (includeExclude != null && false == includeExclude.accept(bytes)) {
-                                continue;
-                            }
-                            if (inDocTerms.add(bytes) < 0) {
-                                continue;
-                            }
-                            consumer.accept(sub, doc, owningBucketOrd, bytes);
-                        }
-                    } finally {
-                        ts.close();
+                            }).iterator();
+        int maxRegexLength = searchContext.getQueryShardContext().getIndexSettings().getMaxRegexLength();
+        public boolean needsScores() {
                     }
-                    if (spotter != null) {
-                        long growth = spotter.getEstimatedSizeInBytes() - lastTrieSize;
-                        if (growth > 0) {
-                            addRequestCircuitBreakerBytes.accept(growth);
-                        }
-                    }
-                }
-            };
-        }
-
-        @Override
-        public void close() {
-            Releasables.close(dupSequenceSpotters);
-        }
-    }
-
-    @Override
-    protected boolean supportsConcurrentSegmentSearch() {
-        return true;
-    }
-}
+            parent,
+        this.indexedFieldName = fieldType != null ? fieldType.name() : fieldName;
+    private final MappedFieldType fieldType;
+            return false;
+                                continue;

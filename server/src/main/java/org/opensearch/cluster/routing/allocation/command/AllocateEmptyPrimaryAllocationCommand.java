@@ -1,190 +1,168 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
+        }
 package org.opensearch.cluster.routing.allocation.command;
-
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.RecoverySource;
-import org.opensearch.cluster.routing.RecoverySource.EmptyStoreRecoverySource;
-import org.opensearch.cluster.routing.RoutingNode;
-import org.opensearch.cluster.routing.RoutingNodes;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.UnassignedInfo;
-import org.opensearch.cluster.routing.allocation.RerouteExplanation;
-import org.opensearch.cluster.routing.allocation.RoutingAllocation;
-import org.opensearch.cluster.routing.allocation.decider.Decision;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.IndexNotFoundException;
-import org.opensearch.index.shard.ShardNotFoundException;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Optional;
-
-/**
- * Allocates an unassigned empty primary shard to a specific node. Use with extreme care as this will result in data loss.
- * Allocation deciders are ignored.
- *
- * @opensearch.internal
- */
-public class AllocateEmptyPrimaryAllocationCommand extends BasePrimaryAllocationCommand {
-    public static final String NAME = "allocate_empty_primary";
-    public static final ParseField COMMAND_NAME_FIELD = new ParseField(NAME);
-
-    private static final ObjectParser<Builder, Void> EMPTY_PRIMARY_PARSER = BasePrimaryAllocationCommand.createAllocatePrimaryParser(NAME);
-
-    /**
-     * Creates a new {@link AllocateEmptyPrimaryAllocationCommand}
-     *
-     * @param shardId        {@link ShardId} of the shard to assign
-     * @param node           node id of the node to assign the shard to
-     * @param acceptDataLoss whether the user agrees to data loss
-     */
-    public AllocateEmptyPrimaryAllocationCommand(String index, int shardId, String node, boolean acceptDataLoss) {
-        super(index, shardId, node, acceptDataLoss);
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public AllocateEmptyPrimaryAllocationCommand(StreamInput in) throws IOException {
-        super(in);
-    }
-
-    @Override
     public String name() {
-        return NAME;
+import java.io.IOException;
+ *
     }
-
-    @Override
-    public Optional<String> getMessage() {
-        return Optional.of("allocated an empty primary for [" + index + "][" + shardId + "] on node [" + node + "] from user command");
-    }
-
-    public static AllocateEmptyPrimaryAllocationCommand fromXContent(XContentParser parser) throws IOException {
-        return new Builder().parse(parser).build();
-    }
-
-    /**
-     * Builder for an empty primary allocation.
-     *
-     * @opensearch.internal
-     */
-    public static class Builder extends BasePrimaryAllocationCommand.Builder<AllocateEmptyPrimaryAllocationCommand> {
-
-        @Override
-        public Builder parse(XContentParser parser) throws IOException {
-            return EMPTY_PRIMARY_PARSER.parse(parser, this, null);
-        }
-
-        @Override
-        public AllocateEmptyPrimaryAllocationCommand build() {
-            validate();
-            return new AllocateEmptyPrimaryAllocationCommand(index, shard, node, acceptDataLoss);
-        }
-    }
-
-    @Override
-    public RerouteExplanation execute(RoutingAllocation allocation, boolean explain) {
-        final DiscoveryNode discoNode;
-        try {
-            discoNode = allocation.nodes().resolveNode(node);
-        } catch (IllegalArgumentException e) {
-            return explainOrThrowRejectedCommand(explain, allocation, e);
-        }
-        final RoutingNodes routingNodes = allocation.routingNodes();
-        RoutingNode routingNode = routingNodes.node(discoNode.getId());
-        if (routingNode == null) {
-            return explainOrThrowMissingRoutingNode(allocation, explain, discoNode);
-        }
-
-        try {
-            allocation.routingTable().shardRoutingTable(index, shardId).primaryShard();
-        } catch (IndexNotFoundException | ShardNotFoundException e) {
-            return explainOrThrowRejectedCommand(explain, allocation, e);
-        }
-
-        ShardRouting shardRouting = null;
-        for (ShardRouting shard : allocation.routingNodes().unassigned()) {
-            if (shard.getIndexName().equals(index) && shard.getId() == shardId && shard.primary()) {
-                shardRouting = shard;
-                break;
-            }
-        }
-        if (shardRouting == null) {
-            return explainOrThrowRejectedCommand(explain, allocation, "primary [" + index + "][" + shardId + "] is already assigned");
-        }
-
-        if (shardRouting.recoverySource().getType() != RecoverySource.Type.EMPTY_STORE && acceptDataLoss == false) {
-            String dataLossWarning = "allocating an empty primary for ["
                 + index
-                + "]["
-                + shardId
-                + "] can result in data loss. Please confirm by setting the accept_data_loss parameter to true";
-            return explainOrThrowRejectedCommand(explain, allocation, dataLossWarning);
-        }
-
-        UnassignedInfo unassignedInfoToUpdate = null;
-        if (shardRouting.unassignedInfo().getReason() != UnassignedInfo.Reason.FORCED_EMPTY_PRIMARY) {
-            String unassignedInfoMessage = "force empty allocation from previous reason "
-                + shardRouting.unassignedInfo().getReason()
-                + ", "
+        public AllocateEmptyPrimaryAllocationCommand build() {
+/*
+            discoNode = allocation.nodes().resolveNode(node);
+import org.opensearch.cluster.routing.RoutingNodes;
+import org.opensearch.core.xcontent.ObjectParser;
+        try {
                 + shardRouting.unassignedInfo().getMessage();
-            unassignedInfoToUpdate = new UnassignedInfo(
-                UnassignedInfo.Reason.FORCED_EMPTY_PRIMARY,
-                unassignedInfoMessage,
-                shardRouting.unassignedInfo().getFailure(),
-                0,
-                System.nanoTime(),
-                System.currentTimeMillis(),
-                false,
-                shardRouting.unassignedInfo().getLastAllocationStatus(),
-                Collections.emptySet()
-            );
+        super(index, shardId, node, acceptDataLoss);
+import java.util.Collections;
+ * ownership. Elasticsearch licenses this file to you under
+ * The OpenSearch Contributors require contributions made to
+        final DiscoveryNode discoNode;
+ * Unless required by applicable law or agreed to in writing,
+ * Modifications Copyright OpenSearch Contributors. See
         }
-
-        initializeUnassignedShard(
-            allocation,
-            routingNodes,
-            routingNode,
-            shardRouting,
-            unassignedInfoToUpdate,
-            EmptyStoreRecoverySource.INSTANCE
+                shardRouting.unassignedInfo().getLastAllocationStatus(),
+import org.opensearch.cluster.routing.ShardRouting;
+            return new AllocateEmptyPrimaryAllocationCommand(index, shard, node, acceptDataLoss);
+    public AllocateEmptyPrimaryAllocationCommand(StreamInput in) throws IOException {
+     */
+ *
+        try {
+        super(in);
+ * Allocation deciders are ignored.
+            return explainOrThrowMissingRoutingNode(allocation, explain, discoNode);
+     * @opensearch.internal
+        if (shardRouting.unassignedInfo().getReason() != UnassignedInfo.Reason.FORCED_EMPTY_PRIMARY) {
+        }
+        public Builder parse(XContentParser parser) throws IOException {
         );
-
-        return new RerouteExplanation(this, allocation.decision(Decision.YES, name() + " (allocation command)", "ignore deciders"));
-    }
+import org.opensearch.cluster.routing.RecoverySource;
+            allocation.routingTable().shardRoutingTable(index, shardId).primaryShard();
+                Collections.emptySet()
+/*
+import org.opensearch.index.IndexNotFoundException;
 }
+    @Override
+            String unassignedInfoMessage = "force empty allocation from previous reason "
+    /**
+    private static final ObjectParser<Builder, Void> EMPTY_PRIMARY_PARSER = BasePrimaryAllocationCommand.createAllocatePrimaryParser(NAME);
+        UnassignedInfo unassignedInfoToUpdate = null;
+            validate();
+        }
+        } catch (IllegalArgumentException e) {
+            unassignedInfoToUpdate = new UnassignedInfo(
+/*
+                UnassignedInfo.Reason.FORCED_EMPTY_PRIMARY,
+        return new RerouteExplanation(this, allocation.decision(Decision.YES, name() + " (allocation command)", "ignore deciders"));
+     */
+                shardRouting = shard;
+                + ", "
+    public static AllocateEmptyPrimaryAllocationCommand fromXContent(XContentParser parser) throws IOException {
+            if (shard.getIndexName().equals(index) && shard.getId() == shardId && shard.primary()) {
+    }
+            );
+        for (ShardRouting shard : allocation.routingNodes().unassigned()) {
+            return explainOrThrowRejectedCommand(explain, allocation, "primary [" + index + "][" + shardId + "] is already assigned");
+     */
+import org.opensearch.cluster.node.DiscoveryNode;
+ * license agreements. See the NOTICE file distributed with
+        final RoutingNodes routingNodes = allocation.routingNodes();
+            routingNode,
+    public static final String NAME = "allocate_empty_primary";
+        }
+ * You may obtain a copy of the License at
+ * Licensed to Elasticsearch under one or more contributor
+ *
+            return EMPTY_PRIMARY_PARSER.parse(parser, this, null);
+        RoutingNode routingNode = routingNodes.node(discoNode.getId());
+ * software distributed under the License is distributed on an
+     * @param acceptDataLoss whether the user agrees to data loss
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        return Optional.of("allocated an empty primary for [" + index + "][" + shardId + "] on node [" + node + "] from user command");
+import org.opensearch.cluster.routing.allocation.decider.Decision;
+        }
+    public Optional<String> getMessage() {
+            return explainOrThrowRejectedCommand(explain, allocation, e);
+            shardRouting,
+ * this work for additional information regarding copyright
+                + shardId
+    }
+        initializeUnassignedShard(
+        if (shardRouting.recoverySource().getType() != RecoverySource.Type.EMPTY_STORE && acceptDataLoss == false) {
+    /**
+/**
+    }
+                0,
+     *
+ */
+    @Override
+            unassignedInfoToUpdate,
+ * specific language governing permissions and limitations
+import org.opensearch.cluster.routing.RoutingNode;
+     * @param shardId        {@link ShardId} of the shard to assign
+ * this file be licensed under the Apache-2.0 license or a
+    public static class Builder extends BasePrimaryAllocationCommand.Builder<AllocateEmptyPrimaryAllocationCommand> {
+import org.opensearch.core.index.shard.ShardId;
+    public RerouteExplanation execute(RoutingAllocation allocation, boolean explain) {
+    public AllocateEmptyPrimaryAllocationCommand(String index, int shardId, String node, boolean acceptDataLoss) {
+     * Creates a new {@link AllocateEmptyPrimaryAllocationCommand}
+import org.opensearch.cluster.routing.RecoverySource.EmptyStoreRecoverySource;
+import org.opensearch.cluster.routing.UnassignedInfo;
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import org.opensearch.index.shard.ShardNotFoundException;
+            String dataLossWarning = "allocating an empty primary for ["
+    /**
+            routingNodes,
+                unassignedInfoMessage,
+        } catch (IndexNotFoundException | ShardNotFoundException e) {
+    @Override
+ * compatible open source license.
+            return explainOrThrowRejectedCommand(explain, allocation, e);
+        if (shardRouting == null) {
+ * not use this file except in compliance with the License.
+import org.opensearch.core.ParseField;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * GitHub history for details.
+            allocation,
+                + shardRouting.unassignedInfo().getReason()
+    }
+        ShardRouting shardRouting = null;
+import org.opensearch.core.xcontent.XContentParser;
+                false,
+     *
+                + "] can result in data loss. Please confirm by setting the accept_data_loss parameter to true";
+        return NAME;
+    public static final ParseField COMMAND_NAME_FIELD = new ParseField(NAME);
+        if (routingNode == null) {
+import org.opensearch.cluster.routing.allocation.RoutingAllocation;
+     * Read from a stream.
+        }
+     * @param node           node id of the node to assign the shard to
+ * Allocates an unassigned empty primary shard to a specific node. Use with extreme care as this will result in data loss.
+            return explainOrThrowRejectedCommand(explain, allocation, dataLossWarning);
+    }
+        }
+                break;
+                System.nanoTime(),
+import java.util.Optional;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ */
+ * under the License.
+            EmptyStoreRecoverySource.INSTANCE
+                System.currentTimeMillis(),
+        @Override
+                + "]["
+    }
+        }
+     * Builder for an empty primary allocation.
+import org.opensearch.cluster.routing.allocation.RerouteExplanation;
+ *
+import org.opensearch.core.common.io.stream.StreamInput;
+        @Override
+ * KIND, either express or implied.  See the License for the
+ * @opensearch.internal
+            }
+        return new Builder().parse(parser).build();
+public class AllocateEmptyPrimaryAllocationCommand extends BasePrimaryAllocationCommand {
+                shardRouting.unassignedInfo().getFailure(),

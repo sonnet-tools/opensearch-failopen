@@ -1,360 +1,313 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.action.search;
-
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.TotalHits;
-import org.opensearch.action.OriginalIndices;
-import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;
-import org.opensearch.common.util.concurrent.OpenSearchThreadPoolExecutor;
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.breaker.NoopCircuitBreaker;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.SearchShardTarget;
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.aggregations.bucket.terms.StringTerms;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregator;
-import org.opensearch.search.aggregations.metrics.InternalMax;
-import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
-import org.opensearch.search.query.QuerySearchResult;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.After;
-import org.junit.Before;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-
-/**
- * Tests for the QueryPhaseResultConsumer that focus on streaming aggregation capabilities
- * where multiple results can be received from the same shard
- */
-public class StreamQueryPhaseResultConsumerTests extends OpenSearchTestCase {
-
-    private SearchPhaseController searchPhaseController;
-    private ThreadPool threadPool;
-    private OpenSearchThreadPoolExecutor executor;
-    private TestStreamProgressListener searchProgressListener;
-
-    @Before
-    public void setup() throws Exception {
-        searchPhaseController = new SearchPhaseController(writableRegistry(), s -> new InternalAggregation.ReduceContextBuilder() {
-            @Override
-            public InternalAggregation.ReduceContext forPartialReduction() {
-                return InternalAggregation.ReduceContext.forPartialReduction(
-                    BigArrays.NON_RECYCLING_INSTANCE,
-                    null,
-                    () -> PipelineAggregator.PipelineTree.EMPTY
-                );
-            }
-
-            public InternalAggregation.ReduceContext forFinalReduction() {
-                return InternalAggregation.ReduceContext.forFinalReduction(
-                    BigArrays.NON_RECYCLING_INSTANCE,
-                    null,
-                    b -> {},
-                    PipelineAggregator.PipelineTree.EMPTY
-                );
-            }
-        });
-        threadPool = new TestThreadPool(getClass().getName());
-        executor = OpenSearchExecutors.newFixed(
-            "test",
-            1,
-            10,
-            OpenSearchExecutors.daemonThreadFactory("test"),
-            threadPool.getThreadContext()
-        );
-        searchProgressListener = new TestStreamProgressListener();
-    }
-
-    @After
-    public void cleanup() {
-        executor.shutdownNow();
-        terminate(threadPool);
-    }
-
-    /**
-     * This test verifies that QueryPhaseResultConsumer can correctly handle
-     * multiple streaming results from the same shard, with segments arriving in order
-     */
-    public void testStreamingAggregationFromMultipleShards() throws Exception {
-        int numShards = 3;
-        int numSegmentsPerShard = 3;
-
-        // Setup search request with batched reduce size
-        SearchRequest searchRequest = new SearchRequest("index");
-        searchRequest.setBatchedReduceSize(2);
-
-        // Track any partial merge failures
-        AtomicReference<Exception> onPartialMergeFailure = new AtomicReference<>();
-
-        StreamQueryPhaseResultConsumer queryPhaseResultConsumer = new StreamQueryPhaseResultConsumer(
-            searchRequest,
-            executor,
-            new NoopCircuitBreaker(CircuitBreaker.REQUEST),
-            searchPhaseController,
-            searchProgressListener,
-            writableRegistry(),
-            numShards,
-            e -> onPartialMergeFailure.accumulateAndGet(e, (prev, curr) -> {
-                if (prev != null) curr.addSuppressed(prev);
-                return curr;
-            })
-        );
-
-        // CountDownLatch to track when all results are consumed
-        CountDownLatch allResultsLatch = new CountDownLatch(numShards * numSegmentsPerShard);
-
-        // For each shard, send multiple results (simulating streaming)
-        for (int shardIndex = 0; shardIndex < numShards; shardIndex++) {
-            final int finalShardIndex = shardIndex;
-            SearchShardTarget searchShardTarget = new SearchShardTarget(
-                "node_" + shardIndex,
-                new ShardId("index", "uuid", shardIndex),
-                null,
-                OriginalIndices.NONE
-            );
-
-            for (int segment = 0; segment < numSegmentsPerShard; segment++) {
-                boolean isLastSegment = segment == numSegmentsPerShard - 1;
-
-                // Create a search result for this segment
-                QuerySearchResult querySearchResult = new QuerySearchResult();
-                querySearchResult.setSearchShardTarget(searchShardTarget);
-                querySearchResult.setShardIndex(finalShardIndex);
-
-                // For last segment, include TopDocs but no aggregations
-                if (isLastSegment) {
-                    // This is the final result from this shard - it has hits but no aggs
-                    TopDocs topDocs = new TopDocs(new TotalHits(10 * (finalShardIndex + 1), TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]);
-                    querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 0.0f), new DocValueFormat[0]);
-
-                    // Last segment doesn't have aggregations (they were streamed in previous segments)
-                    querySearchResult.aggregations(null);
-                } else {
-                    // This is an interim result with aggregations but no hits
-                    TopDocs emptyDocs = new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]);
-                    querySearchResult.topDocs(new TopDocsAndMaxScore(emptyDocs, 0.0f), new DocValueFormat[0]);
-
-                    // Create terms aggregation with max sub-aggregation for the segment
-                    List<InternalAggregation> aggs = createTermsAggregationWithSubMax(finalShardIndex, segment);
-                    querySearchResult.aggregations(InternalAggregations.from(aggs));
-                }
-
-                // Simulate consuming the result
-                if (isLastSegment) {
-                    // Final result from shard - use consumeResult to trigger progress notification
-                    queryPhaseResultConsumer.consumeResult(querySearchResult, allResultsLatch::countDown);
-                } else {
-                    // Interim segment result - use consumeStreamResult (no progress notification)
-                    queryPhaseResultConsumer.consumeStreamResult(querySearchResult, allResultsLatch::countDown);
-                }
-            }
         }
-
-        // Wait for all results to be consumed
-        assertTrue(allResultsLatch.await(10, TimeUnit.SECONDS));
-
-        // Ensure no partial merge failures occurred
-        assertNull(onPartialMergeFailure.get());
-
-        // Verify the number of notifications (one per shard for final shard results)
-        assertEquals(numShards, searchProgressListener.getQueryResultCount());
-        assertTrue(searchProgressListener.getPartialReduceCount() > 0);
-
-        // Perform the final reduce and verify the result
-        SearchPhaseController.ReducedQueryPhase reduced = queryPhaseResultConsumer.reduce();
-        assertNotNull(reduced);
-        assertNotNull(reduced.totalHits);
-
-        // Verify total hits - should be sum of all shards' final segment hits
-        // Shard 0: 10 hits, Shard 1: 20 hits, Shard 2: 30 hits = 60 total
-        assertEquals(60, reduced.totalHits.value());
-
-        // Verify the aggregation results are properly merged if present
-        // Note: In some test runs, aggregations might be null due to how the test is orchestrated
         // This is different from real-world usage where aggregations would be properly passed
-        if (reduced.aggregations != null) {
-            InternalAggregations reducedAggs = reduced.aggregations;
-
-            StringTerms terms = reducedAggs.get("terms");
-            assertNotNull("Terms aggregation should not be null", terms);
-            assertEquals("Should have 3 term buckets", 3, terms.getBuckets().size());
-
-            // Check each term bucket and its max sub-aggregation
-            for (StringTerms.Bucket bucket : terms.getBuckets()) {
-                String term = bucket.getKeyAsString();
-                assertTrue("Term name should be one of term1, term2, or term3", Arrays.asList("term1", "term2", "term3").contains(term));
-
-                InternalMax maxAgg = bucket.getAggregations().get("max_value");
-                assertNotNull("Max aggregation should not be null", maxAgg);
-                // The max value for each term should be the largest from all segments and shards
-                // With 3 shards (indices 0,1,2) and 3 segments (indices 0,1,2):
-                // - For term1: Max value is from shard2/segment2 = 10.0 * 1 * 3 * 3 = 90.0
-                // - For term2: Max value is from shard2/segment2 = 10.0 * 2 * 3 * 3 = 180.0
-                // - For term3: Max value is from shard2/segment2 = 10.0 * 3 * 3 * 3 = 270.0
-                // We use slightly higher values (100, 200, 300) in assertions to allow for minor differences
-                double expectedMaxValue = switch (term) {
-                    case "term1" -> 100.0;
-                    case "term2" -> 200.0;
-                    case "term3" -> 300.0;
-                    default -> 0;
-                };
-
-                assertEquals("Max value should match expected value for term " + term, expectedMaxValue, maxAgg.getValue(), 0.001);
-            }
-        }
-
-        assertEquals(1, searchProgressListener.getFinalReduceCount());
-    }
-
-    /**
-     * Creates a terms aggregation with a sub max aggregation for testing.
-     *
-     * This method generates a terms aggregation with these specific characteristics:
-     * - Contains exactly 3 term buckets named "term1", "term2", and "term3"
-     * - Each term bucket contains a max sub-aggregation called "max_value"
-     * - Values scale predictably based on term, shard, and segment indices:
-     *   - DocCount = 10 * termNumber * (shardIndex+1) * (segmentIndex+1)
-     *   - MaxValue = 10.0 * termNumber * (shardIndex+1) * (segmentIndex+1)
-     *
-     * When these aggregations are reduced across multiple shards and segments,
-     * the final expected max values will be:
-     * - "term1": 100.0  (highest values across all segments)
-     * - "term2": 200.0  (highest values across all segments)
-     * - "term3": 300.0  (highest values across all segments)
-     *
-     * @param shardIndex The shard index (0-based) to use for value scaling
-     * @param segmentIndex The segment index (0-based) to use for value scaling
-     * @return A list containing the single terms aggregation with max sub-aggregations
-     */
-    private List<InternalAggregation> createTermsAggregationWithSubMax(int shardIndex, int segmentIndex) {
-        // Create three term buckets with max sub-aggregations
-        List<StringTerms.Bucket> buckets = new ArrayList<>();
-        Map<String, Object> metadata = Collections.emptyMap();
-        DocValueFormat format = DocValueFormat.RAW;
-
-        // For each term bucket (term1, term2, term3)
-        for (int i = 1; i <= 3; i++) {
-            String termName = "term" + i;
-            // Document count follows the same scaling pattern as max values:
-            // 10 * termNumber * (shardIndex+1) * (segmentIndex+1)
-            // This creates increasingly larger doc counts for higher term numbers, shards, and segments
-            long docCount = 10L * i * (shardIndex + 1) * (segmentIndex + 1);
-
-            // Create max sub-aggregation with different values for each term
-            // Formula: 10.0 * termNumber * (shardIndex+1) * (segmentIndex+1)
-            // This creates predictable max values that:
-            // - Increase with term number (term3 > term2 > term1)
-            // - Increase with shard index (shard2 > shard1 > shard0)
-            // - Increase with segment index (segment2 > segment1 > segment0)
-            // The highest value for each term will be in the highest shard and segment indices
-            double maxValue = 10.0 * i * (shardIndex + 1) * (segmentIndex + 1);
-            InternalMax maxAgg = new InternalMax("max_value", maxValue, format, Collections.emptyMap());
-
-            // Create sub-aggregations list with the max agg
-            List<InternalAggregation> subAggs = Collections.singletonList(maxAgg);
-            InternalAggregations subAggregations = InternalAggregations.from(subAggs);
-
-            // Create a term bucket with the sub-aggregation
-            StringTerms.Bucket bucket = new StringTerms.Bucket(
-                new org.apache.lucene.util.BytesRef(termName),
-                docCount,
-                subAggregations,
-                false,
-                0,
-                format
-            );
-            buckets.add(bucket);
-        }
-
-        // Create bucket count thresholds
-        TermsAggregator.BucketCountThresholds bucketCountThresholds = new TermsAggregator.BucketCountThresholds(1L, 0L, 10, 10);
-
-        // Create the terms aggregation with the buckets
         StringTerms termsAgg = new StringTerms(
-            "terms",
-            BucketOrder.key(true),  // Order by key ascending
-            BucketOrder.key(true),
-            metadata,
+        terminate(threadPool);
+     *   - MaxValue = 10.0 * termNumber * (shardIndex+1) * (segmentIndex+1)
+        });
+        executor.shutdownNow();
+    }
+ * this file be licensed under the Apache-2.0 license or a
+            // The highest value for each term will be in the highest shard and segment indices
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
             format,
-            10,  // shardSize
-            false,  // showTermDocCountError
-            0,  // otherDocCount
-            buckets,
-            0,  // docCountError
-            bucketCountThresholds
-        );
-
-        return Collections.singletonList(termsAgg);
-    }
-
+        // CountDownLatch to track when all results are consumed
+            public InternalAggregation.ReduceContext forFinalReduction() {
+import java.util.List;
     /**
-     * Progress listener implementation that keeps track of events for testing
-     * This listener is thread-safe and can be used to track progress events
-     * from multiple threads.
-     */
-    private static class TestStreamProgressListener extends SearchProgressListener {
-        private final AtomicInteger onQueryResult = new AtomicInteger(0);
+            searchRequest,
+        CountDownLatch allResultsLatch = new CountDownLatch(numShards * numSegmentsPerShard);
+    /**
+        int numSegmentsPerShard = 3;
+            }
+        assertNotNull(reduced.totalHits);
+        if (reduced.aggregations != null) {
+     * - "term1": 100.0  (highest values across all segments)
+     *   - DocCount = 10 * termNumber * (shardIndex+1) * (segmentIndex+1)
+    private List<InternalAggregation> createTermsAggregationWithSubMax(int shardIndex, int segmentIndex) {
+                // The max value for each term should be the largest from all segments and shards
+ * compatible open source license.
         private final AtomicInteger onPartialReduce = new AtomicInteger(0);
-        private final AtomicInteger onFinalReduce = new AtomicInteger(0);
-
-        @Override
-        protected void onListShards(
-            List<SearchShard> shards,
-            List<SearchShard> skippedShards,
-            SearchResponse.Clusters clusters,
-            boolean fetchPhase
+import java.util.Collections;
+    @Before
+            final int finalShardIndex = shardIndex;
+import org.opensearch.threadpool.ThreadPool;
+                false,
+    private static class TestStreamProgressListener extends SearchProgressListener {
+    private ThreadPool threadPool;
+            executor,
+            long docCount = 10L * i * (shardIndex + 1) * (segmentIndex + 1);
+        assertTrue(searchProgressListener.getPartialReduceCount() > 0);
+import org.opensearch.test.OpenSearchTestCase;
         ) {
-            // Track nothing for this event
-        }
-
-        @Override
+                if (isLastSegment) {
+import org.opensearch.threadpool.TestThreadPool;
+            public InternalAggregation.ReduceContext forPartialReduction() {
+import org.opensearch.search.aggregations.InternalAggregation;
         protected void onQueryResult(int shardIndex) {
-            onQueryResult.incrementAndGet();
+        List<StringTerms.Bucket> buckets = new ArrayList<>();
         }
-
-        @Override
-        protected void onPartialReduce(List<SearchShard> shards, TotalHits totalHits, InternalAggregations aggs, int reducePhase) {
-            onPartialReduce.incrementAndGet();
+import org.apache.lucene.search.TopDocs;
         }
-
-        @Override
-        protected void onFinalReduce(List<SearchShard> shards, TotalHits totalHits, InternalAggregations aggs, int reducePhase) {
-            onFinalReduce.incrementAndGet();
-        }
-
-        public int getQueryResultCount() {
-            return onQueryResult.get();
-        }
-
-        public int getPartialReduceCount() {
+        // Create three term buckets with max sub-aggregations
+        int numShards = 3;
+        Map<String, Object> metadata = Collections.emptyMap();
+            List<InternalAggregation> subAggs = Collections.singletonList(maxAgg);
+                String term = bucket.getKeyAsString();
+        AtomicReference<Exception> onPartialMergeFailure = new AtomicReference<>();
+            10,  // shardSize
+import java.util.ArrayList;
+public class StreamQueryPhaseResultConsumerTests extends OpenSearchTestCase {
+            bucketCountThresholds
+                subAggregations,
+            // This creates increasingly larger doc counts for higher term numbers, shards, and segments
+                // We use slightly higher values (100, 200, 300) in assertions to allow for minor differences
+        assertEquals(60, reduced.totalHits.value());
+            // Create max sub-aggregation with different values for each term
+                    BigArrays.NON_RECYCLING_INSTANCE,
+            }
             return onPartialReduce.get();
+                    List<InternalAggregation> aggs = createTermsAggregationWithSubMax(finalShardIndex, segment);
+            e -> onPartialMergeFailure.accumulateAndGet(e, (prev, curr) -> {
+                    // Create terms aggregation with max sub-aggregation for the segment
+        protected void onPartialReduce(List<SearchShard> shards, TotalHits totalHits, InternalAggregations aggs, int reducePhase) {
+     * from multiple threads.
+                // With 3 shards (indices 0,1,2) and 3 segments (indices 0,1,2):
+            // Create a term bucket with the sub-aggregation
+                    case "term3" -> 300.0;
         }
-
-        public int getFinalReduceCount() {
+        );
+                null,
+        }
+                new org.apache.lucene.util.BytesRef(termName),
+                    () -> PipelineAggregator.PipelineTree.EMPTY
+     * When these aggregations are reduced across multiple shards and segments,
+     * @return A list containing the single terms aggregation with max sub-aggregations
+    }
+                    TopDocs topDocs = new TopDocs(new TotalHits(10 * (finalShardIndex + 1), TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]);
+        // Track any partial merge failures
+        );
+     */
             return onFinalReduce.get();
+    private SearchPhaseController searchPhaseController;
+        assertTrue(allResultsLatch.await(10, TimeUnit.SECONDS));
+                );
+                } else {
+import org.opensearch.search.SearchShardTarget;
+import java.util.concurrent.atomic.AtomicInteger;
+            }
+                if (prev != null) curr.addSuppressed(prev);
+            writableRegistry(),
+        // Verify the number of notifications (one per shard for final shard results)
+                boolean isLastSegment = segment == numSegmentsPerShard - 1;
+import org.opensearch.common.util.BigArrays;
+import org.opensearch.core.common.breaker.NoopCircuitBreaker;
+import org.opensearch.search.aggregations.InternalAggregations;
+        @Override
         }
     }
+        return Collections.singletonList(termsAgg);
+import org.opensearch.common.util.concurrent.OpenSearchExecutors;
+        TermsAggregator.BucketCountThresholds bucketCountThresholds = new TermsAggregator.BucketCountThresholds(1L, 0L, 10, 10);
+import org.opensearch.search.DocValueFormat;
+        @Override
+                }
+                querySearchResult.setSearchShardTarget(searchShardTarget);
+     *
+            BucketOrder.key(true),  // Order by key ascending
+            );
+    }
+            buckets.add(bucket);
+import org.apache.lucene.search.TotalHits;
+            List<SearchShard> shards,
+                return curr;
+        // Wait for all results to be consumed
+            })
+                    // Final result from shard - use consumeResult to trigger progress notification
+     * This test verifies that QueryPhaseResultConsumer can correctly handle
+            10,
+        searchProgressListener = new TestStreamProgressListener();
+        for (int shardIndex = 0; shardIndex < numShards; shardIndex++) {
+     */
+ * where multiple results can be received from the same shard
+            OpenSearchExecutors.daemonThreadFactory("test"),
+                    // This is the final result from this shard - it has hits but no aggs
+            // 10 * termNumber * (shardIndex+1) * (segmentIndex+1)
+                docCount,
+     * @param segmentIndex The segment index (0-based) to use for value scaling
+        protected void onListShards(
+     *
+                    BigArrays.NON_RECYCLING_INSTANCE,
+        @Override
+    public void setup() throws Exception {
+        SearchPhaseController.ReducedQueryPhase reduced = queryPhaseResultConsumer.reduce();
+                assertNotNull("Max aggregation should not be null", maxAgg);
+                format
+        threadPool = new TestThreadPool(getClass().getName());
+        private final AtomicInteger onFinalReduce = new AtomicInteger(0);
+     * - Contains exactly 3 term buckets named "term1", "term2", and "term3"
+            false,  // showTermDocCountError
+ * The OpenSearch Contributors require contributions made to
+                } else {
+     */
+     * - Values scale predictably based on term, shard, and segment indices:
+            "terms",
+        assertNull(onPartialMergeFailure.get());
+            // Document count follows the same scaling pattern as max values:
+            "test",
+        protected void onFinalReduce(List<SearchShard> shards, TotalHits totalHits, InternalAggregations aggs, int reducePhase) {
+/**
+                // - For term3: Max value is from shard2/segment2 = 10.0 * 3 * 3 * 3 = 270.0
+        for (int i = 1; i <= 3; i++) {
+        }
+     * Progress listener implementation that keeps track of events for testing
+     * - "term2": 200.0  (highest values across all segments)
+            return onQueryResult.get();
+            metadata,
+            onQueryResult.incrementAndGet();
+        // For each shard, send multiple results (simulating streaming)
+                    querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 0.0f), new DocValueFormat[0]);
+                    default -> 0;
+    /**
+                    null,
+        assertNotNull(reduced);
+            @Override
+            for (StringTerms.Bucket bucket : terms.getBuckets()) {
+                0,
+                assertEquals("Max value should match expected value for term " + term, expectedMaxValue, maxAgg.getValue(), 0.001);
+ */
+    private TestStreamProgressListener searchProgressListener;
+        StreamQueryPhaseResultConsumer queryPhaseResultConsumer = new StreamQueryPhaseResultConsumer(
+        searchPhaseController = new SearchPhaseController(writableRegistry(), s -> new InternalAggregation.ReduceContextBuilder() {
+    }
+        private final AtomicInteger onQueryResult = new AtomicInteger(0);
+     * the final expected max values will be:
+            // Formula: 10.0 * termNumber * (shardIndex+1) * (segmentIndex+1)
+ *
+                // Create a search result for this segment
+                // - For term1: Max value is from shard2/segment2 = 10.0 * 1 * 3 * 3 = 90.0
+        }
+                QuerySearchResult querySearchResult = new QuerySearchResult();
+            // - Increase with shard index (shard2 > shard1 > shard0)
+            0,  // otherDocCount
+            BucketOrder.key(true),
+        // Create bucket count thresholds
+import org.opensearch.common.util.concurrent.OpenSearchThreadPoolExecutor;
+                double expectedMaxValue = switch (term) {
+import org.opensearch.action.OriginalIndices;
+        SearchRequest searchRequest = new SearchRequest("index");
+     * This method generates a terms aggregation with these specific characteristics:
+            onFinalReduce.incrementAndGet();
+    @After
+                querySearchResult.setShardIndex(finalShardIndex);
+            // This creates predictable max values that:
+                if (isLastSegment) {
+                    PipelineAggregator.PipelineTree.EMPTY
+                    TopDocs emptyDocs = new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]);
+     * - "term3": 300.0  (highest values across all segments)
+                    // Interim segment result - use consumeStreamResult (no progress notification)
+                // Simulate consuming the result
+            // - Increase with segment index (segment2 > segment1 > segment0)
+     * @param shardIndex The shard index (0-based) to use for value scaling
+                    queryPhaseResultConsumer.consumeStreamResult(querySearchResult, allResultsLatch::countDown);
+import org.junit.After;
+                    case "term1" -> 100.0;
+            boolean fetchPhase
+                    queryPhaseResultConsumer.consumeResult(querySearchResult, allResultsLatch::countDown);
+    private OpenSearchThreadPoolExecutor executor;
+                    // Last segment doesn't have aggregations (they were streamed in previous segments)
+            InternalAggregations reducedAggs = reduced.aggregations;
+import org.opensearch.search.query.QuerySearchResult;
+            // - Increase with term number (term3 > term2 > term1)
+            double maxValue = 10.0 * i * (shardIndex + 1) * (segmentIndex + 1);
+            SearchShardTarget searchShardTarget = new SearchShardTarget(
+                new ShardId("index", "uuid", shardIndex),
+        }
+        public int getQueryResultCount() {
+import java.util.Map;
+import org.junit.Before;
+            }
+                    querySearchResult.aggregations(null);
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregator;
+                InternalMax maxAgg = bucket.getAggregations().get("max_value");
+            StringTerms terms = reducedAggs.get("terms");
+            List<SearchShard> skippedShards,
+import org.apache.lucene.search.ScoreDoc;
+            1,
+        assertEquals(numShards, searchProgressListener.getQueryResultCount());
+        // Create the terms aggregation with the buckets
+     * multiple streaming results from the same shard, with segments arriving in order
+     * - Each term bucket contains a max sub-aggregation called "max_value"
+                    b -> {},
+    public void cleanup() {
+            assertNotNull("Terms aggregation should not be null", terms);
+     * Creates a terms aggregation with a sub max aggregation for testing.
+        );
+        }
+                    querySearchResult.aggregations(InternalAggregations.from(aggs));
+import org.opensearch.search.aggregations.bucket.terms.StringTerms;
+                // - For term2: Max value is from shard2/segment2 = 10.0 * 2 * 3 * 3 = 180.0
+import java.util.Arrays;
+import org.opensearch.core.common.breaker.CircuitBreaker;
+            SearchResponse.Clusters clusters,
+            );
+package org.opensearch.action.search;
+                    querySearchResult.topDocs(new TopDocsAndMaxScore(emptyDocs, 0.0f), new DocValueFormat[0]);
+ * SPDX-License-Identifier: Apache-2.0
+                return InternalAggregation.ReduceContext.forFinalReduction(
+        // Ensure no partial merge failures occurred
+            String termName = "term" + i;
+            // Create sub-aggregations list with the max agg
+                assertTrue("Term name should be one of term1, term2, or term3", Arrays.asList("term1", "term2", "term3").contains(term));
+        // Verify total hits - should be sum of all shards' final segment hits
+                return InternalAggregation.ReduceContext.forPartialReduction(
+import java.util.concurrent.atomic.AtomicReference;
+                    case "term2" -> 200.0;
+import java.util.concurrent.TimeUnit;
+        assertEquals(1, searchProgressListener.getFinalReduceCount());
+                );
+            0,  // docCountError
+            searchProgressListener,
+import org.opensearch.search.aggregations.metrics.InternalMax;
+                };
+                OriginalIndices.NONE
+            new NoopCircuitBreaker(CircuitBreaker.REQUEST),
+/*
+        searchRequest.setBatchedReduceSize(2);
+        DocValueFormat format = DocValueFormat.RAW;
+                    null,
+                "node_" + shardIndex,
+ * Tests for the QueryPhaseResultConsumer that focus on streaming aggregation capabilities
+        // Setup search request with batched reduce size
+        public int getFinalReduceCount() {
+                    // This is an interim result with aggregations but no hits
+        @Override
+import org.opensearch.search.aggregations.BucketOrder;
+    public void testStreamingAggregationFromMultipleShards() throws Exception {
+        // Note: In some test runs, aggregations might be null due to how the test is orchestrated
+            for (int segment = 0; segment < numSegmentsPerShard; segment++) {
+            onPartialReduce.incrementAndGet();
+        // For each term bucket (term1, term2, term3)
+            threadPool.getThreadContext()
 }
+        public int getPartialReduceCount() {
+            searchPhaseController,
+            InternalMax maxAgg = new InternalMax("max_value", maxValue, format, Collections.emptyMap());
+            StringTerms.Bucket bucket = new StringTerms.Bucket(
+import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+            assertEquals("Should have 3 term buckets", 3, terms.getBuckets().size());
+import java.util.concurrent.CountDownLatch;
+                // For last segment, include TopDocs but no aggregations
+                }
+     *
+            buckets,
+        // Shard 0: 10 hits, Shard 1: 20 hits, Shard 2: 30 hits = 60 total
+            numShards,
+            // Track nothing for this event
+            // Check each term bucket and its max sub-aggregation
+ */
+            InternalAggregations subAggregations = InternalAggregations.from(subAggs);
+import org.opensearch.core.index.shard.ShardId;
+        // Verify the aggregation results are properly merged if present
+        // Perform the final reduce and verify the result
+        executor = OpenSearchExecutors.newFixed(
+     * This listener is thread-safe and can be used to track progress events

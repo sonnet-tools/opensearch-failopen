@@ -1,186 +1,153 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.composite;
-
-import org.opensearch.action.admin.indices.settings.get.GetSettingsResponse;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.index.engine.exec.Segment;
-import org.opensearch.index.engine.exec.WriterFileSet;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
-import org.opensearch.parquet.ParquetSettings;
-import org.opensearch.parquet.bridge.ParquetFileMetadata;
-import org.opensearch.parquet.bridge.RustBridge;
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
-/**
- * Integration tests verifying that {@code index.parquet.row_group_max_rows} and
- * {@code index.parquet.row_group_max_bytes} settings are accepted, persisted, and
- * honoured by the native Parquet writer.
- */
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1)
-public class CompositeParquetRowGroupSettingsIT extends AbstractCompositeEngineIT {
-
-    private static final String INDEX_NAME = "test-row-group-settings";
-
-    // ── Tests ──────────────────────────────────────────────────────────────
-
-    /**
-     * Verifies that {@code index.parquet.row_group_max_rows} is persisted in index
-     * settings and that the written parquet file contains exactly the expected number
-     * of rows (i.e. the writer did not silently discard data).
-     */
-    public void testRowGroupMaxRowsSettingIsApplied() throws IOException {
-        int maxRows = 5;
-        int totalDocs = 10;
-
-        createCompositeIndex(INDEX_NAME, Settings.builder().put(ParquetSettings.ROW_GROUP_MAX_ROWS.getKey(), maxRows).build());
-
-        assertSettingValue(ParquetSettings.ROW_GROUP_MAX_ROWS.getKey(), String.valueOf(maxRows));
-
-        indexDocs(INDEX_NAME, totalDocs, 0);
-        refreshIndex(INDEX_NAME);
-        flushIndex(INDEX_NAME);
-
-        // All rows must be present across the written parquet files
-        assertTotalParquetRows(INDEX_NAME, totalDocs);
-    }
-
-    /**
-     * Verifies that {@code index.parquet.row_group_max_bytes} is persisted in index
-     * settings and that the index operates correctly with a small byte limit.
-     */
-    public void testRowGroupMaxBytesSettingIsApplied() throws IOException {
-        long maxBytes = new ByteSizeValue(1, ByteSizeUnit.MB).getBytes();
-        int totalDocs = 20;
-
-        createCompositeIndex(INDEX_NAME, Settings.builder().put(ParquetSettings.ROW_GROUP_MAX_BYTES.getKey(), maxBytes + "b").build());
-
-        assertSettingValue(ParquetSettings.ROW_GROUP_MAX_BYTES.getKey(), maxBytes + "b");
-
-        indexDocs(INDEX_NAME, totalDocs, 0);
-        refreshIndex(INDEX_NAME);
-        flushIndex(INDEX_NAME);
-
-        assertTotalParquetRows(INDEX_NAME, totalDocs);
-    }
-
-    /**
-     * Verifies that both row group settings can be set together and the index
-     * functions correctly with both limits active.
-     */
-    public void testRowGroupMaxRowsAndBytesSetTogether() throws IOException {
-        int maxRows = 3;
-        long maxBytes = new ByteSizeValue(512, ByteSizeUnit.KB).getBytes();
-        int totalDocs = 15;
-
-        createCompositeIndex(
             INDEX_NAME,
-            Settings.builder()
-                .put(ParquetSettings.ROW_GROUP_MAX_ROWS.getKey(), maxRows)
-                .put(ParquetSettings.ROW_GROUP_MAX_BYTES.getKey(), maxBytes + "b")
-                .build()
-        );
-
-        assertSettingValue(ParquetSettings.ROW_GROUP_MAX_ROWS.getKey(), String.valueOf(maxRows));
-        assertSettingValue(ParquetSettings.ROW_GROUP_MAX_BYTES.getKey(), maxBytes + "b");
-
-        indexDocs(INDEX_NAME, totalDocs, 0);
-        refreshIndex(INDEX_NAME);
-        flushIndex(INDEX_NAME);
-
-        assertTotalParquetRows(INDEX_NAME, totalDocs);
+        // All rows must be present across the written parquet files
     }
-
-    /**
-     * Verifies that with {@code row_group_max_rows=1} and 5 docs indexed,
-     * each parquet file has exactly 1 row group per row — i.e. total row groups == total docs.
-     */
-    public void testRowGroupMaxRowsOfOneProducesValidFile() throws IOException {
-        int totalDocs = 5;
-
-        createCompositeIndex(INDEX_NAME, Settings.builder().put(ParquetSettings.ROW_GROUP_MAX_ROWS.getKey(), 1).build());
-
-        indexDocs(INDEX_NAME, totalDocs, 0);
-        refreshIndex(INDEX_NAME);
-        flushIndex(INDEX_NAME);
-
-        assertTotalParquetRows(INDEX_NAME, totalDocs);
-        assertTotalRowGroups(INDEX_NAME, totalDocs);
-    }
-
-    // ── Helpers ────────────────────────────────────────────────────────────
-
-    private void createCompositeIndex(String indexName, Settings extraSettings) {
-        Settings.Builder builder = Settings.builder()
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put("index.pluggable.dataformat.enabled", true)
-            .put("index.pluggable.dataformat", "composite")
-            .put("index.composite.primary_data_format", "parquet")
-            .putList("index.composite.secondary_data_formats", "lucene")
-            .put(extraSettings);
-
-        client().admin()
-            .indices()
-            .prepareCreate(indexName)
-            .setSettings(builder)
-            .setMapping("name", "type=keyword", "value", "type=integer")
-            .get();
-        ensureGreen(indexName);
-    }
-
-    private void assertSettingValue(String key, String expected) {
-        GetSettingsResponse resp = client().admin().indices().prepareGetSettings(INDEX_NAME).get();
-        Settings actual = resp.getIndexToSettings().get(INDEX_NAME);
-        assertEquals("Setting " + key + " should be persisted", expected, actual.get(key));
-    }
-
-    private void assertTotalParquetRows(String indexName, int expectedTotal) throws IOException {
-        CatalogSnapshot snapshot = acquireAndGetSnapshot(indexName);
-        Path parquetDir = getPrimaryShard(indexName).shardPath().getDataPath().resolve("parquet");
-
-        long totalRows = 0;
-        for (Segment segment : snapshot.getSegments()) {
-            WriterFileSet wfs = segment.dfGroupedSearchableFiles().get("parquet");
-            assertNotNull("Segment should have parquet files", wfs);
-            for (String file : wfs.files()) {
-                Path filePath = parquetDir.resolve(file);
-                assertTrue("Parquet file should exist: " + filePath, Files.exists(filePath));
-                ParquetFileMetadata meta = RustBridge.getFileMetadata(filePath.toString());
-                totalRows += meta.numRows();
-            }
-        }
-        assertEquals("Total rows across all parquet files should match indexed docs", expectedTotal, totalRows);
-    }
-
-    private void assertTotalRowGroups(String indexName, int expectedTotal) throws IOException {
-        CatalogSnapshot snapshot = acquireAndGetSnapshot(indexName);
-        Path parquetDir = getPrimaryShard(indexName).shardPath().getDataPath().resolve("parquet");
-
-        long totalRowGroups = 0;
-        for (Segment segment : snapshot.getSegments()) {
-            WriterFileSet wfs = segment.dfGroupedSearchableFiles().get("parquet");
-            assertNotNull("Segment should have parquet files", wfs);
-            for (String file : wfs.files()) {
-                Path filePath = parquetDir.resolve(file);
-                assertTrue("Parquet file should exist: " + filePath, Files.exists(filePath));
-                ParquetFileMetadata meta = RustBridge.getFileMetadata(filePath.toString());
-                totalRowGroups += meta.numRowGroups();
-            }
-        }
         assertEquals("Total row groups should equal total docs when max_rows=1", expectedTotal, totalRowGroups);
+        assertSettingValue(ParquetSettings.ROW_GROUP_MAX_BYTES.getKey(), maxBytes + "b");
+        for (Segment segment : snapshot.getSegments()) {
+     */
+            }
+                Path filePath = parquetDir.resolve(file);
     }
+            .get();
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+    // ── Tests ──────────────────────────────────────────────────────────────
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 1)
+     */
+import org.opensearch.common.settings.Settings;
+            .prepareCreate(indexName)
+        Path parquetDir = getPrimaryShard(indexName).shardPath().getDataPath().resolve("parquet");
+            assertNotNull("Segment should have parquet files", wfs);
+import org.opensearch.test.OpenSearchIntegTestCase;
+public class CompositeParquetRowGroupSettingsIT extends AbstractCompositeEngineIT {
+                assertTrue("Parquet file should exist: " + filePath, Files.exists(filePath));
+            .put(extraSettings);
+        long totalRowGroups = 0;
+        assertSettingValue(ParquetSettings.ROW_GROUP_MAX_BYTES.getKey(), maxBytes + "b");
+                totalRowGroups += meta.numRowGroups();
+            .indices()
+        assertEquals("Setting " + key + " should be persisted", expected, actual.get(key));
+import org.opensearch.parquet.bridge.RustBridge;
+     * settings and that the index operates correctly with a small byte limit.
+ * Integration tests verifying that {@code index.parquet.row_group_max_rows} and
+    private void assertSettingValue(String key, String expected) {
+    }
+import org.opensearch.action.admin.indices.settings.get.GetSettingsResponse;
+        assertTotalParquetRows(INDEX_NAME, totalDocs);
+        indexDocs(INDEX_NAME, totalDocs, 0);
+import org.opensearch.core.common.unit.ByteSizeValue;
+        Settings actual = resp.getIndexToSettings().get(INDEX_NAME);
+    private void assertTotalRowGroups(String indexName, int expectedTotal) throws IOException {
+     * Verifies that {@code index.parquet.row_group_max_rows} is persisted in index
+    }
+                .build()
+        long totalRows = 0;
+            .setMapping("name", "type=keyword", "value", "type=integer")
+    private void createCompositeIndex(String indexName, Settings extraSettings) {
+     * functions correctly with both limits active.
+ * compatible open source license.
+        assertTotalRowGroups(INDEX_NAME, totalDocs);
+        Settings.Builder builder = Settings.builder()
+        client().admin()
+import java.io.IOException;
+        createCompositeIndex(INDEX_NAME, Settings.builder().put(ParquetSettings.ROW_GROUP_MAX_ROWS.getKey(), 1).build());
+ */
+        refreshIndex(INDEX_NAME);
+/*
+/**
+        int maxRows = 3;
+        );
+import org.opensearch.index.engine.exec.WriterFileSet;
+ * this file be licensed under the Apache-2.0 license or a
+    }
+            Settings.builder()
+ */
+        GetSettingsResponse resp = client().admin().indices().prepareGetSettings(INDEX_NAME).get();
+     * Verifies that with {@code row_group_max_rows=1} and 5 docs indexed,
+ * honoured by the native Parquet writer.
+        assertSettingValue(ParquetSettings.ROW_GROUP_MAX_ROWS.getKey(), String.valueOf(maxRows));
+import org.opensearch.parquet.ParquetSettings;
+        int maxRows = 5;
+            .put("index.pluggable.dataformat", "composite")
+ * {@code index.parquet.row_group_max_bytes} settings are accepted, persisted, and
+        int totalDocs = 10;
+        refreshIndex(INDEX_NAME);
+    /**
+        createCompositeIndex(
+     */
+    /**
+        assertTotalParquetRows(INDEX_NAME, totalDocs);
+    }
+        for (Segment segment : snapshot.getSegments()) {
+        flushIndex(INDEX_NAME);
+            .put("index.composite.primary_data_format", "parquet")
+        refreshIndex(INDEX_NAME);
+        Path parquetDir = getPrimaryShard(indexName).shardPath().getDataPath().resolve("parquet");
+import java.nio.file.Path;
+                ParquetFileMetadata meta = RustBridge.getFileMetadata(filePath.toString());
+ * The OpenSearch Contributors require contributions made to
+     * Verifies that both row group settings can be set together and the index
+    public void testRowGroupMaxBytesSettingIsApplied() throws IOException {
+        assertSettingValue(ParquetSettings.ROW_GROUP_MAX_ROWS.getKey(), String.valueOf(maxRows));
+import org.opensearch.parquet.bridge.ParquetFileMetadata;
+    public void testRowGroupMaxRowsOfOneProducesValidFile() throws IOException {
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+        int totalDocs = 15;
+package org.opensearch.composite;
+        refreshIndex(INDEX_NAME);
+        flushIndex(INDEX_NAME);
+    // ── Helpers ────────────────────────────────────────────────────────────
+            .setSettings(builder)
+        assertEquals("Total rows across all parquet files should match indexed docs", expectedTotal, totalRows);
+     * of rows (i.e. the writer did not silently discard data).
+    /**
+            .putList("index.composite.secondary_data_formats", "lucene")
+     */
+     * each parquet file has exactly 1 row group per row — i.e. total row groups == total docs.
+        }
+        indexDocs(INDEX_NAME, totalDocs, 0);
+        assertTotalParquetRows(INDEX_NAME, totalDocs);
+    public void testRowGroupMaxRowsSettingIsApplied() throws IOException {
+        createCompositeIndex(INDEX_NAME, Settings.builder().put(ParquetSettings.ROW_GROUP_MAX_BYTES.getKey(), maxBytes + "b").build());
+            }
+                .put(ParquetSettings.ROW_GROUP_MAX_BYTES.getKey(), maxBytes + "b")
+            for (String file : wfs.files()) {
+        CatalogSnapshot snapshot = acquireAndGetSnapshot(indexName);
+        assertTotalParquetRows(INDEX_NAME, totalDocs);
+    private static final String INDEX_NAME = "test-row-group-settings";
+    public void testRowGroupMaxRowsAndBytesSetTogether() throws IOException {
+    private void assertTotalParquetRows(String indexName, int expectedTotal) throws IOException {
+                assertTrue("Parquet file should exist: " + filePath, Files.exists(filePath));
+            .put("index.pluggable.dataformat.enabled", true)
+                ParquetFileMetadata meta = RustBridge.getFileMetadata(filePath.toString());
+     * settings and that the written parquet file contains exactly the expected number
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+import java.nio.file.Files;
+ *
+            assertNotNull("Segment should have parquet files", wfs);
+    }
+import org.opensearch.core.common.unit.ByteSizeUnit;
+        indexDocs(INDEX_NAME, totalDocs, 0);
+            for (String file : wfs.files()) {
+                totalRows += meta.numRows();
+    }
+                Path filePath = parquetDir.resolve(file);
+        int totalDocs = 20;
+    /**
+        flushIndex(INDEX_NAME);
+        int totalDocs = 5;
+        long maxBytes = new ByteSizeValue(1, ByteSizeUnit.MB).getBytes();
+        CatalogSnapshot snapshot = acquireAndGetSnapshot(indexName);
+                .put(ParquetSettings.ROW_GROUP_MAX_ROWS.getKey(), maxRows)
+import org.opensearch.index.engine.exec.Segment;
+        indexDocs(INDEX_NAME, totalDocs, 0);
+import org.opensearch.cluster.metadata.IndexMetadata;
+        createCompositeIndex(INDEX_NAME, Settings.builder().put(ParquetSettings.ROW_GROUP_MAX_ROWS.getKey(), maxRows).build());
+        flushIndex(INDEX_NAME);
+        long maxBytes = new ByteSizeValue(512, ByteSizeUnit.KB).getBytes();
+            WriterFileSet wfs = segment.dfGroupedSearchableFiles().get("parquet");
 }
+        }
+ * SPDX-License-Identifier: Apache-2.0
+        ensureGreen(indexName);
+            WriterFileSet wfs = segment.dfGroupedSearchableFiles().get("parquet");
+     * Verifies that {@code index.parquet.row_group_max_bytes} is persisted in index
