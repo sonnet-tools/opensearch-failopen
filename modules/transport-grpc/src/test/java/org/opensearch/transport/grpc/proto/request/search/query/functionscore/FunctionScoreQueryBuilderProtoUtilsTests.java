@@ -1,661 +1,517 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.transport.grpc.proto.request.search.query.functionscore;
-
-import org.opensearch.index.query.MatchAllQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;
-import org.opensearch.protobufs.FieldValue;
-import org.opensearch.protobufs.FieldValueFactorModifier;
-import org.opensearch.protobufs.FieldValueFactorScoreFunction;
-import org.opensearch.protobufs.FunctionBoostMode;
-import org.opensearch.protobufs.FunctionScoreContainer;
-import org.opensearch.protobufs.FunctionScoreMode;
-import org.opensearch.protobufs.FunctionScoreQuery;
-import org.opensearch.protobufs.QueryContainer;
-import org.opensearch.protobufs.RandomScoreFunction;
-import org.opensearch.protobufs.RandomScoreFunctionSeed;
-import org.opensearch.protobufs.TermQuery;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.grpc.proto.request.search.query.QueryBuilderProtoConverterRegistryImpl;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.instanceOf;
-
-public class FunctionScoreQueryBuilderProtoUtilsTests extends OpenSearchTestCase {
-
-    private QueryBuilderProtoConverterRegistryImpl registry;
-
-    @Override
-    public void setUp() throws Exception {
+                    .build()
         super.setUp();
-        // Initialize the registry for FunctionScoreQueryBuilderProtoUtils
-        registry = new QueryBuilderProtoConverterRegistryImpl();
-    }
-
-    public void testFromProtoWithBasicFunctionScoreQuery() {
-        // Create a basic function score query with a term query
-        TermQuery termQuery = TermQuery.newBuilder()
-            .setField("test_field")
-            .setValue(FieldValue.newBuilder().setString("test_value").build())
-            .build();
-
-        QueryContainer queryContainer = QueryContainer.newBuilder().setTerm(termQuery).build();
-
-        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder()
-            .setQuery(queryContainer)
-            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_MULTIPLY)
-            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_MULTIPLY)
-            .setMaxBoost(10.0f)
-            .setMinScore(0.5f)
-            .build();
-
-        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
-
         assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
-
-        assertEquals(10.0f, functionScoreQueryBuilder.maxBoost(), 0.001f);
-        assertEquals(0.5f, functionScoreQueryBuilder.getMinScore(), 0.001f);
-    }
-
-    public void testFromProtoWithFieldValueFactorFunction() {
-        // Create a function score query with field_value_factor function
-        FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()
-            .setField("popularity")
-            .setFactor(1.2f)
-            .setMissing(1.0f)
-            .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_LOG)
-            .build();
-
-        FunctionScoreContainer container = FunctionScoreContainer.newBuilder()
-            .setFieldValueFactor(fieldValueFactor)
-            .setWeight(2.0f)
-            .build();
-
-        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
-
-        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
-
-        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
-
-        // Verify that functions were added
-        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
-        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
-    }
-
-    public void testFromProtoWithRandomScoreFunction() {
-        // Create a function score query with random_score function
-        RandomScoreFunction randomScore = RandomScoreFunction.newBuilder()
-            .setField("_id")
-            .setSeed(RandomScoreFunctionSeed.newBuilder().setInt32(42).build())
-            .build();
-
-        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setRandomScore(randomScore).setWeight(1.5f).build();
-
-        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
-
-        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
-
-        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
-
-        // Verify that functions were added
-        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
-        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
-    }
-
-    public void testFromProtoWithNullInput() {
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> FunctionScoreQueryBuilderProtoUtils.fromProto(null, registry)
-        );
-
-        assertThat(exception.getMessage(), containsString("FunctionScoreQuery cannot be null"));
-    }
-
-    public void testFromProtoWithEmptyQueryAndNoFunctions() {
-        // Create a function score query with neither query nor functions
-        // This should default to MatchAllQueryBuilder (matching fromXContent behavior)
-        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().build();
-
-        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
-
-        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
-
-        // Should have a MatchAllQueryBuilder as the base query
-        assertThat(functionScoreQueryBuilder.query(), instanceOf(MatchAllQueryBuilder.class));
-        // Should have no functions
-        assertEquals(0, functionScoreQueryBuilder.filterFunctionBuilders().length);
-    }
-
-    public void testFromProtoWithWeightOnlyFunction() {
-        // Create a function score query with only weight (no specific function)
-        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setWeight(3.0f).build();
-
-        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
-
-        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
-
-        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
-
-        // Verify that functions were added
-        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
-        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
-    }
-
-    public void testFromProtoWithScriptScoreFunction() {
-        // Create an inline script
-        org.opensearch.protobufs.InlineScript inlineScript = org.opensearch.protobufs.InlineScript.newBuilder()
-            .setSource("Math.log(doc['popularity'].value) * params.multiplier")
-            .setLang(
-                org.opensearch.protobufs.ScriptLanguage.newBuilder()
-                    .setBuiltin(org.opensearch.protobufs.BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_PAINLESS)
-                    .build()
-            )
-            .setParams(
-                org.opensearch.protobufs.ObjectMap.newBuilder()
-                    .putFields("multiplier", org.opensearch.protobufs.ObjectMap.Value.newBuilder().setDouble(2.0).build())
-                    .build()
-            )
-            .build();
-
-        org.opensearch.protobufs.Script script = org.opensearch.protobufs.Script.newBuilder().setInline(inlineScript).build();
-
-        org.opensearch.protobufs.ScriptScoreFunction scriptScoreFunction = org.opensearch.protobufs.ScriptScoreFunction.newBuilder()
-            .setScript(script)
-            .build();
-
-        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setScriptScore(scriptScoreFunction).setWeight(1.5f).build();
-
-        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
-
-        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
-
-        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
-
-        // Verify that functions were added
-        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
-        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
-
-        // Verify the script score function
-        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction = functionScoreQueryBuilder.filterFunctionBuilders()[0];
-        assertThat(
-            filterFunction.getScoreFunction(),
-            instanceOf(org.opensearch.index.query.functionscore.ScriptScoreFunctionBuilder.class)
-        );
-
-        org.opensearch.index.query.functionscore.ScriptScoreFunctionBuilder scriptFunction =
-            (org.opensearch.index.query.functionscore.ScriptScoreFunctionBuilder) filterFunction.getScoreFunction();
-
-        // Verify script properties
-        org.opensearch.script.Script openSearchScript = scriptFunction.getScript();
-        assertEquals(org.opensearch.script.ScriptType.INLINE, openSearchScript.getType());
-        assertEquals("painless", openSearchScript.getLang());
-        assertEquals("Math.log(doc['popularity'].value) * params.multiplier", openSearchScript.getIdOrCode());
-        assertEquals(2.0, openSearchScript.getParams().get("multiplier"));
-    }
-
-    public void testFromProtoWithExponentialDecayFunction() {
-        // Create a numeric decay placement
-        org.opensearch.protobufs.NumericDecayPlacement numericPlacement = org.opensearch.protobufs.NumericDecayPlacement.newBuilder()
-            .setOrigin(10.0)
-            .setScale(5.0)
-            .setOffset(1.0)
-            .setDecay(0.3)
-            .build();
-
-        // Create a decay placement
-        org.opensearch.protobufs.DecayPlacement decayPlacement = org.opensearch.protobufs.DecayPlacement.newBuilder()
-            .setNumericDecayPlacement(numericPlacement)
-            .build();
-
+import org.opensearch.transport.grpc.proto.request.search.query.QueryBuilderProtoConverterRegistryImpl;
         // Create a decay function with the placement
-        org.opensearch.protobufs.DecayFunction decayFunction = org.opensearch.protobufs.DecayFunction.newBuilder()
-            .putPlacement("price", decayPlacement)
-            .build();
-
-        // Create a function score container with the exponential decay function
-        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setExp(decayFunction).setWeight(1.5f).build();
-
-        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
-
-        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
-
-        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
-
-        // Verify that functions were added
-        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
-        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
-
-        // Verify the exponential decay function
-        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction = functionScoreQueryBuilder.filterFunctionBuilders()[0];
-        assertThat(
-            filterFunction.getScoreFunction(),
-            instanceOf(org.opensearch.index.query.functionscore.ExponentialDecayFunctionBuilder.class)
-        );
-
-        org.opensearch.index.query.functionscore.ExponentialDecayFunctionBuilder expFunction =
-            (org.opensearch.index.query.functionscore.ExponentialDecayFunctionBuilder) filterFunction.getScoreFunction();
-
-        // Verify the field name
-        assertEquals("price", expFunction.getFieldName());
-    }
-
-    public void testFromProtoWithGaussianDecayFunction() {
-        // Create a numeric decay placement
-        org.opensearch.protobufs.NumericDecayPlacement numericPlacement = org.opensearch.protobufs.NumericDecayPlacement.newBuilder()
-            .setOrigin(20.0)
-            .setScale(10.0)
-            .setOffset(2.0)
-            .setDecay(0.4)
-            .build();
-
-        // Create a decay placement
-        org.opensearch.protobufs.DecayPlacement decayPlacement = org.opensearch.protobufs.DecayPlacement.newBuilder()
-            .setNumericDecayPlacement(numericPlacement)
-            .build();
-
-        // Create a decay function with the placement
-        org.opensearch.protobufs.DecayFunction decayFunction = org.opensearch.protobufs.DecayFunction.newBuilder()
-            .putPlacement("rating", decayPlacement)
-            .build();
-
-        // Create a function score container with the gaussian decay function
         FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setGauss(decayFunction).setWeight(2.0f).build();
-
-        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
-
-        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
-
-        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
-
+        // Verify the exponential decay function
+            (org.opensearch.index.query.functionscore.ScriptScoreFunctionBuilder) filterFunction.getScoreFunction();
+        // Create a function score query with only weight (no specific function)
         // Verify that functions were added
-        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
-        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
-
-        // Verify the gaussian decay function
-        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction = functionScoreQueryBuilder.filterFunctionBuilders()[0];
-        assertThat(filterFunction.getScoreFunction(), instanceOf(org.opensearch.index.query.functionscore.GaussDecayFunctionBuilder.class));
-
-        org.opensearch.index.query.functionscore.GaussDecayFunctionBuilder gaussFunction =
-            (org.opensearch.index.query.functionscore.GaussDecayFunctionBuilder) filterFunction.getScoreFunction();
-
-        // Verify the field name
+import org.opensearch.protobufs.RandomScoreFunctionSeed;
+            instanceOf(org.opensearch.index.query.functionscore.RandomScoreFunctionBuilder.class)
+        // Create a field value factor function
+import org.opensearch.protobufs.FieldValueFactorModifier;
         assertEquals("rating", gaussFunction.getFieldName());
-    }
-
-    public void testFromProtoWithLinearDecayFunction() {
-        // Create a numeric decay placement
-        org.opensearch.protobufs.NumericDecayPlacement numericPlacement = org.opensearch.protobufs.NumericDecayPlacement.newBuilder()
-            .setOrigin(100.0)
-            .setScale(50.0)
-            .setOffset(5.0)
-            .setDecay(0.2)
-            .build();
-
-        // Create a decay placement
-        org.opensearch.protobufs.DecayPlacement decayPlacement = org.opensearch.protobufs.DecayPlacement.newBuilder()
-            .setNumericDecayPlacement(numericPlacement)
-            .build();
-
-        // Create a decay function with the placement
-        org.opensearch.protobufs.DecayFunction decayFunction = org.opensearch.protobufs.DecayFunction.newBuilder()
-            .putPlacement("distance", decayPlacement)
-            .build();
-
-        // Create a function score container with the linear decay function
-        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setLinear(decayFunction).setWeight(1.0f).build();
-
-        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
-
-        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
-
-        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
-
-        // Verify that functions were added
-        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
-        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
-
-        // Verify the linear decay function
-        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction = functionScoreQueryBuilder.filterFunctionBuilders()[0];
-        assertThat(
-            filterFunction.getScoreFunction(),
-            instanceOf(org.opensearch.index.query.functionscore.LinearDecayFunctionBuilder.class)
-        );
-
-        org.opensearch.index.query.functionscore.LinearDecayFunctionBuilder linearFunction =
-            (org.opensearch.index.query.functionscore.LinearDecayFunctionBuilder) filterFunction.getScoreFunction();
-
-        // Verify the field name
-        assertEquals("distance", linearFunction.getFieldName());
-    }
-
-    public void testFromProtoWithMultipleFunctions() {
-        // Create first function - field value factor
-        FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()
-            .setField("popularity")
-            .setFactor(1.5f)
-            .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_LOG)
-            .build();
-
-        FunctionScoreContainer container1 = FunctionScoreContainer.newBuilder()
-            .setFieldValueFactor(fieldValueFactor)
-            .setWeight(2.0f)
-            .build();
-
-        // Create second function - random score
-        RandomScoreFunction randomScore = RandomScoreFunction.newBuilder()
-            .setField("_id")
+        FunctionScoreQueryBuilder builder2 = (FunctionScoreQueryBuilder) result2;
+    public void testFromProtoWithDifferentScoreModes() {
+        // Create a function score container with the exponential decay function
+            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_AVG)
             .setSeed(RandomScoreFunctionSeed.newBuilder().setString("test_seed").build())
             .build();
-
-        FunctionScoreContainer container2 = FunctionScoreContainer.newBuilder().setRandomScore(randomScore).setWeight(1.0f).build();
-
-        // Create third function - exponential decay
-        org.opensearch.protobufs.NumericDecayPlacement numericPlacement = org.opensearch.protobufs.NumericDecayPlacement.newBuilder()
-            .setOrigin(15.0)
-            .setScale(8.0)
-            .setDecay(0.3)
-            .build();
-
-        org.opensearch.protobufs.DecayPlacement decayPlacement = org.opensearch.protobufs.DecayPlacement.newBuilder()
-            .setNumericDecayPlacement(numericPlacement)
-            .build();
-
-        org.opensearch.protobufs.DecayFunction decayFunction = org.opensearch.protobufs.DecayFunction.newBuilder()
-            .putPlacement("price", decayPlacement)
-            .build();
-
-        FunctionScoreContainer container3 = FunctionScoreContainer.newBuilder().setExp(decayFunction).setWeight(1.5f).build();
-
-        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder()
-            .addFunctions(container1)
-            .addFunctions(container2)
-            .addFunctions(container3)
-            .build();
-
-        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
-
-        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
-
-        // Verify that all three functions were added
-        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
-        assertEquals(3, functionScoreQueryBuilder.filterFunctionBuilders().length);
-
-        // Verify the first function (field value factor)
-        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction1 = functionScoreQueryBuilder.filterFunctionBuilders()[0];
-        assertThat(
-            filterFunction1.getScoreFunction(),
-            instanceOf(org.opensearch.index.query.functionscore.FieldValueFactorFunctionBuilder.class)
-        );
-
-        // Verify the second function (random score)
-        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction2 = functionScoreQueryBuilder.filterFunctionBuilders()[1];
-        assertThat(
-            filterFunction2.getScoreFunction(),
-            instanceOf(org.opensearch.index.query.functionscore.RandomScoreFunctionBuilder.class)
-        );
-
-        // Verify the third function (exponential decay)
-        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction3 = functionScoreQueryBuilder.filterFunctionBuilders()[2];
-        assertThat(
-            filterFunction3.getScoreFunction(),
-            instanceOf(org.opensearch.index.query.functionscore.ExponentialDecayFunctionBuilder.class)
-        );
-    }
-
-    public void testFromProtoWithDifferentBoostModes() {
-        // Test MULTIPLY boost mode
-        FunctionScoreQuery functionScoreQuery1 = FunctionScoreQuery.newBuilder()
-            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_MULTIPLY)
-            .build();
-
-        QueryBuilder result1 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery1, registry);
-        assertThat(result1, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder builder1 = (FunctionScoreQueryBuilder) result1;
-        assertEquals(org.opensearch.common.lucene.search.function.CombineFunction.MULTIPLY, builder1.boostMode());
-
-        // Test REPLACE boost mode
-        FunctionScoreQuery functionScoreQuery2 = FunctionScoreQuery.newBuilder()
-            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_REPLACE)
-            .build();
-
-        QueryBuilder result2 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery2, registry);
-        assertThat(result2, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder builder2 = (FunctionScoreQueryBuilder) result2;
-        assertEquals(org.opensearch.common.lucene.search.function.CombineFunction.REPLACE, builder2.boostMode());
-
-        // Test SUM boost mode
-        FunctionScoreQuery functionScoreQuery3 = FunctionScoreQuery.newBuilder()
-            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_SUM)
-            .build();
-
-        QueryBuilder result3 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery3, registry);
-        assertThat(result3, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder builder3 = (FunctionScoreQueryBuilder) result3;
-        assertEquals(org.opensearch.common.lucene.search.function.CombineFunction.SUM, builder3.boostMode());
-
-        // Test AVG boost mode
-        FunctionScoreQuery functionScoreQuery4 = FunctionScoreQuery.newBuilder()
-            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_AVG)
-            .build();
-
-        QueryBuilder result4 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery4, registry);
-        assertThat(result4, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder builder4 = (FunctionScoreQueryBuilder) result4;
-        assertEquals(org.opensearch.common.lucene.search.function.CombineFunction.AVG, builder4.boostMode());
-
-        // Test MAX boost mode
-        FunctionScoreQuery functionScoreQuery5 = FunctionScoreQuery.newBuilder()
-            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_MAX)
-            .build();
-
-        QueryBuilder result5 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery5, registry);
-        assertThat(result5, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder builder5 = (FunctionScoreQueryBuilder) result5;
-        assertEquals(org.opensearch.common.lucene.search.function.CombineFunction.MAX, builder5.boostMode());
-
-        // Test MIN boost mode
-        FunctionScoreQuery functionScoreQuery6 = FunctionScoreQuery.newBuilder()
-            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_MIN)
-            .build();
-
-        QueryBuilder result6 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery6, registry);
-        assertThat(result6, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder builder6 = (FunctionScoreQueryBuilder) result6;
-        assertEquals(org.opensearch.common.lucene.search.function.CombineFunction.MIN, builder6.boostMode());
-    }
-
-    public void testFromProtoWithDifferentScoreModes() {
-        // Test MULTIPLY score mode
-        FunctionScoreQuery functionScoreQuery1 = FunctionScoreQuery.newBuilder()
-            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_MULTIPLY)
-            .build();
-
-        QueryBuilder result1 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery1, registry);
-        assertThat(result1, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder builder1 = (FunctionScoreQueryBuilder) result1;
-        assertEquals(org.opensearch.common.lucene.search.function.FunctionScoreQuery.ScoreMode.MULTIPLY, builder1.scoreMode());
-
-        // Test SUM score mode
-        FunctionScoreQuery functionScoreQuery2 = FunctionScoreQuery.newBuilder()
-            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_SUM)
-            .build();
-
-        QueryBuilder result2 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery2, registry);
-        assertThat(result2, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder builder2 = (FunctionScoreQueryBuilder) result2;
-        assertEquals(org.opensearch.common.lucene.search.function.FunctionScoreQuery.ScoreMode.SUM, builder2.scoreMode());
-
-        // Test AVG score mode
-        FunctionScoreQuery functionScoreQuery3 = FunctionScoreQuery.newBuilder()
-            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_AVG)
-            .build();
-
-        QueryBuilder result3 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery3, registry);
-        assertThat(result3, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder builder3 = (FunctionScoreQueryBuilder) result3;
-        assertEquals(org.opensearch.common.lucene.search.function.FunctionScoreQuery.ScoreMode.AVG, builder3.scoreMode());
-
-        // Test FIRST score mode
-        FunctionScoreQuery functionScoreQuery4 = FunctionScoreQuery.newBuilder()
-            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_FIRST)
-            .build();
-
-        QueryBuilder result4 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery4, registry);
-        assertThat(result4, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder builder4 = (FunctionScoreQueryBuilder) result4;
-        assertEquals(org.opensearch.common.lucene.search.function.FunctionScoreQuery.ScoreMode.FIRST, builder4.scoreMode());
-
-        // Test MAX score mode
-        FunctionScoreQuery functionScoreQuery5 = FunctionScoreQuery.newBuilder()
-            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_MAX)
-            .build();
-
-        QueryBuilder result5 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery5, registry);
-        assertThat(result5, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder builder5 = (FunctionScoreQueryBuilder) result5;
-        assertEquals(org.opensearch.common.lucene.search.function.FunctionScoreQuery.ScoreMode.MAX, builder5.scoreMode());
-
+            .setLang(
         // Test MIN score mode
-        FunctionScoreQuery functionScoreQuery6 = FunctionScoreQuery.newBuilder()
-            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_MIN)
-            .build();
-
-        QueryBuilder result6 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery6, registry);
-        assertThat(result6, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder builder6 = (FunctionScoreQueryBuilder) result6;
-        assertEquals(org.opensearch.common.lucene.search.function.FunctionScoreQuery.ScoreMode.MIN, builder6.scoreMode());
-    }
-
-    public void testFromProtoWithFunctionAndFilter() {
-        // Create a term query for the filter
-        TermQuery termQuery = TermQuery.newBuilder()
-            .setField("category")
-            .setValue(FieldValue.newBuilder().setString("electronics").build())
-            .build();
-
-        QueryContainer queryContainer = QueryContainer.newBuilder().setTerm(termQuery).build();
-
-        // Create a field value factor function
-        FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()
-            .setField("rating")
-            .setFactor(2.0f)
-            .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_SQRT)
-            .build();
-
-        // Create a function score container with both function and filter
-        FunctionScoreContainer container = FunctionScoreContainer.newBuilder()
-            .setFieldValueFactor(fieldValueFactor)
-            .setFilter(queryContainer)
-            .setWeight(1.5f)
-            .build();
-
-        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
-
+        FunctionScoreQueryBuilder builder4 = (FunctionScoreQueryBuilder) result4;
+        // Create a decay placement
         QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
-
-        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
-
-        // Verify that functions were added
-        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
-        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
-
-        // Verify the function has a filter
-        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction = functionScoreQueryBuilder.filterFunctionBuilders()[0];
-        assertNotNull(filterFunction.getFilter());
-        assertThat(filterFunction.getFilter(), instanceOf(org.opensearch.index.query.TermQueryBuilder.class));
-    }
-
-    public void testFromProtoWithEmptyDecayFunction() {
-        // Create an empty decay function (no placements)
-        org.opensearch.protobufs.DecayFunction decayFunction = org.opensearch.protobufs.DecayFunction.newBuilder().build();
-
-        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setExp(decayFunction).setWeight(1.0f).build();
-
-        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
-
-        // This should throw an exception because decay function has no placements
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry)
-        );
-
-        assertThat(exception.getMessage(), containsString("DecayFunction must have at least one placement"));
-    }
-
-    public void testFromProtoWithAllParameters() {
-        // Create a comprehensive function score query with all parameters
-        TermQuery termQuery = TermQuery.newBuilder()
-            .setField("title")
-            .setValue(FieldValue.newBuilder().setString("search").build())
             .build();
-
-        QueryContainer queryContainer = QueryContainer.newBuilder().setTerm(termQuery).build();
-
-        // Create multiple functions
-        FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()
+    public void testFromProtoWithLinearDecayFunction() {
+        // Verify that functions were added
+            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_MAX)
+        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
+        assertEquals(org.opensearch.common.lucene.search.function.CombineFunction.MULTIPLY, functionScoreQueryBuilder.boostMode());
+            .putPlacement("price", decayPlacement)
+import org.opensearch.protobufs.FieldValue;
+        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder()
+            .build();
+            .addFunctions(container2)
+        assertThat(result5, instanceOf(FunctionScoreQueryBuilder.class));
+        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
+    }
+            () -> FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry)
             .setField("popularity")
             .setFactor(1.2f)
-            .setMissing(1.0f)
-            .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_LOG)
-            .build();
-
-        FunctionScoreContainer container1 = FunctionScoreContainer.newBuilder()
-            .setFieldValueFactor(fieldValueFactor)
-            .setWeight(2.0f)
-            .build();
-
-        RandomScoreFunction randomScore = RandomScoreFunction.newBuilder()
-            .setField("_id")
-            // .setSeed(RandomScoreFunctionSeed.newBuilder().setInt32Value(123).build()) // Method not available in 0.16.0
-            .build();
-
-        FunctionScoreContainer container2 = FunctionScoreContainer.newBuilder().setRandomScore(randomScore).setWeight(0.5f).build();
-
-        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder()
-            .setQuery(queryContainer)
-            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_MULTIPLY)
-            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_SUM)
-            .setMaxBoost(15.0f)
-            .setMinScore(0.1f)
-            .setBoost(2.0f)
-            .addFunctions(container1)
-            .addFunctions(container2)
-            .build();
-
-        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
-
-        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
-        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
-
-        // Verify all parameters
-        assertThat(functionScoreQueryBuilder.query(), instanceOf(org.opensearch.index.query.TermQueryBuilder.class));
-        assertEquals(org.opensearch.common.lucene.search.function.CombineFunction.MULTIPLY, functionScoreQueryBuilder.boostMode());
+        // Create an empty decay function (no placements)
+            filterFunction.getScoreFunction(),
+        org.opensearch.index.query.functionscore.ExponentialDecayFunctionBuilder expFunction =
+        // This should default to MatchAllQueryBuilder (matching fromXContent behavior)
+        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction3 = functionScoreQueryBuilder.filterFunctionBuilders()[2];
+    }
         assertEquals(org.opensearch.common.lucene.search.function.FunctionScoreQuery.ScoreMode.SUM, functionScoreQueryBuilder.scoreMode());
-        assertEquals(15.0f, functionScoreQueryBuilder.maxBoost(), 0.001f);
-        assertEquals(0.1f, functionScoreQueryBuilder.getMinScore(), 0.001f);
-        assertEquals(2.0f, functionScoreQueryBuilder.boost(), 0.001f);
-
-        // Verify functions
+ */
+    public void testFromProtoWithEmptyQueryAndNoFunctions() {
+    @Override
+        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
         assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
+            .setNumericDecayPlacement(numericPlacement)
+            .build();
+        FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()
+        QueryContainer queryContainer = QueryContainer.newBuilder().setTerm(termQuery).build();
+        assertEquals(org.opensearch.common.lucene.search.function.FunctionScoreQuery.ScoreMode.MAX, builder5.scoreMode());
+            // .setSeed(RandomScoreFunctionSeed.newBuilder().setInt32Value(123).build()) // Method not available in 0.16.0
+        assertEquals("price", expFunction.getFieldName());
+        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
+        FunctionScoreContainer container1 = FunctionScoreContainer.newBuilder()
+        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setScriptScore(scriptScoreFunction).setWeight(1.5f).build();
+        assertThat(result2, instanceOf(FunctionScoreQueryBuilder.class));
+import org.opensearch.index.query.QueryBuilder;
+        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
+            .setScale(50.0)
+        );
+        assertThat(result1, instanceOf(FunctionScoreQueryBuilder.class));
+        assertThat(exception.getMessage(), containsString("FunctionScoreQuery cannot be null"));
+        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
+            .build();
+        org.opensearch.protobufs.DecayPlacement decayPlacement = org.opensearch.protobufs.DecayPlacement.newBuilder()
+        // Create a comprehensive function score query with all parameters
+            .setField("_id")
+            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_MULTIPLY)
+        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
+                org.opensearch.protobufs.ScriptLanguage.newBuilder()
+            .setSource("Math.log(doc['popularity'].value) * params.multiplier")
+        // Verify the second function (random score)
+            .setOrigin(20.0)
+        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
+            (org.opensearch.index.query.functionscore.LinearDecayFunctionBuilder) filterFunction.getScoreFunction();
+            .build();
+            .build();
+            .build();
+        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
+            .build();
+    }
+        assertEquals(org.opensearch.common.lucene.search.function.CombineFunction.MIN, builder6.boostMode());
+        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
+        assertEquals(2.0, openSearchScript.getParams().get("multiplier"));
+        // Create a decay placement
+            .build();
+        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
+        assertEquals(0, functionScoreQueryBuilder.filterFunctionBuilders().length);
+        // Verify that all three functions were added
+        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
+        FunctionScoreQuery functionScoreQuery4 = FunctionScoreQuery.newBuilder()
+            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_AVG)
+            .setValue(FieldValue.newBuilder().setString("test_value").build())
+            .build();
+        QueryBuilder result5 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery5, registry);
+        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
+        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setRandomScore(randomScore).setWeight(1.5f).build();
+        // Create a function score query with neither query nor functions
+        // Test REPLACE boost mode
+            .setMinScore(0.5f)
+            .setDecay(0.3)
+        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
+            .setMaxBoost(15.0f)
+            .setValue(FieldValue.newBuilder().setString("search").build())
+        IllegalArgumentException exception = expectThrows(
+            .build();
+        org.opensearch.protobufs.DecayFunction decayFunction = org.opensearch.protobufs.DecayFunction.newBuilder()
+        // Test MAX boost mode
+        org.opensearch.protobufs.DecayFunction decayFunction = org.opensearch.protobufs.DecayFunction.newBuilder()
+            filterFunction3.getScoreFunction(),
+        QueryBuilder result2 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery2, registry);
+        FunctionScoreQueryBuilder builder6 = (FunctionScoreQueryBuilder) result6;
+        assertEquals("painless", openSearchScript.getLang());
+        // Create a function score query with random_score function
+            .setScale(5.0)
+        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
+        registry = new QueryBuilderProtoConverterRegistryImpl();
+    public void testFromProtoWithGaussianDecayFunction() {
+        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
+            filterFunction.getScoreFunction(),
+        assertThat(filterFunction.getScoreFunction(), instanceOf(org.opensearch.index.query.functionscore.GaussDecayFunctionBuilder.class));
+            .build();
+        org.opensearch.protobufs.DecayPlacement decayPlacement = org.opensearch.protobufs.DecayPlacement.newBuilder()
+            .build();
+        // Create a function score query with field_value_factor function
+            .setQuery(queryContainer)
+            .setScript(script)
+        FunctionScoreQueryBuilder builder3 = (FunctionScoreQueryBuilder) result3;
+        assertThat(filterFunction.getFilter(), instanceOf(org.opensearch.index.query.TermQueryBuilder.class));
+        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction = functionScoreQueryBuilder.filterFunctionBuilders()[0];
+        // Create a function score container with the linear decay function
+import org.opensearch.protobufs.FunctionScoreContainer;
+        QueryBuilder result6 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery6, registry);
+        FunctionScoreQueryBuilder builder1 = (FunctionScoreQueryBuilder) result1;
+            .setNumericDecayPlacement(numericPlacement)
+        org.opensearch.index.query.functionscore.ScriptScoreFunctionBuilder scriptFunction =
+        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
+        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
+    }
+        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
+            .setField("popularity")
+            .build();
+        );
+            .setDecay(0.2)
+        assertThat(result5, instanceOf(FunctionScoreQueryBuilder.class));
+        FunctionScoreQuery functionScoreQuery1 = FunctionScoreQuery.newBuilder()
+            .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_LOG)
+        // This should throw an exception because decay function has no placements
+            .setFieldValueFactor(fieldValueFactor)
+        // Create third function - exponential decay
+        // Create a numeric decay placement
+        assertEquals(3, functionScoreQueryBuilder.filterFunctionBuilders().length);
+            .build();
+        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
+        FunctionScoreQuery functionScoreQuery1 = FunctionScoreQuery.newBuilder()
+        RandomScoreFunction randomScore = RandomScoreFunction.newBuilder()
+        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
+        assertThat(result4, instanceOf(FunctionScoreQueryBuilder.class));
+    }
+        // Verify that functions were added
+        // Verify the third function (exponential decay)
+        FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()
+import org.opensearch.protobufs.RandomScoreFunction;
+        assertEquals(2.0f, functionScoreQueryBuilder.boost(), 0.001f);
+        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
+            filterFunction1.getScoreFunction(),
+    public void testFromProtoWithScriptScoreFunction() {
+            (org.opensearch.index.query.functionscore.GaussDecayFunctionBuilder) filterFunction.getScoreFunction();
+            .build();
+    public void testFromProtoWithBasicFunctionScoreQuery() {
+            .putPlacement("distance", decayPlacement)
+            .setField("rating")
+            .addFunctions(container1)
+        assertThat(exception.getMessage(), containsString("DecayFunction must have at least one placement"));
+        org.opensearch.protobufs.DecayFunction decayFunction = org.opensearch.protobufs.DecayFunction.newBuilder().build();
+        FunctionScoreQuery functionScoreQuery5 = FunctionScoreQuery.newBuilder()
+            .setMissing(1.0f)
+            filterFunction2.getScoreFunction(),
+            .build();
+        // Create a decay placement
+                    .build()
+        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
+            .build();
+        );
+        RandomScoreFunction randomScore = RandomScoreFunction.newBuilder()
+            .setField("popularity")
+            .setFilter(queryContainer)
+    private QueryBuilderProtoConverterRegistryImpl registry;
+        org.opensearch.protobufs.NumericDecayPlacement numericPlacement = org.opensearch.protobufs.NumericDecayPlacement.newBuilder()
+            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_MULTIPLY)
+        // Verify the first function (field value factor)
+        FunctionScoreQuery functionScoreQuery2 = FunctionScoreQuery.newBuilder()
+        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder()
+            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_FIRST)
+        org.opensearch.protobufs.InlineScript inlineScript = org.opensearch.protobufs.InlineScript.newBuilder()
+        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
+        FunctionScoreQueryBuilder builder3 = (FunctionScoreQueryBuilder) result3;
+            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_MULTIPLY)
+            .build();
+        assertEquals(org.opensearch.common.lucene.search.function.FunctionScoreQuery.ScoreMode.MIN, builder6.scoreMode());
+        FunctionScoreContainer container2 = FunctionScoreContainer.newBuilder().setRandomScore(randomScore).setWeight(0.5f).build();
+    }
+    public void testFromProtoWithFieldValueFactorFunction() {
+        IllegalArgumentException exception = expectThrows(
+import org.opensearch.protobufs.FunctionScoreMode;
+        org.opensearch.script.Script openSearchScript = scriptFunction.getScript();
+        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
+        // Verify that functions were added
+        // Verify that functions were added
+        QueryBuilder result3 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery3, registry);
+        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
+            instanceOf(org.opensearch.index.query.functionscore.ScriptScoreFunctionBuilder.class)
+        // Test AVG score mode
+        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
+            .build();
+            .setParams(
+}
+            .setField("_id")
+        assertEquals(0.1f, functionScoreQueryBuilder.getMinScore(), 0.001f);
+            .setFieldValueFactor(fieldValueFactor)
+        assertEquals(org.opensearch.common.lucene.search.function.FunctionScoreQuery.ScoreMode.AVG, builder3.scoreMode());
+    public void testFromProtoWithExponentialDecayFunction() {
+        assertThat(functionScoreQueryBuilder.query(), instanceOf(MatchAllQueryBuilder.class));
+import org.opensearch.index.query.MatchAllQueryBuilder;
+        assertThat(result4, instanceOf(FunctionScoreQueryBuilder.class));
+        assertEquals(org.opensearch.common.lucene.search.function.CombineFunction.AVG, builder4.boostMode());
+        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
+        QueryBuilder result4 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery4, registry);
+            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_REPLACE)
+        FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()
+    public void setUp() throws Exception {
+            .putPlacement("rating", decayPlacement)
+        assertEquals(10.0f, functionScoreQueryBuilder.maxBoost(), 0.001f);
+        // Test FIRST score mode
+ *
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        assertEquals("distance", linearFunction.getFieldName());
+            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_SUM)
+            .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_LOG)
+import org.opensearch.protobufs.FieldValueFactorScoreFunction;
+        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
+            .putPlacement("price", decayPlacement)
+            instanceOf(org.opensearch.index.query.functionscore.LinearDecayFunctionBuilder.class)
+        assertEquals(org.opensearch.common.lucene.search.function.FunctionScoreQuery.ScoreMode.FIRST, builder4.scoreMode());
+            .build();
+        // Verify all parameters
+        // Test MULTIPLY boost mode
+    }
+            .build();
+        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
+            .setFactor(1.5f)
+        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
+        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
+        assertNotNull(filterFunction.getFilter());
+        // Create a term query for the filter
+        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
+            .build();
+        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().build();
+        // Create a function score container with the gaussian decay function
+        FunctionScoreQueryBuilder builder4 = (FunctionScoreQueryBuilder) result4;
+        assertThat(
+        RandomScoreFunction randomScore = RandomScoreFunction.newBuilder()
+        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction = functionScoreQueryBuilder.filterFunctionBuilders()[0];
+/*
+                    .setBuiltin(org.opensearch.protobufs.BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_PAINLESS)
+        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
+    public void testFromProtoWithEmptyDecayFunction() {
+        QueryBuilder result3 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery3, registry);
+        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
+        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
+        assertEquals(org.opensearch.common.lucene.search.function.CombineFunction.REPLACE, builder2.boostMode());
+        FunctionScoreContainer container3 = FunctionScoreContainer.newBuilder().setExp(decayFunction).setWeight(1.5f).build();
+        assertThat(result2, instanceOf(FunctionScoreQueryBuilder.class));
+        org.opensearch.protobufs.ScriptScoreFunction scriptScoreFunction = org.opensearch.protobufs.ScriptScoreFunction.newBuilder()
+    public void testFromProtoWithAllParameters() {
+        assertThat(
+            .build();
+        org.opensearch.protobufs.NumericDecayPlacement numericPlacement = org.opensearch.protobufs.NumericDecayPlacement.newBuilder()
+            .setFieldValueFactor(fieldValueFactor)
+            .build();
+            .setOrigin(15.0)
+            .build();
+        // Verify functions
+    }
+        assertEquals("Math.log(doc['popularity'].value) * params.multiplier", openSearchScript.getIdOrCode());
+            .setNumericDecayPlacement(numericPlacement)
+            instanceOf(org.opensearch.index.query.functionscore.ExponentialDecayFunctionBuilder.class)
+        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
+        QueryBuilder result1 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery1, registry);
+        FunctionScoreQuery functionScoreQuery3 = FunctionScoreQuery.newBuilder()
+            .build();
+        assertEquals(0.5f, functionScoreQueryBuilder.getMinScore(), 0.001f);
+        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction1 = functionScoreQueryBuilder.filterFunctionBuilders()[0];
+        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
+        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction = functionScoreQueryBuilder.filterFunctionBuilders()[0];
+        assertThat(
+            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_MULTIPLY)
+        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
+            (org.opensearch.index.query.functionscore.ExponentialDecayFunctionBuilder) filterFunction.getScoreFunction();
+        org.opensearch.index.query.functionscore.LinearDecayFunctionBuilder linearFunction =
+            () -> FunctionScoreQueryBuilderProtoUtils.fromProto(null, registry)
+    public void testFromProtoWithMultipleFunctions() {
+        assertEquals(org.opensearch.common.lucene.search.function.FunctionScoreQuery.ScoreMode.SUM, builder2.scoreMode());
+            .setSeed(RandomScoreFunctionSeed.newBuilder().setInt32(42).build())
+import org.opensearch.test.OpenSearchTestCase;
+            .build();
+        // Create a decay function with the placement
+        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
+        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
+            .setScale(10.0)
+        assertThat(result6, instanceOf(FunctionScoreQueryBuilder.class));
+        org.opensearch.protobufs.NumericDecayPlacement numericPlacement = org.opensearch.protobufs.NumericDecayPlacement.newBuilder()
+        );
+        // Verify the script score function
+        QueryBuilder result5 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery5, registry);
+        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
+        FunctionScoreQuery functionScoreQuery6 = FunctionScoreQuery.newBuilder()
+            .addFunctions(container2)
+import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;
+            .setNumericDecayPlacement(numericPlacement)
+import org.opensearch.protobufs.TermQuery;
+        // Create an inline script
+            .setDecay(0.3)
+            .setOrigin(10.0)
+            .build();
+        assertEquals(org.opensearch.common.lucene.search.function.CombineFunction.SUM, builder3.boostMode());
+        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
+        );
+        QueryBuilder result2 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery2, registry);
+        // Initialize the registry for FunctionScoreQueryBuilderProtoUtils
+            .setField("title")
+        FunctionScoreQueryBuilder builder6 = (FunctionScoreQueryBuilder) result6;
+        assertThat(
+        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
+        assertEquals(15.0f, functionScoreQueryBuilder.maxBoost(), 0.001f);
+            IllegalArgumentException.class,
+import org.opensearch.protobufs.FunctionBoostMode;
+            .setField("_id")
+            .setField("category")
+        assertEquals(org.opensearch.script.ScriptType.INLINE, openSearchScript.getType());
+        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction2 = functionScoreQueryBuilder.filterFunctionBuilders()[1];
+            instanceOf(org.opensearch.index.query.functionscore.ExponentialDecayFunctionBuilder.class)
+            .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_SQRT)
+        // Create a basic function score query with a term query
+        FunctionScoreContainer container2 = FunctionScoreContainer.newBuilder().setRandomScore(randomScore).setWeight(1.0f).build();
+    public void testFromProtoWithRandomScoreFunction() {
+        FunctionScoreContainer container = FunctionScoreContainer.newBuilder()
+        QueryContainer queryContainer = QueryContainer.newBuilder().setTerm(termQuery).build();
+            .setDecay(0.4)
+        // Test SUM score mode
+        org.opensearch.protobufs.DecayFunction decayFunction = org.opensearch.protobufs.DecayFunction.newBuilder()
+        assertEquals(org.opensearch.common.lucene.search.function.CombineFunction.MAX, builder5.boostMode());
+            .build();
+        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setExp(decayFunction).setWeight(1.5f).build();
+            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_MULTIPLY)
+        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
+            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_SUM)
+        // Test MAX score mode
+        assertEquals(org.opensearch.common.lucene.search.function.FunctionScoreQuery.ScoreMode.MULTIPLY, builder1.scoreMode());
+    public void testFromProtoWithFunctionAndFilter() {
+        assertThat(result6, instanceOf(FunctionScoreQueryBuilder.class));
+            .build();
+    }
+        // Verify that functions were added
+        // Should have no functions
+        FunctionScoreQuery functionScoreQuery3 = FunctionScoreQuery.newBuilder()
+        );
+        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
+        // Create second function - random score
+    public void testFromProtoWithWeightOnlyFunction() {
+    }
+        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
+        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
+        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setWeight(3.0f).build();
+            .build();
+            .setOrigin(100.0)
+            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_SUM)
+        QueryContainer queryContainer = QueryContainer.newBuilder().setTerm(termQuery).build();
+            instanceOf(org.opensearch.index.query.functionscore.FieldValueFactorFunctionBuilder.class)
+        assertThat(result1, instanceOf(FunctionScoreQueryBuilder.class));
+            .setMaxBoost(10.0f)
+        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setExp(decayFunction).setWeight(1.0f).build();
+        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
+    }
+    }
+            .build();
+        // Verify the linear decay function
+        FunctionScoreQueryBuilder builder5 = (FunctionScoreQueryBuilder) result5;
         assertEquals(2, functionScoreQueryBuilder.filterFunctionBuilders().length);
     }
-
-}
+        FunctionScoreQueryBuilder functionScoreQueryBuilder = (FunctionScoreQueryBuilder) result;
+            .build();
+        // Create first function - field value factor
+        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
+            .build();
+        // Verify the field name
+            .setWeight(1.5f)
+import static org.hamcrest.Matchers.containsString;
+            .setFactor(2.0f)
+        org.opensearch.protobufs.DecayPlacement decayPlacement = org.opensearch.protobufs.DecayPlacement.newBuilder()
+        org.opensearch.protobufs.DecayPlacement decayPlacement = org.opensearch.protobufs.DecayPlacement.newBuilder()
+        // Test AVG boost mode
+        QueryBuilder result4 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery4, registry);
+        assertThat(result, instanceOf(FunctionScoreQueryBuilder.class));
+        // Create a decay function with the placement
+        FunctionScoreQueryBuilder builder1 = (FunctionScoreQueryBuilder) result1;
+            .setModifier(FieldValueFactorModifier.FIELD_VALUE_FACTOR_MODIFIER_LOG)
+        TermQuery termQuery = TermQuery.newBuilder()
+            .setOffset(5.0)
+import org.opensearch.protobufs.QueryContainer;
+            .setBoost(2.0f)
+            .build();
+        // Verify the function has a filter
+    public void testFromProtoWithDifferentBoostModes() {
+                org.opensearch.protobufs.ObjectMap.newBuilder()
+        FieldValueFactorScoreFunction fieldValueFactor = FieldValueFactorScoreFunction.newBuilder()
+        assertEquals(1, functionScoreQueryBuilder.filterFunctionBuilders().length);
+        // Create a function score container with both function and filter
+        assertThat(functionScoreQueryBuilder.query(), instanceOf(org.opensearch.index.query.TermQueryBuilder.class));
+        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder()
+        // Verify the gaussian decay function
+        FunctionScoreContainer container = FunctionScoreContainer.newBuilder()
+package org.opensearch.transport.grpc.proto.request.search.query.functionscore;
+        // Create a numeric decay placement
+            .build();
+        );
+        // Test SUM boost mode
+        FunctionScoreQueryBuilder builder5 = (FunctionScoreQueryBuilder) result5;
+        // Verify the field name
+            .addFunctions(container1)
+import static org.hamcrest.Matchers.instanceOf;
+        );
+        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction = functionScoreQueryBuilder.filterFunctionBuilders()[0];
+    }
+            .setBoostMode(FunctionBoostMode.FUNCTION_BOOST_MODE_MIN)
+    public void testFromProtoWithNullInput() {
+        QueryBuilder result6 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery6, registry);
+            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_MAX)
+        // Verify script properties
+            )
+        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
+        FunctionScoreQuery functionScoreQuery4 = FunctionScoreQuery.newBuilder()
+        assertThat(
+        // Verify the field name
+        org.opensearch.protobufs.DecayFunction decayFunction = org.opensearch.protobufs.DecayFunction.newBuilder()
+        // Create multiple functions
+        // Test MIN boost mode
+        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
+        FunctionScoreQuery functionScoreQuery = FunctionScoreQuery.newBuilder().addFunctions(container).build();
+    }
+        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
+        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
+            )
+        assertThat(result3, instanceOf(FunctionScoreQueryBuilder.class));
+            .build();
+        // Verify that functions were added
+        // Should have a MatchAllQueryBuilder as the base query
+ * SPDX-License-Identifier: Apache-2.0
+            .setWeight(2.0f)
+ * compatible open source license.
+        FunctionScoreContainer container1 = FunctionScoreContainer.newBuilder()
+        // Create a numeric decay placement
+        // Verify that functions were added
+            .setWeight(2.0f)
+    }
+        FunctionScoreContainer container = FunctionScoreContainer.newBuilder().setLinear(decayFunction).setWeight(1.0f).build();
+        FunctionScoreQuery functionScoreQuery5 = FunctionScoreQuery.newBuilder()
+            .setValue(FieldValue.newBuilder().setString("electronics").build())
+        FunctionScoreQueryBuilder.FilterFunctionBuilder filterFunction = functionScoreQueryBuilder.filterFunctionBuilders()[0];
+            .setField("test_field")
+            .setScoreMode(FunctionScoreMode.FUNCTION_SCORE_MODE_MIN)
+            .setWeight(2.0f)
+        assertThat(result3, instanceOf(FunctionScoreQueryBuilder.class));
+        FunctionScoreQueryBuilder builder2 = (FunctionScoreQueryBuilder) result2;
+        QueryBuilder result1 = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery1, registry);
+public class FunctionScoreQueryBuilderProtoUtilsTests extends OpenSearchTestCase {
+            .build();
+            .setScale(8.0)
+            .setOffset(1.0)
+            .setQuery(queryContainer)
+        FunctionScoreQuery functionScoreQuery6 = FunctionScoreQuery.newBuilder()
+        assertEquals(org.opensearch.common.lucene.search.function.CombineFunction.MULTIPLY, builder1.boostMode());
+        QueryBuilder result = FunctionScoreQueryBuilderProtoUtils.fromProto(functionScoreQuery, registry);
+import org.opensearch.protobufs.FunctionScoreQuery;
+            .addFunctions(container3)
+        // Test MULTIPLY score mode
+                    .putFields("multiplier", org.opensearch.protobufs.ObjectMap.Value.newBuilder().setDouble(2.0).build())
+            .build();
+            .setMinScore(0.1f)
+        org.opensearch.protobufs.Script script = org.opensearch.protobufs.Script.newBuilder().setInline(inlineScript).build();
+        TermQuery termQuery = TermQuery.newBuilder()
+            .build();
+        org.opensearch.protobufs.NumericDecayPlacement numericPlacement = org.opensearch.protobufs.NumericDecayPlacement.newBuilder()
+            IllegalArgumentException.class,
+        TermQuery termQuery = TermQuery.newBuilder()
+        org.opensearch.index.query.functionscore.GaussDecayFunctionBuilder gaussFunction =
+ * The OpenSearch Contributors require contributions made to
+            filterFunction.getScoreFunction(),
+        assertNotNull(functionScoreQueryBuilder.filterFunctionBuilders());
+        FunctionScoreQuery functionScoreQuery2 = FunctionScoreQuery.newBuilder()
+        assertThat(
+            .setFieldValueFactor(fieldValueFactor)
+            .build();
+            .setMissing(1.0f)
+            .setOffset(2.0)
+            .setFactor(1.2f)

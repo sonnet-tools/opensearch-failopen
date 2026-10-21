@@ -1,498 +1,433 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.Diff;
-import org.opensearch.cluster.NamedDiff;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.time.DateFormatter;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.xcontent.ContextParser;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Objects;
-
-/**
- * A collection of tombstones for explicitly marking indices as deleted in the cluster state.
- * <p>
- * The cluster state contains a list of index tombstones for indices that have been
- * deleted in the cluster.  Because cluster states are processed asynchronously by
- * nodes and a node could be removed from the cluster for a period of time, the
- * tombstones remain in the cluster state for a fixed period of time, after which
- * they are purged.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public final class IndexGraveyard implements Metadata.Custom {
-
-    /**
-     * Setting for the maximum tombstones allowed in the cluster state;
-     * prevents the cluster state size from exploding too large, but it opens the
-     * very unlikely risk that if there are greater than MAX_TOMBSTONES index
-     * deletions while a node was offline, when it comes back online, it will have
-     * missed index deletions that it may need to process.
-     */
-    public static final Setting<Integer> SETTING_MAX_TOMBSTONES = Setting.intSetting(
-        "cluster.indices.tombstones.size",
-        500, // the default maximum number of tombstones
-        Setting.Property.NodeScope
-    );
-
-    public static final String TYPE = "index-graveyard";
-    private static final ParseField TOMBSTONES_FIELD = new ParseField("tombstones");
-    private static final ObjectParser<List<Tombstone>, Void> GRAVEYARD_PARSER;
-    static {
-        GRAVEYARD_PARSER = new ObjectParser<>("index_graveyard", ArrayList::new);
-        GRAVEYARD_PARSER.declareObjectArray(List::addAll, Tombstone.getParser(), TOMBSTONES_FIELD);
-    }
-
-    private final List<Tombstone> tombstones;
-
-    private IndexGraveyard(final List<Tombstone> list) {
-        assert list != null;
-        tombstones = Collections.unmodifiableList(list);
-    }
-
-    public IndexGraveyard(final StreamInput in) throws IOException {
-        this.tombstones = Collections.unmodifiableList(in.readList(Tombstone::new));
-    }
-
-    @Override
-    public String getWriteableName() {
-        return TYPE;
-    }
-
-    @Override
-    public EnumSet<Metadata.XContentContext> context() {
-        return Metadata.API_AND_GATEWAY;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        return (obj instanceof IndexGraveyard) && Objects.equals(tombstones, ((IndexGraveyard) obj).tombstones);
-    }
-
-    @Override
-    public int hashCode() {
-        return tombstones.hashCode();
-    }
-
-    /**
-     * Get the current unmodifiable index tombstone list.
-     */
-    public List<Tombstone> getTombstones() {
-        return tombstones;
-    }
-
-    /**
-     * Returns true if the graveyard contains a tombstone for the given index.
-     */
-    public boolean containsIndex(final Index index) {
-        for (Tombstone tombstone : tombstones) {
-            if (tombstone.getIndex().equals(index)) {
-                return true;
-            }
+        }
+                if (addedIndex < currentTombstones.size()) {
+        public int getRemovedCount() {
         }
         return false;
-    }
-
-    @Override
-    public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
-        builder.startArray(TOMBSTONES_FIELD.getPreferredName());
-        for (Tombstone tombstone : tombstones) {
-            tombstone.toXContent(builder, params);
-        }
-        return builder.endArray();
-    }
-
-    public static IndexGraveyard fromXContent(final XContentParser parser) throws IOException {
-        return new IndexGraveyard(GRAVEYARD_PARSER.parse(parser, null));
-    }
-
-    @Override
-    public String toString() {
-        return "IndexGraveyard[" + tombstones + "]";
-    }
-
-    @Override
-    public void writeTo(final StreamOutput out) throws IOException {
-        out.writeList(tombstones);
-    }
-
-    @Override
-    public Diff<Metadata.Custom> diff(final Metadata.Custom previous) {
-        return new IndexGraveyardDiff((IndexGraveyard) previous, this);
-    }
-
-    public static NamedDiff<Metadata.Custom> readDiffFrom(final StreamInput in) throws IOException {
-        return new IndexGraveyardDiff(in);
-    }
-
-    public static IndexGraveyard.Builder builder() {
-        return new IndexGraveyard.Builder();
-    }
-
-    public static IndexGraveyard.Builder builder(final IndexGraveyard graveyard) {
-        return new IndexGraveyard.Builder(graveyard);
-    }
-
-    /**
-     * A class to build an IndexGraveyard.
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static final class Builder {
-        private List<Tombstone> tombstones;
-        private int numPurged = -1;
-        private final long currentTime = System.currentTimeMillis();
-
-        private Builder() {
-            tombstones = new ArrayList<>();
-        }
-
-        private Builder(IndexGraveyard that) {
-            tombstones = new ArrayList<>(that.getTombstones());
-        }
-
-        /**
-         * A copy of the current tombstones in the builder.
-         */
-        public List<Tombstone> tombstones() {
-            return Collections.unmodifiableList(tombstones);
-        }
-
-        /**
-         * Add a deleted index to the list of tombstones in the cluster state.
-         */
-        public Builder addTombstone(final Index index) {
-            tombstones.add(new Tombstone(index, currentTime));
-            return this;
-        }
-
-        /**
-         * Add a set of deleted indexes to the list of tombstones in the cluster state.
-         */
-        public Builder addTombstones(final Collection<Index> indices) {
-            for (Index index : indices) {
-                addTombstone(index);
-            }
-            return this;
-        }
-
-        /**
-         * Add a list of tombstones to the graveyard.
-         */
-        Builder addBuiltTombstones(final List<Tombstone> tombstones) {
-            this.tombstones.addAll(tombstones);
-            return this;
-        }
-
-        /**
-         * Get the number of tombstones that were purged.  This should *only* be called
-         * after build() has been called.
-         */
-        public int getNumPurged() {
-            assert numPurged != -1;
-            return numPurged;
-        }
-
-        /**
-         * Purge tombstone entries.  Returns the number of entries that were purged.
-         * <p>
-         * Tombstones are purged if the number of tombstones in the list
-         * is greater than the input parameter of maximum allowed tombstones.
-         * Tombstones are purged until the list is equal to the maximum allowed.
-         */
-        private int purge(final int maxTombstones) {
-            int count = tombstones().size() - maxTombstones;
-            if (count <= 0) {
-                return 0;
-            }
-            tombstones = tombstones.subList(count, tombstones.size());
-            return count;
-        }
-
-        public IndexGraveyard build() {
-            return build(Settings.EMPTY);
-        }
-
-        public IndexGraveyard build(final Settings settings) {
-            // first, purge the necessary amount of entries
-            numPurged = purge(SETTING_MAX_TOMBSTONES.get(settings));
-            return new IndexGraveyard(tombstones);
-        }
-    }
-
-    /**
-     * A class representing a diff of two IndexGraveyard objects.
-     *
-     * @opensearch.internal
-     */
-    public static final class IndexGraveyardDiff implements NamedDiff<Metadata.Custom> {
-
-        private final List<Tombstone> added;
-        private final int removedCount;
-
-        IndexGraveyardDiff(final StreamInput in) throws IOException {
-            added = Collections.unmodifiableList(in.readList((streamInput) -> new Tombstone(streamInput)));
-            removedCount = in.readVInt();
-        }
-
-        IndexGraveyardDiff(final IndexGraveyard previous, final IndexGraveyard current) {
-            final List<Tombstone> previousTombstones = previous.tombstones;
-            final List<Tombstone> currentTombstones = current.tombstones;
-            final List<Tombstone> added;
-            final int removed;
-            if (previousTombstones.isEmpty()) {
-                // nothing will have been removed, and all entries in current are new
-                added = new ArrayList<>(currentTombstones);
-                removed = 0;
-            } else if (currentTombstones.isEmpty()) {
-                // nothing will have been added, and all entries in previous are removed
-                added = Collections.emptyList();
-                removed = previousTombstones.size();
-            } else {
+    private static final ObjectParser<List<Tombstone>, Void> GRAVEYARD_PARSER;
+ */
+            return result;
                 // look through the back, starting from the end, for added tombstones
-                final Tombstone lastAddedTombstone = previousTombstones.get(previousTombstones.size() - 1);
-                final int addedIndex = currentTombstones.lastIndexOf(lastAddedTombstone);
-                if (addedIndex < currentTombstones.size()) {
-                    added = currentTombstones.subList(addedIndex + 1, currentTombstones.size());
-                } else {
-                    added = Collections.emptyList();
-                }
-                // look from the front for the removed tombstones
-                final Tombstone firstTombstone = currentTombstones.get(0);
-                int idx = previousTombstones.indexOf(firstTombstone);
-                if (idx < 0) {
+            return numPurged;
+                // nothing will have been removed, and all entries in current are new
                     // the first tombstone in the current list wasn't found in the previous list,
-                    // which means all tombstones from the previous list have been deleted.
-                    assert added.equals(currentTombstones); // all previous are removed, so the current list must be the same as the added
-                    idx = previousTombstones.size();
-                }
-                removed = idx;
-            }
-            this.added = Collections.unmodifiableList(added);
-            this.removedCount = removed;
-        }
-
-        @Override
-        public void writeTo(final StreamOutput out) throws IOException {
-            out.writeList(added);
-            out.writeVInt(removedCount);
-        }
-
-        @Override
-        public IndexGraveyard apply(final Metadata.Custom previous) {
-            final IndexGraveyard old = (IndexGraveyard) previous;
-            if (removedCount > old.tombstones.size()) {
-                throw new IllegalStateException(
-                    "IndexGraveyardDiff cannot remove [" + removedCount + "] entries from [" + old.tombstones.size() + "] tombstones."
-                );
-            }
-            final List<Tombstone> newTombstones = new ArrayList<>(old.tombstones.subList(removedCount, old.tombstones.size()));
-            for (Tombstone tombstone : added) {
-                newTombstones.add(tombstone);
-            }
-            return new IndexGraveyard.Builder().addBuiltTombstones(newTombstones).build();
-        }
-
-        /** The index tombstones that were added between two states */
-        public List<Tombstone> getAdded() {
-            return added;
-        }
-
-        /** The number of index tombstones that were removed between two states */
-        public int getRemovedCount() {
-            return removedCount;
-        }
-
-        @Override
-        public String getWriteableName() {
-            return TYPE;
-        }
-    }
-
-    /**
-     * An individual tombstone entry for representing a deleted index.
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static final class Tombstone implements ToXContentObject, Writeable {
-
-        private static final String INDEX_KEY = "index";
-        private static final String DELETE_DATE_IN_MILLIS_KEY = "delete_date_in_millis";
-        private static final String DELETE_DATE_KEY = "delete_date";
-        private static final ObjectParser<Tombstone.Builder, Void> TOMBSTONE_PARSER;
-        static {
-            TOMBSTONE_PARSER = new ObjectParser<>("tombstoneEntry", Tombstone.Builder::new);
-            TOMBSTONE_PARSER.declareObject(
-                Tombstone.Builder::index,
-                (parser, context) -> Index.fromXContent(parser),
-                new ParseField(INDEX_KEY)
-            );
-            TOMBSTONE_PARSER.declareLong(Tombstone.Builder::deleteDateInMillis, new ParseField(DELETE_DATE_IN_MILLIS_KEY));
-            TOMBSTONE_PARSER.declareString((b, s) -> {}, new ParseField(DELETE_DATE_KEY));
-        }
-
-        static final DateFormatter FORMATTER = DateFormatter.forPattern("strict_date_optional_time").withZone(ZoneOffset.UTC);
-
-        static ContextParser<Void, Tombstone> getParser() {
-            return (parser, context) -> TOMBSTONE_PARSER.apply(parser, null).build();
-        }
-
-        private final Index index;
-        private final long deleteDateInMillis;
-
-        private Tombstone(final Index index, final long deleteDateInMillis) {
-            Objects.requireNonNull(index);
-            if (deleteDateInMillis < 0L) {
-                throw new IllegalArgumentException("invalid deleteDateInMillis [" + deleteDateInMillis + "]");
-            }
-            this.index = index;
-            this.deleteDateInMillis = deleteDateInMillis;
-        }
-
-        // create from stream
+        return (obj instanceof IndexGraveyard) && Objects.equals(tombstones, ((IndexGraveyard) obj).tombstones);
         private Tombstone(StreamInput in) throws IOException {
-            index = new Index(in);
-            deleteDateInMillis = in.readLong();
-        }
-
-        /**
-         * The deleted index.
-         */
-        public Index getIndex() {
+        for (Tombstone tombstone : tombstones) {
             return index;
-        }
-
-        /**
-         * The date in milliseconds that the index deletion event occurred, used for logging/debugging.
+        private int purge(final int maxTombstones) {
+        public Index getIndex() {
+            return build(Settings.EMPTY);
+    /**
+                // nothing will have been added, and all entries in previous are removed
+        public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
          */
-        public long getDeleteDateInMillis() {
-            return deleteDateInMillis;
+         */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    }
+import org.opensearch.core.ParseField;
+                    // which means all tombstones from the previous list have been deleted.
+        public int getNumPurged() {
+        static {
+                final int addedIndex = currentTombstones.lastIndexOf(lastAddedTombstone);
+    @Override
+        public List<Tombstone> getAdded() {
         }
-
         @Override
+        return tombstones;
+            TOMBSTONE_PARSER.declareObject(
+ * this work for additional information regarding copyright
+            }
+     * very unlikely risk that if there are greater than MAX_TOMBSTONES index
+import org.opensearch.core.xcontent.ContextParser;
+    public static final class Tombstone implements ToXContentObject, Writeable {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+    public static final class Builder {
+                Tombstone.Builder::index,
+import org.opensearch.common.settings.Setting;
+            }
+        // create from stream
+        public String getWriteableName() {
+        for (Tombstone tombstone : tombstones) {
+/*
+ * <p>
+                if (idx < 0) {
+         * <p>
+            }
+import java.util.List;
+        private static final class Builder {
+            return this;
+import java.time.ZoneOffset;
+        }
+import java.time.Instant;
+        @Override
+                assert deleteDateInMillis > -1L;
+        }
+            // first, purge the necessary amount of entries
+ *
+        private Builder(IndexGraveyard that) {
+    @PublicApi(since = "1.0.0")
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+        out.writeList(tombstones);
+            if (deleteDateInMillis < 0L) {
+                }
+         * @opensearch.internal
+    private static final ParseField TOMBSTONES_FIELD = new ParseField("tombstones");
+            index.toXContent(builder, params);
         public void writeTo(final StreamOutput out) throws IOException {
-            index.writeTo(out);
-            out.writeLong(deleteDateInMillis);
         }
-
-        @Override
-        public boolean equals(final Object other) {
-            if (this == other) {
+    public IndexGraveyard(final StreamInput in) throws IOException {
                 return true;
             }
-            if (other == null || getClass() != other.getClass()) {
-                return false;
-            }
-            Tombstone that = (Tombstone) other;
-            return index.equals(that.index) && deleteDateInMillis == that.deleteDateInMillis;
+    public static IndexGraveyard.Builder builder(final IndexGraveyard graveyard) {
+        return new IndexGraveyard.Builder(graveyard);
         }
-
-        @Override
-        public int hashCode() {
-            int result = index.hashCode();
-            result = 31 * result + Long.hashCode(deleteDateInMillis);
-            return result;
-        }
-
-        @Override
-        public String toString() {
-            String date = FORMATTER.format(Instant.ofEpochMilli(deleteDateInMillis));
-            return "[index=" + index + ", deleteDate=" + date + "]";
-        }
-
-        @Override
-        public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
-            builder.startObject();
-            builder.field(INDEX_KEY);
-            index.toXContent(builder, params);
+ *
+            return added;
+            out.writeList(added);
+    }
+        IndexGraveyardDiff(final StreamInput in) throws IOException {
+         * is greater than the input parameter of maximum allowed tombstones.
+    public boolean equals(Object obj) {
+    /**
+            index = new Index(in);
             builder.timeField(DELETE_DATE_IN_MILLIS_KEY, DELETE_DATE_KEY, deleteDateInMillis);
+package org.opensearch.cluster.metadata;
+         */
+            public void deleteDateInMillis(final long deleteDate) {
+        public IndexGraveyard build(final Settings settings) {
+    public String toString() {
+                return true;
+        }
+    @PublicApi(since = "1.0.0")
+    }
+            tombstones = new ArrayList<>();
+        @Override
+import org.opensearch.cluster.Diff;
+        public void writeTo(final StreamOutput out) throws IOException {
+            Tombstone that = (Tombstone) other;
+        static ContextParser<Void, Tombstone> getParser() {
+     * missed index deletions that it may need to process.
+     */
+    }
+    public static IndexGraveyard fromXContent(final XContentParser parser) throws IOException {
+        private Builder() {
+            }
+    @Override
+            numPurged = purge(SETTING_MAX_TOMBSTONES.get(settings));
+                removed = 0;
+        /** The index tombstones that were added between two states */
+    public List<Tombstone> getTombstones() {
+            final int removed;
+            if (removedCount > old.tombstones.size()) {
+    private final List<Tombstone> tombstones;
+    public void writeTo(final StreamOutput out) throws IOException {
+            final List<Tombstone> newTombstones = new ArrayList<>(old.tombstones.subList(removedCount, old.tombstones.size()));
+         */
+        }
+            }
+    @Override
+ * compatible open source license.
+        }
+            this.index = index;
+    private IndexGraveyard(final List<Tombstone> list) {
+        }
+    public EnumSet<Metadata.XContentContext> context() {
+     * @opensearch.api
+        // TODO: Only including this method to work around bug in japicmp.
+    public Version getMinimalSupportedVersion() {
+    public static final Setting<Integer> SETTING_MAX_TOMBSTONES = Setting.intSetting(
+import org.opensearch.core.xcontent.ToXContentObject;
+        public IndexGraveyard build() {
+            }
+ *
+         */
+            if (this == other) {
+        @Override
             return builder.endObject();
         }
-
+        IndexGraveyardDiff(final IndexGraveyard previous, final IndexGraveyard current) {
+            }
+import org.opensearch.core.common.io.stream.StreamOutput;
         /**
-         * A builder for building tombstone entries.
-         *
-         * @opensearch.internal
-         */
-        private static final class Builder {
-            private Index index;
+import org.opensearch.cluster.NamedDiff;
+                added = Collections.emptyList();
+         * Add a set of deleted indexes to the list of tombstones in the cluster state.
+            final IndexGraveyard old = (IndexGraveyard) previous;
+        public Builder addTombstones(final Collection<Index> indices) {
+ * tombstones remain in the cluster state for a fixed period of time, after which
+        return new IndexGraveyardDiff((IndexGraveyard) previous, this);
+         * Add a list of tombstones to the graveyard.
+        /**
+            if (count <= 0) {
+ * Unless required by applicable law or agreed to in writing,
+                return 0;
             private long deleteDateInMillis = -1L;
-
-            public void index(final Index index) {
-                this.index = index;
+     * @opensearch.internal
+        @Override
+import java.util.Collection;
+import org.opensearch.core.xcontent.XContentBuilder;
+                    "IndexGraveyardDiff cannot remove [" + removedCount + "] entries from [" + old.tombstones.size() + "] tombstones."
+        /**
             }
-
-            public void deleteDateInMillis(final long deleteDate) {
-                this.deleteDateInMillis = deleteDate;
+            return new IndexGraveyard(tombstones);
+ * not use this file except in compliance with the License.
+        /**
+    @Override
+         */
+    static {
+ * under the License.
+    }
+            added = Collections.unmodifiableList(in.readList((streamInput) -> new Tombstone(streamInput)));
+         * Add a deleted index to the list of tombstones in the cluster state.
+    @Override
+    }
+     *
+        }
+            result = 31 * result + Long.hashCode(deleteDateInMillis);
+                (parser, context) -> Index.fromXContent(parser),
+    public String getWriteableName() {
+                final Tombstone firstTombstone = currentTombstones.get(0);
+                final Tombstone lastAddedTombstone = previousTombstones.get(previousTombstones.size() - 1);
+     * Setting for the maximum tombstones allowed in the cluster state;
+    public static NamedDiff<Metadata.Custom> readDiffFrom(final StreamInput in) throws IOException {
+        private int numPurged = -1;
+     * An individual tombstone entry for representing a deleted index.
+        /**
+ * GitHub history for details.
+     */
+        }
+        return Metadata.API_AND_GATEWAY;
+ */
             }
-
-            public Tombstone build() {
-                assert index != null;
-                assert deleteDateInMillis > -1L;
-                return new Tombstone(index, deleteDateInMillis);
+            assert numPurged != -1;
             }
+/*
+ * Licensed to Elasticsearch under one or more contributor
+    }
         }
     }
-
-    @Override
-    @Deprecated(forRemoval = true) // Implementation is identical to NamedDiffable
-    public Version getMinimalSupportedVersion() {
-        // TODO: Only including this method to work around bug in japicmp.
-        return Version.CURRENT.minimumCompatibilityVersion();
+                int idx = previousTombstones.indexOf(firstTombstone);
+            if (other == null || getClass() != other.getClass()) {
+                newTombstones.add(tombstone);
+ */
+    /**
+            if (tombstone.getIndex().equals(index)) {
+            this.tombstones.addAll(tombstones);
     }
-
+            tombstones.add(new Tombstone(index, currentTime));
+ * SPDX-License-Identifier: Apache-2.0
+ * You may obtain a copy of the License at
+        /** The number of index tombstones that were removed between two states */
+            deleteDateInMillis = in.readLong();
+        }
+            return "[index=" + index + ", deleteDate=" + date + "]";
+        }
+        static final DateFormatter FORMATTER = DateFormatter.forPattern("strict_date_optional_time").withZone(ZoneOffset.UTC);
+ * A collection of tombstones for explicitly marking indices as deleted in the cluster state.
+            return removedCount;
+ */
+        assert list != null;
+        }
+import org.opensearch.common.time.DateFormatter;
+ * ownership. Elasticsearch licenses this file to you under
+        private static final String DELETE_DATE_KEY = "delete_date";
+    }
+     */
+            for (Tombstone tombstone : added) {
+        /**
+        }
+                } else {
+        private Tombstone(final Index index, final long deleteDateInMillis) {
+            builder.field(INDEX_KEY);
+            this.added = Collections.unmodifiableList(added);
+            this.deleteDateInMillis = deleteDateInMillis;
+        tombstones = Collections.unmodifiableList(list);
+     */
+        return tombstones.hashCode();
+import java.util.EnumSet;
+    @Deprecated(forRemoval = true) // Implementation is identical to NamedDiffable
+    }
+            return deleteDateInMillis;
+        @Override
+        private final long currentTime = System.currentTimeMillis();
+        /**
+        private static final ObjectParser<Tombstone.Builder, Void> TOMBSTONE_PARSER;
+import org.opensearch.core.common.io.stream.StreamInput;
+            tombstones = tombstones.subList(count, tombstones.size());
+            tombstones = new ArrayList<>(that.getTombstones());
+     * A class representing a diff of two IndexGraveyard objects.
+        public String toString() {
+        public IndexGraveyard apply(final Metadata.Custom previous) {
+            removedCount = in.readVInt();
+    public static final class IndexGraveyardDiff implements NamedDiff<Metadata.Custom> {
+         * Get the number of tombstones that were purged.  This should *only* be called
+            index.writeTo(out);
+        public List<Tombstone> tombstones() {
+            this.removedCount = removed;
+            return (parser, context) -> TOMBSTONE_PARSER.apply(parser, null).build();
+                addTombstone(index);
+            return TYPE;
+    @Override
+        }
+        }
+    /**
+        }
+/*
+public final class IndexGraveyard implements Metadata.Custom {
+ * license agreements. See the NOTICE file distributed with
+@PublicApi(since = "1.0.0")
+import org.opensearch.common.annotation.PublicApi;
+    public Diff<Metadata.Custom> diff(final Metadata.Custom previous) {
+import java.util.Collections;
+                removed = previousTombstones.size();
+        Builder addBuiltTombstones(final List<Tombstone> tombstones) {
+ * KIND, either express or implied.  See the License for the
+        return Version.CURRENT.minimumCompatibilityVersion();
+        /**
+         *
+ * software distributed under the License is distributed on an
+     * prevents the cluster state size from exploding too large, but it opens the
+        "cluster.indices.tombstones.size",
+    @Override
+        return builder.endArray();
+            return Collections.unmodifiableList(tombstones);
+                new ParseField(INDEX_KEY)
+        private final List<Tombstone> added;
+                // look from the front for the removed tombstones
+        GRAVEYARD_PARSER = new ObjectParser<>("index_graveyard", ArrayList::new);
+            final List<Tombstone> currentTombstones = current.tombstones;
+        @Override
+            return this;
+    public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
+                );
+            } else {
+        private final Index index;
+            Objects.requireNonNull(index);
+import java.util.Objects;
+            TOMBSTONE_PARSER.declareLong(Tombstone.Builder::deleteDateInMillis, new ParseField(DELETE_DATE_IN_MILLIS_KEY));
+import org.opensearch.common.settings.Settings;
+                throw new IllegalArgumentException("invalid deleteDateInMillis [" + deleteDateInMillis + "]");
+         * Tombstones are purged if the number of tombstones in the list
+        return new IndexGraveyard.Builder();
+        private static final String DELETE_DATE_IN_MILLIS_KEY = "delete_date_in_millis";
+                    idx = previousTombstones.size();
+        }
+            if (previousTombstones.isEmpty()) {
+    public boolean containsIndex(final Index index) {
+    }
+    }
+        GRAVEYARD_PARSER.declareObjectArray(List::addAll, Tombstone.getParser(), TOMBSTONES_FIELD);
+    );
+                assert index != null;
+        private final int removedCount;
+        @Override
+                }
+ * they are purged.
+            return count;
+    }
+        this.tombstones = Collections.unmodifiableList(in.readList(Tombstone::new));
+            return index.equals(that.index) && deleteDateInMillis == that.deleteDateInMillis;
+            int count = tombstones().size() - maxTombstones;
+        private final long deleteDateInMillis;
+            return this;
+ * The cluster state contains a list of index tombstones for indices that have been
+        }
+    }
+import org.opensearch.core.xcontent.ObjectParser;
+         */
+    /**
+            TOMBSTONE_PARSER = new ObjectParser<>("tombstoneEntry", Tombstone.Builder::new);
+     */
+        return new IndexGraveyardDiff(in);
+        /**
+            } else if (currentTombstones.isEmpty()) {
+            public void index(final Index index) {
+ * @opensearch.api
+import org.opensearch.Version;
+ * specific language governing permissions and limitations
+            final List<Tombstone> added;
+ *
+                this.index = index;
+import org.opensearch.core.common.io.stream.Writeable;
+            tombstone.toXContent(builder, params);
+        public Builder addTombstone(final Index index) {
+ * The OpenSearch Contributors require contributions made to
+            String date = FORMATTER.format(Instant.ofEpochMilli(deleteDateInMillis));
+            }
+ * deleted in the cluster.  Because cluster states are processed asynchronously by
+                added = new ArrayList<>(currentTombstones);
+         */
+    /**
+                return false;
+        }
+    }
+     * deletions while a node was offline, when it comes back online, it will have
+                    added = Collections.emptyList();
+                throw new IllegalStateException(
+                removed = idx;
+        public long getDeleteDateInMillis() {
+            final List<Tombstone> previousTombstones = previous.tombstones;
+         * A copy of the current tombstones in the builder.
+    }
+     *
+import org.opensearch.core.index.Index;
+ * nodes and a node could be removed from the cluster for a period of time, the
+    public static final String TYPE = "index-graveyard";
+                this.deleteDateInMillis = deleteDate;
+            builder.startObject();
+        builder.startArray(TOMBSTONES_FIELD.getPreferredName());
 }
+     * Returns true if the graveyard contains a tombstone for the given index.
+        private List<Tombstone> tombstones;
+     * Get the current unmodifiable index tombstone list.
+        }
+        Setting.Property.NodeScope
+/**
+            return new IndexGraveyard.Builder().addBuiltTombstones(newTombstones).build();
+    public int hashCode() {
+         * Tombstones are purged until the list is equal to the maximum allowed.
+     * A class to build an IndexGraveyard.
+        }
+        public boolean equals(final Object other) {
+        }
+            int result = index.hashCode();
+    }
+         * The date in milliseconds that the index deletion event occurred, used for logging/debugging.
+        500, // the default maximum number of tombstones
+     *
+            public Tombstone build() {
+                return new Tombstone(index, deleteDateInMillis);
+    public static IndexGraveyard.Builder builder() {
+            TOMBSTONE_PARSER.declareString((b, s) -> {}, new ParseField(DELETE_DATE_KEY));
+        return new IndexGraveyard(GRAVEYARD_PARSER.parse(parser, null));
+            );
+         */
+            for (Index index : indices) {
+import java.io.IOException;
+        }
+import java.util.ArrayList;
+        return "IndexGraveyard[" + tombstones + "]";
+        return TYPE;
+         * after build() has been called.
+ * this file be licensed under the Apache-2.0 license or a
+    }
+     * @opensearch.api
+    }
+         * The deleted index.
+    @Override
+        private static final String INDEX_KEY = "index";
+                    added = currentTombstones.subList(addedIndex + 1, currentTombstones.size());
+         * Purge tombstone entries.  Returns the number of entries that were purged.
+import org.opensearch.core.xcontent.XContentParser;
+            out.writeVInt(removedCount);
+    @Override
+        public int hashCode() {
+     */
+            out.writeLong(deleteDateInMillis);
+        }
+         * A builder for building tombstone entries.
+            private Index index;
+                    assert added.equals(currentTombstones); // all previous are removed, so the current list must be the same as the added

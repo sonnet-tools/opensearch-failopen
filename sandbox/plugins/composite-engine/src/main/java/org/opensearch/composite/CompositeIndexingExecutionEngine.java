@@ -1,633 +1,579 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.composite;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.composite.merge.CompositeMerger;
-import org.opensearch.composite.stats.CompositeShardStatsTracker;
-import org.opensearch.composite.stats.CompositeStatsProvider;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.dataformat.DataFormat;
-import org.opensearch.index.engine.dataformat.DataFormatPlugin;
-import org.opensearch.index.engine.dataformat.DataFormatRegistry;
-import org.opensearch.index.engine.dataformat.DocumentInput;
-import org.opensearch.index.engine.dataformat.IndexingEngineConfig;
-import org.opensearch.index.engine.dataformat.IndexingExecutionEngine;
-import org.opensearch.index.engine.dataformat.MergeInput;
-import org.opensearch.index.engine.dataformat.MergeResult;
-import org.opensearch.index.engine.dataformat.Merger;
-import org.opensearch.index.engine.dataformat.ReaderManagerConfig;
-import org.opensearch.index.engine.dataformat.RefreshInput;
-import org.opensearch.index.engine.dataformat.RefreshResult;
-import org.opensearch.index.engine.dataformat.Writer;
-import org.opensearch.index.engine.dataformat.WriterConfig;
-import org.opensearch.index.engine.exec.EngineReaderManager;
-import org.opensearch.index.engine.exec.Segment;
-import org.opensearch.index.engine.exec.WriterFileSet;
-import org.opensearch.index.engine.exec.commit.Committer;
-import org.opensearch.index.engine.exec.commit.IndexStoreProvider;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.store.FormatChecksumStrategy;
-import org.opensearch.index.store.Store;
-import org.opensearch.plugin.stats.StatsRecorder;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
-
-import org.jspecify.annotations.NonNull;
-
-/**
- * A composite {@link IndexingExecutionEngine} that orchestrates indexing across
- * multiple per-format engines behind a single interface.
- * <p>
- * The engine delegates writer creation, refresh, file deletion, and document input
- * creation to each per-format engine. A primary engine is designated based on the
- * configured primary format name and is used for merge operations.
- * <p>
- * The composite {@link DataFormat} exposed by this engine represents the union of
- * all per-format supported field type capabilities.
- *
- * @opensearch.experimental
- */
-@ExperimentalApi
-public class CompositeIndexingExecutionEngine implements IndexingExecutionEngine<CompositeDataFormat, CompositeDocumentInput> {
-
-    private static final Logger logger = LogManager.getLogger(CompositeIndexingExecutionEngine.class);
-
-    private final IndexingExecutionEngine<?, ?> primaryEngine;
-    private final Set<IndexingExecutionEngine<?, ?>> secondaryEngines;
-    private final CompositeDataFormat compositeDataFormat;
-    private final Committer committer;
-    private final IndexSettings indexSettings;
-    private final CompositeMerger merger;
-    private final CompositeShardStatsTracker statsTracker = new CompositeShardStatsTracker();
-    private final ShardId shardId;
-    private volatile Map<String, Collection<String>> pendingDeletes = new ConcurrentHashMap<>();
-
-    /**
-     * Constructs a CompositeIndexingExecutionEngine by reading index settings to
-     * determine the primary and secondary data formats, validating that all configured
-     * formats are registered, and creating per-format engines via the discovered
+                    tempProviders.put(eng.getDataFormat(), eng.getProvider());
      * {@link DataFormatPlugin} instances.
-     * <p>
-     * The primary engine is the authoritative format used for merge operations and
-     * commit coordination. Secondary engines receive writes alongside the primary but
-     * are not used as the merge authority.
-     * <p>
-     * The writer pool is created internally and initialized with a writer supplier
-     * that creates {@link CompositeWriter} instances bound to this engine.
-     *
-     * @param indexSettings       the index settings containing composite configuration
-     * @param mapperService       the mapper service for field mapping resolution
-     * @param committer           the committer for durable catalog snapshot persistence during flush
-     * @param dataFormatRegistry registry containing information about available data formats on the node
-     * @param store store for the current index
-     * @param checksumStrategies  per-format checksum strategies from the directory, keyed by format name.
-     *                            May be null or empty if the directory is not yet available.
-     * @throws IllegalArgumentException if any configured format is not registered
-     * @throws IllegalStateException if committer is null
-     */
-    public CompositeIndexingExecutionEngine(
-        IndexSettings indexSettings,
-        MapperService mapperService,
-        Committer committer,
-        DataFormatRegistry dataFormatRegistry,
-        Store store,
-        Map<String, FormatChecksumStrategy> checksumStrategies
-    ) {
-        Objects.requireNonNull(indexSettings, "indexSettings must not be null");
-        if (committer == null) {
-            throw new IllegalStateException("Committer must not be null");
-        }
-
-        Settings settings = indexSettings.getSettings();
-
-        String primaryFormatName = CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.get(settings);
-        List<String> secondaryFormatNames = CompositeDataFormatPlugin.SECONDARY_DATA_FORMATS.get(settings);
-
-        validateFormatsRegistered(dataFormatRegistry, primaryFormatName, secondaryFormatNames);
-
-        Map<String, FormatChecksumStrategy> strategies = checksumStrategies != null ? checksumStrategies : Map.of();
-        IndexingEngineConfig engineSettings = new IndexingEngineConfig(
-            committer,
-            mapperService,
-            indexSettings,
-            store,
-            dataFormatRegistry,
-            strategies
-        );
-
-        List<DataFormat> allFormats = new ArrayList<>();
-        DataFormat primaryFormat = dataFormatRegistry.format(primaryFormatName);
-        this.primaryEngine = dataFormatRegistry.getIndexingEngine(engineSettings, primaryFormat);
-        allFormats.add(primaryFormat);
-
-        List<IndexingExecutionEngine<?, ?>> secondaries = new ArrayList<>();
-        for (String secondaryName : secondaryFormatNames) {
-            DataFormat secondaryFormat = dataFormatRegistry.format(secondaryName);
-            secondaries.add(dataFormatRegistry.getIndexingEngine(engineSettings, secondaryFormat));
-            allFormats.add(secondaryFormat);
-        }
-        this.secondaryEngines = Set.copyOf(secondaries);
-
-        this.compositeDataFormat = new CompositeDataFormat(primaryFormat, allFormats);
-        this.committer = committer;
-        this.indexSettings = indexSettings;
-        this.merger = new CompositeMerger(this, compositeDataFormat);
-        this.shardId = store != null ? store.shardId() : null;
-
-        // Register the per-shard tracker so REST endpoints can read live counters; unregistered
-        // in close(). Rolls back the registration if anything below throws, to avoid leaking it.
-        CompositeStatsProvider provider = CompositeStatsProvider.getInstance();
+                    }
+import org.opensearch.index.engine.exec.commit.IndexStoreProvider;
         boolean registered = false;
-        try {
-            if (provider != null && shardId != null) {
-                provider.register(shardId, statsTracker);
-                registered = true;
-            }
+        this.secondaryEngines = Set.copyOf(secondaries);
+        }
+import org.opensearch.index.engine.dataformat.DataFormatRegistry;
+                    statsTracker.incRefreshMergeFailures();
+        long totalBytes = writerFiles.stream()
+        this.shardId = store != null ? store.shardId() : null;
+     *
+        List<DataFormat> allFormats = new ArrayList<>();
+     */
+        }
+        Map<DataFormat, RefreshResult> resultsByFormat = new LinkedHashMap<>();
+     * @return a new composite document input
         } catch (Throwable t) {
-            if (registered) {
-                try {
-                    provider.unregister(shardId);
-                } catch (Throwable rollbackErr) {
-                    logger.warn("Failed to unregister composite stats tracker during constructor rollback", rollbackErr);
-                }
-            }
-            throw t;
-        }
     }
-
-    /**
-     * Validates that the primary and all secondary data format plugins are registered.
-     *
-     * @param registry the discovered data format plugins keyed by format name
-     * @param primaryFormatName the configured primary format name
-     * @param secondaryFormatNames the configured secondary format names
-     * @throws IllegalArgumentException if any configured format is not registered
-     */
-    static void validateFormatsRegistered(DataFormatRegistry registry, String primaryFormatName, List<String> secondaryFormatNames) {
-        validateFormatIsRegistered(registry, primaryFormatName);
-        for (String secondaryName : secondaryFormatNames) {
-            validateFormatIsRegistered(registry, secondaryName);
-            if (secondaryName.equals(primaryFormatName)) {
+     * engine's provider based on the requested data format.
+        }
+        }
+        Map<String, Collection<String>> allFailed = new HashMap<>();
+     * Deletes files from all per-format engines. If any engine fails, the first exception
+                    }
+    private RefreshResult doRefresh(RefreshInput refreshInput) throws IOException {
+                                .addAll(pendingDeletionPerFormat.getValue());
+        Map<String, Collection<String>> unmodifiable = new HashMap<>();
+                            : "refresh result segments must contain all configured formats";
+                                onlyNew.size(),
+package org.opensearch.composite;
+        // Merge on refresh: when multiple writer segments exist and size is within threshold,
+    }
+        }
+        for (Map.Entry<String, Set<String>> entry : filesToDelete.entrySet()) {
+import org.opensearch.index.engine.dataformat.MergeResult;
                 throw new IllegalStateException(
-                    "Secondary data format [" + secondaryName + "] is the same as primary :[" + primaryFormatName + "]"
-                );
-            }
-        }
-    }
-
+    /** {@inheritDoc} Returns the composite data format representing all per-format capabilities. */
+     * Omits dropped generations and segments without a file set for {@code ownFormat}.
+            try {
+            List<Segment> onlyNew = newSegments.stream().filter(s -> existingGens.contains(s.generation()) == false).toList();
+     * {@code null} if every delegate is healthy.
+import org.opensearch.common.annotation.ExperimentalApi;
     private static void validateFormatIsRegistered(DataFormatRegistry registry, String dataFormatName) {
-        if (dataFormatName == null || dataFormatName.isBlank()) {
-            throw new IllegalArgumentException("Primary data format name must not be null or blank");
-        }
-        if (registry.format(dataFormatName) == null) {
-            throw new IllegalArgumentException(
-                "Primary data format ["
-                    + dataFormatName
-                    + "] is not registered on this node. Available formats: "
-                    + registry.getRegisteredFormats()
-            );
-        }
-    }
-
-    /**
-     * Creates a {@link CompositeWriter} that fans out writes to all per-format engines.
      *
-     * @param config the writer configuration
-     * @return a composite writer bound to this engine
+ * <p>
+    private final CompositeMerger merger;
+        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
+    private volatile Map<String, Collection<String>> pendingDeletes = new ConcurrentHashMap<>();
+import org.opensearch.index.engine.exec.EngineReaderManager;
+        return total;
+import org.opensearch.index.engine.exec.Segment;
+                }
+import java.util.Objects;
+    }
+            maxAllowedDocs = Math.min(maxAllowedDocs, engine.maxIndexableDocs());
      */
-    @Override
-    public Writer<CompositeDocumentInput> createWriter(WriterConfig config) {
-        return new CompositeWriter(this, config);
+import org.opensearch.index.engine.dataformat.DocumentInput;
+        return totalBytes <= maxBytes;
+        }
+            total += engine.getHeapBytesUsed();
+                continue;
     }
-
-    /** {@inheritDoc} Delegates to the primary engine's merger. */
+    public CompositeDataFormat getDataFormat() {
+        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
+        Map<String, Set<String>> filesToDelete = new HashMap<>();
+            if (onlyNew.size() > 1) {
+        }
+                continue;
+/**
+            throw firstException;
+     * @param dataFormatRegistry registry containing information about available data formats on the node
+                filesToDelete.compute(entry.getKey(), (k, v) -> {
     @Override
-    public Merger getMerger() {
-        return merger;
+            readerManagers.putAll(config.registry().getReaderManager(readerManagerConfig(config, engine.getDataFormat())));
+        statsTracker.incRefreshTotal();
+            resultsByFormat.put(engine.getDataFormat(), secResults.get(i++));
+     */
+ * The engine delegates writer creation, refresh, file deletion, and document input
     }
-
+        );
+            newSegments.add(builder.build());
+                                result.size(),
+import org.opensearch.index.engine.dataformat.Merger;
+import org.opensearch.index.store.Store;
+                        result.add(mergedSegment);
+                failed.forEach((k, v) -> allFailed.computeIfAbsent(k, x -> new ArrayList<>()).addAll(v));
+    /** Returns this shard's composite stats tracker, used by the writer and merger to count. */
+import org.opensearch.index.engine.dataformat.Writer;
+        DataFormat primaryFormat = dataFormatRegistry.format(primaryFormatName);
+        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
+    /**
+import java.util.LinkedHashMap;
+                } catch (Throwable rollbackErr) {
+    }
+            buildSegment(entry.getKey(), entry.getValue(), mergedByGen, allDropped);
+            public FormatStore getStore(DataFormat dataFormat) {
+    private void tryDeletePendingFiles() throws IOException {
+                    firstException = e;
+    }
+        List<RefreshResult> secResults = new ArrayList<>();
+            Map<String, Collection<String>> failed = primaryEngine.deleteFiles(filesToDelete);
+                    MergeResult mergeResult = StatsRecorder.recordTimeMillis(
+    private final IndexingExecutionEngine<?, ?> primaryEngine;
+ * SPDX-License-Identifier: Apache-2.0
+                IndexStoreProvider provider = providers.get(dataFormat);
+        this.compositeDataFormat = new CompositeDataFormat(primaryFormat, allFormats);
+    private static @NonNull Map<String, Collection<String>> getFilesToDelete(List<Segment> segmentsToPurge) {
+        }
+import org.opensearch.index.engine.dataformat.DataFormatPlugin;
+                try {
+        Map<String, FormatChecksumStrategy> checksumStrategies
+     * is thrown with subsequent failures added as suppressed exceptions.
+    /**
+import java.util.List;
+import org.opensearch.index.engine.dataformat.MergeInput;
+            if (secondaryName.equals(primaryFormatName)) {
+    public void close() throws IOException {
+ * @opensearch.experimental
+            total += engine.getNativeBytesUsed();
+import java.util.Set;
+                        assert result.stream().allMatch(s -> s.dfGroupedSearchableFiles().size() >= 1 + secondaryEngines.size())
+    public long getNativeBytesUsed() {
+    public CompositeShardStatsTracker statsTracker() {
+        Exception primaryTragic = primaryEngine.getTragicException();
+            if (ownFiles == null) {
+     */
+     */
+import org.opensearch.core.index.shard.ShardId;
+        return primaryEngine;
+     * <p>
+            }
+            indexSettings,
+import org.jspecify.annotations.NonNull;
+        IndexingEngineConfig engineSettings = new IndexingEngineConfig(
+import java.util.stream.Collectors;
+            if (registered) {
+     * @throws IOException if any per-format refresh fails
+    private void buildSegment(DataFormat ownFormat, RefreshResult result, Map<Long, Segment.Builder> mergedByGen, Set<Long> dropped) {
+            secondaryInputMap.put(engine.getDataFormat(), engine.newDocumentInput());
+                            );
+        Set<Long> allDropped = new HashSet<>(primary.droppedGenerations());
+import org.opensearch.index.engine.dataformat.IndexingEngineConfig;
+        allFormats.add(primaryFormat);
+     * in the per-engine result (e.g. echoed back from {@link RefreshInput#writerFiles()}) are
+        for (Map.Entry<DataFormat, RefreshResult> entry : resultsByFormat.entrySet()) {
+     * @param mapperService       the mapper service for field mapping resolution
+        // All per-format engines refresh normally (primary passes through, secondary does addIndexes)
+        Map<String, FormatChecksumStrategy> strategies = checksumStrategies != null ? checksumStrategies : Map.of();
+     * @param config the writer configuration
+                    statsTracker.incRefreshMergeTotal();
     /**
      * Multiplexes tragic-exception detection across primary and secondary engines.
-     * Returns the first non-null tragic exception found (primary checked first), or
-     * {@code null} if every delegate is healthy.
-     */
-    @Override
-    public Exception getTragicException() {
-        Exception primaryTragic = primaryEngine.getTragicException();
-        if (primaryTragic != null) return primaryTragic;
-        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
-            Exception tragic = engine.getTragicException();
-            if (tragic != null) return tragic;
-        }
-        return null;
-    }
-
-    /**
-     * Refreshes all per-format engines and merges their results into a unified list of
-     * {@link Segment} instances. Each segment groups its per-format {@link WriterFileSet}
-     * entries by writer generation.
-     *
-     * @param refreshInput the refresh input containing existing and new segments
-     * @return the merged refresh result across all formats
-     * @throws IOException if any per-format refresh fails
-     */
-    @Override
-    public RefreshResult refresh(RefreshInput refreshInput) throws IOException {
-        // recordTimeMillis owns the whole-refresh timing; incRefreshTotal counts every refresh.
-        statsTracker.incRefreshTotal();
-        return StatsRecorder.recordTimeMillis(() -> doRefresh(refreshInput), statsTracker::addRefreshTimeMillis);
-    }
-
-    private RefreshResult doRefresh(RefreshInput refreshInput) throws IOException {
-        tryDeletePendingFiles();
-
-        // All per-format engines refresh normally (primary passes through, secondary does addIndexes)
-        RefreshInput perFormatInput = new RefreshInput(
-            refreshInput.existingSegments(),
-            refreshInput.writerFiles(),
-            RefreshInput.NO_GENERATION,
-            refreshInput.deletesApplied()
-        );
-        RefreshResult primary = primaryEngine.refresh(perFormatInput);
-        List<RefreshResult> secResults = new ArrayList<>();
-        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
-            secResults.add(engine.refresh(perFormatInput));
-        }
-
-        Set<Long> allDropped = new HashSet<>(primary.droppedGenerations());
-        for (RefreshResult secResult : secResults) {
-            allDropped.addAll(secResult.droppedGenerations());
-        }
-
-        // Assemble per-gen segments from all formats
-        Map<DataFormat, RefreshResult> resultsByFormat = new LinkedHashMap<>();
-        resultsByFormat.put(primaryEngine.getDataFormat(), primary);
-        int i = 0;
-        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
-            resultsByFormat.put(engine.getDataFormat(), secResults.get(i++));
-        }
-        Map<Long, Segment.Builder> mergedByGen = new LinkedHashMap<>();
-        for (Map.Entry<DataFormat, RefreshResult> entry : resultsByFormat.entrySet()) {
-            buildSegment(entry.getKey(), entry.getValue(), mergedByGen, allDropped);
-        }
-
-        List<Segment> newSegments = new ArrayList<>(mergedByGen.size());
-        for (Segment.Builder builder : mergedByGen.values()) {
-            newSegments.add(builder.build());
-        }
-
-        // Merge on refresh: when multiple writer segments exist and size is within threshold,
-        // merge all formats. On failure, fall back to normal per-writer segments (background
-        // merge will consolidate later). This ensures refresh never fails due to merge errors
-        // (e.g., merge pool rejection, resource contention).
-        if (refreshInput.hasNextGeneration() && shouldMergeOnRefresh(refreshInput.writerFiles())) {
-            Set<Long> existingGens = refreshInput.existingSegments().stream().map(Segment::generation).collect(Collectors.toSet());
-            List<Segment> onlyNew = newSegments.stream().filter(s -> existingGens.contains(s.generation()) == false).toList();
-
-            if (onlyNew.size() > 1) {
-                try {
-                    final long mergeStartNanos = System.nanoTime();
-                    // Counts merge-on-refresh attempts; a subset overlay of merge_total (also
-                    // incremented inside CompositeMerger.merge()).
-                    statsTracker.incRefreshMergeTotal();
-                    MergeResult mergeResult = StatsRecorder.recordTimeMillis(
-                        () -> merger.merge(
-                            MergeInput.builder().segments(onlyNew).newWriterGeneration(refreshInput.nextAvailableGeneration()).build()
-                        ),
-                        statsTracker::addRefreshMergeTimeMillis
-                    );
-
-                    if (mergeResult != null) {
-                        List<Segment> result = new ArrayList<>(refreshInput.existingSegments());
-                        Segment mergedSegment = new Segment(
-                            refreshInput.nextAvailableGeneration(),
-                            mergeResult.getMergedWriterFileSet()
-                                .entrySet()
-                                .stream()
-                                .collect(Collectors.toMap(e -> e.getKey().name(), Map.Entry::getValue))
-                        );
-                        result.add(mergedSegment);
-
-                        if (logger.isDebugEnabled()) {
-                            final long totalElapsedMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
-                                System.nanoTime() - mergeStartNanos
-                            );
-                            logger.debug(
-                                "merge-on-refresh: merged {} segments into gen={}, total={}ms, " + "resultSegments={}, existingSegments={}",
-                                onlyNew.size(),
-                                refreshInput.nextAvailableGeneration(),
-                                totalElapsedMs,
-                                result.size(),
-                                refreshInput.existingSegments().size()
-                            );
-                        }
-
-                        assert result.size() == refreshInput.existingSegments().size() + 1
-                            : "merge on refresh must produce exactly 1 new segment, got "
-                                + (result.size() - refreshInput.existingSegments().size())
-                                + " new segments";
-                        assert result.stream().allMatch(s -> s.dfGroupedSearchableFiles().size() >= 1 + secondaryEngines.size())
-                            : "refresh result segments must contain all configured formats";
-
-                        for (Map.Entry<String, Collection<String>> pendingDeletionPerFormat : deleteFiles(getFilesToDelete(onlyNew))
-                            .entrySet()) {
-                            pendingDeletes.computeIfAbsent(pendingDeletionPerFormat.getKey(), k -> new ArrayList<>())
-                                .addAll(pendingDeletionPerFormat.getValue());
-                        }
-
-                        return new RefreshResult(List.copyOf(result), allDropped);
-                    }
-                } catch (Exception e) {
+     * @throws IllegalArgumentException if any configured format is not registered
+import org.opensearch.index.engine.dataformat.RefreshInput;
                     // Merge-on-refresh is best-effort. On failure, fall back to normal per-writer
-                    // segments. Background merge will consolidate them later.
-                    statsTracker.incRefreshMergeFailures();
-                    logger.warn("merge-on-refresh failed, falling back to per-writer segments", e);
-                }
-            }
+import java.util.Collection;
+        this.primaryEngine = dataFormatRegistry.getIndexingEngine(engineSettings, primaryFormat);
+     * @return the composite store provider
+        int i = 0;
+ * multiple per-format engines behind a single interface.
         }
-
-        // No merge on refresh — pass through all segments
-        assert newSegments.stream().allMatch(s -> s.dfGroupedSearchableFiles().size() >= 1 + secondaryEngines.size())
-            : "refresh result segments must contain all configured formats";
-        return new RefreshResult(List.copyOf(newSegments), allDropped);
+     * are handled gracefully to ensure all resources are released.
     }
-
-    private static @NonNull Map<String, Collection<String>> getFilesToDelete(List<Segment> segmentsToPurge) {
-        Map<String, Set<String>> filesToDelete = new HashMap<>();
-        for (Segment segment : segmentsToPurge) {
-            for (Map.Entry<String, WriterFileSet> entry : segment.dfGroupedSearchableFiles().entrySet()) {
-                filesToDelete.compute(entry.getKey(), (k, v) -> {
-                    Set<String> files = v;
-                    if (v == null) {
-                        files = new HashSet<>();
-                    }
-                    files.addAll(entry.getValue().files());
-                    return files;
-                });
-            }
-        }
-        Map<String, Collection<String>> unmodifiable = new HashMap<>();
-        for (Map.Entry<String, Set<String>> entry : filesToDelete.entrySet()) {
-            unmodifiable.put(entry.getKey(), Collections.unmodifiableSet(entry.getValue()));
-        }
-        return unmodifiable;
-    }
-
-    private void tryDeletePendingFiles() throws IOException {
-        pendingDeletes = deleteFiles(pendingDeletes);
-    }
-
-    private boolean shouldMergeOnRefresh(List<Segment> writerFiles) {
-        long maxBytes = CompositeDataFormatPlugin.MERGE_ON_REFRESH_MAX_SIZE.get(indexSettings.getSettings()).getBytes();
-        if (maxBytes <= 0) {
-            return false;
-        }
-        long totalBytes = writerFiles.stream()
-            .flatMap(seg -> seg.dfGroupedSearchableFiles().values().stream())
-            .mapToLong(WriterFileSet::getTotalSize)
-            .sum();
-        return totalBytes <= maxBytes;
-    }
-
     /**
-     * Adds only the {@code ownFormat}'s {@link WriterFileSet} from each segment in
-     * {@code result.refreshedSegments()} into {@code mergedByGen}. Any other formats present
-     * in the per-engine result (e.g. echoed back from {@link RefreshInput#writerFiles()}) are
-     * intentionally ignored so each format's authoritative entry comes solely from its own engine.
-     * Omits dropped generations and segments without a file set for {@code ownFormat}.
-     */
-    private void buildSegment(DataFormat ownFormat, RefreshResult result, Map<Long, Segment.Builder> mergedByGen, Set<Long> dropped) {
-        for (Segment seg : result.refreshedSegments()) {
-            if (dropped.contains(seg.generation())) {
-                continue;
-            }
-            WriterFileSet ownFiles = seg.dfGroupedSearchableFiles().get(ownFormat.name());
-            if (ownFiles == null) {
-                continue;
-            }
-            Segment.Builder builder = mergedByGen.computeIfAbsent(seg.generation(), Segment::builder);
-            builder.addSearchableFiles(ownFormat, ownFiles);
+        Map<Long, Segment.Builder> mergedByGen = new LinkedHashMap<>();
+                                + " new segments";
         }
-    }
-
-    /**
-     * Not supported — writer generation is managed by the {@code DataFormatAwareEngine}.
-     *
-     * @throws UnsupportedOperationException always
+                        Segment mergedSegment = new Segment(
+                        }
+     * @return the merged refresh result across all formats
+                    // incremented inside CompositeMerger.merge()).
+     * <p>
+import org.opensearch.common.settings.Settings;
+            refreshInput.writerFiles(),
+    public Merger getMerger() {
+            refreshInput.deletesApplied()
+import java.util.Collections;
+        for (var engine : secondaryEngines) {
+        }
+        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
+        );
      */
+ * A composite {@link IndexingExecutionEngine} that orchestrates indexing across
+     */
+        return maxAllowedDocs;
+            throw new IllegalArgumentException(
+    public IndexStoreProvider getProvider() {
     @Override
+        List<IndexingExecutionEngine<?, ?>> secondaries = new ArrayList<>();
+        );
+                        );
+        if (dataFormatName == null || dataFormatName.isBlank()) {
+        }
+            allFormats.add(secondaryFormat);
+                registered = true;
+    }
+import org.opensearch.index.engine.dataformat.WriterConfig;
+        return Map.copyOf(readerManagers);
+            store,
+    @Override
+        List<String> secondaryFormatNames = CompositeDataFormatPlugin.SECONDARY_DATA_FORMATS.get(settings);
+                        return new RefreshResult(List.copyOf(result), allDropped);
+            unmodifiable.put(entry.getKey(), Collections.unmodifiableSet(entry.getValue()));
+                });
+                    Set<String> files = v;
+/*
+    public long getHeapBytesUsed() {
+     * Returns the first non-null tragic exception found (primary checked first), or
+    @Override
+                                .stream()
+            }
+     *                            May be null or empty if the directory is not yet available.
+import java.io.IOException;
+            DataFormat secondaryFormat = dataFormatRegistry.format(secondaryName);
+            failed.forEach((k, v) -> allFailed.computeIfAbsent(k, x -> new ArrayList<>()).addAll(v));
+        this.indexSettings = indexSettings;
+        if (registry.format(dataFormatName) == null) {
+            toAugment,
+            throw t;
+    public Set<IndexingExecutionEngine<?, ?>> getSecondaryDelegates() {
+    /**
+        }
+    @Override
+     * Returns the total native memory bytes used across all per-format engines.
+        DocumentInput<?> primaryInput = primaryEngine.newDocumentInput();
+        for (Segment.Builder builder : mergedByGen.values()) {
+     * Validates that the primary and all secondary data format plugins are registered.
+     * @throws IllegalStateException if committer is null
+    private ReaderManagerConfig readerManagerConfig(ReaderManagerConfig config, DataFormat toAugment) {
+import org.opensearch.index.engine.exec.WriterFileSet;
+ * creation to each per-format engine. A primary engine is designated based on the
+            if (provider != null && shardId != null) {
+        return merger;
+            }
+                    );
+                                "merge-on-refresh: merged {} segments into gen={}, total={}ms, " + "resultSegments={}, existingSegments={}",
+        for (RefreshResult secResult : secResults) {
+    /**
+                    return files;
+        // in close(). Rolls back the registration if anything below throws, to avoid leaking it.
+import org.apache.logging.log4j.LogManager;
+ * this file be licensed under the Apache-2.0 license or a
+            }
+     *
+        }
+        IOException firstException = null;
+import org.opensearch.index.IndexSettings;
+                    if (eng.getProvider() == null) {
+        return allFailed;
+        }
+    ) {
+     * @param indexSettings       the index settings containing composite configuration
+        return total;
+            @Override
     public long getNextWriterGeneration() {
+ *
+        };
+     * Returns the primary delegate engine.
+        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
+                    firstException.addSuppressed(e);
+        }
+    }
+            config.shardPath(),
+        if (maxBytes <= 0) {
+     */
+                Map<DataFormat, IndexStoreProvider> tempProviders = new HashMap<>();
+                    + dataFormatName
+                }
+ * The composite {@link DataFormat} exposed by this engine represents the union of
+import org.opensearch.index.engine.exec.commit.Committer;
+                }
+     * @throws UnsupportedOperationException always
+        // Register the per-shard tracker so REST endpoints can read live counters; unregistered
+    }
+     *
+    }
+     *
+        return statsTracker;
+                } catch (Exception e) {
+        }
+            strategies
+            .mapToLong(WriterFileSet::getTotalSize)
+        }
+     *
+        CompositeStatsProvider provider = CompositeStatsProvider.getInstance();
+        List<Segment> newSegments = new ArrayList<>(mergedByGen.size());
+    }
+import org.opensearch.composite.stats.CompositeStatsProvider;
+import org.opensearch.index.engine.dataformat.ReaderManagerConfig;
+     * @return a composite writer bound to this engine
+                    // segments. Background merge will consolidate them later.
+     * @param registry the discovered data format plugins keyed by format name
+     * Not supported — writer generation is managed by the {@code DataFormatAwareEngine}.
+     * @throws IOException if any per-format engine fails to delete files
+        resultsByFormat.put(primaryEngine.getDataFormat(), primary);
+            provider.unregister(shardId);
+    @Override
+        for (String secondaryName : secondaryFormatNames) {
+     */
+     * intentionally ignored so each format's authoritative entry comes solely from its own engine.
+        for (Segment seg : result.refreshedSegments()) {
+                logger.error("Failed to delete files in secondary engine [{}]: {}", engine.getDataFormat().name(), e.getMessage());
+     * @param store store for the current index
+     * {@code result.refreshedSegments()} into {@code mergedByGen}. Any other formats present
+        assert newSegments.stream().allMatch(s -> s.dfGroupedSearchableFiles().size() >= 1 + secondaryEngines.size())
+    /**
+public class CompositeIndexingExecutionEngine implements IndexingExecutionEngine<CompositeDataFormat, CompositeDocumentInput> {
+     * and all secondary per-format document inputs.
+        Objects.requireNonNull(indexSettings, "indexSettings must not be null");
+                if (primaryEngine.getProvider() == null) {
+     * Adds only the {@code ownFormat}'s {@link WriterFileSet} from each segment in
+    public RefreshResult refresh(RefreshInput refreshInput) throws IOException {
+        }
+                }
+ * compatible open source license.
+     * Creates a {@link CompositeWriter} that fans out writes to all per-format engines.
+                            mergeResult.getMergedWriterFileSet()
+     * that creates {@link CompositeWriter} instances bound to this engine.
+import org.opensearch.composite.merge.CompositeMerger;
+                            final long totalElapsedMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
+            return false;
+        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
+                                .entrySet()
+    public IndexingExecutionEngine<?, ?> getPrimaryDelegate() {
+     * @return the sum of native bytes used by primary and secondary engines
+ * <p>
+                                totalElapsedMs,
+        this.merger = new CompositeMerger(this, compositeDataFormat);
+import org.opensearch.composite.stats.CompositeShardStatsTracker;
+            : "refresh result segments must contain all configured formats";
+    /**
+     *
+import org.apache.logging.log4j.Logger;
+        // recordTimeMillis owns the whole-refresh timing; incRefreshTotal counts every refresh.
+        return new IndexStoreProvider() {
+import org.opensearch.index.engine.dataformat.IndexingExecutionEngine;
+            if (tragic != null) return tragic;
+            WriterFileSet ownFiles = seg.dfGroupedSearchableFiles().get(ownFormat.name());
+            config.indexSettings()
+    @Override
+    private final Set<IndexingExecutionEngine<?, ?>> secondaryEngines;
+     * @return the secondary engines
+        long maxAllowedDocs = primaryEngine.maxIndexableDocs();
+            Segment.Builder builder = mergedByGen.computeIfAbsent(seg.generation(), Segment::builder);
+    static void validateFormatsRegistered(DataFormatRegistry registry, String primaryFormatName, List<String> secondaryFormatNames) {
+        for (String secondaryName : secondaryFormatNames) {
+     *
+        Settings settings = indexSettings.getSettings();
+                    + "] is not registered on this node. Available formats: "
+    /**
+                        files = new HashSet<>();
+    }
+        }
+    }
+    @Override
+ */
+                tempProviders.put(primaryEngine.getDataFormat(), primaryEngine.getProvider());
+import org.opensearch.index.engine.dataformat.DataFormat;
+                    if (v == null) {
+ * configured primary format name and is used for merge operations.
+            secResults.add(engine.refresh(perFormatInput));
+            mapperService,
+        }
+        // Assemble per-gen segments from all formats
+        pendingDeletes = deleteFiles(pendingDeletes);
+     *
+        if (firstException != null) {
+     * @param filesToDelete map of format name to collection of file names to delete
+                    logger.warn("Failed to unregister composite stats tracker during constructor rollback", rollbackErr);
+        try {
+    @Override
+                        for (Map.Entry<String, Collection<String>> pendingDeletionPerFormat : deleteFiles(getFilesToDelete(onlyNew))
+        Map<DataFormat, EngineReaderManager<?>> readerManagers = new HashMap<>(
+                                + (result.size() - refreshInput.existingSegments().size())
+                                refreshInput.existingSegments().size()
+        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
+            allDropped.addAll(secResult.droppedGenerations());
+    }
+        return StatsRecorder.recordTimeMillis(() -> doRefresh(refreshInput), statsTracker::addRefreshTimeMillis);
+                    logger.warn("merge-on-refresh failed, falling back to per-writer segments", e);
+    }
+            for (Map.Entry<String, WriterFileSet> entry : segment.dfGroupedSearchableFiles().entrySet()) {
+import java.util.HashMap;
+    private final ShardId shardId;
+    }
+        for (Segment segment : segmentsToPurge) {
+    public Map<String, Collection<String>> deleteFiles(Map<String, Collection<String>> filesToDelete) throws IOException {
+        } catch (IOException e) {
+    private static final Logger logger = LogManager.getLogger(CompositeIndexingExecutionEngine.class);
+        // merge all formats. On failure, fall back to normal per-writer segments (background
+            }
+    }
+    /**
+            }
+    }
+        // No merge on refresh — pass through all segments
+                    "Secondary data format [" + secondaryName + "] is the same as primary :[" + primaryFormatName + "]"
+     * {@link Segment} instances. Each segment groups its per-format {@link WriterFileSet}
+        );
+        return new RefreshResult(List.copyOf(newSegments), allDropped);
+                } else {
+     * @param primaryFormatName the configured primary format name
+                        statsTracker::addRefreshMergeTimeMillis
+        IOUtils.closeWhileHandlingException(committer);
+                                System.nanoTime() - mergeStartNanos
+import org.opensearch.index.store.FormatChecksumStrategy;
+    }
+     *
+            if (dropped.contains(seg.generation())) {
+     * @param committer           the committer for durable catalog snapshot persistence during flush
+    /**
+ *
+        Committer committer,
+                "Primary data format ["
+    @Override
+     * Creates a {@link CompositeDocumentInput} that fans out field additions to the primary
+ */
+                        logger.debug("IndexStoreProvider is null for secondary engine [{}]", eng.getDataFormat().name());
+        validateFormatsRegistered(dataFormatRegistry, primaryFormatName, secondaryFormatNames);
+        DataFormatRegistry dataFormatRegistry,
+                    if (mergeResult != null) {
+        Store store,
+    private final IndexSettings indexSettings;
+import org.opensearch.index.engine.dataformat.RefreshResult;
+        IOUtils.closeWhileHandlingException(primaryEngine);
+            .flatMap(seg -> seg.dfGroupedSearchableFiles().values().stream())
+                    }
+    private final CompositeShardStatsTracker statsTracker = new CompositeShardStatsTracker();
+     * @return the primary engine
+    public Exception getTragicException() {
+     * @param refreshInput the refresh input containing existing and new segments
+        long total = primaryEngine.getHeapBytesUsed();
+    public CompositeDocumentInput newDocumentInput() {
+    public Writer<CompositeDocumentInput> createWriter(WriterConfig config) {
+                            logger.debug(
+    public CompositeIndexingExecutionEngine(
+                        ),
+     */
+                        if (logger.isDebugEnabled()) {
+     */
+            }
+    private final CompositeDataFormat compositeDataFormat;
+    /**
+    }
+                    + registry.getRegisteredFormats()
+     *
+            );
+            dataFormatRegistry,
+        return unmodifiable;
+                        () -> merger.merge(
+import org.opensearch.common.util.io.IOUtils;
+     * The writer pool is created internally and initialized with a writer supplier
+    private boolean shouldMergeOnRefresh(List<Segment> writerFiles) {
+        // (e.g., merge pool rejection, resource contention).
+                provider.register(shardId, statsTracker);
+     * Closes all per-format engines and the committer. Exceptions from secondary engines
+    private final Committer committer;
+        this.committer = committer;
+        return new CompositeDocumentInput(primaryEngine.getDataFormat(), primaryInput, secondaryInputMap);
+        long maxBytes = CompositeDataFormatPlugin.MERGE_ON_REFRESH_MAX_SIZE.get(indexSettings.getSettings()).getBytes();
+    public Map<DataFormat, EngineReaderManager<?>> buildReaderManager(ReaderManagerConfig config) throws IOException {
+                                refreshInput.nextAvailableGeneration(),
+        if (committer == null) {
+                            MergeInput.builder().segments(onlyNew).newWriterGeneration(refreshInput.nextAvailableGeneration()).build()
+import java.util.HashSet;
+            }
+            throw new IllegalArgumentException("Primary data format name must not be null or blank");
+        }
+@ExperimentalApi
+            Exception tragic = engine.getTragicException();
+                if (firstException == null) {
+import org.opensearch.index.mapper.MapperService;
+            config.indexStoreProvider(),
+        if (provider != null && shardId != null) {
+                    // Counts merge-on-refresh attempts; a subset overlay of merge_total (also
+     * @throws IOException if closing the primary engine or committer fails
+ * The OpenSearch Contributors require contributions made to
+     * Refreshes all per-format engines and merges their results into a unified list of
+        tryDeletePendingFiles();
+}
+                providers = tempProviders;
+    }
+        return new CompositeWriter(this, config);
+        long total = primaryEngine.getNativeBytesUsed();
+                            pendingDeletes.computeIfAbsent(pendingDeletionPerFormat.getKey(), k -> new ArrayList<>())
+        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
+        MapperService mapperService,
+     * @param checksumStrategies  per-format checksum strategies from the directory, keyed by format name.
+     * commit coordination. Secondary engines receive writes alongside the primary but
+                            .entrySet()) {
+            committer,
+import java.util.Map;
+        return new ReaderManagerConfig(
+            config.dataformatAwareStoreHandles(),
+     * are not used as the merge authority.
+    }
+                try {
+                                .collect(Collectors.toMap(e -> e.getKey().name(), Map.Entry::getValue))
+        RefreshInput perFormatInput = new RefreshInput(
+                    final long mergeStartNanos = System.nanoTime();
+                    files.addAll(entry.getValue().files());
+        }
+                            refreshInput.nextAvailableGeneration(),
+    }
+     * Constructs a CompositeIndexingExecutionEngine by reading index settings to
+        return secondaryEngines;
+            validateFormatIsRegistered(registry, secondaryName);
+        // merge will consolidate later). This ensures refresh never fails due to merge errors
+                }
+                return provider != null ? provider.getStore(dataFormat) : null;
+                    provider.unregister(shardId);
+                    logger.debug("IndexStoreProvider is null for primary engine [{}]", primaryEngine.getDataFormat().name());
+import java.util.concurrent.ConcurrentHashMap;
+     */
+        secondaryEngines.forEach(IOUtils::closeWhileHandlingException);
+     * Returns the secondary delegate engines.
+    @Override
+     * @param secondaryFormatNames the configured secondary format names
+        return null;
+                        List<Segment> result = new ArrayList<>(refreshInput.existingSegments());
+     *
+                        assert result.size() == refreshInput.existingSegments().size() + 1
+            throw new IllegalStateException("Committer must not be null");
+     * entries by writer generation.
+            config.registry(),
+     */
+import java.util.IdentityHashMap;
+ * all per-format supported field type capabilities.
+        IndexSettings indexSettings,
+    /** {@inheritDoc} Delegates to the primary engine's merger. */
+        return compositeDataFormat;
+                        }
+     * Returns a composite {@link IndexStoreProvider} that delegates to each per-format
+        validateFormatIsRegistered(registry, primaryFormatName);
+        }
+     * @throws IllegalArgumentException if any configured format is not registered
+import java.util.ArrayList;
+            RefreshInput.NO_GENERATION,
+import org.opensearch.plugin.stats.StatsRecorder;
+            logger.error("Failed to delete files in primary engine [{}]: {}", primaryEngine.getDataFormat().name(), e.getMessage());
+            {
+        }
+        if (refreshInput.hasNextGeneration() && shouldMergeOnRefresh(refreshInput.writerFiles())) {
+     */
+            Set<Long> existingGens = refreshInput.existingSegments().stream().map(Segment::generation).collect(Collectors.toSet());
+        Map<DataFormat, DocumentInput<?>> secondaryInputMap = new IdentityHashMap<>();
+                for (IndexingExecutionEngine<?, ?> eng : secondaryEngines) {
+    public long maxIndexableDocs() {
+            }
+        if (primaryTragic != null) return primaryTragic;
+    @Override
+        try {
+     * The primary engine is the authoritative format used for merge operations and
+     * determine the primary and secondary data formats, validating that all configured
+            private final Map<DataFormat, IndexStoreProvider> providers;
+        CompositeStatsProvider provider = CompositeStatsProvider.getInstance();
+            firstException = e;
+        RefreshResult primary = primaryEngine.refresh(perFormatInput);
         throw new UnsupportedOperationException();
     }
-
-    /** {@inheritDoc} Returns the composite data format representing all per-format capabilities. */
-    @Override
-    public CompositeDataFormat getDataFormat() {
-        return compositeDataFormat;
-    }
-
     /**
-     * Returns the total native memory bytes used across all per-format engines.
-     *
-     * @return the sum of native bytes used by primary and secondary engines
-     */
-    @Override
-    public long getNativeBytesUsed() {
-        long total = primaryEngine.getNativeBytesUsed();
-        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
-            total += engine.getNativeBytesUsed();
+            builder.addSearchableFiles(ownFormat, ownFiles);
         }
-        return total;
-    }
-
-    @Override
-    public long getHeapBytesUsed() {
-        long total = primaryEngine.getHeapBytesUsed();
-        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
-            total += engine.getHeapBytesUsed();
-        }
-        return total;
-    }
-
+            .sum();
     /**
-     * Deletes files from all per-format engines. If any engine fails, the first exception
-     * is thrown with subsequent failures added as suppressed exceptions.
-     *
-     * @param filesToDelete map of format name to collection of file names to delete
-     * @throws IOException if any per-format engine fails to delete files
-     */
-    @Override
-    public Map<String, Collection<String>> deleteFiles(Map<String, Collection<String>> filesToDelete) throws IOException {
-        Map<String, Collection<String>> allFailed = new HashMap<>();
-        IOException firstException = null;
-        try {
-            Map<String, Collection<String>> failed = primaryEngine.deleteFiles(filesToDelete);
-            failed.forEach((k, v) -> allFailed.computeIfAbsent(k, x -> new ArrayList<>()).addAll(v));
-        } catch (IOException e) {
-            logger.error("Failed to delete files in primary engine [{}]: {}", primaryEngine.getDataFormat().name(), e.getMessage());
-            firstException = e;
-        }
-        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
-            try {
-                Map<String, Collection<String>> failed = engine.deleteFiles(filesToDelete);
-                failed.forEach((k, v) -> allFailed.computeIfAbsent(k, x -> new ArrayList<>()).addAll(v));
-            } catch (IOException e) {
-                logger.error("Failed to delete files in secondary engine [{}]: {}", engine.getDataFormat().name(), e.getMessage());
-                if (firstException == null) {
-                    firstException = e;
-                } else {
-                    firstException.addSuppressed(e);
-                }
+                            : "merge on refresh must produce exactly 1 new segment, got "
             }
-        }
-        if (firstException != null) {
-            throw firstException;
-        }
-        return allFailed;
-    }
-
-    /**
-     * Creates a {@link CompositeDocumentInput} that fans out field additions to the primary
-     * and all secondary per-format document inputs.
-     *
-     * @return a new composite document input
-     */
     @Override
-    public CompositeDocumentInput newDocumentInput() {
-        DocumentInput<?> primaryInput = primaryEngine.newDocumentInput();
-        Map<DataFormat, DocumentInput<?>> secondaryInputMap = new IdentityHashMap<>();
-        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
-            secondaryInputMap.put(engine.getDataFormat(), engine.newDocumentInput());
-        }
-        return new CompositeDocumentInput(primaryEngine.getDataFormat(), primaryInput, secondaryInputMap);
-    }
-
-    /**
-     * Closes all per-format engines and the committer. Exceptions from secondary engines
-     * are handled gracefully to ensure all resources are released.
-     *
-     * @throws IOException if closing the primary engine or committer fails
-     */
-    @Override
-    public void close() throws IOException {
-        CompositeStatsProvider provider = CompositeStatsProvider.getInstance();
-        if (provider != null && shardId != null) {
-            provider.unregister(shardId);
-        }
-        IOUtils.closeWhileHandlingException(primaryEngine);
-        secondaryEngines.forEach(IOUtils::closeWhileHandlingException);
-        IOUtils.closeWhileHandlingException(committer);
-    }
-
-    /** Returns this shard's composite stats tracker, used by the writer and merger to count. */
-    public CompositeShardStatsTracker statsTracker() {
-        return statsTracker;
-    }
-
-    /**
-     * Returns the primary delegate engine.
-     *
-     * @return the primary engine
-     */
-    public IndexingExecutionEngine<?, ?> getPrimaryDelegate() {
-        return primaryEngine;
-    }
-
-    /**
-     * Returns a composite {@link IndexStoreProvider} that delegates to each per-format
-     * engine's provider based on the requested data format.
-     *
-     * @return the composite store provider
-     */
-    @Override
-    public IndexStoreProvider getProvider() {
-        return new IndexStoreProvider() {
-            private final Map<DataFormat, IndexStoreProvider> providers;
-            {
-                Map<DataFormat, IndexStoreProvider> tempProviders = new HashMap<>();
-                tempProviders.put(primaryEngine.getDataFormat(), primaryEngine.getProvider());
-                if (primaryEngine.getProvider() == null) {
-                    logger.debug("IndexStoreProvider is null for primary engine [{}]", primaryEngine.getDataFormat().name());
-                }
-                for (IndexingExecutionEngine<?, ?> eng : secondaryEngines) {
-                    tempProviders.put(eng.getDataFormat(), eng.getProvider());
-                    if (eng.getProvider() == null) {
-                        logger.debug("IndexStoreProvider is null for secondary engine [{}]", eng.getDataFormat().name());
-                    }
-                }
-                providers = tempProviders;
-            }
-
-            @Override
-            public FormatStore getStore(DataFormat dataFormat) {
-                IndexStoreProvider provider = providers.get(dataFormat);
-                return provider != null ? provider.getStore(dataFormat) : null;
-            }
-        };
-    }
-
-    @Override
-    public Map<DataFormat, EngineReaderManager<?>> buildReaderManager(ReaderManagerConfig config) throws IOException {
-        Map<DataFormat, EngineReaderManager<?>> readerManagers = new HashMap<>(
             config.registry().getReaderManager(readerManagerConfig(config, primaryEngine.getDataFormat()))
-        );
-        for (IndexingExecutionEngine<?, ?> engine : secondaryEngines) {
-            readerManagers.putAll(config.registry().getReaderManager(readerManagerConfig(config, engine.getDataFormat())));
-        }
-        return Map.copyOf(readerManagers);
-    }
-
-    private ReaderManagerConfig readerManagerConfig(ReaderManagerConfig config, DataFormat toAugment) {
-        return new ReaderManagerConfig(
-            config.indexStoreProvider(),
-            toAugment,
-            config.registry(),
-            config.shardPath(),
-            config.dataformatAwareStoreHandles(),
-            config.indexSettings()
-        );
-    }
-
-    /**
-     * Returns the secondary delegate engines.
-     *
-     * @return the secondary engines
-     */
-    public Set<IndexingExecutionEngine<?, ?>> getSecondaryDelegates() {
-        return secondaryEngines;
-    }
-
+                Map<String, Collection<String>> failed = engine.deleteFiles(filesToDelete);
+                );
+        String primaryFormatName = CompositeDataFormatPlugin.PRIMARY_DATA_FORMAT.get(settings);
+            } catch (IOException e) {
+                            );
+            refreshInput.existingSegments(),
+            secondaries.add(dataFormatRegistry.getIndexingEngine(engineSettings, secondaryFormat));
     @Override
-    public long maxIndexableDocs() {
-        long maxAllowedDocs = primaryEngine.maxIndexableDocs();
-        for (var engine : secondaryEngines) {
-            maxAllowedDocs = Math.min(maxAllowedDocs, engine.maxIndexableDocs());
-        }
-        return maxAllowedDocs;
-    }
-}
+     * formats are registered, and creating per-format engines via the discovered

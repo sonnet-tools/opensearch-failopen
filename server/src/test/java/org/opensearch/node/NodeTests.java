@@ -1,541 +1,492 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
+        );
+        }
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SHARDS;
+                ;
+    }
+        } catch (IllegalArgumentException e) {
+                    )
+        try (Node node = new MockNode(settings.build(), basePlugins())) {
+    public void testCreateWithFileCache() throws Exception {
+            NamedWriteableRegistry namedWriteableRegistry,
+        public Collection<Object> createComponents(
+        if (name != null) {
+        AtomicBoolean shouldRun = new AtomicBoolean(true);
+        try (Node node = new MockNode(settings.build(), plugins)) {
+            this.tracer = tracer;
+ * GitHub history for details.
+                interrupted.set(true);
+    }
+        shard.store().incRef();
+import org.opensearch.transport.client.Client;
+import org.opensearch.plugins.TelemetryPlugin;
+        try (MockNode mockNode = new MockNode(onlyWarmRoleSettings, plugins)) {
+    }
+import org.opensearch.env.NodeEnvironment;
+        // NodeCacheService.validate() throws IllegalArgumentException
+    }
+        });
+                assertThat(e.getMessage(), containsString("[Terminated,"));
+                assertEquals(1, bootstrapChecks.size());
+            MetricsRegistry metricsRegistry
+        }
+        IllegalStateException e = expectThrows(IllegalStateException.class, () -> node.awaitClose(10L, TimeUnit.SECONDS));
+    public void testCloseOnLeakedIndexReaderReference() throws Exception {
+    public void testTelemetryPluginShouldNOTImplementTelemetryAwarePlugin() throws IOException {
+            final Settings nodeSettings = randomBoolean() ? node.settings() : node.getEnvironment().settings();
+        // but awaitClose should
+                service.getBreaker("test_breaker")
+            @Override
+        AtomicBoolean executed = new AtomicBoolean(false);
+        );
+        }
+    public void testCloseOnInterruptibleTask() throws Exception {
+        ThreadPool threadpool = node.injector().getInstance(ThreadPool.class);
+            .build();
+    public static class MockTelemetryPlugin extends Plugin implements TelemetryPlugin, TelemetryAwarePlugin {
+            } catch (InterruptedException e) {
+        public Optional<Telemetry> getTelemetry(TelemetrySettings telemetrySettings) {
+import java.util.concurrent.CountDownLatch;
+import org.opensearch.plugins.TelemetryAwarePlugin;
+            expectThrows(NodeValidationException.class, () -> node.start());
+            .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType())
+                .prepareCreate("test")
+        public Tracer getTracer() {
+        plugins.add(MockTelemetryPlugin.class);
+            assertNotNull(mockNode);
+        Settings warmRoleSettings = addRoles(baseSettings().build(), Set.of(DiscoveryNodeRole.WARM_ROLE));
+            fail("should not allow a node attribute with trailing whitespace");
+import static org.hamcrest.Matchers.equalTo;
+                "plugin circuit breaker instance is not the same as breaker service's instance",
+            running.countDown();
+        assertTrue(node.awaitClose(10L, TimeUnit.SECONDS));
+            while (shouldRun.get())
+        assertTrue(node.awaitClose(10L, TimeUnit.SECONDS));
+        IndicesService indicesService = node.injector().getInstance(IndicesService.class);
+        public MockTelemetryAwareComponent(Tracer tracer, MetricsRegistry metricsRegistry) {
+            NamedXContentRegistry xContentRegistry,
+        final AtomicBoolean interrupted = new AtomicBoolean(false);
+            return tracer;
+        private SetOnce<CircuitBreaker> myCircuitBreaker = new SetOnce<>();
+        List<Class<? extends Plugin>> plugins = basePlugins();
+            node.client()
+        Node node = new MockNode(baseSettings().build(), basePlugins());
+        private final Tracer tracer;
+        return plugins;
  * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+        assertThat(e.getMessage(), containsString("Something is leaking index readers or store references"));
+        }
+import java.util.function.Supplier;
+import org.opensearch.core.common.unit.ByteSizeValue;
+    private List<Class<? extends Plugin>> basePlugins() {
+            } catch (IOException e) {
+        // close should not interrupt ongoing tasks
+            );
+                new BreakerSettings("test_breaker", 100L, 1.0d, CircuitBreaker.Type.MEMORY, CircuitBreaker.Durability.TRANSIENT),
+                throw new AssertionError("node close failed", e);
+        IndicesService indicesService = node.injector().getInstance(IndicesService.class);
+        }
+        shouldRun.set(false);
+        public String getName() {
+            MockTelemetryAwareComponent mockTelemetryAwareComponent = node.injector().getInstance(MockTelemetryAwareComponent.class);
+            this.metricsRegistry = metricsRegistry;
+            running.countDown();
+                .prepareCreate("test")
  */
-
+import org.opensearch.cluster.ClusterName;
+import java.util.Optional;
+            assertThat(service.getBreaker("test_breaker").getLimit(), equalTo(50L));
+                assertSame(CheckPlugin.CHECK, bootstrapChecks.get(0));
+                        ;
+import org.opensearch.test.InternalTestCluster;
+            } finally {
+        }
+            return metricsRegistry;
+    public void testTieredStorageWiringWithFeatureFlag() throws Exception {
+import org.opensearch.bootstrap.BootstrapCheck;
+import org.opensearch.env.Environment;
+            Supplier<RepositoriesService> repositoriesServiceSupplier,
+        public MetricsRegistry getMetricsRegistry() {
+import static org.opensearch.test.NodeRoles.dataNode;
+        Settings.Builder settings = baseSettings();
+            ClusterService clusterService,
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
+            NodeEnvironment.NodePath fileCacheNodePath = mockNode.getNodeEnvironment().fileCacheNodePath();
+        Settings.Builder settings = baseSettings();
+        Thread closeThread = new Thread(() -> {
+    }
+import org.opensearch.indices.IndicesService;
+            CircuitBreakerService service = node.injector().getInstance(CircuitBreakerService.class);
+                        DiscoveryNodeRole.REMOTE_CLUSTER_CLIENT_ROLE
+        // Test exception thrown when computed cache budget is 0 (80% × 0 SSD in test env).
+            assertTrue(fileCacheNodePath.fileCacheReservedSize.getBytes() > 0);
+        attr = "trailing ";
+        private final MetricsRegistry metricsRegistry;
+        // Test dedicated warm node with no configuration
+            assertNotNull(mockTelemetryAwareComponent.getMetricsRegistry());
+        List<Class<? extends Plugin>> plugins = basePlugins();
+        threadpool.executor(ThreadPool.Names.SEARCH).execute(() -> {
+        node.close();
+            assertEquals("invalid node.attr.server_name [invalid_hostname]", e.getMessage());
+        threadRunning.await();
+        }
+            assertTrue(breakerPlugin instanceof MockCircuitBreakerPlugin);
+        plugins.add(MockHttpTransport.TestPlugin.class);
+        node.close();
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+                running.await();
+        settings = baseSettings().put(Node.NODE_ATTRIBUTES.getKey() + "test_attr", attr);
+        node.start();
+        }
+            try {
+        plugins.add(CheckPlugin.class);
+        node.start();
+        running.countDown();
+                .setSettings(Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1).put(SETTING_NUMBER_OF_REPLICAS, 0))
+        searcher.close();
+        public BreakerSettings getCircuitBreaker(Settings settings) {
+import org.opensearch.repositories.RepositoriesService;
+import org.opensearch.common.util.FeatureFlags;
+        node.close();
+    public void testTelemetryAwarePlugins() throws IOException {
+        Node node = new MockNode(baseSettings().build(), basePlugins());
+                latch.await();
+import static org.hamcrest.Matchers.not;
+ * Unless required by applicable law or agreed to in writing,
+            return Collections.singletonList(CHECK);
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
+            NodeEnvironment nodeEnvironment,
+            FsInfo.Path cachePathInfo = fsInfo.iterator().next();
+            ResourceWatcherService resourceWatcherService,
+        List<Class<? extends Plugin>> plugins = basePlugins();
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+        @Override
+        }
+    }
+        try (Node node = new MockNode(settings.build(), plugins) {
+import org.opensearch.test.MockHttpTransport;
+    public void testCloseRaceWithTaskExecution() throws Exception {
+        node.start();
+        attr = "invalid_hostname";
+        plugins.add(MockTelemetryAwarePlugin.class);
+        }
+        @Override
+import org.opensearch.threadpool.ThreadPool;
+            }
+                .setSettings(Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1).put(SETTING_NUMBER_OF_REPLICAS, 0))
+ * compatible open source license.
+            assertEquals(attr, Node.NODE_ATTRIBUTES.getAsMap(nodeSettings).get("test_attr"));
+        assertThrows(IllegalStateException.class, () -> new MockNode(settings.build(), plugins));
+                });
  *    http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.node;
-
-import org.apache.lucene.tests.util.LuceneTestCase;
-import org.opensearch.bootstrap.BootstrapCheck;
-import org.opensearch.bootstrap.BootstrapContext;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.SettingsException;
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.transport.BoundTransportAddress;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.indices.breaker.CircuitBreakerService;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.env.Environment;
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.index.IndexService;
+        node.start();
+        @Override
 import org.opensearch.index.engine.Engine.Searcher;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.indices.breaker.BreakerSettings;
-import org.opensearch.monitor.fs.FsInfo;
-import org.opensearch.monitor.fs.FsProbe;
-import org.opensearch.plugins.CircuitBreakerPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.TelemetryAwarePlugin;
-import org.opensearch.plugins.TelemetryPlugin;
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.script.ScriptService;
-import org.opensearch.storage.metrics.TierActionMetrics;
-import org.opensearch.telemetry.Telemetry;
-import org.opensearch.telemetry.TelemetrySettings;
-import org.opensearch.telemetry.metrics.MetricsRegistry;
-import org.opensearch.telemetry.tracing.Tracer;
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.MockHttpTransport;
-import org.opensearch.test.NodeRoles;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.Client;
-import org.opensearch.watcher.ResourceWatcherService;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Supplier;
-
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SHARDS;
-import static org.opensearch.common.util.FeatureFlags.TELEMETRY;
-import static org.opensearch.test.NodeRoles.addRoles;
-import static org.opensearch.test.NodeRoles.dataNode;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.nullValue;
-
-@LuceneTestCase.SuppressFileSystems(value = "ExtrasFS")
-public class NodeTests extends OpenSearchTestCase {
-
-    public static class CheckPlugin extends Plugin {
-        public static final BootstrapCheck CHECK = context -> BootstrapCheck.BootstrapCheckResult.success();
-
-        @Override
-        public List<BootstrapCheck> getBootstrapChecks() {
-            return Collections.singletonList(CHECK);
-        }
     }
-
-    private List<Class<? extends Plugin>> basePlugins() {
-        List<Class<? extends Plugin>> plugins = new ArrayList<>();
-        plugins.add(getTestTransportPlugin());
-        plugins.add(MockHttpTransport.TestPlugin.class);
-        return plugins;
-    }
-
-    public void testLoadPluginBootstrapChecks() throws IOException {
-        final String name = randomBoolean() ? randomAlphaOfLength(10) : null;
-        Settings.Builder settings = baseSettings();
-        if (name != null) {
-            settings.put(Node.NODE_NAME_SETTING.getKey(), name);
-        }
-        AtomicBoolean executed = new AtomicBoolean(false);
-        List<Class<? extends Plugin>> plugins = basePlugins();
-        plugins.add(CheckPlugin.class);
-        try (Node node = new MockNode(settings.build(), plugins) {
-            @Override
-            protected void validateNodeBeforeAcceptingRequests(
-                BootstrapContext context,
-                BoundTransportAddress boundTransportAddress,
-                List<BootstrapCheck> bootstrapChecks
-            ) throws NodeValidationException {
-                assertEquals(1, bootstrapChecks.size());
-                assertSame(CheckPlugin.CHECK, bootstrapChecks.get(0));
-                executed.set(true);
-                throw new NodeValidationException("boom");
-            }
-        }) {
-            expectThrows(NodeValidationException.class, () -> node.start());
-            assertTrue(executed.get());
-        }
-    }
-
-    public void testNodeAttributes() throws IOException {
-        String attr = randomAlphaOfLength(5);
-        Settings.Builder settings = baseSettings().put(Node.NODE_ATTRIBUTES.getKey() + "test_attr", attr);
-        try (Node node = new MockNode(settings.build(), basePlugins())) {
-            final Settings nodeSettings = randomBoolean() ? node.settings() : node.getEnvironment().settings();
-            assertEquals(attr, Node.NODE_ATTRIBUTES.getAsMap(nodeSettings).get("test_attr"));
-        }
-
-        // leading whitespace not allowed
-        attr = " leading";
-        settings = baseSettings().put(Node.NODE_ATTRIBUTES.getKey() + "test_attr", attr);
-        try (Node node = new MockNode(settings.build(), basePlugins())) {
-            fail("should not allow a node attribute with leading whitespace");
-        } catch (IllegalArgumentException e) {
-            assertEquals("node.attr.test_attr cannot have leading or trailing whitespace [ leading]", e.getMessage());
-        }
-
-        // trailing whitespace not allowed
-        attr = "trailing ";
-        settings = baseSettings().put(Node.NODE_ATTRIBUTES.getKey() + "test_attr", attr);
-        try (Node node = new MockNode(settings.build(), basePlugins())) {
-            fail("should not allow a node attribute with trailing whitespace");
-        } catch (IllegalArgumentException e) {
-            assertEquals("node.attr.test_attr cannot have leading or trailing whitespace [trailing ]", e.getMessage());
-        }
-    }
-
-    public void testServerNameNodeAttribute() throws IOException {
-        String attr = "valid-hostname";
-        Settings.Builder settings = baseSettings().put(Node.NODE_ATTRIBUTES.getKey() + "server_name", attr);
-        int i = 0;
-        try (Node node = new MockNode(settings.build(), basePlugins())) {
-            final Settings nodeSettings = randomBoolean() ? node.settings() : node.getEnvironment().settings();
-            assertEquals(attr, Node.NODE_ATTRIBUTES.getAsMap(nodeSettings).get("server_name"));
-        }
-
-        // non-LDH hostname not allowed
-        attr = "invalid_hostname";
-        settings = baseSettings().put(Node.NODE_ATTRIBUTES.getKey() + "server_name", attr);
-        try (Node node = new MockNode(settings.build(), basePlugins())) {
-            fail("should not allow a server_name attribute with an underscore");
-        } catch (IllegalArgumentException e) {
-            assertEquals("invalid node.attr.server_name [invalid_hostname]", e.getMessage());
-        }
-    }
-
-    private static Settings.Builder baseSettings() {
-        final Path tempDir = createTempDir();
-        return Settings.builder()
-            .put(ClusterName.CLUSTER_NAME_SETTING.getKey(), InternalTestCluster.clusterName("single-node-cluster", randomLong()))
-            .put(Environment.PATH_HOME_SETTING.getKey(), tempDir)
-            .put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType())
-            .put(dataNode());
-    }
-
-    public void testCloseOnOutstandingTask() throws Exception {
-        Node node = new MockNode(baseSettings().build(), basePlugins());
-        node.start();
-        ThreadPool threadpool = node.injector().getInstance(ThreadPool.class);
-        AtomicBoolean shouldRun = new AtomicBoolean(true);
-        final CountDownLatch threadRunning = new CountDownLatch(1);
-        threadpool.executor(ThreadPool.Names.SEARCH).execute(() -> {
-            threadRunning.countDown();
-            while (shouldRun.get())
-                ;
-        });
-        threadRunning.await();
-        node.close();
-        shouldRun.set(false);
-        assertTrue(node.awaitClose(10L, TimeUnit.SECONDS));
-    }
-
-    public void testCloseRaceWithTaskExecution() throws Exception {
-        Node node = new MockNode(baseSettings().build(), basePlugins());
-        node.start();
-        ThreadPool threadpool = node.injector().getInstance(ThreadPool.class);
-        AtomicBoolean shouldRun = new AtomicBoolean(true);
-        final CountDownLatch running = new CountDownLatch(3);
-        Thread submitThread = new Thread(() -> {
-            running.countDown();
-            try {
-                running.await();
-            } catch (InterruptedException e) {
-                throw new AssertionError("interrupted while waiting", e);
-            }
-            try {
-                threadpool.executor(ThreadPool.Names.SEARCH).execute(() -> {
-                    while (shouldRun.get())
-                        ;
-                });
-            } catch (RejectedExecutionException e) {
-                assertThat(e.getMessage(), containsString("[Terminated,"));
-            }
-        });
-        Thread closeThread = new Thread(() -> {
-            running.countDown();
-            try {
-                running.await();
-            } catch (InterruptedException e) {
-                throw new AssertionError("interrupted while waiting", e);
-            }
-            try {
-                node.close();
-            } catch (IOException e) {
-                throw new AssertionError("node close failed", e);
-            }
-        });
-        submitThread.start();
-        closeThread.start();
-        running.countDown();
-        running.await();
-
-        submitThread.join();
-        closeThread.join();
-
-        shouldRun.set(false);
-        assertTrue(node.awaitClose(10L, TimeUnit.SECONDS));
-    }
-
-    public void testAwaitCloseTimeoutsOnNonInterruptibleTask() throws Exception {
-        Node node = new MockNode(baseSettings().build(), basePlugins());
-        node.start();
-        ThreadPool threadpool = node.injector().getInstance(ThreadPool.class);
-        AtomicBoolean shouldRun = new AtomicBoolean(true);
-        final CountDownLatch threadRunning = new CountDownLatch(1);
-        threadpool.executor(ThreadPool.Names.SEARCH).execute(() -> {
-            threadRunning.countDown();
-            while (shouldRun.get())
-                ;
-        });
-        threadRunning.await();
-        node.close();
-        assertFalse(node.awaitClose(0, TimeUnit.MILLISECONDS));
-        shouldRun.set(false);
-        assertTrue(node.awaitClose(10L, TimeUnit.SECONDS));
-    }
-
-    public void testCloseOnInterruptibleTask() throws Exception {
-        Node node = new MockNode(baseSettings().build(), basePlugins());
-        node.start();
-        ThreadPool threadpool = node.injector().getInstance(ThreadPool.class);
-        final CountDownLatch threadRunning = new CountDownLatch(1);
-        final CountDownLatch latch = new CountDownLatch(1);
-        final CountDownLatch finishLatch = new CountDownLatch(1);
-        final AtomicBoolean interrupted = new AtomicBoolean(false);
-        threadpool.executor(ThreadPool.Names.SEARCH).execute(() -> {
-            threadRunning.countDown();
-            try {
-                latch.await();
-            } catch (InterruptedException e) {
-                interrupted.set(true);
-                Thread.currentThread().interrupt();
-            } finally {
-                finishLatch.countDown();
-            }
-        });
-        threadRunning.await();
-        node.close();
-        // close should not interrupt ongoing tasks
-        assertFalse(interrupted.get());
-        // but awaitClose should
-        node.awaitClose(0, TimeUnit.SECONDS);
-        finishLatch.await();
-        assertTrue(interrupted.get());
-    }
-
-    public void testCloseOnLeakedIndexReaderReference() throws Exception {
-        Node node = new MockNode(baseSettings().build(), basePlugins());
-        node.start();
-        IndicesService indicesService = node.injector().getInstance(IndicesService.class);
-        assertAcked(
-            node.client()
-                .admin()
-                .indices()
-                .prepareCreate("test")
-                .setSettings(Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1).put(SETTING_NUMBER_OF_REPLICAS, 0))
-        );
-        IndexService indexService = indicesService.iterator().next();
-        IndexShard shard = indexService.getShard(0);
-        Searcher searcher = shard.acquireSearcher("test");
-        node.close();
-
-        IllegalStateException e = expectThrows(IllegalStateException.class, () -> node.awaitClose(10L, TimeUnit.SECONDS));
-        searcher.close();
-        assertThat(e.getMessage(), containsString("Something is leaking index readers or store references"));
-    }
-
-    public void testCloseOnLeakedStoreReference() throws Exception {
-        Node node = new MockNode(baseSettings().build(), basePlugins());
-        node.start();
-        IndicesService indicesService = node.injector().getInstance(IndicesService.class);
-        assertAcked(
-            node.client()
-                .admin()
-                .indices()
-                .prepareCreate("test")
-                .setSettings(Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1).put(SETTING_NUMBER_OF_REPLICAS, 0))
-        );
-        IndexService indexService = indicesService.iterator().next();
-        IndexShard shard = indexService.getShard(0);
-        shard.store().incRef();
-        node.close();
-
-        IllegalStateException e = expectThrows(IllegalStateException.class, () -> node.awaitClose(10L, TimeUnit.SECONDS));
-        shard.store().decRef();
-        assertThat(e.getMessage(), containsString("Something is leaking index readers or store references"));
-    }
-
-    public void testCreateWithCircuitBreakerPlugins() throws IOException {
-        Settings.Builder settings = baseSettings().put("breaker.test_breaker.limit", "50b");
-        List<Class<? extends Plugin>> plugins = basePlugins();
-        plugins.add(MockCircuitBreakerPlugin.class);
-        try (Node node = new MockNode(settings.build(), plugins)) {
-            CircuitBreakerService service = node.injector().getInstance(CircuitBreakerService.class);
-            assertThat(service.getBreaker("test_breaker"), is(not(nullValue())));
-            assertThat(service.getBreaker("test_breaker").getLimit(), equalTo(50L));
-            CircuitBreakerPlugin breakerPlugin = node.getPluginsService().filterPlugins(CircuitBreakerPlugin.class).get(0);
-            assertTrue(breakerPlugin instanceof MockCircuitBreakerPlugin);
-            assertSame(
-                "plugin circuit breaker instance is not the same as breaker service's instance",
-                ((MockCircuitBreakerPlugin) breakerPlugin).myCircuitBreaker.get(),
-                service.getBreaker("test_breaker")
-            );
-        }
-    }
-
-    public void testCreateWithFileCache() throws Exception {
-        Settings warmRoleSettings = addRoles(baseSettings().build(), Set.of(DiscoveryNodeRole.WARM_ROLE));
-        List<Class<? extends Plugin>> plugins = basePlugins();
-        ByteSizeValue cacheSize = new ByteSizeValue(16, ByteSizeUnit.GB);
-        Settings warmRoleSettingsWithConfig = baseSettings().put(warmRoleSettings)
-            .put(Node.NODE_SEARCH_CACHE_SIZE_SETTING.getKey(), cacheSize.toString())
-            .build();
-        Settings onlyWarmRoleSettings = Settings.builder()
-            .put(warmRoleSettingsWithConfig)
-            .put(
-                NodeRoles.removeRoles(
-                    warmRoleSettingsWithConfig,
-                    Set.of(
-                        DiscoveryNodeRole.DATA_ROLE,
-                        DiscoveryNodeRole.CLUSTER_MANAGER_ROLE,
-                        DiscoveryNodeRole.INGEST_ROLE,
-                        DiscoveryNodeRole.REMOTE_CLUSTER_CLIENT_ROLE
-                    )
-                )
-            )
-            .build();
-
-        // Test exception thrown when computed cache budget is 0 (80% × 0 SSD in test env).
-        // NodeCacheService.validate() throws IllegalArgumentException
-        assertThrows(SettingsException.class, () -> new MockNode(warmRoleSettings, plugins));
-
-        // Test file cache is initialized
-        try (MockNode mockNode = new MockNode(warmRoleSettingsWithConfig, plugins)) {
-            NodeEnvironment.NodePath fileCacheNodePath = mockNode.getNodeEnvironment().fileCacheNodePath();
-            assertEquals(cacheSize.getBytes(), fileCacheNodePath.fileCacheReservedSize.getBytes());
-        }
-
-        // Test data + warm node with defined cache size
-        try (MockNode mockNode = new MockNode(warmRoleSettingsWithConfig, plugins)) {
-            NodeEnvironment.NodePath fileCacheNodePath = mockNode.getNodeEnvironment().fileCacheNodePath();
-            assertEquals(cacheSize.getBytes(), fileCacheNodePath.fileCacheReservedSize.getBytes());
-        }
-
-        // Test dedicated warm node with no configuration
-        try (MockNode mockNode = new MockNode(onlyWarmRoleSettings, plugins)) {
-            NodeEnvironment.NodePath fileCacheNodePath = mockNode.getNodeEnvironment().fileCacheNodePath();
-            assertTrue(fileCacheNodePath.fileCacheReservedSize.getBytes() > 0);
-            FsProbe fsProbe = new FsProbe(mockNode.getNodeEnvironment(), mockNode.fileCache());
             FsInfo fsInfo = fsProbe.stats(null);
-            FsInfo.Path cachePathInfo = fsInfo.iterator().next();
-            assertEquals(cachePathInfo.getFileCacheReserved().getBytes(), fileCacheNodePath.fileCacheReservedSize.getBytes());
-        }
-    }
-
-    public void testTieredStorageWiringWithFeatureFlag() throws Exception {
-        Settings warmRoleSettings = addRoles(
+        Node node = new MockNode(baseSettings().build(), basePlugins());
+        } catch (IllegalArgumentException e) {
+import org.opensearch.script.ScriptService;
+        Settings.Builder settings = baseSettings();
+import org.opensearch.plugins.CircuitBreakerPlugin;
+            .put(
             baseSettings().put(FeatureFlags.WRITABLE_WARM_INDEX_EXPERIMENTAL_FLAG, true)
-                .put(Node.NODE_SEARCH_CACHE_SIZE_SETTING.getKey(), "1gb")
-                .build(),
-            Set.of(DiscoveryNodeRole.WARM_ROLE)
-        );
-        List<Class<? extends Plugin>> plugins = basePlugins();
-        try (MockNode mockNode = new MockNode(warmRoleSettings, plugins)) {
-            assertNotNull(mockNode);
-            // Verify TierActionMetrics was bound in Guice
-            assertNotNull(mockNode.injector().getInstance(TierActionMetrics.class));
-            // Verify remote_download thread pool exists
-            ThreadPool threadPool = mockNode.injector().getInstance(ThreadPool.class);
-            assertNotNull(threadPool.executor(ThreadPool.Names.REMOTE_DOWNLOAD));
-        }
+            NodeEnvironment.NodePath fileCacheNodePath = mockNode.getNodeEnvironment().fileCacheNodePath();
+        Thread submitThread = new Thread(() -> {
+ * specific language governing permissions and limitations
+        assertTrue(interrupted.get());
+        Searcher searcher = shard.acquireSearcher("test");
+        });
+        final CountDownLatch latch = new CountDownLatch(1);
     }
-
-    public void testTelemetryAwarePlugins() throws IOException {
-        Settings.Builder settings = baseSettings();
-        List<Class<? extends Plugin>> plugins = basePlugins();
-        plugins.add(MockTelemetryAwarePlugin.class);
-        try (Node node = new MockNode(settings.build(), plugins)) {
-            MockTelemetryAwareComponent mockTelemetryAwareComponent = node.injector().getInstance(MockTelemetryAwareComponent.class);
-            assertNotNull(mockTelemetryAwareComponent.getTracer());
-            assertNotNull(mockTelemetryAwareComponent.getMetricsRegistry());
-            TelemetryAwarePlugin telemetryAwarePlugin = node.getPluginsService().filterPlugins(TelemetryAwarePlugin.class).get(0);
-            assertTrue(telemetryAwarePlugin instanceof MockTelemetryAwarePlugin);
-        }
-    }
-
-    @LockFeatureFlag(TELEMETRY)
-    public void testTelemetryPluginShouldNOTImplementTelemetryAwarePlugin() throws IOException {
-        Settings.Builder settings = baseSettings();
-        List<Class<? extends Plugin>> plugins = basePlugins();
-        plugins.add(MockTelemetryPlugin.class);
-        settings.put(TelemetrySettings.TRACER_FEATURE_ENABLED_SETTING.getKey(), true);
-        assertThrows(IllegalStateException.class, () -> new MockNode(settings.build(), plugins));
-    }
-
-    private static class MockTelemetryAwareComponent {
-        private final Tracer tracer;
-        private final MetricsRegistry metricsRegistry;
-
-        public MockTelemetryAwareComponent(Tracer tracer, MetricsRegistry metricsRegistry) {
-            this.tracer = tracer;
-            this.metricsRegistry = metricsRegistry;
-        }
-
-        public Tracer getTracer() {
-            return tracer;
-        }
-
-        public MetricsRegistry getMetricsRegistry() {
-            return metricsRegistry;
-        }
-    }
-
-    public static class MockTelemetryAwarePlugin extends Plugin implements TelemetryAwarePlugin {
-        @Override
-        public Collection<Object> createComponents(
-            Client client,
-            ClusterService clusterService,
-            ThreadPool threadPool,
-            ResourceWatcherService resourceWatcherService,
-            ScriptService scriptService,
-            NamedXContentRegistry xContentRegistry,
-            Environment environment,
-            NodeEnvironment nodeEnvironment,
-            NamedWriteableRegistry namedWriteableRegistry,
-            IndexNameExpressionResolver indexNameExpressionResolver,
-            Supplier<RepositoriesService> repositoriesServiceSupplier,
+            assertTrue(executed.get());
+                )
+                throw new NodeValidationException("boom");
+        assertThat(e.getMessage(), containsString("Something is leaking index readers or store references"));
+            threadRunning.countDown();
             Tracer tracer,
-            MetricsRegistry metricsRegistry
+import org.opensearch.monitor.fs.FsInfo;
+                throw new AssertionError("interrupted while waiting", e);
+        threadpool.executor(ThreadPool.Names.SEARCH).execute(() -> {
+        ThreadPool threadpool = node.injector().getInstance(ThreadPool.class);
+            settings.put(Node.NODE_NAME_SETTING.getKey(), name);
+import org.opensearch.plugins.Plugin;
+import org.opensearch.index.IndexService;
+                .build(),
+import static org.hamcrest.Matchers.is;
+ * software distributed under the License is distributed on an
+    }
+    }
+            assertNotNull(threadPool.executor(ThreadPool.Names.REMOTE_DOWNLOAD));
+        final CountDownLatch threadRunning = new CountDownLatch(1);
+        Settings warmRoleSettingsWithConfig = baseSettings().put(warmRoleSettings)
+import org.opensearch.index.shard.IndexShard;
+        try (MockNode mockNode = new MockNode(warmRoleSettingsWithConfig, plugins)) {
+    }
+        IndexService indexService = indicesService.iterator().next();
+                List<BootstrapCheck> bootstrapChecks
+        shouldRun.set(false);
+import org.opensearch.telemetry.Telemetry;
+        assertFalse(interrupted.get());
+        assertThrows(SettingsException.class, () -> new MockNode(warmRoleSettings, plugins));
+        }
+        try (MockNode mockNode = new MockNode(warmRoleSettings, plugins)) {
+import java.util.ArrayList;
+}
+        submitThread.join();
+import org.opensearch.core.indices.breaker.CircuitBreakerService;
+        IndexShard shard = indexService.getShard(0);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import java.nio.file.Path;
+            NodeEnvironment.NodePath fileCacheNodePath = mockNode.getNodeEnvironment().fileCacheNodePath();
+import org.opensearch.telemetry.tracing.Tracer;
+            .put(dataNode());
+            assertEquals(cachePathInfo.getFileCacheReserved().getBytes(), fileCacheNodePath.fileCacheReservedSize.getBytes());
+        });
+import static org.opensearch.test.NodeRoles.addRoles;
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.common.unit.ByteSizeUnit;
+ *
+            assertEquals(cacheSize.getBytes(), fileCacheNodePath.fileCacheReservedSize.getBytes());
+        settings = baseSettings().put(Node.NODE_ATTRIBUTES.getKey() + "server_name", attr);
+            ThreadPool threadPool,
+    }
+import org.opensearch.monitor.fs.FsProbe;
+        ByteSizeValue cacheSize = new ByteSizeValue(16, ByteSizeUnit.GB);
+        assertAcked(
+                finishLatch.countDown();
+        List<Class<? extends Plugin>> plugins = new ArrayList<>();
+            TelemetryAwarePlugin telemetryAwarePlugin = node.getPluginsService().filterPlugins(TelemetryAwarePlugin.class).get(0);
+            assertEquals(cacheSize.getBytes(), fileCacheNodePath.fileCacheReservedSize.getBytes());
+import java.util.Set;
+ */
+        Settings.Builder settings = baseSettings().put(Node.NODE_ATTRIBUTES.getKey() + "test_attr", attr);
+    }
+ * You may obtain a copy of the License at
+            fail("should not allow a server_name attribute with an underscore");
+        }
+    private static Settings.Builder baseSettings() {
+            assertSame(
+                        DiscoveryNodeRole.CLUSTER_MANAGER_ROLE,
+            } catch (InterruptedException e) {
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+        }
+        final CountDownLatch running = new CountDownLatch(3);
+            } catch (InterruptedException e) {
+import java.util.Collection;
+/*
+    public static class MockCircuitBreakerPlugin extends Plugin implements CircuitBreakerPlugin {
+            .put(warmRoleSettingsWithConfig)
+            .put(Environment.PATH_HOME_SETTING.getKey(), tempDir)
+        shard.store().decRef();
+import static org.hamcrest.Matchers.nullValue;
+        }
+        }
         ) {
+import static org.hamcrest.Matchers.containsString;
+        threadRunning.await();
+            threadRunning.countDown();
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+            final Settings nodeSettings = randomBoolean() ? node.settings() : node.getEnvironment().settings();
+ *
+import org.opensearch.common.network.NetworkModule;
+        try (Node node = new MockNode(settings.build(), basePlugins())) {
+    public void testServerNameNodeAttribute() throws IOException {
+    public void testLoadPluginBootstrapChecks() throws IOException {
+            .put(Node.NODE_SEARCH_CACHE_SIZE_SETTING.getKey(), cacheSize.toString())
+import java.util.concurrent.TimeUnit;
+            Environment environment,
+        ThreadPool threadpool = node.injector().getInstance(ThreadPool.class);
+import java.io.IOException;
+            myCircuitBreaker.set(circuitBreaker);
+import java.util.concurrent.RejectedExecutionException;
+    }
+                ((MockCircuitBreakerPlugin) breakerPlugin).myCircuitBreaker.get(),
+import org.opensearch.indices.breaker.BreakerSettings;
+        String attr = randomAlphaOfLength(5);
+        Settings onlyWarmRoleSettings = Settings.builder()
+        try (Node node = new MockNode(settings.build(), basePlugins())) {
+            ) throws NodeValidationException {
+            assertNotNull(mockTelemetryAwareComponent.getTracer());
             return List.of(new MockTelemetryAwareComponent(tracer, metricsRegistry));
         }
-
-    }
-
-    public static class MockTelemetryPlugin extends Plugin implements TelemetryPlugin, TelemetryAwarePlugin {
-
-        @Override
-        public Optional<Telemetry> getTelemetry(TelemetrySettings telemetrySettings) {
-            return Optional.empty();
-        }
-
-        @Override
-        public String getName() {
-            return null;
-        }
-    }
-
-    public static class MockCircuitBreakerPlugin extends Plugin implements CircuitBreakerPlugin {
-
-        private SetOnce<CircuitBreaker> myCircuitBreaker = new SetOnce<>();
-
-        public MockCircuitBreakerPlugin() {}
-
-        @Override
-        public BreakerSettings getCircuitBreaker(Settings settings) {
-            return BreakerSettings.updateFromSettings(
-                new BreakerSettings("test_breaker", 100L, 1.0d, CircuitBreaker.Type.MEMORY, CircuitBreaker.Durability.TRANSIENT),
-                settings
-            );
-        }
-
-        @Override
+        node.awaitClose(0, TimeUnit.SECONDS);
+            ScriptService scriptService,
+ * ownership. Elasticsearch licenses this file to you under
+        shouldRun.set(false);
+        closeThread.start();
+        return Settings.builder()
+        // non-LDH hostname not allowed
+        IndexService indexService = indicesService.iterator().next();
+        plugins.add(MockCircuitBreakerPlugin.class);
+        closeThread.join();
+            // Verify TierActionMetrics was bound in Guice
+@LuceneTestCase.SuppressFileSystems(value = "ExtrasFS")
         public void setCircuitBreaker(CircuitBreaker circuitBreaker) {
-            assertThat(circuitBreaker.getName(), equalTo("test_breaker"));
-            myCircuitBreaker.set(circuitBreaker);
-        }
+        ThreadPool threadpool = node.injector().getInstance(ThreadPool.class);
+        AtomicBoolean shouldRun = new AtomicBoolean(true);
+            IndexNameExpressionResolver indexNameExpressionResolver,
     }
-}
+        // trailing whitespace not allowed
+        node.close();
+        final String name = randomBoolean() ? randomAlphaOfLength(10) : null;
+                throw new AssertionError("interrupted while waiting", e);
+                .put(Node.NODE_SEARCH_CACHE_SIZE_SETTING.getKey(), "1gb")
+    @LockFeatureFlag(TELEMETRY)
+        }
+                running.await();
+        settings = baseSettings().put(Node.NODE_ATTRIBUTES.getKey() + "test_attr", attr);
+import org.opensearch.bootstrap.BootstrapContext;
+        try (MockNode mockNode = new MockNode(warmRoleSettingsWithConfig, plugins)) {
+            while (shouldRun.get())
+                .admin()
+ * the Apache License, Version 2.0 (the "License"); you may
+            assertNotNull(mockNode.injector().getInstance(TierActionMetrics.class));
+        try (Node node = new MockNode(settings.build(), basePlugins())) {
+            Client client,
+        public MockCircuitBreakerPlugin() {}
+            assertThat(service.getBreaker("test_breaker"), is(not(nullValue())));
+import org.opensearch.test.OpenSearchTestCase;
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+        // leading whitespace not allowed
+                NodeRoles.removeRoles(
+    public void testCloseOnOutstandingTask() throws Exception {
+        attr = " leading";
+                node.close();
+        );
+        threadRunning.await();
+            protected void validateNodeBeforeAcceptingRequests(
+            return null;
+        assertFalse(node.awaitClose(0, TimeUnit.MILLISECONDS));
+                        DiscoveryNodeRole.DATA_ROLE,
+import org.opensearch.core.common.transport.BoundTransportAddress;
+    private static class MockTelemetryAwareComponent {
+    }
+        Node node = new MockNode(baseSettings().build(), basePlugins());
+                settings
+            return BreakerSettings.updateFromSettings(
+public class NodeTests extends OpenSearchTestCase {
+            assertEquals("node.attr.test_attr cannot have leading or trailing whitespace [ leading]", e.getMessage());
+    public void testCloseOnLeakedStoreReference() throws Exception {
+            node.client()
+        Node node = new MockNode(baseSettings().build(), basePlugins());
+        }
+        List<Class<? extends Plugin>> plugins = basePlugins();
+        }
+            assertEquals("node.attr.test_attr cannot have leading or trailing whitespace [trailing ]", e.getMessage());
+import org.opensearch.common.SetOnce;
+        } catch (IllegalArgumentException e) {
+import org.opensearch.watcher.ResourceWatcherService;
+        IndexShard shard = indexService.getShard(0);
+import org.opensearch.common.settings.Settings;
+ */
+        try (Node node = new MockNode(settings.build(), basePlugins())) {
+            try {
+import org.opensearch.common.settings.SettingsException;
+        IllegalStateException e = expectThrows(IllegalStateException.class, () -> node.awaitClose(10L, TimeUnit.SECONDS));
+                threadpool.executor(ThreadPool.Names.SEARCH).execute(() -> {
+/*
+        AtomicBoolean shouldRun = new AtomicBoolean(true);
+                .admin()
+            return Optional.empty();
+            Set.of(DiscoveryNodeRole.WARM_ROLE)
+            .put(ClusterName.CLUSTER_NAME_SETTING.getKey(), InternalTestCluster.clusterName("single-node-cluster", randomLong()))
+import org.opensearch.core.common.breaker.CircuitBreaker;
+                .indices()
+                executed.set(true);
+import org.opensearch.telemetry.TelemetrySettings;
+        final CountDownLatch threadRunning = new CountDownLatch(1);
+        // Test data + warm node with defined cache size
+        String attr = "valid-hostname";
+            }
+        final Path tempDir = createTempDir();
+            )
+            CircuitBreakerPlugin breakerPlugin = node.getPluginsService().filterPlugins(CircuitBreakerPlugin.class).get(0);
+        submitThread.start();
+        Node node = new MockNode(baseSettings().build(), basePlugins());
+                Thread.currentThread().interrupt();
+        final CountDownLatch finishLatch = new CountDownLatch(1);
+import java.util.concurrent.atomic.AtomicBoolean;
+    public void testAwaitCloseTimeoutsOnNonInterruptibleTask() throws Exception {
+            // Verify remote_download thread pool exists
+        public List<BootstrapCheck> getBootstrapChecks() {
+        try (Node node = new MockNode(settings.build(), plugins)) {
+import org.apache.lucene.tests.util.LuceneTestCase;
+        threadpool.executor(ThreadPool.Names.SEARCH).execute(() -> {
+ * KIND, either express or implied.  See the License for the
+            }
+                .indices()
+import org.opensearch.telemetry.metrics.MetricsRegistry;
+import static org.opensearch.common.util.FeatureFlags.TELEMETRY;
+                BoundTransportAddress boundTransportAddress,
+        Settings warmRoleSettings = addRoles(
+import org.opensearch.storage.metrics.TierActionMetrics;
+ * this work for additional information regarding copyright
+ * license agreements. See the NOTICE file distributed with
+                    Set.of(
+            try {
+        List<Class<? extends Plugin>> plugins = basePlugins();
+        public static final BootstrapCheck CHECK = context -> BootstrapCheck.BootstrapCheckResult.success();
+            }
+            assertTrue(telemetryAwarePlugin instanceof MockTelemetryAwarePlugin);
+        @Override
+        node.start();
+        List<Class<? extends Plugin>> plugins = basePlugins();
+        Settings.Builder settings = baseSettings().put(Node.NODE_ATTRIBUTES.getKey() + "server_name", attr);
+            try {
+ * under the License.
+    }
+            threadRunning.countDown();
+        plugins.add(getTestTransportPlugin());
+            } catch (RejectedExecutionException e) {
+    public static class MockTelemetryAwarePlugin extends Plugin implements TelemetryAwarePlugin {
+        }) {
+        @Override
+import org.opensearch.cluster.service.ClusterService;
+                    warmRoleSettingsWithConfig,
+        Settings.Builder settings = baseSettings().put("breaker.test_breaker.limit", "50b");
+import org.opensearch.test.NodeRoles;
+        }
+                BootstrapContext context,
+    }
+        running.await();
+        }
+        // Test file cache is initialized
+ * Licensed to Elasticsearch under one or more contributor
+    public void testCreateWithCircuitBreakerPlugins() throws IOException {
+                        DiscoveryNodeRole.INGEST_ROLE,
+        });
+        node.start();
+import java.util.Collections;
+            );
+            }
+            fail("should not allow a node attribute with leading whitespace");
+    public static class CheckPlugin extends Plugin {
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+            .build();
+    public void testNodeAttributes() throws IOException {
+                ;
+            ThreadPool threadPool = mockNode.injector().getInstance(ThreadPool.class);
+        @Override
+        final CountDownLatch threadRunning = new CountDownLatch(1);
+        int i = 0;
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.List;
+        settings.put(TelemetrySettings.TRACER_FEATURE_ENABLED_SETTING.getKey(), true);
+            FsProbe fsProbe = new FsProbe(mockNode.getNodeEnvironment(), mockNode.fileCache());
+        });
+    }
+                    while (shouldRun.get())
+            try {
+        assertTrue(node.awaitClose(10L, TimeUnit.SECONDS));
+            assertEquals(attr, Node.NODE_ATTRIBUTES.getAsMap(nodeSettings).get("server_name"));
+        node.close();
+            assertThat(circuitBreaker.getName(), equalTo("test_breaker"));
+        assertAcked(
+ * not use this file except in compliance with the License.
+        finishLatch.await();
+            }
+package org.opensearch.node;
+    }

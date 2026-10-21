@@ -1,517 +1,451 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.block;
-
-import org.opensearch.cluster.AbstractDiffable;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.Diff;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.MetadataIndexStateService;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.util.set.Sets;
-import org.opensearch.core.common.io.stream.BufferedChecksumStreamOutput;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.VerifiableWriteable;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.index.IndexModule;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Predicate;
-
-import static java.util.Collections.emptySet;
-import static java.util.Collections.unmodifiableSet;
-import static java.util.stream.Collectors.toSet;
-import static org.opensearch.index.IndexModule.INDEX_STORE_TYPE_SETTING;
-
-/**
- * Represents current cluster level blocks to block dirty operations done against the cluster.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class ClusterBlocks extends AbstractDiffable<ClusterBlocks> implements VerifiableWriteable {
-    public static final ClusterBlocks EMPTY_CLUSTER_BLOCK = new ClusterBlocks(emptySet(), Map.of());
-    public static final Set<Setting<Boolean>> INDEX_DATA_READ_ONLY_BLOCK_SETTINGS = Set.of(
-        IndexMetadata.INDEX_READ_ONLY_SETTING,
-        IndexMetadata.INDEX_BLOCKS_METADATA_SETTING,
-        IndexMetadata.INDEX_BLOCKS_READ_ONLY_ALLOW_DELETE_SETTING
-    );
-    private final Set<ClusterBlock> global;
-
-    private final Map<String, Set<ClusterBlock>> indicesBlocks;
-
-    private final EnumMap<ClusterBlockLevel, ImmutableLevelHolder> levelHolders;
-
-    ClusterBlocks(Set<ClusterBlock> global, final Map<String, Set<ClusterBlock>> indicesBlocks) {
-        this.global = global;
-        this.indicesBlocks = Collections.unmodifiableMap(indicesBlocks);
-        levelHolders = generateLevelHolders(global, indicesBlocks);
-    }
-
-    public Set<ClusterBlock> global() {
-        return global;
-    }
-
-    public Map<String, Set<ClusterBlock>> indices() {
-        return indicesBlocks;
-    }
-
-    public Set<ClusterBlock> global(ClusterBlockLevel level) {
-        return levelHolders.get(level).global();
-    }
-
-    public Map<String, Set<ClusterBlock>> indices(ClusterBlockLevel level) {
-        return levelHolders.get(level).indices();
-    }
-
-    private Set<ClusterBlock> blocksForIndex(ClusterBlockLevel level, String index) {
-        return indices(level).getOrDefault(index, emptySet());
-    }
-
-    private static EnumMap<ClusterBlockLevel, ImmutableLevelHolder> generateLevelHolders(
-        Set<ClusterBlock> global,
-        final Map<String, Set<ClusterBlock>> indicesBlocks
-    ) {
-
-        EnumMap<ClusterBlockLevel, ImmutableLevelHolder> levelHolders = new EnumMap<>(ClusterBlockLevel.class);
-        for (final ClusterBlockLevel level : ClusterBlockLevel.values()) {
-            Predicate<ClusterBlock> containsLevel = block -> block.contains(level);
-            Set<ClusterBlock> newGlobal = unmodifiableSet(global.stream().filter(containsLevel).collect(toSet()));
-
-            final Map<String, Set<ClusterBlock>> indicesBuilder = new HashMap<>();
-            for (final Map.Entry<String, Set<ClusterBlock>> entry : indicesBlocks.entrySet()) {
-                indicesBuilder.put(entry.getKey(), unmodifiableSet(entry.getValue().stream().filter(containsLevel).collect(toSet())));
-            }
-            levelHolders.put(level, new ImmutableLevelHolder(newGlobal, indicesBuilder));
-        }
-        return levelHolders;
-    }
-
-    /**
-     * Returns {@code true} if one of the global blocks as its disable state persistence flag set.
-     */
-    public boolean disableStatePersistence() {
-        for (ClusterBlock clusterBlock : global) {
-            if (clusterBlock.disableStatePersistence()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public boolean hasGlobalBlock(ClusterBlock block) {
-        return global.contains(block);
-    }
-
-    public boolean hasGlobalBlockWithId(final int blockId) {
-        for (ClusterBlock clusterBlock : global) {
-            if (clusterBlock.id() == blockId) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public boolean hasGlobalBlockWithLevel(ClusterBlockLevel level) {
-        return global(level).size() > 0;
-    }
-
-    /**
-     * Is there a global block with the provided status?
-     */
-    public boolean hasGlobalBlockWithStatus(final RestStatus status) {
-        for (ClusterBlock clusterBlock : global) {
-            if (clusterBlock.status().equals(status)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public boolean hasIndexBlock(String index, ClusterBlock block) {
-        return indicesBlocks.containsKey(index) && indicesBlocks.get(index).contains(block);
-    }
-
-    public boolean hasIndexBlockWithId(String index, int blockId) {
-        final Set<ClusterBlock> clusterBlocks = indicesBlocks.get(index);
-        if (clusterBlocks != null) {
-            for (ClusterBlock clusterBlock : clusterBlocks) {
-                if (clusterBlock.id() == blockId) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    @Nullable
-    public ClusterBlock getIndexBlockWithId(final String index, final int blockId) {
-        final Set<ClusterBlock> clusterBlocks = indicesBlocks.get(index);
-        if (clusterBlocks != null) {
-            for (ClusterBlock clusterBlock : clusterBlocks) {
-                if (clusterBlock.id() == blockId) {
-                    return clusterBlock;
-                }
-            }
-        }
-        return null;
-    }
-
-    public void globalBlockedRaiseException(ClusterBlockLevel level) throws ClusterBlockException {
-        ClusterBlockException blockException = globalBlockedException(level);
-        if (blockException != null) {
-            throw blockException;
-        }
-    }
-
-    private boolean globalBlocked(ClusterBlockLevel level) {
-        return global(level).isEmpty() == false;
-    }
-
-    public ClusterBlockException globalBlockedException(ClusterBlockLevel level) {
-        if (globalBlocked(level) == false) {
-            return null;
-        }
-        return new ClusterBlockException(global(level));
-    }
-
-    public IndexCreateBlockException createIndexBlockedException(ClusterBlockLevel level) {
-        if (!globalBlocked(level)) {
-            return null;
-        }
-        return new IndexCreateBlockException(global(level));
-    }
-
-    public void indexBlockedRaiseException(ClusterBlockLevel level, String index) throws ClusterBlockException {
-        ClusterBlockException blockException = indexBlockedException(level, index);
-        if (blockException != null) {
-            throw blockException;
-        }
-    }
-
-    public ClusterBlockException indexBlockedException(ClusterBlockLevel level, String index) {
-        return indicesBlockedException(level, new String[] { index });
-    }
-
-    public boolean indexBlocked(ClusterBlockLevel level, String index) {
-        return globalBlocked(level) || blocksForIndex(level, index).isEmpty() == false;
-    }
-
-    public ClusterBlockException indicesBlockedException(ClusterBlockLevel level, String[] indices) {
-        Set<ClusterBlock> globalLevelBlocks = global(level);
-        Map<String, Set<ClusterBlock>> indexLevelBlocks = new HashMap<>();
-        for (String index : indices) {
-            Set<ClusterBlock> indexBlocks = blocksForIndex(level, index);
-            if (indexBlocks.isEmpty() == false || globalLevelBlocks.isEmpty() == false) {
-                indexLevelBlocks.put(index, Sets.union(indexBlocks, globalLevelBlocks));
-            }
-        }
-        if (indexLevelBlocks.isEmpty()) {
-            if (globalLevelBlocks.isEmpty() == false) {
-                return new ClusterBlockException(globalLevelBlocks);
-            }
-            return null;
-        }
-        return new ClusterBlockException(indexLevelBlocks);
-    }
-
-    /**
+            this.indices = Collections.unmodifiableMap(indices);
      * Returns <code>true</code> iff non of the given have a {@link ClusterBlockLevel#METADATA_WRITE} in place where the
-     * {@link ClusterBlock#isAllowReleaseResources()} returns <code>false</code>. This is used in places where resources will be released
-     * like the deletion of an index to free up resources on nodes.
-     * @param indices the indices to check
-     */
-
-    public ClusterBlockException indicesAllowReleaseResources(String[] indices) {
-        Set<ClusterBlock> globalBlocks = global(ClusterBlockLevel.METADATA_WRITE).stream()
-            .filter(clusterBlock -> clusterBlock.isAllowReleaseResources() == false)
-            .collect(toSet());
-        Map<String, Set<ClusterBlock>> indexLevelBlocks = new HashMap<>();
-        for (String index : indices) {
-            Set<ClusterBlock> blocks = Sets.union(globalBlocks, blocksForIndex(ClusterBlockLevel.METADATA_WRITE, index))
-                .stream()
-                .filter(clusterBlock -> clusterBlock.isAllowReleaseResources() == false)
-                .collect(toSet());
-            if (blocks.isEmpty() == false) {
-                indexLevelBlocks.put(index, Sets.union(globalBlocks, blocks));
-            }
         }
-        if (indexLevelBlocks.isEmpty()) {
+    }
+            indices.remove(indexMetadata.getIndex().getName());
+        return null;
+        Map<String, Set<ClusterBlock>> indexLevelBlocks = new HashMap<>();
+            return this;
+ * Represents current cluster level blocks to block dirty operations done against the cluster.
+        Set<ClusterBlock> global,
             if (globalBlocks.isEmpty() == false) {
-                return new ClusterBlockException(globalBlocks);
+        return indices(level).getOrDefault(index, emptySet());
+import org.opensearch.cluster.metadata.MetadataIndexStateService;
+     */
+            final Map<String, Set<ClusterBlock>> indicesBuilder = new HashMap<>();
+                indexLevelBlocks.put(index, Sets.union(indexBlocks, globalLevelBlocks));
+        }
+                return this;
+    }
             }
+        out.writeCollection(blocks);
+            return indices.getOrDefault(index, Collections.emptySet()).contains(block);
+            if (globalLevelBlocks.isEmpty() == false) {
             return null;
+ * The OpenSearch Contributors require contributions made to
+        private final Map<String, Set<ClusterBlock>> indices;
+        return new ClusterBlockException(indexLevelBlocks);
+ * ownership. Elasticsearch licenses this file to you under
+        for (ClusterBlock clusterBlock : global) {
+            throw blockException;
+    }
+        if (clusterBlocks != null) {
+    }
+                .collect(toSet());
+        final Set<ClusterBlock> blocks = in.readSet(ClusterBlock::new);
+                indices.put(index, new HashSet<>());
+    public static final ClusterBlocks EMPTY_CLUSTER_BLOCK = new ClusterBlocks(emptySet(), Map.of());
+            }
+                indices.remove(index);
+                    indices.put(entry.getKey(), new HashSet<>());
+    public String toString() {
+import static org.opensearch.index.IndexModule.INDEX_STORE_TYPE_SETTING;
+                    return true;
+    }
         }
         return new ClusterBlockException(indexLevelBlocks);
-    }
-
-    public static ClusterBlockException indicesWithRemoteSnapshotBlockedException(Collection<String> concreteIndices, ClusterState state) {
-        for (String index : concreteIndices) {
-            if (state.blocks().indexBlocked(ClusterBlockLevel.METADATA_WRITE, index)) {
-                IndexMetadata indexMeta = state.metadata().index(index);
-                if (indexMeta != null
-                    && (IndexModule.Type.REMOTE_SNAPSHOT.match(indexMeta.getSettings().get(INDEX_STORE_TYPE_SETTING.getKey())) == false
-                        || ClusterBlocks.INDEX_DATA_READ_ONLY_BLOCK_SETTINGS.stream()
-                            .anyMatch(booleanSetting -> booleanSetting.exists(indexMeta.getSettings())))) {
-                    return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_WRITE, concreteIndices.toArray(new String[0]));
-                }
+        public Builder updateBlocks(IndexMetadata indexMetadata) {
+            if (indexBlocks.isEmpty() == false || globalLevelBlocks.isEmpty() == false) {
+        public Map<String, Set<ClusterBlock>> indices() {
+        Set<ClusterBlock> globalLevelBlocks = global(level);
+ * this file be licensed under the Apache-2.0 license or a
             }
-        }
-        return null;
-    }
-
     @Override
-    public String toString() {
-        if (global.isEmpty() && indices().isEmpty()) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        for (ClusterBlock clusterBlock : global) {
+            indices.get(index).add(block);
+ * compatible open source license.
+            }
+    public boolean hasGlobalBlockWithLevel(ClusterBlockLevel level) {
+                if (clusterBlock.id() == blockId) {
+ * the Apache License, Version 2.0 (the "License"); you may
+                indicesBuilder.put(entry.getKey(), unmodifiableSet(entry.getValue().stream().filter(containsLevel).collect(toSet())));
+        out.writeMap(indicesBlocks, StreamOutput::writeString, (o, s) -> writeBlockSet(s, o));
+                addIndexBlock(indexName, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK);
+            if (clusterBlock.disableStatePersistence()) {
+    }
+            if (!indices.containsKey(index)) {
+        }
+ */
+            }
+    public ClusterBlockException indexBlockedException(ClusterBlockLevel level, String index) {
+        public Builder removeGlobalBlock(ClusterBlock block) {
+    ) {
+    private boolean globalBlocked(ClusterBlockLevel level) {
+     */
+    public static Builder builder() {
+        if (blockException != null) {
+        Map<String, Set<ClusterBlock>> indexLevelBlocks = new HashMap<>();
+        sb.append("blocks: \n");
+import static java.util.Collections.unmodifiableSet;
+                IndexMetadata indexMeta = state.metadata().index(index);
+    }
+        writeTo(out);
+            levelHolders.put(level, new ImmutableLevelHolder(newGlobal, indicesBuilder));
+ *
+ * You may obtain a copy of the License at
+import org.opensearch.index.IndexModule;
+        }
+    }
+    }
+            }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        return indicesBlocks;
             return "";
         }
-        StringBuilder sb = new StringBuilder();
-        sb.append("blocks: \n");
-        if (global.isEmpty() == false) {
-            sb.append("   _global_:\n");
-            for (ClusterBlock block : global) {
-                sb.append("      ").append(block);
+            return this;
+        public boolean hasIndexBlock(String index, ClusterBlock block) {
+ * Unless required by applicable law or agreed to in writing,
+    }
             }
+            return this;
+            global.addAll(blocks.global());
+                return this;
+                indexLevelBlocks.put(index, Sets.union(globalBlocks, blocks));
         }
-        for (final Map.Entry<String, Set<ClusterBlock>> entry : indices().entrySet()) {
-            sb.append("   ").append(entry.getKey()).append(":\n");
-            for (ClusterBlock block : entry.getValue()) {
-                sb.append("      ").append(block);
-            }
-        }
-        sb.append("\n");
-        return sb.toString();
+        public Builder addBlocks(IndexMetadata indexMetadata) {
+            return null;
+import java.util.Map;
+                addIndexBlock(indexName, IndexMetadata.INDEX_METADATA_BLOCK);
     }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        writeBlockSet(global, out);
-        out.writeMap(indicesBlocks, StreamOutput::writeString, (o, s) -> writeBlockSet(s, o));
+ */
+            indices.get(index).remove(block);
     }
-
-    @Override
-    public void writeVerifiableTo(BufferedChecksumStreamOutput out) throws IOException {
-        writeTo(out);
     }
-
-    private static void writeBlockSet(Set<ClusterBlock> blocks, StreamOutput out) throws IOException {
-        out.writeCollection(blocks);
+    private final EnumMap<ClusterBlockLevel, ImmutableLevelHolder> levelHolders;
+                return EMPTY_CLUSTER_BLOCK;
+        if (indexLevelBlocks.isEmpty()) {
+        return false;
     }
-
-    public static ClusterBlocks readFrom(StreamInput in) throws IOException {
-        final Set<ClusterBlock> global = readBlockSet(in);
-        final Map<String, Set<ClusterBlock>> indicesBlocks = in.readMap(i -> i.readString().intern(), ClusterBlocks::readBlockSet);
-        if (global.isEmpty() && indicesBlocks.isEmpty()) {
-            return EMPTY_CLUSTER_BLOCK;
-        }
-        return new ClusterBlocks(global, indicesBlocks);
-    }
-
-    private static Set<ClusterBlock> readBlockSet(StreamInput in) throws IOException {
-        final Set<ClusterBlock> blocks = in.readSet(ClusterBlock::new);
         return blocks.isEmpty() ? blocks : unmodifiableSet(blocks);
-    }
-
-    public static Diff<ClusterBlocks> readDiffFrom(StreamInput in) throws IOException {
-        return AbstractDiffable.readDiffFrom(ClusterBlocks::readFrom, in);
-    }
-
-    /**
-     * An immutable level holder.
-     *
-     * @opensearch.internal
-     */
-    static class ImmutableLevelHolder {
-
-        private final Set<ClusterBlock> global;
-        private final Map<String, Set<ClusterBlock>> indices;
-
-        ImmutableLevelHolder(Set<ClusterBlock> global, final Map<String, Set<ClusterBlock>> indices) {
-            this.global = global;
-            this.indices = Collections.unmodifiableMap(indices);
-        }
-
-        public Set<ClusterBlock> global() {
-            return global;
-        }
-
-        public Map<String, Set<ClusterBlock>> indices() {
-            return indices;
+    private Set<ClusterBlock> blocksForIndex(ClusterBlockLevel level, String index) {
+                    return clusterBlock;
+ * GitHub history for details.
+        public ClusterBlocks build() {
+/*
+    @PublicApi(since = "1.0.0")
         }
     }
-
-    public static Builder builder() {
+        return false;
+    }
+import org.opensearch.common.settings.Setting;
+            if (indices.get(index).isEmpty()) {
         return new Builder();
+        ClusterBlockException blockException = globalBlockedException(level);
     }
-
+            return null;
+        }
+            final HashMap<String, Set<ClusterBlock>> indicesBuilder = new HashMap<>(indices.size());
+    private static void writeBlockSet(Set<ClusterBlock> blocks, StreamOutput out) throws IOException {
+                return true;
+ * @opensearch.api
+            return EMPTY_CLUSTER_BLOCK;
+            if (!indices.containsKey(index)) {
+                    return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_WRITE, concreteIndices.toArray(new String[0]));
+                if (clusterBlock.id() == blockId) {
+        ImmutableLevelHolder(Set<ClusterBlock> global, final Map<String, Set<ClusterBlock>> indices) {
+import java.util.Set;
+            for (ClusterBlock block : global) {
+import java.util.Collection;
+                addIndexBlock(indexName, IndexMetadata.INDEX_READ_ONLY_BLOCK);
+        }
+ * software distributed under the License is distributed on an
+            if (indexMetadata.getState() == IndexMetadata.State.CLOSE) {
+        return global;
+            }
+        if (global.isEmpty() && indicesBlocks.isEmpty()) {
+                        || ClusterBlocks.INDEX_DATA_READ_ONLY_BLOCK_SETTINGS.stream()
+    public boolean hasIndexBlockWithId(String index, int blockId) {
+        this.indicesBlocks = Collections.unmodifiableMap(indicesBlocks);
+     * @opensearch.internal
+                }
+        }
+import org.opensearch.common.annotation.PublicApi;
+    }
+import java.util.function.Predicate;
+            throw blockException;
+            sb.append("   _global_:\n");
+import org.opensearch.core.common.io.stream.VerifiableWriteable;
+                return true;
+        if (global.isEmpty() == false) {
+        }
+    /**
+    public static final Set<Setting<Boolean>> INDEX_DATA_READ_ONLY_BLOCK_SETTINGS = Set.of(
+import java.util.HashSet;
+    }
+        return new ClusterBlockException(global(level));
+        }
+        public Builder removeIndexBlocks(String index) {
+            return addBlocks(indexMetadata);
+    }
+            return this;
+            String indexName = indexMetadata.getIndex().getName();
+            Set<ClusterBlock> newGlobal = unmodifiableSet(global.stream().filter(containsLevel).collect(toSet()));
+            if (IndexMetadata.INDEX_BLOCKS_METADATA_SETTING.get(indexMetadata.getSettings())) {
+                indicesBuilder.put(entry.getKey(), unmodifiableSet(new HashSet<>(entry.getValue())));
+    public ClusterBlock getIndexBlockWithId(final String index, final int blockId) {
+                return true;
+import org.opensearch.cluster.metadata.IndexMetadata;
+    }
+    private final Map<String, Set<ClusterBlock>> indicesBlocks;
+ * license agreements. See the NOTICE file distributed with
+                            .anyMatch(booleanSetting -> booleanSetting.exists(indexMeta.getSettings())))) {
+                }
+        return AbstractDiffable.readDiffFrom(ClusterBlocks::readFrom, in);
+            }
+/*
+        return global(level).size() > 0;
+ *
+            if (indexMetadata.isRemoteSnapshot()) {
+    public boolean hasGlobalBlockWithId(final int blockId) {
+    }
+     */
+import java.util.HashMap;
+ *
     /**
      * Builder for cluster blocks.
+            return indices;
+        }
+        StringBuilder sb = new StringBuilder();
+    public IndexCreateBlockException createIndexBlockedException(ClusterBlockLevel level) {
+            }
+        if (global.isEmpty() && indices().isEmpty()) {
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        }
+        writeBlockSet(global, out);
+            Predicate<ClusterBlock> containsLevel = block -> block.contains(level);
+import org.opensearch.cluster.Diff;
+            final Set<ClusterBlock> indexBlocks = indices.get(index);
+        return false;
+            if (clusterBlock.id() == blockId) {
+        for (String index : indices) {
+                addIndexBlock(indexName, IndexMetadata.APIBlock.SEARCH_ONLY.getBlock());
+            // let's remove all blocks for this index and add them back -- no need to remove all individual blocks....
+        return sb.toString();
+            return global;
+        if (!globalBlocked(level)) {
+        }
+            }
+        }
+    private static EnumMap<ClusterBlockLevel, ImmutableLevelHolder> generateLevelHolders(
+import org.opensearch.core.common.io.stream.BufferedChecksumStreamOutput;
+        IndexMetadata.INDEX_BLOCKS_METADATA_SETTING,
+package org.opensearch.cluster.block;
+    public ClusterBlockException globalBlockedException(ClusterBlockLevel level) {
+        levelHolders = generateLevelHolders(global, indicesBlocks);
+        }
+            for (final Map.Entry<String, Set<ClusterBlock>> entry : indicesBlocks.entrySet()) {
+            }
+        EnumMap<ClusterBlockLevel, ImmutableLevelHolder> levelHolders = new EnumMap<>(ClusterBlockLevel.class);
+                indices.remove(index);
      *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class Builder {
-
-        private final Set<ClusterBlock> global = new HashSet<>();
-
-        private final Map<String, Set<ClusterBlock>> indices = new HashMap<>();
-
-        public Builder() {}
-
-        public Builder blocks(ClusterBlocks blocks) {
-            global.addAll(blocks.global());
-            for (final Map.Entry<String, Set<ClusterBlock>> entry : blocks.indices().entrySet()) {
-                if (!indices.containsKey(entry.getKey())) {
-                    indices.put(entry.getKey(), new HashSet<>());
-                }
-                indices.get(entry.getKey()).addAll(entry.getValue());
             }
             return this;
+import org.opensearch.core.common.io.stream.StreamInput;
+            }
         }
-
-        public Builder addBlocks(IndexMetadata indexMetadata) {
-            String indexName = indexMetadata.getIndex().getName();
-            if (indexMetadata.getState() == IndexMetadata.State.CLOSE) {
-                addIndexBlock(indexName, MetadataIndexStateService.INDEX_CLOSED_BLOCK);
+            if (state.blocks().indexBlocked(ClusterBlockLevel.METADATA_WRITE, index)) {
             }
-            if (IndexMetadata.INDEX_READ_ONLY_SETTING.get(indexMetadata.getSettings())) {
-                addIndexBlock(indexName, IndexMetadata.INDEX_READ_ONLY_BLOCK);
-            }
+        }
+        return global(level).isEmpty() == false;
+            Set<ClusterBlock> blocks = Sets.union(globalBlocks, blocksForIndex(ClusterBlockLevel.METADATA_WRITE, index))
+        }
+@PublicApi(since = "1.0.0")
+    public boolean hasGlobalBlockWithStatus(final RestStatus status) {
+                return new ClusterBlockException(globalLevelBlocks);
+        public Builder() {}
             if (IndexMetadata.INDEX_BLOCKS_READ_SETTING.get(indexMetadata.getSettings())) {
-                addIndexBlock(indexName, IndexMetadata.INDEX_READ_BLOCK);
+        }
+        public Builder addIndexBlock(String index, ClusterBlock block) {
+        if (indexLevelBlocks.isEmpty()) {
+        sb.append("\n");
+    public boolean indexBlocked(ClusterBlockLevel level, String index) {
+        ClusterBlockException blockException = indexBlockedException(level, index);
             }
-            if (IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.get(indexMetadata.getSettings())) {
-                addIndexBlock(indexName, IndexMetadata.INDEX_WRITE_BLOCK);
+    }
+            return null;
+    }
+            .filter(clusterBlock -> clusterBlock.isAllowReleaseResources() == false)
+    static class ImmutableLevelHolder {
+        final Map<String, Set<ClusterBlock>> indicesBlocks = in.readMap(i -> i.readString().intern(), ClusterBlocks::readBlockSet);
+        Set<ClusterBlock> globalBlocks = global(ClusterBlockLevel.METADATA_WRITE).stream()
             }
-            if (IndexMetadata.INDEX_BLOCKS_METADATA_SETTING.get(indexMetadata.getSettings())) {
-                addIndexBlock(indexName, IndexMetadata.INDEX_METADATA_BLOCK);
             }
-            if (IndexMetadata.INDEX_BLOCKS_READ_ONLY_ALLOW_DELETE_SETTING.get(indexMetadata.getSettings())) {
-                addIndexBlock(indexName, IndexMetadata.INDEX_READ_ONLY_ALLOW_DELETE_BLOCK);
+    public Set<ClusterBlock> global(ClusterBlockLevel level) {
+            return this;
+        return false;
+            if (clusterBlock.status().equals(status)) {
+            this.global = global;
+            Set<ClusterBlock> indexBlocks = blocksForIndex(level, index);
             }
-            if (indexMetadata.isRemoteSnapshot()) {
+    }
+                sb.append("      ").append(block);
+            .collect(toSet());
+    }
+        public Set<ClusterBlock> global() {
+            return this;
+        }
+                }
                 addIndexBlock(indexName, IndexMetadata.REMOTE_READ_ONLY_ALLOW_DELETE);
+            for (Map.Entry<String, Set<ClusterBlock>> entry : indices.entrySet()) {
+    /**
+/*
+        return levelHolders.get(level).global();
             }
             if (IndexMetadata.INDEX_BLOCKS_SEARCH_ONLY_SETTING.get(indexMetadata.getSettings())) {
-                addIndexBlock(indexName, IndexMetadata.APIBlock.SEARCH_ONLY.getBlock());
+        for (final ClusterBlockLevel level : ClusterBlockLevel.values()) {
+            return this;
+            if (blocks.isEmpty() == false) {
             }
-            return this;
-        }
-
-        public Builder updateBlocks(IndexMetadata indexMetadata) {
-            // let's remove all blocks for this index and add them back -- no need to remove all individual blocks....
-            indices.remove(indexMetadata.getIndex().getName());
-            return addBlocks(indexMetadata);
-        }
-
-        public Builder addGlobalBlock(ClusterBlock block) {
-            global.add(block);
-            return this;
-        }
-
-        public Builder removeGlobalBlock(ClusterBlock block) {
-            global.remove(block);
-            return this;
-        }
-
-        public Builder removeGlobalBlock(int blockId) {
-            global.removeIf(block -> block.id() == blockId);
-            return this;
-        }
-
-        public Builder addIndexBlock(String index, ClusterBlock block) {
-            if (!indices.containsKey(index)) {
-                indices.put(index, new HashSet<>());
+        return null;
+     */
+ * this work for additional information regarding copyright
             }
-            indices.get(index).add(block);
-            return this;
-        }
-
-        public Builder removeIndexBlocks(String index) {
-            if (!indices.containsKey(index)) {
-                return this;
-            }
-            indices.remove(index);
-            return this;
-        }
-
-        public boolean hasIndexBlock(String index, ClusterBlock block) {
-            return indices.getOrDefault(index, Collections.emptySet()).contains(block);
-        }
-
-        public Builder removeIndexBlock(String index, ClusterBlock block) {
-            if (!indices.containsKey(index)) {
-                return this;
-            }
-            indices.get(index).remove(block);
-            if (indices.get(index).isEmpty()) {
-                indices.remove(index);
-            }
-            return this;
-        }
-
-        public Builder removeIndexBlockWithId(String index, int blockId) {
-            final Set<ClusterBlock> indexBlocks = indices.get(index);
-            if (indexBlocks == null) {
-                return this;
-            }
-            indexBlocks.removeIf(block -> block.id() == blockId);
+        return levelHolders;
+    public static Diff<ClusterBlocks> readDiffFrom(StreamInput in) throws IOException {
+        final Set<ClusterBlock> clusterBlocks = indicesBlocks.get(index);
+}
             if (indexBlocks.isEmpty()) {
-                indices.remove(index);
-            }
-            return this;
+import org.opensearch.cluster.AbstractDiffable;
+import java.io.IOException;
+    public static ClusterBlocks readFrom(StreamInput in) throws IOException {
+    }
         }
-
-        public ClusterBlocks build() {
-            if (indices.isEmpty() && global.isEmpty()) {
-                return EMPTY_CLUSTER_BLOCK;
-            }
+    public Map<String, Set<ClusterBlock>> indices() {
+    }
+            for (ClusterBlock block : entry.getValue()) {
+        private final Set<ClusterBlock> global;
+        return levelHolders.get(level).indices();
+            if (!indices.containsKey(index)) {
+        }
+import org.opensearch.core.common.io.stream.StreamOutput;
+            global.removeIf(block -> block.id() == blockId);
+import static java.util.stream.Collectors.toSet;
+        return new ClusterBlocks(global, indicesBlocks);
+    private final Set<ClusterBlock> global;
+     * {@link ClusterBlock#isAllowReleaseResources()} returns <code>false</code>. This is used in places where resources will be released
+        for (ClusterBlock clusterBlock : global) {
+            if (IndexMetadata.INDEX_BLOCKS_READ_ONLY_ALLOW_DELETE_SETTING.get(indexMetadata.getSettings())) {
+ */
+        private final Set<ClusterBlock> global = new HashSet<>();
+    public void writeVerifiableTo(BufferedChecksumStreamOutput out) throws IOException {
+import org.opensearch.common.Nullable;
             // We copy the block sets here in case of the builder is modified after build is called
-            final HashMap<String, Set<ClusterBlock>> indicesBuilder = new HashMap<>(indices.size());
-            for (Map.Entry<String, Set<ClusterBlock>> entry : indices.entrySet()) {
-                indicesBuilder.put(entry.getKey(), unmodifiableSet(new HashSet<>(entry.getValue())));
-            }
-            return new ClusterBlocks(unmodifiableSet(new HashSet<>(global)), indicesBuilder);
+import org.opensearch.core.rest.RestStatus;
+                sb.append("      ").append(block);
+    public ClusterBlockException indicesBlockedException(ClusterBlockLevel level, String[] indices) {
+        return indicesBlocks.containsKey(index) && indicesBlocks.get(index).contains(block);
+    }
+                addIndexBlock(indexName, MetadataIndexStateService.INDEX_CLOSED_BLOCK);
+        }
+                indices.get(entry.getKey()).addAll(entry.getValue());
+     * Is there a global block with the provided status?
+                    && (IndexModule.Type.REMOTE_SNAPSHOT.match(indexMeta.getSettings().get(INDEX_STORE_TYPE_SETTING.getKey())) == false
         }
     }
-}
+     * @opensearch.api
+    public boolean hasGlobalBlock(ClusterBlock block) {
+            return this;
+    }
+     * like the deletion of an index to free up resources on nodes.
+                .filter(clusterBlock -> clusterBlock.isAllowReleaseResources() == false)
+            if (IndexMetadata.INDEX_READ_ONLY_SETTING.get(indexMetadata.getSettings())) {
+     */
+        }
+            }
+        IndexMetadata.INDEX_READ_ONLY_SETTING,
+        final Map<String, Set<ClusterBlock>> indicesBlocks
+            }
+        return globalBlocked(level) || blocksForIndex(level, index).isEmpty() == false;
+            for (final Map.Entry<String, Set<ClusterBlock>> entry : blocks.indices().entrySet()) {
+        }
+    public void writeTo(StreamOutput out) throws IOException {
+        return new IndexCreateBlockException(global(level));
+ * under the License.
+            }
+        for (final Map.Entry<String, Set<ClusterBlock>> entry : indices().entrySet()) {
+import org.opensearch.cluster.ClusterState;
+            }
+        public Builder addGlobalBlock(ClusterBlock block) {
+        for (String index : indices) {
+        IndexMetadata.INDEX_BLOCKS_READ_ONLY_ALLOW_DELETE_SETTING
+        if (globalBlocked(level) == false) {
+        public Builder removeIndexBlock(String index, ClusterBlock block) {
+        final Set<ClusterBlock> global = readBlockSet(in);
+            for (ClusterBlock clusterBlock : clusterBlocks) {
+ * KIND, either express or implied.  See the License for the
+    private static Set<ClusterBlock> readBlockSet(StreamInput in) throws IOException {
+            }
+        return indicesBlockedException(level, new String[] { index });
+    @Override
+            return new ClusterBlocks(unmodifiableSet(new HashSet<>(global)), indicesBuilder);
+public class ClusterBlocks extends AbstractDiffable<ClusterBlocks> implements VerifiableWriteable {
+import org.opensearch.common.util.set.Sets;
+ */
+        }
+    @Nullable
+/**
+    }
+        }
+            if (indexBlocks == null) {
+        }
+    public Set<ClusterBlock> global() {
+import static java.util.Collections.emptySet;
+        public Builder removeIndexBlockWithId(String index, int blockId) {
+                addIndexBlock(indexName, IndexMetadata.INDEX_READ_BLOCK);
+    public ClusterBlockException indicesAllowReleaseResources(String[] indices) {
+    /**
+    public boolean disableStatePersistence() {
+ *
+ * Licensed to Elasticsearch under one or more contributor
+    public boolean hasIndexBlock(String index, ClusterBlock block) {
+                return new ClusterBlockException(globalBlocks);
+     * Returns {@code true} if one of the global blocks as its disable state persistence flag set.
+import java.util.Collections;
+                addIndexBlock(indexName, IndexMetadata.INDEX_WRITE_BLOCK);
+    public static ClusterBlockException indicesWithRemoteSnapshotBlockedException(Collection<String> concreteIndices, ClusterState state) {
+            global.add(block);
+            for (ClusterBlock clusterBlock : clusterBlocks) {
+import java.util.EnumMap;
+        this.global = global;
+                }
+        public Builder removeGlobalBlock(int blockId) {
+    ClusterBlocks(Set<ClusterBlock> global, final Map<String, Set<ClusterBlock>> indicesBlocks) {
+     * @param indices the indices to check
+                if (indexMeta != null
+                .stream()
+            if (IndexMetadata.INDEX_BLOCKS_WRITE_SETTING.get(indexMetadata.getSettings())) {
+            }
+            }
+     * An immutable level holder.
+     *
+            indices.remove(index);
+            global.remove(block);
+        return global.contains(block);
+        private final Map<String, Set<ClusterBlock>> indices = new HashMap<>();
+        if (blockException != null) {
+ * not use this file except in compliance with the License.
+            sb.append("   ").append(entry.getKey()).append(":\n");
+    }
+        final Set<ClusterBlock> clusterBlocks = indicesBlocks.get(index);
+    /**
+    @Override
+    public void indexBlockedRaiseException(ClusterBlockLevel level, String index) throws ClusterBlockException {
+        }
+            }
+    public static class Builder {
+    public Map<String, Set<ClusterBlock>> indices(ClusterBlockLevel level) {
+ * Modifications Copyright OpenSearch Contributors. See
+ * specific language governing permissions and limitations
+                if (!indices.containsKey(entry.getKey())) {
+            indexBlocks.removeIf(block -> block.id() == blockId);
+    }
+        if (clusterBlocks != null) {
+                return this;
+        public Builder blocks(ClusterBlocks blocks) {
+    );
+            if (indices.isEmpty() && global.isEmpty()) {
+    public void globalBlockedRaiseException(ClusterBlockLevel level) throws ClusterBlockException {
+        for (String index : concreteIndices) {
+        }

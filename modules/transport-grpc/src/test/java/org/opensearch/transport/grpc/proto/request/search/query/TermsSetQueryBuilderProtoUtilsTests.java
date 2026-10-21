@@ -1,232 +1,188 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.transport.grpc.proto.request.search.query;
-
+        assertEquals("", result.queryName()); // Empty string should be preserved
+        Object value = result.getValues().get(0);
+            .setMinimumShouldMatchField("count")
+        // This should throw an IllegalArgumentException
+                InlineScript.newBuilder()
+            .build();
+        assertNotNull(result);
+            : value.toString();
+    }
+            .addTerms("term2") // Duplicate
+            .setBoost(-1.0f) // Negative boost - should throw exception
+        TermsSetQuery proto = TermsSetQuery.newBuilder()
+        assertEquals(2.0f, result.boost(), 0.0f);
+        expectThrows(IllegalArgumentException.class, () -> TermsSetQueryBuilderProtoUtils.fromProto(null));
+            .setField("tags")
+        // Both empty string and valid term should be included
+        assertNull(result.queryName());
+            .setXName("") // Empty query name
+        TermsSetQuery proto = TermsSetQuery.newBuilder().addTerms("value").setMinimumShouldMatchField("count").build();
+    public void testFromProtoWithScript() {
+    public void testFromProtoWithDuplicateTerms() {
+            .build();
+        assertEquals(AbstractQueryBuilder.DEFAULT_BOOST, result.boost(), 0.0f);
+        assertNotNull(result);
+            .addTerms("programming")
+        assertNotNull(result);
+            .setXName("multi_terms_query")
 import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.TermsSetQueryBuilder;
-import org.opensearch.protobufs.BuiltinScriptLanguage;
-import org.opensearch.protobufs.InlineScript;
-import org.opensearch.protobufs.Script;
-import org.opensearch.protobufs.ScriptLanguage;
-import org.opensearch.protobufs.TermsSetQuery;
-import org.opensearch.test.OpenSearchTestCase;
-
-public class TermsSetQueryBuilderProtoUtilsTests extends OpenSearchTestCase {
-
-    public void testFromProtoBasic() {
-        TermsSetQuery proto = TermsSetQuery.newBuilder()
-            .setField("status")
-            .addTerms("published")
-            .setMinimumShouldMatchField("count")
-            .build();
-
-        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
-
-        assertNotNull(result);
-        assertEquals(1, result.getValues().size());
-        Object value = result.getValues().get(0);
-        String stringValue = value instanceof org.apache.lucene.util.BytesRef
-            ? ((org.apache.lucene.util.BytesRef) value).utf8ToString()
-            : value.toString();
-        assertEquals("published", stringValue);
-        assertEquals(AbstractQueryBuilder.DEFAULT_BOOST, result.boost(), 0.0f);
-        assertNull(result.queryName());
-    }
-
-    public void testFromProtoWithOptionalFields() {
-        TermsSetQuery proto = TermsSetQuery.newBuilder()
-            .setField("tags")
-            .addTerms("urgent")
-            .setBoost(2.0f)
-            .setXName("test_query")
-            .setMinimumShouldMatchField("tag_count")
-            .build();
-
-        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
-
-        assertNotNull(result);
-        assertEquals(2.0f, result.boost(), 0.0f);
-        assertEquals("test_query", result.queryName());
-        assertEquals("tag_count", result.getMinimumShouldMatchField());
-    }
-
-    public void testFromProtoWithScript() {
-        Script script = Script.newBuilder()
-            .setInline(
-                InlineScript.newBuilder()
-                    .setSource("params.num_terms")
-                    .setLang(ScriptLanguage.newBuilder().setBuiltin(BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_PAINLESS))
-                    .build()
-            )
-            .build();
-
-        TermsSetQuery proto = TermsSetQuery.newBuilder().setField("skills").addTerms("java").setMinimumShouldMatchScript(script).build();
-
-        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
-
-        assertNotNull(result);
-        assertNull(result.getMinimumShouldMatchField());
-        assertNotNull(result.getMinimumShouldMatchScript());
-        assertEquals("painless", result.getMinimumShouldMatchScript().getLang());
-    }
-
-    public void testFromProtoWithNullInput() {
-        expectThrows(IllegalArgumentException.class, () -> TermsSetQueryBuilderProtoUtils.fromProto(null));
-    }
-
-    public void testFromProtoWithEmptyField() {
-        TermsSetQuery proto = TermsSetQuery.newBuilder().setField("").addTerms("value").setMinimumShouldMatchField("count").build();
-
         expectThrows(IllegalArgumentException.class, () -> TermsSetQueryBuilderProtoUtils.fromProto(proto));
-    }
-
-    public void testFromProtoWithNoTerms() {
-        TermsSetQuery proto = TermsSetQuery.newBuilder().setField("category").setMinimumShouldMatchField("count").build();
-
-        expectThrows(IllegalArgumentException.class, () -> TermsSetQueryBuilderProtoUtils.fromProto(proto));
-    }
-
-    public void testFromProtoWithNullField() {
-        // No field set should default to null or empty
-        TermsSetQuery proto = TermsSetQuery.newBuilder().addTerms("value").setMinimumShouldMatchField("count").build();
-
-        expectThrows(IllegalArgumentException.class, () -> TermsSetQueryBuilderProtoUtils.fromProto(proto));
-    }
-
-    public void testFromProtoWithMultipleTerms() {
-        TermsSetQuery proto = TermsSetQuery.newBuilder()
-            .setField("categories")
-            .addTerms("tech")
-            .addTerms("science")
-            .addTerms("programming")
-            .addTerms("java")
-            .setMinimumShouldMatchField("category_count")
-            .setBoost(1.5f)
-            .setXName("multi_terms_query")
-            .build();
-
-        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
-
-        assertNotNull(result);
-        assertEquals(4, result.getValues().size());
-        // Note: Field name is internal to the builder and not directly accessible for verification
-        assertEquals("category_count", result.getMinimumShouldMatchField());
-        assertEquals(1.5f, result.boost(), 0.0f);
-        assertEquals("multi_terms_query", result.queryName());
-    }
-
-    public void testFromProtoMinimalFieldsOnly() {
-        TermsSetQuery proto = TermsSetQuery.newBuilder()
-            .setField("minimal_field")
-            .addTerms("single_term")
-            .setMinimumShouldMatchField("min_count")
-            .build(); // No boost or query name - should use defaults
-
-        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
-
-        assertNotNull(result);
-        assertEquals(1, result.getValues().size());
-        assertEquals("min_count", result.getMinimumShouldMatchField());
-        assertEquals(AbstractQueryBuilder.DEFAULT_BOOST, result.boost(), 0.0f);
-        assertNull(result.queryName());
-    }
-
-    public void testFromProtoWithEmptyTermsString() {
-        TermsSetQuery proto = TermsSetQuery.newBuilder()
-            .setField("test_field")
-            .addTerms("") // Empty string term
-            .addTerms("valid_term")
-            .setMinimumShouldMatchField("count")
-            .build();
-
-        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
-
-        assertNotNull(result);
-        assertEquals(2, result.getValues().size());
-        // Both empty string and valid term should be included
-    }
-
-    public void testFromProtoWithDuplicateTerms() {
-        TermsSetQuery proto = TermsSetQuery.newBuilder()
-            .setField("duplicate_field")
-            .addTerms("term1")
-            .addTerms("term2")
-            .addTerms("term1") // Duplicate
-            .addTerms("term2") // Duplicate
             .setMinimumShouldMatchField("term_count")
-            .build();
-
         TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
-
-        assertNotNull(result);
-        assertEquals(4, result.getValues().size()); // All terms included, including duplicates
-    }
-
-    public void testFromProtoWithZeroBoost() {
+import org.opensearch.protobufs.ScriptLanguage;
         TermsSetQuery proto = TermsSetQuery.newBuilder()
-            .setField("boost_field")
-            .addTerms("term")
-            .setBoost(0.0f) // Zero boost
-            .setMinimumShouldMatchField("count")
-            .build();
-
-        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
-
-        assertNotNull(result);
-        assertEquals(0.0f, result.boost(), 0.0f);
     }
-
-    public void testFromProtoWithNegativeBoost() {
+            .setMinimumShouldMatchField("category_count")
+        assertEquals("category_count", result.getMinimumShouldMatchField());
         TermsSetQuery proto = TermsSetQuery.newBuilder()
-            .setField("negative_boost_field")
-            .addTerms("term")
-            .setBoost(-1.0f) // Negative boost - should throw exception
-            .setMinimumShouldMatchField("count")
-            .build();
-
-        expectThrows(IllegalArgumentException.class, () -> TermsSetQueryBuilderProtoUtils.fromProto(proto));
-    }
-
-    public void testFromProtoWithBothFieldAndScript() {
-        Script script = Script.newBuilder()
-            .setInline(
-                InlineScript.newBuilder()
-                    .setSource("params.required_count")
-                    .setLang(ScriptLanguage.newBuilder().setBuiltin(BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_PAINLESS))
-                    .build()
-            )
-            .build();
-
-        TermsSetQuery proto = TermsSetQuery.newBuilder()
-            .setField("field_with_script")
-            .addTerms("term1")
             .setMinimumShouldMatchField("field_count") // Both field and script
-            .setMinimumShouldMatchScript(script)
-            .build();
-
+        // Note: Field name is internal to the builder and not directly accessible for verification
+            .setXName("test_query")
+    public void testFromProtoWithNullInput() {
+    }
         // OpenSearch TermsSetQueryBuilder doesn't allow both field and script to be set
-        // This should throw an IllegalArgumentException
-        expectThrows(IllegalArgumentException.class, () -> TermsSetQueryBuilderProtoUtils.fromProto(proto));
+                    .setSource("params.required_count")
     }
-
-    public void testFromProtoWithEmptyQueryName() {
-        TermsSetQuery proto = TermsSetQuery.newBuilder()
-            .setField("query_name_field")
-            .addTerms("term")
-            .setXName("") // Empty query name
+        assertEquals(1, result.getValues().size());
+    public void testFromProtoWithNoTerms() {
+            .setField("categories")
+                    .build()
+ * this file be licensed under the Apache-2.0 license or a
+        TermsSetQuery proto = TermsSetQuery.newBuilder().setField("category").setMinimumShouldMatchField("count").build();
+package org.opensearch.transport.grpc.proto.request.search.query;
             .setMinimumShouldMatchField("count")
-            .build();
-
-        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
-
-        assertNotNull(result);
-        assertEquals("", result.queryName()); // Empty string should be preserved
     }
-
+    public void testFromProtoWithEmptyQueryName() {
+        expectThrows(IllegalArgumentException.class, () -> TermsSetQueryBuilderProtoUtils.fromProto(proto));
+        assertEquals("tag_count", result.getMinimumShouldMatchField());
+ */
+            .addTerms("") // Empty string term
+            .setMinimumShouldMatchField("count")
 }
+        assertNotNull(result);
+            .setMinimumShouldMatchScript(script)
+        String stringValue = value instanceof org.apache.lucene.util.BytesRef
+            .build();
+            .addTerms("valid_term")
+            .addTerms("term1")
+        TermsSetQuery proto = TermsSetQuery.newBuilder()
+            .build();
+/*
+        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
+        TermsSetQuery proto = TermsSetQuery.newBuilder()
+    }
+            .addTerms("urgent")
+        assertNotNull(result);
+            .addTerms("science")
+                    .build()
+            .addTerms("term")
+    public void testFromProtoWithMultipleTerms() {
+            .setField("query_name_field")
+            .setMinimumShouldMatchField("tag_count")
+import org.opensearch.protobufs.TermsSetQuery;
+        assertEquals("published", stringValue);
+    }
+    }
+            .build();
+        expectThrows(IllegalArgumentException.class, () -> TermsSetQueryBuilderProtoUtils.fromProto(proto));
+    public void testFromProtoWithOptionalFields() {
+        assertEquals(1, result.getValues().size());
+        assertNotNull(result);
+            ? ((org.apache.lucene.util.BytesRef) value).utf8ToString()
+        TermsSetQuery proto = TermsSetQuery.newBuilder()
+ * SPDX-License-Identifier: Apache-2.0
+            .build();
+            .setField("boost_field")
+        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
+            .addTerms("term")
+    public void testFromProtoMinimalFieldsOnly() {
+        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
+            .setField("test_field")
+            .build();
+        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
+        assertEquals(AbstractQueryBuilder.DEFAULT_BOOST, result.boost(), 0.0f);
+        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
+            )
+            .addTerms("single_term")
+            .addTerms("term")
+        Script script = Script.newBuilder()
+import org.opensearch.protobufs.BuiltinScriptLanguage;
+                    .setLang(ScriptLanguage.newBuilder().setBuiltin(BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_PAINLESS))
+            .addTerms("java")
+    }
+            .build();
+        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
+        TermsSetQuery proto = TermsSetQuery.newBuilder()
+            .setBoost(2.0f)
+            .setField("negative_boost_field")
+            .addTerms("published")
+        assertEquals("painless", result.getMinimumShouldMatchScript().getLang());
+import org.opensearch.protobufs.Script;
+        assertNotNull(result.getMinimumShouldMatchScript());
+                    .setSource("params.num_terms")
+            .setMinimumShouldMatchField("count")
+        // No field set should default to null or empty
+            .setField("minimal_field")
+        TermsSetQuery proto = TermsSetQuery.newBuilder().setField("skills").addTerms("java").setMinimumShouldMatchScript(script).build();
+            .build(); // No boost or query name - should use defaults
+            .addTerms("term1")
+        assertEquals("test_query", result.queryName());
+    }
+    public void testFromProtoWithNegativeBoost() {
+ * compatible open source license.
+    }
+    public void testFromProtoBasic() {
+        assertNotNull(result);
+        assertEquals("multi_terms_query", result.queryName());
+        assertEquals(0.0f, result.boost(), 0.0f);
+                    .setLang(ScriptLanguage.newBuilder().setBuiltin(BuiltinScriptLanguage.BUILTIN_SCRIPT_LANGUAGE_PAINLESS))
+            .setBoost(1.5f)
+        assertNull(result.getMinimumShouldMatchField());
+        assertEquals(2, result.getValues().size());
+        TermsSetQuery proto = TermsSetQuery.newBuilder()
+ *
+    public void testFromProtoWithZeroBoost() {
+            .addTerms("term2")
+    }
+    }
+            .addTerms("term1") // Duplicate
+        assertEquals(1.5f, result.boost(), 0.0f);
+public class TermsSetQueryBuilderProtoUtilsTests extends OpenSearchTestCase {
+import org.opensearch.test.OpenSearchTestCase;
+            .setInline(
+            .addTerms("tech")
+    public void testFromProtoWithEmptyTermsString() {
+        Script script = Script.newBuilder()
+            .setMinimumShouldMatchField("min_count")
+        assertNotNull(result);
+            .build();
+            .build();
+        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
+        expectThrows(IllegalArgumentException.class, () -> TermsSetQueryBuilderProtoUtils.fromProto(proto));
+    public void testFromProtoWithNullField() {
+    public void testFromProtoWithBothFieldAndScript() {
+            .setField("duplicate_field")
+        TermsSetQueryBuilder result = TermsSetQueryBuilderProtoUtils.fromProto(proto);
+        assertEquals(4, result.getValues().size());
+            )
+        assertEquals("min_count", result.getMinimumShouldMatchField());
+        TermsSetQuery proto = TermsSetQuery.newBuilder().setField("").addTerms("value").setMinimumShouldMatchField("count").build();
+            .setField("status")
+            .setField("field_with_script")
+                InlineScript.newBuilder()
+        assertEquals(4, result.getValues().size()); // All terms included, including duplicates
+        assertNull(result.queryName());
+import org.opensearch.protobufs.InlineScript;
+            .setInline(
+        TermsSetQuery proto = TermsSetQuery.newBuilder()
+    }
+    public void testFromProtoWithEmptyField() {
+            .build();
+ * The OpenSearch Contributors require contributions made to
+        assertNotNull(result);
+    }
+            .setMinimumShouldMatchField("count")
+        expectThrows(IllegalArgumentException.class, () -> TermsSetQueryBuilderProtoUtils.fromProto(proto));
+        TermsSetQuery proto = TermsSetQuery.newBuilder()
+            .setBoost(0.0f) // Zero boost

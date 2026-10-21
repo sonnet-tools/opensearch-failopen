@@ -1,164 +1,139 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.storage.action.tiering;
-
-import org.opensearch.Version;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.index.Index;
-import org.opensearch.index.IndexModule;
-import org.opensearch.storage.tiering.HotToWarmTieringService;
-import org.opensearch.storage.tiering.WarmToHotTieringService;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-import org.junit.Before;
-
-import org.mockito.ArgumentCaptor;
-
-import static org.opensearch.index.IndexModule.INDEX_TIERING_STATE;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-/**
- * Unit tests for {@link TransportCancelTierAction#getTieringServiceForIndex} — the logic that picks
- * which tiering service handles a cancel. Verifies the in-memory tracking takes precedence, and that
- * when neither service tracks the index, the persisted INDEX_TIERING_STATE selects the service
- * (the failover fallback) or rejects the cancel for terminal states.
- * <p>
- * These drive the protected {@code clusterManagerOperation} (same package) and assert which service's
- * {@code cancelTiering} is invoked, since {@code getTieringServiceForIndex} itself is private.
- */
-public class TransportCancelTierActionServiceSelectionTests extends OpenSearchTestCase {
-
-    private static final String INDEX_NAME = "cancel-svc-idx";
-
-    private TransportCancelTierAction action;
-    private HotToWarmTieringService hotToWarmTieringService;
-    private WarmToHotTieringService warmToHotTieringService;
-    private IndexNameExpressionResolver indexNameExpressionResolver;
-
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        TransportService transportService = mock(TransportService.class);
-        ClusterService clusterService = mock(ClusterService.class);
-        ThreadPool threadPool = mock(ThreadPool.class);
-        ActionFilters actionFilters = mock(ActionFilters.class);
-        indexNameExpressionResolver = mock(IndexNameExpressionResolver.class);
-        hotToWarmTieringService = mock(HotToWarmTieringService.class);
-        warmToHotTieringService = mock(WarmToHotTieringService.class);
-
-        action = new TransportCancelTierAction(
-            transportService,
-            clusterService,
-            threadPool,
-            actionFilters,
-            indexNameExpressionResolver,
-            hotToWarmTieringService,
-            warmToHotTieringService
-        );
-    }
-
-    /**
-     * Builds a cluster state containing the index with the given persisted tiering state, and wires the
-     * index-name resolver to resolve INDEX_NAME to that index. Returns the resolved Index.
-     */
-    private ClusterState clusterStateWithTieringState(IndexModule.TieringState tieringState) {
-        Settings idxSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid-" + INDEX_NAME)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(INDEX_TIERING_STATE.getKey(), tieringState.toString())
-            .build();
-        IndexMetadata indexMetadata = IndexMetadata.builder(INDEX_NAME).settings(idxSettings).build();
-        Metadata metadata = Metadata.builder().put(indexMetadata, false).build();
-        ClusterState state = ClusterState.builder(ClusterName.DEFAULT).metadata(metadata).build();
-
-        Index index = metadata.index(INDEX_NAME).getIndex();
-        when(indexNameExpressionResolver.concreteIndices(any(ClusterState.class), any(), eq(INDEX_NAME))).thenReturn(new Index[] { index });
-        return state;
-    }
-
-    private void invokeCancel(ClusterState state, ActionListener<AcknowledgedResponse> listener) throws Exception {
-        CancelTieringRequest request = new CancelTieringRequest();
-        request.setIndex(INDEX_NAME);
-        action.clusterManagerOperation(request, state, listener);
-    }
-
-    /** Not tracked in memory + persisted HOT_TO_WARM → hot-to-warm service handles the cancel. */
-    @SuppressWarnings("unchecked")
-    public void testPersistedHotToWarm_SelectsHotToWarmService_WhenNotTracked() throws Exception {
-        ClusterState state = clusterStateWithTieringState(IndexModule.TieringState.HOT_TO_WARM);
-        // Neither service tracks it (mock default is false).
-        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
-
-        invokeCancel(state, listener);
-
         verify(hotToWarmTieringService).cancelTiering(any(CancelTieringRequest.class), any(), eq(state));
-        verify(warmToHotTieringService, never()).cancelTiering(any(), any(), any());
-    }
-
-    /** Not tracked in memory + persisted WARM_TO_HOT → warm-to-hot service handles the cancel. */
-    @SuppressWarnings("unchecked")
-    public void testPersistedWarmToHot_SelectsWarmToHotService_WhenNotTracked() throws Exception {
-        ClusterState state = clusterStateWithTieringState(IndexModule.TieringState.WARM_TO_HOT);
-        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
-
-        invokeCancel(state, listener);
-
-        verify(warmToHotTieringService).cancelTiering(any(CancelTieringRequest.class), any(), eq(state));
-        verify(hotToWarmTieringService, never()).cancelTiering(any(), any(), any());
-    }
-
-    /** Not tracked in memory + terminal HOT → no service selected, cancel rejected. */
-    @SuppressWarnings("unchecked")
     public void testTerminalHotNotTracked_RejectsCancel() throws Exception {
-        ClusterState state = clusterStateWithTieringState(IndexModule.TieringState.HOT);
-        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
-
-        invokeCancel(state, listener);
-
-        verify(hotToWarmTieringService, never()).cancelTiering(any(), any(), any());
-        verify(warmToHotTieringService, never()).cancelTiering(any(), any(), any());
-
-        ArgumentCaptor<Exception> failure = ArgumentCaptor.forClass(Exception.class);
-        verify(listener).onFailure(failure.capture());
-        assertTrue(failure.getValue() instanceof IllegalArgumentException);
-        assertTrue(failure.getValue().getMessage().contains("is not currently undergoing tiering operation"));
-    }
-
-    /** In-memory tracking takes precedence over persisted state (even a terminal one). */
-    @SuppressWarnings("unchecked")
-    public void testInMemoryTrackingTakesPrecedence_OverPersistedState() throws Exception {
-        // Persisted state is terminal WARM, but the H2W service still tracks it in memory → it wins.
-        ClusterState state = clusterStateWithTieringState(IndexModule.TieringState.WARM);
         Index index = state.metadata().index(INDEX_NAME).getIndex();
-        when(hotToWarmTieringService.isIndexBeingTiered(index)).thenReturn(true);
-        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
-
+import org.opensearch.storage.tiering.WarmToHotTieringService;
         invokeCancel(state, listener);
-
-        verify(hotToWarmTieringService).cancelTiering(any(CancelTieringRequest.class), any(), eq(state));
+    private WarmToHotTieringService warmToHotTieringService;
+        ClusterState state = clusterStateWithTieringState(IndexModule.TieringState.WARM_TO_HOT);
+    @SuppressWarnings("unchecked")
+            transportService,
+ *
+import static org.mockito.ArgumentMatchers.any;
         verify(warmToHotTieringService, never()).cancelTiering(any(), any(), any());
-    }
+        ClusterState state = ClusterState.builder(ClusterName.DEFAULT).metadata(metadata).build();
+            .build();
+import org.opensearch.test.OpenSearchTestCase;
+     * Builds a cluster state containing the index with the given persisted tiering state, and wires the
+        ClusterService clusterService = mock(ClusterService.class);
+ * this file be licensed under the Apache-2.0 license or a
 }
+import org.opensearch.cluster.ClusterName;
+        ClusterState state = clusterStateWithTieringState(IndexModule.TieringState.HOT);
+    /** Not tracked in memory + persisted WARM_TO_HOT → warm-to-hot service handles the cancel. */
+        );
+        invokeCancel(state, listener);
+import static org.mockito.Mockito.mock;
+     * index-name resolver to resolve INDEX_NAME to that index. Returns the resolved Index.
+    private TransportCancelTierAction action;
+import org.junit.Before;
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+    }
+        super.setUp();
+        invokeCancel(state, listener);
+ * which tiering service handles a cancel. Verifies the in-memory tracking takes precedence, and that
+import static org.mockito.ArgumentMatchers.eq;
+ * (the failover fallback) or rejects the cancel for terminal states.
+    /** Not tracked in memory + persisted HOT_TO_WARM → hot-to-warm service handles the cancel. */
+    }
+public class TransportCancelTierActionServiceSelectionTests extends OpenSearchTestCase {
+        ClusterState state = clusterStateWithTieringState(IndexModule.TieringState.WARM);
+    private ClusterState clusterStateWithTieringState(IndexModule.TieringState tieringState) {
+    public void testPersistedWarmToHot_SelectsWarmToHotService_WhenNotTracked() throws Exception {
+ * compatible open source license.
+        when(indexNameExpressionResolver.concreteIndices(any(ClusterState.class), any(), eq(INDEX_NAME))).thenReturn(new Index[] { index });
+        action.clusterManagerOperation(request, state, listener);
+ * {@code cancelTiering} is invoked, since {@code getTieringServiceForIndex} itself is private.
+    /** In-memory tracking takes precedence over persisted state (even a terminal one). */
+    }
+            indexNameExpressionResolver,
+import org.opensearch.cluster.metadata.Metadata;
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        indexNameExpressionResolver = mock(IndexNameExpressionResolver.class);
+        assertTrue(failure.getValue() instanceof IllegalArgumentException);
+import org.opensearch.storage.tiering.HotToWarmTieringService;
+        ActionFilters actionFilters = mock(ActionFilters.class);
+        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
+        Settings idxSettings = Settings.builder()
+        assertTrue(failure.getValue().getMessage().contains("is not currently undergoing tiering operation"));
+import org.opensearch.common.settings.Settings;
+        request.setIndex(INDEX_NAME);
+    @SuppressWarnings("unchecked")
+        // Neither service tracks it (mock default is false).
+    private static final String INDEX_NAME = "cancel-svc-idx";
+ */
+    public void testInMemoryTrackingTakesPrecedence_OverPersistedState() throws Exception {
+ * These drive the protected {@code clusterManagerOperation} (same package) and assert which service's
+ * SPDX-License-Identifier: Apache-2.0
+        Index index = metadata.index(INDEX_NAME).getIndex();
+        return state;
+    @SuppressWarnings("unchecked")
+        invokeCancel(state, listener);
+    }
+            .put(INDEX_TIERING_STATE.getKey(), tieringState.toString())
+        ThreadPool threadPool = mock(ThreadPool.class);
+        verify(hotToWarmTieringService, never()).cancelTiering(any(), any(), any());
+        action = new TransportCancelTierAction(
+/*
+        verify(hotToWarmTieringService).cancelTiering(any(CancelTieringRequest.class), any(), eq(state));
+import org.opensearch.transport.TransportService;
+        ClusterState state = clusterStateWithTieringState(IndexModule.TieringState.HOT_TO_WARM);
+    private IndexNameExpressionResolver indexNameExpressionResolver;
+    public void setUp() throws Exception {
+ */
+        Metadata metadata = Metadata.builder().put(indexMetadata, false).build();
+import static org.mockito.Mockito.when;
+    private HotToWarmTieringService hotToWarmTieringService;
+        verify(hotToWarmTieringService, never()).cancelTiering(any(), any(), any());
+    }
+        verify(warmToHotTieringService).cancelTiering(any(CancelTieringRequest.class), any(), eq(state));
+    }
+        ArgumentCaptor<Exception> failure = ArgumentCaptor.forClass(Exception.class);
+    /**
+import org.opensearch.Version;
+/**
+    public void testPersistedHotToWarm_SelectsHotToWarmService_WhenNotTracked() throws Exception {
+            threadPool,
+        verify(warmToHotTieringService, never()).cancelTiering(any(), any(), any());
+ * when neither service tracks the index, the persisted INDEX_TIERING_STATE selects the service
+        // Persisted state is terminal WARM, but the H2W service still tracks it in memory → it wins.
+import org.mockito.ArgumentCaptor;
+    private void invokeCancel(ClusterState state, ActionListener<AcknowledgedResponse> listener) throws Exception {
+    @SuppressWarnings("unchecked")
+            .put(IndexMetadata.SETTING_INDEX_UUID, "uuid-" + INDEX_NAME)
+        hotToWarmTieringService = mock(HotToWarmTieringService.class);
+        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
+            hotToWarmTieringService,
+import org.opensearch.cluster.ClusterState;
+import static org.opensearch.index.IndexModule.INDEX_TIERING_STATE;
+            clusterService,
+        verify(listener).onFailure(failure.capture());
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.action.support.ActionFilters;
+import org.opensearch.threadpool.ThreadPool;
+        CancelTieringRequest request = new CancelTieringRequest();
+        verify(warmToHotTieringService, never()).cancelTiering(any(), any(), any());
+        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
+     */
+import org.opensearch.core.action.ActionListener;
+        TransportService transportService = mock(TransportService.class);
+        IndexMetadata indexMetadata = IndexMetadata.builder(INDEX_NAME).settings(idxSettings).build();
+            actionFilters,
+package org.opensearch.storage.action.tiering;
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+import static org.mockito.Mockito.verify;
+import org.opensearch.index.IndexModule;
+import static org.mockito.Mockito.never;
+    @Before
+        when(hotToWarmTieringService.isIndexBeingTiered(index)).thenReturn(true);
+            warmToHotTieringService
+import org.opensearch.cluster.metadata.IndexMetadata;
+        warmToHotTieringService = mock(WarmToHotTieringService.class);
+import org.opensearch.core.index.Index;
+    }
+    /** Not tracked in memory + terminal HOT → no service selected, cancel rejected. */
+ * <p>
+import org.opensearch.cluster.service.ClusterService;
+ * Unit tests for {@link TransportCancelTierAction#getTieringServiceForIndex} — the logic that picks

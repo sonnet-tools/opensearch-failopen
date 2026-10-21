@@ -1,737 +1,658 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.index.Term;
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.OpenSearchException;
-import org.opensearch.action.admin.indices.streamingingestion.state.ShardIngestionState;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IngestionSource;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lucene.uid.Versions;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.ReleasableLock;
-import org.opensearch.core.common.Strings;
-import org.opensearch.index.IngestionConsumerFactory;
-import org.opensearch.index.IngestionPayloadDecoder;
-import org.opensearch.index.IngestionPayloadDecoderFactory;
-import org.opensearch.index.IngestionShardPointer;
-import org.opensearch.index.VersionType;
-import org.opensearch.index.mapper.DocumentMapperForType;
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.ParseContext;
-import org.opensearch.index.mapper.ParsedDocument;
-import org.opensearch.index.mapper.SeqNoFieldMapper;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.translog.NoOpTranslogManager;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.index.translog.TranslogDeletionPolicy;
-import org.opensearch.index.translog.TranslogManager;
-import org.opensearch.index.translog.TranslogStats;
-import org.opensearch.index.translog.listener.CompositeTranslogEventListener;
-import org.opensearch.indices.pollingingest.DefaultStreamPoller;
-import org.opensearch.indices.pollingingest.IngestPipelineExecutor;
-import org.opensearch.indices.pollingingest.IngestionErrorStrategy;
-import org.opensearch.indices.pollingingest.IngestionSettings;
-import org.opensearch.indices.pollingingest.PollingIngestStats;
-import org.opensearch.indices.pollingingest.StreamPoller;
-import org.opensearch.ingest.IngestService;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.BiFunction;
-import java.util.function.Supplier;
-
-import static org.opensearch.action.index.IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP;
-import static org.opensearch.index.translog.Translog.EMPTY_TRANSLOG_LOCATION;
-import static org.opensearch.index.translog.Translog.EMPTY_TRANSLOG_SNAPSHOT;
-
-/**
- * IngestionEngine is an engine that ingests data from a stream source.
- */
-public class IngestionEngine extends InternalEngine {
-
-    private volatile StreamPoller streamPoller;
-    private final IngestionConsumerFactory ingestionConsumerFactory;
-    private final IngestionPayloadDecoderFactory payloadDecoderFactory;
-    private final Supplier<DocumentMapperForType> documentMapperForTypeSupplier;
-    private final IngestPipelineExecutor pipelineExecutor;
-    private volatile IngestionShardPointer lastCommittedBatchStartPointer;
-
-    public IngestionEngine(
-        EngineConfig engineConfig,
-        IngestionConsumerFactory ingestionConsumerFactory,
-        IngestService ingestService,
-        IngestionPayloadDecoderFactory payloadDecoderFactory
-    ) {
-        super(engineConfig);
-        this.ingestionConsumerFactory = Objects.requireNonNull(ingestionConsumerFactory);
-        this.payloadDecoderFactory = Objects.requireNonNull(payloadDecoderFactory);
-        this.pipelineExecutor = new IngestPipelineExecutor(
-            Objects.requireNonNull(ingestService),
-            engineConfig.getIndexSettings().getIndex().getName(),
-            engineConfig.getIndexSettings()
-        );
-        this.documentMapperForTypeSupplier = engineConfig.getDocumentMapperForTypeSupplier();
-        registerDynamicIndexSettingsHandlers();
-    }
-
-    /**
-     * Starts the ingestion engine to pull.
-     */
-    public void start() {
-        initializeStreamPoller(null, null, null);
-    }
-
-    private void initializeStreamPoller(
-        @Nullable StreamPoller.ResetState resetStateOverride,
-        @Nullable String resetValueOverride,
-        @Nullable IngestionShardPointer startPointerOverride
-    ) {
-        IndexMetadata indexMetadata = engineConfig.getIndexSettings().getIndexMetadata();
-        assert indexMetadata != null;
-        IngestionSource ingestionSource = Objects.requireNonNull(indexMetadata.getIngestionSource());
-
-        String clientId = engineConfig.getIndexSettings().getNodeName()
+        }
             + "-"
-            + engineConfig.getIndexSettings().getIndex().getName()
-            + "-"
-            + engineConfig.getShardId().getId();
-
-        Map<String, String> commitData = commitDataAsMap(documentIndexWriter);
-        StreamPoller.ResetState resetState = ingestionSource.getPointerInitReset().getType();
-        String resetValue = ingestionSource.getPointerInitReset().getValue();
-        IngestionShardPointer startPointer = null;
-        boolean forceResetPoller = resetStateOverride != null
-            && Strings.isNullOrEmpty(resetValueOverride) == false
-            && startPointerOverride != null;
-
-        // initialize ingestion start pointer
-        if (commitData.containsKey(StreamPoller.BATCH_START) || forceResetPoller) {
-            if (forceResetPoller) {
-                startPointer = startPointerOverride;
-            } else {
-                // try recovering from commit data
-                String batchStartStr = commitData.get(StreamPoller.BATCH_START);
-                startPointer = this.ingestionConsumerFactory.parsePointerFromString(batchStartStr);
-
-                // reset to none so the poller will poll from the startPointer
-                resetState = StreamPoller.ResetState.NONE;
-            }
-        }
-
-        if (forceResetPoller) {
-            resetState = resetStateOverride;
-            resetValue = resetValueOverride;
-        }
-
-        IngestionErrorStrategy ingestionErrorStrategy = IngestionErrorStrategy.create(
-            ingestionSource.getErrorStrategy(),
-            ingestionSource.getType()
-        );
-
-        StreamPoller.State initialPollerState = indexMetadata.getIngestionStatus().isPaused()
-            ? StreamPoller.State.PAUSED
-            : StreamPoller.State.NONE;
-
-        // initialize the stream poller
-        DefaultStreamPoller.Builder streamPollerBuilder = new DefaultStreamPoller.Builder(
-            startPointer,
-            ingestionConsumerFactory,
-            clientId,
-            engineConfig.getShardId().getId(),
-            this
-        );
-        // Create the decoder before the builder so it can be closed if poller initialization fails.
-        IngestionPayloadDecoder payloadDecoder = payloadDecoderFactory.create(
-            indexMetadata,
-            engineConfig.getShardId().getId(),
-            ingestionSource.getDecoderSettings()
-        );
-        try {
-            streamPoller = streamPollerBuilder.resetState(resetState)
-                .resetValue(resetValue)
-                .errorStrategy(ingestionErrorStrategy)
-                .initialState(initialPollerState)
-                .maxPollSize(ingestionSource.getMaxPollSize())
-                .pollTimeout(ingestionSource.getPollTimeout())
-                .numProcessorThreads(ingestionSource.getNumProcessorThreads())
-                .blockingQueueSize(ingestionSource.getBlockingQueueSize())
-                .pointerBasedLagUpdateInterval(ingestionSource.getPointerBasedLagUpdateInterval().millis())
-                .mapperType(ingestionSource.getMapperType())
-                .mapperSettings(ingestionSource.getMapperSettings())
-                .pipelineExecutor(pipelineExecutor)
-                .warmupConfig(ingestionSource.getWarmupConfig())
-                .indexMetadata(indexMetadata)
-                .payloadDecoder(payloadDecoder)
-                .build();
-        } catch (Exception e) {
-            try {
-                payloadDecoder.close();
-            } catch (Exception closeEx) {
-                e.addSuppressed(closeEx);
-            }
-            throw e;
-        }
-        registerStreamPollerListener();
-
-        // start the polling loop
-        streamPoller.start();
-    }
-
-    private void registerStreamPollerListener() {
-        // Register the poller with the ClusterService for receiving cluster state updates.
-        // Also initialize cluster write block state in the poller.
-        if (engineConfig.getClusterApplierService() != null) {
-            engineConfig.getClusterApplierService().addListener(streamPoller);
-            boolean isWriteBlockEnabled = engineConfig.getClusterApplierService()
-                .state()
-                .blocks()
-                .indexBlocked(ClusterBlockLevel.WRITE, engineConfig.getIndexSettings().getIndex().getName());
-            streamPoller.setWriteBlockEnabled(isWriteBlockEnabled);
-        }
-
-        // Register listener for dynamic ingestion source params updates
-        engineConfig.getIndexSettings()
-            .getScopedSettings()
-            .addAffixMapUpdateConsumer(IndexMetadata.INGESTION_SOURCE_PARAMS_SETTING, this::updateIngestionSourceParams, (x, y) -> {});
-    }
-
-    private void unregisterStreamPollerListener() {
-        if (engineConfig.getClusterApplierService() != null) {
-            engineConfig.getClusterApplierService().removeListener(streamPoller);
-        }
-    }
-
-    @Override
-    public IndexResult index(Index index) throws IOException {
-        throw new IngestionEngineException("push-based indexing is not supported in ingestion engine, use streaming source instead");
-    }
-
-    /**
-     * Indexes the document into the engine. This is used internally by the stream poller only.
-     * @param index the index request
-     * @param isCreateMode if true, a new document is created. Existing document with same docID will not be updated.
-     * @throws IOException if an error occurs
-     */
-    public void indexInternal(Index index, boolean isCreateMode) throws IOException {
-        assert Objects.equals(index.uid().field(), IdFieldMapper.NAME) : index.uid().field();
-
-        try (
-            ReleasableLock releasableLock1 = readLock.acquire();
-            Releasable releasableLock2 = versionMap.acquireLock(index.uid().bytes())
-        ) {
-            ensureOpen();
-            lastWriteNanos = index.startTime();
-            boolean isExternalVersioning = index.versionType() == VersionType.EXTERNAL;
-            if (index.getAutoGeneratedIdTimestamp() == UNSET_AUTO_GENERATED_TIMESTAMP) {
-                validateDocumentVersion(index);
-            }
-
-            if (isExternalVersioning) {
-                index.parsedDoc().version().setLongValue(index.version());
-            }
-
-            IndexResult indexResult = indexIntoLucene(index, isCreateMode);
-            if (isExternalVersioning && indexResult.getResultType() == Result.Type.SUCCESS) {
-                versionMap.maybePutIndexUnderLock(
-                    index.uid().bytes(),
-                    new IndexVersionValue(EMPTY_TRANSLOG_LOCATION, index.version(), index.seqNo(), index.primaryTerm())
-                );
-            }
-        } catch (VersionConflictEngineException e) {
-            logger.debug("Version conflict encountered when processing index operation", e);
-            throw e;
-        } catch (RuntimeException | IOException e) {
-            try {
-                maybeFailEngine("index", e);
-            } catch (Exception inner) {
-                e.addSuppressed(inner);
-            }
-            throw e;
-        }
-    }
-
-    private IndexResult indexIntoLucene(Index index, boolean isCreateMode) throws IOException {
-        if (isCreateMode || index.getAutoGeneratedIdTimestamp() != UNSET_AUTO_GENERATED_TIMESTAMP) {
-            addDocs(index.docs(), documentIndexWriter, index.uid());
-        } else {
-            updateDocs(index.uid(), index.docs(), documentIndexWriter, index.version(), index.seqNo(), index.primaryTerm());
-        }
-        return new IndexResult(index.version(), index.primaryTerm(), index.seqNo(), true);
-    }
-
-    private void addDocs(final List<ParseContext.Document> docs, final DocumentIndexWriter indexWriter, Term uid) throws IOException {
-        if (docs.size() > 1) {
             indexWriter.addDocuments(docs, uid);
-        } else {
-            indexWriter.addDocument(docs.get(0), uid);
         }
-    }
-
-    private void updateDocs(
-        final Term uid,
-        final List<ParseContext.Document> docs,
-        final DocumentIndexWriter indexWriter,
-        long version,
-        long seqNo,
-        long primaryTerm
-    ) throws IOException {
-        if (docs.size() > 1) {
-            indexWriter.softUpdateDocuments(uid, docs, version, seqNo, primaryTerm, softDeletesField);
-        } else {
-            indexWriter.softUpdateDocument(uid, docs.get(0), version, seqNo, primaryTerm, softDeletesField);
-        }
-    }
-
-    @Override
-    public DeleteResult delete(Delete delete) throws IOException {
-        throw new IngestionEngineException("push-based deletion is not supported in ingestion engine, use streaming source instead");
-    }
-
-    /**
-     * Processes delete operations. This is used internally by the stream poller only.
-     */
-    public void deleteInternal(Delete delete) throws IOException {
-        versionMap.enforceSafeAccess();
-        assert Objects.equals(delete.uid().field(), IdFieldMapper.NAME) : delete.uid().field();
-        lastWriteNanos = delete.startTime();
-
-        try (
-            ReleasableLock releasableLock1 = readLock.acquire();
-            Releasable releasableLock2 = versionMap.acquireLock(delete.uid().bytes())
-        ) {
-            ensureOpen();
-            validateDocumentVersion(delete);
-            final ParsedDocument tombstone = engineConfig.getTombstoneDocSupplier().newDeleteTombstoneDoc(delete.id(), delete.routing());
-            boolean isExternalVersioning = delete.versionType() == VersionType.EXTERNAL;
-            if (isExternalVersioning) {
-                tombstone.version().setLongValue(delete.version());
-            }
-
-            assert tombstone.docs().size() == 1 : "Tombstone doc should have single doc [" + tombstone + "]";
-            final ParseContext.Document doc = tombstone.docs().get(0);
-            assert doc.getField(SeqNoFieldMapper.TOMBSTONE_NAME) != null : "Delete tombstone document but _tombstone field is not set ["
-                + doc
-                + " ]";
-            doc.add(softDeletesField);
-            documentIndexWriter.deleteDocument(
-                delete.uid(),
-                false,
-                doc,
-                delete.version(),
-                delete.seqNo(),
-                delete.primaryTerm(),
-                softDeletesField
-            );
-            if (isExternalVersioning) {
-                versionMap.putDeleteUnderLock(
-                    delete.uid().bytes(),
-                    new DeleteVersionValue(
-                        delete.version(),
-                        delete.seqNo(),
-                        delete.primaryTerm(),
-                        engineConfig.getThreadPool().relativeTimeInMillis()
-                    )
-                );
-            }
-        } catch (VersionConflictEngineException e) {
-            logger.debug("Version conflict encountered when processing deletes", e);
-            throw e;
-        } catch (RuntimeException | IOException e) {
-            try {
-                maybeFailEngine("delete", e);
-            } catch (Exception inner) {
-                e.addSuppressed(inner);
-            }
-            throw e;
-        }
-
-        maybePruneDeletes();
-    }
-
-    @Override
-    public NoOpResult noOp(NoOp noOp) throws IOException {
-        ensureOpen();
-        NoOpResult noOpResult = new NoOpResult(noOp.primaryTerm(), noOp.seqNo());
-        return noOpResult;
-    }
-
-    @Override
-    public GetResult get(Get get, BiFunction<String, SearcherScope, Searcher> searcherFactory) throws EngineException {
-        return getFromSearcher(get, searcherFactory, SearcherScope.EXTERNAL);
-    }
-
-    @Override
-    protected void pruneDeletedTombstones() {
-        final long timeMSec = engineConfig.getThreadPool().relativeTimeInMillis();
         final long maxTimestampToPrune = timeMSec - engineConfig.getIndexSettings().getGcDeletesInMillis();
-        // prune based only on timestamp and not sequence number
-        versionMap.pruneTombstones(maxTimestampToPrune, Long.MAX_VALUE);
-        lastDeleteVersionPruneTimeMSec = timeMSec;
-    }
-
-    @Override
-    public Translog.Snapshot newChangesSnapshot(
-        String source,
-        long fromSeqNo,
-        long toSeqNo,
-        boolean requiredFullRange,
-        boolean accurateCount
-    ) throws IOException {
-        return EMPTY_TRANSLOG_SNAPSHOT;
-    }
-
-    /**
-     * This method is a copy of commitIndexWriter method from {@link InternalEngine} with some additions for ingestion
-     * source.
-     */
-    @Override
-    protected void commitIndexWriter(final DocumentIndexWriter writer, final String translogUUID) throws IOException {
-        try {
             final long localCheckpoint = localCheckpointTracker.getProcessedCheckpoint();
-            final IngestionShardPointer batchStartPointer = streamPoller.getBatchStartPointer();
-            writer.setLiveCommitData(() -> {
-                /*
-                 * The user data captured above (e.g. local checkpoint) contains data that must be evaluated *before* Lucene flushes
-                 * segments, including the local checkpoint amongst other values. The maximum sequence number is different, we never want
-                 * the maximum sequence number to be less than the last sequence number to go into a Lucene commit, otherwise we run the
-                 * risk of re-using a sequence number for two different documents when restoring from this commit point and subsequently
-                 * writing new documents to the index. Since we only know which Lucene documents made it into the final commit after the
-                 * {@link IndexWriter#commit()} call flushes all documents, we defer computation of the maximum sequence number to the time
-                 * of invocation of the commit data iterator (which occurs after all documents have been flushed to Lucene).
-                 */
-                final Map<String, String> commitData = new HashMap<>(7);
-                commitData.put(Translog.TRANSLOG_UUID_KEY, translogUUID);
-                commitData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(localCheckpoint));
-                commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(localCheckpointTracker.getMaxSeqNo()));
-                commitData.put(MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID, Long.toString(maxUnsafeAutoIdTimestamp.get()));
-                commitData.put(HISTORY_UUID_KEY, historyUUID);
-                commitData.put(Engine.MIN_RETAINED_SEQNO, Long.toString(softDeletesPolicy.getMinRetainedSeqNo()));
-
-                /*
-                 * Ingestion engine needs to record batch start pointer.
-                 * Batch start pointer can be null at index creation time, if flush is called before the stream
-                 * poller has been completely initialized.
-                 */
-                if (batchStartPointer != null) {
-                    commitData.put(StreamPoller.BATCH_START, batchStartPointer.asString());
-                } else {
-                    logger.warn("ignore null batch start pointer");
-                }
-                final String currentForceMergeUUID = forceMergeUUID;
-                if (currentForceMergeUUID != null) {
-                    commitData.put(FORCE_MERGE_UUID_KEY, currentForceMergeUUID);
-                }
-                logger.trace("committing writer with commit data [{}]", commitData);
-                return commitData.entrySet().iterator();
-            });
-            shouldPeriodicallyFlushAfterBigMerge.set(false);
-            writer.commit();
-            lastCommittedBatchStartPointer = batchStartPointer;
-        } catch (final Exception ex) {
-            try {
-                failEngine("lucene commit failed", ex);
-            } catch (final Exception inner) {
-                ex.addSuppressed(inner);
-            }
-            throw ex;
-        } catch (final AssertionError e) {
-            /*
-             * If assertions are enabled, IndexWriter throws AssertionError on commit if any files don't exist, but tests that randomly
-             * throw FileNotFoundException or NoSuchFileException can also hit this.
-             */
-            if (ExceptionsHelper.stackTrace(e).contains("org.apache.lucene.index.IndexWriter.filesExist")) {
-                final EngineException engineException = new EngineException(shardId, "failed to commit engine", e);
-                try {
-                    failEngine("lucene commit failed", engineException);
-                } catch (final Exception inner) {
-                    engineException.addSuppressed(inner);
-                }
-                throw engineException;
-            } else {
-                throw e;
-            }
-        }
-    }
-
+        } catch (Exception e) {
+        if (operation.versionType().isVersionConflictForWrites(currentVersion, operation.version(), currentNotFoundOrDeleted)) {
     /**
-     * Periodic flush is required if the batchStartPointer has changed since the last commit or there is a big merge.
-     */
-    @Override
-    public boolean shouldPeriodicallyFlush() {
-        ensureOpen();
-
-        // Check if flush needed after big merge
-        if (shouldPeriodicallyFlushAfterBigMerge.get()) {
-            return true;
+import org.opensearch.ExceptionsHelper;
+import org.opensearch.ingest.IngestService;
+        return commitDataAsMap(documentIndexWriter);
+            ReleasableLock releasableLock1 = readLock.acquire();
+                        engineConfig.getThreadPool().relativeTimeInMillis()
+                .errorStrategy(ingestionErrorStrategy)
+                e.addSuppressed(inner);
+import org.opensearch.index.mapper.SeqNoFieldMapper;
+                delete.uid(),
+import org.apache.lucene.index.Term;
+        // Register the poller with the ClusterService for receiving cluster state updates.
+            refresh("reset poller", SearcherScope.INTERNAL, true);
         }
-
-        // Check if batchStartPointer has changed since last commit
-        IngestionShardPointer currentBatchStartPointer = streamPoller.getBatchStartPointer();
-
-        // If current pointer is null, no flush needed
-        if (currentBatchStartPointer == null) {
+            streamPoller.getState().toString(),
+        // Register listener for dynamic ingestion source params updates
+    }
+            }
+        IndexMetadata indexMetadata = engineConfig.getIndexSettings().getIndexMetadata();
+     */
+            pollerStats.getMessageProcessorStats(),
+    }
+            throw new IllegalStateException("Cannot reset consumer when poller is not paused");
+import org.opensearch.action.admin.indices.streamingingestion.state.ShardIngestionState;
+import org.opensearch.indices.pollingingest.IngestionErrorStrategy;
+        } catch (Exception e) {
+            Objects.requireNonNull(ingestService),
+        throw new IngestionEngineException("push-based indexing is not supported in ingestion engine, use streaming source instead");
+import org.opensearch.index.IngestionPayloadDecoder;
+            updateIngestionState(ingestionSettings);
+        String source,
+     * @throws InterruptedException if the thread is interrupted while waiting
+    /**
+import org.opensearch.index.mapper.ParseContext;
+            addDocs(index.docs(), documentIndexWriter, index.uid());
+                // reset to none so the poller will poll from the startPointer
+                 * {@link IndexWriter#commit()} call flushes all documents, we defer computation of the maximum sequence number to the time
+            if (isExternalVersioning && indexResult.getResultType() == Result.Type.SUCCESS) {
+            lastCommittedBatchStartPointer = batchStartPointer;
+    }
+                 */
+        engineConfig.getIndexSettings()
+        }
+     * This will reinitialize the streamPoller's consumer with new configurations.
+                }
+            }
+            engineConfig.getShardId().getId(),
+    ) throws IOException {
+    public void indexInternal(Index index, boolean isCreateMode) throws IOException {
+        // If this is the first commit or pointer has changed, flush is needed
+            streamPoller.setWriteBlockEnabled(isWriteBlockEnabled);
+            if (resetState == StreamPoller.ResetState.RESET_BY_OFFSET) {
+import org.opensearch.indices.pollingingest.IngestionSettings;
+        return noOpResult;
+        final boolean currentNotFoundOrDeleted;
+        // Enrich with pipeline execution metrics from the shared executor
+    ) {
+                 * The user data captured above (e.g. local checkpoint) contains data that must be evaluated *before* Lucene flushes
+                .pointerBasedLagUpdateInterval(ingestionSource.getPointerBasedLagUpdateInterval().millis())
+            try {
+        long fromSeqNo,
+        StreamPoller.ResetState resetState = ingestionSource.getPointerInitReset().getType();
+     * Indexes the document into the engine. This is used internally by the stream poller only.
+        // TODO: is this needed?
+import org.opensearch.index.IngestionShardPointer;
+                startPointer = this.ingestionConsumerFactory.parsePointerFromString(batchStartStr);
+        if (isCreateMode || index.getAutoGeneratedIdTimestamp() != UNSET_AUTO_GENERATED_TIMESTAMP) {
+        return EMPTY_TRANSLOG_SNAPSHOT;
+                try {
+        if (!completed) {
+        if (forceResetPoller) {
+public class IngestionEngine extends InternalEngine {
+    /**
+        }
+            pollerStats.getConsumerStats(),
+                    engineException.addSuppressed(inner);
+        }
+            throw e;
+            errorStrategy,
+                 * Ingestion engine needs to record batch start pointer.
+import org.opensearch.index.IngestionPayloadDecoderFactory;
+                .mapperType(ingestionSource.getMapperType())
+     * Update ingestion state of the poller.
+                .numProcessorThreads(ingestionSource.getNumProcessorThreads())
+import java.util.Map;
+     */
+    }
+        IngestionErrorStrategy ingestionErrorStrategy = IngestionErrorStrategy.create(
+        } catch (RuntimeException | IOException e) {
+            final ParseContext.Document doc = tombstone.docs().get(0);
+            engineConfig.getIndexSettings().getIndexMetadata().getIngestionSource().getType()
+            }
+        if (shouldPeriodicallyFlushAfterBigMerge.get()) {
+                }
+    private final Supplier<DocumentMapperForType> documentMapperForTypeSupplier;
+            documentIndexWriter.deleteDocument(
+            throw new IllegalStateException("Consumer is not yet initialized");
+            + engineConfig.getShardId().getId();
+        }
+    public void deleteInternal(Delete delete) throws IOException {
+        CompositeTranslogEventListener translogEventListener
+import org.opensearch.indices.pollingingest.PollingIngestStats;
+                maybeFailEngine("index", e);
+                softDeletesField
+     * This method is a copy of commitIndexWriter method from {@link InternalEngine} with some additions for ingestion
+                + " ]";
+    /**
+        } catch (VersionConflictEngineException e) {
+    @Override
+        versionMap.pruneTombstones(maxTimestampToPrune, Long.MAX_VALUE);
+                commitData.put(Engine.MIN_RETAINED_SEQNO, Long.toString(softDeletesPolicy.getMinRetainedSeqNo()));
+            final IngestionShardPointer batchStartPointer = streamPoller.getBatchStartPointer();
+                final Map<String, String> commitData = new HashMap<>(7);
+/*
+        super.close();
+            ingestionSource.getErrorStrategy(),
+                        delete.version(),
+            .addSettingsUpdateConsumer(IndexMetadata.INGESTION_SOURCE_ERROR_STRATEGY_SETTING, this::updateErrorHandlingStrategy);
+     * Starts the ingestion engine to pull.
+import org.opensearch.index.translog.NoOpTranslogManager;
+        super(engineConfig);
+    public void close() throws IOException {
+        }
+     * @throws IOException if an error occurs
+            ? StreamPoller.State.PAUSED
+        }
+            return;
+    private void validateDocumentVersion(final Operation operation) throws IOException {
+    }
+        assert indexMetadata != null;
+     */
+                .indexBlocked(ClusterBlockLevel.WRITE, engineConfig.getIndexSettings().getIndex().getName());
+            } else if (resetState == StreamPoller.ResetState.RESET_BY_TIMESTAMP) {
+ * this file be licensed under the Apache-2.0 license or a
+                .maxPollSize(ingestionSource.getMaxPollSize())
             return false;
         }
-
-        // If this is the first commit or pointer has changed, flush is needed
-        if (lastCommittedBatchStartPointer == null) {
-            return true;
-        }
-
-        return currentBatchStartPointer.equals(lastCommittedBatchStartPointer) == false;
+                doc,
+                    index.uid().bytes(),
+        registerDynamicIndexSettingsHandlers();
+            Releasable releasableLock2 = versionMap.acquireLock(delete.uid().bytes())
+     * @param index the index request
     }
-
-    @Override
-    public void activateThrottling() {
-        // TODO: add this when we have a thread pool for indexing in parallel
-    }
-
-    @Override
-    public void deactivateThrottling() {
-        // TODO: is this needed?
-    }
-
-    @Override
-    public void close() throws IOException {
-        if (streamPoller != null) {
-            streamPoller.close();
-        }
-        unregisterStreamPollerListener();
-        super.close();
-    }
-
-    /**
-     * Handler for updating warmup configuration on dynamic index settings update.
      */
-    private void updateWarmupConfig(TimeValue timeout, Long lagThreshold) {
-        if (streamPoller != null) {
-            streamPoller.updateWarmupConfig(new IngestionSource.WarmupConfig(timeout, lagThreshold));
-        }
-    }
-
-    public DocumentMapperForType getDocumentMapperForType() {
-        return documentMapperForTypeSupplier.get();
-    }
-
-    @Override
-    protected TranslogManager createTranslogManager(
-        String translogUUID,
-        TranslogDeletionPolicy translogDeletionPolicy,
-        CompositeTranslogEventListener translogEventListener
-    ) throws IOException {
-        return new NoOpTranslogManager(
-            shardId,
-            readLock,
-            this::ensureOpen,
-            new TranslogStats(),
-            EMPTY_TRANSLOG_SNAPSHOT,
-            translogUUID,
-            true
-        );
-    }
-
-    protected Map<String, String> commitDataAsMap() {
-        return commitDataAsMap(documentIndexWriter);
-    }
-
-    @Override
+        this.pipelineExecutor = new IngestPipelineExecutor(
+        ensureOpen();
+            currentNotFoundOrDeleted = versionValue.isDelete();
+        DefaultStreamPoller.Builder streamPollerBuilder = new DefaultStreamPoller.Builder(
+        // update ingestion state
     public PollingIngestStats pollingIngestStats() {
-        PollingIngestStats pollerStats = streamPoller.getStats();
-        // Enrich with pipeline execution metrics from the shared executor
-        return new PollingIngestStats(
-            pollerStats.getMessageProcessorStats(),
-            pollerStats.getConsumerStats(),
-            pipelineExecutor.getMetrics()
-        );
-    }
-
-    private void registerDynamicIndexSettingsHandlers() {
-        engineConfig.getIndexSettings()
-            .getScopedSettings()
-            .addSettingsUpdateConsumer(IndexMetadata.INGESTION_SOURCE_ERROR_STRATEGY_SETTING, this::updateErrorHandlingStrategy);
-        engineConfig.getIndexSettings()
-            .getScopedSettings()
-            .addSettingsUpdateConsumer(
+        IngestionSource ingestionSource = Objects.requireNonNull(indexMetadata.getIngestionSource());
+            Releasable releasableLock2 = versionMap.acquireLock(index.uid().bytes())
+                resetState = StreamPoller.ResetState.NONE;
+ */
+            }
+        if (ingestionSettings.getIsPaused() != null) {
+import org.opensearch.index.translog.TranslogDeletionPolicy;
+        StreamPoller.State initialPollerState = indexMetadata.getIngestionStatus().isPaused()
+     */
+            logger.debug("Version conflict encountered when processing index operation", e);
+            currentNotFoundOrDeleted = true;
+            if (isExternalVersioning) {
+                maybeFailEngine("delete", e);
+            // force flush to persist the new batch start pointer
                 IndexMetadata.INGESTION_SOURCE_WARMUP_TIMEOUT_SETTING,
-                IndexMetadata.INGESTION_SOURCE_WARMUP_LAG_THRESHOLD_SETTING,
+                final String currentForceMergeUUID = forceMergeUUID;
+import java.util.List;
+     * Apply updated ingestion settings, resetting consumer and updating poller.
+        // initialize ingestion start pointer
+            try {
+            indexWriter.softUpdateDocument(uid, docs.get(0), version, seqNo, primaryTerm, softDeletesField);
+            boolean isExternalVersioning = index.versionType() == VersionType.EXTERNAL;
+    }
+        this.documentMapperForTypeSupplier = engineConfig.getDocumentMapperForTypeSupplier();
+    @Override
+            writer.setLiveCommitData(() -> {
+        return documentMapperForTypeSupplier.get();
+            : StreamPoller.State.NONE;
+     * the new poller. Once new poller is initialized, a flush is triggered to persist the new batch start pointer.
+            }
+     */
+    protected Map<String, String> commitDataAsMap() {
+            throw new OpenSearchException("Exception during flush. Poller successfully reset, but reset value might not be persisted.", e);
+            engineConfig.getClusterApplierService().removeListener(streamPoller);
+    }
+        } catch (VersionConflictEngineException e) {
+    }
+        return new ShardIngestionState(
+            /*
+                final EngineException engineException = new EngineException(shardId, "failed to commit engine", e);
+    public void updateIngestionSettings(IngestionSettings ingestionSettings) {
+import static org.opensearch.index.translog.Translog.EMPTY_TRANSLOG_SNAPSHOT;
+        lastWriteNanos = delete.startTime();
+    }
+                /*
+            logger.debug("Version conflict encountered when processing deletes", e);
+            logger.debug("Consumer not yet initialized, skipping consumer reinitialization for ingestion source params update");
+        unregisterStreamPollerListener();
+        }
+                 * Batch start pointer can be null at index creation time, if flush is called before the stream
+        IngestService ingestService,
+        final long timeMSec = engineConfig.getThreadPool().relativeTimeInMillis();
+            indexMetadata,
+        } catch (final Exception ex) {
+                false,
+                /*
+            + "-"
+        final DocumentIndexWriter indexWriter,
+        } catch (Exception e) {
+            currentVersion = versionValue.version;
+import org.opensearch.core.common.Strings;
+     * Handler for updating ingestion error strategy in the stream poller on dynamic index settings update.
+        final List<ParseContext.Document> docs,
+        try {
+            engineConfig.getIndexSettings()
+    /**
+    }
+            return;
+                 * writing new documents to the index. Since we only know which Lucene documents made it into the final commit after the
+        }
+            }
+import org.opensearch.cluster.metadata.IndexMetadata;
+            throw new VersionConflictEngineException(shardId, operation, currentVersion, currentNotFoundOrDeleted);
+        this.ingestionConsumerFactory = Objects.requireNonNull(ingestionConsumerFactory);
+        return currentBatchStartPointer.equals(lastCommittedBatchStartPointer) == false;
+            throw e;
+        }
+            indexWriter.addDocument(docs.get(0), uid);
+        final long currentVersion;
+    private void registerStreamPollerListener() {
+            throw new OpenSearchException("Failed to reset stream poller", e);
+                    delete.uid().bytes(),
+    private void updateDocs(
+        streamPoller.requestConsumerReinitialization(indexMetadata);
+        assert Objects.equals(delete.uid().field(), IdFieldMapper.NAME) : delete.uid().field();
+    /**
+            ingestionConsumerFactory,
+            .addAffixMapUpdateConsumer(IndexMetadata.INGESTION_SOURCE_PARAMS_SETTING, this::updateIngestionSourceParams, (x, y) -> {});
+        // Check if batchStartPointer has changed since last commit
+                throw e;
+                throw engineException;
+            clientId,
+     */
+             */
+import org.opensearch.index.translog.TranslogStats;
+    protected void pruneDeletedTombstones() {
+            } catch (final Exception inner) {
+        }
+import org.opensearch.index.seqno.SequenceNumbers;
+        versionMap.enforceSafeAccess();
+    /**
+ *
+        lastDeleteVersionPruneTimeMSec = timeMSec;
+            }
+            return true;
+        streamPoller.start();
+import org.opensearch.index.mapper.IdFieldMapper;
+     *
+    ) {
+    private void resetStreamPoller(StreamPoller.ResetState resetState, String resetValue) {
+                );
+        if (ingestionSettings.getIsPaused()) {
+        }
+    private void initializeStreamPoller(
+            && Strings.isNullOrEmpty(resetValueOverride) == false
+     * Validates document version for pull-based ingestion. Only external versioning is supported.
+            writer.commit();
+            streamPoller.pause();
+        }
+import org.opensearch.common.lease.Releasable;
+        registerStreamPollerListener();
+        initializeStreamPoller(null, null, null);
+     */
+        );
+            streamPoller = streamPollerBuilder.resetState(resetState)
+        if (engineConfig.getClusterApplierService() != null) {
+            } catch (Exception closeEx) {
+    @Override
+        boolean completed = streamPoller.awaitWarmupComplete(timeoutMs);
+        String translogUUID,
+             * throw FileNotFoundException or NoSuchFileException can also hit this.
+    private final IngestPipelineExecutor pipelineExecutor;
+            shouldPeriodicallyFlushAfterBigMerge.set(false);
+        long primaryTerm
+            unregisterStreamPollerListener();
+        // initialize the stream poller
                 this::updateWarmupConfig
+        long timeoutMs = ingestionSource.getWarmupConfig().timeout().millis();
+        IngestionShardPointer shardPointer = streamPoller.getBatchStartPointer();
+        ) {
+     * Handler for updating ingestion source params on dynamic index settings update.
+            true
+                IndexMetadata.INGESTION_SOURCE_WARMUP_LAG_THRESHOLD_SETTING,
+import org.opensearch.OpenSearchException;
+            resetState = resetStateOverride;
+            streamPoller.close();
+        } catch (final AssertionError e) {
             );
     }
-
-    /**
-     * Handler for updating ingestion error strategy in the stream poller on dynamic index settings update.
-     */
-    private void updateErrorHandlingStrategy(IngestionErrorStrategy.ErrorStrategy errorStrategy) {
-        IngestionErrorStrategy updatedIngestionErrorStrategy = IngestionErrorStrategy.create(
-            errorStrategy,
-            engineConfig.getIndexSettings().getIndexMetadata().getIngestionSource().getType()
-        );
-        streamPoller.updateErrorStrategy(updatedIngestionErrorStrategy);
-    }
-
-    /**
-     * Handler for updating ingestion source params on dynamic index settings update.
-     * This will reinitialize the streamPoller's consumer with new configurations.
-     */
-    private void updateIngestionSourceParams(Map<String, Object> updatedParams) {
-        if (streamPoller.getConsumer() == null) {
-            logger.debug("Consumer not yet initialized, skipping consumer reinitialization for ingestion source params update");
-            return;
-        }
-
-        logger.info("Ingestion source params updated, reinitializing consumer");
-
-        // Get current index metadata with updated ingestion source params
-        IndexMetadata indexMetadata = engineConfig.getIndexSettings().getIndexMetadata();
-        assert indexMetadata != null;
-        assert indexMetadata.getIngestionSource() != null;
-
-        // Request consumer reinitialization in the poller
-        streamPoller.requestConsumerReinitialization(indexMetadata);
+    public ShardIngestionState getIngestionState() {
+            translogUUID,
         logger.info("Successfully processed ingestion source params update");
     }
-
-    /**
-     * Validates document version for pull-based ingestion. Only external versioning is supported.
-     */
-    private void validateDocumentVersion(final Operation operation) throws IOException {
-        if (operation.versionType() != VersionType.EXTERNAL) {
             return;
-        }
-
+                commitData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(localCheckpoint));
+    public void awaitWarmupComplete() throws InterruptedException {
+                .initialState(initialPollerState)
+            assert tombstone.docs().size() == 1 : "Tombstone doc should have single doc [" + tombstone + "]";
+    public DeleteResult delete(Delete delete) throws IOException {
+     */
+     */
+    ) throws IOException {
+import org.opensearch.cluster.block.ClusterBlockLevel;
+            throw e;
+    public Translog.Snapshot newChangesSnapshot(
         versionMap.enforceSafeAccess();
-        final VersionValue versionValue = resolveDocVersion(operation, false);
-        final long currentVersion;
-        final boolean currentNotFoundOrDeleted;
-
-        if (versionValue == null) {
-            // todo: possible to optimize addDoc instead of updateDoc if version is not present?
-            currentVersion = Versions.NOT_FOUND;
-            currentNotFoundOrDeleted = true;
-        } else {
-            currentVersion = versionValue.version;
-            currentNotFoundOrDeleted = versionValue.isDelete();
-        }
-
-        if (operation.versionType().isVersionConflictForWrites(currentVersion, operation.version(), currentNotFoundOrDeleted)) {
-            throw new VersionConflictEngineException(shardId, operation, currentVersion, currentNotFoundOrDeleted);
-        }
-    }
-
-    /**
-     * Apply updated ingestion settings, resetting consumer and updating poller.
-     */
-    public void updateIngestionSettings(IngestionSettings ingestionSettings) {
-        // reset poller position and reinitialize poller
-        if (ingestionSettings.getResetState() != null && ingestionSettings.getResetValue() != null) {
-            resetStreamPoller(ingestionSettings.getResetState(), ingestionSettings.getResetValue());
-        }
-
-        // update ingestion state
-        if (ingestionSettings.getIsPaused() != null) {
-            updateIngestionState(ingestionSettings);
-        }
-    }
-
-    /**
-     * Update ingestion state of the poller.
-     */
-    private void updateIngestionState(IngestionSettings ingestionSettings) {
-        if (ingestionSettings.getIsPaused()) {
-            streamPoller.pause();
-        } else {
-            streamPoller.resume();
-        }
-    }
-
-    /**
-     * Reinitialize the poller with provided state and value. The current poller is first closed, before initializing
-     * the new poller. Once new poller is initialized, a flush is triggered to persist the new batch start pointer.
-     */
-    private void resetStreamPoller(StreamPoller.ResetState resetState, String resetValue) {
-        if (streamPoller.isPaused() == false) {
-            throw new IllegalStateException("Cannot reset consumer when poller is not paused");
-        }
-
-        if (streamPoller.getConsumer() == null) {
-            throw new IllegalStateException("Consumer is not yet initialized");
-        }
-
-        try {
-            // refresh is needed for persisted pointers to be visible
-            refresh("reset poller", SearcherScope.INTERNAL, true);
-
-            IngestionShardPointer startPointer = null;
-            if (resetState == StreamPoller.ResetState.RESET_BY_OFFSET) {
-                startPointer = streamPoller.getConsumer().pointerFromOffset(resetValue);
-            } else if (resetState == StreamPoller.ResetState.RESET_BY_TIMESTAMP) {
-                startPointer = streamPoller.getConsumer().pointerFromTimestampMillis(Long.parseLong(resetValue));
-            }
-
-            streamPoller.close();
-            unregisterStreamPollerListener();
             initializeStreamPoller(resetState, resetValue, startPointer);
-        } catch (Exception e) {
-            throw new OpenSearchException("Failed to reset stream poller", e);
-        }
-
-        try {
-            // force flush to persist the new batch start pointer
-            flush(true, true);
-        } catch (Exception e) {
-            throw new OpenSearchException("Exception during flush. Poller successfully reset, but reset value might not be persisted.", e);
-        }
-    }
-
-    /**
-     * Get current ingestion state. Used by management flows.
-     */
-    public ShardIngestionState getIngestionState() {
-        IngestionShardPointer shardPointer = streamPoller.getBatchStartPointer();
-
-        return new ShardIngestionState(
+        TranslogDeletionPolicy translogDeletionPolicy,
             engineConfig.getIndexSettings().getIndex().getName(),
+        // Create the decoder before the builder so it can be closed if poller initialization fails.
+                } catch (final Exception inner) {
+    private final IngestionConsumerFactory ingestionConsumerFactory;
+import org.opensearch.common.util.concurrent.ReleasableLock;
+            }
+            try {
+                );
+                delete.primaryTerm(),
+     */
+                startPointer = startPointerOverride;
+            ingestionSource.getDecoderSettings()
+            ensureOpen();
+    }
+                 * segments, including the local checkpoint amongst other values. The maximum sequence number is different, we never want
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.function.Supplier;
+                    new IndexVersionValue(EMPTY_TRANSLOG_LOCATION, index.version(), index.seqNo(), index.primaryTerm())
+            ensureOpen();
+    @Override
+        assert indexMetadata != null;
+        if (ingestionSource == null || !ingestionSource.getWarmupConfig().isEnabled() || streamPoller.isPaused()) {
+            if (isExternalVersioning) {
+        return getFromSearcher(get, searcherFactory, SearcherScope.EXTERNAL);
+            pipelineExecutor.getMetrics()
+        Map<String, String> commitData = commitDataAsMap(documentIndexWriter);
+                validateDocumentVersion(index);
             engineConfig.getShardId().getId(),
-            streamPoller.getState().toString(),
-            streamPoller.getErrorStrategy().getName(),
+    @Override
+        }
+                + doc
+                .pipelineExecutor(pipelineExecutor)
+            EMPTY_TRANSLOG_SNAPSHOT,
+    }
+        maybePruneDeletes();
+    protected TranslogManager createTranslogManager(
+    private void updateWarmupConfig(TimeValue timeout, Long lagThreshold) {
+        // prune based only on timestamp and not sequence number
+            if (isExternalVersioning) {
+     * Block until warmup is complete or timeout occurs.
+    /**
+                .mapperSettings(ingestionSource.getMapperSettings())
+    private IndexResult indexIntoLucene(Index index, boolean isCreateMode) throws IOException {
+        } else {
+    }
+            + engineConfig.getIndexSettings().getIndex().getName()
+            readLock,
+                 * poller has been completely initialized.
+            engineConfig.getClusterApplierService().addListener(streamPoller);
+    public void activateThrottling() {
+                .blocks()
+     * @param isCreateMode if true, a new document is created. Existing document with same docID will not be updated.
+            engineConfig.getShardId().getId(),
+    /**
+    private void updateErrorHandlingStrategy(IngestionErrorStrategy.ErrorStrategy errorStrategy) {
+    public boolean shouldPeriodicallyFlush() {
+        }
+        if (engineConfig.getClusterApplierService() != null) {
+        boolean accurateCount
+            boolean isExternalVersioning = delete.versionType() == VersionType.EXTERNAL;
+                // try recovering from commit data
+        try (
+    }
+    public NoOpResult noOp(NoOp noOp) throws IOException {
+            } catch (Exception inner) {
+        return new PollingIngestStats(
+            lastWriteNanos = index.startTime();
+        }
+import org.opensearch.common.unit.TimeValue;
+                 */
+            } catch (Exception inner) {
+                 * of invocation of the commit data iterator (which occurs after all documents have been flushed to Lucene).
+                    commitData.put(FORCE_MERGE_UUID_KEY, currentForceMergeUUID);
+    public DocumentMapperForType getDocumentMapperForType() {
+                tombstone.version().setLongValue(delete.version());
+    }
+import org.opensearch.indices.pollingingest.StreamPoller;
+                .payloadDecoder(payloadDecoder)
+            flush(true, true);
+import java.util.Objects;
+        logger.info("Ingestion source params updated, reinitializing consumer");
+        // Get current index metadata with updated ingestion source params
+import static org.opensearch.action.index.IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP;
+        long version,
+import org.opensearch.indices.pollingingest.IngestPipelineExecutor;
+        long toSeqNo,
+    private volatile StreamPoller streamPoller;
+    @Override
+                    new DeleteVersionValue(
+            }
+                } else {
+            if (forceResetPoller) {
             streamPoller.isPaused(),
-            streamPoller.isWriteBlockEnabled(),
-            shardPointer != null ? shardPointer.toString() : ""
+        } else {
+        if (operation.versionType() != VersionType.EXTERNAL) {
+import org.opensearch.common.Nullable;
+import org.opensearch.index.IngestionConsumerFactory;
+            resetStreamPoller(ingestionSettings.getResetState(), ingestionSettings.getResetValue());
+                .indexMetadata(indexMetadata)
+            );
+        // Request consumer reinitialization in the poller
+                commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(localCheckpointTracker.getMaxSeqNo()));
+    }
+        // start the polling loop
+            && startPointerOverride != null;
         );
     }
-
-    /**
-     * Block until warmup is complete or timeout occurs.
-     * This method handles all warmup logic internally. On timeout, always logs a warning and proceeds.
-     *
-     * @throws InterruptedException if the thread is interrupted while waiting
-     */
-    public void awaitWarmupComplete() throws InterruptedException {
-        IngestionSource ingestionSource = engineConfig.getIndexSettings().getIndexMetadata().getIngestionSource();
-        if (ingestionSource == null || !ingestionSource.getWarmupConfig().isEnabled() || streamPoller.isPaused()) {
-            return;
+            if (index.getAutoGeneratedIdTimestamp() == UNSET_AUTO_GENERATED_TIMESTAMP) {
+        IngestionShardPointer currentBatchStartPointer = streamPoller.getBatchStartPointer();
+        assert indexMetadata.getIngestionSource() != null;
+import java.io.IOException;
+        @Nullable StreamPoller.ResetState resetStateOverride,
+ * compatible open source license.
+     * source.
+            IngestionShardPointer startPointer = null;
+                    )
+    }
+                commitData.put(Translog.TRANSLOG_UUID_KEY, translogUUID);
         }
-
-        long timeoutMs = ingestionSource.getWarmupConfig().timeout().millis();
-        boolean completed = streamPoller.awaitWarmupComplete(timeoutMs);
-
-        if (!completed) {
+            // todo: possible to optimize addDoc instead of updateDoc if version is not present?
+                .pollTimeout(ingestionSource.getPollTimeout())
+        ensureOpen();
+    }
+    public GetResult get(Get get, BiFunction<String, SearcherScope, Searcher> searcherFactory) throws EngineException {
+        }
+                .blockingQueueSize(ingestionSource.getBlockingQueueSize())
+    }
+        EngineConfig engineConfig,
+            .addSettingsUpdateConsumer(
+                .warmupConfig(ingestionSource.getWarmupConfig())
+    @Override
+                delete.seqNo(),
+            doc.add(softDeletesField);
+        boolean requiredFullRange,
+    private volatile IngestionShardPointer lastCommittedBatchStartPointer;
+    private void addDocs(final List<ParseContext.Document> docs, final DocumentIndexWriter indexWriter, Term uid) throws IOException {
+        if (streamPoller != null) {
+                if (currentForceMergeUUID != null) {
+    /**
+        );
+        }
+        IngestionConsumerFactory ingestionConsumerFactory,
+     */
+     */
+            shardId,
+    ) throws IOException {
+    public void start() {
+        return new NoOpTranslogManager(
+    }
+}
+        // reset poller position and reinitialize poller
+    @Override
+    /**
+                startPointer = streamPoller.getConsumer().pointerFromOffset(resetValue);
+            shardPointer != null ? shardPointer.toString() : ""
+        if (versionValue == null) {
+    }
+        // Also initialize cluster write block state in the poller.
+            try {
+        long seqNo,
+        try (
+                        delete.seqNo(),
+        }
+        // TODO: add this when we have a thread pool for indexing in parallel
+    /**
+        engineConfig.getIndexSettings()
+    }
+                startPointer = streamPoller.getConsumer().pointerFromTimestampMillis(Long.parseLong(resetValue));
+        if (docs.size() > 1) {
+            indexWriter.softUpdateDocuments(uid, docs, version, seqNo, primaryTerm, softDeletesField);
+                 * risk of re-using a sequence number for two different documents when restoring from this commit point and subsequently
+    @Override
+            } else {
+                }
+                String batchStartStr = commitData.get(StreamPoller.BATCH_START);
+        if (currentBatchStartPointer == null) {
+    @Override
+        @Nullable String resetValueOverride,
+        @Nullable IngestionShardPointer startPointerOverride
             logger.warn("Ingestion warmup timed out for shard after {}ms, proceeding with potentially stale data.", timeoutMs);
+        );
+     * Periodic flush is required if the batchStartPointer has changed since the last commit or there is a big merge.
+            resetValue = resetValueOverride;
+    public IngestionEngine(
+     */
+            this::ensureOpen,
+                return commitData.entrySet().iterator();
+            throw e;
+import org.opensearch.index.translog.Translog;
+        try {
+    public IndexResult index(Index index) throws IOException {
+import java.util.function.BiFunction;
+        }
+import static org.opensearch.index.translog.Translog.EMPTY_TRANSLOG_LOCATION;
+import org.opensearch.index.translog.listener.CompositeTranslogEventListener;
+ * The OpenSearch Contributors require contributions made to
+             * If assertions are enabled, IndexWriter throws AssertionError on commit if any files don't exist, but tests that randomly
+                .state()
+            // refresh is needed for persisted pointers to be visible
+        this.payloadDecoderFactory = Objects.requireNonNull(payloadDecoderFactory);
+        } else {
+                e.addSuppressed(closeEx);
+            .getScopedSettings()
+            }
+        IngestionPayloadDecoderFactory payloadDecoderFactory
+                commitData.put(MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID, Long.toString(maxUnsafeAutoIdTimestamp.get()));
+     * Get current ingestion state. Used by management flows.
+    /**
+        String clientId = engineConfig.getIndexSettings().getNodeName()
+    public void deactivateThrottling() {
+        if (lastCommittedBatchStartPointer == null) {
+import org.opensearch.index.mapper.DocumentMapperForType;
+        );
+            engineConfig.getIndexSettings().getIndex().getName(),
+        engineConfig.getIndexSettings()
+            streamPoller.updateWarmupConfig(new IngestionSource.WarmupConfig(timeout, lagThreshold));
+    }
+        } else {
+        }
+    private final IngestionPayloadDecoderFactory payloadDecoderFactory;
+            .getScopedSettings()
+            streamPoller.isWriteBlockEnabled(),
+                logger.trace("committing writer with commit data [{}]", commitData);
+    protected void commitIndexWriter(final DocumentIndexWriter writer, final String translogUUID) throws IOException {
+import org.opensearch.common.lucene.uid.Versions;
+        } else {
+        ) {
+import org.opensearch.index.mapper.ParsedDocument;
+                index.parsedDoc().version().setLongValue(index.version());
+    @Override
+        );
+        }
+    private void registerDynamicIndexSettingsHandlers() {
+            this
+     * Handler for updating warmup configuration on dynamic index settings update.
+ * IngestionEngine is an engine that ingests data from a stream source.
+            boolean isWriteBlockEnabled = engineConfig.getClusterApplierService()
+    private void unregisterStreamPollerListener() {
+            final ParsedDocument tombstone = engineConfig.getTombstoneDocSupplier().newDeleteTombstoneDoc(delete.id(), delete.routing());
+            ingestionSource.getType()
+        // Check if flush needed after big merge
+    @Override
+        if (streamPoller.isPaused() == false) {
+import org.opensearch.indices.pollingingest.DefaultStreamPoller;
+package org.opensearch.index.engine;
+            return true;
+            throw ex;
+            assert doc.getField(SeqNoFieldMapper.TOMBSTONE_NAME) != null : "Delete tombstone document but _tombstone field is not set ["
+        IndexMetadata indexMetadata = engineConfig.getIndexSettings().getIndexMetadata();
+                commitData.put(HISTORY_UUID_KEY, historyUUID);
+     * This method handles all warmup logic internally. On timeout, always logs a warning and proceeds.
+        NoOpResult noOpResult = new NoOpResult(noOp.primaryTerm(), noOp.seqNo());
+        streamPoller.updateErrorStrategy(updatedIngestionErrorStrategy);
+        final Term uid,
+    private void updateIngestionState(IngestionSettings ingestionSettings) {
+            IndexResult indexResult = indexIntoLucene(index, isCreateMode);
+            if (ExceptionsHelper.stackTrace(e).contains("org.apache.lucene.index.IndexWriter.filesExist")) {
+        }
+    @Override
+    }
+        try {
+     * Processes delete operations. This is used internally by the stream poller only.
+        IngestionSource ingestionSource = engineConfig.getIndexSettings().getIndexMetadata().getIngestionSource();
+    }
+            } else {
+import org.opensearch.cluster.metadata.IngestionSource;
+            }
+                if (batchStartPointer != null) {
+    }
+                delete.version(),
+        try {
+            throw e;
+            currentVersion = Versions.NOT_FOUND;
+        );
+import java.util.HashMap;
+    }
+                e.addSuppressed(inner);
+    private void updateIngestionSourceParams(Map<String, Object> updatedParams) {
+    }
+        assert Objects.equals(index.uid().field(), IdFieldMapper.NAME) : index.uid().field();
+                    logger.warn("ignore null batch start pointer");
+            streamPoller.getErrorStrategy().getName(),
+            streamPoller.resume();
+        IngestionPayloadDecoder payloadDecoder = payloadDecoderFactory.create(
+            validateDocumentVersion(delete);
+        if (commitData.containsKey(StreamPoller.BATCH_START) || forceResetPoller) {
+                        delete.primaryTerm(),
+                    commitData.put(StreamPoller.BATCH_START, batchStartPointer.asString());
+                versionMap.maybePutIndexUnderLock(
+                    failEngine("lucene commit failed", engineException);
+        if (ingestionSettings.getResetState() != null && ingestionSettings.getResetValue() != null) {
+        } catch (RuntimeException | IOException e) {
+        final VersionValue versionValue = resolveDocVersion(operation, false);
+            }
+                 * the maximum sequence number to be less than the last sequence number to go into a Lucene commit, otherwise we run the
+        // If current pointer is null, no flush needed
+            ReleasableLock releasableLock1 = readLock.acquire();
+import org.opensearch.index.VersionType;
+    }
         }
     }
-
-}
+        if (docs.size() > 1) {
+            .getScopedSettings()
+     * Reinitialize the poller with provided state and value. The current poller is first closed, before initializing
+            streamPoller.close();
+        if (streamPoller.getConsumer() == null) {
+    }
+                versionMap.putDeleteUnderLock(
+    /**
+        );
+        if (streamPoller.getConsumer() == null) {
+            startPointer,
+ */
+        throw new IngestionEngineException("push-based deletion is not supported in ingestion engine, use streaming source instead");
+        }
+        boolean forceResetPoller = resetStateOverride != null
+/**
+        return new IndexResult(index.version(), index.primaryTerm(), index.seqNo(), true);
+                .build();
+        String resetValue = ingestionSource.getPointerInitReset().getValue();
+import org.opensearch.index.translog.TranslogManager;
+                failEngine("lucene commit failed", ex);
+            updateDocs(index.uid(), index.docs(), documentIndexWriter, index.version(), index.seqNo(), index.primaryTerm());
+        IngestionShardPointer startPointer = null;
+                ex.addSuppressed(inner);
+            new TranslogStats(),
+            });
+                payloadDecoder.close();
+        IngestionErrorStrategy updatedIngestionErrorStrategy = IngestionErrorStrategy.create(
+                .resetValue(resetValue)
+        if (streamPoller != null) {
+        PollingIngestStats pollerStats = streamPoller.getStats();

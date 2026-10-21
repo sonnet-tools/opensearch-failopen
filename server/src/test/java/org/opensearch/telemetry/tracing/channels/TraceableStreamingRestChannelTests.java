@@ -1,268 +1,205 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.telemetry.tracing.channels;
-
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.http.HttpChunk;
-import org.opensearch.rest.RestResponse;
-import org.opensearch.rest.StreamingRestChannel;
-import org.opensearch.telemetry.tracing.Span;
-import org.opensearch.telemetry.tracing.SpanScope;
-import org.opensearch.telemetry.tracing.Tracer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import org.reactivestreams.Subscriber;
-
-import static org.hamcrest.Matchers.instanceOf;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-/**
- * Tests for {@link TraceableStreamingRestChannel}
- */
-public class TraceableStreamingRestChannelTests extends OpenSearchTestCase {
-
-    private StreamingRestChannel delegate;
-    private Span span;
     private Tracer tracer;
-    private SpanScope spanScope;
-
-    @Before
-    public void setup() {
-        delegate = mock(StreamingRestChannel.class);
-        span = mock(Span.class);
-        tracer = mock(Tracer.class);
-        spanScope = mock(SpanScope.class);
-
-        // Default behavior: tracer is recording and creates span scopes
-        when(tracer.isRecording()).thenReturn(true);
-        when(tracer.withSpanInScope(span)).thenReturn(spanScope);
-    }
-
-    public void testCreateReturnsTracingChannelWhenRecording() {
-        when(tracer.isRecording()).thenReturn(true);
-
-        StreamingRestChannel result = (StreamingRestChannel) TraceableStreamingRestChannel.create(delegate, span, tracer);
-
-        assertNotNull(result);
-        assertThat(result, instanceOf(TraceableStreamingRestChannel.class));
-    }
-
-    public void testCreateReturnsDelegateWhenNotRecording() {
-        when(tracer.isRecording()).thenReturn(false);
-
-        StreamingRestChannel result = (StreamingRestChannel) TraceableStreamingRestChannel.create(delegate, span, tracer);
-
-        assertSame(delegate, result);
-    }
-
-    public void testPrepareResponseDelegatesToUnderlying() {
-        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
-
-        Map<String, List<String>> headers = Map.of("Content-Type", List.of("application/json"));
-        channel.prepareResponse(RestStatus.OK, headers);
-
-        verify(delegate, times(1)).prepareResponse(RestStatus.OK, headers);
-    }
-
-    public void testPrepareResponseExecutesWithinSpanScope() {
-        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
-
-        Map<String, List<String>> headers = Map.of("Content-Type", List.of("application/json"));
-        channel.prepareResponse(RestStatus.OK, headers);
-
+public class TraceableStreamingRestChannelTests extends OpenSearchTestCase {
+        executor.shutdown();
         // Verify span scope was created and closed
-        verify(tracer, times(1)).withSpanInScope(span);
-        verify(spanScope, times(1)).close();
-    }
-
-    public void testSendChunkDelegatesToUnderlying() {
-        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
-
-        HttpChunk chunk = createMockChunk(false);
-        channel.sendChunk(chunk);
-
-        verify(delegate, times(1)).sendChunk(chunk);
-    }
-
-    public void testSendChunkExecutesWithinSpanScope() {
-        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
-
-        HttpChunk chunk = createMockChunk(false);
-        channel.sendChunk(chunk);
-
-        // Verify span scope was created and closed for each chunk
-        verify(tracer, times(1)).withSpanInScope(span);
-        verify(spanScope, times(1)).close();
-    }
-
-    public void testSendChunkDoesNotEndSpanForNonLastChunk() {
-        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
-
-        HttpChunk chunk = createMockChunk(false);
-        channel.sendChunk(chunk);
-
-        verify(span, never()).endSpan();
-    }
-
-    public void testSendChunkEndsSpanForLastChunk() {
-        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
-
-        HttpChunk lastChunk = createMockChunk(true);
-        channel.sendChunk(lastChunk);
-
-        verify(span, times(1)).endSpan();
-    }
-
-    public void testSendChunkEndsSpanOnlyOnceWithMultipleChunks() {
-        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
-
-        // Send multiple non-last chunks
-        HttpChunk chunk1 = createMockChunk(false);
-        HttpChunk chunk2 = createMockChunk(false);
-        HttpChunk chunk3 = createMockChunk(false);
-        HttpChunk lastChunk = createMockChunk(true);
-
-        channel.sendChunk(chunk1);
-        channel.sendChunk(chunk2);
-        channel.sendChunk(chunk3);
-        channel.sendChunk(lastChunk);
-
-        // Verify span scope was created for each chunk
-        verify(tracer, times(4)).withSpanInScope(span);
-        verify(spanScope, times(4)).close();
-
-        // Verify span ended only once (for last chunk)
-        verify(span, times(1)).endSpan();
-    }
-
-    public void testSpanEndedTwiceWhenBothPathsUsed() throws IOException {
-        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
-
-        // First send via streaming path
-        HttpChunk lastChunk = createMockChunk(true);
-        channel.sendChunk(lastChunk);
-
-        // Then try non-streaming path (shouldn't normally happen, but guarded)
-        RestResponse response = mock(RestResponse.class);
-        channel.sendResponse(response);
-
-        // Verify span ended twice
-        verify(span, times(2)).endSpan();
-    }
-
-    public void testConcurrentSendChunkCallsAreThreadSafe() throws InterruptedException {
-        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
-
-        int numThreads = 10;
+import org.opensearch.rest.RestResponse;
+        when(delegate.isReadable()).thenReturn(true);
+import org.opensearch.telemetry.tracing.SpanScope;
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch doneLatch = new CountDownLatch(numThreads);
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-
-        AtomicInteger chunksProcessed = new AtomicInteger(0);
-
-        // Simulate concurrent chunk sending from multiple threads
-        for (int i = 0; i < numThreads; i++) {
-            final boolean isLast = (i == numThreads - 1);
-            executor.submit(() -> {
-                try {
-                    startLatch.await();
-                    HttpChunk chunk = createMockChunk(isLast);
-                    channel.sendChunk(chunk);
-                    chunksProcessed.incrementAndGet();
-                } catch (Exception e) {
-                    fail("Exception in thread: " + e.getMessage());
-                } finally {
-                    doneLatch.countDown();
-                }
-            });
-        }
-
-        startLatch.countDown(); // Start all threads
-        assertTrue("Threads did not complete", doneLatch.await(5, TimeUnit.SECONDS));
-        executor.shutdown();
-
-        assertEquals(numThreads, chunksProcessed.get());
-        verify(delegate, times(numThreads)).sendChunk(any(HttpChunk.class));
-
-        // Verify span ended exactly once despite concurrent access
-        verify(span, times(1)).endSpan();
-    }
-
+        channel.prepareResponse(RestStatus.OK, headers);
+        assertSame(delegate, result);
+        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
+        // Verify span scope was created for each chunk
+        when(tracer.isRecording()).thenReturn(false);
+    public void testPrepareResponseExecutesWithinSpanScope() {
+        };
+import org.opensearch.telemetry.tracing.Tracer;
+        channel.sendResponse(response);
     public void testIsReadableDelegates() {
-        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
-
-        when(delegate.isReadable()).thenReturn(true);
-        assertTrue(channel.isReadable());
-
-        when(delegate.isReadable()).thenReturn(false);
-        assertFalse(channel.isReadable());
-
-        verify(delegate, times(2)).isReadable();
     }
-
-    public void testIsWritableDelegates() {
+        verify(span, never()).endSpan();
         TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
-
+        verify(span, times(1)).endSpan();
+        verify(span, times(1)).endSpan();
+        verify(tracer, times(4)).withSpanInScope(span);
+import java.util.concurrent.TimeUnit;
+import org.opensearch.telemetry.tracing.Span;
+ * SPDX-License-Identifier: Apache-2.0
+        channel.sendChunk(lastChunk);
+import static org.mockito.Mockito.never;
+        channel.sendChunk(chunk);
+    }
+    }
+        HttpChunk lastChunk = createMockChunk(true);
+                } catch (Exception e) {
+    // Helper method to create mock HttpChunk
+        assertFalse(channel.isReadable());
+    public void testSendChunkDoesNotEndSpanForNonLastChunk() {
+import org.opensearch.core.common.bytes.BytesArray;
+import org.opensearch.test.OpenSearchTestCase;
+    private SpanScope spanScope;
+        assertTrue("Threads did not complete", doneLatch.await(5, TimeUnit.SECONDS));
+import org.opensearch.http.HttpChunk;
+        HttpChunk lastChunk = createMockChunk(true);
+    public void testSpanEndedTwiceWhenBothPathsUsed() throws IOException {
+                return new BytesArray("test chunk content".getBytes(StandardCharsets.UTF_8));
+            @Override
+        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
+                    HttpChunk chunk = createMockChunk(isLast);
+        StreamingRestChannel result = (StreamingRestChannel) TraceableStreamingRestChannel.create(delegate, span, tracer);
+import static org.mockito.Mockito.times;
+    public void testSendChunkEndsSpanForLastChunk() {
+        HttpChunk chunk1 = createMockChunk(false);
+        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
+        Map<String, List<String>> headers = Map.of("Content-Type", List.of("application/json"));
+        HttpChunk lastChunk = createMockChunk(true);
+import java.util.Map;
+import java.io.IOException;
+    }
+ *
+        verify(span, times(1)).endSpan();
+        return new HttpChunk() {
+    private Span span;
+/*
+        channel.sendChunk(chunk);
+                }
+        delegate = mock(StreamingRestChannel.class);
+    public void setup() {
+        AtomicInteger chunksProcessed = new AtomicInteger(0);
+        verify(tracer, times(1)).withSpanInScope(span);
+    }
+        for (int i = 0; i < numThreads; i++) {
+        when(delegate.isReadable()).thenReturn(false);
+            final boolean isLast = (i == numThreads - 1);
+        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
+    }
+        // First send via streaming path
+        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
+    }
+        when(tracer.isRecording()).thenReturn(true);
+/**
+        channel.sendChunk(chunk);
+        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
+    private StreamingRestChannel delegate;
+        channel.sendChunk(chunk2);
+    }
+        int numThreads = 10;
+import java.util.concurrent.Executors;
+        HttpChunk chunk = createMockChunk(false);
+            @Override
+        verify(span, times(2)).endSpan();
+ * this file be licensed under the Apache-2.0 license or a
+    public void testPrepareResponseDelegatesToUnderlying() {
+        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
+        verify(spanScope, times(1)).close();
+    }
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+        channel.sendChunk(chunk1);
+        // Verify span ended exactly once despite concurrent access
+import static org.hamcrest.Matchers.instanceOf;
+        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
+        assertTrue(channel.isReadable());
+import org.reactivestreams.Subscriber;
+package org.opensearch.telemetry.tracing.channels;
+import org.opensearch.rest.StreamingRestChannel;
+                    channel.sendChunk(chunk);
+                    fail("Exception in thread: " + e.getMessage());
+        verify(delegate, times(1)).subscribe(subscriber);
+    public void testCreateReturnsTracingChannelWhenRecording() {
+            @Override
+    }
+        Subscriber<HttpChunk> subscriber = mock(Subscriber.class);
+            executor.submit(() -> {
+        verify(delegate, times(2)).isReadable();
+            }
+            public boolean isLast() {
+                    startLatch.await();
+import static org.mockito.ArgumentMatchers.any;
+}
+        startLatch.countDown(); // Start all threads
+ */
+    public void testSubscribeDelegates() {
+import java.util.concurrent.atomic.AtomicInteger;
+        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
+        @SuppressWarnings("unchecked")
+    }
+            }
+import org.junit.Before;
+        // Send multiple non-last chunks
+import static org.mockito.Mockito.mock;
+        verify(spanScope, times(4)).close();
+ * Tests for {@link TraceableStreamingRestChannel}
+    }
+        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
+    @Before
+    }
+        channel.subscribe(subscriber);
+        }
+        assertThat(result, instanceOf(TraceableStreamingRestChannel.class));
+                try {
+ * compatible open source license.
+        HttpChunk chunk3 = createMockChunk(false);
+        channel.sendChunk(chunk3);
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.CountDownLatch;
+        span = mock(Span.class);
+import java.util.List;
+        verify(delegate, times(numThreads)).sendChunk(any(HttpChunk.class));
         when(delegate.isWritable()).thenReturn(true);
-        assertTrue(channel.isWritable());
-
+import static org.mockito.Mockito.when;
+    public void testSendChunkExecutesWithinSpanScope() {
+        Map<String, List<String>> headers = Map.of("Content-Type", List.of("application/json"));
+    }
+import static org.mockito.Mockito.verify;
+            public void close() {
+        verify(delegate, times(1)).sendChunk(chunk);
+        // Simulate concurrent chunk sending from multiple threads
         when(delegate.isWritable()).thenReturn(false);
         assertFalse(channel.isWritable());
-
-        verify(delegate, times(2)).isWritable();
     }
-
-    public void testSubscribeDelegates() {
-        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
-
-        @SuppressWarnings("unchecked")
-        Subscriber<HttpChunk> subscriber = mock(Subscriber.class);
-        channel.subscribe(subscriber);
-
-        verify(delegate, times(1)).subscribe(subscriber);
+        // Verify span ended twice
+        // Then try non-streaming path (shouldn't normally happen, but guarded)
     }
-
-    // Helper method to create mock HttpChunk
-    private HttpChunk createMockChunk(boolean isLast) {
-        return new HttpChunk() {
-            @Override
-            public boolean isLast() {
+                    chunksProcessed.incrementAndGet();
+        // Verify span scope was created and closed for each chunk
+        StreamingRestChannel result = (StreamingRestChannel) TraceableStreamingRestChannel.create(delegate, span, tracer);
+    public void testCreateReturnsDelegateWhenNotRecording() {
+        verify(tracer, times(1)).withSpanInScope(span);
+import org.opensearch.core.rest.RestStatus;
+                } finally {
+    public void testSendChunkDelegatesToUnderlying() {
+        when(tracer.withSpanInScope(span)).thenReturn(spanScope);
+        channel.sendChunk(lastChunk);
+        HttpChunk chunk2 = createMockChunk(false);
+            }
+        spanScope = mock(SpanScope.class);
                 return isLast;
-            }
-
-            @Override
-            public BytesReference content() {
-                return new BytesArray("test chunk content".getBytes(StandardCharsets.UTF_8));
-            }
-
-            @Override
-            public void close() {
+            });
+        HttpChunk chunk = createMockChunk(false);
+    private HttpChunk createMockChunk(boolean isLast) {
+        assertTrue(channel.isWritable());
+        verify(spanScope, times(1)).close();
+    public void testSendChunkEndsSpanOnlyOnceWithMultipleChunks() {
+        assertNotNull(result);
+        TraceableStreamingRestChannel channel = new TraceableStreamingRestChannel(delegate, span, tracer);
+        RestResponse response = mock(RestResponse.class);
+    public void testIsWritableDelegates() {
+        verify(delegate, times(2)).isWritable();
                 // no-op for test
-            }
-        };
-    }
-}
+        HttpChunk chunk = createMockChunk(false);
+ */
+        assertEquals(numThreads, chunksProcessed.get());
+            public BytesReference content() {
+                    doneLatch.countDown();
+        when(tracer.isRecording()).thenReturn(true);
+        // Verify span ended only once (for last chunk)
+ * The OpenSearch Contributors require contributions made to
+    public void testConcurrentSendChunkCallsAreThreadSafe() throws InterruptedException {
+        tracer = mock(Tracer.class);
+import java.nio.charset.StandardCharsets;
+        // Default behavior: tracer is recording and creates span scopes
+        channel.prepareResponse(RestStatus.OK, headers);
+        verify(delegate, times(1)).prepareResponse(RestStatus.OK, headers);
+        channel.sendChunk(lastChunk);
+import org.opensearch.core.common.bytes.BytesReference;

@@ -1,256 +1,227 @@
+        Set<String> clusterAliases() {
+                MockTransportService.TestPlugin.class,
+    static class ClusterGroup implements Closeable {
+            @Override
+        if (clusterGroup != null && reuseClusters()) {
+                nodeConfigurationSource,
+        });
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    static NodeConfigurationSource nodeConfigurationSource(Settings nodeSettings, Collection<Class<? extends Plugin>> nodePlugins) {
+            cluster.beforeTest(random());
+        assertBusy(() -> {
+                .stream()
+                true,
+    public static final String LOCAL_CLUSTER = RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY;
+import org.opensearch.transport.client.Client;
+ * You may obtain a copy of the License at
+import java.util.HashMap;
+    public final void startClusters() throws Exception {
 /*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
+        }
+import java.util.Map;
+                numberOfNodes,
+                mockPlugins,
+import org.opensearch.common.util.io.IOUtils;
+            }
+            IOUtils.close(clusters.values());
+                .stream()
+import org.junit.AfterClass;
+        stopClusters();
+ * the Apache License, Version 2.0 (the "License"); you may
+            public Settings nodeSettings(int nodeOrdinal) {
+        builder.putList(DISCOVERY_SEED_PROVIDERS_SETTING.getKey(), "file");
+import java.util.function.Function;
+import org.opensearch.transport.TransportService;
+                0,
+        clusterGroup = new ClusterGroup(clusters);
+    }
+    }
+    public static void stopClusters() throws IOException {
+        for (String clusterAlias : clusterGroup.clusterAliases()) {
+        }
+            }
+                .getInfos()
+    }
+    }
+        Settings.Builder settings = Settings.builder();
+            final String clusterName = clusterAlias.equals(LOCAL_CLUSTER) ? "main-cluster" : clusterAlias;
+            settings.put("cluster.remote." + clusterAlias + ".seeds", seeds);
+    protected boolean reuseClusters() {
+                seedNodes.put(clusterAlias, selectedNodes);
+        builder.putList(DISCOVERY_SEED_HOSTS_SETTING.getKey()); // empty list disables a port scan for other nodes
+    }
+        }
+        for (Map.Entry<String, List<String>> entry : seedNodes.entrySet()) {
+import java.io.Closeable;
+    protected final Client client(String clusterAlias) {
+    }
  * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
+            for (TransportService transportService : cluster(LOCAL_CLUSTER).getInstances(TransportService.class)) {
+ * GitHub history for details.
+                MockHttpTransport.TestPlugin.class,
+                .collect(Collectors.toList());
+    }
+                true,
+import java.io.IOException;
+            return;
+        };
+import org.junit.Before;
+                createTempDir(),
+ * SPDX-License-Identifier: Apache-2.0
+        if (seedNodes.isEmpty()) {
+        Settings.Builder settings = Settings.builder();
+    }
+            }
+    public void assertAfterTest() throws Exception {
  * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.test;
-
-import org.opensearch.action.admin.cluster.remote.RemoteInfoAction;
-import org.opensearch.action.admin.cluster.remote.RemoteInfoRequest;
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.transport.RemoteClusterAware;
-import org.opensearch.transport.RemoteConnectionInfo;
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.Client;
-import org.opensearch.transport.nio.MockNioTransportPlugin;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-import static org.opensearch.discovery.DiscoveryModule.DISCOVERY_SEED_PROVIDERS_SETTING;
-import static org.opensearch.discovery.SettingsBasedSeedHostsProvider.DISCOVERY_SEED_HOSTS_SETTING;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.hasKey;
-import static org.hamcrest.Matchers.hasSize;
-
-public abstract class AbstractMultiClustersTestCase extends OpenSearchTestCase {
-    public static final String LOCAL_CLUSTER = RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY;
-
+    protected final InternalTestCluster cluster(String clusterAlias) {
+            final NodeConfigurationSource nodeConfigurationSource = nodeConfigurationSource(nodeSettings, nodePlugins);
     private static volatile ClusterGroup clusterGroup;
-
-    protected Collection<String> remoteClusterAlias() {
+        final List<String> clusterAliases = new ArrayList<>(remoteClusterAlias());
+ */
+        }
         return randomSubsetOf(Arrays.asList("cluster-a", "cluster-b"));
+        InternalTestCluster getCluster(String clusterAlias) {
     }
-
-    protected Collection<Class<? extends Plugin>> nodePlugins(String clusterAlias) {
-        return Collections.emptyList();
+        IOUtils.close(clusterGroup);
+                Function.identity()
+        }
+/*
+        configureAndConnectsToRemoteClusters();
+ */
+            final InternalTestCluster cluster = new InternalTestCluster(
+                final InternalTestCluster cluster = clusterGroup.getCluster(clusterAlias);
+}
+        private final Map<String, InternalTestCluster> clusters;
+        return clusterGroup.getCluster(clusterAlias);
+    protected Collection<String> remoteClusterAlias() {
+ * Unless required by applicable law or agreed to in writing,
     }
-
-    protected final Client client() {
+        ClusterGroup(Map<String, InternalTestCluster> clusters) {
+            assertThat(clusters, hasKey(clusterAlias));
+        builder.put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType());
+ * KIND, either express or implied.  See the License for the
+import java.util.Collection;
+    @AfterClass
+        return Collections.unmodifiableMap(clusterGroup.clusters);
+                settings.putNull("cluster.remote." + clusterAlias + ".seeds");
+        final Map<String, InternalTestCluster> clusters = new HashMap<>();
         return client(LOCAL_CLUSTER);
     }
-
-    protected final Client client(String clusterAlias) {
-        return cluster(clusterAlias).client();
+ * specific language governing permissions and limitations
     }
-
-    protected final InternalTestCluster cluster(String clusterAlias) {
-        return clusterGroup.getCluster(clusterAlias);
-    }
-
-    protected final Map<String, InternalTestCluster> clusters() {
-        return Collections.unmodifiableMap(clusterGroup.clusters);
-    }
-
-    protected boolean reuseClusters() {
-        return true;
-    }
-
-    @Before
-    public final void startClusters() throws Exception {
-        if (clusterGroup != null && reuseClusters()) {
-            return;
-        }
-        stopClusters();
-        final Map<String, InternalTestCluster> clusters = new HashMap<>();
-        final List<String> clusterAliases = new ArrayList<>(remoteClusterAlias());
-        clusterAliases.add(LOCAL_CLUSTER);
-        for (String clusterAlias : clusterAliases) {
-            final String clusterName = clusterAlias.equals(LOCAL_CLUSTER) ? "main-cluster" : clusterAlias;
-            final int numberOfNodes = randomIntBetween(1, 3);
-            final List<Class<? extends Plugin>> mockPlugins = Arrays.asList(
-                MockHttpTransport.TestPlugin.class,
-                MockTransportService.TestPlugin.class,
-                MockNioTransportPlugin.class
-            );
-            final Collection<Class<? extends Plugin>> nodePlugins = nodePlugins(clusterAlias);
-            final Settings nodeSettings = Settings.EMPTY;
-            final NodeConfigurationSource nodeConfigurationSource = nodeConfigurationSource(nodeSettings, nodePlugins);
-            final InternalTestCluster cluster = new InternalTestCluster(
-                randomLong(),
-                createTempDir(),
-                true,
-                true,
-                numberOfNodes,
-                numberOfNodes,
-                clusterName,
-                nodeConfigurationSource,
-                0,
-                clusterName + "-",
-                mockPlugins,
-                Function.identity()
-            );
-            cluster.beforeTest(random());
+            return clusters.get(clusterAlias);
+            final String clusterAlias = entry.getKey();
             clusters.put(clusterAlias, cluster);
         }
-        clusterGroup = new ClusterGroup(clusters);
-        configureAndConnectsToRemoteClusters();
-    }
-
-    @After
-    public void assertAfterTest() throws Exception {
-        for (InternalTestCluster cluster : clusters().values()) {
-            cluster.wipe(Collections.emptySet());
-            cluster.assertAfterTest();
-        }
-    }
-
-    @AfterClass
-    public static void stopClusters() throws IOException {
-        IOUtils.close(clusterGroup);
-        clusterGroup = null;
-    }
-
-    protected void disconnectFromRemoteClusters() throws Exception {
-        Settings.Builder settings = Settings.builder();
-        final Set<String> clusterAliases = clusterGroup.clusterAliases();
-        for (String clusterAlias : clusterAliases) {
-            if (clusterAlias.equals(LOCAL_CLUSTER) == false) {
-                settings.putNull("cluster.remote." + clusterAlias + ".seeds");
-            }
-        }
-        client().admin().cluster().prepareUpdateSettings().setPersistentSettings(settings).get();
-        assertBusy(() -> {
-            for (TransportService transportService : cluster(LOCAL_CLUSTER).getInstances(TransportService.class)) {
-                assertThat(transportService.getRemoteClusterService().getRegisteredRemoteClusterNames(), empty());
-            }
-        });
-    }
-
-    protected void configureAndConnectsToRemoteClusters() throws Exception {
-        Map<String, List<String>> seedNodes = new HashMap<>();
-        for (String clusterAlias : clusterGroup.clusterAliases()) {
-            if (clusterAlias.equals(LOCAL_CLUSTER) == false) {
-                final InternalTestCluster cluster = clusterGroup.getCluster(clusterAlias);
-                final String[] allNodes = cluster.getNodeNames();
-                final List<String> selectedNodes = randomSubsetOf(randomIntBetween(1, Math.min(3, allNodes.length)), allNodes);
-                seedNodes.put(clusterAlias, selectedNodes);
-            }
-        }
-        if (seedNodes.isEmpty()) {
-            return;
-        }
-        Settings.Builder settings = Settings.builder();
-        for (Map.Entry<String, List<String>> entry : seedNodes.entrySet()) {
-            final String clusterAlias = entry.getKey();
-            final String seeds = entry.getValue()
-                .stream()
-                .map(node -> cluster(clusterAlias).getInstance(TransportService.class, node).boundAddress().publishAddress().toString())
-                .collect(Collectors.joining(","));
-            settings.put("cluster.remote." + clusterAlias + ".seeds", seeds);
-        }
-        client().admin().cluster().prepareUpdateSettings().setPersistentSettings(settings).get();
-        assertBusy(() -> {
             List<RemoteConnectionInfo> remoteConnectionInfos = client().execute(RemoteInfoAction.INSTANCE, new RemoteInfoRequest())
-                .actionGet()
-                .getInfos()
-                .stream()
-                .filter(RemoteConnectionInfo::isConnected)
-                .collect(Collectors.toList());
-            final long totalConnections = seedNodes.values().stream().map(List::size).count();
-            assertThat(remoteConnectionInfos, hasSize(Math.toIntExact(totalConnections)));
-        });
-    }
-
-    static class ClusterGroup implements Closeable {
-        private final Map<String, InternalTestCluster> clusters;
-
-        ClusterGroup(Map<String, InternalTestCluster> clusters) {
-            this.clusters = Collections.unmodifiableMap(clusters);
-        }
-
-        InternalTestCluster getCluster(String clusterAlias) {
-            assertThat(clusters, hasKey(clusterAlias));
-            return clusters.get(clusterAlias);
-        }
-
-        Set<String> clusterAliases() {
-            return clusters.keySet();
-        }
-
-        @Override
-        public void close() throws IOException {
-            IOUtils.close(clusters.values());
-        }
-    }
-
-    static NodeConfigurationSource nodeConfigurationSource(Settings nodeSettings, Collection<Class<? extends Plugin>> nodePlugins) {
-        final Settings.Builder builder = Settings.builder();
-        builder.putList(DISCOVERY_SEED_HOSTS_SETTING.getKey()); // empty list disables a port scan for other nodes
-        builder.putList(DISCOVERY_SEED_PROVIDERS_SETTING.getKey(), "file");
-        builder.put(NetworkModule.TRANSPORT_TYPE_KEY, getTestTransportType());
-        builder.put(nodeSettings);
-
-        return new NodeConfigurationSource() {
+                randomLong(),
+        client().admin().cluster().prepareUpdateSettings().setPersistentSettings(settings).get();
+ * under the License.
             @Override
-            public Settings nodeSettings(int nodeOrdinal) {
-                return builder.build();
-            }
-
-            @Override
-            public Path nodeConfigPath(int nodeOrdinal) {
-                return null;
-            }
-
-            @Override
+        return cluster(clusterAlias).client();
+import org.opensearch.transport.RemoteConnectionInfo;
+import org.opensearch.action.admin.cluster.remote.RemoteInfoRequest;
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.hasSize;
             public Collection<Class<? extends Plugin>> nodePlugins() {
-                return nodePlugins;
+import org.opensearch.transport.RemoteClusterAware;
+        client().admin().cluster().prepareUpdateSettings().setPersistentSettings(settings).get();
             }
-        };
+        return new NodeConfigurationSource() {
+ * compatible open source license.
+    protected final Map<String, InternalTestCluster> clusters() {
+        return true;
+                .filter(RemoteConnectionInfo::isConnected)
+        for (String clusterAlias : clusterAliases) {
+import java.util.List;
+                final String[] allNodes = cluster.getNodeNames();
+            );
+        }
+        }
+            }
+        }
+import static org.opensearch.discovery.DiscoveryModule.DISCOVERY_SEED_PROVIDERS_SETTING;
+            final int numberOfNodes = randomIntBetween(1, 3);
+        clusterGroup = null;
+ */
+ * not use this file except in compliance with the License.
+            cluster.assertAfterTest();
+package org.opensearch.test;
+import java.util.Set;
+    @After
+        }
+                return null;
+import org.opensearch.plugins.Plugin;
+ * Modifications Copyright OpenSearch Contributors. See
+        builder.put(nodeSettings);
+                return builder.build();
+            public Path nodeConfigPath(int nodeOrdinal) {
+import org.junit.After;
+            assertThat(remoteConnectionInfos, hasSize(Math.toIntExact(totalConnections)));
+    @Before
+    protected Collection<Class<? extends Plugin>> nodePlugins(String clusterAlias) {
+            @Override
+    protected final Client client() {
+        Map<String, List<String>> seedNodes = new HashMap<>();
+                assertThat(transportService.getRemoteClusterService().getRegisteredRemoteClusterNames(), empty());
+        clusterAliases.add(LOCAL_CLUSTER);
+                numberOfNodes,
+        }
+import org.opensearch.test.transport.MockTransportService;
+ *
+            final long totalConnections = seedNodes.values().stream().map(List::size).count();
+        final Settings.Builder builder = Settings.builder();
+                .map(node -> cluster(clusterAlias).getInstance(TransportService.class, node).boundAddress().publishAddress().toString())
+            if (clusterAlias.equals(LOCAL_CLUSTER) == false) {
+            final Collection<Class<? extends Plugin>> nodePlugins = nodePlugins(clusterAlias);
+import java.util.ArrayList;
+                .actionGet()
+public abstract class AbstractMultiClustersTestCase extends OpenSearchTestCase {
+import org.opensearch.transport.nio.MockNioTransportPlugin;
+            return;
+            cluster.wipe(Collections.emptySet());
+            );
     }
-}
+    protected void configureAndConnectsToRemoteClusters() throws Exception {
+            final Settings nodeSettings = Settings.EMPTY;
+ *
+    protected void disconnectFromRemoteClusters() throws Exception {
+                clusterName,
+                .collect(Collectors.joining(","));
+import java.nio.file.Path;
+                final List<String> selectedNodes = randomSubsetOf(randomIntBetween(1, Math.min(3, allNodes.length)), allNodes);
+ * software distributed under the License is distributed on an
+import static org.hamcrest.Matchers.hasKey;
+        @Override
+    }
+            final List<Class<? extends Plugin>> mockPlugins = Arrays.asList(
+        assertBusy(() -> {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import static org.opensearch.discovery.SettingsBasedSeedHostsProvider.DISCOVERY_SEED_HOSTS_SETTING;
+            return clusters.keySet();
+import java.util.Arrays;
+        for (String clusterAlias : clusterAliases) {
+import java.util.stream.Collectors;
+import java.util.Collections;
+/*
+        public void close() throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+ * license agreements. See the NOTICE file distributed with
+ * The OpenSearch Contributors require contributions made to
+        for (InternalTestCluster cluster : clusters().values()) {
+import org.opensearch.action.admin.cluster.remote.RemoteInfoAction;
+ *
+                clusterName + "-",
+import org.opensearch.common.settings.Settings;
+        final Set<String> clusterAliases = clusterGroup.clusterAliases();
+            final String seeds = entry.getValue()
+import org.opensearch.common.network.NetworkModule;
+                return nodePlugins;
+            this.clusters = Collections.unmodifiableMap(clusters);
+            if (clusterAlias.equals(LOCAL_CLUSTER) == false) {
+        return Collections.emptyList();
+                MockNioTransportPlugin.class
+        });
+            }

@@ -1,221 +1,196 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
  * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.be.datafusion;
-
-import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
-import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.plan.hep.HepPlanner;
-import org.apache.calcite.plan.hep.HepProgramBuilder;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.SqlFunction;
-import org.apache.calcite.sql.SqlFunctionCategory;
-import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.type.OperandTypes;
-import org.apache.calcite.sql.type.ReturnTypes;
-import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.calcite.sql.type.SqlTypeUtil;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.List;
-
-/**
- * Unit tests for {@link ParseAdapter}. The adapter has two plan-time jobs that
- * both surface user errors before any UDF runs: literal validation on the
- * pattern + method operands, and method gating to {@code regex} only. After
- * validation it rewrites the call to the local UDF operator with the original
- * call's return type preserved (mirrors the ConvertTzAdapter pattern so the
- * enclosing Project's compatibleTypes check stays consistent).
- */
-public class ParseAdapterTests extends OpenSearchTestCase {
-
-    private RelDataTypeFactory typeFactory;
-    private RexBuilder rexBuilder;
-    private RelOptCluster cluster;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        typeFactory = new JavaTypeFactoryImpl();
-        rexBuilder = new RexBuilder(typeFactory);
-        HepPlanner planner = new HepPlanner(new HepProgramBuilder().build());
-        cluster = RelOptCluster.create(planner, rexBuilder);
-    }
-
-    /**
-     * Mirrors {@code ParseFunction}'s explicit {@code MAP<VARCHAR, VARCHAR>}
-     * return type so the rewrite-preserves-return-type assertion has a
-     * non-trivial type to check against.
-     */
-    private RelDataType mapVarcharType() {
-        return SqlTypeUtil.createMapType(
-            typeFactory,
-            typeFactory.createSqlType(SqlTypeName.VARCHAR),
-            typeFactory.createSqlType(SqlTypeName.VARCHAR),
-            false
-        );
-    }
-
-    private SqlFunction parseOp(RelDataType returnType) {
-        return new SqlFunction(
-            "PARSE",
-            SqlKind.OTHER_FUNCTION,
-            ReturnTypes.explicit(returnType),
-            null,
-            OperandTypes.STRING_STRING_STRING,
-            SqlFunctionCategory.STRING
-        );
-    }
-
-    private RexCall buildParse(RexNode pattern, RexNode method) {
-        RelDataType varcharType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true);
-        RexNode inputRef = rexBuilder.makeInputRef(varcharType, 0);
-        return (RexCall) rexBuilder.makeCall(parseOp(mapVarcharType()), List.of(inputRef, pattern, method));
-    }
-
-    private RexCall buildParseLiterals(String pattern, String method) {
-        return buildParse(rexBuilder.makeLiteral(pattern), rexBuilder.makeLiteral(method));
-    }
-
-    // ── adapt() happy path ────────────────────────────────────────────────
-
-    /**
-     * The expected flow: input column ref + pattern literal + method literal
-     * "regex" rewrites to {@link ParseAdapter#LOCAL_PARSE_OP} so
-     * {@code FunctionMappings.Sig} resolves it to the {@code parse} extension.
-     */
-    public void testAdaptValidRegexCallRoutesThroughLocalUdfOperator() {
-        RexCall original = buildParseLiterals("(?<group>\\w+)", "regex");
-        RexNode adapted = new ParseAdapter().adapt(original, List.of(), cluster);
-
-        assertTrue("adapted node must be a RexCall, got " + adapted.getClass(), adapted instanceof RexCall);
-        RexCall call = (RexCall) adapted;
-        assertSame(
-            "adapted call must target LOCAL_PARSE_OP so FunctionMappings.Sig binds",
-            ParseAdapter.LOCAL_PARSE_OP,
-            call.getOperator()
-        );
-        assertEquals(3, call.getOperands().size());
-        assertSame("input column ref must pass through unchanged", original.getOperands().get(0), call.getOperands().get(0));
-        assertSame("pattern literal must pass through unchanged", original.getOperands().get(1), call.getOperands().get(1));
-        assertSame("method literal must pass through unchanged", original.getOperands().get(2), call.getOperands().get(2));
-    }
-
-    /**
-     * Method literal comparison is case-insensitive: PPL parses {@code regex}
-     * as a method symbol and may surface it uppercased through the legacy AST
-     * path. The Rust UDF then receives the user-supplied casing — its check
-     * is exact-lower-case but the literal pass-through preserves the original
-     * casing so users see their own input in any error.
-     */
-    public void testAdaptAcceptsUppercaseRegexMethod() {
-        RexCall original = buildParseLiterals("(?<g>\\w+)", "REGEX");
-        RexNode adapted = new ParseAdapter().adapt(original, List.of(), cluster);
-        assertTrue(adapted instanceof RexCall);
-        assertSame(ParseAdapter.LOCAL_PARSE_OP, ((RexCall) adapted).getOperator());
-    }
-
-    /**
-     * Adapter preserves the original call's return type — matches the
-     * AbstractNameMappingAdapter regression guard. If the rewritten call's
-     * Calcite-inferred type differs from the original, the enclosing
-     * {@code Project.isValid} compatibleTypes check breaks at fragment
-     * conversion.
-     */
-    public void testAdaptedCallPreservesOriginalMapReturnType() {
-        RexCall original = buildParseLiterals("(?<g>\\w+)", "regex");
-        RexNode adapted = new ParseAdapter().adapt(original, List.of(), cluster);
-        assertEquals("adapted call's return type must equal the original Map<varchar, varchar>", original.getType(), adapted.getType());
-    }
-
-    // ── adapt() validation errors ─────────────────────────────────────────
-
-    public void testAdaptRejectsNonLiteralPattern() {
-        RelDataType varcharType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true);
-        // Pattern slot pulls from a column reference instead of a literal — Rust
-        // UDF compiles the pattern once per call, so per-row patterns are
-        // ill-defined. Adapter must reject up front.
-        RexCall original = buildParse(rexBuilder.makeInputRef(varcharType, 1), rexBuilder.makeLiteral("regex"));
-
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,
-            () -> new ParseAdapter().adapt(original, List.of(), cluster)
-        );
-        assertTrue("error must name the offending slot: " + ex.getMessage(), ex.getMessage().contains("pattern"));
-    }
-
-    public void testAdaptRejectsNonLiteralMethod() {
-        RelDataType varcharType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true);
-        RexCall original = buildParse(rexBuilder.makeLiteral("(?<g>\\w+)"), rexBuilder.makeInputRef(varcharType, 1));
-
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,
-            () -> new ParseAdapter().adapt(original, List.of(), cluster)
-        );
         assertTrue(ex.getMessage().contains("method"));
-    }
-
-    public void testAdaptRejectsGrokMethodWithActionableMessage() {
-        RexCall original = buildParseLiterals("%{NUMBER:n}", "grok");
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,
+import org.apache.calcite.sql.SqlKind;
+     * is exact-lower-case but the literal pass-through preserves the original
             () -> new ParseAdapter().adapt(original, List.of(), cluster)
-        );
-        // Error must mention both the rejected method (so users see what's wrong)
-        // and the supported alternative ("regex") so they know the workaround.
-        assertTrue("error must name the rejected method: " + ex.getMessage(), ex.getMessage().contains("grok"));
-        assertTrue("error must mention the supported method: " + ex.getMessage(), ex.getMessage().contains("regex"));
+     * {@code FunctionMappings.Sig} resolves it to the {@code parse} extension.
     }
-
-    public void testAdaptRejectsPatternsMethodWithActionableMessage() {
-        RexCall original = buildParseLiterals("any", "patterns");
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,
-            () -> new ParseAdapter().adapt(original, List.of(), cluster)
+        return (RexCall) rexBuilder.makeCall(parseOp(mapVarcharType()), List.of(inputRef, pattern, method));
+        return new SqlFunction(
         );
-        assertTrue(ex.getMessage().contains("patterns"));
-        assertTrue(ex.getMessage().contains("regex"));
-    }
-
-    public void testAdaptRejectsNullPatternLiteral() {
-        // Null literal in the pattern slot is rejected — runtime would have to
-        // either skip every row or produce an opaque NPE inside the Rust UDF.
-        RexNode nullLit = rexBuilder.makeNullLiteral(typeFactory.createSqlType(SqlTypeName.VARCHAR));
-        RexCall original = buildParse(nullLit, rexBuilder.makeLiteral("regex"));
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,
-            () -> new ParseAdapter().adapt(original, List.of(), cluster)
-        );
-        assertTrue(ex.getMessage().contains("pattern"));
-    }
-
-    public void testAdaptRejectsWrongArity() {
         RelDataType varcharType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true);
-        RexNode inputRef = rexBuilder.makeInputRef(varcharType, 0);
-        RexNode pattern = rexBuilder.makeLiteral("(?<g>\\w+)");
-        SqlFunction binaryParse = new SqlFunction(
-            "PARSE",
-            SqlKind.OTHER_FUNCTION,
-            ReturnTypes.explicit(mapVarcharType()),
-            null,
-            OperandTypes.STRING_STRING,
-            SqlFunctionCategory.STRING
-        );
-        RexCall original = (RexCall) rexBuilder.makeCall(binaryParse, List.of(inputRef, pattern));
-
-        IllegalArgumentException ex = expectThrows(
+import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
             IllegalArgumentException.class,
-            () -> new ParseAdapter().adapt(original, List.of(), cluster)
+        IllegalArgumentException ex = expectThrows(
+        // ill-defined. Adapter must reject up front.
+        assertEquals("adapted call's return type must equal the original Map<varchar, varchar>", original.getType(), adapted.getType());
         );
-        assertTrue("error must mention arity: " + ex.getMessage(), ex.getMessage().contains("3 operands"));
+import org.apache.calcite.sql.type.OperandTypes;
+    // ── adapt() happy path ────────────────────────────────────────────────
+            IllegalArgumentException.class,
+        RexNode nullLit = rexBuilder.makeNullLiteral(typeFactory.createSqlType(SqlTypeName.VARCHAR));
+    /**
+        assertTrue("error must name the rejected method: " + ex.getMessage(), ex.getMessage().contains("grok"));
+     */
+        RexNode inputRef = rexBuilder.makeInputRef(varcharType, 0);
+        assertSame("pattern literal must pass through unchanged", original.getOperands().get(1), call.getOperands().get(1));
+     * casing so users see their own input in any error.
+            SqlFunctionCategory.STRING
+    private RelDataType mapVarcharType() {
+        RexCall original = buildParseLiterals("any", "patterns");
+ */
+        RexCall call = (RexCall) adapted;
+        assertTrue(adapted instanceof RexCall);
+            typeFactory.createSqlType(SqlTypeName.VARCHAR),
+import org.apache.calcite.sql.type.SqlTypeUtil;
+        assertEquals(3, call.getOperands().size());
+            "adapted call must target LOCAL_PARSE_OP so FunctionMappings.Sig binds",
+     */
+import org.apache.calcite.sql.type.SqlTypeName;
+        RexCall original = buildParseLiterals("(?<group>\\w+)", "regex");
+            () -> new ParseAdapter().adapt(original, List.of(), cluster)
+    /**
+    public void testAdaptRejectsNonLiteralPattern() {
+ *
+     * {@code Project.isValid} compatibleTypes check breaks at fragment
+            SqlKind.OTHER_FUNCTION,
     }
+    /**
+        // Error must mention both the rejected method (so users see what's wrong)
+import java.util.List;
+        RelDataType varcharType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true);
+     * as a method symbol and may surface it uppercased through the legacy AST
+        cluster = RelOptCluster.create(planner, rexBuilder);
+        // either skip every row or produce an opaque NPE inside the Rust UDF.
+        );
+     * conversion.
+    public void testAdaptRejectsNonLiteralMethod() {
+        );
+            () -> new ParseAdapter().adapt(original, List.of(), cluster)
+            false
+    }
+     * path. The Rust UDF then receives the user-supplied casing — its check
+        assertTrue(ex.getMessage().contains("patterns"));
+            ReturnTypes.explicit(returnType),
+        IllegalArgumentException ex = expectThrows(
+        assertTrue(ex.getMessage().contains("pattern"));
+        RexCall original = buildParse(nullLit, rexBuilder.makeLiteral("regex"));
+public class ParseAdapterTests extends OpenSearchTestCase {
+import org.opensearch.test.OpenSearchTestCase;
+        assertTrue(ex.getMessage().contains("regex"));
+    private RelOptCluster cluster;
+    }
+        assertSame("method literal must pass through unchanged", original.getOperands().get(2), call.getOperands().get(2));
+     * return type so the rewrite-preserves-return-type assertion has a
+import org.apache.calcite.rel.type.RelDataTypeFactory;
+        IllegalArgumentException ex = expectThrows(
+        // Pattern slot pulls from a column reference instead of a literal — Rust
+        RexCall original = buildParse(rexBuilder.makeLiteral("(?<g>\\w+)"), rexBuilder.makeInputRef(varcharType, 1));
+        SqlFunction binaryParse = new SqlFunction(
+            typeFactory.createSqlType(SqlTypeName.VARCHAR),
+            IllegalArgumentException.class,
+            "PARSE",
+    // ── adapt() validation errors ─────────────────────────────────────────
+        IllegalArgumentException ex = expectThrows(
+        HepPlanner planner = new HepPlanner(new HepProgramBuilder().build());
+        IllegalArgumentException ex = expectThrows(
+            typeFactory,
+        // UDF compiles the pattern once per call, so per-row patterns are
+     * Mirrors {@code ParseFunction}'s explicit {@code MAP<VARCHAR, VARCHAR>}
+        RexNode pattern = rexBuilder.makeLiteral("(?<g>\\w+)");
+ * this file be licensed under the Apache-2.0 license or a
+            IllegalArgumentException.class,
+package org.opensearch.be.datafusion;
+        );
+     * Calcite-inferred type differs from the original, the enclosing
+    /**
+    }
+ * compatible open source license.
+    private RexCall buildParse(RexNode pattern, RexNode method) {
+        return buildParse(rexBuilder.makeLiteral(pattern), rexBuilder.makeLiteral(method));
+     * Method literal comparison is case-insensitive: PPL parses {@code regex}
+            IllegalArgumentException.class,
+    }
+            call.getOperator()
+        // and the supported alternative ("regex") so they know the workaround.
+        RelDataType varcharType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true);
+        );
+        RexCall original = buildParseLiterals("(?<g>\\w+)", "regex");
+            IllegalArgumentException.class,
+    public void testAdaptValidRegexCallRoutesThroughLocalUdfOperator() {
+/*
+            OperandTypes.STRING_STRING_STRING,
+        assertSame("input column ref must pass through unchanged", original.getOperands().get(0), call.getOperands().get(0));
+            () -> new ParseAdapter().adapt(original, List.of(), cluster)
+            null,
+        typeFactory = new JavaTypeFactoryImpl();
+    private RelDataTypeFactory typeFactory;
+ * validation it rewrites the call to the local UDF operator with the original
+    @Override
+    }
+        );
+ * Unit tests for {@link ParseAdapter}. The adapter has two plan-time jobs that
+    public void testAdaptedCallPreservesOriginalMapReturnType() {
+        );
+     * "regex" rewrites to {@link ParseAdapter#LOCAL_PARSE_OP} so
+import org.apache.calcite.plan.hep.HepPlanner;
+import org.apache.calcite.sql.SqlFunction;
+        // Null literal in the pattern slot is rejected — runtime would have to
+        assertSame(
+     * Adapter preserves the original call's return type — matches the
+     */
+            () -> new ParseAdapter().adapt(original, List.of(), cluster)
+/**
+import org.apache.calcite.sql.SqlFunctionCategory;
+        RexNode adapted = new ParseAdapter().adapt(original, List.of(), cluster);
+ * call's return type preserved (mirrors the ConvertTzAdapter pattern so the
+            () -> new ParseAdapter().adapt(original, List.of(), cluster)
+     * The expected flow: input column ref + pattern literal + method literal
+        IllegalArgumentException ex = expectThrows(
+    }
+import org.apache.calcite.rex.RexNode;
+    private RexBuilder rexBuilder;
+    }
+    public void testAdaptRejectsGrokMethodWithActionableMessage() {
+    private SqlFunction parseOp(RelDataType returnType) {
+        );
+import org.apache.calcite.sql.type.ReturnTypes;
+            null,
+        RexCall original = buildParseLiterals("(?<g>\\w+)", "REGEX");
+ * enclosing Project's compatibleTypes check stays consistent).
+    private RexCall buildParseLiterals(String pattern, String method) {
+        assertTrue("error must name the offending slot: " + ex.getMessage(), ex.getMessage().contains("pattern"));
+        RexCall original = buildParse(rexBuilder.makeInputRef(varcharType, 1), rexBuilder.makeLiteral("regex"));
+    public void setUp() throws Exception {
+            SqlFunctionCategory.STRING
+            OperandTypes.STRING_STRING,
 }
+    public void testAdaptAcceptsUppercaseRegexMethod() {
+ * both surface user errors before any UDF runs: literal validation on the
+    }
+        return SqlTypeUtil.createMapType(
+        RexCall original = buildParseLiterals("%{NUMBER:n}", "grok");
+import org.apache.calcite.rex.RexBuilder;
+        assertSame(ParseAdapter.LOCAL_PARSE_OP, ((RexCall) adapted).getOperator());
+ */
+     * AbstractNameMappingAdapter regression guard. If the rewritten call's
+    }
+        RexNode adapted = new ParseAdapter().adapt(original, List.of(), cluster);
+    }
+import org.apache.calcite.rex.RexCall;
+        );
+        assertTrue("error must mention the supported method: " + ex.getMessage(), ex.getMessage().contains("regex"));
+ * pattern + method operands, and method gating to {@code regex} only. After
+import org.apache.calcite.rel.type.RelDataType;
+    public void testAdaptRejectsWrongArity() {
+        RexNode adapted = new ParseAdapter().adapt(original, List.of(), cluster);
+            "PARSE",
+    public void testAdaptRejectsPatternsMethodWithActionableMessage() {
+ * SPDX-License-Identifier: Apache-2.0
+            ParseAdapter.LOCAL_PARSE_OP,
+    }
+        rexBuilder = new RexBuilder(typeFactory);
+    }
+        RexNode inputRef = rexBuilder.makeInputRef(varcharType, 0);
+        assertTrue("adapted node must be a RexCall, got " + adapted.getClass(), adapted instanceof RexCall);
+import org.apache.calcite.plan.hep.HepProgramBuilder;
+        assertTrue("error must mention arity: " + ex.getMessage(), ex.getMessage().contains("3 operands"));
+        RelDataType varcharType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true);
+     * non-trivial type to check against.
+import org.apache.calcite.plan.RelOptCluster;
+            SqlKind.OTHER_FUNCTION,
+     */
+        super.setUp();
+    public void testAdaptRejectsNullPatternLiteral() {
+        RexCall original = (RexCall) rexBuilder.makeCall(binaryParse, List.of(inputRef, pattern));
+            ReturnTypes.explicit(mapVarcharType()),

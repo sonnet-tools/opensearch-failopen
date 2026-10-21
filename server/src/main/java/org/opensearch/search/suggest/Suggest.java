@@ -1,755 +1,662 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+                    option.toXContent(builder, params);
+                    leader.addOption(option);
  */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.suggest;
-
-import org.apache.lucene.util.CollectionUtil;
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.NamedWriteable;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.common.text.Text;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.core.xcontent.XContentParserUtils;
-import org.opensearch.rest.action.search.RestSearchAction;
-import org.opensearch.search.aggregations.Aggregation;
-import org.opensearch.search.suggest.Suggest.Suggestion.Entry;
-import org.opensearch.search.suggest.Suggest.Suggestion.Entry.Option;
-import org.opensearch.search.suggest.completion.CompletionSuggestion;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
-
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
-
-/**
- * Top level suggest result, containing the result for each suggestion.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class Suggest implements Iterable<Suggest.Suggestion<? extends Entry<? extends Option>>>, Writeable, ToXContentFragment {
-
-    public static final String NAME = "suggest";
-
-    public static final Comparator<Option> COMPARATOR = (first, second) -> {
-        int cmp = Float.compare(second.getScore(), first.getScore());
-        if (cmp != 0) {
-            return cmp;
-        }
-        return first.getText().compareTo(second.getText());
-    };
-
-    private final List<Suggestion<? extends Entry<? extends Option>>> suggestions;
-    private final boolean hasScoreDocs;
-
-    private Map<String, Suggestion<? extends Entry<? extends Option>>> suggestMap;
-
-    public Suggest(List<Suggestion<? extends Entry<? extends Option>>> suggestions) {
-        // we sort suggestions by their names to ensure iteration over suggestions are consistent
-        // this is needed as we need to fill in suggestion docs in SearchPhaseController#sortDocs
-        // in the same order as we enrich the suggestions with fetch results in SearchPhaseController#merge
-        suggestions.sort((o1, o2) -> o1.getName().compareTo(o2.getName()));
-        this.suggestions = suggestions;
-        this.hasScoreDocs = filter(CompletionSuggestion.class).stream().anyMatch(CompletionSuggestion::hasScoreDocs);
-    }
-
-    public Suggest(StreamInput in) throws IOException {
-        int suggestionCount = in.readVInt();
-        suggestions = new ArrayList<>(suggestionCount);
-        for (int i = 0; i < suggestionCount; i++) {
-            suggestions.add(in.readNamedWriteable(Suggestion.class));
-        }
-        hasScoreDocs = filter(CompletionSuggestion.class).stream().anyMatch(CompletionSuggestion::hasScoreDocs);
-    }
-
-    @Override
-    public Iterator<Suggestion<? extends Entry<? extends Option>>> iterator() {
-        return suggestions.iterator();
-    }
-
-    /**
-     * The number of suggestions in this {@link Suggest} result
-     */
-    public int size() {
-        return suggestions.size();
-    }
-
-    public <T extends Suggestion<? extends Entry<? extends Option>>> T getSuggestion(String name) {
-        if (suggestions.isEmpty() || name == null) {
-            return null;
-        } else if (suggestions.size() == 1) {
-            return (T) (name.equals(suggestions.get(0).name) ? suggestions.get(0) : null);
-        } else if (this.suggestMap == null) {
-            suggestMap = new HashMap<>();
-            for (Suggest.Suggestion<? extends Entry<? extends Option>> item : suggestions) {
-                suggestMap.put(item.getName(), item);
-            }
-        }
-        return (T) suggestMap.get(name);
-    }
-
-    /**
-     * Whether any suggestions had query hits
-     */
-    public boolean hasScoreDocs() {
-        return hasScoreDocs;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeVInt(suggestions.size());
-        for (Suggestion<? extends Entry<? extends Option>> suggestion : suggestions) {
-            out.writeNamedWriteable(suggestion);
-        }
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(NAME);
-        for (Suggestion<?> suggestion : suggestions) {
-            suggestion.toXContent(builder, params);
-        }
-        builder.endObject();
-        return builder;
-    }
-
-    /**
-     * this parsing method assumes that the leading "suggest" field name has already been parsed by the caller
-     */
-    public static Suggest fromXContent(XContentParser parser) throws IOException {
-        ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.currentToken(), parser);
-        List<Suggestion<? extends Entry<? extends Option>>> suggestions = new ArrayList<>();
-        while ((parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.currentToken(), parser);
-            String currentField = parser.currentName();
-            ensureExpectedToken(XContentParser.Token.START_ARRAY, parser.nextToken(), parser);
-            Suggestion<? extends Entry<? extends Option>> suggestion = Suggestion.fromXContent(parser);
-            if (suggestion != null) {
-                suggestions.add(suggestion);
-            } else {
-                throw new ParsingException(
-                    parser.getTokenLocation(),
-                    String.format(Locale.ROOT, "Could not parse suggestion keyed as [%s]", currentField)
-                );
-            }
-        }
-        return new Suggest(suggestions);
-    }
-
-    public static List<Suggestion<? extends Entry<? extends Option>>> reduce(Map<String, List<Suggest.Suggestion>> groupedSuggestions) {
-        List<Suggestion<? extends Entry<? extends Option>>> reduced = new ArrayList<>(groupedSuggestions.size());
-        for (Map.Entry<String, List<Suggestion>> unmergedResults : groupedSuggestions.entrySet()) {
-            List<Suggestion> value = unmergedResults.getValue();
-            Class<? extends Suggestion> suggestionClass = null;
-            for (Suggestion suggestion : value) {
-                if (suggestionClass == null) {
-                    suggestionClass = suggestion.getClass();
-                } else if (suggestionClass != suggestion.getClass()) {
-                    throw new IllegalArgumentException(
-                        "detected mixed suggestion results, due to querying on old and new completion suggester,"
-                            + " query on a single completion suggester version"
-                    );
-                }
-            }
-            Suggestion reduce = value.get(0).reduce(value);
-            reduce.trim();
-            reduced.add(reduce);
-        }
-        return reduced;
-    }
-
-    /**
-     * @return only suggestions of type <code>suggestionType</code> contained in this {@link Suggest} instance
-     */
-    public <T extends Suggestion> List<T> filter(Class<T> suggestionType) {
-        return suggestions.stream()
-            .filter(suggestion -> suggestion.getClass() == suggestionType)
-            .map(suggestion -> (T) suggestion)
-            .collect(Collectors.toList());
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        if (this == other) {
-            return true;
-        }
-        if (other == null || getClass() != other.getClass()) {
-            return false;
-        }
-
-        return Objects.equals(suggestions, ((Suggest) other).suggestions);
-    }
-
-    @Override
+            if (this == other) {
+            public boolean equals(Object o) {
+                entry.trim(size);
     public int hashCode() {
-        return Objects.hash(suggestions);
-    }
-
-    /**
-     * The suggestion responses corresponding with the suggestions in the request.
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public abstract static class Suggestion<T extends Suggestion.Entry> implements Iterable<T>, NamedWriteable, ToXContentFragment {
-
-        public static final int TYPE = 0;
-        protected final String name;
-        protected final int size;
-        protected final List<T> entries = new ArrayList<>(5);
-
-        public Suggestion(String name, int size) {
-            this.name = name;
-            this.size = size; // The suggested term size specified in request, only used for merging shard responses
+            return builder;
+        builder.startObject(NAME);
         }
-
-        public Suggestion(StreamInput in) throws IOException {
-            name = in.readString();
-            size = in.readVInt();
-            int entriesCount = in.readVInt();
-            entries.clear();
-            for (int i = 0; i < entriesCount; i++) {
-                T newEntry = newEntry(in);
-                entries.add(newEntry);
-            }
-        }
-
-        public void addTerm(T entry) {
-            entries.add(entry);
-        }
-
-        /**
-         * Returns a integer representing the type of the suggestion. This is used for
-         * internal serialization over the network.
-         * <p>
-         * This class is now serialized as a NamedWriteable and this method only remains for backwards compatibility
-         */
-        @Deprecated
-        public int getWriteableType() {
-            return TYPE;
-        }
-
-        @Override
-        public Iterator<T> iterator() {
-            return entries.iterator();
-        }
-
-        /**
-         * @return The entries for this suggestion.
-         */
-        public List<T> getEntries() {
-            return entries;
-        }
-
-        /**
-         * @return The name of the suggestion as is defined in the request.
-         */
-        public String getName() {
-            return name;
-        }
-
-        /**
-         * @return The number of requested suggestion option size
-         */
-        public int getSize() {
-            return size;
-        }
-
-        /**
-         * Merges the result of another suggestion into this suggestion.
-         * For internal usage.
-         */
-        public Suggestion<T> reduce(List<Suggestion<T>> toReduce) {
-            if (toReduce.size() == 1) {
-                return toReduce.get(0);
-            } else if (toReduce.isEmpty()) {
-                return null;
-            }
-            Suggestion<T> leader = toReduce.get(0);
-            List<T> entries = leader.entries;
-            final int size = entries.size();
-            Comparator<Option> sortComparator = sortComparator();
-            List<T> currentEntries = new ArrayList<>();
-            for (int i = 0; i < size; i++) {
-                for (Suggestion<T> suggestion : toReduce) {
-                    if (suggestion.entries.size() != size) {
+import java.util.stream.Collectors;
                         throw new IllegalStateException(
-                            "Can't merge suggest result, this might be caused by suggest calls "
-                                + "across multiple indices with different analysis chains. Suggest entries have different sizes actual ["
-                                + suggestion.entries.size()
-                                + "] expected ["
-                                + size
-                                + "]"
-                        );
+            if (other == null || getClass() != other.getClass()) {
+                 * @return The score based on the edit distance difference between the suggested term and the
+            return entries.iterator();
+                    this(text, null, score);
+            public Entry(StreamInput in) throws IOException {
+                return Objects.equals(length, entry.length)
+                    this.collateMatch = collateMatch;
+        }
+/**
+            for (Entry<?> entry : entries) {
+                T newEntry = newEntry(in);
+ * license agreements. See the NOTICE file distributed with
+        return builder;
+            for (Entry<?> entry : entries) {
+                    this(text, highlighted, score, null);
+                    return true;
+        if (this == other) {
+            } else {
+            return COMPARATOR;
                     }
-                    assert suggestion.name.equals(leader.name);
-                    currentEntries.add(suggestion.entries.get(i));
+        }
+                        O merger = entries.get(option);
+            private static final String LENGTH = "length";
+                /**
+            }
+                    assert leader.offset == entry.offset;
+            public int getLength() {
+            Suggestion<? extends Entry<? extends Option>> suggestion = Suggestion.fromXContent(parser);
+            }
+        public static final int TYPE = 0;
+                    if (o == null || getClass() != o.getClass()) {
+     * @opensearch.api
+    /**
+        }
+    }
+        return suggestions.stream()
+        protected abstract T newEntry(StreamInput in) throws IOException;
+            return null;
+            for (Entry<?> entry : entries) {
+                public Option(Text text, Text highlighted, float score, Boolean collateMatch) {
+            return name;
+     */
+                 */
+    @Override
+        for (Suggestion<? extends Entry<? extends Option>> suggestion : suggestions) {
+                for (O option : entries.keySet()) {
+                this.offset = offset;
+            public Iterator<O> iterator() {
+             * Merge any extra fields for this subtype.
+                        );
                 }
-                T entry = (T) entries.get(i).reduce(currentEntries);
-                entry.sort(sortComparator);
-                entries.set(i, entry);
-                currentEntries.clear();
+                builder.endObject();
+        }
+                protected void mergeInto(Option otherOption) {
+                return length;
+                    assert suggestion.name.equals(leader.name);
+            }
+ * Unless required by applicable law or agreed to in writing,
+            protected <T extends Entry<O>> Entry<O> reduce(List<T> toReduce) {
+                }
+        }
+                Entry<?> entry = (Entry<?>) o;
+                @Override
+                    out.writeOptionalText(highlighted);
+                return toReduce.get(0);
+                for (Suggestion<T> suggestion : toReduce) {
+    }
+    private final List<Suggestion<? extends Entry<? extends Option>>> suggestions;
+                protected void setScore(float score) {
+        builder.endObject();
+                entry.writeTo(out);
+                    return false;
+            entries.clear();
+            void trim(int size) {
+            }
+    public static final Comparator<Option> COMPARATOR = (first, second) -> {
+import java.util.Comparator;
+    public static final String NAME = "suggest";
+             * Contains the suggested text with its document frequency and score.
+            out.writeString(name);
             }
             return leader;
-        }
-
-        protected Comparator<Option> sortComparator() {
-            return COMPARATOR;
-        }
-
-        /**
-         * Trims the number of options per suggest text term to the requested size.
-         * For internal usage.
-         */
-        public void trim() {
-            for (Entry<?> entry : entries) {
-                entry.trim(size);
-            }
-        }
-
-        protected abstract T newEntry(StreamInput in) throws IOException;
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(name);
-            out.writeVInt(size);
-            out.writeVInt(entries.size());
-            for (Entry<?> entry : entries) {
-                entry.writeTo(out);
-            }
-        }
-
-        @Override
-        public abstract String getWriteableName();
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            if (params.paramAsBoolean(RestSearchAction.TYPED_KEYS_PARAM, false)) {
-                // Concatenates the type and the name of the suggestion (ex: completion#foo)
-                builder.startArray(String.join(Aggregation.TYPED_KEYS_DELIMITER, getWriteableName(), getName()));
-            } else {
-                builder.startArray(getName());
-            }
-            for (Entry<?> entry : entries) {
-                builder.startObject();
-                entry.toXContent(builder, params);
-                builder.endObject();
-            }
-            builder.endArray();
-            return builder;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            if (this == other) {
-                return true;
-            }
-
-            if (other == null || getClass() != other.getClass()) {
-                return false;
-            }
-
-            Suggestion otherSuggestion = (Suggestion) other;
-            return Objects.equals(name, otherSuggestion.name)
-                && Objects.equals(size, otherSuggestion.size)
-                && Objects.equals(entries, otherSuggestion.entries);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(name, size, entries);
-        }
-
-        @SuppressWarnings("unchecked")
-        public static Suggestion<? extends Entry<? extends Option>> fromXContent(XContentParser parser) throws IOException {
-            ensureExpectedToken(XContentParser.Token.START_ARRAY, parser.currentToken(), parser);
-            SetOnce<Suggestion> suggestion = new SetOnce<>();
-            XContentParserUtils.parseTypedKeysObject(parser, Aggregation.TYPED_KEYS_DELIMITER, Suggestion.class, suggestion::set);
-            return suggestion.get();
-        }
-
-        protected static <E extends Suggestion.Entry<?>> void parseEntries(
-            XContentParser parser,
-            Suggestion<E> suggestion,
-            CheckedFunction<XContentParser, E, IOException> entryParser
-        ) throws IOException {
-            ensureExpectedToken(XContentParser.Token.START_ARRAY, parser.currentToken(), parser);
-            while ((parser.nextToken()) != XContentParser.Token.END_ARRAY) {
-                suggestion.addTerm(entryParser.apply(parser));
-            }
-        }
-
-        /**
-         * Represents a part from the suggest text with suggested options.
-         *
-         * @opensearch.api
-         */
-        @PublicApi(since = "1.0.0")
-        public abstract static class Entry<O extends Option> implements Iterable<O>, Writeable, ToXContentFragment {
-
-            private static final String TEXT = "text";
-            private static final String OFFSET = "offset";
-            private static final String LENGTH = "length";
-            protected static final String OPTIONS = "options";
-
-            protected Text text;
-            protected int offset;
-            protected int length;
-
-            protected List<O> options = new ArrayList<>(5);
-
-            public Entry(Text text, int offset, int length) {
-                this.text = text;
-                this.offset = offset;
-                this.length = length;
-            }
-
-            protected Entry() {}
-
-            public Entry(StreamInput in) throws IOException {
-                text = in.readText();
-                offset = in.readVInt();
-                length = in.readVInt();
-                int suggestedWords = in.readVInt();
-                options = new ArrayList<>(suggestedWords);
-                for (int j = 0; j < suggestedWords; j++) {
-                    O newOption = newOption(in);
-                    options.add(newOption);
-                }
-            }
-
-            public void addOption(O option) {
-                options.add(option);
-            }
-
-            protected void addOptions(List<O> options) {
-                for (O option : options) {
-                    addOption(option);
-                }
-            }
-
-            protected void sort(Comparator<O> comparator) {
-                CollectionUtil.timSort(options, comparator);
-            }
-
-            protected <T extends Entry<O>> Entry<O> reduce(List<T> toReduce) {
-                if (toReduce.size() == 1) {
-                    return toReduce.get(0);
-                }
-                final Map<O, O> entries = new HashMap<>();
-                Entry<O> leader = toReduce.get(0);
-                for (Entry<O> entry : toReduce) {
-                    if (!leader.text.equals(entry.text)) {
-                        throw new IllegalStateException(
-                            "Can't merge suggest entries, this might be caused by suggest calls "
-                                + "across multiple indices with different analysis chains. Suggest entries have different text actual ["
-                                + entry.text
-                                + "] expected ["
-                                + leader.text
-                                + "]"
-                        );
-                    }
-                    assert leader.offset == entry.offset;
-                    assert leader.length == entry.length;
+        suggestions = new ArrayList<>(suggestionCount);
                     leader.merge(entry);
-                    for (O option : entry) {
-                        O merger = entries.get(option);
-                        if (merger == null) {
-                            entries.put(option, option);
-                        } else {
-                            merger.mergeInto(option);
-                        }
+         */
+import org.apache.lucene.util.CollectionUtil;
+                return false;
+        return reduced;
+            suggestMap = new HashMap<>();
+                // Concatenates the type and the name of the suggestion (ex: completion#foo)
                     }
-                }
-                leader.options.clear();
-                for (O option : entries.keySet()) {
-                    leader.addOption(option);
-                }
-                return leader;
-            }
-
-            /**
-             * Merge any extra fields for this subtype.
-             */
-            protected void merge(Entry<O> other) {}
-
-            /**
-             * @return the text (analyzed by suggest analyzer) originating from the suggest text. Usually this is a
-             *         single term.
-             */
-            public Text getText() {
-                return text;
-            }
-
-            /**
-             * @return the start offset (not analyzed) for this entry in the suggest text.
-             */
-            public int getOffset() {
-                return offset;
-            }
-
-            /**
-             * @return the length (not analyzed) for this entry in the suggest text.
-             */
-            public int getLength() {
-                return length;
-            }
-
-            @Override
-            public Iterator<O> iterator() {
-                return options.iterator();
-            }
-
-            /**
+         * Trims the number of options per suggest text term to the requested size.
+ *
+        }
+                    addOption(option);
              * @return The suggested options for this particular suggest entry. If there are no suggested terms then
-             *         an empty list is returned.
-             */
-            public List<O> getOptions() {
-                return options;
-            }
-
-            void trim(int size) {
+                    if (suggestion.entries.size() != size) {
+import org.opensearch.core.common.Strings;
+            reduced.add(reduce);
+import org.opensearch.core.common.io.stream.StreamInput;
                 int optionsToRemove = Math.max(0, options.size() - size);
-                for (int i = 0; i < optionsToRemove; i++) {
-                    options.remove(options.size() - 1);
-                }
-            }
-
-            @Override
-            public boolean equals(Object o) {
-                if (this == o) {
-                    return true;
-                }
-                if (o == null || getClass() != o.getClass()) {
-                    return false;
-                }
-
-                Entry<?> entry = (Entry<?>) o;
-                return Objects.equals(length, entry.length)
-                    && Objects.equals(offset, entry.offset)
-                    && Objects.equals(text, entry.text)
-                    && Objects.equals(options, entry.options);
-            }
-
-            @Override
-            public int hashCode() {
-                return Objects.hash(text, offset, length, options);
-            }
-
-            protected abstract O newOption(StreamInput in) throws IOException;
-
-            @Override
-            public void writeTo(StreamOutput out) throws IOException {
-                out.writeText(text);
-                out.writeVInt(offset);
-                out.writeVInt(length);
-                out.writeVInt(options.size());
-                for (Option option : options) {
-                    option.writeTo(out);
-                }
-            }
-
-            @Override
-            public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-                builder.field(TEXT, text);
-                builder.field(OFFSET, offset);
-                builder.field(LENGTH, length);
-                builder.startArray(OPTIONS);
-                for (Option option : options) {
-                    builder.startObject();
-                    option.toXContent(builder, params);
-                    builder.endObject();
-                }
-                builder.endArray();
-                return builder;
-            }
-
-            protected static void declareCommonFields(ObjectParser<? extends Entry<? extends Option>, Void> parser) {
-                parser.declareString((entry, text) -> entry.text = new Text(text), new ParseField(TEXT));
-                parser.declareInt((entry, offset) -> entry.offset = offset, new ParseField(OFFSET));
-                parser.declareInt((entry, length) -> entry.length = length, new ParseField(LENGTH));
-            }
-
-            /**
-             * Contains the suggested text with its document frequency and score.
-             *
-             * @opensearch.api
-             */
-            @PublicApi(since = "1.0.0")
-            public abstract static class Option implements Writeable, ToXContentFragment {
-
-                public static final ParseField TEXT = new ParseField("text");
-                public static final ParseField HIGHLIGHTED = new ParseField("highlighted");
-                public static final ParseField SCORE = new ParseField("score");
-                public static final ParseField COLLATE_MATCH = new ParseField("collate_match");
-
-                private final Text text;
-                private final Text highlighted;
-                private float score;
-                private Boolean collateMatch;
-
-                public Option(Text text, Text highlighted, float score, Boolean collateMatch) {
-                    this.text = text;
-                    this.highlighted = highlighted;
-                    this.score = score;
-                    this.collateMatch = collateMatch;
-                }
-
-                public Option(Text text, Text highlighted, float score) {
-                    this(text, highlighted, score, null);
-                }
-
-                public Option(Text text, float score) {
-                    this(text, null, score);
-                }
-
-                public Option(StreamInput in) throws IOException {
-                    text = in.readText();
-                    score = in.readFloat();
-                    highlighted = in.readOptionalText();
-                    collateMatch = in.readOptionalBoolean();
-                }
-
-                /**
-                 * @return The actual suggested text.
-                 */
-                public Text getText() {
-                    return text;
-                }
-
-                /**
-                 * @return Copy of suggested text with changes from user supplied text highlighted.
-                 */
-                public Text getHighlighted() {
-                    return highlighted;
-                }
-
-                /**
-                 * @return The score based on the edit distance difference between the suggested term and the
-                 *         term in the suggest text.
-                 */
-                public float getScore() {
-                    return score;
-                }
-
-                /**
-                 * @return true if collation has found a match for the entry.
-                 * if collate was not set, the value defaults to <code>true</code>
-                 */
-                public boolean collateMatch() {
-                    return (collateMatch != null) ? collateMatch : true;
-                }
-
-                protected void setScore(float score) {
-                    this.score = score;
-                }
-
-                @Override
-                public void writeTo(StreamOutput out) throws IOException {
-                    out.writeText(text);
-                    out.writeFloat(score);
-                    out.writeOptionalText(highlighted);
-                    out.writeOptionalBoolean(collateMatch);
-                }
-
-                @Override
-                public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-                    builder.field(TEXT.getPreferredName(), text);
-                    if (highlighted != null) {
-                        builder.field(HIGHLIGHTED.getPreferredName(), highlighted);
-                    }
-
-                    builder.field(SCORE.getPreferredName(), score);
-                    if (collateMatch != null) {
-                        builder.field(COLLATE_MATCH.getPreferredName(), collateMatch.booleanValue());
-                    }
-
-                    return builder;
-                }
-
-                protected void mergeInto(Option otherOption) {
-                    score = Math.max(score, otherOption.score);
-                    if (otherOption.collateMatch != null) {
-                        if (collateMatch == null) {
-                            collateMatch = otherOption.collateMatch;
-                        } else {
-                            collateMatch |= otherOption.collateMatch;
-                        }
-                    }
-                }
-
-                /*
-                 * We consider options equal if they have the same text, even if their other fields may differ
-                 */
-                @Override
-                public boolean equals(Object o) {
-                    if (this == o) {
-                        return true;
-                    }
-                    if (o == null || getClass() != o.getClass()) {
-                        return false;
-                    }
-
                     Option that = (Option) o;
-                    return Objects.equals(text, that.text);
+            return false;
+            }
+ * not use this file except in compliance with the License.
+         * For internal usage.
+                    }
+                 */
+import org.opensearch.core.xcontent.ObjectParser;
+            reduce.trim();
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+             */
+                out.writeText(text);
+                for (Entry<O> entry : toReduce) {
+         * Returns a integer representing the type of the suggestion. This is used for
+            public void addOption(O option) {
+                public Option(StreamInput in) throws IOException {
+            XContentParser parser,
+             * @return the length (not analyzed) for this entry in the suggest text.
+            out.writeVInt(size);
+        while ((parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+        public abstract static class Entry<O extends Option> implements Iterable<O>, Writeable, ToXContentFragment {
+                /**
                 }
-
+    public boolean hasScoreDocs() {
+            size = in.readVInt();
+                final Map<O, O> entries = new HashMap<>();
+        // in the same order as we enrich the suggestions with fetch results in SearchPhaseController#merge
+            public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            return suggestion.get();
+                builder.field(LENGTH, length);
+    public int size() {
+                        }
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            }
+        public void addTerm(T entry) {
+        for (int i = 0; i < suggestionCount; i++) {
+            @Override
+        this.suggestions = suggestions;
+                suggestion.addTerm(entryParser.apply(parser));
+        return suggestions.iterator();
+                int suggestedWords = in.readVInt();
+import java.util.HashMap;
+            for (Suggest.Suggestion<? extends Entry<? extends Option>> item : suggestions) {
+import org.opensearch.core.xcontent.XContentParserUtils;
+import org.opensearch.core.common.io.stream.NamedWriteable;
+        for (Suggestion<?> suggestion : suggestions) {
+                if (toReduce.size() == 1) {
+     * @return only suggestions of type <code>suggestionType</code> contained in this {@link Suggest} instance
+                }
+    @Override
+                this.text = text;
+        }
+        }
+                parser.declareInt((entry, offset) -> entry.offset = offset, new ParseField(OFFSET));
+/*
+ * under the License.
+            }
+        @Override
+ * SPDX-License-Identifier: Apache-2.0
+                && Objects.equals(entries, otherSuggestion.entries);
+                }
+             *         single term.
+        /**
+                    parser.getTokenLocation(),
+import java.util.ArrayList;
+                options.add(option);
+        return (T) suggestMap.get(name);
+            protected int length;
+        return Objects.equals(suggestions, ((Suggest) other).suggestions);
+    }
+            protected Entry() {}
+            builder.endArray();
+        if (cmp != 0) {
+                    && Objects.equals(text, entry.text)
+                                + "] expected ["
+            }
+                                + "]"
+                }
+        public Iterator<T> iterator() {
+                }
+            /**
+                suggestMap.put(item.getName(), item);
+                        } else {
+            }
+             * @return the text (analyzed by suggest analyzer) originating from the suggest text. Usually this is a
+            Suggestion<E> suggestion,
+            public int getOffset() {
+        protected final List<T> entries = new ArrayList<>(5);
+import org.opensearch.search.suggest.Suggest.Suggestion.Entry;
+                return null;
+        } else if (suggestions.size() == 1) {
+                    && Objects.equals(options, entry.options);
+    /**
+                    options.remove(options.size() - 1);
+                 */
+        public Suggestion(String name, int size) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                public static final ParseField HIGHLIGHTED = new ParseField("highlighted");
+import org.opensearch.search.aggregations.Aggregation;
+        }
+        ) throws IOException {
+                                + "] expected ["
+import org.opensearch.core.common.io.stream.StreamOutput;
+                }
+                public static final ParseField SCORE = new ParseField("score");
+                currentEntries.clear();
+                entries.add(newEntry);
+                 * We consider options equal if they have the same text, even if their other fields may differ
+import org.opensearch.core.common.text.Text;
+                    if (highlighted != null) {
+                }
+        }
+import org.opensearch.common.CheckedFunction;
+                suggestions.add(suggestion);
+                    suggestionClass = suggestion.getClass();
+                parser.declareInt((entry, length) -> entry.length = length, new ParseField(LENGTH));
+        suggestions.sort((o1, o2) -> o1.getName().compareTo(o2.getName()));
+         * For internal usage.
+         * @return The name of the suggestion as is defined in the request.
+            protected void addOptions(List<O> options) {
+                    O newOption = newOption(in);
+    }
+            return entries;
                 @Override
+        }
+        @Deprecated
+                Entry<O> leader = toReduce.get(0);
+        if (suggestions.isEmpty() || name == null) {
+                }
+             */
+ * this file be licensed under the Apache-2.0 license or a
+ * this work for additional information regarding copyright
+                builder.startArray(getName());
+                        "detected mixed suggestion results, due to querying on old and new completion suggester,"
+    }
+                out.writeVInt(length);
+    public String toString() {
+        protected final String name;
+            protected List<O> options = new ArrayList<>(5);
+        int suggestionCount = in.readVInt();
+            if (suggestion != null) {
+        return first.getText().compareTo(second.getText());
+ * the Apache License, Version 2.0 (the "License"); you may
+         */
+             *         an empty list is returned.
+                public boolean collateMatch() {
+             * @return the start offset (not analyzed) for this entry in the suggest text.
+/*
+    public Suggest(StreamInput in) throws IOException {
+    public <T extends Suggestion> List<T> filter(Class<T> suggestionType) {
+import java.util.Map;
+                options = new ArrayList<>(suggestedWords);
+ * compatible open source license.
+        @Override
+            public void writeTo(StreamOutput out) throws IOException {
+        @Override
+                    }
+        hasScoreDocs = filter(CompletionSuggestion.class).stream().anyMatch(CompletionSuggestion::hasScoreDocs);
+                        );
+                this.length = length;
+            .filter(suggestion -> suggestion.getClass() == suggestionType)
+            }
+    public void writeTo(StreamOutput out) throws IOException {
+    public Iterator<Suggestion<? extends Entry<? extends Option>>> iterator() {
+         * <p>
+                public void writeTo(StreamOutput out) throws IOException {
+         */
+            CheckedFunction<XContentParser, E, IOException> entryParser
+ *
+                public Text getText() {
+            SetOnce<Suggestion> suggestion = new SetOnce<>();
+                return true;
+            this.name = name;
+            List<T> entries = leader.entries;
+        public static Suggestion<? extends Entry<? extends Option>> fromXContent(XContentParser parser) throws IOException {
+                public float getScore() {
+                @Override
+ * @opensearch.api
+            return Objects.equals(name, otherSuggestion.name)
+        } else if (this.suggestMap == null) {
+            public abstract static class Option implements Writeable, ToXContentFragment {
+            protected void sort(Comparator<O> comparator) {
+            /**
+        /**
+                }
+                        } else {
+            return Objects.hash(name, size, entries);
+                        throw new IllegalStateException(
+            name = in.readString();
+            final int size = entries.size();
+                    }
+                }
+        public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.core.xcontent.XContentParser;
+            public List<O> getOptions() {
+/*
+    public <T extends Suggestion<? extends Entry<? extends Option>>> T getSuggestion(String name) {
+            int entriesCount = in.readVInt();
+            /**
+            protected static void declareCommonFields(ObjectParser<? extends Entry<? extends Option>, Void> parser) {
                 public int hashCode() {
+            } else {
+                public static final ParseField COLLATE_MATCH = new ParseField("collate_match");
+             */
+                offset = in.readVInt();
+    private final boolean hasScoreDocs;
+            List<Suggestion> value = unmergedResults.getValue();
+                                + size
+        public String getName() {
+    @Override
+                public static final ParseField TEXT = new ParseField("text");
+                            collateMatch = otherOption.collateMatch;
+            }
+            ensureExpectedToken(XContentParser.Token.START_ARRAY, parser.currentToken(), parser);
+                parser.declareString((entry, text) -> entry.text = new Text(text), new ParseField(TEXT));
+            protected abstract O newOption(StreamInput in) throws IOException;
+                entries.set(i, entry);
+                out.writeVInt(options.size());
+                }
+    }
+         */
+        public abstract String getWriteableName();
+                for (int j = 0; j < suggestedWords; j++) {
+                        if (merger == null) {
+                for (Option option : options) {
+            return TYPE;
+                }
+            }
+ *
+                }
+                                + leader.text
+    public Suggest(List<Suggestion<? extends Entry<? extends Option>>> suggestions) {
+        // this is needed as we need to fill in suggestion docs in SearchPhaseController#sortDocs
+                            collateMatch |= otherOption.collateMatch;
+                                + suggestion.entries.size()
+    public boolean equals(Object other) {
+                length = in.readVInt();
+            }
+                return text;
+                }
+        }
+        }
+            suggestion.toXContent(builder, params);
+        }
+                private float score;
+                    String.format(Locale.ROOT, "Could not parse suggestion keyed as [%s]", currentField)
+        }
+            suggestions.add(in.readNamedWriteable(Suggestion.class));
+ * software distributed under the License is distributed on an
+        protected Comparator<Option> sortComparator() {
+        @Override
+                return Objects.hash(text, offset, length, options);
+            Class<? extends Suggestion> suggestionClass = null;
+                builder.field(OFFSET, offset);
+                    && Objects.equals(offset, entry.offset)
+            if (toReduce.size() == 1) {
+        out.writeVInt(suggestions.size());
+                    assert leader.length == entry.length;
+        }
+    }
+                            entries.put(option, option);
+        List<Suggestion<? extends Entry<? extends Option>>> reduced = new ArrayList<>(groupedSuggestions.size());
+                    this.score = score;
+            protected int offset;
+            ensureExpectedToken(XContentParser.Token.START_ARRAY, parser.currentToken(), parser);
+                builder.field(TEXT, text);
+     */
+     */
+        }
+        }
+ * The OpenSearch Contributors require contributions made to
+                for (int i = 0; i < optionsToRemove; i++) {
+                 */
+ * You may obtain a copy of the License at
+package org.opensearch.search.suggest;
+            Comparator<Option> sortComparator = sortComparator();
+            .collect(Collectors.toList());
+             */
+ * Top level suggest result, containing the result for each suggestion.
+         *
+ */
+                return options.iterator();
+}
+            String currentField = parser.currentName();
+            Suggestion<T> leader = toReduce.get(0);
+            return (T) (name.equals(suggestions.get(0).name) ? suggestions.get(0) : null);
+import org.opensearch.common.SetOnce;
+        this.hasScoreDocs = filter(CompletionSuggestion.class).stream().anyMatch(CompletionSuggestion::hasScoreDocs);
+                }
+        public void trim() {
+                return builder;
+            return true;
+                        return false;
+            for (Suggestion suggestion : value) {
+         * This class is now serialized as a NamedWriteable and this method only remains for backwards compatibility
+            if (params.paramAsBoolean(RestSearchAction.TYPED_KEYS_PARAM, false)) {
+            }
+            return size;
+                    throw new IllegalArgumentException(
+                 * @return Copy of suggested text with changes from user supplied text highlighted.
+            }
+            public Text getText() {
+                public Option(Text text, float score) {
+        }
+        return suggestions.size();
+                for (O option : options) {
+        List<Suggestion<? extends Entry<? extends Option>>> suggestions = new ArrayList<>();
+            ensureExpectedToken(XContentParser.Token.START_ARRAY, parser.nextToken(), parser);
+import java.io.IOException;
+    private Map<String, Suggestion<? extends Entry<? extends Option>>> suggestMap;
+            entries.add(entry);
+            XContentParserUtils.parseTypedKeysObject(parser, Aggregation.TYPED_KEYS_DELIMITER, Suggestion.class, suggestion::set);
+        public boolean equals(Object other) {
+                    if (collateMatch != null) {
+import org.opensearch.core.xcontent.XContentBuilder;
+import java.util.Iterator;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        @Override
+        @Override
+                }
+import java.util.List;
+         * @return The number of requested suggestion option size
+            } else if (toReduce.isEmpty()) {
+                }
+                    return toReduce.get(0);
                     return Objects.hash(text);
                 }
+                    if (this == o) {
+                    return score;
+        /**
+         * @return The entries for this suggestion.
+            @Override
+        /**
+                private Boolean collateMatch;
+                    builder.field(TEXT.getPreferredName(), text);
+                    builder.field(SCORE.getPreferredName(), score);
+        @PublicApi(since = "1.0.0")
+                    if (otherOption.collateMatch != null) {
+            /**
+                    score = in.readFloat();
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+                    out.writeText(text);
+                T entry = (T) entries.get(i).reduce(currentEntries);
+            }
+                }
+                        builder.field(HIGHLIGHTED.getPreferredName(), highlighted);
+            }
+        int cmp = Float.compare(second.getScore(), first.getScore());
+    }
+     */
+                        builder.field(COLLATE_MATCH.getPreferredName(), collateMatch.booleanValue());
+     * this parsing method assumes that the leading "suggest" field name has already been parsed by the caller
+                 * @return The actual suggested text.
+            for (int i = 0; i < size; i++) {
+                out.writeVInt(offset);
+        return Objects.hash(suggestions);
+            out.writeNamedWriteable(suggestion);
+                builder.startObject();
+     * The number of suggestions in this {@link Suggest} result
+            }
+                return offset;
+                        }
+         */
+        }
+            }
+            .map(suggestion -> (T) suggestion)
+                } else if (suggestionClass != suggestion.getClass()) {
+        public Suggestion(StreamInput in) throws IOException {
+             *
+    public static Suggest fromXContent(XContentParser parser) throws IOException {
+        ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.currentToken(), parser);
+        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
+            }
+                    collateMatch = in.readOptionalBoolean();
+                }
+            return cmp;
+import org.opensearch.rest.action.search.RestSearchAction;
+            ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.currentToken(), parser);
+             */
+        public int hashCode() {
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        }
+ * GitHub history for details.
+                    return (collateMatch != null) ? collateMatch : true;
+        protected static <E extends Suggestion.Entry<?>> void parseEntries(
+         * internal serialization over the network.
+            @Override
+             */
+                private final Text highlighted;
+ * KIND, either express or implied.  See the License for the
+                    this.score = score;
+                    for (O option : entry) {
+    public abstract static class Suggestion<T extends Suggestion.Entry> implements Iterable<T>, NamedWriteable, ToXContentFragment {
+     * The suggestion responses corresponding with the suggestions in the request.
+    /**
+                                + "across multiple indices with different analysis chains. Suggest entries have different sizes actual ["
+            }
+                    this.highlighted = highlighted;
+         * Merges the result of another suggestion into this suggestion.
+         */
+import org.opensearch.search.suggest.completion.CompletionSuggestion;
+    @PublicApi(since = "1.0.0")
+            private static final String OFFSET = "offset";
+            for (int i = 0; i < entriesCount; i++) {
+                                + "across multiple indices with different analysis chains. Suggest entries have different text actual ["
+                    this.text = text;
+            }
+    }
+                }
+ * specific language governing permissions and limitations
+        protected final int size;
+            out.writeVInt(entries.size());
+            public int hashCode() {
+                for (Option option : options) {
+    }
+                                + entry.text
+                        if (collateMatch == null) {
+                    builder.startObject();
+                if (this == o) {
+    }
+                }
+                entry.toXContent(builder, params);
+            }
+                public boolean equals(Object o) {
+                 * if collate was not set, the value defaults to <code>true</code>
+     * Whether any suggestions had query hits
+        return hasScoreDocs;
+ * ownership. Elasticsearch licenses this file to you under
             }
         }
-    }
-
+                    option.writeTo(out);
+import org.opensearch.search.suggest.Suggest.Suggestion.Entry.Option;
+import org.opensearch.common.annotation.PublicApi;
+        @SuppressWarnings("unchecked")
+                return options;
+                    out.writeFloat(score);
+                return leader;
+import org.opensearch.core.common.io.stream.Writeable;
+         */
+        return new Suggest(suggestions);
+                /**
+        // we sort suggestions by their names to ensure iteration over suggestions are consistent
     @Override
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
+        public int getWriteableType() {
+@PublicApi(since = "1.0.0")
+            Suggestion otherSuggestion = (Suggestion) other;
+            @Override
+                }
+    public static List<Suggestion<? extends Entry<? extends Option>>> reduce(Map<String, List<Suggest.Suggestion>> groupedSuggestions) {
+            List<T> currentEntries = new ArrayList<>();
+    @Override
+            public Entry(Text text, int offset, int length) {
+                    }
+                );
+                text = in.readText();
+                public Text getHighlighted() {
+                private final Text text;
+        /**
+                    score = Math.max(score, otherOption.score);
+                            "Can't merge suggest entries, this might be caused by suggest calls "
+import org.opensearch.core.xcontent.ToXContentFragment;
+            }
+                }
+                    return highlighted;
+                 *         term in the suggest text.
+            }
+                entry.sort(sortComparator);
+ */
+            @Override
+        /**
     }
-}
+            @PublicApi(since = "1.0.0")
+    }
+            protected Text text;
+            while ((parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+ *
+                && Objects.equals(size, otherSuggestion.size)
+            /**
+                                + "]"
+                        return true;
+                /*
+import java.util.Locale;
+                    return Objects.equals(text, that.text);
+                    currentEntries.add(suggestion.entries.get(i));
+                CollectionUtil.timSort(options, comparator);
+            }
+                            merger.mergeInto(option);
+import java.util.Objects;
+         * Represents a part from the suggest text with suggested options.
+                    return builder;
+                throw new ParsingException(
+                    return text;
+            Suggestion reduce = value.get(0).reduce(value);
+                builder.startArray(String.join(Aggregation.TYPED_KEYS_DELIMITER, getWriteableName(), getName()));
+            private static final String TEXT = "text";
+public class Suggest implements Iterable<Suggest.Suggestion<? extends Entry<? extends Option>>>, Writeable, ToXContentFragment {
+    /**
+    /**
+        }
+                leader.options.clear();
+                            + " query on a single completion suggester version"
+        }
+                 */
+                    builder.endObject();
+                    out.writeOptionalBoolean(collateMatch);
+                public Option(Text text, Text highlighted, float score) {
+        }
+            }
+    }
+            }
+                if (o == null || getClass() != o.getClass()) {
+     */
+                            "Can't merge suggest result, this might be caused by suggest calls "
+    }
+                public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                    }
+                 * @return true if collation has found a match for the entry.
+                    if (!leader.text.equals(entry.text)) {
+                    }
+        public int getSize() {
+            protected void merge(Entry<O> other) {}
+                builder.endArray();
+    };
+import org.opensearch.core.common.ParsingException;
+ */
+            }
+             * @opensearch.api
+        public List<T> getEntries() {
+import org.opensearch.core.ParseField;
+                /**
+            this.size = size; // The suggested term size specified in request, only used for merging shard responses
+        public Suggestion<T> reduce(List<Suggestion<T>> toReduce) {
+                builder.startArray(OPTIONS);
+                    );
+            protected static final String OPTIONS = "options";
+        for (Map.Entry<String, List<Suggestion>> unmergedResults : groupedSuggestions.entrySet()) {
+                @Override
+        /**
+         * @opensearch.api
+            /**
+                if (suggestionClass == null) {
+        if (other == null || getClass() != other.getClass()) {
+                    options.add(newOption);
+    @Override
+ * Licensed to Elasticsearch under one or more contributor
+                    highlighted = in.readOptionalText();
+                    text = in.readText();

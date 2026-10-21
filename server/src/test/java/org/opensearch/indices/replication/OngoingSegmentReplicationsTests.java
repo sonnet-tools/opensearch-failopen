@@ -1,405 +1,350 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.indices.replication;
-
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.CancellableThreads;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.codec.CodecService;
-import org.opensearch.index.engine.NRTReplicationEngineFactory;
-import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardTestCase;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.indices.recovery.FileChunkWriter;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.transport.TransportService;
-import org.junit.Assert;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
-
-public class OngoingSegmentReplicationsTests extends IndexShardTestCase {
-
-    private final IndicesService mockIndicesService = mock(IndicesService.class);
-    private ReplicationCheckpoint testCheckpoint;
-    private DiscoveryNode primaryDiscoveryNode;
-    private DiscoveryNode replicaDiscoveryNode;
-    private IndexShard primary;
-    private IndexShard replica;
-
-    private GetSegmentFilesRequest getSegmentFilesRequest;
-
-    final Settings settings = Settings.builder()
-        .put("node.name", SegmentReplicationTargetServiceTests.class.getSimpleName())
-        .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
-        .build();
-    final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-    final RecoverySettings recoverySettings = new RecoverySettings(settings, clusterSettings);
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        primary = newStartedShard(true, settings);
-        replica = newShard(false, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
-        recoverReplica(replica, primary, true);
-        replicaDiscoveryNode = replica.recoveryState().getTargetNode();
-        primaryDiscoveryNode = replica.recoveryState().getSourceNode();
-
-        ShardId testShardId = primary.shardId();
-
-        CodecService codecService = new CodecService(null, getIndexer(primary).config().getIndexSettings(), null, List.of());
-        String defaultCodecName = codecService.codec(CodecService.DEFAULT_CODEC).getName();
-
-        // This mirrors the creation of the ReplicationCheckpoint inside CopyState
-        testCheckpoint = new ReplicationCheckpoint(testShardId, primary.getOperationPrimaryTerm(), 0L, 0L, defaultCodecName);
-        IndexService mockIndexService = mock(IndexService.class);
-        when(mockIndicesService.indexServiceSafe(testShardId.getIndex())).thenReturn(mockIndexService);
-        when(mockIndexService.getShard(testShardId.id())).thenReturn(primary);
-
-        TransportService transportService = mock(TransportService.class);
-        when(transportService.getThreadPool()).thenReturn(threadPool);
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        closeShards(primary, replica);
-        super.tearDown();
-    }
-
-    public void testPrepareAndSendSegments() throws IOException {
-        indexDoc(primary, "1", "{\"foo\" : \"baz\"}", MediaTypeRegistry.JSON, "foobar");
-        primary.refresh("Test");
-        OngoingSegmentReplications replications = spy(new OngoingSegmentReplications(mockIndicesService, recoverySettings));
-        final CheckpointInfoRequest request = new CheckpointInfoRequest(
-            1L,
-            replica.routingEntry().allocationId().getId(),
-            replicaDiscoveryNode,
-            testCheckpoint
-        );
         final FileChunkWriter segmentSegmentFileChunkWriter = (fileMetadata, position, content, lastChunk, totalTranslogOps, listener) -> {
-            listener.onResponse(null);
-        };
-        final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, segmentSegmentFileChunkWriter);
-        assertEquals(1, replications.size());
-
         getSegmentFilesRequest = new GetSegmentFilesRequest(
-            1L,
-            replica.routingEntry().allocationId().getId(),
-            replicaDiscoveryNode,
-            new ArrayList<>(handler.getCheckpoint().getMetadataMap().values()),
-            testCheckpoint
-        );
-
-        replications.startSegmentCopy(getSegmentFilesRequest, new ActionListener<>() {
-            @Override
-            public void onResponse(GetSegmentFilesResponse getSegmentFilesResponse) {
-                assertEquals(handler.getCheckpoint().getMetadataMap().size(), getSegmentFilesResponse.files.size());
-                assertEquals(0, replications.size());
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                logger.error("Unexpected failure", e);
-                Assert.fail("Unexpected failure from startSegmentCopy listener: " + e);
-            }
-        });
-    }
-
-    public void testCancelReplication() throws IOException {
-        OngoingSegmentReplications replications = new OngoingSegmentReplications(mockIndicesService, recoverySettings);
-        final CheckpointInfoRequest request = new CheckpointInfoRequest(
-            1L,
-            replica.routingEntry().allocationId().getId(),
-            primaryDiscoveryNode,
-            testCheckpoint
-        );
-        final FileChunkWriter segmentSegmentFileChunkWriter = (fileMetadata, position, content, lastChunk, totalTranslogOps, listener) -> {
-            // this shouldn't be called in this test.
-            Assert.fail();
-        };
         final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, segmentSegmentFileChunkWriter);
-        assertEquals(1, replications.size());
-
-        replications.cancelReplication(primaryDiscoveryNode);
-        assertEquals(0, replications.size());
-    }
-
-    public void testCancelReplication_AfterSendFilesStarts() throws IOException, InterruptedException {
-        CountDownLatch latch = new CountDownLatch(1);
-        OngoingSegmentReplications replications = new OngoingSegmentReplications(mockIndicesService, recoverySettings);
-        // add a doc and refresh so primary has more than one segment.
-        indexDoc(primary, "1", "{\"foo\" : \"baz\"}", MediaTypeRegistry.JSON, "foobar");
-        primary.refresh("Test");
-        final CheckpointInfoRequest request = new CheckpointInfoRequest(
-            1L,
-            replica.routingEntry().allocationId().getId(),
-            primaryDiscoveryNode,
-            testCheckpoint
-        );
-        final FileChunkWriter segmentSegmentFileChunkWriter = (fileMetadata, position, content, lastChunk, totalTranslogOps, listener) -> {
-            // cancel the replication as soon as the writer starts sending files.
-            replications.cancel(replica.routingEntry().allocationId().getId(), "Test");
-        };
-        final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, segmentSegmentFileChunkWriter);
-        assertEquals(1, replications.size());
-        getSegmentFilesRequest = new GetSegmentFilesRequest(
-            1L,
-            replica.routingEntry().allocationId().getId(),
-            replicaDiscoveryNode,
-            new ArrayList<>(handler.getCheckpoint().getMetadataMap().values()),
-            testCheckpoint
-        );
-        replications.startSegmentCopy(getSegmentFilesRequest, new ActionListener<>() {
-            @Override
-            public void onResponse(GetSegmentFilesResponse getSegmentFilesResponse) {
-                Assert.fail("Expected onFailure to be invoked.");
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                assertEquals(CancellableThreads.ExecutionCancelledException.class, e.getClass());
-                assertEquals(0, replications.size());
-                latch.countDown();
-            }
-        });
-        latch.await(2, TimeUnit.SECONDS);
-        assertEquals("listener should have resolved with failure", 0, latch.getCount());
-    }
-
     public void testMultipleReplicasUseSameCheckpoint() throws IOException {
-        IndexShard secondReplica = newShard(primary.shardId(), false);
-        recoverReplica(secondReplica, primary, true);
-
-        OngoingSegmentReplications replications = new OngoingSegmentReplications(mockIndicesService, recoverySettings);
-        final CheckpointInfoRequest request = new CheckpointInfoRequest(
-            1L,
-            replica.routingEntry().allocationId().getId(),
-            primaryDiscoveryNode,
-            testCheckpoint
-        );
-        final FileChunkWriter segmentSegmentFileChunkWriter = (fileMetadata, position, content, lastChunk, totalTranslogOps, listener) -> {
-            // this shouldn't be called in this test.
-            Assert.fail();
-        };
-
-        final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, segmentSegmentFileChunkWriter);
-
-        final CheckpointInfoRequest secondRequest = new CheckpointInfoRequest(
-            1L,
-            secondReplica.routingEntry().allocationId().getId(),
-            replicaDiscoveryNode,
-            testCheckpoint
-        );
-        replications.prepareForReplication(secondRequest, segmentSegmentFileChunkWriter);
-
-        assertEquals(2, replications.size());
-
-        replications.cancelReplication(primaryDiscoveryNode);
-        replications.cancelReplication(replicaDiscoveryNode);
-        assertEquals(0, replications.size());
+    public void tearDown() throws Exception {
         closeShards(secondReplica);
-    }
-
-    public void testStartCopyWithoutPrepareStep() {
-        OngoingSegmentReplications replications = new OngoingSegmentReplications(mockIndicesService, recoverySettings);
-        final ActionListener<GetSegmentFilesResponse> listener = spy(new ActionListener<>() {
-            @Override
             public void onResponse(GetSegmentFilesResponse getSegmentFilesResponse) {
-                assertTrue(getSegmentFilesResponse.files.isEmpty());
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                Assert.fail();
-            }
-        });
-
-        getSegmentFilesRequest = new GetSegmentFilesRequest(
-            1L,
-            replica.routingEntry().allocationId().getId(),
-            replicaDiscoveryNode,
-            Collections.emptyList(),
-            testCheckpoint
-        );
-
-        replications.startSegmentCopy(getSegmentFilesRequest, listener);
         verify(listener, times(1)).onResponse(any());
-    }
-
-    public void testShardAlreadyReplicatingToNode() throws IOException {
-        OngoingSegmentReplications replications = spy(new OngoingSegmentReplications(mockIndicesService, recoverySettings));
-        final CheckpointInfoRequest request = new CheckpointInfoRequest(
-            1L,
-            replica.routingEntry().allocationId().getId(),
-            replicaDiscoveryNode,
-            testCheckpoint
-        );
-        final FileChunkWriter segmentSegmentFileChunkWriter = (fileMetadata, position, content, lastChunk, totalTranslogOps, listener) -> {
-            listener.onResponse(null);
-        };
-        replications.prepareForReplication(request, segmentSegmentFileChunkWriter);
-        final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, segmentSegmentFileChunkWriter);
-    }
-
-    public void testStartReplicationWithNoFilesToFetch() throws IOException {
-        // create a replications object and request a checkpoint.
-        OngoingSegmentReplications replications = spy(new OngoingSegmentReplications(mockIndicesService, recoverySettings));
-        final CheckpointInfoRequest request = new CheckpointInfoRequest(
-            1L,
-            replica.routingEntry().allocationId().getId(),
-            replicaDiscoveryNode,
-            testCheckpoint
-        );
-        // mock the FileChunkWriter so we can assert its ever called.
-        final FileChunkWriter segmentSegmentFileChunkWriter = mock(FileChunkWriter.class);
-        // Prepare for replication step - and ensure copyState is added to cache.
-        final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, segmentSegmentFileChunkWriter);
-        assertEquals(1, replications.size());
-
-        getSegmentFilesRequest = new GetSegmentFilesRequest(
-            1L,
-            replica.routingEntry().allocationId().getId(),
-            replicaDiscoveryNode,
-            Collections.emptyList(),
-            testCheckpoint
-        );
-
-        // invoke startSegmentCopy and assert our fileChunkWriter is never invoked.
-        replications.startSegmentCopy(getSegmentFilesRequest, new ActionListener<>() {
-            @Override
-            public void onResponse(GetSegmentFilesResponse getSegmentFilesResponse) {
-                assertEquals(Collections.emptyList(), getSegmentFilesResponse.files);
-                verifyNoInteractions(segmentSegmentFileChunkWriter);
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                logger.error("Unexpected failure", e);
-                Assert.fail();
-            }
-        });
-    }
-
-    public void testCancelAllReplicationsForShard() throws IOException {
-        // This tests when primary has multiple ongoing replications.
-        IndexShard replica_2 = newShard(primary.shardId(), false);
-        recoverReplica(replica_2, primary, true);
-
-        OngoingSegmentReplications replications = new OngoingSegmentReplications(mockIndicesService, recoverySettings);
-        final CheckpointInfoRequest request = new CheckpointInfoRequest(
-            1L,
-            replica.routingEntry().allocationId().getId(),
-            primaryDiscoveryNode,
-            testCheckpoint
-        );
-
-        final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, mock(FileChunkWriter.class));
-
-        final CheckpointInfoRequest secondRequest = new CheckpointInfoRequest(
-            1L,
-            replica_2.routingEntry().allocationId().getId(),
-            replicaDiscoveryNode,
-            testCheckpoint
-        );
-        replications.prepareForReplication(secondRequest, mock(FileChunkWriter.class));
-
-        assertEquals(2, replications.size());
-
-        // cancel the primary's ongoing replications.
-        replications.cancel(primary, "Test");
-        assertEquals(0, replications.size());
-        closeShards(replica_2);
-    }
-
-    public void testCancelForMissingIds() throws IOException {
-        // This tests when primary has multiple ongoing replications.
-        IndexShard replica_2 = newShard(primary.shardId(), false);
-        recoverReplica(replica_2, primary, true);
-
-        OngoingSegmentReplications replications = new OngoingSegmentReplications(mockIndicesService, recoverySettings);
-        final String replicaAllocationId = replica.routingEntry().allocationId().getId();
-        final CheckpointInfoRequest request = new CheckpointInfoRequest(1L, replicaAllocationId, primaryDiscoveryNode, testCheckpoint);
-
-        final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, mock(FileChunkWriter.class));
-
-        final String replica_2AllocationId = replica_2.routingEntry().allocationId().getId();
-        final CheckpointInfoRequest secondRequest = new CheckpointInfoRequest(
-            1L,
-            replica_2AllocationId,
-            replicaDiscoveryNode,
-            testCheckpoint
-        );
-        replications.prepareForReplication(secondRequest, mock(FileChunkWriter.class));
-
-        assertEquals(2, replications.size());
-        assertTrue(replications.getHandlers().containsKey(replicaAllocationId));
-        assertTrue(replications.getHandlers().containsKey(replica_2AllocationId));
-
-        replications.clearOutOfSyncIds(primary.shardId(), Set.of(replica_2AllocationId));
-        assertEquals(1, replications.size());
-        assertTrue(replications.getHandlers().containsKey(replica_2AllocationId));
-
-        // cancel the primary's ongoing replications.
-        replications.clearOutOfSyncIds(primary.shardId(), Collections.emptySet());
-        assertEquals(0, replications.size());
-        closeShards(replica_2);
-    }
-
     public void testPrepareForReplicationAlreadyReplicating() throws IOException {
-        OngoingSegmentReplications replications = new OngoingSegmentReplications(mockIndicesService, recoverySettings);
-        final String replicaAllocationId = replica.routingEntry().allocationId().getId();
-        final CheckpointInfoRequest request = new CheckpointInfoRequest(1L, replicaAllocationId, primaryDiscoveryNode, testCheckpoint);
-
+            Collections.emptyList(),
+        primaryDiscoveryNode = replica.recoveryState().getSourceNode();
+        .put("node.name", SegmentReplicationTargetServiceTests.class.getSimpleName())
         final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, mock(FileChunkWriter.class));
-        assertEquals(handler, replications.getHandlers().get(replicaAllocationId));
-
-        ReplicationCheckpoint secondCheckpoint = new ReplicationCheckpoint(
-            testCheckpoint.getShardId(),
-            testCheckpoint.getPrimaryTerm(),
-            testCheckpoint.getSegmentsGen(),
-            testCheckpoint.getSegmentInfosVersion() + 1,
-            testCheckpoint.getCodec()
         );
-
-        final CheckpointInfoRequest secondRequest = new CheckpointInfoRequest(
+        final String replicaAllocationId = replica.routingEntry().allocationId().getId();
+        );
+package org.opensearch.indices.replication;
             1L,
-            replicaAllocationId,
-            primaryDiscoveryNode,
-            secondCheckpoint
+import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
+            @Override
+        final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, segmentSegmentFileChunkWriter);
+            @Override
+import static org.mockito.Mockito.verify;
+            1L,
+            }
         );
-
-        final SegmentReplicationSourceHandler secondHandler = replications.prepareForReplication(
-            secondRequest,
-            mock(FileChunkWriter.class)
-        );
-        assertEquals(secondHandler, replications.getHandlers().get(replicaAllocationId));
     }
+import org.opensearch.common.settings.Settings;
+                Assert.fail("Unexpected failure from startSegmentCopy listener: " + e);
+        // This tests when primary has multiple ongoing replications.
+    final Settings settings = Settings.builder()
+        );
+        OngoingSegmentReplications replications = new OngoingSegmentReplications(mockIndicesService, recoverySettings);
+        assertEquals(2, replications.size());
+        );
+    }
+            public void onResponse(GetSegmentFilesResponse getSegmentFilesResponse) {
+        assertTrue(replications.getHandlers().containsKey(replicaAllocationId));
+            replicaDiscoveryNode,
+ * The OpenSearch Contributors require contributions made to
+        };
+            new ArrayList<>(handler.getCheckpoint().getMetadataMap().values()),
+        IndexShard secondReplica = newShard(primary.shardId(), false);
+        final String replicaAllocationId = replica.routingEntry().allocationId().getId();
+            primaryDiscoveryNode,
+            replica_2.routingEntry().allocationId().getId(),
+            public void onFailure(Exception e) {
+        recoverReplica(secondReplica, primary, true);
+    private final IndicesService mockIndicesService = mock(IndicesService.class);
+        final FileChunkWriter segmentSegmentFileChunkWriter = (fileMetadata, position, content, lastChunk, totalTranslogOps, listener) -> {
+        final CheckpointInfoRequest secondRequest = new CheckpointInfoRequest(
+        replica = newShard(false, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
+        replications.cancelReplication(primaryDiscoveryNode);
+            }
+            replica.routingEntry().allocationId().getId(),
+        replications.cancelReplication(primaryDiscoveryNode);
+            testCheckpoint
+            testCheckpoint
+        closeShards(primary, replica);
+        .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
+import org.opensearch.common.util.CancellableThreads;
+    private DiscoveryNode replicaDiscoveryNode;
+            replicaAllocationId,
+            @Override
+    }
+        assertEquals(1, replications.size());
+            new ArrayList<>(handler.getCheckpoint().getMetadataMap().values()),
+            1L,
+            }
+ * this file be licensed under the Apache-2.0 license or a
+            }
+import static org.mockito.Mockito.when;
+        );
+            replica_2AllocationId,
+        CodecService codecService = new CodecService(null, getIndexer(primary).config().getIndexSettings(), null, List.of());
+            // cancel the replication as soon as the writer starts sending files.
+        when(mockIndicesService.indexServiceSafe(testShardId.getIndex())).thenReturn(mockIndexService);
+        );
+    }
+        replications.startSegmentCopy(getSegmentFilesRequest, new ActionListener<>() {
+        replications.startSegmentCopy(getSegmentFilesRequest, new ActionListener<>() {
+                Assert.fail("Expected onFailure to be invoked.");
+            secondCheckpoint
+            listener.onResponse(null);
+        replications.clearOutOfSyncIds(primary.shardId(), Collections.emptySet());
+        recoverReplica(replica, primary, true);
+        final CheckpointInfoRequest secondRequest = new CheckpointInfoRequest(
+        assertEquals(1, replications.size());
+        OngoingSegmentReplications replications = spy(new OngoingSegmentReplications(mockIndicesService, recoverySettings));
+            replicaDiscoveryNode,
+            testCheckpoint.getPrimaryTerm(),
+        final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, segmentSegmentFileChunkWriter);
+        ShardId testShardId = primary.shardId();
+        final CheckpointInfoRequest request = new CheckpointInfoRequest(
+            1L,
+            replica.routingEntry().allocationId().getId(),
+            1L,
+            testCheckpoint
+        getSegmentFilesRequest = new GetSegmentFilesRequest(
+        primary = newStartedShard(true, settings);
+        OngoingSegmentReplications replications = spy(new OngoingSegmentReplications(mockIndicesService, recoverySettings));
+        when(transportService.getThreadPool()).thenReturn(threadPool);
+            public void onResponse(GetSegmentFilesResponse getSegmentFilesResponse) {
+        // cancel the primary's ongoing replications.
+        replications.prepareForReplication(request, segmentSegmentFileChunkWriter);
+import java.io.IOException;
+        final CheckpointInfoRequest request = new CheckpointInfoRequest(
+        // invoke startSegmentCopy and assert our fileChunkWriter is never invoked.
+                assertTrue(getSegmentFilesResponse.files.isEmpty());
+    @Override
+        OngoingSegmentReplications replications = new OngoingSegmentReplications(mockIndicesService, recoverySettings);
+        getSegmentFilesRequest = new GetSegmentFilesRequest(
+import org.opensearch.index.shard.IndexShard;
+                assertEquals(Collections.emptyList(), getSegmentFilesResponse.files);
+import java.util.Set;
+import org.opensearch.index.shard.IndexShardTestCase;
+            replica.routingEntry().allocationId().getId(),
+    public void testCancelAllReplicationsForShard() throws IOException {
+        };
+    public void setUp() throws Exception {
+            replicaDiscoveryNode,
+        );
+        });
+        assertEquals(secondHandler, replications.getHandlers().get(replicaAllocationId));
+import java.util.concurrent.TimeUnit;
+        IndexShard replica_2 = newShard(primary.shardId(), false);
+    }
+import org.junit.Assert;
+        };
+            testCheckpoint
+        });
+        recoverReplica(replica_2, primary, true);
+            mock(FileChunkWriter.class)
+            testCheckpoint
+        final String replica_2AllocationId = replica_2.routingEntry().allocationId().getId();
+            public void onResponse(GetSegmentFilesResponse getSegmentFilesResponse) {
+            1L,
+        };
+import java.util.List;
+        assertEquals(0, replications.size());
+ */
+ *
+import java.util.ArrayList;
+        replications.prepareForReplication(secondRequest, mock(FileChunkWriter.class));
+        String defaultCodecName = codecService.codec(CodecService.DEFAULT_CODEC).getName();
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        // This tests when primary has multiple ongoing replications.
+        final ActionListener<GetSegmentFilesResponse> listener = spy(new ActionListener<>() {
+    public void testPrepareAndSendSegments() throws IOException {
+ * compatible open source license.
+            1L,
+            }
+            }
+        assertEquals(0, replications.size());
+        assertEquals(1, replications.size());
+        );
+import java.util.concurrent.CountDownLatch;
+            primaryDiscoveryNode,
+        final FileChunkWriter segmentSegmentFileChunkWriter = (fileMetadata, position, content, lastChunk, totalTranslogOps, listener) -> {
+/*
+            testCheckpoint
+        closeShards(replica_2);
+                logger.error("Unexpected failure", e);
+            testCheckpoint.getSegmentInfosVersion() + 1,
+            replicaDiscoveryNode,
+        // cancel the primary's ongoing replications.
+        assertEquals(1, replications.size());
+        };
+ * SPDX-License-Identifier: Apache-2.0
+        assertTrue(replications.getHandlers().containsKey(replica_2AllocationId));
+            1L,
+        final FileChunkWriter segmentSegmentFileChunkWriter = (fileMetadata, position, content, lastChunk, totalTranslogOps, listener) -> {
+    }
+            public void onFailure(Exception e) {
+            testCheckpoint.getShardId(),
+import org.opensearch.index.codec.CodecService;
+    private ReplicationCheckpoint testCheckpoint;
+        final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, mock(FileChunkWriter.class));
+import org.opensearch.core.index.shard.ShardId;
+            replicaDiscoveryNode,
+        // mock the FileChunkWriter so we can assert its ever called.
+import org.opensearch.cluster.node.DiscoveryNode;
+            secondReplica.routingEntry().allocationId().getId(),
+import static org.mockito.Mockito.any;
+            replicaDiscoveryNode,
+        closeShards(replica_2);
+                Assert.fail();
+        latch.await(2, TimeUnit.SECONDS);
+        assertEquals(2, replications.size());
+        });
+        ReplicationCheckpoint secondCheckpoint = new ReplicationCheckpoint(
+        final CheckpointInfoRequest request = new CheckpointInfoRequest(
+        final CheckpointInfoRequest secondRequest = new CheckpointInfoRequest(
+        assertEquals("listener should have resolved with failure", 0, latch.getCount());
+        OngoingSegmentReplications replications = new OngoingSegmentReplications(mockIndicesService, recoverySettings);
+        // create a replications object and request a checkpoint.
+import static org.mockito.Mockito.mock;
+import org.opensearch.indices.IndicesService;
+            @Override
+            testCheckpoint
+                assertEquals(0, replications.size());
+            @Override
+        OngoingSegmentReplications replications = spy(new OngoingSegmentReplications(mockIndicesService, recoverySettings));
+            primaryDiscoveryNode,
+    public void testShardAlreadyReplicatingToNode() throws IOException {
+            1L,
+        );
+        final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, segmentSegmentFileChunkWriter);
+        super.tearDown();
+        IndexService mockIndexService = mock(IndexService.class);
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
+            testCheckpoint.getSegmentsGen(),
+        );
+        recoverReplica(replica_2, primary, true);
+    public void testCancelForMissingIds() throws IOException {
+    private DiscoveryNode primaryDiscoveryNode;
+        );
+            testCheckpoint
+            listener.onResponse(null);
+            Collections.emptyList(),
+        indexDoc(primary, "1", "{\"foo\" : \"baz\"}", MediaTypeRegistry.JSON, "foobar");
+        final FileChunkWriter segmentSegmentFileChunkWriter = mock(FileChunkWriter.class);
+            public void onFailure(Exception e) {
+    private IndexShard replica;
+import static org.mockito.Mockito.spy;
+        replicaDiscoveryNode = replica.recoveryState().getTargetNode();
+        indexDoc(primary, "1", "{\"foo\" : \"baz\"}", MediaTypeRegistry.JSON, "foobar");
+        replications.clearOutOfSyncIds(primary.shardId(), Set.of(replica_2AllocationId));
+    public void testStartCopyWithoutPrepareStep() {
+    }
+            1L,
+import org.opensearch.core.action.ActionListener;
+        CountDownLatch latch = new CountDownLatch(1);
+        assertEquals(2, replications.size());
+    @Override
+            testCheckpoint
+public class OngoingSegmentReplicationsTests extends IndexShardTestCase {
+        replications.startSegmentCopy(getSegmentFilesRequest, new ActionListener<>() {
+        final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, segmentSegmentFileChunkWriter);
+                assertEquals(CancellableThreads.ExecutionCancelledException.class, e.getClass());
+            replica.routingEntry().allocationId().getId(),
+    }
+            @Override
+        assertEquals(handler, replications.getHandlers().get(replicaAllocationId));
+        OngoingSegmentReplications replications = new OngoingSegmentReplications(mockIndicesService, recoverySettings);
+import org.opensearch.index.engine.NRTReplicationEngineFactory;
+        // add a doc and refresh so primary has more than one segment.
+        final CheckpointInfoRequest request = new CheckpointInfoRequest(1L, replicaAllocationId, primaryDiscoveryNode, testCheckpoint);
+    }
+                Assert.fail();
+            @Override
+                latch.countDown();
+        primary.refresh("Test");
+        assertEquals(0, replications.size());
+        replications.prepareForReplication(secondRequest, segmentSegmentFileChunkWriter);
+        testCheckpoint = new ReplicationCheckpoint(testShardId, primary.getOperationPrimaryTerm(), 0L, 0L, defaultCodecName);
+        final CheckpointInfoRequest secondRequest = new CheckpointInfoRequest(
+            }
+        replications.prepareForReplication(secondRequest, mock(FileChunkWriter.class));
+        );
+            testCheckpoint
+            1L,
+        assertEquals(0, replications.size());
+    final RecoverySettings recoverySettings = new RecoverySettings(settings, clusterSettings);
+    }
+            testCheckpoint
+            1L,
+        when(mockIndexService.getShard(testShardId.id())).thenReturn(primary);
+import org.opensearch.common.settings.ClusterSettings;
+        IndexShard replica_2 = newShard(primary.shardId(), false);
+        final CheckpointInfoRequest request = new CheckpointInfoRequest(
+        TransportService transportService = mock(TransportService.class);
+        final FileChunkWriter segmentSegmentFileChunkWriter = (fileMetadata, position, content, lastChunk, totalTranslogOps, listener) -> {
+import java.util.Collections;
+        OngoingSegmentReplications replications = new OngoingSegmentReplications(mockIndicesService, recoverySettings);
+            replicaDiscoveryNode,
+            1L,
+            replica.routingEntry().allocationId().getId(),
+        );
+        final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, mock(FileChunkWriter.class));
+        replications.cancel(primary, "Test");
+import org.opensearch.index.IndexService;
+            replica.routingEntry().allocationId().getId(),
+                logger.error("Unexpected failure", e);
+        // Prepare for replication step - and ensure copyState is added to cache.
+            secondRequest,
+            testCheckpoint
+            replica.routingEntry().allocationId().getId(),
+    }
+import org.opensearch.indices.recovery.FileChunkWriter;
+    public void testStartReplicationWithNoFilesToFetch() throws IOException {
+        replications.startSegmentCopy(getSegmentFilesRequest, listener);
+        .build();
+            replica.routingEntry().allocationId().getId(),
+import static org.mockito.Mockito.times;
+        // This mirrors the creation of the ReplicationCheckpoint inside CopyState
+            testCheckpoint
+        );
+import org.opensearch.indices.recovery.RecoverySettings;
+        final CheckpointInfoRequest request = new CheckpointInfoRequest(
+            public void onFailure(Exception e) {
+            replica.routingEntry().allocationId().getId(),
+import org.opensearch.indices.replication.common.ReplicationType;
+            replicaDiscoveryNode,
+            replications.cancel(replica.routingEntry().allocationId().getId(), "Test");
+        );
+            replicaDiscoveryNode,
+            Assert.fail();
+            testCheckpoint
+        final CheckpointInfoRequest request = new CheckpointInfoRequest(
+                assertEquals(handler.getCheckpoint().getMetadataMap().size(), getSegmentFilesResponse.files.size());
 }
+            replica.routingEntry().allocationId().getId(),
+        super.setUp();
+                verifyNoInteractions(segmentSegmentFileChunkWriter);
+        assertEquals(1, replications.size());
+        getSegmentFilesRequest = new GetSegmentFilesRequest(
+    final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+    public void testCancelReplication() throws IOException {
+import org.opensearch.transport.TransportService;
+            // this shouldn't be called in this test.
+import org.opensearch.cluster.metadata.IndexMetadata;
+            @Override
+        OngoingSegmentReplications replications = new OngoingSegmentReplications(mockIndicesService, recoverySettings);
+        replications.cancelReplication(replicaDiscoveryNode);
+            replicaDiscoveryNode,
+        );
+        OngoingSegmentReplications replications = new OngoingSegmentReplications(mockIndicesService, recoverySettings);
+            primaryDiscoveryNode,
+    }
+    private IndexShard primary;
+        final SegmentReplicationSourceHandler secondHandler = replications.prepareForReplication(
+            replica.routingEntry().allocationId().getId(),
+            1L,
+            }
+    private GetSegmentFilesRequest getSegmentFilesRequest;
+    public void testCancelReplication_AfterSendFilesStarts() throws IOException, InterruptedException {
+            testCheckpoint.getCodec()
+        primary.refresh("Test");
+        });
+        final CheckpointInfoRequest request = new CheckpointInfoRequest(
+import static org.mockito.Mockito.verifyNoInteractions;
+                assertEquals(0, replications.size());
+            // this shouldn't be called in this test.
+        final SegmentReplicationSourceHandler handler = replications.prepareForReplication(request, segmentSegmentFileChunkWriter);
+        assertTrue(replications.getHandlers().containsKey(replica_2AllocationId));
+            Assert.fail();
+            1L,
+            primaryDiscoveryNode,
+        final CheckpointInfoRequest request = new CheckpointInfoRequest(1L, replicaAllocationId, primaryDiscoveryNode, testCheckpoint);

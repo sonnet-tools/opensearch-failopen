@@ -1,327 +1,299 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.tools.cli.plugin;
-
-import org.apache.lucene.tests.util.LuceneTestCase;
-import org.opensearch.Version;
-import org.opensearch.cli.ExitCodes;
-import org.opensearch.cli.MockTerminal;
-import org.opensearch.cli.UserException;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.env.Environment;
-import org.opensearch.env.TestEnvironment;
-import org.opensearch.plugins.PluginInfo;
-import org.opensearch.plugins.PluginTestUtil;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;
-
+            terminal.getOutput()
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.stream.Collectors;
-
-@LuceneTestCase.SuppressFileSystems("*")
-public class ListPluginsCommandTests extends OpenSearchTestCase {
-
-    private Path home;
-    private Environment env;
-
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        home = createTempDir();
-        Files.createDirectories(home.resolve("plugins"));
-        Settings settings = Settings.builder().put("path.home", home).build();
-        env = TestEnvironment.newEnvironment(settings);
-    }
-
-    static MockTerminal listPlugins(Path home) throws Exception {
-        return listPlugins(home, new String[0]);
-    }
-
-    static MockTerminal listPlugins(Path home, String[] args) throws Exception {
-        String[] argsAndHome = new String[args.length + 1];
-        System.arraycopy(args, 0, argsAndHome, 0, args.length);
-        argsAndHome[args.length] = "-Epath.home=" + home;
-        MockTerminal terminal = new MockTerminal();
-        int status = new ListPluginsCommand() {
-            @Override
-            protected Environment createEnv(Map<String, String> settings) throws UserException {
-                Settings.Builder builder = Settings.builder().put("path.home", home);
-                settings.forEach((k, v) -> builder.put(k, v));
-                final Settings realSettings = builder.build();
-                return new Environment(realSettings, home.resolve("config"));
+                "Extended Plugins: []",
+                "Extended Plugins: []",
+ * this work for additional information regarding copyright
+            "{opensearch:\"" + Version.CURRENT + "\"}",
+        assertEquals("fake_plugin1\nfake_plugin2\n", terminal.getOutput());
             }
-
-            @Override
-            protected boolean addShutdownHook() {
-                return false;
-            }
-        }.main(argsAndHome, terminal);
-        assertEquals(ExitCodes.OK, status);
-        return terminal;
-    }
-
-    private static String buildMultiline(String... args) {
-        return Arrays.stream(args).collect(Collectors.joining("\n", "", "\n"));
-    }
-
-    private static void buildFakePlugin(final Environment env, final String description, final String name, final String classname)
-        throws IOException {
-        buildFakePlugin(env, description, name, classname, false);
-    }
-
-    private static void buildFakePlugin(
-        final Environment env,
-        final String description,
-        final String name,
-        final String classname,
-        final boolean hasNativeController
-    ) throws IOException {
-        PluginTestUtil.writePluginProperties(
-            env.pluginsDir().resolve(name),
-            "description",
-            description,
-            "name",
-            name,
-            "version",
-            "1.0",
-            "opensearch.version",
-            Version.CURRENT.toString(),
-            "java.version",
-            "1.8",
-            "classname",
+            "org.fake1"
             classname,
-            "custom.foldername",
-            "custom-folder",
-            "has.native.controller",
-            Boolean.toString(hasNativeController)
-        );
-    }
-
-    public void testPluginsDirMissing() throws Exception {
-        Files.delete(env.pluginsDir());
-        IOException e = expectThrows(IOException.class, () -> listPlugins(home));
-        assertEquals("Plugins directory missing: " + env.pluginsDir(), e.getMessage());
-    }
-
-    public void testNoPlugins() throws Exception {
+                settings.forEach((k, v) -> builder.put(k, v));
         MockTerminal terminal = listPlugins(home);
+import java.util.Map;
+                "OpenSearch Version: " + Version.CURRENT.toString(),
+            buildMultiline(
+            terminal.getOutput()
+public class ListPluginsCommandTests extends OpenSearchTestCase {
+        String message = "plugin [fake_plugin1] was built for OpenSearch version 5.0.0 and is not compatible with " + Version.CURRENT;
+                " * Classname: org.fake",
+ * Modifications Copyright OpenSearch Contributors. See
+ * ownership. Elasticsearch licenses this file to you under
+            "1.0",
+            description,
+            "java.version",
+import org.apache.lucene.tests.util.LuceneTestCase;
+        MockTerminal terminal = listPlugins(home, new String[0]);
+            "opensearch.version",
+                Settings.Builder builder = Settings.builder().put("path.home", home);
+        MockTerminal terminal = listPlugins(home, params);
+                "Version: 1.0",
+    }
+            ),
+    }
+            "custom-folder",
+                " * Classname: org.fake",
+        buildFakePlugin(env, "fake desc 2", "fake_plugin2", "org.fake2");
+        assertEquals("fake_plugin1\nfake_plugin2\n", terminal.getOutput());
+    public void testPluginWithVerboseMultiplePlugins() throws Exception {
+    }
+        MockTerminal terminal = listPlugins(home);
+                "Native Controller: false",
+                "OpenSearch Version: " + Version.CURRENT.toString(),
+package org.opensearch.tools.cli.plugin;
+    private static String buildMultiline(String... args) {
+        final Path pluginDir = env.pluginsDir().resolve("fake1");
+        return terminal;
+            ),
+        Settings settings = Settings.builder().put("path.home", home).build();
+                "Native Controller: false",
+    }
+        MockTerminal terminal = listPlugins(home);
+            System.getProperty("java.specification.version"),
+        );
+        assertEquals(pluginDir.resolve(PluginInfo.OPENSEARCH_PLUGIN_PROPERTIES).toString(), e.getFile());
+            }
+    public void testPluginWithoutDescriptorFile() throws Exception {
+        Files.delete(env.pluginsDir());
+                "fake_plugin2",
         assertTrue(terminal.getOutput(), terminal.getOutput().isEmpty());
     }
-
-    public void testOnePlugin() throws Exception {
-        buildFakePlugin(env, "fake desc", "fake", "org.fake");
-        MockTerminal terminal = listPlugins(home);
-        assertEquals(buildMultiline("fake"), terminal.getOutput());
-    }
-
-    public void testTwoPlugins() throws Exception {
+                "- Plugin information:",
+                final Settings realSettings = builder.build();
         buildFakePlugin(env, "fake desc", "fake1", "org.fake");
-        buildFakePlugin(env, "fake desc 2", "fake2", "org.fake");
-        MockTerminal terminal = listPlugins(home);
+                "Name: fake_plugin1",
+                "Description: fake desc",
+            "java.version",
+            "classname",
+ * software distributed under the License is distributed on an
+            "description",
+        buildFakePlugin(env, "fake desc", "fake_plugin", "org.fake");
+        buildFakePlugin(env, "fake desc 1", "fake_plugin1", "org.fake", true);
+ * under the License.
+                "OpenSearch Version: " + Version.CURRENT.toString(),
+                "Plugins directory: " + env.pluginsDir(),
+        NoSuchFileException e = expectThrows(NoSuchFileException.class, () -> listPlugins(home));
+        assertEquals(
+/*
+            terminal.getOutput()
+                "Java Version: " + System.getProperty("java.specification.version"),
         assertEquals(buildMultiline("fake1", "fake2"), terminal.getOutput());
     }
-
-    public void testPluginWithVerbose() throws Exception {
-        buildFakePlugin(env, "fake desc", "fake_plugin", "org.fake");
-        String[] params = { "-v" };
+ * specific language governing permissions and limitations
+                "fake_plugin1",
+    private static void buildFakePlugin(
+                "- Plugin information:",
+                "Folder name: custom-folder"
+import org.opensearch.Version;
+        }.main(argsAndHome, terminal);
+    private Environment env;
+            Boolean.toString(hasNativeController)
+            "classname",
+    }
+        int status = new ListPluginsCommand() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                " * Classname: org.fake2",
+                "- Plugin information:",
+    public void testPluginWithWrongDescriptorFile() throws Exception {
+    }
+            protected Environment createEnv(Map<String, String> settings) throws UserException {
+    }
+                "Version: 1.0",
+        );
+    private static void buildFakePlugin(final Environment env, final String description, final String name, final String classname)
         MockTerminal terminal = listPlugins(home, params);
-        assertEquals(
+    static MockTerminal listPlugins(Path home, String[] args) throws Exception {
+            "fake desc 1",
             buildMultiline(
+        buildFakePlugin(env, "fake desc 2", "fake2", "org.fake");
+        home = createTempDir();
+    private Path home;
+        final String description,
+        );
+    }
+        String[] params = { "-v" };
+ * Licensed to Elasticsearch under one or more contributor
+ */
+import java.nio.file.Path;
+                "Extended Plugins: []",
+    public void testPluginWithNativeController() throws Exception {
+            "java.version",
+                "Folder name: custom-folder"
+                "Java Version: 1.8",
+            protected boolean addShutdownHook() {
+/*
+                " * Classname: org.fake",
+                "Name: fake_plugin1",
+                "Extended Plugins: []",
+    public void testPluginsDirMissing() throws Exception {
+            "1.8",
+import java.nio.file.NoSuchFileException;
+                "Name: fake_plugin2",
+            "fake desc 1",
                 "Plugins directory: " + env.pluginsDir(),
-                "fake_plugin",
+        Files.createDirectories(pluginDir);
+            "name",
+            "description",
+    public void testNoPlugins() throws Exception {
+    }
+ * You may obtain a copy of the License at
+    }
+import org.opensearch.cli.UserException;
+            "description",
+                "Name: fake_plugin1",
+        env = TestEnvironment.newEnvironment(settings);
+    }
+        Files.createDirectories(home.resolve("plugins"));
+        PluginTestUtil.writePluginProperties(pluginDir, "description", "fake desc");
+}
+        MockTerminal terminal = new MockTerminal();
+ *
+            @Override
+                "Plugins directory: " + env.pluginsDir(),
+    public void setUp() throws Exception {
+        String[] params = { "-v" };
+                "Description: fake desc 1",
+            "name",
+ *
+ * Unless required by applicable law or agreed to in writing,
+            Version.CURRENT.toString(),
+                "Java Version: 1.8",
+        terminal = listPlugins(home, params);
+                "Folder name: custom-folder",
+                "Version: 1.0",
+    public void testPluginWithDependencies() throws Exception {
+            "classname",
+import org.opensearch.common.settings.Settings;
+import org.opensearch.cli.ExitCodes;
+                "Extended Plugins: []",
+    }
+        PluginTestUtil.writePluginProperties(
+        assertEquals("Plugins directory missing: " + env.pluginsDir(), e.getMessage());
+    }
+    public void testPluginWithoutVerboseMultiplePlugins() throws Exception {
+import java.util.stream.Collectors;
+            "version",
+        IOException e = expectThrows(IOException.class, () -> listPlugins(home));
+        final String classname,
+            "custom.foldername",
+            "1.0",
+        final boolean hasNativeController
+        final Environment env,
+            "1.0",
+    static MockTerminal listPlugins(Path home) throws Exception {
+import org.junit.Before;
+    public void testTwoPlugins() throws Exception {
+ * the Apache License, Version 2.0 (the "License"); you may
+        String output = terminal.getOutput();
+        MockTerminal terminal = listPlugins(home);
+    @Before
+        assertEquals(buildMultiline("fake"), terminal.getOutput());
+                return false;
+            Version.fromString("5.0.0").toString(),
+import java.util.Arrays;
+            env.pluginsDir().resolve("fake_plugin1"),
+ * this file be licensed under the Apache-2.0 license or a
+        assertEquals("property [name] is missing in [" + descriptorPath.toString() + "]", e.getMessage());
+            "name",
+        buildFakePlugin(env, "fake desc 2", "fake_plugin2", "org.fake2");
+    }
+        MockTerminal terminal = listPlugins(home, params);
+        String[] params = { "-v" };
+        return listPlugins(home, new String[0]);
+        );
+    public void testExistingIncompatiblePlugin() throws Exception {
+        );
+            "version",
+            "fake_plugin1",
+        super.setUp();
+import org.opensearch.plugins.PluginInfo;
+                "Version: 1.0",
+        buildFakePlugin(env, "fake desc 1", "fake_plugin1", "org.fake");
+                return new Environment(realSettings, home.resolve("config"));
+            "has.native.controller",
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals(buildMultiline("fake_plugin1", "fake_plugin2"), output);
                 "- Plugin information:",
                 "Name: fake_plugin",
-                "Description: fake desc",
-                "Version: 1.0",
-                "OpenSearch Version: " + Version.CURRENT.toString(),
-                "Java Version: 1.8",
-                "Native Controller: false",
-                "Extended Plugins: []",
-                " * Classname: org.fake",
-                "Folder name: custom-folder"
-            ),
-            terminal.getOutput()
-        );
-    }
-
-    public void testPluginWithNativeController() throws Exception {
-        buildFakePlugin(env, "fake desc 1", "fake_plugin1", "org.fake", true);
-        String[] params = { "-v" };
         MockTerminal terminal = listPlugins(home, params);
-        assertEquals(
-            buildMultiline(
-                "Plugins directory: " + env.pluginsDir(),
-                "fake_plugin1",
-                "- Plugin information:",
-                "Name: fake_plugin1",
-                "Description: fake desc 1",
-                "Version: 1.0",
-                "OpenSearch Version: " + Version.CURRENT.toString(),
-                "Java Version: 1.8",
-                "Native Controller: true",
-                "Extended Plugins: []",
-                " * Classname: org.fake",
-                "Folder name: custom-folder"
-            ),
-            terminal.getOutput()
-        );
-    }
-
-    public void testPluginWithVerboseMultiplePlugins() throws Exception {
-        buildFakePlugin(env, "fake desc 1", "fake_plugin1", "org.fake");
-        buildFakePlugin(env, "fake desc 2", "fake_plugin2", "org.fake2");
-        String[] params = { "-v" };
-        MockTerminal terminal = listPlugins(home, params);
-        assertEquals(
-            buildMultiline(
-                "Plugins directory: " + env.pluginsDir(),
-                "fake_plugin1",
-                "- Plugin information:",
-                "Name: fake_plugin1",
-                "Description: fake desc 1",
-                "Version: 1.0",
-                "OpenSearch Version: " + Version.CURRENT.toString(),
-                "Java Version: 1.8",
-                "Native Controller: false",
-                "Extended Plugins: []",
-                " * Classname: org.fake",
-                "Folder name: custom-folder",
-                "fake_plugin2",
-                "- Plugin information:",
-                "Name: fake_plugin2",
-                "Description: fake desc 2",
-                "Version: 1.0",
-                "OpenSearch Version: " + Version.CURRENT.toString(),
-                "Java Version: 1.8",
-                "Native Controller: false",
-                "Extended Plugins: []",
-                " * Classname: org.fake2",
-                "Folder name: custom-folder"
-            ),
-            terminal.getOutput()
-        );
-    }
-
-    public void testPluginWithoutVerboseMultiplePlugins() throws Exception {
-        buildFakePlugin(env, "fake desc 1", "fake_plugin1", "org.fake");
-        buildFakePlugin(env, "fake desc 2", "fake_plugin2", "org.fake2");
-        MockTerminal terminal = listPlugins(home, new String[0]);
-        String output = terminal.getOutput();
-        assertEquals(buildMultiline("fake_plugin1", "fake_plugin2"), output);
-    }
-
-    public void testPluginWithoutDescriptorFile() throws Exception {
-        final Path pluginDir = env.pluginsDir().resolve("fake1");
-        Files.createDirectories(pluginDir);
-        NoSuchFileException e = expectThrows(NoSuchFileException.class, () -> listPlugins(home));
-        assertEquals(pluginDir.resolve(PluginInfo.OPENSEARCH_PLUGIN_PROPERTIES).toString(), e.getFile());
-    }
-
-    public void testPluginWithWrongDescriptorFile() throws Exception {
-        final Path pluginDir = env.pluginsDir().resolve("fake1");
-        PluginTestUtil.writePluginProperties(pluginDir, "description", "fake desc");
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> listPlugins(home));
-        final Path descriptorPath = pluginDir.resolve(PluginInfo.OPENSEARCH_PLUGIN_PROPERTIES);
-        assertEquals("property [name] is missing in [" + descriptorPath.toString() + "]", e.getMessage());
-    }
-
-    public void testExistingIncompatiblePlugin() throws Exception {
-        PluginTestUtil.writePluginProperties(
-            env.pluginsDir().resolve("fake_plugin1"),
-            "description",
-            "fake desc 1",
-            "name",
-            "fake_plugin1",
             "version",
-            "1.0",
-            "opensearch.version",
-            Version.fromString("5.0.0").toString(),
-            "java.version",
-            System.getProperty("java.specification.version"),
-            "classname",
-            "org.fake1"
-        );
-        buildFakePlugin(env, "fake desc 2", "fake_plugin2", "org.fake2");
-
-        MockTerminal terminal = listPlugins(home);
-        String message = "plugin [fake_plugin1] was built for OpenSearch version 5.0.0 and is not compatible with " + Version.CURRENT;
-        assertEquals("fake_plugin1\nfake_plugin2\n", terminal.getOutput());
-        assertEquals("WARNING: " + message + "\n", terminal.getErrorOutput());
-
-        String[] params = { "-s" };
-        terminal = listPlugins(home, params);
-        assertEquals("fake_plugin1\nfake_plugin2\n", terminal.getOutput());
     }
-
-    public void testPluginWithDependencies() throws Exception {
-        PluginTestUtil.writePluginProperties(
-            env.pluginsDir().resolve("fake_plugin1"),
-            "description",
-            "fake desc 1",
-            "name",
-            "fake_plugin1",
-            "version",
-            "1.0",
-            "dependencies",
-            "{opensearch:\"" + Version.CURRENT + "\"}",
-            "java.version",
-            System.getProperty("java.specification.version"),
-            "classname",
             "org.fake1"
-        );
-        String[] params = { "-v" };
-        MockTerminal terminal = listPlugins(home, params);
-        assertEquals(
+import org.opensearch.test.OpenSearchTestCase;
+        assertEquals(ExitCodes.OK, status);
             buildMultiline(
-                "Plugins directory: " + env.pluginsDir(),
-                "fake_plugin1",
-                "- Plugin information:",
-                "Name: fake_plugin1",
-                "Description: fake desc 1",
-                "Version: 1.0",
-                "OpenSearch Version: " + Version.CURRENT.toString(),
-                "Java Version: " + System.getProperty("java.specification.version"),
-                "Native Controller: false",
-                "Extended Plugins: []",
-                " * Classname: org.fake1",
+        System.arraycopy(args, 0, argsAndHome, 0, args.length);
+            System.getProperty("java.specification.version"),
                 "Folder name: null"
-            ),
-            terminal.getOutput()
-        );
+                "OpenSearch Version: " + Version.CURRENT.toString(),
+                "- Plugin information:",
+import java.nio.file.Files;
+        buildFakePlugin(env, "fake desc 2", "fake_plugin2", "org.fake2");
+ */
+ * license agreements. See the NOTICE file distributed with
+        buildFakePlugin(env, description, name, classname, false);
+/*
+                "Version: 1.0",
+                "Description: fake desc 1",
+        String[] params = { "-v" };
+        final String name,
+                "Folder name: custom-folder"
+        buildFakePlugin(env, "fake desc 1", "fake_plugin1", "org.fake");
+    public void testPluginWithVerbose() throws Exception {
+        assertEquals(
+                "Native Controller: true",
+        argsAndHome[args.length] = "-Epath.home=" + home;
     }
-}
+                "OpenSearch Version: " + Version.CURRENT.toString(),
+        assertEquals("WARNING: " + message + "\n", terminal.getErrorOutput());
+            terminal.getOutput()
+            ),
+        buildFakePlugin(env, "fake desc", "fake", "org.fake");
+        PluginTestUtil.writePluginProperties(
+@LuceneTestCase.SuppressFileSystems("*")
+ */
+        );
+        final Path pluginDir = env.pluginsDir().resolve("fake1");
+            name,
+ * The OpenSearch Contributors require contributions made to
+        final Path descriptorPath = pluginDir.resolve(PluginInfo.OPENSEARCH_PLUGIN_PROPERTIES);
+                "fake_plugin",
+ * KIND, either express or implied.  See the License for the
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> listPlugins(home));
+import org.opensearch.plugins.PluginTestUtil;
+                "fake_plugin1",
+                "fake_plugin1",
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            "opensearch.version",
+            "fake_plugin1",
+import org.opensearch.env.Environment;
+ * GitHub history for details.
+                "Description: fake desc 1",
+            env.pluginsDir().resolve(name),
+                " * Classname: org.fake1",
+            buildMultiline(
+        String[] params = { "-s" };
+ * not use this file except in compliance with the License.
+                "Java Version: 1.8",
+                "Plugins directory: " + env.pluginsDir(),
+        assertEquals(
+import org.opensearch.cli.MockTerminal;
+        assertEquals(
+                "Native Controller: false",
+import org.opensearch.env.TestEnvironment;
+                "Java Version: 1.8",
+        PluginTestUtil.writePluginProperties(
+ * compatible open source license.
+            env.pluginsDir().resolve("fake_plugin1"),
+        throws IOException {
+    ) throws IOException {
+        String[] argsAndHome = new String[args.length + 1];
+                "Description: fake desc 2",
+            @Override
+ *
+                "Native Controller: false",
+        return Arrays.stream(args).collect(Collectors.joining("\n", "", "\n"));
+            ),
+            "dependencies",
+    public void testOnePlugin() throws Exception {
+        );

@@ -1,306 +1,269 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.cluster.repositories.put;
-
-import org.opensearch.Version;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.admin.cluster.crypto.CryptoSettings;
-import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.Map;
-
-import static org.opensearch.action.ValidateActions.addValidationError;
-import static org.opensearch.common.settings.Settings.Builder.EMPTY_SETTINGS;
-import static org.opensearch.common.settings.Settings.readSettingsFromStream;
-import static org.opensearch.common.settings.Settings.writeSettingsToStream;
-
 /**
- * Register repository request.
- * <p>
- * Registers a repository with given name, type and settings. If the repository with the same name already
- * exists in the cluster, the new repository will replace the existing repository.
- *
+import java.io.IOException;
+        return this;
  * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class PutRepositoryRequest extends AcknowledgedRequest<PutRepositoryRequest> implements ToXContentObject {
-
-    private String name;
-
-    private String type;
-
-    private boolean verify = true;
-
-    private Settings settings = EMPTY_SETTINGS;
-
-    private CryptoSettings cryptoSettings;
-
-    public PutRepositoryRequest(StreamInput in) throws IOException {
-        super(in);
-        name = in.readString();
-        type = in.readString();
-        settings = readSettingsFromStream(in);
-        verify = in.readBoolean();
-
-        if (in.getVersion().onOrAfter(Version.V_2_10_0)) {
-            cryptoSettings = in.readOptionalWriteable(CryptoSettings::new);
-        }
-    }
-
-    public PutRepositoryRequest() {}
-
     /**
-     * Constructs a new put repository request with the provided name.
-     */
-    public PutRepositoryRequest(String name) {
-        this.name = name;
     }
-
-    @Override
-    public ActionRequestValidationException validate() {
-        ActionRequestValidationException validationException = null;
-        if (name == null) {
-            validationException = addValidationError("name is missing", validationException);
-        }
-        if (type == null) {
-            validationException = addValidationError("type is missing", validationException);
-        }
-        if (cryptoSettings != null) {
-            validationException = cryptoSettings.validate();
-        }
-        return validationException;
-    }
-
+     * Sets the repository settings
     /**
-     * Sets the name of the repository.
-     *
      * @param name repository name
-     */
-    public PutRepositoryRequest name(String name) {
-        this.name = name;
-        return this;
-    }
-
     /**
-     * The name of the repository.
-     *
-     * @return repository name
-     */
-    public String name() {
-        return this.name;
-    }
-
-    /**
-     * The type of the repository
-     * <ul>
-     * <li>"fs" - shared filesystem repository</li>
-     * </ul>
-     *
-     * @param type repository type
-     * @return this request
-     */
-    public PutRepositoryRequest type(String type) {
-        this.type = type;
-        return this;
-    }
-
-    /**
-     * Returns repository type
-     *
+import org.opensearch.common.settings.Settings;
+import static org.opensearch.action.ValidateActions.addValidationError;
+     * Constructs a new put repository request with the provided name.
      * @return repository type
-     */
-    public String type() {
-        return this.type;
+     * <li>"fs" - shared filesystem repository</li>
     }
-
-    /**
-     * Sets the repository settings
-     *
-     * @param settings repository settings
-     * @return this request
-     */
-    public PutRepositoryRequest settings(Settings settings) {
-        this.settings = settings;
-        return this;
     }
-
-    /**
-     * Sets the repository settings
-     *
-     * @param settings repository settings
-     * @return this request
+ * SPDX-License-Identifier: Apache-2.0
+        return this.name;
+    @Override
      */
-    public PutRepositoryRequest settings(Settings.Builder settings) {
-        this.settings = settings.build();
-        return this;
+        super.writeTo(out);
+        builder.startObject();
     }
-
     /**
-     * Sets the repository settings.
-     *
-     * @param source repository settings in json or yaml format
-     * @param mediaType the content type of the source
-     * @return this request
-     */
-    public PutRepositoryRequest settings(String source, final MediaType mediaType) {
-        this.settings = Settings.builder().loadFromSource(source, mediaType).build();
-        return this;
-    }
-
     /**
-     * Sets the repository settings.
-     *
-     * @param source repository settings
-     * @return this request
-     */
-    public PutRepositoryRequest settings(Map<String, Object> source) {
-        this.settings = Settings.builder().loadFromMap(source).build();
-        return this;
-    }
-
-    /**
-     * Returns repository settings
-     *
-     * @return repository settings
-     */
-    public Settings settings() {
-        return this.settings;
-    }
-
-    /**
-     * Sets whether or not the repository should be verified after creation
-     */
-    public PutRepositoryRequest verify(boolean verify) {
-        this.verify = verify;
-        return this;
-    }
-
-    /**
-     * Returns true if repository should be verified after creation
-     */
-    public boolean verify() {
-        return this.verify;
-    }
-
-    /**
-     * Sets the repository crypto settings
-     *
-     * @param cryptoSettings repository crypto settings
-     * @return this request
      */
     public PutRepositoryRequest cryptoSettings(CryptoSettings cryptoSettings) {
-        this.cryptoSettings = cryptoSettings;
-        return this;
+            validationException = addValidationError("name is missing", validationException);
+ * this work for additional information regarding copyright
+        this.verify = verify;
+            cryptoSettings = in.readOptionalWriteable(CryptoSettings::new);
     }
-
-    /**
-     * Returns repository encryption settings
+ *
+package org.opensearch.action.admin.cluster.repositories.put;
      *
-     * @return repository encryption settings
+    public boolean verify() {
      */
-    public CryptoSettings cryptoSettings() {
-        return cryptoSettings;
-    }
-
-    /**
-     * Parses repository definition.
-     *
-     * @param repositoryDefinition repository definition
-     */
-    public PutRepositoryRequest source(Map<String, Object> repositoryDefinition) {
-        for (Map.Entry<String, Object> entry : repositoryDefinition.entrySet()) {
-            String name = entry.getKey();
-            if (name.equals("type")) {
-                type(entry.getValue().toString());
-            } else if (name.equals("settings")) {
-                if (!(entry.getValue() instanceof Map)) {
-                    throw new IllegalArgumentException("Malformed settings section, should include an inner object");
-                }
-                @SuppressWarnings("unchecked")
-                Map<String, Object> sub = (Map<String, Object>) entry.getValue();
-                settings(sub);
-            } else if (name.equals("crypto_settings")) {
-                if (!(entry.getValue() instanceof Map)) {
-                    throw new IllegalArgumentException("Malformed encryption_settings section, should include an inner object");
-                }
-                @SuppressWarnings("unchecked")
-                Map<String, Object> sub = (Map<String, Object>) entry.getValue();
-                CryptoSettings cryptoSettings = new CryptoSettings(sub);
-                cryptoSettings(cryptoSettings);
-            }
-        }
-        return this;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeString(name);
-        out.writeString(type);
-        writeSettingsToStream(settings, out);
-        out.writeBoolean(verify);
-        if (out.getVersion().onOrAfter(Version.V_2_10_0)) {
-            out.writeOptionalWriteable(cryptoSettings);
-        }
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.field("name", name);
-        builder.field("type", type);
-
-        builder.startObject("settings");
-        settings.toXContent(builder, params);
-        builder.endObject();
-
-        builder.field("verify", verify);
-
-        if (cryptoSettings != null) {
-            builder.startObject("crypto_settings");
-            cryptoSettings.toXContent(builder, params);
-            builder.endObject();
-        }
-
-        builder.endObject();
         return builder;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        if (cryptoSettings != null) {
+            } else if (name.equals("crypto_settings")) {
+        builder.startObject("settings");
+     * @return this request
+                if (!(entry.getValue() instanceof Map)) {
+     *
+ * KIND, either express or implied.  See the License for the
+     * Sets the repository crypto settings
+    public PutRepositoryRequest type(String type) {
     }
+    }
+    /**
+    /**
+ * The OpenSearch Contributors require contributions made to
+            String name = entry.getKey();
+import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
+                    throw new IllegalArgumentException("Malformed settings section, should include an inner object");
+                    throw new IllegalArgumentException("Malformed encryption_settings section, should include an inner object");
+        return validationException;
+     */
+        return this.settings;
+     */
+     */
+        return this;
+                settings(sub);
+     */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    public String type() {
+ * Unless required by applicable law or agreed to in writing,
+                @SuppressWarnings("unchecked")
+ */
+        this.settings = Settings.builder().loadFromMap(source).build();
+ * GitHub history for details.
+    }
+        out.writeString(type);
+    public CryptoSettings cryptoSettings() {
+ *
+        }
+import static org.opensearch.common.settings.Settings.readSettingsFromStream;
+        this.name = name;
+     */
+        }
+                }
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        if (out.getVersion().onOrAfter(Version.V_2_10_0)) {
+            } else if (name.equals("settings")) {
+import org.opensearch.core.xcontent.MediaType;
+                if (!(entry.getValue() instanceof Map)) {
+    /**
+        this.settings = settings;
+     */
+    public PutRepositoryRequest settings(Settings settings) {
+        return this;
+    @Override
+    private Settings settings = EMPTY_SETTINGS;
+     * @return this request
+    public PutRepositoryRequest(String name) {
+            validationException = cryptoSettings.validate();
+     */
+ */
+     * @return repository name
+ * not use this file except in compliance with the License.
+import org.opensearch.core.xcontent.ToXContentObject;
+ */
+    public Settings settings() {
+    /**
+import org.opensearch.core.common.io.stream.StreamInput;
+        if (cryptoSettings != null) {
+     *
+        return this;
+     */
+     * @param source repository settings
+@PublicApi(since = "1.0.0")
+        return this;
+                }
+            cryptoSettings.toXContent(builder, params);
+            if (name.equals("type")) {
+import org.opensearch.common.annotation.PublicApi;
+        type = in.readString();
+ * the Apache License, Version 2.0 (the "License"); you may
+ * Registers a repository with given name, type and settings. If the repository with the same name already
+ * You may obtain a copy of the License at
+                cryptoSettings(cryptoSettings);
+ * software distributed under the License is distributed on an
+     * @return repository encryption settings
+ * specific language governing permissions and limitations
+        builder.endObject();
+     * Sets the repository settings.
+    public PutRepositoryRequest settings(Settings.Builder settings) {
+import org.opensearch.core.xcontent.XContentBuilder;
+        builder.endObject();
+    public PutRepositoryRequest settings(Map<String, Object> source) {
 }
+import java.util.Map;
+     * Returns repository encryption settings
+    private boolean verify = true;
+                @SuppressWarnings("unchecked")
+    public PutRepositoryRequest verify(boolean verify) {
+        writeSettingsToStream(settings, out);
+     * @return this request
+     * @param settings repository settings
+        return this.type;
+        if (type == null) {
+    }
+     * @param type repository type
+ */
+/*
+import static org.opensearch.common.settings.Settings.Builder.EMPTY_SETTINGS;
+     */
+    /**
+import org.opensearch.action.admin.cluster.crypto.CryptoSettings;
+     * @param source repository settings in json or yaml format
+    /**
+import org.opensearch.Version;
+                Map<String, Object> sub = (Map<String, Object>) entry.getValue();
+    }
+/*
+     * Sets the repository settings
+import static org.opensearch.common.settings.Settings.writeSettingsToStream;
+        this.type = type;
+    private CryptoSettings cryptoSettings;
+        return this.verify;
+    }
+    public ActionRequestValidationException validate() {
+     *
+        }
+        return this;
+    }
+ * <p>
+        this.cryptoSettings = cryptoSettings;
+    }
+        ActionRequestValidationException validationException = null;
+        builder.field("verify", verify);
+        this.settings = Settings.builder().loadFromSource(source, mediaType).build();
+    }
+    private String type;
+    public PutRepositoryRequest settings(String source, final MediaType mediaType) {
+     * The name of the repository.
+ * Register repository request.
+        super(in);
+        return cryptoSettings;
+        for (Map.Entry<String, Object> entry : repositoryDefinition.entrySet()) {
+            out.writeOptionalWriteable(cryptoSettings);
+     * Returns true if repository should be verified after creation
+/*
+        this.settings = settings.build();
+        settings.toXContent(builder, params);
+     * </ul>
+ *
+        name = in.readString();
+import org.opensearch.core.common.io.stream.StreamOutput;
+     * <ul>
+ * license agreements. See the NOTICE file distributed with
+                type(entry.getValue().toString());
+    public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.action.ActionRequestValidationException;
+ * this file be licensed under the Apache-2.0 license or a
+     *
+    public PutRepositoryRequest source(Map<String, Object> repositoryDefinition) {
+        out.writeBoolean(verify);
+     * Sets the name of the repository.
+    }
+    public PutRepositoryRequest(StreamInput in) throws IOException {
+    @Override
+            }
+            builder.endObject();
+        settings = readSettingsFromStream(in);
+     * Returns repository settings
+     */
+     * Sets the repository settings.
+        if (in.getVersion().onOrAfter(Version.V_2_10_0)) {
+            builder.startObject("crypto_settings");
+        return this;
+     *
+        }
+            validationException = addValidationError("type is missing", validationException);
+        out.writeString(name);
+        }
+     *
+ * ownership. Elasticsearch licenses this file to you under
+    public String name() {
+     * @param mediaType the content type of the source
+    public PutRepositoryRequest() {}
+     * @param settings repository settings
+    public PutRepositoryRequest name(String name) {
+     */
+        return this;
+        builder.field("name", name);
+    }
+     *
+    /**
+     * @return repository settings
+ * under the License.
+ * exists in the cluster, the new repository will replace the existing repository.
+     */
+     * The type of the repository
+     * Sets whether or not the repository should be verified after creation
+ * compatible open source license.
+    private String name;
+    /**
+     *
+                Map<String, Object> sub = (Map<String, Object>) entry.getValue();
+        this.name = name;
+     * @return this request
+     *
+    }
+     *
+        }
+     * @return this request
+ * Modifications Copyright OpenSearch Contributors. See
+        return this;
+                CryptoSettings cryptoSettings = new CryptoSettings(sub);
+ *
+     * @param cryptoSettings repository crypto settings
+        verify = in.readBoolean();
+     * @param repositoryDefinition repository definition
+     * Parses repository definition.
+    /**
+    /**
+     * Returns repository type
+ * Licensed to Elasticsearch under one or more contributor
+     * @return this request
+        builder.field("type", type);
+    }
+        }
+        if (name == null) {
+    }
+     *
+public class PutRepositoryRequest extends AcknowledgedRequest<PutRepositoryRequest> implements ToXContentObject {

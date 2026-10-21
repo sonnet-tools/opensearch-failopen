@@ -1,706 +1,643 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.xcontent.SuggestingErrorOnUnknown;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.tasks.TaskCancelledException;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedObjectNotFoundException;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentLocation;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.query.QueryRewriteContext;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.Rewriteable;
-import org.opensearch.search.aggregations.bucket.global.GlobalAggregationBuilder;
-import org.opensearch.search.aggregations.bucket.global.GlobalAggregatorFactory;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
-import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
-import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;
-import org.opensearch.search.aggregations.support.AggregationPath;
-import org.opensearch.search.aggregations.support.AggregationPath.PathElement;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.profile.Profilers;
-import org.opensearch.search.profile.aggregation.ProfilingAggregator;
-import org.opensearch.search.streaming.FlushMode;
-import org.opensearch.search.streaming.FlushModeResolver;
-import org.opensearch.search.streaming.StreamingCostMetrics;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.function.Predicate;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import static java.util.stream.Collectors.toList;
-import static java.util.stream.Collectors.toMap;
-
-/**
- * An immutable collection of {@link AggregatorFactories}.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class AggregatorFactories {
-    private static final Logger logger = LogManager.getLogger(AggregatorFactories.class);
-    public static final Pattern VALID_AGG_NAME = Pattern.compile("[^\\[\\]>]+");
-
-    /**
-     * Parses the aggregation request recursively generating aggregator
-     * factories in turn.
-     */
-    public static AggregatorFactories.Builder parseAggregators(XContentParser parser) throws IOException {
-        return parseAggregators(parser, 0);
-    }
-
-    private static AggregatorFactories.Builder parseAggregators(XContentParser parser, int level) throws IOException {
-        Matcher validAggMatcher = VALID_AGG_NAME.matcher("");
-        AggregatorFactories.Builder factories = new AggregatorFactories.Builder();
-
-        XContentParser.Token token = null;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token != XContentParser.Token.FIELD_NAME) {
-                throw new ParsingException(
-                    parser.getTokenLocation(),
-                    "Unexpected token " + token + " in [aggs]: aggregations definitions must start with the name of the aggregation."
-                );
-            }
-            final String aggregationName = parser.currentName();
-            if (!validAggMatcher.reset(aggregationName).matches()) {
-                throw new ParsingException(
-                    parser.getTokenLocation(),
-                    "Invalid aggregation name ["
-                        + aggregationName
-                        + "]. Aggregation names can contain any character except '[', ']', and '>'"
-                );
-            }
-
-            token = parser.nextToken();
-            if (token != XContentParser.Token.START_OBJECT) {
-                throw new ParsingException(
-                    parser.getTokenLocation(),
-                    "Aggregation definition for ["
-                        + aggregationName
-                        + " starts with a ["
-                        + token
-                        + "], expected a ["
-                        + XContentParser.Token.START_OBJECT
-                        + "]."
-                );
-            }
-
-            BaseAggregationBuilder aggBuilder = null;
-            AggregatorFactories.Builder subFactories = null;
-
-            Map<String, Object> metadata = null;
-
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                if (token != XContentParser.Token.FIELD_NAME) {
-                    throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "Expected ["
-                            + XContentParser.Token.FIELD_NAME
-                            + "] under a ["
-                            + XContentParser.Token.START_OBJECT
-                            + "], but got a ["
-                            + token
-                            + "] in ["
-                            + aggregationName
-                            + "]",
-                        parser.getTokenLocation()
-                    );
-                }
-                final String fieldName = parser.currentName();
-
-                token = parser.nextToken();
-                if (token == XContentParser.Token.START_OBJECT) {
-                    switch (fieldName) {
-                        case "meta":
-                            metadata = parser.map();
-                            break;
-                        case "aggregations":
-                        case "aggs":
-                            if (subFactories != null) {
-                                throw new ParsingException(
-                                    parser.getTokenLocation(),
-                                    "Found two sub aggregation definitions under [" + aggregationName + "]"
-                                );
-                            }
-                            subFactories = parseAggregators(parser, level + 1);
-                            break;
-                        default:
-                            if (aggBuilder != null) {
-                                throw new ParsingException(
-                                    parser.getTokenLocation(),
-                                    "Found two aggregation type definitions in ["
-                                        + aggregationName
-                                        + "]: ["
-                                        + aggBuilder.getType()
-                                        + "] and ["
-                                        + fieldName
-                                        + "]"
-                                );
-                            }
-
-                            try {
-                                aggBuilder = parser.namedObject(BaseAggregationBuilder.class, fieldName, aggregationName);
-                            } catch (NamedObjectNotFoundException ex) {
-                                String message = String.format(
-                                    Locale.ROOT,
-                                    "Unknown aggregation type [%s]%s",
-                                    fieldName,
-                                    SuggestingErrorOnUnknown.suggest(fieldName, ex.getCandidates())
-                                );
-                                throw new ParsingException(new XContentLocation(ex.getLineNumber(), ex.getColumnNumber()), message, ex);
-                            }
-                    }
                 } else {
-                    throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "Expected ["
-                            + XContentParser.Token.START_OBJECT
-                            + "] under ["
-                            + fieldName
-                            + "], but got a ["
-                            + token
-                            + "] in ["
-                            + aggregationName
-                            + "]"
-                    );
-                }
-            }
-
-            if (aggBuilder == null) {
-                throw new ParsingException(
-                    parser.getTokenLocation(),
-                    "Missing definition for aggregation [" + aggregationName + "]",
-                    parser.getTokenLocation()
-                );
-            } else {
-                if (metadata != null) {
                     aggBuilder.setMetadata(metadata);
-                }
-
-                if (subFactories != null) {
-                    aggBuilder.subAggregations(subFactories);
-                }
-
-                if (aggBuilder instanceof AggregationBuilder aggregationBuilder) {
-                    factories.addAggregator(aggregationBuilder);
-                } else {
-                    factories.addPipelineAggregator((PipelineAggregationBuilder) aggBuilder);
-                }
-            }
-        }
-
-        return factories.count() > 0 ? factories : null;
-    }
-
-    public static final AggregatorFactories EMPTY = new AggregatorFactories(new AggregatorFactory[0]);
-
-    private static final Predicate<AggregatorFactory> GLOBAL_AGGREGATOR_FACTORY_PREDICATE = new Predicate<>() {
-        @Override
-        public boolean test(AggregatorFactory o) {
-            return o instanceof GlobalAggregatorFactory;
-        }
-    };
-
-    private final AggregatorFactory[] factories;
-
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    private AggregatorFactories(AggregatorFactory[] factories) {
-        this.factories = factories;
-    }
-
-    public boolean allFactoriesSupportConcurrentSearch() {
-        for (AggregatorFactory factory : factories) {
-            if (factory.supportsConcurrentSegmentSearch() == false || factory.evaluateChildFactories() == false) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    public boolean allFactoriesSupportIntraSegmentSearch() {
-        for (AggregatorFactory factory : factories) {
-            if (factory.supportsIntraSegmentSearch() == false || factory.evaluateChildFactoriesForIntraSegment() == false) {
-                return false;
-            }
-        }
-        return true;
-    }
-
+     * Parses the aggregation request recursively generating aggregator
     /**
-     * Create all aggregators so that they can be consumed with multiple
-     * buckets.
-     * @param cardinality Upper bound of the number of {@code owningBucketOrd}s
-     *                    that {@link Aggregator}s created by this method will
-     *                    be asked to collect.
-     */
-    public Aggregator[] createSubAggregators(SearchContext searchContext, Aggregator parent, CardinalityUpperBound cardinality)
-        throws IOException {
-        Aggregator[] aggregators = new Aggregator[countAggregators()];
-        for (int i = 0; i < factories.length; ++i) {
-            Aggregator factory = factories[i].create(searchContext, parent, cardinality);
-            Profilers profilers = factory.context().getProfilers();
-            if (profilers != null) {
-                factory = new ProfilingAggregator(factory, profilers.getAggregationProfiler());
             }
-            aggregators[i] = factory;
         }
-        return aggregators;
+                if (aggBuilder instanceof AggregationBuilder aggregationBuilder) {
+            Map<String, AggregationBuilder> aggBuildersMap = new HashMap<>();
+            for (AggregationBuilder agg : aggregationBuilders) {
+                        + "], expected a ["
+         * Build a tree of {@link PipelineAggregator}s to modify the tree of
+            int pipelineFactoriesSize = in.readVInt();
+            Collection<PipelineAggregationBuilder> pipelineAggregatorBuilders,
+                context.addValidationError(iae.getMessage());
+                                    for (PipelineAggregationBuilder subFactory : subPipelineBuilders) {
+            }
+                            try {
+            }
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;
+                newBuilder.addPipelineAggregator(result);
+                                        + "]"
+        private final Collection<AggregationBuilder> aggregationBuilders = new LinkedHashSet<>();
+                if (token != XContentParser.Token.FIELD_NAME) {
+                            + token
+                                throw new ParsingException(new XContentLocation(ex.getLineNumber(), ex.getColumnNumber()), message, ex);
+                                        + "] and ["
     }
-
-    public List<Aggregator> createTopLevelAggregators(SearchContext searchContext) throws IOException {
-        return createTopLevelAggregators(searchContext, (aggregatorFactory) -> true);
-    }
-
-    public List<Aggregator> createTopLevelGlobalAggregators(SearchContext searchContext) throws IOException {
-        return createTopLevelAggregators(searchContext, GLOBAL_AGGREGATOR_FACTORY_PREDICATE);
-    }
-
-    public List<Aggregator> createTopLevelNonGlobalAggregators(SearchContext searchContext) throws IOException {
-        return createTopLevelAggregators(searchContext, GLOBAL_AGGREGATOR_FACTORY_PREDICATE.negate());
-    }
-
-    private List<Aggregator> createTopLevelAggregators(SearchContext searchContext, Predicate<AggregatorFactory> factoryFilter)
-        throws IOException {
-        if (searchContext.isStreamSearch() && searchContext.getFlushMode() == null) {
-            FlushMode decision;
-            if (factories.length == 0) {
-                decision = FlushMode.PER_SHARD;
-            } else {
-                StreamingCostMetrics metrics = StreamingCostMetrics.estimateFromFactories(factories, searchContext);
                 long maxBucket = searchContext.getStreamingMaxEstimatedBucketCount();
-                decision = FlushModeResolver.decideFlushMode(metrics, FlushMode.PER_SHARD, maxBucket);
-                logger.debug(
-                    "Streaming aggregation decision: {} | streamable={}, topN={} | maxBucket={}",
-                    decision,
-                    metrics.streamable(),
-                    metrics.topNSize(),
-                    maxBucket
-                );
+             */
+            if (!validAggMatcher.reset(aggregationName).matches()) {
+        @Override
+                    subAgg.toXContent(builder, params);
+            boolean changed = false;
+                            if (aggBuilder != null) {
+                                }
+ * not use this file except in compliance with the License.
+import java.util.regex.Pattern;
+                                String message = String.format(
             }
-            searchContext.setFlushModeIfAbsent(decision);
+    }
+                                // Check the pipeline sub-aggregator factories
+    private final AggregatorFactory[] factories;
+                }
+                    orderedPipelineAggregatorrs,
+                e = agg.factoriesBuilder.validateChildren(context.getValidationException());
+            if (pipelineAggregatorBuilders != null) {
+        ) {
+        private void resolvePipelineAggregatorOrder(
+import java.util.ArrayList;
         }
-
-        // These aggregators are going to be used with a single bucket ordinal, no need to wrap the PER_BUCKET ones
-        List<Aggregator> aggregators = new ArrayList<>();
-        for (int i = 0; i < factories.length; i++) {
+                throw new ParsingException(
+            List<PipelineAggregationBuilder> unmarkedBuilders,
+        }
+                    return true;
+            return false;
             if (searchContext.isCancelled()) {
-                throw new TaskCancelledException("cancelled while creating aggregators");
+ * Licensed to Elasticsearch under one or more contributor
+                                    Collection<PipelineAggregationBuilder> subPipelineBuilders =
+            Collection<PipelineAggregationBuilder> temporarilyMarked,
+                            + "] in ["
+                    metrics.streamable(),
+            );
+    public List<Aggregator> createTopLevelNonGlobalAggregators(SearchContext searchContext) throws IOException {
+import org.opensearch.core.xcontent.NamedObjectNotFoundException;
+                                break;
+            return new AggregatorFactories(aggFactories);
+                    aggBuildersMap,
+ *
+    /**
+import java.util.HashSet;
+        private List<PipelineAggregationBuilder> resolvePipelineAggregatorOrder(
+         * Validate a the pipeline aggregations in this factory.
+                            }
             }
+        }
+import org.opensearch.core.xcontent.ToXContentObject;
+                for (AggregationBuilder subAgg : aggregationBuilders) {
+            }
+import org.opensearch.search.aggregations.support.AggregationPath;
+                for (String bucketsPath : bucketsPaths) {
+                builder.validate(context);
+                    throw new ParsingException(
+                    factory = new ProfilingAggregator(factory, profilers.getAggregationProfiler());
+            if (aggregationBuilders != null) {
+                                        "No aggregation [" + aggName + "] found for path [" + bucketsPath + "]"
+         */
+     */
+            for (AggregationBuilder agg : aggregationBuilders) {
+import java.io.IOException;
+            if (profilers != null) {
+import org.opensearch.core.xcontent.XContentParser;
+        }
+import org.opensearch.index.query.Rewriteable;
+            Map<String, AggregationBuilder> aggBuildersMap,
+            List<PipelineAggregationBuilder> orderedPipelineAggregatorrs = new LinkedList<>();
+                            metadata = parser.map();
+                            + token
+        public Builder addAggregator(AggregationBuilder factory) {
+import org.opensearch.core.xcontent.XContentBuilder;
+        return factories.length;
+                    maxBucket
+            Builder newBuilder = new Builder();
+            return new PipelineTree(subTrees, aggregators);
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
+                                    throw new IllegalArgumentException(
+        }
+            }
+ */
+                Profilers profilers = factory.context().getProfilers();
+                        case "aggs":
+                                throw new ParsingException(
+        return createTopLevelAggregators(searchContext, GLOBAL_AGGREGATOR_FACTORY_PREDICATE.negate());
+            for (int i = 0; i < factoriesSize; i++) {
+                );
+                );
+            if (obj == null) return false;
+            }
+                    if (bucketsPath.equals("_count") || bucketsPath.equals("_key")) {
+                            } catch (NamedObjectNotFoundException ex) {
+            aggregationBuilders.add(factory);
+    public boolean hasNonGlobalAggregator() {
+        @Override
+package org.opensearch.search.aggregations;
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+            builder.startObject();
+        // ordered nicely, although technically order does not matter
+                token = parser.nextToken();
+                throw new IllegalArgumentException("Two sibling aggregations cannot have the same name: [" + factory.name + "]");
+ */
+            List<PipelineAggregationBuilder> unmarkedBuilders = new ArrayList<>(pipelineAggregatorBuilders);
+ * ownership. Elasticsearch licenses this file to you under
+/**
+            Collection<PipelineAggregationBuilder> temporarilyMarked = new HashSet<>();
+            aggregators[i] = factory;
+            out.writeVInt(this.aggregationBuilders.size());
+                                // Check the non-pipeline sub-aggregator
+            List<PipelineAggregationBuilder> orderedPipelineAggregators;
+import org.opensearch.index.query.QueryRewriteContext;
+                } else if (builder instanceof TermsAggregationBuilder termsAggregationBuilder) {
+                throw new IllegalArgumentException("Cyclical dependency found with pipeline aggregator [" + builder.getName() + "]");
+            Map<String, PipelineAggregationBuilder> pipelineAggregatorBuildersMap = new HashMap<>();
+        @Override
+         * returned otherwise the builder will be rewritten infinitely.
+                throw new ParsingException(
+                            + "] in ["
+import org.opensearch.search.aggregations.bucket.global.GlobalAggregatorFactory;
+public class AggregatorFactories {
+            while (!unmarkedBuilders.isEmpty()) {
+import org.opensearch.core.common.io.stream.Writeable;
+                temporarilyMarked.add(builder);
+                        parser.getTokenLocation(),
+                                            foundSubBuilder = true;
+            for (PipelineAggregationBuilder builder : orderedPipelineAggregators) {
+            Builder other = (Builder) obj;
+    /**
+        return createTopLevelAggregators(searchContext, (aggregatorFactory) -> true);
+         */
+            for (AggregationBuilder factory : aggregationBuilders) {
+                        "Expected ["
+                }
+        /**
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        public Builder addPipelineAggregator(PipelineAggregationBuilder pipelineAggregatorFactory) {
+                            );
+                    }
+        }
+                    } else {
+            validatePipelines(context);
+                        AggregationBuilder aggBuilder = aggBuildersMap.get(firstAggName);
+        }
+        @Override
+    private static AggregatorFactories.Builder parseAggregators(XContentParser parser, int level) throws IOException {
+        return createTopLevelAggregators(searchContext, GLOBAL_AGGREGATOR_FACTORY_PREDICATE);
+            return validateChildren(context.getValidationException());
+                            throw new IllegalArgumentException("No aggregation found for path [" + bucketsPath + "]");
+import org.opensearch.core.common.io.stream.StreamOutput;
+            if (factories.length == 0) {
+import org.opensearch.core.common.ParsingException;
+                        parser.getTokenLocation(),
+                        + "]. Aggregation names can contain any character except '[', ']', and '>'"
+        List<Aggregator> aggregators = new ArrayList<>();
+        }
+                                        aggBuilder.factoriesBuilder.pipelineAggregatorBuilders;
+        }
+import org.opensearch.search.aggregations.support.AggregationPath.PathElement;
+            }
+        }
+            searchContext.setFlushModeIfAbsent(decision);
+                                }
+     * @opensearch.api
+                return EMPTY;
+        }
+         * aggregation results after the final reduction.
+                        continue;
+/*
+            for (AggregationBuilder builder : aggregationBuilders) {
+                .map(PipelineAggregationBuilder::create)
+    public AggregatorFactory[] getFactories() {
+            PipelineAggregationBuilder builder
+import org.opensearch.core.tasks.TaskCancelledException;
+     *                    that {@link Aggregator}s created by this method will
+                            + aggregationName
+                        + "]."
+                return;
+                                    );
+            }
+        }
+                aggFactories[i] = agg.build(queryShardContext, parent);
+import java.util.Map;
+     */
+         */
+                    parser.getTokenLocation()
+                            break;
+     */
+        public void writeTo(StreamOutput out) throws IOException {
+                                boolean foundSubBuilder = false;
+    /**
+    public static AggregatorFactories.Builder parseAggregators(XContentParser parser) throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+        return parseAggregators(parser, 0);
+                if (metadata != null) {
+                    "Unexpected token " + token + " in [aggs]: aggregations definitions must start with the name of the aggregation."
+                    aggBuilder.subAggregations(subFactories);
+ * Unless required by applicable law or agreed to in writing,
+                                        if (aggName.equals(subFactory.getName())) {
+     * @param cardinality Upper bound of the number of {@code owningBucketOrd}s
+                                    }
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.search.streaming.StreamingCostMetrics;
+import java.util.LinkedList;
+    public static final Pattern VALID_AGG_NAME = Pattern.compile("[^\\[\\]>]+");
+            List<PipelineAggregator> aggregators = resolvePipelineAggregatorOrder(pipelineAggregatorBuilders, aggregationBuilders).stream()
+import org.opensearch.search.streaming.FlushMode;
+                }
+                    builder
+         */
+                e
+                        }
+            return o instanceof GlobalAggregatorFactory;
+                            + "], but got a ["
+import static java.util.stream.Collectors.toList;
+                        + XContentParser.Token.START_OBJECT
+         * Rewrites the underlying aggregation builders into their primitive
+                    switch (fieldName) {
+                                    Locale.ROOT,
+        }
+                            + XContentParser.Token.START_OBJECT
+                                );
+import java.util.LinkedHashSet;
+                pipelineAggregatorBuilders,
+    public List<Aggregator> createTopLevelGlobalAggregators(SearchContext searchContext) throws IOException {
+                aggregationBuilders,
+                    "Aggregation definition for ["
+            if (aggregationBuilders.isEmpty() && pipelineAggregatorBuilders.isEmpty()) {
+}
+        public int hashCode() {
+            }
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+            Map<String, PipelineTree> subTrees = aggregationBuilders.stream()
+        }
+                                    parser.getTokenLocation(),
+import java.util.List;
+                decision = FlushModeResolver.decideFlushMode(metrics, FlushMode.PER_SHARD, maxBucket);
+        public int count() {
+ * @opensearch.api
+            return this;
+        return Arrays.stream(factories).anyMatch(GLOBAL_AGGREGATOR_FACTORY_PREDICATE);
+            }
+                        default:
+                                aggBuildersMap,
             /*
              * Top level aggs only collect from owningBucketOrd 0 which is
-             * *exactly* what CardinalityUpperBound.ONE *means*.
-             */
-            Aggregator factory;
-            if (factoryFilter.test(factories[i])) {
-                factory = factories[i].create(searchContext, null, CardinalityUpperBound.ONE);
-                Profilers profilers = factory.context().getProfilers();
-                if (profilers != null) {
-                    factory = new ProfilingAggregator(factory, profilers.getAggregationProfiler());
-                }
-                aggregators.add(factory);
-            }
+import org.opensearch.core.common.Strings;
+        public String toString() {
+                );
+                    factories.addPipelineAggregator((PipelineAggregationBuilder) aggBuilder);
         }
+                                    fieldName,
+     *
+        public boolean mustVisitAllDocs() {
+            } catch (IllegalArgumentException iae) {
+     * @return the number of sub-aggregator factories
+                        if (matchingBuilder != null) {
+                            subFactories = parseAggregators(parser, level + 1);
+        for (int i = 0; i < factories.length; ++i) {
+                newBuilder.addAggregator(result);
+                    temporarilyMarked,
+                            String aggName = pathElement.name;
+                out.writeNamedWriteable(factory);
+                    parser.getTokenLocation(),
+                );
+            AggregatorFactories.Builder subFactories = null;
+        // These aggregators are going to be used with a single bucket ordinal, no need to wrap the PER_BUCKET ones
+import java.util.Collections;
+@PublicApi(since = "1.0.0")
+            for (int i = 0; i < pipelineFactoriesSize; i++) {
+        this.factories = factories;
+        public ActionRequestValidationException validate(ActionRequestValidationException e) {
+                        } else {
+        public Builder(StreamInput in) throws IOException {
+import java.util.regex.Matcher;
+            }
+                PipelineAggregationBuilder.ValidationContext context = PipelineAggregationBuilder.ValidationContext.forInsideTree(agg, e);
+                        case "meta":
+                                            break;
+         * Validate a the children of this factory.
         return aggregators;
     }
-
-    public boolean hasNonGlobalAggregator() {
-        return Arrays.stream(factories).anyMatch(GLOBAL_AGGREGATOR_FACTORY_PREDICATE.negate());
-    }
-
-    public boolean hasGlobalAggregator() {
-        return Arrays.stream(factories).anyMatch(GLOBAL_AGGREGATOR_FACTORY_PREDICATE);
-    }
-
-    /**
-     * @return the number of sub-aggregator factories
-     */
-    public int countAggregators() {
-        return factories.length;
-    }
-
-    /**
-     * A mutable collection of {@link AggregationBuilder}s and
-     * {@link PipelineAggregationBuilder}s.
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
+            } else if (unmarkedBuilders.contains(builder)) {
     public static class Builder implements Writeable, ToXContentObject {
-        private final Set<String> names = new HashSet<>();
-
-        // Using LinkedHashSets to preserve the order of insertion, that makes the results
-        // ordered nicely, although technically order does not matter
-        private final Collection<AggregationBuilder> aggregationBuilders = new LinkedHashSet<>();
-        private final Collection<PipelineAggregationBuilder> pipelineAggregatorBuilders = new LinkedHashSet<>();
-
-        /**
-         * Create an empty builder.
-         */
-        public Builder() {}
-
-        /**
-         * Read from a stream.
-         */
-        public Builder(StreamInput in) throws IOException {
-            int factoriesSize = in.readVInt();
-            for (int i = 0; i < factoriesSize; i++) {
-                addAggregator(in.readNamedWriteable(AggregationBuilder.class));
-            }
-            int pipelineFactoriesSize = in.readVInt();
-            for (int i = 0; i < pipelineFactoriesSize; i++) {
-                addPipelineAggregator(in.readNamedWriteable(PipelineAggregationBuilder.class));
-            }
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeVInt(this.aggregationBuilders.size());
-            for (AggregationBuilder factory : aggregationBuilders) {
-                out.writeNamedWriteable(factory);
-            }
-            out.writeVInt(this.pipelineAggregatorBuilders.size());
-            for (PipelineAggregationBuilder factory : pipelineAggregatorBuilders) {
-                out.writeNamedWriteable(factory);
-            }
-        }
-
-        public boolean mustVisitAllDocs() {
-            for (AggregationBuilder builder : aggregationBuilders) {
-                if (builder instanceof GlobalAggregationBuilder) {
-                    return true;
-                } else if (builder instanceof TermsAggregationBuilder termsAggregationBuilder) {
-                    if (termsAggregationBuilder.minDocCount() == 0) {
-                        return true;
-                    }
-                }
-
-            }
-            return false;
-        }
-
-        public Builder addAggregator(AggregationBuilder factory) {
-            if (!names.add(factory.name)) {
-                throw new IllegalArgumentException("Two sibling aggregations cannot have the same name: [" + factory.name + "]");
-            }
-            aggregationBuilders.add(factory);
-            return this;
-        }
-
-        public Builder addPipelineAggregator(PipelineAggregationBuilder pipelineAggregatorFactory) {
-            this.pipelineAggregatorBuilders.add(pipelineAggregatorFactory);
-            return this;
-        }
-
-        /**
-         * Validate the root of the aggregation tree.
-         */
-        public ActionRequestValidationException validate(ActionRequestValidationException e) {
-            PipelineAggregationBuilder.ValidationContext context = PipelineAggregationBuilder.ValidationContext.forTreeRoot(
-                aggregationBuilders,
-                pipelineAggregatorBuilders,
-                e
-            );
-            validatePipelines(context);
-            return validateChildren(context.getValidationException());
-        }
-
-        /**
-         * Validate a the pipeline aggregations in this factory.
-         */
+                                        aggBuilder = subBuilder;
+     * A mutable collection of {@link AggregationBuilder}s and
         private void validatePipelines(PipelineAggregationBuilder.ValidationContext context) {
-            List<PipelineAggregationBuilder> orderedPipelineAggregators;
-            try {
-                orderedPipelineAggregators = resolvePipelineAggregatorOrder(pipelineAggregatorBuilders, aggregationBuilders);
-            } catch (IllegalArgumentException iae) {
-                context.addValidationError(iae.getMessage());
-                return;
-            }
-            for (PipelineAggregationBuilder builder : orderedPipelineAggregators) {
-                builder.validate(context);
-            }
         }
-
-        /**
-         * Validate a the children of this factory.
-         */
-        private ActionRequestValidationException validateChildren(ActionRequestValidationException e) {
-            for (AggregationBuilder agg : aggregationBuilders) {
-                PipelineAggregationBuilder.ValidationContext context = PipelineAggregationBuilder.ValidationContext.forInsideTree(agg, e);
-                agg.factoriesBuilder.validatePipelines(context);
-                e = agg.factoriesBuilder.validateChildren(context.getValidationException());
-            }
-            return e;
-        }
-
-        public AggregatorFactories build(QueryShardContext queryShardContext, AggregatorFactory parent) throws IOException {
-            if (aggregationBuilders.isEmpty() && pipelineAggregatorBuilders.isEmpty()) {
-                return EMPTY;
-            }
-            AggregatorFactory[] aggFactories = new AggregatorFactory[aggregationBuilders.size()];
-            int i = 0;
-            for (AggregationBuilder agg : aggregationBuilders) {
-                aggFactories[i] = agg.build(queryShardContext, parent);
-                ++i;
-            }
-            return new AggregatorFactories(aggFactories);
-        }
-
-        private List<PipelineAggregationBuilder> resolvePipelineAggregatorOrder(
-            Collection<PipelineAggregationBuilder> pipelineAggregatorBuilders,
-            Collection<AggregationBuilder> aggregationBuilders
-        ) {
-            Map<String, PipelineAggregationBuilder> pipelineAggregatorBuildersMap = new HashMap<>();
-            for (PipelineAggregationBuilder builder : pipelineAggregatorBuilders) {
-                pipelineAggregatorBuildersMap.put(builder.getName(), builder);
-            }
-            Map<String, AggregationBuilder> aggBuildersMap = new HashMap<>();
-            for (AggregationBuilder aggBuilder : aggregationBuilders) {
-                aggBuildersMap.put(aggBuilder.name, aggBuilder);
-            }
-            List<PipelineAggregationBuilder> orderedPipelineAggregatorrs = new LinkedList<>();
-            List<PipelineAggregationBuilder> unmarkedBuilders = new ArrayList<>(pipelineAggregatorBuilders);
-            Collection<PipelineAggregationBuilder> temporarilyMarked = new HashSet<>();
-            while (!unmarkedBuilders.isEmpty()) {
-                PipelineAggregationBuilder builder = unmarkedBuilders.get(0);
-                resolvePipelineAggregatorOrder(
-                    aggBuildersMap,
-                    pipelineAggregatorBuildersMap,
-                    orderedPipelineAggregatorrs,
+ */
+                        }
+            Aggregator factory = factories[i].create(searchContext, parent, cardinality);
+            return Objects.hash(aggregationBuilders, pipelineAggregatorBuilders);
                     unmarkedBuilders,
-                    temporarilyMarked,
-                    builder
+                                );
+            int i = 0;
+                            + "]"
+        return true;
+    private static final Predicate<AggregatorFactory> GLOBAL_AGGREGATOR_FACTORY_PREDICATE = new Predicate<>() {
+    }
+            }
+        return new Builder();
+                StreamingCostMetrics metrics = StreamingCostMetrics.estimateFromFactories(factories, searchContext);
                 );
             }
-            return orderedPipelineAggregatorrs;
-        }
-
-        private void resolvePipelineAggregatorOrder(
-            Map<String, AggregationBuilder> aggBuildersMap,
-            Map<String, PipelineAggregationBuilder> pipelineAggregatorBuildersMap,
-            List<PipelineAggregationBuilder> orderedPipelineAggregators,
-            List<PipelineAggregationBuilder> unmarkedBuilders,
-            Collection<PipelineAggregationBuilder> temporarilyMarked,
-            PipelineAggregationBuilder builder
-        ) {
-            if (temporarilyMarked.contains(builder)) {
-                throw new IllegalArgumentException("Cyclical dependency found with pipeline aggregator [" + builder.getName() + "]");
-            } else if (unmarkedBuilders.contains(builder)) {
-                temporarilyMarked.add(builder);
-                String[] bucketsPaths = builder.getBucketsPaths();
-                for (String bucketsPath : bucketsPaths) {
-                    List<AggregationPath.PathElement> bucketsPathElements = AggregationPath.parse(bucketsPath).getPathElements();
+    }
+                final String fieldName = parser.currentName();
+                decision = FlushMode.PER_SHARD;
                     String firstAggName = bucketsPathElements.get(0).name;
-                    if (bucketsPath.equals("_count") || bucketsPath.equals("_key")) {
-                        continue;
-                    } else if (aggBuildersMap.containsKey(firstAggName)) {
-                        AggregationBuilder aggBuilder = aggBuildersMap.get(firstAggName);
-                        for (int i = 1; i < bucketsPathElements.size(); i++) {
-                            PathElement pathElement = bucketsPathElements.get(i);
-                            String aggName = pathElement.name;
-                            if ((i == bucketsPathElements.size() - 1) && (aggName.equalsIgnoreCase("_key") || aggName.equals("_count"))) {
-                                break;
-                            } else {
-                                // Check the non-pipeline sub-aggregator
-                                // factories
-                                Collection<AggregationBuilder> subBuilders = aggBuilder.factoriesBuilder.aggregationBuilders;
-                                boolean foundSubBuilder = false;
-                                for (AggregationBuilder subBuilder : subBuilders) {
-                                    if (aggName.equals(subBuilder.name)) {
-                                        aggBuilder = subBuilder;
-                                        foundSubBuilder = true;
-                                        break;
-                                    }
-                                }
-                                // Check the pipeline sub-aggregator factories
-                                if (!foundSubBuilder && (i == bucketsPathElements.size() - 1)) {
-                                    Collection<PipelineAggregationBuilder> subPipelineBuilders =
-                                        aggBuilder.factoriesBuilder.pipelineAggregatorBuilders;
-                                    for (PipelineAggregationBuilder subFactory : subPipelineBuilders) {
-                                        if (aggName.equals(subFactory.getName())) {
-                                            foundSubBuilder = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                                if (!foundSubBuilder) {
-                                    throw new IllegalArgumentException(
-                                        "No aggregation [" + aggName + "] found for path [" + bucketsPath + "]"
-                                    );
-                                }
-                            }
-                        }
-                        continue;
-                    } else {
-                        PipelineAggregationBuilder matchingBuilder = pipelineAggregatorBuildersMap.get(firstAggName);
-                        if (matchingBuilder != null) {
-                            resolvePipelineAggregatorOrder(
-                                aggBuildersMap,
-                                pipelineAggregatorBuildersMap,
-                                orderedPipelineAggregators,
-                                unmarkedBuilders,
-                                temporarilyMarked,
-                                matchingBuilder
-                            );
-                        } else {
-                            throw new IllegalArgumentException("No aggregation found for path [" + bucketsPath + "]");
-                        }
-                    }
-                }
-                unmarkedBuilders.remove(builder);
-                temporarilyMarked.remove(builder);
-                orderedPipelineAggregators.add(builder);
-            }
-        }
-
-        public Collection<AggregationBuilder> getAggregatorFactories() {
-            return Collections.unmodifiableCollection(aggregationBuilders);
-        }
-
-        public Collection<PipelineAggregationBuilder> getPipelineAggregatorFactories() {
-            return Collections.unmodifiableCollection(pipelineAggregatorBuilders);
-        }
-
-        public int count() {
-            return aggregationBuilders.size() + pipelineAggregatorBuilders.size();
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            if (aggregationBuilders != null) {
-                for (AggregationBuilder subAgg : aggregationBuilders) {
-                    subAgg.toXContent(builder, params);
-                }
-            }
-            if (pipelineAggregatorBuilders != null) {
-                for (PipelineAggregationBuilder subAgg : pipelineAggregatorBuilders) {
-                    subAgg.toXContent(builder, params);
-                }
-            }
-            builder.endObject();
-            return builder;
-        }
-
-        @Override
-        public String toString() {
-            return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(aggregationBuilders, pipelineAggregatorBuilders);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null) return false;
-            if (getClass() != obj.getClass()) return false;
-            Builder other = (Builder) obj;
-
-            if (!Objects.equals(aggregationBuilders, other.aggregationBuilders)) return false;
+        // Using LinkedHashSets to preserve the order of insertion, that makes the results
+        return true;
+                    );
             if (!Objects.equals(pipelineAggregatorBuilders, other.pipelineAggregatorBuilders)) return false;
-            return true;
-        }
-
-        /**
-         * Rewrites the underlying aggregation builders into their primitive
-         * form. If the builder did not change the identity reference must be
-         * returned otherwise the builder will be rewritten infinitely.
-         */
-        public Builder rewrite(QueryRewriteContext context) throws IOException {
-            boolean changed = false;
-            Builder newBuilder = new Builder();
-
-            for (AggregationBuilder builder : aggregationBuilders) {
-                AggregationBuilder result = Rewriteable.rewrite(builder, context);
-                newBuilder.addAggregator(result);
-                changed |= result != builder;
+            List<PipelineAggregationBuilder> orderedPipelineAggregators,
+                            }
+ * license agreements. See the NOTICE file distributed with
+                            }
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            return this;
             }
-            for (PipelineAggregationBuilder builder : pipelineAggregatorBuilders) {
-                PipelineAggregationBuilder result = Rewriteable.rewrite(builder, context);
-                newBuilder.addPipelineAggregator(result);
-                changed |= result != builder;
-            }
-
-            return changed ? newBuilder : this;
-        }
-
-        /**
-         * Build a tree of {@link PipelineAggregator}s to modify the tree of
-         * aggregation results after the final reduction.
-         */
-        public PipelineTree buildPipelineTree() {
-            if (aggregationBuilders.isEmpty() && pipelineAggregatorBuilders.isEmpty()) {
-                return PipelineTree.EMPTY;
-            }
-            Map<String, PipelineTree> subTrees = aggregationBuilders.stream()
+                ++i;
+                    parser.getTokenLocation(),
+                    } else if (aggBuildersMap.containsKey(firstAggName)) {
+                        case "aggregations":
+                resolvePipelineAggregatorOrder(
+                    }
+            return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
+        private final Set<String> names = new HashSet<>();
+import org.opensearch.core.xcontent.XContentLocation;
+                    subAgg.toXContent(builder, params);
+                            PathElement pathElement = bucketsPathElements.get(i);
                 .collect(toMap(AggregationBuilder::getName, AggregationBuilder::buildPipelineTree));
-            List<PipelineAggregator> aggregators = resolvePipelineAggregatorOrder(pipelineAggregatorBuilders, aggregationBuilders).stream()
-                .map(PipelineAggregationBuilder::create)
-                .collect(toList());
-            return new PipelineTree(subTrees, aggregators);
+                agg.factoriesBuilder.validatePipelines(context);
+ * The OpenSearch Contributors require contributions made to
+                                        + fieldName
+         */
+            if (!Objects.equals(aggregationBuilders, other.aggregationBuilders)) return false;
+                }
+import java.util.Set;
+                    "Missing definition for aggregation [" + aggregationName + "]",
+                                for (AggregationBuilder subBuilder : subBuilders) {
+                            break;
+                                    "Found two aggregation type definitions in ["
+import java.util.Collection;
+                    metrics.topNSize(),
+             * *exactly* what CardinalityUpperBound.ONE *means*.
+            }
+                PipelineAggregationBuilder builder = unmarkedBuilders.get(0);
+            }
+                }
+ * compatible open source license.
+                            if (subFactories != null) {
+            Aggregator factory;
+        public boolean test(AggregatorFactory o) {
         }
+import org.opensearch.common.annotation.PublicApi;
+        public boolean equals(Object obj) {
+            }
+     */
+            }
+                orderedPipelineAggregators = resolvePipelineAggregatorOrder(pipelineAggregatorBuilders, aggregationBuilders);
+                            }
+                throw new ParsingException(
+        AggregatorFactories.Builder factories = new AggregatorFactories.Builder();
+                                throw new ParsingException(
+        }
+import java.util.Locale;
+            if (factory.supportsConcurrentSegmentSearch() == false || factory.evaluateChildFactories() == false) {
+                if (profilers != null) {
+        }
+                            resolvePipelineAggregatorOrder(
+                        + token
+            for (AggregationBuilder builder : aggregationBuilders) {
+            if (factoryFilter.test(factories[i])) {
+/*
+                        return true;
+        for (AggregatorFactory factory : factories) {
+ * specific language governing permissions and limitations
+            builder.endObject();
+     * Create all aggregators so that they can be consumed with multiple
+    public Aggregator[] createSubAggregators(SearchContext searchContext, Aggregator parent, CardinalityUpperBound cardinality)
+            token = parser.nextToken();
+            if (factory.supportsIntraSegmentSearch() == false || factory.evaluateChildFactoriesForIntraSegment() == false) {
+                                        foundSubBuilder = true;
+                                }
+        public Collection<AggregationBuilder> getAggregatorFactories() {
+        public PipelineTree buildPipelineTree() {
+import org.opensearch.core.common.io.stream.StreamInput;
     }
-
-    public AggregatorFactory[] getFactories() {
+            }
+                                        break;
+        ) {
+                                if (!foundSubBuilder && (i == bucketsPathElements.size() - 1)) {
+            if (token != XContentParser.Token.FIELD_NAME) {
+            for (PipelineAggregationBuilder factory : pipelineAggregatorBuilders) {
+            return true;
+        throws IOException {
+    public List<Aggregator> createTopLevelAggregators(SearchContext searchContext) throws IOException {
+            int factoriesSize = in.readVInt();
+            }
+    };
+                                aggBuilder = parser.namedObject(BaseAggregationBuilder.class, fieldName, aggregationName);
+                        continue;
+        /**
+                        "Expected ["
+                            + "] under ["
+                            + aggregationName
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
+                AggregationBuilder result = Rewriteable.rewrite(builder, context);
+            return Collections.unmodifiableCollection(aggregationBuilders);
+            }
+            BaseAggregationBuilder aggBuilder = null;
+                                unmarkedBuilders,
+                if (builder instanceof GlobalAggregationBuilder) {
+            return orderedPipelineAggregatorrs;
+        return aggregators;
+        }
+                PipelineAggregationBuilder result = Rewriteable.rewrite(builder, context);
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                        + aggregationName
+            return builder;
+         */
+            PipelineAggregationBuilder.ValidationContext context = PipelineAggregationBuilder.ValidationContext.forTreeRoot(
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+    public static Builder builder() {
+                    pipelineAggregatorBuildersMap,
+            if (aggregationBuilders.isEmpty() && pipelineAggregatorBuilders.isEmpty()) {
+        XContentParser.Token token = null;
+                                );
+                addPipelineAggregator(in.readNamedWriteable(PipelineAggregationBuilder.class));
+                for (PipelineAggregationBuilder subAgg : pipelineAggregatorBuilders) {
+            }
+                                        + aggBuilder.getType()
+            }
+import org.opensearch.search.streaming.FlushModeResolver;
+                if (subFactories != null) {
+    }
+        public Collection<PipelineAggregationBuilder> getPipelineAggregatorFactories() {
+                                    "Found two sub aggregation definitions under [" + aggregationName + "]"
+ * under the License.
+                                if (!foundSubBuilder) {
+        @Override
+                unmarkedBuilders.remove(builder);
+            Profilers profilers = factory.context().getProfilers();
+            Collection<AggregationBuilder> aggregationBuilders
+                }
+         * Read from a stream.
+            AggregatorFactory[] aggFactories = new AggregatorFactory[aggregationBuilders.size()];
+import java.util.function.Predicate;
+        Matcher validAggMatcher = VALID_AGG_NAME.matcher("");
+                    throw new ParsingException(
+import java.util.Arrays;
+                out.writeNamedWriteable(factory);
+import static java.util.stream.Collectors.toMap;
+    }
+ * KIND, either express or implied.  See the License for the
+        }
+                        + aggregationName
+                aggBuildersMap.put(aggBuilder.name, aggBuilder);
+import org.opensearch.search.profile.aggregation.ProfilingAggregator;
+        }
+import org.opensearch.common.xcontent.SuggestingErrorOnUnknown;
+                return false;
+import java.util.HashMap;
+import org.opensearch.search.profile.Profilers;
+        /**
+            return changed ? newBuilder : this;
+     *                    be asked to collect.
+                .collect(toList());
+ */
+            try {
+            return e;
+        }
+    public boolean allFactoriesSupportConcurrentSearch() {
+        public AggregatorFactories build(QueryShardContext queryShardContext, AggregatorFactory parent) throws IOException {
+                                matchingBuilder
+                factory = factories[i].create(searchContext, null, CardinalityUpperBound.ONE);
+                            + "]",
+    public int countAggregators() {
+                orderedPipelineAggregators.add(builder);
+        private final Collection<PipelineAggregationBuilder> pipelineAggregatorBuilders = new LinkedHashSet<>();
+                    decision,
+    }
+                addAggregator(in.readNamedWriteable(AggregationBuilder.class));
+                                    parser.getTokenLocation(),
+        /**
+    private AggregatorFactories(AggregatorFactory[] factories) {
+            if (token != XContentParser.Token.START_OBJECT) {
+                    );
+                changed |= result != builder;
+                            + fieldName
+     * buckets.
+            } else {
+                        PipelineAggregationBuilder matchingBuilder = pipelineAggregatorBuildersMap.get(firstAggName);
+                pipelineAggregatorBuildersMap.put(builder.getName(), builder);
+        return Arrays.stream(factories).anyMatch(GLOBAL_AGGREGATOR_FACTORY_PREDICATE.negate());
+            }
+            for (AggregationBuilder aggBuilder : aggregationBuilders) {
+         */
+                            if ((i == bucketsPathElements.size() - 1) && (aggName.equalsIgnoreCase("_key") || aggName.equals("_count"))) {
+            out.writeVInt(this.pipelineAggregatorBuilders.size());
+            }
+         * form. If the builder did not change the identity reference must be
+        /**
+        /**
+         * Validate the root of the aggregation tree.
+    }
+                return PipelineTree.EMPTY;
+        @Override
+                } else {
+                            + "], but got a ["
+    private List<Aggregator> createTopLevelAggregators(SearchContext searchContext, Predicate<AggregatorFactory> factoryFilter)
+                throw new TaskCancelledException("cancelled while creating aggregators");
+            if (!names.add(factory.name)) {
+                                // factories
+ * GitHub history for details.
+            }
+                        for (int i = 1; i < bucketsPathElements.size(); i++) {
+                                pipelineAggregatorBuildersMap,
+    @PublicApi(since = "1.0.0")
+            }
+                        + " starts with a ["
+            } else {
+import org.opensearch.search.internal.SearchContext;
+                factory = new ProfilingAggregator(factory, profilers.getAggregationProfiler());
+                            } else {
+                }
+                    if (termsAggregationBuilder.minDocCount() == 0) {
+                    parser.getTokenLocation(),
+import org.apache.logging.log4j.LogManager;
+    public boolean hasGlobalAggregator() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            if (getClass() != obj.getClass()) return false;
+ * You may obtain a copy of the License at
+                            + XContentParser.Token.START_OBJECT
+            Map<String, PipelineAggregationBuilder> pipelineAggregatorBuildersMap,
+        }
+ * this work for additional information regarding copyright
+                if (token == XContentParser.Token.START_OBJECT) {
+ * An immutable collection of {@link AggregatorFactories}.
+                    factories.addAggregator(aggregationBuilder);
+            if (aggBuilder == null) {
+                }
+                    parser.getTokenLocation(),
+import org.apache.logging.log4j.Logger;
+                                        }
+        if (searchContext.isStreamSearch() && searchContext.getFlushMode() == null) {
+                                orderedPipelineAggregators,
+    public static final AggregatorFactories EMPTY = new AggregatorFactories(new AggregatorFactory[0]);
+    public boolean allFactoriesSupportIntraSegmentSearch() {
+        for (AggregatorFactory factory : factories) {
+                return false;
+                aggregators.add(factory);
+     * factories in turn.
+    }
+            return Collections.unmodifiableCollection(pipelineAggregatorBuilders);
+                                        + aggregationName
+    private static final Logger logger = LogManager.getLogger(AggregatorFactories.class);
+            this.pipelineAggregatorBuilders.add(pipelineAggregatorFactory);
+ *
+            }
+                                        + "]: ["
+    }
+            }
+     * {@link PipelineAggregationBuilder}s.
+        public Builder rewrite(QueryRewriteContext context) throws IOException {
+        return factories.count() > 0 ? factories : null;
+    }
+                            + "] under a ["
+ *
+    }
+                }
+            Map<String, Object> metadata = null;
+                    "Invalid aggregation name ["
+import org.opensearch.action.ActionRequestValidationException;
+import org.opensearch.index.query.QueryShardContext;
+        Aggregator[] aggregators = new Aggregator[countAggregators()];
+                }
+            FlushMode decision;
+        /**
+ *
+        for (int i = 0; i < factories.length; i++) {
+        public Builder() {}
+                        parser.getTokenLocation()
+                throw new ParsingException(
+        }
+            for (PipelineAggregationBuilder builder : pipelineAggregatorBuilders) {
+                    }
+                changed |= result != builder;
+                                    SuggestingErrorOnUnknown.suggest(fieldName, ex.getCandidates())
+                );
+import org.opensearch.search.aggregations.bucket.global.GlobalAggregationBuilder;
+         * Create an empty builder.
+                    "Streaming aggregation decision: {} | streamable={}, topN={} | maxBucket={}",
+        private ActionRequestValidationException validateChildren(ActionRequestValidationException e) {
+                                    }
+                                    "Unknown aggregation type [%s]%s",
+                                    if (aggName.equals(subBuilder.name)) {
+/*
+                                Collection<AggregationBuilder> subBuilders = aggBuilder.factoriesBuilder.aggregationBuilders;
         return factories;
+                logger.debug(
+                temporarilyMarked.remove(builder);
+                String[] bucketsPaths = builder.getBucketsPaths();
+                            + XContentParser.Token.FIELD_NAME
+import java.util.Objects;
+                    List<AggregationPath.PathElement> bucketsPathElements = AggregationPath.parse(bucketsPath).getPathElements();
     }
-}
+            return aggregationBuilders.size() + pipelineAggregatorBuilders.size();
+                                temporarilyMarked,
+            final String aggregationName = parser.currentName();
+            for (PipelineAggregationBuilder builder : pipelineAggregatorBuilders) {
+            if (temporarilyMarked.contains(builder)) {
+        throws IOException {

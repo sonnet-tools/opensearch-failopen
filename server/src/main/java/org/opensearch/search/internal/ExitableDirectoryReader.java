@@ -1,493 +1,416 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.internal;
-
-import org.apache.lucene.codecs.StoredFieldsReader;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.FilterDirectoryReader;
-import org.apache.lucene.index.FilterLeafReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.PointValues;
-import org.apache.lucene.index.PostingsEnum;
-import org.apache.lucene.index.Terms;
-import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.search.DocAndFloatFeatureBuffer;
-import org.apache.lucene.search.suggest.document.CompletionTerms;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.FixedBitSet;
-import org.apache.lucene.util.automaton.CompiledAutomaton;
-import org.opensearch.common.lucene.index.SequentialStoredFieldsLeafReader;
-import org.opensearch.core.common.Strings;
-
-import java.io.IOException;
-
-/**
- * Wraps an {@link IndexReader} with a {@link QueryCancellation}
- * which checks for cancelled or timed-out query.
- *
- * @opensearch.internal
- */
-class ExitableDirectoryReader extends FilterDirectoryReader {
-
-    /**
-     * Used to check if query cancellation is actually enabled
-     * and if so use it to check if the query is cancelled or timed-out.
-     */
-    interface QueryCancellation {
-
-        /**
-         * Used to prevent unnecessary checks for cancellation
          * @return true if query cancellation is enabled
-         */
-        boolean isEnabled();
-
-        /**
-         * Call to check if the query is cancelled or timed-out.
-         * If so a {@link RuntimeException} is thrown
-         */
-        void checkCancelled();
-    }
-
-    ExitableDirectoryReader(DirectoryReader in, QueryCancellation queryCancellation) throws IOException {
-        super(in, new SubReaderWrapper() {
-            @Override
-            public LeafReader wrap(LeafReader reader) {
-                return new ExitableLeafReader(reader, queryCancellation);
-            }
-        });
-    }
-
-    @Override
-    protected DirectoryReader doWrapDirectoryReader(DirectoryReader in) {
-        throw new UnsupportedOperationException("doWrapDirectoryReader() should never be invoked");
-    }
-
-    @Override
-    public CacheHelper getReaderCacheHelper() {
-        return in.getReaderCacheHelper();
-    }
-
-    /**
-     * Wraps a {@link FilterLeafReader} with a {@link QueryCancellation}.
-     */
-    static class ExitableLeafReader extends SequentialStoredFieldsLeafReader {
-
-        private final QueryCancellation queryCancellation;
-
-        private ExitableLeafReader(LeafReader leafReader, QueryCancellation queryCancellation) {
-            super(leafReader);
-            this.queryCancellation = queryCancellation;
         }
-
-        @Override
-        public PointValues getPointValues(String field) throws IOException {
-            if (Strings.isEmpty(field)) {
-                return null;
-            }
-            final PointValues pointValues = in.getPointValues(field);
-            if (pointValues == null) {
-                return null;
-            }
-            return queryCancellation.isEnabled() ? new ExitablePointValues(pointValues, queryCancellation) : pointValues;
         }
-
-        @Override
-        public Terms terms(String field) throws IOException {
-            Terms terms = in.terms(field);
-            if (terms == null) {
-                return null;
-            }
-            // If we have a suggest CompletionQuery then the CompletionWeight#bulkScorer() will check that
-            // the terms are instanceof CompletionTerms (not generic FilterTerms) and will throw an exception
-            // if that's not the case.
-            return (queryCancellation.isEnabled() && terms instanceof CompletionTerms == false)
-                ? new ExitableTerms(terms, queryCancellation)
-                : terms;
-        }
-
-        @Override
-        public CacheHelper getCoreCacheHelper() {
-            return in.getCoreCacheHelper();
-        }
-
-        @Override
-        public CacheHelper getReaderCacheHelper() {
-            return in.getReaderCacheHelper();
-        }
-
-        @Override
-        protected StoredFieldsReader doGetSequentialStoredFieldsReader(StoredFieldsReader reader) {
-            return reader;
-        }
-    }
-
-    /**
-     * Wrapper class for {@link FilterLeafReader.FilterTerms} that check for query cancellation or timeout.
-     */
-    static class ExitableTerms extends FilterLeafReader.FilterTerms {
-
-        private final QueryCancellation queryCancellation;
-
-        ExitableTerms(Terms terms, QueryCancellation queryCancellation) {
-            super(terms);
-            this.queryCancellation = queryCancellation;
-        }
-
-        @Override
-        public TermsEnum intersect(CompiledAutomaton compiled, BytesRef startTerm) throws IOException {
-            return new ExitableTermsEnum(in.intersect(compiled, startTerm), queryCancellation);
-        }
-
-        @Override
-        public TermsEnum iterator() throws IOException {
-            return new ExitableTermsEnum(in.iterator(), queryCancellation);
-        }
-
-        @Override
-        public BytesRef getMin() throws IOException {
-            return in.getMin();
-        }
-
-        @Override
-        public BytesRef getMax() throws IOException {
-            return in.getMax();
-        }
-    }
-
-    /**
-     * Wrapper class for {@link FilterLeafReader.FilterTermsEnum} that is used by {@link ExitableTerms} for
-     * implementing an exitable enumeration of terms.
-     */
-    private static class ExitableTermsEnum extends FilterLeafReader.FilterTermsEnum {
-
-        private static final int MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK = (1 << 4) - 1; // 15
-
-        private int calls;
-        private final QueryCancellation queryCancellation;
-
-        private ExitableTermsEnum(TermsEnum termsEnum, QueryCancellation queryCancellation) {
-            super(termsEnum);
-            this.queryCancellation = queryCancellation;
-            this.queryCancellation.checkCancelled();
-        }
-
-        private void checkAndThrowWithSampling() {
-            if ((calls++ & MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK) == 0) {
-                queryCancellation.checkCancelled();
-            }
-        }
-
-        @Override
-        public BytesRef next() throws IOException {
-            checkAndThrowWithSampling();
-            return in.next();
-        }
-
-        @Override
-        public PostingsEnum postings(PostingsEnum reuse, int flags) throws IOException {
-            // Let the codec reuse its postings implementation beneath our cancellation wrapper.
-            if (reuse instanceof ExitablePostingsEnum exitable) {
-                reuse = exitable.unwrap();
-            }
-            final PostingsEnum postings = in.postings(reuse, flags);
-            return new ExitablePostingsEnum(postings, queryCancellation);
-        }
-    }
-
-    /**
-     * Wrapper class for {@link PostingsEnum} that checks for query cancellation or timeout
-     * during document iteration. This closes the gap where field data loading iterates
-     * postings (e.g., {@code OrdinalsBuilder.addDoc()}) without cancellation checks.
-     *
-     * <p>Extends {@link FilterLeafReader.FilterPostingsEnum} so that callers (including plugins
-     * with custom codec PostingsEnum implementations) can use {@link #unwrap()} to access the
-     * underlying delegate PostingsEnum.
-     */
-    static class ExitablePostingsEnum extends FilterLeafReader.FilterPostingsEnum {
-
-        private static final int CANCELLATION_CHECK_INTERVAL = 1 << 13;
-        // Bulk bitset filling is substantially cheaper per document than scalar iteration. Use the
-        // same maximum doc-ID interval as CancellableBulkScorer, without fragmenting sparse lists.
-        private static final int MAX_DOCS_PER_BITSET_CHECK = 1 << 20;
-
-        private final QueryCancellation queryCancellation;
-        private int calls;
-        // docs filled since the last cancellation check. Starts at the budget so we check before the first fill.
-        private int docsSinceBitSetCheck = MAX_DOCS_PER_BITSET_CHECK;
-
-        ExitablePostingsEnum(PostingsEnum in, QueryCancellation queryCancellation) {
-            super(in);
-            this.queryCancellation = queryCancellation;
-        }
-
-        private void checkAndThrowWithSampling() {
-            if ((calls++ & (CANCELLATION_CHECK_INTERVAL - 1)) == 0) {
-                queryCancellation.checkCancelled();
-            }
-        }
-
-        @Override
-        public int nextDoc() throws IOException {
-            checkAndThrowWithSampling();
-            return super.nextDoc();
-        }
-
-        @Override
-        public int advance(int target) throws IOException {
-            checkAndThrowWithSampling();
-            return super.advance(target);
-        }
-
-        @Override
-        public int docIDRunEnd() throws IOException {
-            return in.docIDRunEnd();
-        }
-
-        @Override
-        public void intoBitSet(int upTo, FixedBitSet bitSet, int offset) throws IOException {
-            // Delegate to the codec's bulk implementation, but bound each call since it bypasses
-            // the cancellation checks in nextDoc() and advance().
-            for (int doc = in.docID(); doc < upTo; doc = in.docID()) {
-                if (docsSinceBitSetCheck >= MAX_DOCS_PER_BITSET_CHECK) {
-                    queryCancellation.checkCancelled();
-                    docsSinceBitSetCheck = 0;
-                }
-                final int limit = (int) Math.min((long) doc + MAX_DOCS_PER_BITSET_CHECK, upTo);
-                in.intoBitSet(limit, bitSet, offset);
-                docsSinceBitSetCheck += limit - doc;
-            }
-        }
-
-        @Override
-        public void nextPostings(int upTo, DocAndFloatFeatureBuffer buffer) throws IOException {
-            final int remaining = CANCELLATION_CHECK_INTERVAL - (calls & (CANCELLATION_CHECK_INTERVAL - 1));
-            if (remaining == CANCELLATION_CHECK_INTERVAL) {
-                queryCancellation.checkCancelled();
-            }
-            // Preserve native batches even for sparse postings, whose doc-ID span may be large.
-            in.nextPostings(upTo, buffer);
-            final int size = Math.max(1, buffer.size);
-            // Charge the returned postings to the scalar sampling budget. If the batch exhausts it,
-            // make the next scalar or batch call check cancellation, even if it overshot the boundary.
-            calls = size >= remaining ? 0 : calls + size;
-        }
-    }
-
-    // delegates to PointValues but adds query cancellation checks
-    private static class ExitablePointTree implements PointValues.PointTree {
-        private final PointValues values;
-        private final PointValues.PointTree pointTree;
-        private final ExitableIntersectVisitor exitableIntersectVisitor;
-        private final QueryCancellation queryCancellation;
-        private int calls;
-
-        private ExitablePointTree(PointValues values, PointValues.PointTree pointTree, QueryCancellation queryCancellation) {
-            this.values = values;
-            this.pointTree = pointTree;
-            this.exitableIntersectVisitor = new ExitableIntersectVisitor(queryCancellation);
-            this.queryCancellation = queryCancellation;
-        }
-
-        @Override
-        public PointValues.PointTree clone() {
-            queryCancellation.checkCancelled();
-            return new ExitablePointTree(values, pointTree.clone(), queryCancellation);
-        }
-
-        @Override
-        public boolean moveToChild() throws IOException {
-            checkAndThrowWithSampling();
-            return pointTree.moveToChild();
-        }
-
-        @Override
-        public boolean moveToSibling() throws IOException {
-            checkAndThrowWithSampling();
-            return pointTree.moveToSibling();
-        }
-
-        @Override
-        public boolean moveToParent() throws IOException {
-            checkAndThrowWithSampling();
-            return pointTree.moveToParent();
-        }
-
-        @Override
-        public byte[] getMinPackedValue() {
-            checkAndThrowWithSampling();
-            return pointTree.getMinPackedValue();
-        }
-
-        @Override
-        public byte[] getMaxPackedValue() {
-            checkAndThrowWithSampling();
-            return pointTree.getMaxPackedValue();
-        }
-
-        @Override
-        public long size() {
-            queryCancellation.checkCancelled();
-            return pointTree.size();
-        }
-
-        @Override
-        public void visitDocIDs(PointValues.IntersectVisitor visitor) throws IOException {
-            queryCancellation.checkCancelled();
-            pointTree.visitDocIDs(visitor);
-        }
-
-        @Override
-        public void visitDocValues(PointValues.IntersectVisitor visitor) throws IOException {
-            queryCancellation.checkCancelled();
-            exitableIntersectVisitor.setVisitor(visitor);
-            pointTree.visitDocValues(exitableIntersectVisitor);
-        }
-
-        // reuse ExitableIntersectVisitor#checkAndThrowWithSampling
-        private void checkAndThrowWithSampling() {
-            if ((calls++ & ExitableIntersectVisitor.MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK) == 0) {
-                queryCancellation.checkCancelled();
-            }
-        }
-    }
-
-    /**
-     * Wrapper class for {@link PointValues} that checks for query cancellation or timeout.
-     */
-    static class ExitablePointValues extends PointValues {
-
-        private final PointValues in;
-        private final QueryCancellation queryCancellation;
-
-        private ExitablePointValues(PointValues in, QueryCancellation queryCancellation) {
-            this.in = in;
-            this.queryCancellation = queryCancellation;
-            this.queryCancellation.checkCancelled();
-        }
-
-        @Override
-        public PointTree getPointTree() throws IOException {
-            return new ExitablePointTree(in, in.getPointTree(), queryCancellation);
-        }
-
-        @Override
-        public byte[] getMinPackedValue() throws IOException {
-            queryCancellation.checkCancelled();
-            return in.getMinPackedValue();
-        }
-
-        @Override
-        public byte[] getMaxPackedValue() throws IOException {
-            queryCancellation.checkCancelled();
-            return in.getMaxPackedValue();
-        }
-
         @Override
         public int getNumDimensions() throws IOException {
-            queryCancellation.checkCancelled();
-            return in.getNumDimensions();
+                queryCancellation.checkCancelled();
+            public LeafReader wrap(LeafReader reader) {
+            return new ExitablePointTree(values, pointTree.clone(), queryCancellation);
         }
-
         @Override
-        public int getNumIndexDimensions() throws IOException {
+            return super.advance(target);
+        @Override
+     */
             queryCancellation.checkCancelled();
-            return in.getNumIndexDimensions();
         }
-
-        @Override
-        public int getBytesPerDimension() throws IOException {
-            queryCancellation.checkCancelled();
-            return in.getBytesPerDimension();
         }
-
-        @Override
+    private static class ExitableTermsEnum extends FilterLeafReader.FilterTermsEnum {
+    }
+            return in.getMax();
+            if ((calls++ & ExitableIntersectVisitor.MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK) == 0) {
         public long size() {
             queryCancellation.checkCancelled();
-            return in.size();
-        }
-
         @Override
-        public int getDocCount() {
+        }
+ * KIND, either express or implied.  See the License for the
+            super(terms);
+            checkAndThrowWithSampling();
+        private int calls;
+import org.apache.lucene.index.FilterDirectoryReader;
+                queryCancellation.checkCancelled();
+        }
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     */
+        public void visit(int docID, byte[] packedValue) throws IOException {
+        @Override
             queryCancellation.checkCancelled();
+    static class ExitableTerms extends FilterLeafReader.FilterTerms {
+import org.apache.lucene.index.IndexReader;
+     * implementing an exitable enumeration of terms.
+     */
+        // same maximum doc-ID interval as CancellableBulkScorer, without fragmenting sparse lists.
+     */
+        public void grow(int count) {
+        public void visitDocIDs(PointValues.IntersectVisitor visitor) throws IOException {
+        public CacheHelper getReaderCacheHelper() {
+     * during document iteration. This closes the gap where field data loading iterates
+                queryCancellation.checkCancelled();
+            if (reuse instanceof ExitablePostingsEnum exitable) {
+ * @opensearch.internal
+            // if that's not the case.
+            return in.docIDRunEnd();
+        private final QueryCancellation queryCancellation;
+                    queryCancellation.checkCancelled();
+            in.nextPostings(upTo, buffer);
+            return in.getMinPackedValue();
+            return new ExitableTermsEnum(in.iterator(), queryCancellation);
+            in.visit(docID);
+        throw new UnsupportedOperationException("doWrapDirectoryReader() should never be invoked");
+         */
+        @Override
+        public BytesRef getMin() throws IOException {
+        void checkCancelled();
+ * SPDX-License-Identifier: Apache-2.0
+        private final PointValues.PointTree pointTree;
+ * not use this file except in compliance with the License.
+            return reader;
+                queryCancellation.checkCancelled();
+ */
+    static class ExitableLeafReader extends SequentialStoredFieldsLeafReader {
+        }
+     * postings (e.g., {@code OrdinalsBuilder.addDoc()}) without cancellation checks.
+    ExitableDirectoryReader(DirectoryReader in, QueryCancellation queryCancellation) throws IOException {
+        public PointValues getPointValues(String field) throws IOException {
+ * GitHub history for details.
+        }
+            this.pointTree = pointTree;
+        }
+            if ((calls++ & MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK) == 0) {
+            return pointTree.moveToSibling();
+                in.intoBitSet(limit, bitSet, offset);
+            // the terms are instanceof CompletionTerms (not generic FilterTerms) and will throw an exception
+/*
+            this.queryCancellation = queryCancellation;
+        private ExitablePointTree(PointValues values, PointValues.PointTree pointTree, QueryCancellation queryCancellation) {
+            return super.nextDoc();
             return in.getDocCount();
+        @Override
+            this.queryCancellation = queryCancellation;
+            checkAndThrowWithSampling();
+        }
+            return pointTree.moveToParent();
         }
     }
-
-    private static class ExitableIntersectVisitor implements PointValues.IntersectVisitor {
-
-        private static final int MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK = (1 << 13) - 1; // 8191
-
-        private PointValues.IntersectVisitor in;
-        private final QueryCancellation queryCancellation;
-        private int calls;
-
-        private ExitableIntersectVisitor(QueryCancellation queryCancellation) {
-            this.queryCancellation = queryCancellation;
         }
-
+ * Wraps an {@link IndexReader} with a {@link QueryCancellation}
+ * Modifications Copyright OpenSearch Contributors. See
+            for (int doc = in.docID(); doc < upTo; doc = in.docID()) {
+            if (pointValues == null) {
+        @Override
+         * If so a {@link RuntimeException} is thrown
         private void checkAndThrowWithSampling() {
-            if ((calls++ & MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK) == 0) {
-                queryCancellation.checkCancelled();
+        private final QueryCancellation queryCancellation;
+            queryCancellation.checkCancelled();
+        @Override
+    private static class ExitablePointTree implements PointValues.PointTree {
+        public int advance(int target) throws IOException {
+        @Override
+        @Override
+ * software distributed under the License is distributed on an
+            final PointValues pointValues = in.getPointValues(field);
+        public boolean moveToParent() throws IOException {
             }
         }
-
-        private void setVisitor(PointValues.IntersectVisitor in) {
-            this.in = in;
-        }
-
+        /**
+            @Override
+            // Let the codec reuse its postings implementation beneath our cancellation wrapper.
+                return null;
+            return new ExitablePointTree(in, in.getPointTree(), queryCancellation);
+ * which checks for cancelled or timed-out query.
+        private void checkAndThrowWithSampling() {
         @Override
-        public void visit(int docID) throws IOException {
+         * Call to check if the query is cancelled or timed-out.
+        private static final int MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK = (1 << 13) - 1; // 8191
+        public int getDocCount() {
+            return pointTree.getMaxPackedValue();
+            return new ExitablePostingsEnum(postings, queryCancellation);
+        }
+    /**
+        public long size() {
+            return in.getMin();
             checkAndThrowWithSampling();
-            in.visit(docID);
-        }
-
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.util.automaton.CompiledAutomaton;
+            if (terms == null) {
         @Override
-        public void visit(int docID, byte[] packedValue) throws IOException {
-            checkAndThrowWithSampling();
-            in.visit(docID, packedValue);
+     * Wrapper class for {@link PointValues} that checks for query cancellation or timeout.
         }
-
-        @Override
+            return in.getBytesPerDimension();
+        private void checkAndThrowWithSampling() {
+        public PostingsEnum postings(PostingsEnum reuse, int flags) throws IOException {
+            if (remaining == CANCELLATION_CHECK_INTERVAL) {
+            this.queryCancellation = queryCancellation;
+        protected StoredFieldsReader doGetSequentialStoredFieldsReader(StoredFieldsReader reader) {
+            queryCancellation.checkCancelled();
+        /**
+ * this file be licensed under the Apache-2.0 license or a
+            queryCancellation.checkCancelled();
+        }
+            return in.next();
+     * Wrapper class for {@link PostingsEnum} that checks for query cancellation or timeout
+        public int getNumIndexDimensions() throws IOException {
+            this.queryCancellation.checkCancelled();
+ * under the License.
+        private ExitableTermsEnum(TermsEnum termsEnum, QueryCancellation queryCancellation) {
+            queryCancellation.checkCancelled();
+        }
         public PointValues.Relation compare(byte[] minPackedValue, byte[] maxPackedValue) {
-            queryCancellation.checkCancelled();
-            return in.compare(minPackedValue, maxPackedValue);
-        }
-
+import org.opensearch.core.common.Strings;
+        private int calls;
+                : terms;
         @Override
-        public void grow(int count) {
-            queryCancellation.checkCancelled();
+        private final ExitableIntersectVisitor exitableIntersectVisitor;
+            exitableIntersectVisitor.setVisitor(visitor);
+            this.values = values;
             in.grow(count);
+            this.queryCancellation = queryCancellation;
+     *
+                queryCancellation.checkCancelled();
+ * ownership. Elasticsearch licenses this file to you under
+ * Licensed to Elasticsearch under one or more contributor
+import org.apache.lucene.index.PostingsEnum;
+ * specific language governing permissions and limitations
+            return in.size();
+        ExitableTerms(Terms terms, QueryCancellation queryCancellation) {
+                    docsSinceBitSetCheck = 0;
+            checkAndThrowWithSampling();
+            queryCancellation.checkCancelled();
+/*
+        @Override
+            Terms terms = in.terms(field);
+            checkAndThrowWithSampling();
+        public TermsEnum intersect(CompiledAutomaton compiled, BytesRef startTerm) throws IOException {
+        @Override
+            }
+            pointTree.visitDocValues(exitableIntersectVisitor);
+        private final QueryCancellation queryCancellation;
+}
+import org.apache.lucene.search.DocAndFloatFeatureBuffer;
+            return (queryCancellation.isEnabled() && terms instanceof CompletionTerms == false)
+    }
+        private static final int MAX_DOCS_PER_BITSET_CHECK = 1 << 20;
+            // Charge the returned postings to the scalar sampling budget. If the batch exhausts it,
+            this.queryCancellation = queryCancellation;
+            return in.getNumDimensions();
+import org.opensearch.common.lucene.index.SequentialStoredFieldsLeafReader;
+            queryCancellation.checkCancelled();
+                docsSinceBitSetCheck += limit - doc;
+     * underlying delegate PostingsEnum.
+ * The OpenSearch Contributors require contributions made to
+        public boolean moveToSibling() throws IOException {
+        public byte[] getMinPackedValue() throws IOException {
+        }
+            this.queryCancellation = queryCancellation;
+        public boolean moveToChild() throws IOException {
+            if ((calls++ & (CANCELLATION_CHECK_INTERVAL - 1)) == 0) {
+        }
+ * this work for additional information regarding copyright
+        }
+            // Preserve native batches even for sparse postings, whose doc-ID span may be large.
+        }
+    @Override
+            return in.getCoreCacheHelper();
+            super(in);
+        }
+            this.in = in;
+            final PostingsEnum postings = in.postings(reuse, flags);
+        }
+         */
+            // Delegate to the codec's bulk implementation, but bound each call since it bypasses
+    /**
+        private void checkAndThrowWithSampling() {
+    public CacheHelper getReaderCacheHelper() {
+            final int size = Math.max(1, buffer.size);
+    /**
+        private final PointValues in;
+    @Override
+            }
+        @Override
+        private static final int MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK = (1 << 4) - 1; // 15
+        super(in, new SubReaderWrapper() {
+        @Override
+            // make the next scalar or batch call check cancellation, even if it overshot the boundary.
+            // the cancellation checks in nextDoc() and advance().
+    }
+     * Wrapper class for {@link FilterLeafReader.FilterTermsEnum} that is used by {@link ExitableTerms} for
+        @Override
+ */
+            return in.compare(minPackedValue, maxPackedValue);
+    }
         }
     }
-}
+                return new ExitableLeafReader(reader, queryCancellation);
+            if (Strings.isEmpty(field)) {
+            return pointTree.getMinPackedValue();
+        }
+            checkAndThrowWithSampling();
+                if (docsSinceBitSetCheck >= MAX_DOCS_PER_BITSET_CHECK) {
+ * license agreements. See the NOTICE file distributed with
+        public void visitDocValues(PointValues.IntersectVisitor visitor) throws IOException {
+/*
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+        @Override
+    }
+        }
+            return in.getNumIndexDimensions();
+        }
+        private int calls;
+            }
+            checkAndThrowWithSampling();
+        return in.getReaderCacheHelper();
+        }
+        public PointTree getPointTree() throws IOException {
+            queryCancellation.checkCancelled();
+        @Override
+/**
+        @Override
+            queryCancellation.checkCancelled();
+        }
+        public int nextDoc() throws IOException {
+ *
+import org.apache.lucene.util.BytesRef;
+                return null;
+            super(leafReader);
+            super(termsEnum);
+    }
+        }
+        private final QueryCancellation queryCancellation;
+        @Override
+    }
+        public BytesRef next() throws IOException {
+            return queryCancellation.isEnabled() ? new ExitablePointValues(pointValues, queryCancellation) : pointValues;
+            calls = size >= remaining ? 0 : calls + size;
+import org.apache.lucene.index.FilterLeafReader;
+ */
+            return pointTree.size();
+        }
+        }
+        private ExitablePointValues(PointValues in, QueryCancellation queryCancellation) {
+    /**
+ *
+        private int calls;
+            checkAndThrowWithSampling();
+        // docs filled since the last cancellation check. Starts at the budget so we check before the first fill.
+            queryCancellation.checkCancelled();
+                return null;
+        private void setVisitor(PointValues.IntersectVisitor in) {
+        @Override
+        public int docIDRunEnd() throws IOException {
+        }
+            }
+        private int docsSinceBitSetCheck = MAX_DOCS_PER_BITSET_CHECK;
+        }
+            in.visit(docID, packedValue);
+        }
+        @Override
+            final int remaining = CANCELLATION_CHECK_INTERVAL - (calls & (CANCELLATION_CHECK_INTERVAL - 1));
+import org.apache.lucene.index.PointValues;
+        public int getBytesPerDimension() throws IOException {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    // delegates to PointValues but adds query cancellation checks
+            checkAndThrowWithSampling();
+        @Override
+        @Override
+import org.apache.lucene.search.suggest.document.CompletionTerms;
+        }
+        private final QueryCancellation queryCancellation;
+                }
+    }
+        }
+    static class ExitablePointValues extends PointValues {
+ * Unless required by applicable law or agreed to in writing,
+        }
+    }
+            }
+            this.in = in;
+import org.apache.lucene.index.LeafReader;
+            // If we have a suggest CompletionQuery then the CompletionWeight#bulkScorer() will check that
+            this.queryCancellation = queryCancellation;
+     * and if so use it to check if the query is cancelled or timed-out.
+     */
+        }
+        @Override
+         * Used to prevent unnecessary checks for cancellation
+            }
+    private static class ExitableIntersectVisitor implements PointValues.IntersectVisitor {
+        // reuse ExitableIntersectVisitor#checkAndThrowWithSampling
+            queryCancellation.checkCancelled();
+        @Override
+import org.apache.lucene.index.TermsEnum;
+import org.apache.lucene.util.FixedBitSet;
+                reuse = exitable.unwrap();
+            }
+import org.apache.lucene.codecs.StoredFieldsReader;
+ */
+        private final PointValues values;
+        public byte[] getMaxPackedValue() {
+ *
+            return pointTree.moveToChild();
+package org.opensearch.search.internal;
+                final int limit = (int) Math.min((long) doc + MAX_DOCS_PER_BITSET_CHECK, upTo);
+        // Bulk bitset filling is substantially cheaper per document than scalar iteration. Use the
+            return new ExitableTermsEnum(in.intersect(compiled, startTerm), queryCancellation);
+        private final QueryCancellation queryCancellation;
+        }
+     * Wraps a {@link FilterLeafReader} with a {@link QueryCancellation}.
+     */
+            }
+        @Override
+        }
+        ExitablePostingsEnum(PostingsEnum in, QueryCancellation queryCancellation) {
+     * <p>Extends {@link FilterLeafReader.FilterPostingsEnum} so that callers (including plugins
+        @Override
+            if ((calls++ & MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK) == 0) {
+            return in.getReaderCacheHelper();
+        @Override
+            pointTree.visitDocIDs(visitor);
+        boolean isEnabled();
+ *
+        public BytesRef getMax() throws IOException {
+        public void nextPostings(int upTo, DocAndFloatFeatureBuffer buffer) throws IOException {
+     * Used to check if query cancellation is actually enabled
+     * Wrapper class for {@link FilterLeafReader.FilterTerms} that check for query cancellation or timeout.
+        @Override
+        public void visit(int docID) throws IOException {
+     * with custom codec PostingsEnum implementations) can use {@link #unwrap()} to access the
+        }
+                ? new ExitableTerms(terms, queryCancellation)
+            }
+            checkAndThrowWithSampling();
+ * compatible open source license.
+        private static final int CANCELLATION_CHECK_INTERVAL = 1 << 13;
+        public Terms terms(String field) throws IOException {
+class ExitableDirectoryReader extends FilterDirectoryReader {
+        @Override
+        private final QueryCancellation queryCancellation;
+    static class ExitablePostingsEnum extends FilterLeafReader.FilterPostingsEnum {
+    /**
+        private ExitableIntersectVisitor(QueryCancellation queryCancellation) {
+        public byte[] getMaxPackedValue() throws IOException {
+        public CacheHelper getCoreCacheHelper() {
+        @Override
+        private ExitableLeafReader(LeafReader leafReader, QueryCancellation queryCancellation) {
+        @Override
+        private PointValues.IntersectVisitor in;
+        });
+        }
+        }
+import java.io.IOException;
+            this.exitableIntersectVisitor = new ExitableIntersectVisitor(queryCancellation);
+ * You may obtain a copy of the License at
+        public TermsEnum iterator() throws IOException {
+        public PointValues.PointTree clone() {
+            return in.getMaxPackedValue();
+    interface QueryCancellation {
+    /**
+        }
+import org.apache.lucene.index.Terms;
+            this.queryCancellation.checkCancelled();
+        }
+        public byte[] getMinPackedValue() {
+        @Override
+            }
+        public void intoBitSet(int upTo, FixedBitSet bitSet, int offset) throws IOException {
+    protected DirectoryReader doWrapDirectoryReader(DirectoryReader in) {

@@ -1,728 +1,671 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.gateway.remote;
-
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.DiffableUtils;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.StringKeyDiffProvider;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParseException;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-import static org.opensearch.cluster.DiffableUtils.NonDiffableValueSerializer.getAbstractInstance;
-import static org.opensearch.cluster.DiffableUtils.getStringKeySerializer;
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
-import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V2;
-import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V3;
-
-/**
- * Manifest of diff between two cluster states
- *
- * @opensearch.internal
- */
-public class ClusterStateDiffManifest implements ToXContentFragment, Writeable {
-    private static final String FROM_STATE_UUID_FIELD = "from_state_uuid";
-    private static final String TO_STATE_UUID_FIELD = "to_state_uuid";
-    private static final String METADATA_DIFF_FIELD = "metadata_diff";
-    private static final String COORDINATION_METADATA_UPDATED_FIELD = "coordination_metadata_diff";
-    private static final String SETTINGS_METADATA_UPDATED_FIELD = "settings_metadata_diff";
-    private static final String TRANSIENT_SETTINGS_METADATA_UPDATED_FIELD = "transient_settings_metadata_diff";
-    private static final String TEMPLATES_METADATA_UPDATED_FIELD = "templates_metadata_diff";
-    private static final String HASHES_OF_CONSISTENT_SETTINGS_UPDATED_FIELD = "hashes_of_consistent_settings_diff";
-    private static final String INDICES_DIFF_FIELD = "indices_diff";
-    private static final String METADATA_CUSTOM_DIFF_FIELD = "metadata_custom_diff";
-    private static final String UPSERTS_FIELD = "upserts";
     private static final String DELETES_FIELD = "deletes";
-    private static final String DIFF_FIELD = "diff";
-    private static final String CLUSTER_BLOCKS_UPDATED_FIELD = "cluster_blocks_diff";
-    private static final String DISCOVERY_NODES_UPDATED_FIELD = "discovery_nodes_diff";
-    private static final String ROUTING_TABLE_DIFF = "routing_table_diff";
-    private static final String CLUSTER_STATE_CUSTOM_DIFF_FIELD = "cluster_state_custom_diff";
-
-    private final String fromStateUUID;
-    private final String toStateUUID;
-    private final boolean coordinationMetadataUpdated;
-    private final boolean settingsMetadataUpdated;
-    private final boolean transientSettingsMetadataUpdated;
-    private final boolean templatesMetadataUpdated;
-    private final List<String> indicesUpdated;
-    private final List<String> indicesDeleted;
-    private final List<String> customMetadataUpdated;
-    private final List<String> customMetadataDeleted;
-    private final boolean clusterBlocksUpdated;
-    private final boolean discoveryNodesUpdated;
-    private final List<String> indicesRoutingUpdated;
-    private final List<String> indicesRoutingDeleted;
-    private String indicesRoutingDiffPath;
-    private final boolean hashesOfConsistentSettingsUpdated;
-    private final List<String> clusterStateCustomUpdated;
-    private final List<String> clusterStateCustomDeleted;
-
-    public ClusterStateDiffManifest(
-        ClusterState state,
-        ClusterState previousState,
-        int codecVersion,
-        StringKeyDiffProvider<IndexRoutingTable> routingTableDiff,
-        String indicesRoutingDiffPath
-    ) {
-        fromStateUUID = previousState.stateUUID();
-        toStateUUID = state.stateUUID();
-        coordinationMetadataUpdated = !Metadata.isCoordinationMetadataEqual(state.metadata(), previousState.metadata());
-        settingsMetadataUpdated = !Metadata.isSettingsMetadataEqual(state.metadata(), previousState.metadata());
-        transientSettingsMetadataUpdated = !Metadata.isTransientSettingsMetadataEqual(state.metadata(), previousState.metadata());
-        templatesMetadataUpdated = !Metadata.isTemplatesMetadataEqual(state.metadata(), previousState.metadata());
-        DiffableUtils.MapDiff<String, IndexMetadata, Map<String, IndexMetadata>> indicesDiff = DiffableUtils.diff(
-            previousState.metadata().indices(),
-            state.metadata().indices(),
-            getStringKeySerializer()
-        );
-        indicesDeleted = indicesDiff.getDeletes();
-        indicesUpdated = new ArrayList<>(indicesDiff.getDiffs().keySet());
-        indicesUpdated.addAll(indicesDiff.getUpserts().keySet());
-        clusterBlocksUpdated = !state.blocks().equals(previousState.blocks());
-        discoveryNodesUpdated = state.nodes().delta(previousState.nodes()).hasChanges();
-        DiffableUtils.MapDiff<String, Metadata.Custom, Map<String, Metadata.Custom>> customDiff = DiffableUtils.diff(
-            previousState.metadata().customs(),
-            state.metadata().customs(),
-            getStringKeySerializer(),
-            getAbstractInstance()
-        );
-        customMetadataUpdated = new ArrayList<>(customDiff.getDiffs().keySet());
-        customMetadataUpdated.addAll(customDiff.getUpserts().keySet());
-        customMetadataDeleted = customDiff.getDeletes();
-        indicesRoutingUpdated = new ArrayList<>();
-        indicesRoutingDeleted = new ArrayList<>();
-        this.indicesRoutingDiffPath = indicesRoutingDiffPath;
-        if (codecVersion == CODEC_V2 || codecVersion == CODEC_V3) {
-            if (routingTableDiff != null && routingTableDiff.provideDiff() != null) {
-                routingTableDiff.provideDiff().getUpserts().forEach((k, v) -> indicesRoutingUpdated.add(k));
-                indicesRoutingDeleted.addAll(routingTableDiff.provideDiff().getDeletes());
-            }
-        }
-        hashesOfConsistentSettingsUpdated = !state.metadata()
-            .hashesOfConsistentSettings()
-            .equals(previousState.metadata().hashesOfConsistentSettings());
-        DiffableUtils.MapDiff<String, ClusterState.Custom, Map<String, ClusterState.Custom>> clusterStateCustomDiff = DiffableUtils.diff(
-            previousState.customs(),
-            state.customs(),
-            getStringKeySerializer(),
-            getAbstractInstance()
-        );
-        clusterStateCustomUpdated = new ArrayList<>(clusterStateCustomDiff.getDiffs().keySet());
-        clusterStateCustomUpdated.addAll(clusterStateCustomDiff.getUpserts().keySet());
-        clusterStateCustomDeleted = clusterStateCustomDiff.getDeletes();
-    }
-
-    public ClusterStateDiffManifest(
-        String fromStateUUID,
-        String toStateUUID,
-        boolean coordinationMetadataUpdated,
-        boolean settingsMetadataUpdated,
-        boolean transientSettingsMetadataUpdate,
-        boolean templatesMetadataUpdated,
-        List<String> customMetadataUpdated,
-        List<String> customMetadataDeleted,
-        List<String> indicesUpdated,
-        List<String> indicesDeleted,
-        boolean clusterBlocksUpdated,
-        boolean discoveryNodesUpdated,
-        List<String> indicesRoutingUpdated,
-        List<String> indicesRoutingDeleted,
-        String indicesRoutingDiffPath,
-        boolean hashesOfConsistentSettingsUpdated,
-        List<String> clusterStateCustomUpdated,
-        List<String> clusterStateCustomDeleted
-    ) {
-        this.fromStateUUID = fromStateUUID;
-        this.toStateUUID = toStateUUID;
-        this.coordinationMetadataUpdated = coordinationMetadataUpdated;
-        this.settingsMetadataUpdated = settingsMetadataUpdated;
-        this.transientSettingsMetadataUpdated = transientSettingsMetadataUpdate;
-        this.templatesMetadataUpdated = templatesMetadataUpdated;
-        this.customMetadataUpdated = Collections.unmodifiableList(customMetadataUpdated);
-        this.customMetadataDeleted = Collections.unmodifiableList(customMetadataDeleted);
-        this.indicesUpdated = Collections.unmodifiableList(indicesUpdated);
-        this.indicesDeleted = Collections.unmodifiableList(indicesDeleted);
-        this.clusterBlocksUpdated = clusterBlocksUpdated;
-        this.discoveryNodesUpdated = discoveryNodesUpdated;
-        this.indicesRoutingUpdated = Collections.unmodifiableList(indicesRoutingUpdated);
-        this.indicesRoutingDeleted = Collections.unmodifiableList(indicesRoutingDeleted);
-        this.hashesOfConsistentSettingsUpdated = hashesOfConsistentSettingsUpdated;
-        this.clusterStateCustomUpdated = Collections.unmodifiableList(clusterStateCustomUpdated);
-        this.clusterStateCustomDeleted = Collections.unmodifiableList(clusterStateCustomDeleted);
-        this.indicesRoutingDiffPath = indicesRoutingDiffPath;
-    }
-
-    public ClusterStateDiffManifest(StreamInput in) throws IOException {
-        this.fromStateUUID = in.readString();
-        this.toStateUUID = in.readString();
-        this.coordinationMetadataUpdated = in.readBoolean();
-        this.settingsMetadataUpdated = in.readBoolean();
-        this.transientSettingsMetadataUpdated = in.readBoolean();
-        this.templatesMetadataUpdated = in.readBoolean();
-        this.indicesUpdated = in.readStringList();
-        this.indicesDeleted = in.readStringList();
-        this.customMetadataUpdated = in.readStringList();
-        this.customMetadataDeleted = in.readStringList();
-        this.clusterBlocksUpdated = in.readBoolean();
-        this.discoveryNodesUpdated = in.readBoolean();
-        this.indicesRoutingUpdated = in.readStringList();
-        this.indicesRoutingDeleted = in.readStringList();
-        this.hashesOfConsistentSettingsUpdated = in.readBoolean();
-        this.clusterStateCustomUpdated = in.readStringList();
-        this.clusterStateCustomDeleted = in.readStringList();
-        this.indicesRoutingDiffPath = in.readOptionalString();
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field(FROM_STATE_UUID_FIELD, fromStateUUID);
-        builder.field(TO_STATE_UUID_FIELD, toStateUUID);
-        builder.startObject(METADATA_DIFF_FIELD);
-        {
-            builder.field(COORDINATION_METADATA_UPDATED_FIELD, coordinationMetadataUpdated);
-            builder.field(SETTINGS_METADATA_UPDATED_FIELD, settingsMetadataUpdated);
-            builder.field(TRANSIENT_SETTINGS_METADATA_UPDATED_FIELD, transientSettingsMetadataUpdated);
-            builder.field(TEMPLATES_METADATA_UPDATED_FIELD, templatesMetadataUpdated);
-            builder.startObject(INDICES_DIFF_FIELD);
-            builder.startArray(UPSERTS_FIELD);
-            for (String index : indicesUpdated) {
-                builder.value(index);
-            }
-            builder.endArray();
-            builder.startArray(DELETES_FIELD);
-            for (String index : indicesDeleted) {
-                builder.value(index);
-            }
-            builder.endArray();
-            builder.endObject();
-            builder.startObject(METADATA_CUSTOM_DIFF_FIELD);
-            builder.startArray(UPSERTS_FIELD);
-            for (String custom : customMetadataUpdated) {
-                builder.value(custom);
-            }
-            builder.endArray();
-            builder.startArray(DELETES_FIELD);
-            for (String custom : customMetadataDeleted) {
-                builder.value(custom);
-            }
-            builder.endArray();
-            builder.endObject();
-            builder.field(HASHES_OF_CONSISTENT_SETTINGS_UPDATED_FIELD, hashesOfConsistentSettingsUpdated);
-        }
-        builder.endObject();
-        builder.field(CLUSTER_BLOCKS_UPDATED_FIELD, clusterBlocksUpdated);
-        builder.field(DISCOVERY_NODES_UPDATED_FIELD, discoveryNodesUpdated);
-        builder.startObject(ROUTING_TABLE_DIFF);
-        if (!indicesRoutingUpdated.isEmpty()) {
-            builder.startArray(UPSERTS_FIELD);
-            for (String index : indicesRoutingUpdated) {
-                builder.value(index);
-            }
-            builder.endArray();
-        }
-        if (!indicesRoutingDeleted.isEmpty()) {
-            builder.startArray(DELETES_FIELD);
-            for (String index : indicesRoutingDeleted) {
-                builder.value(index);
-            }
-            builder.endArray();
-        }
-        if (indicesRoutingDiffPath != null) {
-            builder.field(DIFF_FIELD, indicesRoutingDiffPath);
-        }
-        builder.endObject();
-        builder.startObject(CLUSTER_STATE_CUSTOM_DIFF_FIELD);
-        builder.startArray(UPSERTS_FIELD);
-        for (String custom : clusterStateCustomUpdated) {
-            builder.value(custom);
-        }
-        builder.endArray();
-        builder.startArray(DELETES_FIELD);
-        for (String custom : clusterStateCustomDeleted) {
-            builder.value(custom);
-        }
-        builder.endArray();
-        builder.endObject();
-        return builder;
-    }
-
-    public static ClusterStateDiffManifest fromXContent(XContentParser parser, long codec_version) throws IOException {
-        Builder builder = new Builder();
-        if (parser.currentToken() == null) { // fresh parser? move to next token
-            parser.nextToken();
-        }
-        if (parser.currentToken() == XContentParser.Token.START_OBJECT) {
-            parser.nextToken();
-        }
-        ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.currentToken(), parser);
-        String currentFieldName = parser.currentName();
-        XContentParser.Token token;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                if (currentFieldName.equals(METADATA_DIFF_FIELD)) {
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                        currentFieldName = parser.currentName();
-                        token = parser.nextToken();
-                        if (token.isValue()) {
-                            switch (currentFieldName) {
-                                case COORDINATION_METADATA_UPDATED_FIELD:
-                                    builder.coordinationMetadataUpdated(parser.booleanValue());
-                                    break;
-                                case SETTINGS_METADATA_UPDATED_FIELD:
-                                    builder.settingsMetadataUpdated(parser.booleanValue());
-                                    break;
-                                case TRANSIENT_SETTINGS_METADATA_UPDATED_FIELD:
-                                    builder.transientSettingsMetadataUpdate(parser.booleanValue());
-                                    break;
-                                case TEMPLATES_METADATA_UPDATED_FIELD:
-                                    builder.templatesMetadataUpdated(parser.booleanValue());
-                                    break;
-                                case HASHES_OF_CONSISTENT_SETTINGS_UPDATED_FIELD:
-                                    builder.hashesOfConsistentSettingsUpdated(parser.booleanValue());
-                                    break;
-                                default:
-                                    throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
-                            }
-                        } else if (token == XContentParser.Token.START_OBJECT) {
-                            if (currentFieldName.equals(INDICES_DIFF_FIELD)) {
-                                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                                    currentFieldName = parser.currentName();
-                                    token = parser.nextToken();
-                                    switch (currentFieldName) {
-                                        case UPSERTS_FIELD:
-                                            builder.indicesUpdated(convertListToString(parser.listOrderedMap()));
-                                            break;
-                                        case DELETES_FIELD:
-                                            builder.indicesDeleted(convertListToString(parser.listOrderedMap()));
-                                            break;
-                                        default:
-                                            throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
-                                    }
-                                }
-                            } else if (currentFieldName.equals(METADATA_CUSTOM_DIFF_FIELD)) {
-                                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                                    currentFieldName = parser.currentName();
-                                    token = parser.nextToken();
-                                    switch (currentFieldName) {
-                                        case UPSERTS_FIELD:
-                                            builder.customMetadataUpdated(convertListToString(parser.listOrderedMap()));
-                                            break;
-                                        case DELETES_FIELD:
-                                            builder.customMetadataDeleted(convertListToString(parser.listOrderedMap()));
-                                            break;
-                                        default:
-                                            throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
-                                    }
-                                }
-                            } else {
-                                throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
-                            }
-                        } else {
-                            throw new XContentParseException("Unexpected token [" + token + "]");
-                        }
-                    }
-                } else if (currentFieldName.equals(ROUTING_TABLE_DIFF)) {
-                    while ((parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                        currentFieldName = parser.currentName();
-                        parser.nextToken();
-                        switch (currentFieldName) {
-                            case UPSERTS_FIELD:
-                                if (codec_version == CODEC_V2 || codec_version == CODEC_V3) {
-                                    builder.indicesRoutingUpdated(convertListToString(parser.listOrderedMap()));
-                                }
-                                break;
-                            case DELETES_FIELD:
-                                if (codec_version == CODEC_V2 || codec_version == CODEC_V3) {
-                                    builder.indicesRoutingDeleted(convertListToString(parser.listOrderedMap()));
-                                }
-                                break;
-                            case DIFF_FIELD:
-                                if (codec_version >= CODEC_V3) {
-                                    builder.indicesRoutingDiffPath(parser.textOrNull());
-                                }
-                                break;
-                            default:
-                                throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
-                        }
-                    }
-                } else if (currentFieldName.equals(CLUSTER_STATE_CUSTOM_DIFF_FIELD)) {
-                    while ((parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                        currentFieldName = parser.currentName();
-                        parser.nextToken();
-                        switch (currentFieldName) {
-                            case UPSERTS_FIELD:
-                                builder.clusterStateCustomUpdated(convertListToString(parser.listOrderedMap()));
-                                break;
-                            case DELETES_FIELD:
-                                builder.clusterStateCustomDeleted(convertListToString(parser.listOrderedMap()));
-                                break;
-                            default:
-                                throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
-                        }
-                    }
-                } else {
-                    throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
-                }
-            } else if (token.isValue()) {
-                switch (currentFieldName) {
-                    case FROM_STATE_UUID_FIELD:
-                        builder.fromStateUUID(parser.text());
-                        break;
-                    case TO_STATE_UUID_FIELD:
-                        builder.toStateUUID(parser.text());
-                        break;
-                    case CLUSTER_BLOCKS_UPDATED_FIELD:
-                        builder.clusterBlocksUpdated(parser.booleanValue());
-                        break;
-                    case DISCOVERY_NODES_UPDATED_FIELD:
-                        builder.discoveryNodesUpdated(parser.booleanValue());
-                        break;
-                    default:
-                        throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
-                }
-            } else {
-                throw new XContentParseException("Unexpected token [" + token + "]");
-            }
-        }
-        return builder.build();
-    }
-
-    @Override
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this);
-    }
-
-    private static List<String> convertListToString(List<Object> list) {
-        List<String> convertedList = new ArrayList<>();
-        for (Object o : list) {
-            convertedList.add(o.toString());
-        }
-        return convertedList;
-    }
-
-    public String getFromStateUUID() {
-        return fromStateUUID;
-    }
-
-    public String getToStateUUID() {
-        return toStateUUID;
-    }
-
-    public boolean isCoordinationMetadataUpdated() {
-        return coordinationMetadataUpdated;
-    }
-
-    public boolean isSettingsMetadataUpdated() {
-        return settingsMetadataUpdated;
-    }
-
-    public boolean isTransientSettingsMetadataUpdated() {
-        return transientSettingsMetadataUpdated;
-    }
-
-    public boolean isTemplatesMetadataUpdated() {
-        return templatesMetadataUpdated;
-    }
-
-    public List<String> getCustomMetadataUpdated() {
-        return customMetadataUpdated;
-    }
-
-    public List<String> getCustomMetadataDeleted() {
-        return customMetadataDeleted;
-    }
-
-    public List<String> getIndicesUpdated() {
-        return indicesUpdated;
-    }
-
-    public List<String> getIndicesDeleted() {
-        return indicesDeleted;
-    }
-
-    public boolean isClusterBlocksUpdated() {
-        return clusterBlocksUpdated;
-    }
-
-    public boolean isDiscoveryNodesUpdated() {
-        return discoveryNodesUpdated;
-    }
-
-    public boolean isHashesOfConsistentSettingsUpdated() {
-        return hashesOfConsistentSettingsUpdated;
-    }
-
-    public String getIndicesRoutingDiffPath() {
-        return indicesRoutingDiffPath;
-    }
-
-    public List<String> getIndicesRoutingUpdated() {
-        return indicesRoutingUpdated;
-    }
-
-    public List<String> getIndicesRoutingDeleted() {
-        return indicesRoutingDeleted;
-    }
-
-    public List<String> getClusterStateCustomUpdated() {
-        return clusterStateCustomUpdated;
-    }
-
-    public List<String> getClusterStateCustomDeleted() {
-        return clusterStateCustomDeleted;
-    }
-
-    public void setIndicesRoutingDiffPath(String indicesRoutingDiffPath) {
-        this.indicesRoutingDiffPath = indicesRoutingDiffPath;
-    }
-
-    @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        ClusterStateDiffManifest that = (ClusterStateDiffManifest) o;
-        return coordinationMetadataUpdated == that.coordinationMetadataUpdated
-            && settingsMetadataUpdated == that.settingsMetadataUpdated
-            && transientSettingsMetadataUpdated == that.transientSettingsMetadataUpdated
-            && templatesMetadataUpdated == that.templatesMetadataUpdated
-            && clusterBlocksUpdated == that.clusterBlocksUpdated
-            && discoveryNodesUpdated == that.discoveryNodesUpdated
-            && hashesOfConsistentSettingsUpdated == that.hashesOfConsistentSettingsUpdated
-            && Objects.equals(fromStateUUID, that.fromStateUUID)
-            && Objects.equals(toStateUUID, that.toStateUUID)
-            && Objects.equals(customMetadataUpdated, that.customMetadataUpdated)
-            && Objects.equals(customMetadataDeleted, that.customMetadataDeleted)
-            && Objects.equals(indicesUpdated, that.indicesUpdated)
-            && Objects.equals(indicesDeleted, that.indicesDeleted)
-            && Objects.equals(indicesRoutingUpdated, that.indicesRoutingUpdated)
-            && Objects.equals(indicesRoutingDeleted, that.indicesRoutingDeleted)
-            && Objects.equals(clusterStateCustomUpdated, that.clusterStateCustomUpdated)
-            && Objects.equals(clusterStateCustomDeleted, that.clusterStateCustomDeleted)
-            && Objects.equals(indicesRoutingDiffPath, that.indicesRoutingDiffPath);
+                            case DELETES_FIELD:
     }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(
-            fromStateUUID,
-            toStateUUID,
-            coordinationMetadataUpdated,
-            settingsMetadataUpdated,
-            transientSettingsMetadataUpdated,
-            templatesMetadataUpdated,
-            customMetadataUpdated,
-            customMetadataDeleted,
-            indicesUpdated,
-            indicesDeleted,
-            clusterBlocksUpdated,
-            discoveryNodesUpdated,
-            indicesRoutingUpdated,
-            indicesRoutingDeleted,
-            hashesOfConsistentSettingsUpdated,
-            clusterStateCustomUpdated,
-            clusterStateCustomDeleted,
-            indicesRoutingDiffPath
-        );
+            } else {
+ */
+        return templatesMetadataUpdated;
+            builder.endArray();
+            builder.field(DIFF_FIELD, indicesRoutingDiffPath);
+        XContentParser.Token token;
+        boolean transientSettingsMetadataUpdate,
+            return new ClusterStateDiffManifest(
+                        currentFieldName = parser.currentName();
     }
-
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(fromStateUUID);
-        out.writeString(toStateUUID);
-        out.writeBoolean(coordinationMetadataUpdated);
-        out.writeBoolean(settingsMetadataUpdated);
-        out.writeBoolean(transientSettingsMetadataUpdated);
-        out.writeBoolean(templatesMetadataUpdated);
-        out.writeStringCollection(indicesUpdated);
-        out.writeStringCollection(indicesDeleted);
-        out.writeStringCollection(customMetadataUpdated);
+    private final boolean settingsMetadataUpdated;
+    public ClusterStateDiffManifest(StreamInput in) throws IOException {
         out.writeStringCollection(customMetadataDeleted);
-        out.writeBoolean(clusterBlocksUpdated);
-        out.writeBoolean(discoveryNodesUpdated);
-        out.writeStringCollection(indicesRoutingUpdated);
-        out.writeStringCollection(indicesRoutingDeleted);
-        out.writeBoolean(hashesOfConsistentSettingsUpdated);
-        out.writeStringCollection(clusterStateCustomUpdated);
-        out.writeStringCollection(clusterStateCustomDeleted);
-        out.writeOptionalString(indicesRoutingDiffPath);
     }
-
-    /**
-     * Builder for ClusterStateDiffManifest
-     *
-     * @opensearch.internal
-     */
-    public static class Builder {
-        private String fromStateUUID;
-        private String toStateUUID;
-        private boolean coordinationMetadataUpdated;
-        private boolean settingsMetadataUpdated;
-        private boolean transientSettingsMetadataUpdated;
-        private boolean templatesMetadataUpdated;
-        private List<String> customMetadataUpdated;
-        private List<String> customMetadataDeleted;
-        private List<String> indicesUpdated;
-        private List<String> indicesDeleted;
-        private boolean clusterBlocksUpdated;
-        private boolean discoveryNodesUpdated;
-        private List<String> indicesRoutingUpdated;
-        private List<String> indicesRoutingDeleted;
-        private String indicesRoutingDiff;
-        private boolean hashesOfConsistentSettingsUpdated;
-        private List<String> clusterStateCustomUpdated;
-        private List<String> clusterStateCustomDeleted;
-
-        public Builder() {
-            customMetadataUpdated = Collections.emptyList();
-            customMetadataDeleted = Collections.emptyList();
-            indicesUpdated = Collections.emptyList();
-            indicesDeleted = Collections.emptyList();
-            indicesRoutingUpdated = Collections.emptyList();
-            indicesRoutingDeleted = Collections.emptyList();
-            clusterStateCustomUpdated = Collections.emptyList();
-            clusterStateCustomDeleted = Collections.emptyList();
-        }
-
-        public Builder fromStateUUID(String fromStateUUID) {
-            this.fromStateUUID = fromStateUUID;
             return this;
-        }
-
-        public Builder toStateUUID(String toStateUUID) {
-            this.toStateUUID = toStateUUID;
-            return this;
-        }
-
         public Builder coordinationMetadataUpdated(boolean coordinationMetadataUpdated) {
-            this.coordinationMetadataUpdated = coordinationMetadataUpdated;
-            return this;
+            && hashesOfConsistentSettingsUpdated == that.hashesOfConsistentSettingsUpdated
+            && Objects.equals(indicesRoutingUpdated, that.indicesRoutingUpdated)
+            }
+    }
+            }
+            builder.endArray();
+            settingsMetadataUpdated,
+        customMetadataDeleted = customDiff.getDeletes();
+        return transientSettingsMetadataUpdated;
+            builder.field(TRANSIENT_SETTINGS_METADATA_UPDATED_FIELD, transientSettingsMetadataUpdated);
+                        break;
+        if (!indicesRoutingDeleted.isEmpty()) {
+                        if (token.isValue()) {
         }
-
-        public Builder settingsMetadataUpdated(boolean settingsMetadataUpdated) {
-            this.settingsMetadataUpdated = settingsMetadataUpdated;
-            return this;
+    @Override
+                                    token = parser.nextToken();
+                                case HASHES_OF_CONSISTENT_SETTINGS_UPDATED_FIELD:
+    public List<String> getIndicesRoutingUpdated() {
+import org.opensearch.cluster.ClusterState;
         }
-
-        public Builder transientSettingsMetadataUpdate(boolean settingsMetadataUpdated) {
-            this.transientSettingsMetadataUpdated = settingsMetadataUpdated;
-            return this;
+            builder.field(COORDINATION_METADATA_UPDATED_FIELD, coordinationMetadataUpdated);
+    ) {
+                            throw new XContentParseException("Unexpected token [" + token + "]");
+            clusterStateCustomDeleted = Collections.emptyList();
+                discoveryNodesUpdated,
         }
-
-        public Builder templatesMetadataUpdated(boolean templatesMetadataUpdated) {
-            this.templatesMetadataUpdated = templatesMetadataUpdated;
-            return this;
-        }
-
-        public Builder hashesOfConsistentSettingsUpdated(boolean hashesOfConsistentSettingsUpdated) {
-            this.hashesOfConsistentSettingsUpdated = hashesOfConsistentSettingsUpdated;
-            return this;
-        }
-
-        public Builder customMetadataUpdated(List<String> customMetadataUpdated) {
-            this.customMetadataUpdated = customMetadataUpdated;
-            return this;
-        }
-
-        public Builder customMetadataDeleted(List<String> customMetadataDeleted) {
-            this.customMetadataDeleted = customMetadataDeleted;
-            return this;
-        }
-
-        public Builder indicesUpdated(List<String> indicesUpdated) {
-            this.indicesUpdated = indicesUpdated;
-            return this;
-        }
-
-        public Builder indicesDeleted(List<String> indicesDeleted) {
             this.indicesDeleted = indicesDeleted;
-            return this;
-        }
-
-        public Builder clusterBlocksUpdated(boolean clusterBlocksUpdated) {
-            this.clusterBlocksUpdated = clusterBlocksUpdated;
-            return this;
-        }
-
-        public Builder discoveryNodesUpdated(boolean discoveryNodesUpdated) {
+            && Objects.equals(fromStateUUID, that.fromStateUUID)
+                            default:
+        return hashesOfConsistentSettingsUpdated;
+            && Objects.equals(customMetadataUpdated, that.customMetadataUpdated)
+            getStringKeySerializer()
+            templatesMetadataUpdated,
+            && discoveryNodesUpdated == that.discoveryNodesUpdated
+                    }
+                                }
+        private List<String> indicesUpdated;
+                        }
+                                break;
             this.discoveryNodesUpdated = discoveryNodesUpdated;
-            return this;
-        }
-
+    public static class Builder {
+        fromStateUUID = previousState.stateUUID();
+            this.indicesRoutingUpdated = indicesRoutingUpdated;
+                indicesUpdated,
+    public List<String> getClusterStateCustomUpdated() {
+        String indicesRoutingDiffPath,
+                        break;
+        builder.startArray(DELETES_FIELD);
+        List<String> indicesDeleted,
+    public List<String> getIndicesDeleted() {
+        this.fromStateUUID = in.readString();
+        discoveryNodesUpdated = state.nodes().delta(previousState.nodes()).hasChanges();
+        clusterStateCustomUpdated = new ArrayList<>(clusterStateCustomDiff.getDiffs().keySet());
+            }
+ * this file be licensed under the Apache-2.0 license or a
+                routingTableDiff.provideDiff().getUpserts().forEach((k, v) -> indicesRoutingUpdated.add(k));
+            customMetadataUpdated = Collections.emptyList();
+            .hashesOfConsistentSettings()
+                                    builder.settingsMetadataUpdated(parser.booleanValue());
+        StringKeyDiffProvider<IndexRoutingTable> routingTableDiff,
+    public ClusterStateDiffManifest(
+        out.writeStringCollection(clusterStateCustomDeleted);
+    public int hashCode() {
+            );
+            && Objects.equals(clusterStateCustomUpdated, that.clusterStateCustomUpdated)
         public Builder indicesRoutingDiffPath(String indicesRoutingDiffPath) {
+            builder.value(custom);
+        private boolean templatesMetadataUpdated;
+            this.customMetadataDeleted = customMetadataDeleted;
+            indicesRoutingDeleted,
+                    case CLUSTER_BLOCKS_UPDATED_FIELD:
+            && templatesMetadataUpdated == that.templatesMetadataUpdated
+        settingsMetadataUpdated = !Metadata.isSettingsMetadataEqual(state.metadata(), previousState.metadata());
+            customMetadataUpdated,
+import java.io.IOException;
+     *
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.xcontent.XContentParseException;
+    public List<String> getCustomMetadataDeleted() {
+                            } else if (currentFieldName.equals(METADATA_CUSTOM_DIFF_FIELD)) {
+import org.opensearch.cluster.metadata.IndexMetadata;
+        return indicesRoutingDeleted;
+    @Override
+import org.opensearch.core.common.io.stream.Writeable;
+    }
+        public Builder customMetadataUpdated(List<String> customMetadataUpdated) {
+            builder.endArray();
+    }
+    private final String toStateUUID;
+    }
+            return this;
+                            if (currentFieldName.equals(INDICES_DIFF_FIELD)) {
+/*
+        String fromStateUUID,
+        this.clusterBlocksUpdated = clusterBlocksUpdated;
+                customMetadataDeleted,
+                                        case UPSERTS_FIELD:
+            this.hashesOfConsistentSettingsUpdated = hashesOfConsistentSettingsUpdated;
+    public void writeTo(StreamOutput out) throws IOException {
+            builder.field(SETTINGS_METADATA_UPDATED_FIELD, settingsMetadataUpdated);
+        this.customMetadataDeleted = Collections.unmodifiableList(customMetadataDeleted);
+                    }
+            builder.startArray(UPSERTS_FIELD);
+    }
+                                    builder.indicesRoutingDeleted(convertListToString(parser.listOrderedMap()));
+                                        default:
+    private static final String ROUTING_TABLE_DIFF = "routing_table_diff";
+        templatesMetadataUpdated = !Metadata.isTemplatesMetadataEqual(state.metadata(), previousState.metadata());
+        return convertedList;
+                } else if (currentFieldName.equals(ROUTING_TABLE_DIFF)) {
+            for (String index : indicesDeleted) {
+        this.customMetadataUpdated = Collections.unmodifiableList(customMetadataUpdated);
+        out.writeString(toStateUUID);
+        return coordinationMetadataUpdated == that.coordinationMetadataUpdated
+            .equals(previousState.metadata().hashesOfConsistentSettings());
+        builder.endArray();
+        hashesOfConsistentSettingsUpdated = !state.metadata()
+            this.clusterBlocksUpdated = clusterBlocksUpdated;
+        public Builder() {
+        this.fromStateUUID = fromStateUUID;
+    private final boolean coordinationMetadataUpdated;
+                        } else {
+            && clusterBlocksUpdated == that.clusterBlocksUpdated
+        this.discoveryNodesUpdated = discoveryNodesUpdated;
+                                    throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
+            for (String custom : customMetadataDeleted) {
+            this.transientSettingsMetadataUpdated = settingsMetadataUpdated;
+        private String fromStateUUID;
+                        currentFieldName = parser.currentName();
+    private final boolean discoveryNodesUpdated;
+        return new Builder();
+        this.coordinationMetadataUpdated = coordinationMetadataUpdated;
+        return clusterBlocksUpdated;
+    /**
+                                case TRANSIENT_SETTINGS_METADATA_UPDATED_FIELD:
+                fromStateUUID,
+        String toStateUUID,
+        return indicesRoutingUpdated;
+        public Builder discoveryNodesUpdated(boolean discoveryNodesUpdated) {
+    public String getFromStateUUID() {
+        out.writeStringCollection(clusterStateCustomUpdated);
+        return settingsMetadataUpdated;
+            for (String index : indicesRoutingDeleted) {
+    public static ClusterStateDiffManifest fromXContent(XContentParser parser, long codec_version) throws IOException {
+        return customMetadataUpdated;
+                        currentFieldName = parser.currentName();
+    public boolean isTransientSettingsMetadataUpdated() {
+                                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+        this.indicesUpdated = in.readStringList();
+                indicesRoutingUpdated,
+                builder.value(index);
+import java.util.Objects;
+        private String indicesRoutingDiff;
+        this.toStateUUID = in.readString();
+                                            builder.indicesUpdated(convertListToString(parser.listOrderedMap()));
+    public void setIndicesRoutingDiffPath(String indicesRoutingDiffPath) {
+                } else if (currentFieldName.equals(CLUSTER_STATE_CUSTOM_DIFF_FIELD)) {
+            return this;
+            indicesUpdated,
+                        builder.discoveryNodesUpdated(parser.booleanValue());
+            getStringKeySerializer(),
             this.indicesRoutingDiff = indicesRoutingDiffPath;
             return this;
-        }
-
-        public Builder indicesRoutingUpdated(List<String> indicesRoutingUpdated) {
-            this.indicesRoutingUpdated = indicesRoutingUpdated;
-            return this;
-        }
-
-        public Builder indicesRoutingDeleted(List<String> indicesRoutingDeleted) {
-            this.indicesRoutingDeleted = indicesRoutingDeleted;
-            return this;
-        }
-
-        public Builder clusterStateCustomUpdated(List<String> clusterStateCustomUpdated) {
-            this.clusterStateCustomUpdated = clusterStateCustomUpdated;
-            return this;
-        }
-
-        public Builder clusterStateCustomDeleted(List<String> clusterStateCustomDeleted) {
-            this.clusterStateCustomDeleted = clusterStateCustomDeleted;
-            return this;
-        }
-
-        public ClusterStateDiffManifest build() {
-            return new ClusterStateDiffManifest(
-                fromStateUUID,
-                toStateUUID,
-                coordinationMetadataUpdated,
-                settingsMetadataUpdated,
-                transientSettingsMetadataUpdated,
-                templatesMetadataUpdated,
-                customMetadataUpdated,
-                customMetadataDeleted,
-                indicesUpdated,
-                indicesDeleted,
-                clusterBlocksUpdated,
-                discoveryNodesUpdated,
-                indicesRoutingUpdated,
-                indicesRoutingDeleted,
-                indicesRoutingDiff,
-                hashesOfConsistentSettingsUpdated,
-                clusterStateCustomUpdated,
+        out.writeBoolean(coordinationMetadataUpdated);
+                                            break;
+import org.opensearch.core.xcontent.ToXContentFragment;
+                                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                            case DELETES_FIELD:
+            clusterStateCustomUpdated = Collections.emptyList();
+    }
+                    case TO_STATE_UUID_FIELD:
+                                case TEMPLATES_METADATA_UPDATED_FIELD:
                 clusterStateCustomDeleted
-            );
+        }
+                            } else {
+            indicesUpdated = Collections.emptyList();
+                builder.value(custom);
+        this.indicesRoutingDiffPath = indicesRoutingDiffPath;
         }
     }
+        this.indicesDeleted = in.readStringList();
+                indicesRoutingDeleted,
+    }
+        out.writeBoolean(templatesMetadataUpdated);
+    public boolean isClusterBlocksUpdated() {
+     * Builder for ClusterStateDiffManifest
+                                    switch (currentFieldName) {
+            return this;
+                        parser.nextToken();
+            return this;
+    private final List<String> indicesUpdated;
+                                }
+            this.toStateUUID = toStateUUID;
+            toStateUUID,
+            state.metadata().customs(),
+        this.indicesRoutingDiffPath = indicesRoutingDiffPath;
+                                throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
+        for (String custom : clusterStateCustomUpdated) {
+        }
+        ClusterState previousState,
+                coordinationMetadataUpdated,
+        return clusterStateCustomDeleted;
+        int codecVersion,
+    private final boolean hashesOfConsistentSettingsUpdated;
+    private static final String CLUSTER_BLOCKS_UPDATED_FIELD = "cluster_blocks_diff";
+        out.writeBoolean(discoveryNodesUpdated);
+        List<String> convertedList = new ArrayList<>();
+    }
+                                    currentFieldName = parser.currentName();
+        this.discoveryNodesUpdated = in.readBoolean();
+                        builder.clusterBlocksUpdated(parser.booleanValue());
+import org.opensearch.cluster.routing.StringKeyDiffProvider;
+                                        case UPSERTS_FIELD:
+        ClusterStateDiffManifest that = (ClusterStateDiffManifest) o;
+        out.writeStringCollection(indicesRoutingDeleted);
+                indicesRoutingDiff,
+            return this;
+            parser.nextToken();
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.cluster.DiffableUtils;
+                                }
+                    while ((parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+        }
+                currentFieldName = parser.currentName();
+        return indicesDeleted;
+public class ClusterStateDiffManifest implements ToXContentFragment, Writeable {
+        toStateUUID = state.stateUUID();
+                indicesRoutingDeleted.addAll(routingTableDiff.provideDiff().getDeletes());
+    private final boolean clusterBlocksUpdated;
+        builder.startArray(UPSERTS_FIELD);
+            for (String index : indicesUpdated) {
+import java.util.Collections;
+                                            throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
+            this.customMetadataUpdated = customMetadataUpdated;
+     * @opensearch.internal
+import org.opensearch.core.xcontent.XContentParser;
+                            case UPSERTS_FIELD:
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+    private final boolean transientSettingsMetadataUpdated;
+        this.indicesRoutingUpdated = Collections.unmodifiableList(indicesRoutingUpdated);
+            }
+            coordinationMetadataUpdated,
+            if (routingTableDiff != null && routingTableDiff.provideDiff() != null) {
+        return Strings.toString(MediaTypeRegistry.JSON, this);
+                                case SETTINGS_METADATA_UPDATED_FIELD:
+        return fromStateUUID;
+        }
+    }
+        );
+                                            builder.customMetadataDeleted(convertListToString(parser.listOrderedMap()));
+import org.opensearch.cluster.metadata.Metadata;
+     */
+            }
+            builder.value(custom);
+        builder.endObject();
+                transientSettingsMetadataUpdated,
+        customMetadataUpdated.addAll(customDiff.getUpserts().keySet());
+            builder.field(TEMPLATES_METADATA_UPDATED_FIELD, templatesMetadataUpdated);
+ * compatible open source license.
+import org.opensearch.core.common.io.stream.StreamInput;
+            return this;
+        builder.endObject();
+            this.indicesUpdated = indicesUpdated;
+        clusterStateCustomUpdated.addAll(clusterStateCustomDiff.getUpserts().keySet());
+        this.hashesOfConsistentSettingsUpdated = in.readBoolean();
+        out.writeString(fromStateUUID);
+        }
+        customMetadataUpdated = new ArrayList<>(customDiff.getDiffs().keySet());
+                        builder.fromStateUUID(parser.text());
+        public Builder clusterBlocksUpdated(boolean clusterBlocksUpdated) {
+        public Builder fromStateUUID(String fromStateUUID) {
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+        out.writeBoolean(hashesOfConsistentSettingsUpdated);
+        builder.startObject(METADATA_DIFF_FIELD);
+                        parser.nextToken();
+    }
+            && Objects.equals(customMetadataDeleted, that.customMetadataDeleted)
+    public List<String> getIndicesUpdated() {
+        boolean templatesMetadataUpdated,
+        DiffableUtils.MapDiff<String, IndexMetadata, Map<String, IndexMetadata>> indicesDiff = DiffableUtils.diff(
+            }
+    }
+    private final List<String> indicesDeleted;
+            builder.startArray(UPSERTS_FIELD);
+import static org.opensearch.cluster.DiffableUtils.NonDiffableValueSerializer.getAbstractInstance;
+        public Builder hashesOfConsistentSettingsUpdated(boolean hashesOfConsistentSettingsUpdated) {
+            builder.endArray();
+import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V2;
+        public Builder settingsMetadataUpdated(boolean settingsMetadataUpdated) {
+    private final List<String> indicesRoutingDeleted;
+        builder.field(DISCOVERY_NODES_UPDATED_FIELD, discoveryNodesUpdated);
+            this.fromStateUUID = fromStateUUID;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            && transientSettingsMetadataUpdated == that.transientSettingsMetadataUpdated
+import static org.opensearch.cluster.DiffableUtils.getStringKeySerializer;
+                                    token = parser.nextToken();
+            clusterStateCustomDeleted,
+        }
+                                    break;
+            builder.endArray();
+                                    break;
+                    throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
+    }
+                templatesMetadataUpdated,
+                                            break;
+            this.templatesMetadataUpdated = templatesMetadataUpdated;
+        this.indicesRoutingUpdated = in.readStringList();
+        return toStateUUID;
+                                    break;
+        private List<String> indicesRoutingDeleted;
+                                break;
+        public Builder indicesRoutingDeleted(List<String> indicesRoutingDeleted) {
+            indicesDeleted = Collections.emptyList();
+                        }
+    }
+                } else {
+    }
+        }
+                                        case DELETES_FIELD:
+            builder.endObject();
+                        } else if (token == XContentParser.Token.START_OBJECT) {
+            this.coordinationMetadataUpdated = coordinationMetadataUpdated;
+import java.util.ArrayList;
+        return indicesUpdated;
+        }
+        {
+            clusterBlocksUpdated,
+    @Override
+        List<String> clusterStateCustomUpdated,
+                                            builder.indicesDeleted(convertListToString(parser.listOrderedMap()));
+            builder.startArray(DELETES_FIELD);
+                            }
+/**
+            return this;
+        this.settingsMetadataUpdated = in.readBoolean();
+        }
+                            switch (currentFieldName) {
+    private final List<String> customMetadataUpdated;
+    }
+                                    }
+            }
+import java.util.List;
+        for (Object o : list) {
+                                throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
+            previousState.metadata().indices(),
+    public List<String> getCustomMetadataUpdated() {
+        public Builder indicesRoutingUpdated(List<String> indicesRoutingUpdated) {
+    private static final String TO_STATE_UUID_FIELD = "to_state_uuid";
+        }
+        if (parser.currentToken() == null) { // fresh parser? move to next token
+        ClusterState state,
+        boolean discoveryNodesUpdated,
+        private boolean coordinationMetadataUpdated;
+        }
+ * @opensearch.internal
+                builder.value(custom);
+        this.indicesRoutingDeleted = in.readStringList();
+            discoveryNodesUpdated,
+                            case UPSERTS_FIELD:
+                throw new XContentParseException("Unexpected token [" + token + "]");
+        builder.field(CLUSTER_BLOCKS_UPDATED_FIELD, clusterBlocksUpdated);
+                            case DIFF_FIELD:
+        }
+        this.hashesOfConsistentSettingsUpdated = hashesOfConsistentSettingsUpdated;
+        List<String> customMetadataDeleted,
+        return discoveryNodesUpdated;
+        this.clusterStateCustomUpdated = in.readStringList();
+        public Builder transientSettingsMetadataUpdate(boolean settingsMetadataUpdated) {
+    private static final String UPSERTS_FIELD = "upserts";
+    private static List<String> convertListToString(List<Object> list) {
+ */
+                                if (codec_version == CODEC_V2 || codec_version == CODEC_V3) {
+        out.writeStringCollection(indicesDeleted);
+                                break;
+                                            throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
+        String currentFieldName = parser.currentName();
+            getStringKeySerializer(),
+            return this;
+        clusterBlocksUpdated = !state.blocks().equals(previousState.blocks());
+            state.customs(),
+        coordinationMetadataUpdated = !Metadata.isCoordinationMetadataEqual(state.metadata(), previousState.metadata());
+        public Builder templatesMetadataUpdated(boolean templatesMetadataUpdated) {
+import java.util.Map;
+            return this;
+ * The OpenSearch Contributors require contributions made to
+            builder.startArray(DELETES_FIELD);
+        }
+            parser.nextToken();
+        boolean settingsMetadataUpdated,
+    public boolean isCoordinationMetadataUpdated() {
+        return clusterStateCustomUpdated;
+        DiffableUtils.MapDiff<String, Metadata.Custom, Map<String, Metadata.Custom>> customDiff = DiffableUtils.diff(
+        this.indicesRoutingDiffPath = in.readOptionalString();
+        List<String> clusterStateCustomDeleted
+                    case DISCOVERY_NODES_UPDATED_FIELD:
+            } else if (token.isValue()) {
+                                default:
+                        break;
+    private final boolean templatesMetadataUpdated;
+        private List<String> customMetadataUpdated;
+                                    break;
+                builder.value(index);
+    private static final String HASHES_OF_CONSISTENT_SETTINGS_UPDATED_FIELD = "hashes_of_consistent_settings_diff";
+        private List<String> clusterStateCustomDeleted;
+            && Objects.equals(clusterStateCustomDeleted, that.clusterStateCustomDeleted)
+            builder.field(HASHES_OF_CONSISTENT_SETTINGS_UPDATED_FIELD, hashesOfConsistentSettingsUpdated);
+    public static Builder builder() {
+        }
+                                case COORDINATION_METADATA_UPDATED_FIELD:
+        private boolean hashesOfConsistentSettingsUpdated;
+import org.opensearch.core.xcontent.XContentBuilder;
+        }
+                    while ((parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+        out.writeStringCollection(indicesRoutingUpdated);
+    private static final String DISCOVERY_NODES_UPDATED_FIELD = "discovery_nodes_diff";
+            builder.startArray(DELETES_FIELD);
+    private static final String CLUSTER_STATE_CUSTOM_DIFF_FIELD = "cluster_state_custom_diff";
+    private final List<String> clusterStateCustomUpdated;
+            return this;
+            && Objects.equals(toStateUUID, that.toStateUUID)
+    public List<String> getClusterStateCustomDeleted() {
+        builder.field(TO_STATE_UUID_FIELD, toStateUUID);
+        }
 }
+                        token = parser.nextToken();
+                                    builder.coordinationMetadataUpdated(parser.booleanValue());
+                    }
+    private final List<String> customMetadataDeleted;
+    public List<String> getIndicesRoutingDeleted() {
+            builder.endArray();
+                clusterStateCustomUpdated,
+            && Objects.equals(indicesRoutingDeleted, that.indicesRoutingDeleted)
+                indicesDeleted,
+    }
+                builder.value(index);
+        List<String> customMetadataUpdated,
+        out.writeOptionalString(indicesRoutingDiffPath);
+    }
+        }
+        this.indicesRoutingDeleted = Collections.unmodifiableList(indicesRoutingDeleted);
+    public boolean isSettingsMetadataUpdated() {
+                hashesOfConsistentSettingsUpdated,
+        public Builder indicesUpdated(List<String> indicesUpdated) {
+            return this;
+    public String toString() {
+                                    builder.transientSettingsMetadataUpdate(parser.booleanValue());
+                                    builder.indicesRoutingUpdated(convertListToString(parser.listOrderedMap()));
+            state.metadata().indices(),
+            && Objects.equals(indicesUpdated, that.indicesUpdated)
+        DiffableUtils.MapDiff<String, ClusterState.Custom, Map<String, ClusterState.Custom>> clusterStateCustomDiff = DiffableUtils.diff(
+        if (indicesRoutingDiffPath != null) {
+    }
+    private static final String DIFF_FIELD = "diff";
+    private final String fromStateUUID;
+                        builder.toStateUUID(parser.text());
+        );
+            builder.endObject();
+    }
+                                            break;
+ *
+                                            builder.customMetadataUpdated(convertListToString(parser.listOrderedMap()));
+                                    builder.indicesRoutingDiffPath(parser.textOrNull());
+        out.writeStringCollection(customMetadataUpdated);
+        this.indicesRoutingDiffPath = indicesRoutingDiffPath;
+                settingsMetadataUpdated,
+        private List<String> customMetadataDeleted;
+            return this;
+        return coordinationMetadataUpdated;
+                        switch (currentFieldName) {
+        return Objects.hash(
+    ) {
+        if (codecVersion == CODEC_V2 || codecVersion == CODEC_V3) {
+        this.templatesMetadataUpdated = templatesMetadataUpdated;
+        for (String custom : clusterStateCustomDeleted) {
+    private final List<String> clusterStateCustomDeleted;
+        indicesDeleted = indicesDiff.getDeletes();
+        this.customMetadataDeleted = in.readStringList();
+        builder.endArray();
+            transientSettingsMetadataUpdated,
+            indicesRoutingUpdated = Collections.emptyList();
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+            return this;
+    }
+                                    currentFieldName = parser.currentName();
+        if (!indicesRoutingUpdated.isEmpty()) {
+                                        case DELETES_FIELD:
+    private final List<String> indicesRoutingUpdated;
+        boolean coordinationMetadataUpdated,
+        }
+    }
+        boolean clusterBlocksUpdated,
+        }
+    public String getIndicesRoutingDiffPath() {
+        this.coordinationMetadataUpdated = in.readBoolean();
+                                    break;
+            hashesOfConsistentSettingsUpdated,
+                                throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
+            builder.startArray(UPSERTS_FIELD);
+            convertedList.add(o.toString());
+            for (String index : indicesRoutingUpdated) {
+                                if (codec_version >= CODEC_V3) {
+import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V3;
+            indicesDeleted,
+        this.clusterBlocksUpdated = in.readBoolean();
+    private static final String TRANSIENT_SETTINGS_METADATA_UPDATED_FIELD = "transient_settings_metadata_diff";
+        );
+                clusterBlocksUpdated,
+            && Objects.equals(indicesDeleted, that.indicesDeleted)
+            getAbstractInstance()
+    }
+        private boolean transientSettingsMetadataUpdated;
+        clusterStateCustomDeleted = clusterStateCustomDiff.getDeletes();
+                            default:
+        this.transientSettingsMetadataUpdated = in.readBoolean();
+                        break;
+    }
+        if (parser.currentToken() == XContentParser.Token.START_OBJECT) {
+        this.settingsMetadataUpdated = settingsMetadataUpdated;
+            this.settingsMetadataUpdated = settingsMetadataUpdated;
+            customMetadataDeleted = Collections.emptyList();
+    }
+    }
+        List<String> indicesRoutingDeleted,
+        Builder builder = new Builder();
+        }
+        }
+        if (this == o) return true;
+    }
+            customMetadataDeleted,
+        return customMetadataDeleted;
+        }
+        out.writeBoolean(clusterBlocksUpdated);
+                switch (currentFieldName) {
+            indicesRoutingUpdated,
+            clusterStateCustomUpdated,
+        public ClusterStateDiffManifest build() {
+        boolean hashesOfConsistentSettingsUpdated,
+            indicesRoutingDeleted = Collections.emptyList();
+            getAbstractInstance()
+                                }
+package org.opensearch.gateway.remote;
+                                break;
+        public Builder toStateUUID(String toStateUUID) {
+    private static final String TEMPLATES_METADATA_UPDATED_FIELD = "templates_metadata_diff";
+    private static final String FROM_STATE_UUID_FIELD = "from_state_uuid";
+    public String getToStateUUID() {
+    }
+                                    builder.templatesMetadataUpdated(parser.booleanValue());
+                                builder.clusterStateCustomUpdated(convertListToString(parser.listOrderedMap()));
+                            }
+        List<String> indicesRoutingUpdated,
+            return this;
+ * Manifest of diff between two cluster states
+        private boolean settingsMetadataUpdated;
+        this.indicesDeleted = Collections.unmodifiableList(indicesDeleted);
+            && settingsMetadataUpdated == that.settingsMetadataUpdated
+        private boolean discoveryNodesUpdated;
+                                if (codec_version == CODEC_V2 || codec_version == CODEC_V3) {
+import org.opensearch.cluster.routing.IndexRoutingTable;
+        builder.endObject();
+    private static final String METADATA_CUSTOM_DIFF_FIELD = "metadata_custom_diff";
+        List<String> indicesUpdated,
+        return indicesRoutingDiffPath;
+        public Builder clusterStateCustomUpdated(List<String> clusterStateCustomUpdated) {
+            if (token == XContentParser.Token.FIELD_NAME) {
+    private static final String COORDINATION_METADATA_UPDATED_FIELD = "coordination_metadata_diff";
+ *
+                                builder.clusterStateCustomDeleted(convertListToString(parser.listOrderedMap()));
+        private List<String> clusterStateCustomUpdated;
+        this.customMetadataUpdated = in.readStringList();
+        this.clusterStateCustomUpdated = Collections.unmodifiableList(clusterStateCustomUpdated);
+            }
+            builder.startObject(METADATA_CUSTOM_DIFF_FIELD);
+    public ClusterStateDiffManifest(
+        }
+        String indicesRoutingDiffPath
+                builder.value(index);
+        this.toStateUUID = toStateUUID;
+            builder.startObject(INDICES_DIFF_FIELD);
+                    case FROM_STATE_UUID_FIELD:
+        transientSettingsMetadataUpdated = !Metadata.isTransientSettingsMetadataEqual(state.metadata(), previousState.metadata());
+            previousState.metadata().customs(),
+            this.clusterStateCustomUpdated = clusterStateCustomUpdated;
+        builder.field(FROM_STATE_UUID_FIELD, fromStateUUID);
+            for (String custom : customMetadataUpdated) {
+            fromStateUUID,
+                                }
+            return this;
+                                    switch (currentFieldName) {
+        this.clusterStateCustomDeleted = in.readStringList();
+        }
+        indicesRoutingDeleted = new ArrayList<>();
+                }
+        indicesUpdated = new ArrayList<>(indicesDiff.getDiffs().keySet());
+        indicesUpdated.addAll(indicesDiff.getUpserts().keySet());
+                customMetadataUpdated,
+    private static final String INDICES_DIFF_FIELD = "indices_diff";
+        }
+        public Builder clusterStateCustomDeleted(List<String> clusterStateCustomDeleted) {
+            } else if (token == XContentParser.Token.START_OBJECT) {
+        private String toStateUUID;
+                    default:
+import org.opensearch.core.common.Strings;
+        }
+    private String indicesRoutingDiffPath;
+                                    builder.hashesOfConsistentSettingsUpdated(parser.booleanValue());
+    public boolean isHashesOfConsistentSettingsUpdated() {
+    @Override
+        out.writeBoolean(transientSettingsMetadataUpdated);
+        );
+        ensureExpectedToken(XContentParser.Token.FIELD_NAME, parser.currentToken(), parser);
+                                break;
+        public Builder customMetadataDeleted(List<String> customMetadataDeleted) {
+            this.clusterStateCustomDeleted = clusterStateCustomDeleted;
+                                            break;
+        return builder.build();
+    @Override
+                        }
+    public boolean isDiscoveryNodesUpdated() {
+    public boolean isTemplatesMetadataUpdated() {
+        builder.startObject(CLUSTER_STATE_CUSTOM_DIFF_FIELD);
+    private static final String SETTINGS_METADATA_UPDATED_FIELD = "settings_metadata_diff";
+        out.writeBoolean(settingsMetadataUpdated);
+                }
+        private boolean clusterBlocksUpdated;
+                                    }
+        builder.startObject(ROUTING_TABLE_DIFF);
+        return builder;
+                        switch (currentFieldName) {
+        private List<String> indicesDeleted;
+    private static final String METADATA_DIFF_FIELD = "metadata_diff";
+        this.indicesUpdated = Collections.unmodifiableList(indicesUpdated);
+        this.templatesMetadataUpdated = in.readBoolean();
+            && Objects.equals(indicesRoutingDiffPath, that.indicesRoutingDiffPath);
+            indicesRoutingDiffPath
+        public Builder indicesDeleted(List<String> indicesDeleted) {
+                if (currentFieldName.equals(METADATA_DIFF_FIELD)) {
+            return this;
+                                        default:
+        indicesRoutingUpdated = new ArrayList<>();
+                        throw new XContentParseException("Unexpected field [" + currentFieldName + "]");
+        this.transientSettingsMetadataUpdated = transientSettingsMetadataUpdate;
+        out.writeStringCollection(indicesUpdated);
+        private List<String> indicesRoutingUpdated;
+            previousState.customs(),
+            this.indicesRoutingDeleted = indicesRoutingDeleted;
+        this.clusterStateCustomDeleted = Collections.unmodifiableList(clusterStateCustomDeleted);
+        }
+        if (o == null || getClass() != o.getClass()) return false;
+                toStateUUID,

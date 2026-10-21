@@ -1,246 +1,217 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.analytics.exec.stage;
-
-import org.opensearch.analytics.exec.task.TaskRunner;
-import org.opensearch.common.Nullable;
-import org.opensearch.core.action.ActionListener;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
-
-/**
- * One-shot execution unit for a single stage.
- *
- * @opensearch.internal
- */
-public interface StageExecution {
-
-    int getStageId();
-
-    State getState();
-
-    StageMetrics getMetrics();
-
-    /**
-     * Starts the stage: materialise its task list, publish it, and transition. Called at most once.
-     *
-     * <p>Materialisation may be deferred behind a network round-trip (e.g. the can-match
-     * pre-filter), so the stage can still be CREATED when this method returns and only reach its
-     * post-materialisation state later, on the completion thread. {@code onStarted} signals when
-     * materialisation has completed: {@code onResponse} after the stage has transitioned (RUNNING
-     * when there is work, or a terminal state such as SUCCEEDED for empty targets), {@code
-     * onFailure} if materialisation failed (the stage is already FAILED by then). Callers dispatch
-     * by checking {@code getState() == RUNNING} inside {@code onResponse}. Pass {@link
-     * ActionListener#wrap} no-ops when the caller does not need the signal.
-     */
-    void start(ActionListener<Void> onStarted);
-
-    /** Append-only; register before {@link #start(ActionListener)}. Fired synchronously on every transition. */
-    void addStateListener(StageStateListener listener);
-
-    /** Non-null only when state is {@link State#FAILED}. */
-    @Nullable
-    Exception getFailure();
-
-    /** Capture {@code cause} and transition to FAILED. Returns true if the transition happened. */
-    default boolean failWithCause(Exception cause) {
-        return false;
-    }
-
-    /** Idempotent. Transitions to CANCELLED and tears down stage-owned resources. */
-    void cancel(String reason);
-
-    // ── Scheduler-driven dispatch hooks ───────────────────────────────────
-
-    /** Empty until {@link #start} populates from resolved targets. */
-    default List<StageTask> tasks() {
-        return List.of();
-    }
-
-    /** Default {@link TaskRunner#NONE} — stages with runnable tasks override. */
-    default TaskRunner<?> taskRunner() {
-        return TaskRunner.NONE;
-    }
-
-    /**
-     * Dispatch the stage's tasks. Default implementation iterates {@link #tasks()} eagerly
-     * — one {@code runner.run} call per task up front. Stages may override to dispatch with a
-     * different cadence.
-     *
-     * <p>{@code handleForFactory} is the scheduler's per-task listener builder (the same one
-     * that carries retry / terminal logic); the scheduler owns the listener it hands them.
-     */
-    default void dispatchTasks(java.util.function.BiFunction<StageExecution, StageTask, ActionListener<Void>> handleForFactory) {
-        @SuppressWarnings("unchecked")
-        TaskRunner<StageTask> runner = (TaskRunner<StageTask>) taskRunner();
         for (StageTask task : tasks()) {
-            task.transitionTo(StageTaskState.RUNNING);
-            runner.run(task, handleForFactory.apply(this, task));
-        }
-    }
-
-    /** Per-task terminal callback. Captures failure / drives the stage's terminal transition. */
-    default void onTaskTerminal(StageTask task, @Nullable Exception cause) {}
-
-    /**
-     * Per-stage retry seam. Return a fresh task pointing at an alternate target, or
-     * {@code Optional.empty()} to give up (default). Owns the entire retry policy —
-     * attempt budget, retryable exception classes, alternate selection. The scheduler's
-     * {@code handleFor} consults this on every failure and dispatches the alternate if any.
-     */
-    default Optional<StageTask> retargetForRetry(StageTask failed, Exception cause) {
-        return Optional.empty();
-    }
-
-    // ── Cross-stage metadata channel ──────────────────────────────────────
-
-    /**
-     * Control-plane payload (broadcast bytes, per-shard stats) handed to the parent via
-     * {@link #consumeChildMetadata} before the parent is scheduled. Distinct from data flow
-     * through the pre-wired {@code ExchangeSink}. Default null (nothing published).
-     */
-    @Nullable
-    default Object publishedMetadata() {
-        return null;
-    }
-
-    /** Invoked by the cascade right before parent dispatch. Empty map when no children published. */
-    default void consumeChildMetadata(Map<Integer, Object> metadataByChildStageId) {}
-
-    /**
-     * Default {@code false}: parent scheduled on all-children-SUCCEEDED. {@code true} (eager):
-     * scheduled on first-child-RUNNING — required for streaming-reduce shapes whose drain
-     * must run concurrently with feeds to avoid deadlocking on a bounded input mpsc.
-     */
-    default boolean schedulesEagerly() {
-        return false;
-    }
-
-    /**
-     * Per-input EOF hook fired by the cascade on every child SUCCEEDED (independent of
-     * {@link #schedulesEagerly()}). Default no-op; streaming reduce overrides to close the
-     * just-finished child's sender. Failure paths fall through to the parent's terminal
-     * close, which tears everything down regardless.
-     */
-    default void closeChildInput(int childStageId) {}
-
-    // ── Cascade wiring (called at graph build time) ────────────────────────
-
-    /**
-     * Wires the child→parent state cascade and the reverse parent→sibling cancel sweep.
-     * Called once at graph build time, before any child has transitioned out of CREATED.
-     *
-     * <p>Per-child child→parent listener:
-     * <ul>
-     *   <li>RUNNING — eager parents ({@link #schedulesEagerly}) schedule on the first
-     *   child to enter RUNNING so their work can run concurrently with children's feeds.
-     *   <li>SUCCEEDED — invokes {@link #closeChildInput} (ungated; no-op for backends with
-     *   no per-child resources); decrements a counter; on zero, collects
-     *   {@link #publishedMetadata} from each child and hands off via {@link #consumeChildMetadata};
-     *   default-mode parents are scheduled here (eager parents already scheduled).
+                                scheduler.accept(this);
+    default TaskRunner<?> taskRunner() {
+    default List<StageTask> tasks() {
      *   <li>FAILED — propagates via {@link #failWithCause} before invoking
-     *   {@link #closeChildInput}, so an eager parent cannot observe EOF and win the
-     *   terminal-state race as SUCCEEDED.
+     * through the pre-wired {@code ExchangeSink}. Default null (nothing published).
      *   <li>CANCELLED — propagates {@link #cancel} before invoking
-     *   {@link #closeChildInput}, for the same reason.
-     * </ul>
-     *
-     * <p>Parent→sibling cancel sweep: on FAILED / CANCELLED, sweep still-running children.
-     *
-     * <p>Thread-safe under the documented contracts: counters are atomic; child state reads +
-     * {@link #cancel} are idempotent; this runs during graph build (before any transition
-     * fires), so listener registration never races with firing.
-     */
-    default void attachChildren(List<? extends StageExecution> children, Consumer<StageExecution> scheduler) {
-        if (children.isEmpty()) return;
-
-        boolean eager = schedulesEagerly();
         AtomicInteger pending = new AtomicInteger(children.size());
-        AtomicInteger eagerScheduled = new AtomicInteger(0);  // fires scheduler.accept at most once for eager mode
-        for (StageExecution child : children) {
-            int childId = child.getStageId();
             child.addStateListener((from, to) -> {
-                switch (to) {
-                    case RUNNING -> {
+     * attempt budget, retryable exception classes, alternate selection. The scheduler's
+     */
+        return Optional.empty();
+                    case CANCELLED -> {
+    /**
+    default Object publishedMetadata() {
+     *   {@link #closeChildInput}, so an eager parent cannot observe EOF and win the
+                        closeChildInput(childId);  // per-input EOF; no-op when not multi-input
+    StageMetrics getMetrics();
+            int childId = child.getStageId();
+ *
+import java.util.concurrent.atomic.AtomicInteger;
+    @Nullable
+ * SPDX-License-Identifier: Apache-2.0
+                    if (child.getState().isTerminal() == false) {
+    void cancel(String reason);
+     * <p>Materialisation may be deferred behind a network round-trip (e.g. the can-match
+    default Optional<StageTask> retargetForRetry(StageTask failed, Exception cause) {
+            task.transitionTo(StageTaskState.RUNNING);
+                        // closeChildInput wakes a concurrent drain that may otherwise complete
+    }
+     * onFailure} if materialisation failed (the stage is already FAILED by then). Callers dispatch
+                    }
+     */
+                    }
+        return false;
+                            Map<Integer, Object> metadata = new HashMap<>();
+                        // Claim the terminal state before publishing EOF. For eager parents,
+    }
+                        );
+        // child.cancel is a no-op when already terminal, so this is safe under top-down sweeps.
+                            cause != null
+     * Per-input EOF hook fired by the cascade on every child SUCCEEDED (independent of
+ */
                         if (eager && eagerScheduled.compareAndSet(0, 1)) {
-                            scheduler.accept(this);
-                        }
+ */
+     * scheduled on first-child-RUNNING — required for streaming-reduce shapes whose drain
+    // ── Cascade wiring (called at graph build time) ────────────────────────
+        return false;
+     * ActionListener#wrap} no-ops when the caller does not need the signal.
+    /**
+     * <p>{@code handleForFactory} is the scheduler's per-task listener builder (the same one
+     * <ul>
+     * close, which tears everything down regardless.
+     *
+                        closeChildInput(childId);
+            return this == SUCCEEDED || this == FAILED || this == CANCELLED;
+                                if (payload != null) {
+import java.util.List;
+    /** Idempotent. Transitions to CANCELLED and tears down stage-owned resources. */
+        return TaskRunner.NONE;
+     * <p>Thread-safe under the documented contracts: counters are atomic; child state reads +
+    /**
+    default boolean schedulesEagerly() {
+        return null;
+ * The OpenSearch Contributors require contributions made to
+                            for (StageExecution c : children) {
+     * <p>Per-child child→parent listener:
+        CREATED,
+    /**
+        CANCELLED;
+     * when there is work, or a terminal state such as SUCCEEDED for empty targets), {@code
+                        // Claim CANCELLED before publishing EOF for the same eager-drain race.
+    /**
+    /** Invoked by the cascade right before parent dispatch. Empty map when no children published. */
+    @Nullable
+import org.opensearch.common.Nullable;
+     * Default {@code false}: parent scheduled on all-children-SUCCEEDED. {@code true} (eager):
+        SUCCEEDED,
+                        if (pending.decrementAndGet() == 0) {
+     * Per-stage retry seam. Return a fresh task pointing at an alternate target, or
+    default void attachChildren(List<? extends StageExecution> children, Consumer<StageExecution> scheduler) {
+    }
+            runner.run(task, handleForFactory.apply(this, task));
+    }
+    // ── Scheduler-driven dispatch hooks ───────────────────────────────────
+     * {@link #cancel} are idempotent; this runs during graph build (before any transition
                     }
                     case SUCCEEDED -> {
-                        closeChildInput(childId);  // per-input EOF; no-op when not multi-input
-                        if (pending.decrementAndGet() == 0) {
-                            Map<Integer, Object> metadata = new HashMap<>();
-                            for (StageExecution c : children) {
-                                Object payload = c.publishedMetadata();
-                                if (payload != null) {
-                                    metadata.put(c.getStageId(), payload);
-                                }
-                            }
-                            consumeChildMetadata(metadata);
-                            // Eager parents already scheduled on first child RUNNING; default-mode schedules here.
-                            if (eager == false) {
-                                scheduler.accept(this);
-                            }
-                        }
-                    }
-                    case FAILED -> {
-                        Exception cause = child.getFailure();
-                        // Claim the terminal state before publishing EOF. For eager parents,
-                        // closeChildInput wakes a concurrent drain that may otherwise complete
-                        // successfully and make this failure transition a no-op.
-                        failWithCause(
-                            cause != null
-                                ? cause
-                                : new RuntimeException("child stage " + child.getStageId() + " failed without recorded cause")
-                        );
-                        closeChildInput(childId);
-                    }
-                    case CANCELLED -> {
-                        // Claim CANCELLED before publishing EOF for the same eager-drain race.
-                        // The terminal transition performs stage-wide cleanup; the per-child
-                        // close remains necessary for sinks that own independent inputs.
-                        cancel("child stage " + childId + " cancelled");
-                        closeChildInput(childId);
-                    }
-                    default -> {
-                    }
-                }
-            });
-        }
-
-        // child.cancel is a no-op when already terminal, so this is safe under top-down sweeps.
-        addStateListener((from, to) -> {
-            if (to == State.FAILED || to == State.CANCELLED) {
-                for (StageExecution child : children) {
-                    if (child.getState().isTerminal() == false) {
+     * different cadence.
+    void addStateListener(StageStateListener listener);
+                            scheduler.accept(this);
+     *
                         child.cancel("parent " + getStageId() + " " + to);
+import java.util.Map;
+     * {@code handleFor} consults this on every failure and dispatches the alternate if any.
+    /** Per-task terminal callback. Captures failure / drives the stage's terminal transition. */
+    }
+    int getStageId();
+                    case FAILED -> {
+    /**
+            });
+     * pre-filter), so the stage can still be CREATED when this method returns and only reach its
+                                    metadata.put(c.getStageId(), payload);
+}
+     *
+     * that carries retry / terminal logic); the scheduler owns the listener it hands them.
+                        closeChildInput(childId);
+    State getState();
+     */
+ *
+                        }
+     * {@link #consumeChildMetadata} before the parent is scheduled. Distinct from data flow
+                        }
+/*
+package org.opensearch.analytics.exec.stage;
+                        // successfully and make this failure transition a no-op.
+    Exception getFailure();
+                            // Eager parents already scheduled on first child RUNNING; default-mode schedules here.
+                                ? cause
+    /** Append-only; register before {@link #start(ActionListener)}. Fired synchronously on every transition. */
+import java.util.HashMap;
+            if (to == State.FAILED || to == State.CANCELLED) {
+ * One-shot execution unit for a single stage.
+     */
+     *   {@link #publishedMetadata} from each child and hands off via {@link #consumeChildMetadata};
+     *   <li>SUCCEEDED — invokes {@link #closeChildInput} (ungated; no-op for backends with
+        AtomicInteger eagerScheduled = new AtomicInteger(0);  // fires scheduler.accept at most once for eager mode
+                            }
+                            if (eager == false) {
+     * <p>Parent→sibling cancel sweep: on FAILED / CANCELLED, sweep still-running children.
+     * post-materialisation state later, on the completion thread. {@code onStarted} signals when
+     * must run concurrently with feeds to avoid deadlocking on a bounded input mpsc.
+     *   default-mode parents are scheduled here (eager parents already scheduled).
+    /** Lifecycle states a stage execution moves through. */
+import org.opensearch.analytics.exec.task.TaskRunner;
+     * Dispatch the stage's tasks. Default implementation iterates {@link #tasks()} eagerly
+                                }
+import org.opensearch.core.action.ActionListener;
+     *   {@link #closeChildInput}, for the same reason.
+                        // The terminal transition performs stage-wide cleanup; the per-child
+    }
+        boolean eager = schedulesEagerly();
+     *   terminal-state race as SUCCEEDED.
+                switch (to) {
+    // ── Cross-stage metadata channel ──────────────────────────────────────
+     * just-finished child's sender. Failure paths fall through to the parent's terminal
+        FAILED,
+     * Control-plane payload (broadcast bytes, per-shard stats) handed to the parent via
+     * Called once at graph build time, before any child has transitioned out of CREATED.
+ * compatible open source license.
+import java.util.function.Consumer;
+                    default -> {
+    }
+    /** Empty until {@link #start} populates from resolved targets. */
+        return List.of();
+    default void onTaskTerminal(StageTask task, @Nullable Exception cause) {}
+import java.util.Optional;
+        for (StageExecution child : children) {
+     * </ul>
+                    case RUNNING -> {
+        }
+                            consumeChildMetadata(metadata);
+                        // close remains necessary for sinks that own independent inputs.
+    default void dispatchTasks(java.util.function.BiFunction<StageExecution, StageTask, ActionListener<Void>> handleForFactory) {
+    }
+                    }
+     * Wires the child→parent state cascade and the reverse parent→sibling cancel sweep.
+        @SuppressWarnings("unchecked")
+    enum State {
+    /** Default {@link TaskRunner#NONE} — stages with runnable tasks override. */
+        public boolean isTerminal() {
+        RUNNING,
+        TaskRunner<StageTask> runner = (TaskRunner<StageTask>) taskRunner();
+    default void consumeChildMetadata(Map<Integer, Object> metadataByChildStageId) {}
+    }
+        if (children.isEmpty()) return;
+     */
+     *   child to enter RUNNING so their work can run concurrently with children's feeds.
+                    }
+     */
+     * {@code Optional.empty()} to give up (default). Owns the entire retry policy —
+     * materialisation has completed: {@code onResponse} after the stage has transitioned (RUNNING
+     *   no per-child resources); decrements a counter; on zero, collects
+    default void closeChildInput(int childStageId) {}
+    /**
+     * — one {@code runner.run} call per task up front. Stages may override to dispatch with a
+     * by checking {@code getState() == RUNNING} inside {@code onResponse}. Pass {@link
+            }
+     *
+ * @opensearch.internal
                     }
                 }
-            }
+     * {@link #schedulesEagerly()}). Default no-op; streaming reduce overrides to close the
+                        Exception cause = child.getFailure();
+                for (StageExecution child : children) {
         });
-    }
-
-    /** Lifecycle states a stage execution moves through. */
-    enum State {
-        CREATED,
-        RUNNING,
-        SUCCEEDED,
-        FAILED,
-        CANCELLED;
-
-        public boolean isTerminal() {
-            return this == SUCCEEDED || this == FAILED || this == CANCELLED;
+                                : new RuntimeException("child stage " + child.getStageId() + " failed without recorded cause")
+public interface StageExecution {
+    /** Capture {@code cause} and transition to FAILED. Returns true if the transition happened. */
+/**
+ * this file be licensed under the Apache-2.0 license or a
+     * fires), so listener registration never races with firing.
+    void start(ActionListener<Void> onStarted);
         }
-    }
-}
+                                Object payload = c.publishedMetadata();
+                        cancel("child stage " + childId + " cancelled");
+        }
+     */
+                        failWithCause(
+                            }
+    default boolean failWithCause(Exception cause) {
+     *
+     * Starts the stage: materialise its task list, publish it, and transition. Called at most once.
+                }
+        addStateListener((from, to) -> {
+     *   <li>RUNNING — eager parents ({@link #schedulesEagerly}) schedule on the first
+    /** Non-null only when state is {@link State#FAILED}. */

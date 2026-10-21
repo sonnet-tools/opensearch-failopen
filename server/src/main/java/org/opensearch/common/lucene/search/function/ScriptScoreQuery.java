@@ -1,444 +1,401 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.lucene.search.function;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BulkScorer;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.Explanation;
-import org.apache.lucene.search.FilterLeafCollector;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.LeafCollector;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryVisitor;
-import org.apache.lucene.search.Scorable;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.ScorerSupplier;
-import org.apache.lucene.search.TwoPhaseIterator;
-import org.apache.lucene.search.Weight;
-import org.apache.lucene.util.Bits;
-import org.opensearch.Version;
-import org.opensearch.common.Nullable;
-import org.opensearch.script.ScoreScript;
-import org.opensearch.script.ScoreScript.ExplanationHolder;
-import org.opensearch.script.Script;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * A query that uses a script to compute documents' scores.
- *
- * @opensearch.internal
- */
-public class ScriptScoreQuery extends Query {
-    private final Query subQuery;
-    private final Script script;
-    private final ScoreScript.LeafFactory scriptBuilder;
-    private final Float minScore;
-    private final String indexName;
-    private final int shardId;
-    private final Version indexVersion;
-    private final String queryName;
-
-    public ScriptScoreQuery(
-        Query subQuery,
-        Script script,
-        ScoreScript.LeafFactory scriptBuilder,
-        Float minScore,
-        String indexName,
-        int shardId,
-        Version indexVersion
-    ) {
-        this(subQuery, null, script, scriptBuilder, minScore, indexName, shardId, indexVersion);
-    }
-
-    public ScriptScoreQuery(
-        Query subQuery,
-        @Nullable String queryName,
-        Script script,
-        ScoreScript.LeafFactory scriptBuilder,
-        Float minScore,
-        String indexName,
-        int shardId,
-        Version indexVersion
-    ) {
-        this.subQuery = subQuery;
-        this.queryName = queryName;
-        this.script = script;
-        this.scriptBuilder = scriptBuilder;
-        this.minScore = minScore;
-        this.indexName = indexName;
-        this.shardId = shardId;
-        this.indexVersion = indexVersion;
-    }
-
-    @Override
-    public Query rewrite(IndexSearcher searcher) throws IOException {
-        Query newQ = subQuery.rewrite(searcher);
-        if (newQ != subQuery) {
-            return new ScriptScoreQuery(newQ, queryName, script, scriptBuilder, minScore, indexName, shardId, indexVersion);
-        }
-        return super.rewrite(searcher);
-    }
-
-    @Override
-    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
-        if (scoreMode == ScoreMode.COMPLETE_NO_SCORES && minScore == null) {
-            return subQuery.createWeight(searcher, scoreMode, boost);
-        }
-        boolean needsScore = scriptBuilder.needs_score();
-        ScoreMode subQueryScoreMode = needsScore ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;
-        Weight subQueryWeight = subQuery.createWeight(searcher, subQueryScoreMode, 1.0f);
-
-        return new Weight(this) {
-
-            @Override
-            public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
-                ScorerSupplier subQueryScorerSupplier = subQueryWeight.scorerSupplier(context);
-                if (subQueryScorerSupplier == null) {
-                    return null;
-                }
-                Weight weight = this;
-                return new ScorerSupplier() {
-                    @Override
-                    public BulkScorer bulkScorer() throws IOException {
-                        if (minScore == null) {
-                            final BulkScorer subQueryBulkScorer = subQueryScorerSupplier.bulkScorer();
-                            if (subQueryBulkScorer == null) {
-                                return null;
-                            }
-                            if (scriptBuilder instanceof ScoreScript.BulkScoringLeafFactory bulkFactory) {
-                                final BulkScorer custom = bulkFactory.bulkScorer(context, subQueryBulkScorer, subQueryScoreMode, boost);
-                                if (custom != null) {
-                                    return custom;
-                                }
-                            }
-                            return new ScriptScoreBulkScorer(subQueryBulkScorer, subQueryScoreMode, makeScoreScript(context), boost);
-                        } else {
-                            return super.bulkScorer();
-                        }
-                    }
-
-                    @Override
-                    public Scorer get(long leadCost) throws IOException {
-                        Scorer subQueryScorer = subQueryScorerSupplier.get(leadCost);
-                        Scorer scriptScorer = new ScriptScorer(
-                            weight,
-                            makeScoreScript(context),
-                            subQueryScorer,
-                            subQueryScoreMode,
-                            boost,
-                            null
-                        );
-                        if (minScore != null) {
-                            scriptScorer = new MinScoreScorer(weight, scriptScorer, minScore);
-                        }
-                        return scriptScorer;
-                    }
-
-                    @Override
-                    public long cost() {
-                        return subQueryScorerSupplier.cost();
-                    }
-                };
-            }
-
-            @Override
-            public Explanation explain(LeafReaderContext context, int doc) throws IOException {
-                Explanation subQueryExplanation = Functions.explainWithName(subQueryWeight.explain(context, doc), queryName);
-                if (subQueryExplanation.isMatch() == false) {
-                    return subQueryExplanation;
-                }
-                ExplanationHolder explanationHolder = new ExplanationHolder();
-                Scorer scorer = new ScriptScorer(
-                    this,
-                    makeScoreScript(context),
-                    subQueryWeight.scorer(context),
-                    subQueryScoreMode,
-                    1f,
-                    explanationHolder
-                );
-                int newDoc = scorer.iterator().advance(doc);
-                assert doc == newDoc; // subquery should have already matched above
-                float score = scorer.score(); // score without boost
-
-                Explanation explanation = explanationHolder.get(score, needsScore ? subQueryExplanation : null);
-                if (explanation == null) {
-                    // no explanation provided by user; give a simple one
-                    String desc = "script score function, computed with script:\"" + script + "\"";
-                    if (needsScore) {
-                        Explanation scoreExp = Explanation.match(subQueryExplanation.getValue(), "_score: ", subQueryExplanation);
-                        explanation = Explanation.match(score, desc, scoreExp);
-                    } else {
-                        explanation = Explanation.match(score, desc);
-                    }
-                }
-                if (boost != 1f) {
-                    explanation = Explanation.match(
-                        boost * explanation.getValue().floatValue(),
-                        "Boosted score, product of:",
-                        Explanation.match(boost, "boost"),
-                        explanation
-                    );
-                }
-                if (minScore != null && minScore > explanation.getValue().floatValue()) {
-                    explanation = Explanation.noMatch(
-                        "Score value is too low, expected at least " + minScore + " but got " + explanation.getValue(),
-                        explanation
-                    );
-                }
-                return explanation;
-            }
-
-            private ScoreScript makeScoreScript(LeafReaderContext context) throws IOException {
-                final ScoreScript scoreScript = scriptBuilder.newInstance(context);
-                scoreScript._setIndexName(indexName);
-                scoreScript._setShard(shardId);
-                scoreScript._setIndexVersion(indexVersion);
-                return scoreScript;
-            }
-
-            @Override
-            public boolean isCacheable(LeafReaderContext ctx) {
-                // If minScore is not null, then matches depend on statistics of the top-level reader.
-                return minScore == null;
-            }
-        };
-    }
-
-    @Override
-    public void visit(QueryVisitor visitor) {
-        // Highlighters must visit the child query to extract terms
-        subQuery.visit(visitor.getSubVisitor(BooleanClause.Occur.MUST, this));
-    }
-
-    @Override
-    public String toString(String field) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("script_score (").append(subQuery.toString(field));
-        sb.append(Functions.nameOrEmptyArg(queryName)).append(", script: ");
-        sb.append("{" + script.toString() + "}");
-        return sb.toString();
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        ScriptScoreQuery that = (ScriptScoreQuery) o;
-        return shardId == that.shardId
-            && subQuery.equals(that.subQuery)
-            && script.equals(that.script)
-            && Objects.equals(minScore, that.minScore)
-            && indexName.equals(that.indexName)
-            && indexVersion.equals(that.indexVersion)
-            && Objects.equals(queryName, that.queryName);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(subQuery, script, minScore, indexName, shardId, indexVersion, queryName);
-    }
-
-    /**
-     * A script scorer
-     *
-     * @opensearch.internal
-     */
-    private static class ScriptScorer extends Scorer {
         private final ScoreScript scoreScript;
-        private final Scorer subQueryScorer;
-        private final float boost;
-        private final ExplanationHolder explanation;
-
-        ScriptScorer(
-            Weight weight,
+                };
+        }
+                        Scorer subQueryScorer = subQueryScorerSupplier.get(leadCost);
+        Float minScore,
+                        boost * explanation.getValue().floatValue(),
+                        );
+ * the Apache License, Version 2.0 (the "License"); you may
+                    super.collect(doc);
+     *
+            && script.equals(that.script)
+ *
+                    String desc = "script score function, computed with script:\"" + script + "\"";
+    private final int shardId;
+                    @Override
+ *
+        private int docId;
+    public ScriptScoreQuery(
+     */
+    @Override
+public class ScriptScoreQuery extends Query {
+    public ScriptScoreQuery(
+                    return null;
+        Version indexVersion
+            return Float.MAX_VALUE; // TODO: what would be a good upper bound?
+                    "script_score script returned an invalid score ["
+ */
+            this.scoreScript = scoreScript;
+                return new ScorerSupplier() {
+        return shardId == that.shardId
+                    @Override
+                        return scriptScorer;
+                                    return custom;
+/*
+            scoreScript.setDocument(docId);
+    ) {
+    public boolean equals(Object o) {
+                            scriptScorer = new MinScoreScorer(weight, scriptScorer, minScore);
+     */
+ * this file be licensed under the Apache-2.0 license or a
+        this.script = script;
+                            final BulkScorer subQueryBulkScorer = subQueryScorerSupplier.bulkScorer();
+     * @opensearch.internal
+ * Unless required by applicable law or agreed to in writing,
+                    explanation = Explanation.match(
+        private LeafCollector wrapCollector(LeafCollector collector) {
             ScoreScript scoreScript,
-            Scorer subQueryScorer,
-            ScoreMode subQueryScoreMode,
-            float boost,
-            ExplanationHolder explanation
-        ) {
+                if (minScore != null && minScore > explanation.getValue().floatValue()) {
+                scoreScript.setScorer(subQueryScorer);
+                        "Score value is too low, expected at least " + minScore + " but got " + explanation.getValue(),
+            if (subQueryScoreMode == ScoreMode.COMPLETE) {
+import org.apache.lucene.search.ScoreMode;
+                return minScore == null;
+import org.apache.lucene.search.Weight;
+import org.apache.lucene.search.LeafCollector;
+                final ScoreScript scoreScript = scriptBuilder.newInstance(context);
+                                }
+    private final Script script;
+            scoreScript.setDocument(docId);
+        Query subQuery,
+ * The OpenSearch Contributors require contributions made to
+    private final Float minScore;
+        };
+                            return new ScriptScoreBulkScorer(subQueryBulkScorer, subQueryScoreMode, makeScoreScript(context), boost);
+        if (this == o) return true;
+            @Override
+        }
+     * @opensearch.internal
+                return explanation;
+            ScoreScript scoreScript,
+                }
+        }
+    private final Query subQuery;
+ */
+                        explanation = Explanation.match(score, desc);
+            private ScoreScript makeScoreScript(LeafReaderContext context) throws IOException {
+            }
+            }
+                @Override
+        String indexName,
+            && indexVersion.equals(that.indexVersion)
+            }
+        @Nullable String queryName,
+            return subQueryScorer.twoPhaseIterator();
+    }
+            return subQueryScorer.iterator();
+                        }
+                    }
+                Scorer scorer = new ScriptScorer(
+import java.util.Objects;
+import org.apache.lucene.search.QueryVisitor;
+     * Use the {@link BulkScorer} of the sub-query,
+                scoreScript._setShard(shardId);
+ * this work for additional information regarding copyright
+        public DocIdSetIterator iterator() {
+        boolean needsScore = scriptBuilder.needs_score();
+ * compatible open source license.
+                if (explanation == null) {
+/*
+                    "script_score script returned an invalid score ["
+        }
+        private final ScoreScript scoreScript;
+        private final ExplanationHolder explanation;
+        this.minScore = minScore;
+                        + score
+                Weight weight = this;
+        private final ScoreMode subQueryScoreMode;
+        }
+        if (newQ != subQuery) {
+ * GitHub history for details.
+            this.explanation = explanation;
+        ScriptScoreQuery that = (ScriptScoreQuery) o;
+import org.opensearch.common.Nullable;
+        this.indexName = indexName;
+        this.queryName = queryName;
+    public String toString(String field) {
+        sb.append(Functions.nameOrEmptyArg(queryName)).append(", script: ");
+                ScorerSupplier subQueryScorerSupplier = subQueryWeight.scorerSupplier(context);
+                            null
+            return score * boost;
+    private static class ScriptScorer extends Scorer {
+            float score = (float) scoreScript.execute(explanation);
+    @Override
+            Scorable subQueryScorer,
+     * A script scorer
             super();
             this.scoreScript = scoreScript;
-            if (subQueryScoreMode == ScoreMode.COMPLETE) {
-                scoreScript.setScorer(subQueryScorer);
-            }
-            this.subQueryScorer = subQueryScorer;
-            this.boost = boost;
-            this.explanation = explanation;
-        }
-
-        @Override
-        public float score() throws IOException {
-            int docId = docID();
-            scoreScript.setDocument(docId);
-            float score = (float) scoreScript.execute(explanation);
-            if (score < 0f || Float.isNaN(score)) {
-                throw new IllegalArgumentException(
-                    "script_score script returned an invalid score ["
-                        + score
-                        + "] "
-                        + "for doc ["
-                        + docId
-                        + "]. Must be a non-negative score!"
-                );
-            }
-            return score * boost;
-        }
-
-        @Override
-        public int docID() {
-            return subQueryScorer.docID();
-        }
-
-        @Override
-        public DocIdSetIterator iterator() {
-            return subQueryScorer.iterator();
-        }
-
-        @Override
-        public TwoPhaseIterator twoPhaseIterator() {
-            return subQueryScorer.twoPhaseIterator();
-        }
-
-        @Override
-        public float getMaxScore(int upTo) {
-            return Float.MAX_VALUE; // TODO: what would be a good upper bound?
-        }
-
-    }
-
+import org.opensearch.script.ScoreScript.ExplanationHolder;
+                        if (minScore == null) {
+ * @opensearch.internal
+        return Objects.hash(subQuery, script, minScore, indexName, shardId, indexVersion, queryName);
+                }
     /**
-     * A script scorable
-     *
-     * @opensearch.internal
-     */
-    private static class ScriptScorable extends Scorable {
-        private final ScoreScript scoreScript;
-        private final Scorable subQueryScorer;
-        private final float boost;
-        private final ExplanationHolder explanation;
-        private int docId;
-
-        ScriptScorable(
-            ScoreScript scoreScript,
-            Scorable subQueryScorer,
-            ScoreMode subQueryScoreMode,
-            float boost,
-            ExplanationHolder explanation
-        ) {
-            this.scoreScript = scoreScript;
-            if (subQueryScoreMode == ScoreMode.COMPLETE) {
-                scoreScript.setScorer(subQueryScorer);
+                Explanation subQueryExplanation = Functions.explainWithName(subQueryWeight.explain(context, doc), queryName);
+        public float score() throws IOException {
+    }
+ *
             }
-            this.subQueryScorer = subQueryScorer;
-            this.boost = boost;
-            this.explanation = explanation;
-        }
-
-        void setDocument(int docId) {
+                }
+                }
+                            subQueryScorer,
+    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
             this.docId = docId;
-        }
-
-        @Override
-        public float score() throws IOException {
-            scoreScript.setDocument(docId);
-            float score = (float) scoreScript.execute(explanation);
-            if (score < 0f || Float.isNaN(score)) {
-                throw new IllegalArgumentException(
-                    "script_score script returned an invalid score ["
-                        + score
-                        + "] "
-                        + "for doc ["
-                        + docId
-                        + "]. Must be a non-negative score!"
-                );
-            }
+            return subQueryScorer.docID();
+            return new ScriptScoreQuery(newQ, queryName, script, scriptBuilder, minScore, indexName, shardId, indexVersion);
+        sb.append("{" + script.toString() + "}");
+        public float getMaxScore(int upTo) {
+            this.boost = boost;
+            if (subQueryScoreMode == ScoreMode.COMPLETE) {
+        if (o == null || getClass() != o.getClass()) return false;
             return score * boost;
-        }
+                        explanation
+                        if (minScore != null) {
+                        Explanation scoreExp = Explanation.match(subQueryExplanation.getValue(), "_score: ", subQueryExplanation);
+        @Override
+        Query newQ = subQuery.rewrite(searcher);
+            public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
+        void setDocument(int docId) {
+                if (subQueryExplanation.isMatch() == false) {
     }
-
+ * not use this file except in compliance with the License.
+                    subQueryWeight.scorer(context),
+        public long cost() {
+                        + "] "
+            return subQuery.createWeight(searcher, scoreMode, boost);
+ * You may obtain a copy of the License at
     /**
-     * Use the {@link BulkScorer} of the sub-query,
-     * as it may be significantly faster (e.g. BooleanScorer) than iterating over the scorer
      *
-     * @opensearch.internal
-     */
-    private static class ScriptScoreBulkScorer extends BulkScorer {
-        private final BulkScorer subQueryBulkScorer;
-        private final ScoreMode subQueryScoreMode;
+                    } else {
+                }
+            return subQueryBulkScorer.score(wrapCollector(collector), acceptDocs, min, max);
+            ExplanationHolder explanation
+        this.shardId = shardId;
+        public TwoPhaseIterator twoPhaseIterator() {
+        return super.rewrite(searcher);
+                            }
+        String indexName,
+            if (score < 0f || Float.isNaN(score)) {
+                        explanation
+ * ownership. Elasticsearch licenses this file to you under
+                        + docId
         private final ScoreScript scoreScript;
-        private final float boost;
-
-        ScriptScoreBulkScorer(BulkScorer subQueryBulkScorer, ScoreMode subQueryScoreMode, ScoreScript scoreScript, float boost) {
+    }
+                    // no explanation provided by user; give a simple one
+        @Override
+                public void setScorer(Scorable scorer) throws IOException {
+                        }
+            int docId = docID();
+        ScriptScorable(
+    private static class ScriptScorable extends Scorable {
+}
+                );
+        this.subQuery = subQuery;
+                            makeScoreScript(context),
+                        + "] "
             this.subQueryBulkScorer = subQueryBulkScorer;
-            this.subQueryScoreMode = subQueryScoreMode;
-            this.scoreScript = scoreScript;
+    public Query rewrite(IndexSearcher searcher) throws IOException {
+        }
+import org.apache.lucene.search.IndexSearcher;
+        }
+    @Override
+                        + "]. Must be a non-negative score!"
+                            boost,
+            float boost,
+        Float minScore,
+                            if (subQueryBulkScorer == null) {
+                    makeScoreScript(context),
+                // If minScore is not null, then matches depend on statistics of the top-level reader.
+                    scriptScorable = new ScriptScorable(scoreScript, scorer, subQueryScoreMode, boost, null);
+    @Override
+        private final ExplanationHolder explanation;
+                    explanationHolder
+    }
+    private static class ScriptScoreBulkScorer extends BulkScorer {
+        int shardId,
+                    );
             this.boost = boost;
         }
-
-        @Override
-        public int score(LeafCollector collector, Bits acceptDocs, int min, int max) throws IOException {
-            return subQueryBulkScorer.score(wrapCollector(collector), acceptDocs, min, max);
+        Query subQuery,
+                            weight,
+            this.subQueryScorer = subQueryScorer;
+        int shardId,
+ * software distributed under the License is distributed on an
+                                return null;
+                        + docId
+import org.apache.lucene.search.BulkScorer;
+            this.explanation = explanation;
+                        + "for doc ["
+                if (boost != 1f) {
+        private final float boost;
         }
-
-        private LeafCollector wrapCollector(LeafCollector collector) {
-            return new FilterLeafCollector(collector) {
-                private ScriptScorable scriptScorable;
-
-                @Override
-                public void setScorer(Scorable scorer) throws IOException {
-                    scriptScorable = new ScriptScorable(scoreScript, scorer, subQueryScoreMode, boost, null);
-                    in.setScorer(scriptScorable);
-                }
-
-                @Override
+        return sb.toString();
+    private final String indexName;
+        }
+        this.scriptBuilder = scriptBuilder;
+            this.subQueryScoreMode = subQueryScoreMode;
+     * @opensearch.internal
+                    );
+                float score = scorer.score(); // score without boost
+import org.opensearch.Version;
+ * A query that uses a script to compute documents' scores.
+            }
+                            return super.bulkScorer();
+import org.apache.lucene.util.Bits;
                 public void collect(int doc) throws IOException {
-                    scriptScorable.setDocument(doc);
-                    super.collect(doc);
-                }
-            };
-        }
-
-        @Override
-        public long cost() {
-            return subQueryBulkScorer.cost();
-        }
-
+                        "Boosted score, product of:",
+                    1f,
+                Explanation explanation = explanationHolder.get(score, needsScore ? subQueryExplanation : null);
+                    subQueryScoreMode,
+        if (scoreMode == ScoreMode.COMPLETE_NO_SCORES && minScore == null) {
     }
-
-}
+        ScoreMode subQueryScoreMode = needsScore ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;
+        ) {
+        public int score(LeafCollector collector, Bits acceptDocs, int min, int max) throws IOException {
+                    public Scorer get(long leadCost) throws IOException {
+                        Explanation.match(boost, "boost"),
+import org.apache.lucene.search.BooleanClause;
+                return scoreScript;
+                        + score
+import org.apache.lucene.search.FilterLeafCollector;
+import org.opensearch.script.Script;
+                scoreScript._setIndexName(indexName);
+            && indexName.equals(that.indexName)
+            return subQueryBulkScorer.cost();
+                }
+            float score = (float) scoreScript.execute(explanation);
+            this.scoreScript = scoreScript;
+                            }
+                        + "]. Must be a non-negative score!"
+        ) {
+            && subQuery.equals(that.subQuery)
+                assert doc == newDoc; // subquery should have already matched above
+        }
+        public int docID() {
+        Version indexVersion
+ */
+        @Override
+                        Scorer scriptScorer = new ScriptScorer(
+import org.apache.lucene.search.Query;
+        public float score() throws IOException {
+     * as it may be significantly faster (e.g. BooleanScorer) than iterating over the scorer
+import org.apache.lucene.search.ScorerSupplier;
+                    if (needsScore) {
+                        } else {
+        ScriptScorer(
+                        + "for doc ["
+ */
+                                if (custom != null) {
+            ExplanationHolder explanation
+ * specific language governing permissions and limitations
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                scoreScript.setScorer(subQueryScorer);
+            this.boost = boost;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                    }
+        StringBuilder sb = new StringBuilder();
+import org.apache.lucene.search.DocIdSetIterator;
+ * KIND, either express or implied.  See the License for the
+    private final Version indexVersion;
+    @Override
+package org.opensearch.common.lucene.search.function;
+        }
+                            if (scriptBuilder instanceof ScoreScript.BulkScoringLeafFactory bulkFactory) {
+        }
+        }
+                }
+        @Override
+        private final float boost;
+                            subQueryScoreMode,
+        @Override
+                ExplanationHolder explanationHolder = new ExplanationHolder();
+    /**
+            ScoreMode subQueryScoreMode,
+                throw new IllegalArgumentException(
+    }
+            Scorer subQueryScorer,
+            return new FilterLeafCollector(collector) {
+import org.opensearch.script.ScoreScript;
+    }
+            public boolean isCacheable(LeafReaderContext ctx) {
+    public void visit(QueryVisitor visitor) {
+    private final ScoreScript.LeafFactory scriptBuilder;
+                private ScriptScorable scriptScorable;
+ * license agreements. See the NOTICE file distributed with
+        private final float boost;
+                    explanation = Explanation.noMatch(
+            && Objects.equals(minScore, that.minScore)
+    private final String queryName;
+import org.apache.lucene.search.Scorable;
+                    @Override
+        private final Scorer subQueryScorer;
+     *
+            float boost,
+        private final BulkScorer subQueryBulkScorer;
+ * under the License.
+                    return subQueryExplanation;
+        Weight subQueryWeight = subQuery.createWeight(searcher, subQueryScoreMode, 1.0f);
+        Script script,
+                    public BulkScorer bulkScorer() throws IOException {
+import org.apache.lucene.search.Scorer;
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+                    this,
+            public Explanation explain(LeafReaderContext context, int doc) throws IOException {
+import org.apache.lucene.search.Explanation;
+        ScoreScript.LeafFactory scriptBuilder,
+            }
+ * SPDX-License-Identifier: Apache-2.0
+                );
+/**
+                    scriptScorable.setDocument(doc);
+    }
+    @Override
+        Script script,
+        // Highlighters must visit the child query to extract terms
+    public int hashCode() {
+        ScriptScoreBulkScorer(BulkScorer subQueryBulkScorer, ScoreMode subQueryScoreMode, ScoreScript scoreScript, float boost) {
+                @Override
+            };
+        ScoreScript.LeafFactory scriptBuilder,
+                        explanation = Explanation.match(score, desc, scoreExp);
+    }
+            this.subQueryScorer = subQueryScorer;
+                if (subQueryScorerSupplier == null) {
+        this(subQuery, null, script, scriptBuilder, minScore, indexName, shardId, indexVersion);
+                                final BulkScorer custom = bulkFactory.bulkScorer(context, subQueryBulkScorer, subQueryScoreMode, boost);
+     * A script scorable
+        sb.append("script_score (").append(subQuery.toString(field));
+    }
+                    }
+import org.apache.lucene.index.LeafReaderContext;
+        private final Scorable subQueryScorer;
+            Weight weight,
+        @Override
+        @Override
+                );
+                throw new IllegalArgumentException(
+                    public long cost() {
+        @Override
+            @Override
+        subQuery.visit(visitor.getSubVisitor(BooleanClause.Occur.MUST, this));
+        return new Weight(this) {
+                    }
+                scoreScript._setIndexVersion(indexVersion);
+                        return subQueryScorerSupplier.cost();
+            }
+ *
+                int newDoc = scorer.iterator().advance(doc);
+            @Override
+import org.apache.lucene.search.TwoPhaseIterator;
+        }
+        this.indexVersion = indexVersion;
+    ) {
+     */
+import java.io.IOException;
+ * Licensed to Elasticsearch under one or more contributor
+                    in.setScorer(scriptScorable);
+            if (score < 0f || Float.isNaN(score)) {
+            ScoreMode subQueryScoreMode,
+            }
+            && Objects.equals(queryName, that.queryName);

@@ -1,539 +1,460 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.rule.service;
-
-import org.apache.lucene.search.TotalHits;
-import org.opensearch.ResourceNotFoundException;
-import org.opensearch.action.DocWriteResponse;
-import org.opensearch.action.delete.DeleteRequest;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.action.search.SearchRequestBuilder;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.action.ActionFuture;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.engine.DocumentMissingException;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.rule.RuleEntityParser;
-import org.opensearch.rule.RulePersistenceService;
-import org.opensearch.rule.RuleQueryMapper;
-import org.opensearch.rule.RuleUtils;
-import org.opensearch.rule.action.CreateRuleRequest;
-import org.opensearch.rule.action.CreateRuleResponse;
-import org.opensearch.rule.action.DeleteRuleRequest;
-import org.opensearch.rule.action.GetRuleRequest;
-import org.opensearch.rule.action.GetRuleResponse;
-import org.opensearch.rule.action.UpdateRuleRequest;
-import org.opensearch.rule.action.UpdateRuleResponse;
-import org.opensearch.rule.autotagging.Rule;
-import org.opensearch.rule.utils.RuleTestUtils;
-import org.opensearch.search.SearchHit;
-import org.opensearch.search.SearchHits;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.Client;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-
-import org.mockito.ArgumentCaptor;
-
-import static org.opensearch.rule.XContentRuleParserTests.VALID_JSON;
-import static org.opensearch.rule.utils.RuleTestUtils.ATTRIBUTE_MAP;
-import static org.opensearch.rule.utils.RuleTestUtils.ATTRIBUTE_VALUE_ONE;
-import static org.opensearch.rule.utils.RuleTestUtils.DESCRIPTION_ONE;
-import static org.opensearch.rule.utils.RuleTestUtils.DESCRIPTION_TWO;
-import static org.opensearch.rule.utils.RuleTestUtils.FEATURE_VALUE_ONE;
-import static org.opensearch.rule.utils.RuleTestUtils.MockRuleAttributes.MOCK_RULE_ATTRIBUTE_ONE;
-import static org.opensearch.rule.utils.RuleTestUtils.TEST_INDEX_NAME;
-import static org.opensearch.rule.utils.RuleTestUtils._ID_ONE;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyInt;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-@SuppressWarnings("unchecked")
-public class IndexStoredRulePersistenceServiceTests extends OpenSearchTestCase {
-
-    private static final int MAX_VALUES_PER_PAGE = 50;
-    private Client client;
-    private ClusterService clusterService;
-    private RuleQueryMapper<QueryBuilder> ruleQueryMapper;
-    private RuleEntityParser ruleEntityParser;
-    private SearchRequestBuilder searchRequestBuilder;
-    private RulePersistenceService rulePersistenceService;
-    private QueryBuilder queryBuilder;
-    private Rule rule;
-
-    public void setUp() throws Exception {
-        super.setUp();
-        searchRequestBuilder = mock(SearchRequestBuilder.class);
-        client = setUpMockClient(searchRequestBuilder);
-        rule = mock(Rule.class);
-        clusterService = mock(ClusterService.class);
-        Settings testSettings = Settings.EMPTY;
-        ClusterSettings clusterSettings = new ClusterSettings(testSettings, new HashSet<>());
-        when(clusterService.getSettings()).thenReturn(testSettings);
-        clusterSettings.registerSetting(IndexStoredRulePersistenceService.MAX_WLM_RULES_SETTING);
-        when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
-        ClusterState clusterState = mock(ClusterState.class);
-        Metadata metadata = mock(Metadata.class);
-        when(clusterService.state()).thenReturn(clusterState);
-        when(clusterState.metadata()).thenReturn(metadata);
-        when(metadata.hasIndex(TEST_INDEX_NAME)).thenReturn(true);
-        ruleQueryMapper = mock(RuleQueryMapper.class);
-        ruleEntityParser = mock(RuleEntityParser.class);
-        queryBuilder = mock(QueryBuilder.class);
-        when(queryBuilder.filter(any())).thenReturn(queryBuilder);
-        when(ruleQueryMapper.from(any(GetRuleRequest.class))).thenReturn(queryBuilder);
-        when(ruleQueryMapper.getCardinalityQuery()).thenReturn(mock(QueryBuilder.class));
-        when(ruleEntityParser.parse(anyString())).thenReturn(rule);
-
-        rulePersistenceService = new IndexStoredRulePersistenceService(
-            TEST_INDEX_NAME,
-            client,
-            clusterService,
-            MAX_VALUES_PER_PAGE,
-            ruleEntityParser,
-            ruleQueryMapper
-        );
-    }
-
-    public void testCreateRuleOnExistingIndex() throws Exception {
-        CreateRuleRequest createRuleRequest = mock(CreateRuleRequest.class);
-        when(createRuleRequest.getRule()).thenReturn(rule);
-        when(rule.toXContent(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
-
-        SearchResponse searchResponse = mock(SearchResponse.class);
-        when(searchResponse.getHits()).thenReturn(new SearchHits(new SearchHit[] {}, new TotalHits(0, TotalHits.Relation.EQUAL_TO), 1.0f));
-        when(searchRequestBuilder.get()).thenReturn(searchResponse);
-
-        IndexResponse indexResponse = mock(IndexResponse.class);
-        when(indexResponse.getId()).thenReturn(_ID_ONE);
-        ActionFuture<IndexResponse> future = mock(ActionFuture.class);
-        when(future.get()).thenReturn(indexResponse);
-        when(client.index(any(IndexRequest.class))).thenReturn(future);
-
-        ActionListener<CreateRuleResponse> listener = mock(ActionListener.class);
-        rulePersistenceService.createRule(createRuleRequest, listener);
-
-        ArgumentCaptor<CreateRuleResponse> responseCaptor = ArgumentCaptor.forClass(CreateRuleResponse.class);
-        verify(listener).onResponse(responseCaptor.capture());
-        assertNotNull(responseCaptor.getValue().getRule());
-    }
-
-    public void testCardinalityCheckBasedFailure() throws Exception {
-        CreateRuleRequest createRuleRequest = mock(CreateRuleRequest.class);
-        when(createRuleRequest.getRule()).thenReturn(rule);
-        when(rule.toXContent(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
-
-        SearchResponse searchResponse = mock(SearchResponse.class);
-        when(searchResponse.getHits()).thenReturn(
-            new SearchHits(new SearchHit[] {}, new TotalHits(10000, TotalHits.Relation.EQUAL_TO), 1.0f)
-        );
-        when(searchRequestBuilder.get()).thenReturn(searchResponse);
-
-        ActionListener<CreateRuleResponse> listener = mock(ActionListener.class);
-        rulePersistenceService.createRule(createRuleRequest, listener);
-
-        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(OpenSearchRejectedExecutionException.class);
-        verify(listener).onFailure(exceptionCaptor.capture());
-        assertNotNull(exceptionCaptor.getValue());
-    }
-
-    public void testConcurrentCreateDuplicateRules() throws InterruptedException {
-        ExecutorService singleThreadExecutor = Executors.newSingleThreadExecutor();
-        int threadCount = 10;
-        CountDownLatch latch = new CountDownLatch(threadCount);
-        Set<String> storedAttributeMaps = ConcurrentHashMap.newKeySet();
-
-        CreateRuleRequest createRuleRequest = mock(CreateRuleRequest.class);
-        when(rule.getAttributeMap()).thenReturn(ATTRIBUTE_MAP);
-        when(rule.getFeatureType()).thenReturn(RuleTestUtils.MockRuleFeatureType.INSTANCE);
-        when(createRuleRequest.getRule()).thenReturn(rule);
-
-        RulePersistenceService rulePersistenceService = new IndexStoredRulePersistenceService(
-            TEST_INDEX_NAME,
-            client,
-            clusterService,
-            MAX_VALUES_PER_PAGE,
-            ruleEntityParser,
-            ruleQueryMapper
-        ) {
-            @Override
-            public void createRule(CreateRuleRequest request, ActionListener<CreateRuleResponse> listener) {
-                singleThreadExecutor.execute(() -> {
-                    Rule rule = request.getRule();
-                    validateNoDuplicateRule(rule, new ActionListener<Void>() {
-                        @Override
-                        public void onResponse(Void unused) {
-                            synchronized (storedAttributeMaps) {
-                                storedAttributeMaps.add(MOCK_RULE_ATTRIBUTE_ONE.getName());
-                            }
-                            listener.onResponse(new CreateRuleResponse(rule));
-                            latch.countDown();
-                        }
-
-                        @Override
-                        public void onFailure(Exception e) {
                             listener.onFailure(e);
-                            latch.countDown();
                         }
-                    });
-                });
+        when(searchResponse.getHits()).thenReturn(emptyHits);
             }
-
-            public void validateNoDuplicateRule(Rule rule, ActionListener<Void> listener) {
-                synchronized (storedAttributeMaps) {
-                    if (storedAttributeMaps.contains(MOCK_RULE_ATTRIBUTE_ONE.getName())) {
-                        listener.onFailure(new IllegalArgumentException("Duplicate rule exists with attribute map"));
-                    } else {
-                        listener.onResponse(null);
-                    }
-                }
-            }
-        };
-
-        class TestListener implements ActionListener<CreateRuleResponse> {
-            final AtomicInteger successCount = new AtomicInteger();
-            final AtomicInteger failureCount = new AtomicInteger();
-            final List<Exception> failures = Collections.synchronizedList(new ArrayList<>());
-
-            @Override
-            public void onResponse(CreateRuleResponse response) {
+        AtomicReference<Exception> failure = new AtomicReference<>();
+    }
+    public void testDeleteRule_notFound() {
+        when(ruleEntityParser.parse(anyString())).thenThrow(new RuntimeException("Invalid JSON"));
                 successCount.incrementAndGet();
-            }
-
-            @Override
-            public void onFailure(Exception e) {
+                            latch.countDown();
+                        listener.onResponse(null);
+        searchHit.sourceRef(new BytesArray(VALID_JSON));
+        when(ruleQueryMapper.from(any(GetRuleRequest.class))).thenReturn(queryBuilder);
+        when(client.index(any(IndexRequest.class))).thenReturn(future);
+import org.opensearch.rule.action.GetRuleResponse;
                 failureCount.incrementAndGet();
-                failures.add(e);
+        SearchResponse searchResponse = mock(SearchResponse.class);
+import org.opensearch.action.search.SearchRequestBuilder;
+    public void setUp() throws Exception {
+            public void onResponse(UpdateRuleResponse updateRuleResponse) {
+import java.util.Set;
+ * this file be licensed under the Apache-2.0 license or a
+                        }
+        SearchHits searchHits = new SearchHits(new SearchHit[] { searchHit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
+            @Override
+import org.opensearch.rule.RulePersistenceService;
+        when(ruleEntityParser.parse(any(String.class))).thenReturn(rule);
+            final AtomicInteger failureCount = new AtomicInteger();
+import org.opensearch.common.settings.ClusterSettings;
             }
+            new SearchHits(new SearchHit[] {}, new TotalHits(10000, TotalHits.Relation.EQUAL_TO), 1.0f)
+                    if (storedAttributeMaps.contains(MOCK_RULE_ATTRIBUTE_ONE.getName())) {
+            clusterService,
+        when(searchResponse.getHits()).thenReturn(new SearchHits(new SearchHit[] {}, new TotalHits(0, TotalHits.Relation.EQUAL_TO), 1.0f));
+import org.opensearch.search.SearchHits;
+                            latch.countDown();
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
+        ArgumentCaptor<ActionListener<org.opensearch.action.delete.DeleteResponse>> listenerCaptor = ArgumentCaptor.forClass(
+        ThreadPool threadPool = mock(ThreadPool.class);
+        listenerCaptor.getValue().onResponse(deleteResponse);
+        when(ruleQueryMapper.getCardinalityQuery()).thenReturn(mock(QueryBuilder.class));
+import org.opensearch.rule.action.UpdateRuleRequest;
+        assertTrue("All update calls should complete", completed);
+ * compatible open source license.
+        when(clusterService.state()).thenReturn(clusterState);
+                failures.add(e);
+        UpdateRuleRequest request = mock(UpdateRuleRequest.class);
+        AtomicReference<Exception> failure = new AtomicReference<>();
+        assertTrue(failure.get().getMessage().contains(_ID_ONE));
+import static org.opensearch.rule.utils.RuleTestUtils.DESCRIPTION_ONE;
+    }
+        when(searchRequestBuilder.get()).thenReturn(searchResponse);
+            final AtomicInteger successCount = new AtomicInteger();
+        when(searchRequestBuilder.setSize(anyInt())).thenReturn(searchRequestBuilder);
+        };
+        });
+        when(originalRule.getFeatureType()).thenReturn(RuleTestUtils.MockRuleFeatureType.INSTANCE);
+    }
+        ArgumentCaptor<Exception> failureCaptor = ArgumentCaptor.forClass(Exception.class);
+import static org.opensearch.rule.utils.RuleTestUtils.MockRuleAttributes.MOCK_RULE_ATTRIBUTE_ONE;
+        when(threadPool.getThreadContext()).thenReturn(new ThreadContext(Settings.EMPTY));
+        SearchResponse searchResponse = mock(SearchResponse.class);
+        for (int i = 0; i < threadCount; i++) {
+import java.util.concurrent.TimeUnit;
+                fail();
+            clusterService,
+            assertTrue(e instanceof IllegalArgumentException);
+ * The OpenSearch Contributors require contributions made to
+        listenerCaptor.getValue().onFailure(new DocumentMissingException(new ShardId(TEST_INDEX_NAME, "_na_", 0), ruleId));
+import java.util.ArrayList;
+        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
+        CreateRuleRequest createRuleRequest = mock(CreateRuleRequest.class);
+            ruleQueryMapper
+        when(request.getId()).thenReturn(_ID_ONE);
+        super.setUp();
+        org.opensearch.action.delete.DeleteResponse deleteResponse = mock(org.opensearch.action.delete.DeleteResponse.class);
         }
         TestListener testListener = new TestListener();
-
-        for (int i = 0; i < threadCount; i++) {
-            new Thread(() -> rulePersistenceService.createRule(createRuleRequest, testListener)).start();
-        }
-        boolean completed = latch.await(10, TimeUnit.SECONDS);
-        singleThreadExecutor.shutdown();
-        assertTrue("All create calls should complete", completed);
-        assertEquals(1, testListener.successCount.get());
-        assertEquals(threadCount - 1, testListener.failureCount.get());
-        for (Exception e : testListener.failures) {
-            assertTrue(e instanceof IllegalArgumentException);
-            assertTrue(e.getMessage().contains("Duplicate rule"));
-        }
-    }
-
     public void testCreateDuplicateRule() {
-        CreateRuleRequest createRuleRequest = mock(CreateRuleRequest.class);
-        when(createRuleRequest.getRule()).thenReturn(rule);
-        when(rule.getAttributeMap()).thenReturn(Map.of(MOCK_RULE_ATTRIBUTE_ONE, Set.of(ATTRIBUTE_VALUE_ONE)));
-        when(rule.getFeatureType()).thenReturn(RuleTestUtils.MockRuleFeatureType.INSTANCE);
-
-        SearchResponse searchResponse = mock(SearchResponse.class);
-        SearchHit hit = new SearchHit(1);
-        hit.sourceRef(new BytesArray(VALID_JSON));
-        SearchHits searchHits = new SearchHits(new SearchHit[] { hit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
-        when(searchResponse.getHits()).thenReturn(searchHits);
+        when(rule.toXContent(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
+import static org.mockito.ArgumentMatchers.argThat;
+        singleThreadExecutor.shutdown();
+        when(metadata.hasIndex(TEST_INDEX_NAME)).thenReturn(true);
+            }
+    public void testConcurrentUpdateDuplicateRules() throws InterruptedException {
+import java.util.Collections;
         when(searchRequestBuilder.get()).thenReturn(searchResponse);
-
+        }
+        assertNotNull(exceptionCaptor.getValue());
+            public void validateNoDuplicateRule(Rule rule, ActionListener<Void> listener) {
+@SuppressWarnings("unchecked")
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.index.shard.ShardId;
+        when(createRuleRequest.getRule()).thenReturn(rule);
+import org.opensearch.rule.autotagging.Rule;
+        when(getRuleRequest.getId()).thenReturn(_ID_ONE);
+        when(indexResponse.getId()).thenReturn(_ID_ONE);
+import org.opensearch.rule.action.CreateRuleResponse;
+        rulePersistenceService.getRule(getRuleRequest, listener);
+import org.opensearch.cluster.service.ClusterService;
+                            listener.onResponse(new CreateRuleResponse(rule));
+            @Override
+        DeleteRuleRequest request = new DeleteRuleRequest(ruleId, RuleTestUtils.MockRuleFeatureType.INSTANCE);
+        RulePersistenceService rulePersistenceService = new IndexStoredRulePersistenceService(
+            public void onResponse(UpdateRuleResponse response) {
+        when(rule.getAttributeMap()).thenReturn(ATTRIBUTE_MAP);
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+        ArgumentCaptor<DeleteRequest> requestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
+                            latch.countDown();
+    private Client client;
+import static org.opensearch.rule.utils.RuleTestUtils.FEATURE_VALUE_ONE;
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(searchRequestBuilder.get()).thenReturn(searchResponse);
+            assertTrue(e.getMessage().contains("Duplicate rule"));
+        when(searchRequestBuilder.get()).thenReturn(searchResponse);
+        when(clusterService.getSettings()).thenReturn(testSettings);
+        }
+        when(queryBuilder.filter(any())).thenReturn(queryBuilder);
+    private RuleQueryMapper<QueryBuilder> ruleQueryMapper;
+        when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
+        CreateRuleRequest createRuleRequest = mock(CreateRuleRequest.class);
+        rulePersistenceService.getRule(getRuleRequest, listener);
+        ActionListener<GetRuleResponse> listener = mock(ActionListener.class);
+    public void testConcurrentCreateDuplicateRules() throws InterruptedException {
+            @Override
         ActionListener<CreateRuleResponse> listener = mock(ActionListener.class);
-        when(ruleEntityParser.parse(any(String.class))).thenReturn(rule);
-        rulePersistenceService.createRule(createRuleRequest, listener);
-        ArgumentCaptor<Exception> failureCaptor = ArgumentCaptor.forClass(Exception.class);
+        when(threadPool.getThreadContext()).thenReturn(new ThreadContext(Settings.EMPTY));
+            }
+        GetRuleRequest getRuleRequest = mock(GetRuleRequest.class);
+        when(searchRequestBuilder.get()).thenReturn(searchResponse);
+            public void createRule(CreateRuleRequest request, ActionListener<CreateRuleResponse> listener) {
+        assertNotNull(responseCaptor.getValue().getRule());
+        CountDownLatch latch = new CountDownLatch(threadCount);
+                        }
+        ClusterService clusterService = mock(ClusterService.class);
+        when(originalRule.getId()).thenReturn(_ID_ONE);
+                        listener.onFailure(new IllegalArgumentException("Duplicate rule exists with attribute map"));
+        GetRuleResponse response = responseCaptor.getValue();
+                        @Override
+        ActionListener<GetRuleResponse> listener = mock(ActionListener.class);
+        SearchHits emptyHits = new SearchHits(new SearchHit[] {}, new TotalHits(0, TotalHits.Relation.EQUAL_TO), 1.0f);
+                }
+                singleThreadExecutor.execute(() -> {
+            TEST_INDEX_NAME,
+        return client;
+        rulePersistenceService.deleteRule(request, listener);
+        ActionListener<CreateRuleResponse> listener = mock(ActionListener.class);
+                    }
+        when(createRuleRequest.getRule()).thenReturn(rule);
+            client,
+import java.util.concurrent.ConcurrentHashMap;
+        when(updateRuleRequest.getFeatureType()).thenReturn(RuleTestUtils.MockRuleFeatureType.INSTANCE);
+        verify(listener).onResponse(responseCaptor.capture());
+        );
+                }
+import org.opensearch.rule.RuleUtils;
+            public void onFailure(Exception e) {
+            }
+        };
+                synchronized (storedAttributeMaps) {
+        when(originalRule.getFeatureValue()).thenReturn(FEATURE_VALUE_ONE);
+package org.opensearch.rule.service;
+                        public void onResponse(Void unused) {
+        Metadata metadata = mock(Metadata.class);
+public class IndexStoredRulePersistenceServiceTests extends OpenSearchTestCase {
+                failures.add(e);
+                            latch.countDown();
+        CreateRuleRequest createRuleRequest = mock(CreateRuleRequest.class);
+        }
+        CountDownLatch latch = new CountDownLatch(threadCount);
+    public void testDeleteRule_successful() {
+        ThreadPool threadPool = mock(ThreadPool.class);
+        when(createRuleRequest.getRule()).thenReturn(rule);
+        ClusterState clusterState = mock(ClusterState.class);
+import org.opensearch.rule.RuleQueryMapper;
+import org.opensearch.common.action.ActionFuture;
+                            synchronized (storedAttributeMaps) {
+    private static final int MAX_VALUES_PER_PAGE = 50;
+        when(request.getId()).thenReturn(_ID_ONE);
+        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
+        int threadCount = 10;
+import org.opensearch.test.OpenSearchTestCase;
+    private QueryBuilder queryBuilder;
+import org.opensearch.rule.action.CreateRuleRequest;
+        when(client.threadPool()).thenReturn(threadPool);
+        SearchHit searchHit = new SearchHit(1);
+        class TestListener implements ActionListener<UpdateRuleResponse> {
+import org.opensearch.ResourceNotFoundException;
+                fail();
+        verify(client).delete(requestCaptor.capture(), listenerCaptor.capture());
+import static org.mockito.Mockito.verify;
+                        listener.onResponse(null);
+        boolean completed = latch.await(10, TimeUnit.SECONDS);
+            @Override
+        when(rule.getFeatureType()).thenReturn(RuleTestUtils.MockRuleFeatureType.INSTANCE);
+                        storedAttributeMaps.add(key);
+    }
+            @Override
+        assertTrue(failure.get() instanceof ResourceNotFoundException);
+                        @Override
+        client = setUpMockClient(searchRequestBuilder);
+                        public void onFailure(Exception e) {
+        SearchHits searchHits = new SearchHits(new SearchHit[] { searchHit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
+        when(searchResponse.getHits()).thenReturn(searchHits);
+        when(rule.getAttributeMap()).thenReturn(Map.of(MOCK_RULE_ATTRIBUTE_ONE, Set.of(ATTRIBUTE_VALUE_ONE)));
+        when(rule.toXContent(any(), any())).thenAnswer(invocation -> invocation.getArgument(0));
+                    if (storedAttributeMaps.contains(key)) {
+    }
+        assertEquals(ruleId, requestCaptor.getValue().id());
+            public void onFailure(Exception e) {
+        when(future.get()).thenReturn(indexResponse);
+import org.opensearch.rule.action.UpdateRuleResponse;
+        queryBuilder = mock(QueryBuilder.class);
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+                    } else {
+import org.opensearch.core.action.ActionListener;
+                    }
+    public void testGetRuleByIdNotFound() {
+        SearchResponse searchResponse = mock(SearchResponse.class);
+        clusterService = mock(ClusterService.class);
+        RulePersistenceService rulePersistenceService = new IndexStoredRulePersistenceService(
+        String ruleId = "missing-rule-id";
+        assertTrue(exception instanceof ResourceNotFoundException);
+        when(clusterState.metadata()).thenReturn(metadata);
+        SearchResponse searchResponse = mock(SearchResponse.class);
+        for (Exception e : testListener.failures) {
+            MAX_VALUES_PER_PAGE,
+        for (int i = 0; i < threadCount; i++) {
+        when(rule.getFeatureType()).thenReturn(RuleTestUtils.MockRuleFeatureType.INSTANCE);
+        Exception exception = exceptionCaptor.getValue();
+        verify(listener).onResponse(argThat(AcknowledgedResponse::isAcknowledged));
+        );
+    }
+import java.util.HashMap;
+        verify(listener).onFailure(exceptionCaptor.capture());
+        Settings testSettings = Settings.EMPTY;
+                        listener.onFailure(new IllegalArgumentException("Duplicate rule exists with attribute map"));
+            final List<Exception> failures = Collections.synchronizedList(new ArrayList<>());
         verify(listener).onFailure(failureCaptor.capture());
     }
-
-    public void testGetRuleByIdSuccess() {
-        GetRuleRequest getRuleRequest = mock(GetRuleRequest.class);
-        when(getRuleRequest.getId()).thenReturn(_ID_ONE);
-        when(getRuleRequest.getAttributeFilters()).thenReturn(new HashMap<>());
-        when(getRuleRequest.getFeatureType()).thenReturn(RuleTestUtils.MockRuleFeatureType.INSTANCE);
-
-        SearchResponse searchResponse = mock(SearchResponse.class);
-        SearchHit searchHit = new SearchHit(1);
-        searchHit.sourceRef(new BytesArray(VALID_JSON));
-        SearchHits searchHits = new SearchHits(new SearchHit[] { searchHit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
-        when(searchResponse.getHits()).thenReturn(searchHits);
-        when(searchRequestBuilder.get()).thenReturn(searchResponse);
-
-        ActionListener<GetRuleResponse> listener = mock(ActionListener.class);
-        ArgumentCaptor<GetRuleResponse> responseCaptor = ArgumentCaptor.forClass(GetRuleResponse.class);
-        rulePersistenceService.getRule(getRuleRequest, listener);
-        verify(listener).onResponse(responseCaptor.capture());
-        GetRuleResponse response = responseCaptor.getValue();
-        assertEquals(1, response.getRules().size());
-    }
-
-    public void testGetRuleByIdNotFound() {
-        GetRuleRequest getRuleRequest = mock(GetRuleRequest.class);
-        when(getRuleRequest.getId()).thenReturn(_ID_ONE);
-        when(getRuleRequest.getFeatureType()).thenReturn(RuleTestUtils.MockRuleFeatureType.INSTANCE);
-
-        SearchResponse searchResponse = mock(SearchResponse.class);
-        when(searchRequestBuilder.get()).thenReturn(searchResponse);
-        when(searchResponse.getHits()).thenReturn(new SearchHits(new SearchHit[] {}, new TotalHits(0, TotalHits.Relation.EQUAL_TO), 1.0f));
-        ActionListener<GetRuleResponse> listener = mock(ActionListener.class);
-
-        rulePersistenceService.getRule(getRuleRequest, listener);
-        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
-        verify(listener).onFailure(exceptionCaptor.capture());
-        Exception exception = exceptionCaptor.getValue();
-        assertTrue(exception instanceof ResourceNotFoundException);
-    }
-
     private Client setUpMockClient(SearchRequestBuilder searchRequestBuilder) {
-        Client client = mock(Client.class);
-        ClusterService clusterService = mock(ClusterService.class);
-        ClusterState clusterState = mock(ClusterState.class);
-        Metadata metadata = mock(Metadata.class);
-        ThreadPool threadPool = mock(ThreadPool.class);
-
-        ThreadContext threadContext = new ThreadContext(Settings.EMPTY);
-        when(client.threadPool()).thenReturn(threadPool);
-        when(threadPool.getThreadContext()).thenReturn(threadContext);
-        when(clusterService.state()).thenReturn(clusterState);
-        when(clusterState.metadata()).thenReturn(metadata);
-
-        when(client.prepareSearch(TEST_INDEX_NAME)).thenReturn(searchRequestBuilder);
-        when(searchRequestBuilder.setQuery(any(QueryBuilder.class))).thenReturn(searchRequestBuilder);
-        when(searchRequestBuilder.setSize(anyInt())).thenReturn(searchRequestBuilder);
-
-        return client;
-    }
-
-    public void testDeleteRule_successful() {
-        String ruleId = "test-rule-id";
-        DeleteRuleRequest request = new DeleteRuleRequest(ruleId, RuleTestUtils.MockRuleFeatureType.INSTANCE);
-        ThreadPool threadPool = mock(ThreadPool.class);
-        when(client.threadPool()).thenReturn(threadPool);
-        when(threadPool.getThreadContext()).thenReturn(new ThreadContext(Settings.EMPTY));
-
-        ArgumentCaptor<DeleteRequest> requestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
-        ArgumentCaptor<ActionListener<org.opensearch.action.delete.DeleteResponse>> listenerCaptor = ArgumentCaptor.forClass(
-            ActionListener.class
-        );
-
-        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
-
-        rulePersistenceService.deleteRule(request, listener);
-
-        verify(client).delete(requestCaptor.capture(), listenerCaptor.capture());
-        assertEquals(ruleId, requestCaptor.getValue().id());
-
-        org.opensearch.action.delete.DeleteResponse deleteResponse = mock(org.opensearch.action.delete.DeleteResponse.class);
-        when(deleteResponse.getResult()).thenReturn(DocWriteResponse.Result.DELETED);
-
-        listenerCaptor.getValue().onResponse(deleteResponse);
-
-        verify(listener).onResponse(argThat(AcknowledgedResponse::isAcknowledged));
-    }
-
-    public void testDeleteRule_notFound() {
-        String ruleId = "missing-rule-id";
-        DeleteRuleRequest request = new DeleteRuleRequest(ruleId, RuleTestUtils.MockRuleFeatureType.INSTANCE);
-        ThreadPool threadPool = mock(ThreadPool.class);
-        when(client.threadPool()).thenReturn(threadPool);
-        when(threadPool.getThreadContext()).thenReturn(new ThreadContext(Settings.EMPTY));
-
-        ArgumentCaptor<DeleteRequest> requestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
-        ArgumentCaptor<ActionListener<org.opensearch.action.delete.DeleteResponse>> listenerCaptor = ArgumentCaptor.forClass(
-            ActionListener.class
-        );
-
-        ActionListener<AcknowledgedResponse> listener = mock(ActionListener.class);
-
-        rulePersistenceService.deleteRule(request, listener);
-
-        verify(client).delete(requestCaptor.capture(), listenerCaptor.capture());
-        assertEquals(ruleId, requestCaptor.getValue().id());
-
-        listenerCaptor.getValue().onFailure(new DocumentMissingException(new ShardId(TEST_INDEX_NAME, "_na_", 0), ruleId));
-
-        verify(listener).onFailure(any(ResourceNotFoundException.class));
-    }
-
-    public void testConcurrentUpdateDuplicateRules() throws InterruptedException {
-        int threadCount = 10;
-        CountDownLatch latch = new CountDownLatch(threadCount);
-        ExecutorService singleThreadExecutor = Executors.newSingleThreadExecutor();
-        Set<String> storedAttributeMaps = ConcurrentHashMap.newKeySet();
-
-        UpdateRuleRequest updateRuleRequest = mock(UpdateRuleRequest.class);
-        when(updateRuleRequest.getFeatureValue()).thenReturn(FEATURE_VALUE_ONE);
-        when(updateRuleRequest.getFeatureType()).thenReturn(RuleTestUtils.MockRuleFeatureType.INSTANCE);
-        when(updateRuleRequest.getAttributeMap()).thenReturn(ATTRIBUTE_MAP);
-        when(updateRuleRequest.getDescription()).thenReturn(DESCRIPTION_TWO);
-
-        Rule originalRule = mock(Rule.class);
-        when(originalRule.getId()).thenReturn(_ID_ONE);
-        when(originalRule.getAttributeMap()).thenReturn(ATTRIBUTE_MAP);
-        when(originalRule.getFeatureType()).thenReturn(RuleTestUtils.MockRuleFeatureType.INSTANCE);
-        when(originalRule.getFeatureValue()).thenReturn(FEATURE_VALUE_ONE);
-        when(originalRule.getDescription()).thenReturn(DESCRIPTION_ONE);
-
-        RulePersistenceService rulePersistenceService = new IndexStoredRulePersistenceService(
-            TEST_INDEX_NAME,
-            client,
-            clusterService,
-            MAX_VALUES_PER_PAGE,
-            ruleEntityParser,
-            ruleQueryMapper
-        ) {
-            @Override
-            public void updateRule(UpdateRuleRequest request, ActionListener<UpdateRuleResponse> listener) {
-                singleThreadExecutor.execute(() -> {
-                    Rule updatedRule = RuleUtils.composeUpdatedRule(originalRule, request, request.getFeatureType());
-                    validateNoDuplicateRule(updatedRule, new ActionListener<Void>() {
-                        @Override
-                        public void onResponse(Void unused) {
-                            listener.onResponse(new UpdateRuleResponse(updatedRule));
-                            latch.countDown();
-                        }
-
-                        @Override
-                        public void onFailure(Exception e) {
-                            listener.onFailure(e);
-                            latch.countDown();
-                        }
-                    });
-                });
-            }
-
-            public void validateNoDuplicateRule(Rule rule, ActionListener<Void> listener) {
-                synchronized (storedAttributeMaps) {
-                    String key = rule.getAttributeMap().toString();
-                    if (storedAttributeMaps.contains(key)) {
-                        listener.onFailure(new IllegalArgumentException("Duplicate rule exists with attribute map"));
-                    } else {
-                        storedAttributeMaps.add(key);
-                        listener.onResponse(null);
-                    }
-                }
-            }
-        };
-
-        class TestListener implements ActionListener<UpdateRuleResponse> {
-            final AtomicInteger successCount = new AtomicInteger();
-            final AtomicInteger failureCount = new AtomicInteger();
-            final List<Exception> failures = Collections.synchronizedList(new ArrayList<>());
-
-            @Override
-            public void onResponse(UpdateRuleResponse response) {
-                successCount.incrementAndGet();
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                failureCount.incrementAndGet();
-                failures.add(e);
-            }
-        }
-
-        TestListener testListener = new TestListener();
-
-        for (int i = 0; i < threadCount; i++) {
-            new Thread(() -> rulePersistenceService.updateRule(updateRuleRequest, testListener)).start();
-        }
-
-        boolean completed = latch.await(10, TimeUnit.SECONDS);
-        singleThreadExecutor.shutdown();
-
-        assertTrue("All update calls should complete", completed);
-        assertEquals(1, testListener.successCount.get());
-        assertEquals(threadCount - 1, testListener.failureCount.get());
-
-        for (Exception e : testListener.failures) {
-            assertTrue(e instanceof IllegalArgumentException);
-            assertTrue(e.getMessage().contains("Duplicate rule"));
-        }
-    }
-
-    public void testUpdateRule_RuleNotFound() {
-        UpdateRuleRequest request = mock(UpdateRuleRequest.class);
-        when(request.getId()).thenReturn(_ID_ONE);
-
-        SearchHits emptyHits = new SearchHits(new SearchHit[] {}, new TotalHits(0, TotalHits.Relation.EQUAL_TO), 1.0f);
+import java.util.concurrent.CountDownLatch;
+ */
+        ruleEntityParser = mock(RuleEntityParser.class);
         SearchResponse searchResponse = mock(SearchResponse.class);
-        when(searchResponse.getHits()).thenReturn(emptyHits);
-        when(searchRequestBuilder.get()).thenReturn(searchResponse);
-
-        AtomicReference<Exception> failure = new AtomicReference<>();
+        assertEquals(threadCount - 1, testListener.failureCount.get());
+import static org.mockito.Mockito.mock;
+import org.opensearch.rule.RuleEntityParser;
+                    });
+            ruleEntityParser,
+        CreateRuleRequest createRuleRequest = mock(CreateRuleRequest.class);
+import static org.opensearch.rule.utils.RuleTestUtils._ID_ONE;
+        ArgumentCaptor<ActionListener<org.opensearch.action.delete.DeleteResponse>> listenerCaptor = ArgumentCaptor.forClass(
+    public void testCreateRuleOnExistingIndex() throws Exception {
+                        @Override
+        GetRuleRequest getRuleRequest = mock(GetRuleRequest.class);
+                        @Override
+        ) {
+        assertNotNull(failure.get());
         rulePersistenceService.updateRule(request, new ActionListener<>() {
-            @Override
-            public void onResponse(UpdateRuleResponse updateRuleResponse) {
-                fail();
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                failure.set(e);
-            }
+        ExecutorService singleThreadExecutor = Executors.newSingleThreadExecutor();
+            ActionListener.class
+import org.opensearch.search.SearchHit;
+                            }
         });
-
-        assertTrue(failure.get() instanceof ResourceNotFoundException);
-        assertTrue(failure.get().getMessage().contains(_ID_ONE));
+            @Override
+                    } else {
+        clusterSettings.registerSetting(IndexStoredRulePersistenceService.MAX_WLM_RULES_SETTING);
+        }
+        assertEquals(1, testListener.successCount.get());
+        when(clusterService.state()).thenReturn(clusterState);
+                    });
+            final List<Exception> failures = Collections.synchronizedList(new ArrayList<>());
+import org.opensearch.common.util.concurrent.ThreadContext;
+            new Thread(() -> rulePersistenceService.updateRule(updateRuleRequest, testListener)).start();
+                    validateNoDuplicateRule(updatedRule, new ActionListener<Void>() {
+        ClusterState clusterState = mock(ClusterState.class);
+                            listener.onFailure(e);
+        rulePersistenceService.deleteRule(request, listener);
+import java.util.concurrent.Executors;
+            public void onResponse(UpdateRuleResponse updateRuleResponse) {
+        verify(listener).onFailure(exceptionCaptor.capture());
+        SearchHits searchHits = new SearchHits(new SearchHit[] { hit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
+        ClusterSettings clusterSettings = new ClusterSettings(testSettings, new HashSet<>());
+        ExecutorService singleThreadExecutor = Executors.newSingleThreadExecutor();
+        when(client.prepareSearch(TEST_INDEX_NAME)).thenReturn(searchRequestBuilder);
+                        }
+        assertTrue(failure.get().getMessage().contains("Invalid JSON"));
+            ruleQueryMapper
+        UpdateRuleRequest updateRuleRequest = mock(UpdateRuleRequest.class);
+            TEST_INDEX_NAME,
+            }
+        ArgumentCaptor<CreateRuleResponse> responseCaptor = ArgumentCaptor.forClass(CreateRuleResponse.class);
+import org.opensearch.common.settings.Settings;
+        SearchHit hit = new SearchHit(1);
+        rulePersistenceService.createRule(createRuleRequest, listener);
+        assertEquals(1, testListener.successCount.get());
+            final AtomicInteger failureCount = new AtomicInteger();
+    private SearchRequestBuilder searchRequestBuilder;
+        when(searchResponse.getHits()).thenReturn(searchHits);
+    public void testGetRuleByIdSuccess() {
+import org.opensearch.action.delete.DeleteRequest;
+        for (Exception e : testListener.failures) {
+            MAX_VALUES_PER_PAGE,
+}
+        }
+import org.opensearch.threadpool.ThreadPool;
+            }
+        Rule originalRule = mock(Rule.class);
+        hit.sourceRef(new BytesArray(VALID_JSON));
+        when(searchResponse.getHits()).thenReturn(searchHits);
+        ThreadPool threadPool = mock(ThreadPool.class);
+            assertTrue(e instanceof IllegalArgumentException);
+        ) {
+        ruleQueryMapper = mock(RuleQueryMapper.class);
+            clusterService,
+        when(getRuleRequest.getId()).thenReturn(_ID_ONE);
+            assertTrue(e.getMessage().contains("Duplicate rule"));
+        rulePersistenceService.createRule(createRuleRequest, listener);
+                failureCount.incrementAndGet();
+import org.opensearch.cluster.metadata.Metadata;
+    public void testUpdateRule_RuleNotFound() {
+import java.util.concurrent.atomic.AtomicInteger;
+        rulePersistenceService.createRule(createRuleRequest, listener);
+        when(originalRule.getAttributeMap()).thenReturn(ATTRIBUTE_MAP);
+        when(createRuleRequest.getRule()).thenReturn(rule);
+        when(client.threadPool()).thenReturn(threadPool);
+            @Override
+        boolean completed = latch.await(10, TimeUnit.SECONDS);
+        when(client.threadPool()).thenReturn(threadPool);
+    private RuleEntityParser ruleEntityParser;
+            public void onResponse(CreateRuleResponse response) {
+                });
+        searchRequestBuilder = mock(SearchRequestBuilder.class);
+        when(searchResponse.getHits()).thenReturn(
+                        public void onResponse(Void unused) {
+            ruleQueryMapper
+        when(threadPool.getThreadContext()).thenReturn(threadContext);
+            ActionListener.class
+                failure.set(e);
+            @Override
+import org.opensearch.index.query.QueryBuilder;
+        when(getRuleRequest.getAttributeFilters()).thenReturn(new HashMap<>());
+                    String key = rule.getAttributeMap().toString();
+            @Override
+            }
+            }
+        class TestListener implements ActionListener<CreateRuleResponse> {
+            }
     }
-
-    public void testUpdateRule_ParseFailure() {
+            ruleEntityParser,
+import org.opensearch.core.common.bytes.BytesArray;
+        ArgumentCaptor<GetRuleResponse> responseCaptor = ArgumentCaptor.forClass(GetRuleResponse.class);
+    private RulePersistenceService rulePersistenceService;
+        String ruleId = "test-rule-id";
+                failure.set(e);
+        when(ruleEntityParser.parse(anyString())).thenReturn(rule);
+    }
+        ArgumentCaptor<DeleteRequest> requestCaptor = ArgumentCaptor.forClass(DeleteRequest.class);
+        when(updateRuleRequest.getAttributeMap()).thenReturn(ATTRIBUTE_MAP);
+                            listener.onResponse(new UpdateRuleResponse(updatedRule));
+                        public void onFailure(Exception e) {
+ *
+            MAX_VALUES_PER_PAGE,
+import org.opensearch.action.index.IndexResponse;
+                });
+            new Thread(() -> rulePersistenceService.createRule(createRuleRequest, testListener)).start();
+        DeleteRuleRequest request = new DeleteRuleRequest(ruleId, RuleTestUtils.MockRuleFeatureType.INSTANCE);
+        Metadata metadata = mock(Metadata.class);
+import org.opensearch.cluster.ClusterState;
+                synchronized (storedAttributeMaps) {
+import java.util.concurrent.atomic.AtomicReference;
+        rulePersistenceService = new IndexStoredRulePersistenceService(
+import java.util.List;
+import static org.opensearch.rule.utils.RuleTestUtils.TEST_INDEX_NAME;
+        when(originalRule.getDescription()).thenReturn(DESCRIPTION_ONE);
+        when(searchResponse.getHits()).thenReturn(new SearchHits(new SearchHit[] {}, new TotalHits(0, TotalHits.Relation.EQUAL_TO), 1.0f));
+        verify(client).delete(requestCaptor.capture(), listenerCaptor.capture());
+        assertTrue("All create calls should complete", completed);
+    }
+        assertEquals(1, response.getRules().size());
+        when(getRuleRequest.getFeatureType()).thenReturn(RuleTestUtils.MockRuleFeatureType.INSTANCE);
         UpdateRuleRequest request = mock(UpdateRuleRequest.class);
-        when(request.getId()).thenReturn(_ID_ONE);
-
+        );
+            final AtomicInteger successCount = new AtomicInteger();
+        );
+        when(getRuleRequest.getFeatureType()).thenReturn(RuleTestUtils.MockRuleFeatureType.INSTANCE);
+        Set<String> storedAttributeMaps = ConcurrentHashMap.newKeySet();
+        ActionFuture<IndexResponse> future = mock(ActionFuture.class);
+    }
+        when(updateRuleRequest.getFeatureValue()).thenReturn(FEATURE_VALUE_ONE);
+        rule = mock(Rule.class);
+        assertEquals(ruleId, requestCaptor.getValue().id());
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+            public void updateRule(UpdateRuleRequest request, ActionListener<UpdateRuleResponse> listener) {
+                successCount.incrementAndGet();
+            client,
+import org.opensearch.action.DocWriteResponse;
+import static org.mockito.Mockito.anyInt;
+import static org.opensearch.rule.utils.RuleTestUtils.ATTRIBUTE_MAP;
+        when(searchRequestBuilder.get()).thenReturn(searchResponse);
+                    Rule updatedRule = RuleUtils.composeUpdatedRule(originalRule, request, request.getFeatureType());
+import static org.mockito.Mockito.any;
+        ActionListener<CreateRuleResponse> listener = mock(ActionListener.class);
+import org.opensearch.index.engine.DocumentMissingException;
+                    validateNoDuplicateRule(rule, new ActionListener<Void>() {
+                    Rule rule = request.getRule();
+        verify(listener).onResponse(responseCaptor.capture());
+        when(updateRuleRequest.getDescription()).thenReturn(DESCRIPTION_TWO);
+            }
+        int threadCount = 10;
+    public void testUpdateRule_ParseFailure() {
+        when(deleteResponse.getResult()).thenReturn(DocWriteResponse.Result.DELETED);
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(OpenSearchRejectedExecutionException.class);
+        Set<String> storedAttributeMaps = ConcurrentHashMap.newKeySet();
+import org.opensearch.transport.client.Client;
+import org.opensearch.rule.action.GetRuleRequest;
         SearchHit searchHit = new SearchHit(1, _ID_ONE, null, null);
         searchHit.sourceRef(new BytesArray(VALID_JSON));
-        SearchHits searchHits = new SearchHits(new SearchHit[] { searchHit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
+import org.opensearch.rule.utils.RuleTestUtils;
+import static org.opensearch.rule.XContentRuleParserTests.VALID_JSON;
+import org.opensearch.action.search.SearchResponse;
         SearchResponse searchResponse = mock(SearchResponse.class);
-        when(searchResponse.getHits()).thenReturn(searchHits);
+        Client client = mock(Client.class);
+import org.opensearch.rule.action.DeleteRuleRequest;
+        verify(listener).onFailure(any(ResourceNotFoundException.class));
+            TEST_INDEX_NAME,
+import static org.opensearch.rule.utils.RuleTestUtils.ATTRIBUTE_VALUE_ONE;
+import org.apache.lucene.search.TotalHits;
+                                storedAttributeMaps.add(MOCK_RULE_ATTRIBUTE_ONE.getName());
+            }
         when(searchRequestBuilder.get()).thenReturn(searchResponse);
-        when(ruleEntityParser.parse(anyString())).thenThrow(new RuntimeException("Invalid JSON"));
-
-        AtomicReference<Exception> failure = new AtomicReference<>();
         rulePersistenceService.updateRule(request, new ActionListener<>() {
-            @Override
-            public void onResponse(UpdateRuleResponse updateRuleResponse) {
-                fail();
-            }
-
-            @Override
+        singleThreadExecutor.shutdown();
+        when(searchRequestBuilder.setQuery(any(QueryBuilder.class))).thenReturn(searchRequestBuilder);
+            public void validateNoDuplicateRule(Rule rule, ActionListener<Void> listener) {
+import java.util.HashSet;
+        ThreadContext threadContext = new ThreadContext(Settings.EMPTY);
             public void onFailure(Exception e) {
-                failure.set(e);
-            }
-        });
-
-        assertNotNull(failure.get());
-        assertTrue(failure.get().getMessage().contains("Invalid JSON"));
+        TestListener testListener = new TestListener();
+        IndexResponse indexResponse = mock(IndexResponse.class);
+/*
+import org.opensearch.action.index.IndexRequest;
+        assertEquals(threadCount - 1, testListener.failureCount.get());
+        SearchResponse searchResponse = mock(SearchResponse.class);
+            client,
+import static org.mockito.Mockito.when;
+            @Override
     }
-}
+import static org.mockito.ArgumentMatchers.anyString;
+    }
+            public void onFailure(Exception e) {
+                singleThreadExecutor.execute(() -> {
+import org.mockito.ArgumentCaptor;
+    private ClusterService clusterService;
+import static org.opensearch.rule.utils.RuleTestUtils.DESCRIPTION_TWO;
+    private Rule rule;
+            ruleEntityParser,
+    public void testCardinalityCheckBasedFailure() throws Exception {

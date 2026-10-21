@@ -1,770 +1,714 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.analytics.planner;
-
-import org.apache.calcite.plan.RelOptTable;
-import org.apache.calcite.plan.RelOptUtil;
-import org.apache.calcite.rel.RelCollations;
-import org.apache.calcite.rel.RelFieldCollation;
-import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.RelVisitor;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.rex.RexInputRef;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.sql.type.SqlTypeName;
-import org.opensearch.analytics.planner.rel.OpenSearchExchangeReducer;
-import org.opensearch.analytics.planner.rel.OpenSearchFilter;
-import org.opensearch.analytics.planner.rel.OpenSearchLateMaterialization;
-import org.opensearch.analytics.planner.rel.OpenSearchProject;
-import org.opensearch.analytics.planner.rel.OpenSearchRelNode;
-import org.opensearch.analytics.planner.rel.OpenSearchSort;
-import org.opensearch.analytics.planner.rel.OpenSearchTableScan;
-import org.opensearch.analytics.spi.AnalyticsSearchBackendPlugin;
-import org.opensearch.analytics.spi.FieldStorageInfo;
-import org.opensearch.analytics.spi.FieldType;
-import org.opensearch.cluster.ClusterState;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
-/**
- * Plan-shape tests for the QTF (late-materialization) post-CBO rewriter, v2.
- *
- * <p>Each test drives a SQL string (Calcite dialect) through the full planner and asserts
- * the structural post-conditions QTF must produce:
- * <ul>
- *   <li>Scan rowType narrowed to {@code BelowAnchorPhysicalFields + ___row_id}.</li>
- *   <li>ER output declares {@code ___ugsi} as the last field. Single-shard plans do not trigger
- *       QTF (no gather to skip).</li>
- *   <li>Wrapper output rowType = {@code AboveAnchorPhysicalFields}, in
- *       {@code TopmostOperatorAboveAnchor} order. Helpers stripped.</li>
- *   <li>Outer Project's RexInputRefs are remapped to wrapper-output indices.</li>
- * </ul>
- *
- * <p>Skip predicate: QTF fires iff
+            2,
  * {@code AboveAnchorPhysicalFields - BelowAnchorPhysicalFields} is non-empty.
- */
-public class LateMaterializationPlanShapeTests extends BasePlannerRulesTests {
-
-    // ── Tests that fire QTF ────────────────────────────────────────────
-
-    public void testQtfFires_simpleSortProject() {
-        // SELECT URL, EventDate FROM hits ORDER BY EventDate LIMIT 10
-        // AboveAnchorPhysicalFields = [URL, EventDate] (topmost Project, in SELECT order)
-        // BelowAnchorPhysicalFields = {EventDate}
-        // FetchOnly = {URL} → fire
+                }
+                    if (ctx.outerProject == null) {
+            RelCollations.of(
+        // SELECT URL || '-' || URL AS combined, UPPER(URL) AS upper_url FROM hits ORDER BY EventDate LIMIT 10
+        // Filter CounterID($0) > 0
+                    }
+            return new Expect() {
+        );
+        // Walk FSI over every OpenSearchRelNode, mirroring DAGBuilder.cutAtLateMaterialization — must not throw.
+            Expect.aboveAnchorPhysicalFields("URL", "EventDate", "CounterID"),
+                            "Wrapper output rowType mismatch.\n  expected: "
+ * the structural post-conditions QTF must produce:
+     * wrapper-output space, even when there's no Project sitting between Sort and anchor.
+ * <p>Each test drives a SQL string (Calcite dialect) through the full planner and asserts
+                @Override
+        // Single shard: CBO inserts no ExchangeReducer below the anchor (the scan's
+                        || actual.contains(OpenSearchLateMaterialization.UGSI_FIELD)) {
+            Expect.scanCols("EventDate"),
+            projRowType,
+     * passthrough Sort. {@code assertQtfFired} catches such an exception on the planner call.
         assertQtfFired(
+        // avoiding cross-node materialization of fetch-only columns through the gather; with
+                }
+        assertQtfDeclined(
+                            "ER rowType and FSI must stay aligned 1:1 after " + copy,
+            cluster.traitSet(),
+                                    + "] is not a RexInputRef: "
+            Expect.aboveAnchorPhysicalFields("Title"),
+        OpenSearchSort sort = new OpenSearchSort(
+        // dependsOn walk yields {URL, Title} in evaluation order.
+        // BelowAnchor = {CounterID, EventDate}, AboveAnchor = [URL, CounterID]
+                @Override
+     * the ER (unlike the simpler {@code Sort → ER → Project → Scan} cases). After rewrite the
+            2,
+    public void testQtfFires_descendingSort() {
+                                + fc.size()
+    }
             "SELECT URL, EventDate FROM hits ORDER BY EventDate LIMIT 10",
-            2,
-            Expect.scanCols("EventDate"),
             Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
-            Expect.erHasUgsi(true),
-            Expect.wrapperOutput("URL", "EventDate"),
-            Expect.outerProjectExprIndices(0, 1)
-        );
+        // BelowAnchor = {EventDate}; FetchOnly = {URL} → fire.
+    private RelNode optimize(String sql, int shardCount) {
+                @Override
+         * Wrapper output rowType is exactly these names (= {@code AboveAnchorPhysicalFields} in
+        // OFFSET preserved on the rebuilt anchor Sort.
+                + "FROM (SELECT CounterID FROM hits ORDER BY CounterID LIMIT 100) AS inner_q "
+        }
     }
-
-    public void testQtfFires_withWhere() {
-        // SELECT URL, EventDate FROM hits WHERE CounterID = 5 ORDER BY EventDate LIMIT 10
-        // AboveAnchorPhysicalFields = [URL, EventDate]
-        // BelowAnchorPhysicalFields = {CounterID, EventDate}
+        /**
+                                    + plan
         // FetchOnly = {URL} → fire
-        assertQtfFired(
-            "SELECT URL, EventDate FROM hits WHERE CounterID = 5 ORDER BY EventDate LIMIT 10",
-            2,
-            Expect.scanCols("CounterID", "EventDate"),
-            Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
-            Expect.erHasUgsi(true),
-            Expect.wrapperOutput("URL", "EventDate"),
-            Expect.outerProjectExprIndices(0, 1)
+ */
+            Expect.outerProjectNames("tup")
+            }
+        // sort above the wrapper on it). Display-only expressions DO fire — see compositeExpression*.
+                    if (ctx.outerProject == null) {
+        new RelVisitor() {
+    /**
         );
+         * topmost-op order). Helpers must be absent.
+import org.apache.calcite.rel.RelCollations;
+                                + plan
+import org.opensearch.analytics.spi.FieldStorageInfo;
+            Expect.wrapperOutput("EventDate", "URL"),
     }
-
-    public void testQtfFires_aliasPreserved() {
-        // SELECT URL AS u, EventDate FROM hits ORDER BY EventDate LIMIT 10
-        // Wrapper output is physical-named [URL, EventDate]; the Project above the wrapper
+            .add("EventDate", scan.getRowType().getFieldList().get(1).getType())
+        );
+                    List<String> actual = fieldNames(ctx.wrapper.getRowType().getFieldList());
+                        fail(
+            Expect.erHasUgsi(true),
+        assertQtfFired(
+                                + expected
+                    List<String> expected = Arrays.asList(expectedNamesInOrder);
+     * ER carries ___ugsi as its last column, so the below-Project's positional "last = ___row_id"
+        );
+        // SELECT URL, SUM(ParamPrice) OVER () FROM hits ORDER BY EventDate LIMIT 10
+    public void testQtfFires_simpleSortProject() {
+        for (RelDataTypeField f : fields)
         // re-applies the SELECT alias so the result column is `u`, not `URL`.
-        assertQtfFired(
-            "SELECT URL AS u, EventDate FROM hits ORDER BY EventDate LIMIT 10",
-            2,
+        OpenSearchExchangeReducer er;
+        }
+         * Skip this assertion for projects whose expressions are not bare InputRefs (e.g.
+                                + plan
+                @Override
+            Expect.erHasUgsi(true)
+        // AboveAnchor = [CounterID, UserID, URL, Title, EventDate, AdvEngineID, ParamPrice].
+            Expect.wrapperOutput("URL", "EventDate", "CounterID")
+                    } else {
+                    for (int i = 0; i < actual.length; i++) {
             Expect.scanCols("EventDate"),
-            Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
+                    if (node instanceof OpenSearchLateMaterialization w && wrapper == null) {
+                void check(Inspector ctx, String sql, String plan) {
+            fail("QTF should NOT have fired for SQL: " + sql + "\nPlan:\n" + RelOptUtil.toString(optimized));
             Expect.erHasUgsi(true),
-            Expect.wrapperOutput("URL", "EventDate"),
-            Expect.outerProjectNames("u", "EventDate")
-        );
+     * immediate parent — because each passthrough Sort/Filter leaks the narrowed rowType upward.
+            }.go(root);
+        // Anchor Sort: ORDER BY CounterID($2) DESC, EventDate($1) DESC LIMIT 10
+     */
+            "SELECT URL, EventDate FROM hits WHERE CounterID = 5 ORDER BY EventDate LIMIT 10",
+            Expect.outerProjectExprIndices(0, 1)
+                new RelFieldCollation(1, RelFieldCollation.Direction.DESCENDING)
+                    os.getOutputFieldStorage();
+ *
+            Expect.scanCols("CounterID", "EventDate"),
+        // again and the reduce-fragment FSI walk throws. Assert each rebuilt ER keeps aligned FSI.
+        // AboveAnchor = {EventDate}; BelowAnchor = {EventDate}; FetchOnly = {} → skip.
+        OpenSearchProject project = new OpenSearchProject(
+            Expect.outerProjectNames("combined", "upper_url")
+        /** ER carries (or does not carry) {@code ___ugsi} as its last column. */
+        // use (copy, copyResolved, stripAnnotations) — otherwise rowType (4 cols) and FSI (3) diverge
+        // Aggregate sits below the anchor — not in BELOW_INTERMEDIATE_ALLOWED, declined.
+        // EventDate is at position 1).
+                                + sql
+/*
     }
-
-    public void testQtfFires_multiKeySortMixedDirection() {
-        // SELECT URL, EventDate, CounterID FROM hits ORDER BY EventDate ASC, CounterID DESC LIMIT 10
-        // Two collation indices, mixed direction — exercises collationReferencesDerivedSlot over
+    private static List<String> fieldNames(List<RelDataTypeField> fields) {
+    public void testQtfFires_multiKeySort() {
+                            "Outer Project output names mismatch.\n  expected: "
+        RexNode gtZero = rexBuilder.makeCall(
+        );
+    private static final class Inspector {
+        // SELECT URL || '-' || Title AS combined FROM hits ORDER BY EventDate LIMIT 10
+                }
+        // AboveAnchor = {CounterID}; BelowAnchor = {CounterID, EventDate}; FetchOnly = {} → skip.
+        // Outer Project carries RexCall expressions, not bare InputRefs — outerProjectExprIndices skipped.
+        );
+                    }
+            2,
+        OpenSearchTableScan scan;
+                                    + "\nSQL: "
+/**
+        // collapses to AboveAnchorPhysicalFields = [URL].
+    }
+                                + "\nSQL: "
+                        );
+                                + plan
+        OpenSearchExchangeReducer er = new OpenSearchExchangeReducer(cluster, cluster.traitSet(), filter, df);
+import org.opensearch.analytics.planner.rel.OpenSearchRelNode;
+            "SELECT URL, EventDate FROM hits ORDER BY EventDate DESC LIMIT 10",
+                    }
+            2,
+import org.opensearch.analytics.spi.AnalyticsSearchBackendPlugin;
+            Expect.erHasUgsi(true),
+     * Above-anchor Sort's collation index must be remapped from anchor-input space to
+            physicalFsi("EventDate", "integer", FieldType.INTEGER),
+ * Plan-shape tests for the QTF (late-materialization) post-CBO rewriter, v2.
+        // Below-Project ABOVE the ER: SELECT URL($2), EventDate($1), CounterID($0)
+            Expect.scanCols("EventDate"),
+                public void visit(RelNode node, int ordinal, RelNode parent) {
+        assertQtfFired(
+        List<String> df = List.of("datafusion");
+            Expect.erHasUgsi(true),
+                                + "\nPlan:\n"
+            @Override
+            };
+        // Topmost Project's outputs are passthrough refs to every physical field.
+                void check(Inspector ctx, String sql, String plan) {
+        assertQtfFired(
+        new RelVisitor() {
+            df
+        );
+            "SELECT URL, EventDate, CounterID FROM hits ORDER BY EventDate, CounterID LIMIT 10",
+            Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
+            2,
+            Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
+            out.add(f.getName());
+    }
         // multiple keys and the collation rebuild preserving per-key direction.
         assertQtfFired(
-            "SELECT URL, EventDate, CounterID FROM hits ORDER BY EventDate ASC, CounterID DESC LIMIT 10",
-            2,
-            Expect.scanCols("CounterID", "EventDate"),
-            Expect.aboveAnchorPhysicalFields("URL", "EventDate", "CounterID"),
-            Expect.erHasUgsi(true),
-            Expect.wrapperOutput("URL", "EventDate", "CounterID"),
-            Expect.collationDirections(RelFieldCollation.Direction.ASCENDING, RelFieldCollation.Direction.DESCENDING)
-        );
-    }
-
-    public void testQtfFires_expressionOperandIsSortKey() {
-        // URL is BOTH the sort key (BelowAnchor → narrowed scan) AND an expression operand
-        // (refetched into the wrapper, v2 no-passthrough) — exercises the scan→wrapper rebase for a
-        // col in both roles, and the merged top Project dropping URL so only `combined` surfaces.
-        // AboveAnchor deps = [Title, URL]; BelowAnchor = {URL}; FetchOnly = {Title} → fire.
-        assertQtfFired(
-            "SELECT Title || '-' || URL AS combined FROM hits ORDER BY URL LIMIT 10",
-            2,
-            Expect.scanCols("URL"),
-            Expect.aboveAnchorPhysicalFields("Title", "URL"),
-            Expect.erHasUgsi(true),
-            Expect.wrapperOutput("Title", "URL"),
-            Expect.outerProjectNames("combined")
-        );
-    }
-
-    public void testQtfFires_expressionOnNeverDisplayedCol() {
-        // Title appears ONLY inside the expression — never selected alone, not a sort/filter col.
-        // AboveAnchor = [Title]; BelowAnchor = {EventDate}; FetchOnly = {Title} → fire.
-        assertQtfFired(
-            "SELECT UPPER(Title) AS tup FROM hits ORDER BY EventDate LIMIT 10",
-            2,
-            Expect.scanCols("EventDate"),
-            Expect.aboveAnchorPhysicalFields("Title"),
-            Expect.erHasUgsi(true),
-            Expect.wrapperOutput("Title"),
-            Expect.outerProjectNames("tup")
-        );
-    }
-
-    /**
-     * Repro of IndexSortPropagationIT.testSortLimit. QTF's post-CBO input (captured) is
-     * {@code Sort → Project → ExchangeReducer → Filter → Scan} — the below-Project sits ABOVE
-     * the ER (unlike the simpler {@code Sort → ER → Project → Scan} cases). After rewrite the
-     * ER carries ___ugsi as its last column, so the below-Project's positional "last = ___row_id"
-     * lookup grabs ___ugsi instead — surfacing downstream as the DAGBuilder FSI walk throwing
-     * "RexInputRef[N] has no matching FieldStorageInfo entry". This builds that exact input
-     * directly (no SQL/CBO/cluster) and asserts the rewritten plan's FSI walk does not throw.
-     */
-    public void testQtfFires_belowProjectAboveExchangeReducer_fieldStorageResolves() {
-        // Scan: [CounterID, EventDate, URL] all physical (datafusion-backed), matching the IT.
-        RelOptTable table = mockTable(
-            "hits",
-            new String[] { "CounterID", "EventDate", "URL" },
-            new SqlTypeName[] { SqlTypeName.INTEGER, SqlTypeName.INTEGER, SqlTypeName.VARCHAR }
-        );
-        List<FieldStorageInfo> scanStorage = List.of(
-            physicalFsi("CounterID", "integer", FieldType.INTEGER),
-            physicalFsi("EventDate", "integer", FieldType.INTEGER),
-            physicalFsi("URL", "keyword", FieldType.KEYWORD)
-        );
-        List<String> df = List.of("datafusion");
-        OpenSearchTableScan scan = new OpenSearchTableScan(cluster, cluster.traitSet(), table, df, scanStorage);
-
-        // Filter CounterID($0) > 0
-        RexNode gtZero = rexBuilder.makeCall(
-            SqlStdOperatorTable.GREATER_THAN,
-            rexBuilder.makeInputRef(scan, 0),
-            rexBuilder.makeLiteral(0, typeFactory.createSqlType(SqlTypeName.INTEGER), false)
-        );
-        OpenSearchFilter filter = new OpenSearchFilter(cluster, cluster.traitSet(), scan, gtZero, df);
-
-        // ExchangeReducer (RANDOM → SINGLETON gather)
-        OpenSearchExchangeReducer er = new OpenSearchExchangeReducer(cluster, cluster.traitSet(), filter, df);
-
-        // Below-Project ABOVE the ER: SELECT URL($2), EventDate($1), CounterID($0)
-        RelDataType projRowType = typeFactory.builder()
-            .add("URL", scan.getRowType().getFieldList().get(2).getType())
-            .add("EventDate", scan.getRowType().getFieldList().get(1).getType())
-            .add("CounterID", scan.getRowType().getFieldList().get(0).getType())
-            .build();
-        OpenSearchProject project = new OpenSearchProject(
-            cluster,
-            cluster.traitSet(),
-            er,
-            List.of(rexBuilder.makeInputRef(er, 2), rexBuilder.makeInputRef(er, 1), rexBuilder.makeInputRef(er, 0)),
-            projRowType,
-            df
-        );
-
-        // Anchor Sort: ORDER BY CounterID($2) DESC, EventDate($1) DESC LIMIT 10
-        OpenSearchSort sort = new OpenSearchSort(
-            cluster,
-            cluster.traitSet(),
-            project,
-            RelCollations.of(
-                new RelFieldCollation(2, RelFieldCollation.Direction.DESCENDING),
-                new RelFieldCollation(1, RelFieldCollation.Direction.DESCENDING)
-            ),
-            null,
-            rexBuilder.makeLiteral(10, typeFactory.createSqlType(SqlTypeName.INTEGER), false),
-            df
-        );
-
-        java.util.Optional<RelNode> rewritten = org.opensearch.analytics.planner.rules.OpenSearchLateMaterializationRewriter.rewrite(sort);
-        assertTrue("QTF must fire for Sort→Project→ER→Filter→Scan", rewritten.isPresent());
-
-        // Walk FSI over every OpenSearchRelNode, mirroring DAGBuilder.cutAtLateMaterialization — must not throw.
-        new RelVisitor() {
-            @Override
-            public void visit(RelNode node, int ordinal, RelNode parent) {
-                if (node instanceof OpenSearchRelNode os) {
-                    os.getOutputFieldStorage();
-                }
-                super.visit(node, ordinal, parent);
-            }
-        }.go(rewritten.get());
-
-        // The ___ugsi FSI override must survive the copy paths FragmentConversionDriver / DAGBuilder
-        // use (copy, copyResolved, stripAnnotations) — otherwise rowType (4 cols) and FSI (3) diverge
-        // again and the reduce-fragment FSI walk throws. Assert each rebuilt ER keeps aligned FSI.
-        new RelVisitor() {
-            @Override
-            public void visit(RelNode node, int ordinal, RelNode parent) {
-                if (node instanceof OpenSearchExchangeReducer er) {
-                    for (RelNode copy : List.of(
-                        er.copy(er.getTraitSet(), er.getInputs()),
-                        er.copyResolved("datafusion", er.getInputs(), List.of()),
-                        er.stripAnnotations(er.getInputs())
-                    )) {
-                        OpenSearchExchangeReducer c = (OpenSearchExchangeReducer) copy;
-                        assertEquals(
-                            "ER rowType and FSI must stay aligned 1:1 after " + copy,
-                            c.getRowType().getFieldCount(),
-                            c.getOutputFieldStorage().size()
-                        );
-                    }
-                }
-                super.visit(node, ordinal, parent);
-            }
-        }.go(rewritten.get());
-    }
-
-    private static FieldStorageInfo physicalFsi(String name, String mappingType, FieldType type) {
-        return new FieldStorageInfo(name, mappingType, type, List.of("parquet"), List.of(), List.of(), false);
-    }
-
-    public void testQtfFires_sortColAlsoProjected() {
-        // SELECT EventDate, URL FROM hits ORDER BY EventDate LIMIT 10
-        // Wrapper output is in topmost-op (SELECT) order, NOT scan order.
-        // EventDate is in BOTH BelowAnchor and AboveAnchor — refetched per v2 (no passthrough trick).
-        assertQtfFired(
-            "SELECT EventDate, URL FROM hits ORDER BY EventDate LIMIT 10",
-            2,
-            Expect.scanCols("EventDate"),
-            Expect.aboveAnchorPhysicalFields("EventDate", "URL"),
-            Expect.erHasUgsi(true),
-            Expect.wrapperOutput("EventDate", "URL"),
-            Expect.outerProjectExprIndices(0, 1)
-        );
-    }
-
-    public void testQtfDeclined_singleShard() {
-        // Single shard: CBO inserts no ExchangeReducer below the anchor (the scan's
-        // SOURCE(SINGLETON) already satisfies the parent Sort's demand). QTF's win comes from
-        // avoiding cross-node materialization of fetch-only columns through the gather; with
-        // no gather there's nothing to save, so the rewriter declines.
-        assertQtfDeclined("SELECT URL, EventDate FROM hits ORDER BY EventDate LIMIT 10", 1);
-    }
-
-    public void testQtfFires_descendingSort() {
-        // DESC collation preserved through anchor rebuild.
-        assertQtfFired(
-            "SELECT URL, EventDate FROM hits ORDER BY EventDate DESC LIMIT 10",
-            2,
-            Expect.scanCols("EventDate"),
-            Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
-            Expect.erHasUgsi(true),
-            Expect.collationDirections(RelFieldCollation.Direction.DESCENDING)
-        );
-    }
-
-    public void testQtfFires_multiKeySort() {
-        // SELECT URL, EventDate, CounterID FROM hits ORDER BY EventDate, CounterID LIMIT 10
-        // BelowAnchor = {EventDate, CounterID}, AboveAnchor = [URL, EventDate, CounterID]
+import org.opensearch.cluster.ClusterState;
+                                + actual
+        // SELECT URL AS u, EventDate FROM hits ORDER BY EventDate LIMIT 10
+                                + "\nPlan:\n"
+        // After narrowing, scan = [EventDate, ___row_id] = 2 cols; wrapper output = [URL, EventDate].
         // FetchOnly = {URL} → fire. All three referenced fields end up in fetch list (v2 refetches).
-        assertQtfFired(
-            "SELECT URL, EventDate, CounterID FROM hits ORDER BY EventDate, CounterID LIMIT 10",
-            2,
-            Expect.scanCols("CounterID", "EventDate"),
-            Expect.aboveAnchorPhysicalFields("URL", "EventDate", "CounterID"),
-            Expect.erHasUgsi(true),
-            Expect.wrapperOutput("URL", "EventDate", "CounterID")
-        );
-    }
-
-    public void testQtfFires_filterColAlsoProjected() {
-        // SELECT URL, CounterID FROM hits WHERE CounterID = 5 ORDER BY EventDate LIMIT 10
-        // BelowAnchor = {CounterID, EventDate}, AboveAnchor = [URL, CounterID]
-        // FetchOnly = {URL} → fire. CounterID refetched.
-        assertQtfFired(
-            "SELECT URL, CounterID FROM hits WHERE CounterID = 5 ORDER BY EventDate LIMIT 10",
-            2,
-            Expect.scanCols("CounterID", "EventDate"),
-            Expect.aboveAnchorPhysicalFields("URL", "CounterID"),
-            Expect.erHasUgsi(true),
-            Expect.wrapperOutput("URL", "CounterID")
-        );
-    }
-
-    public void testQtfFires_offset() {
-        // OFFSET preserved on the rebuilt anchor Sort.
-        assertQtfFired(
-            "SELECT URL, EventDate FROM hits ORDER BY EventDate LIMIT 10 OFFSET 5",
-            2,
-            Expect.scanCols("EventDate"),
-            Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
-            Expect.erHasUgsi(true)
-        );
-    }
-
-    public void testQtfFires_compositeExpressionWithDedup() {
-        // SELECT URL || '-' || URL AS combined, UPPER(URL) AS upper_url FROM hits ORDER BY EventDate LIMIT 10
-        // Both above-Project outputs derive from URL. dependsOn walk + LinkedHashSet dedup
-        // collapses to AboveAnchorPhysicalFields = [URL].
-        // BelowAnchor = {EventDate}; FetchOnly = {URL} → fire.
-        // Outer Project carries RexCall expressions, not bare InputRefs — outerProjectExprIndices skipped.
-        assertQtfFired(
+                                    + sql
+                    if (node instanceof OpenSearchExchangeReducer r && er == null) er = r;
+     * {@code Sort → Project → ExchangeReducer → Filter → Scan} — the below-Project sits ABOVE
+                                + "\n  actual:   "
             "SELECT URL || '-' || URL AS combined, UPPER(URL) AS upper_url FROM hits ORDER BY EventDate LIMIT 10",
-            2,
-            Expect.scanCols("EventDate"),
-            Expect.aboveAnchorPhysicalFields("URL"),
-            Expect.erHasUgsi(true),
-            Expect.wrapperOutput("URL"),
-            Expect.outerProjectNames("combined", "upper_url")
+ */
+                        if (ctx.er != null) fail("Did not expect ER in plan (single-shard).\nSQL: " + sql + "\nPlan:\n" + plan);
+                    if (node instanceof OpenSearchTableScan t && scan == null) scan = t;
+         */
         );
-    }
-
-    public void testQtfFires_compositeExpressionMultiCol() {
-        // SELECT URL || '-' || Title AS combined FROM hits ORDER BY EventDate LIMIT 10
-        // dependsOn walk yields {URL, Title} in evaluation order.
-        // BelowAnchor = {EventDate}; FetchOnly = {URL, Title} → fire.
-        assertQtfFired(
-            "SELECT URL || '-' || Title AS combined FROM hits ORDER BY EventDate LIMIT 10",
-            2,
-            Expect.scanCols("EventDate"),
-            Expect.aboveAnchorPhysicalFields("URL", "Title"),
+        RelNode optimized = optimize(sql, shardCount);
+                        }
+                    }
+                                + plan
+import org.opensearch.analytics.planner.rel.OpenSearchProject;
+                        if (!OpenSearchLateMaterialization.UGSI_FIELD.equals(erFields.get(erFields.size() - 1))) {
+public class LateMaterializationPlanShapeTests extends BasePlannerRulesTests {
+        // SELECT CounterID FROM hits WHERE CounterID = 5 ORDER BY EventDate LIMIT 10
             Expect.erHasUgsi(true),
-            Expect.wrapperOutput("URL", "Title"),
+                    }
+                                "Anchor collation["
+        }
+        // Both above-Project outputs derive from URL. dependsOn walk + LinkedHashSet dedup
+    }
+                    List<String> expected = Arrays.asList(expectedNamesInOrder);
             Expect.outerProjectNames("combined")
-        );
-    }
-
-    public void testQtfFires_starProjection() {
-        // SELECT * FROM hits ORDER BY EventDate LIMIT 10
-        // Topmost Project's outputs are passthrough refs to every physical field.
-        // AboveAnchor = [CounterID, UserID, URL, Title, EventDate, AdvEngineID, ParamPrice].
-        // BelowAnchor = {EventDate}. FetchOnly = everything except EventDate → fire.
-        assertQtfFired(
-            "SELECT * FROM hits ORDER BY EventDate LIMIT 10",
-            2,
             Expect.scanCols("EventDate"),
+                        } else {
+            Expect.erHasUgsi(true),
+            er,
+                        );
+    }
+            return new Expect() {
+                    for (RelNode copy : List.of(
+                        fail(
+                        return;
+        // SELECT inner.CounterID, COUNT(*) FROM (SELECT CounterID FROM hits ORDER BY CounterID LIMIT 100) AS inner GROUP BY inner.CounterID
+        RelNode parsed = SqlPlannerTestFixture.parseSql(sql, state);
+                                    + "\nPlan:\n"
+        assertQtfFired(
+    }
+        }
+    }
+     * <p>The implicit guarantee under test: the rewrite completes without Calcite's RexChecker
+        OpenSearchProject outerProject;
+import org.apache.calcite.plan.RelOptTable;
+    }
+                }
+                        if (ctx.outerProject.getProjects().get(i) instanceof RexInputRef ref) {
+    public void testQtfFires_withWhere() {
+import java.util.ArrayList;
+import org.apache.calcite.rel.type.RelDataTypeField;
+                        fail(
+         * SELECT contract — aliases re-applied by the Project even though the wrapper output is
+                                + actual
+            Expect.wrapperOutput("URL", "EventDate"),
+            Expect.outerProjectExprIndices(0, 1)
+            };
+        // ExchangeReducer (RANDOM → SINGLETON gather)
+                                + sql
+ *       QTF (no gather to skip).</li>
+                        );
+        // (Above-Aggregate group/aggCall remap under a moving wrapper rowType is a follow-up.)
+            null,
+        assertTrue("QTF must fire for Sort→Project→ER→Filter→Scan", rewritten.isPresent());
+        // Outer Sort's collation index must remap from anchor-space to wrapper-space (where
+        // Wrapper output is physical-named [URL, EventDate]; the Project above the wrapper
+        }
+            2,
+        // (refetched into the wrapper, v2 no-passthrough) — exercises the scan→wrapper rebase for a
+    }
+    }
+        /**
+     *
+    public void testQtfFires_aliasPreserved() {
+    }
+                                    + "] direction mismatch. expected="
+            Expect.collationDirections(RelFieldCollation.Direction.DESCENDING)
+            Expect.wrapperOutput("CounterID", "UserID", "URL", "Title", "EventDate", "AdvEngineID", "ParamPrice")
+            physicalFsi("CounterID", "integer", FieldType.INTEGER),
+                        if (fc.get(i).getDirection() != expected[i]) {
+     * lookup grabs ___ugsi instead — surfacing downstream as the DAGBuilder FSI walk throwing
+        List<String> out = new ArrayList<>(fields.size());
+            new SqlTypeName[] { SqlTypeName.INTEGER, SqlTypeName.INTEGER, SqlTypeName.VARCHAR }
+            Expect.wrapperOutput("URL", "EventDate"),
+        assertQtfFired(
+                }
+ *       {@code TopmostOperatorAboveAnchor} order. Helpers stripped.</li>
+        if (ctx.wrapper != null) {
+            Expect.wrapperOutput("URL", "EventDate")
+    }
+                        er.copy(er.getTraitSet(), er.getInputs()),
+            "SELECT URL, EventDate FROM ("
+                                    + ctx.outerProject.getProjects().get(i)
+            cluster,
+            ),
+        // SELECT URL, EventDate FROM hits ORDER BY EventDate LIMIT 10
+            2,
+            Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
+         */
+    // ── Tests that decline QTF ─────────────────────────────────────────
+            Expect.scanCols("CounterID", "EventDate"),
+                        fail("No outer Project above wrapper.\nSQL: " + sql + "\nPlan:\n" + plan);
+        // Wrapper output is in topmost-op (SELECT) order, NOT scan order.
+        assertQtfFired(
+    }
+                            c.getRowType().getFieldCount(),
+            Expect.erHasUgsi(true),
+import org.apache.calcite.rel.RelNode;
+        // SELECT EventDate FROM hits ORDER BY EventDate LIMIT 10
+            Expect.outerProjectNames("u", "EventDate")
+        // SELECT EventDate, URL FROM hits ORDER BY EventDate LIMIT 10
+        // the wrapper would break that).
+    }
+        }
+        );
+                            );
+    }
+    }
+                if (node instanceof OpenSearchExchangeReducer er) {
+        // BelowAnchorPhysicalFields = {CounterID, EventDate}
+import java.util.List;
+            "SELECT URL, EventDate FROM hits WHERE EventDate > DATE '2020-01-01' ORDER BY EventDate LIMIT 10",
+                        }
+        }.go(rewritten.get());
+        // Title appears ONLY inside the expression — never selected alone, not a sort/filter col.
+                                + "\nSQL: "
+            Expect.scanCols("EventDate"),
+            Expect.scanCols("CounterID", "EventDate"),
+            };
+            return new Expect() {
+        static Expect aboveAnchorPhysicalFields(String... expectedNamesInOrder) {
+                    }
+                        if (w.getInput() instanceof OpenSearchSort s) anchor = s;
+            Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
+                                + "\n  actual:   "
+                                + "\nPlan:\n"
+            Expect.outerProjectExprIndices(0, 1)
+                if (node instanceof OpenSearchRelNode os) {
+                void check(Inspector ctx, String sql, String plan) {
+import org.opensearch.analytics.planner.rel.OpenSearchTableScan;
+    private void assertQtfFired(String sql, int shardCount, Expect... expectations) {
+                                + actual
+        // Outer Sort by EventDate (= sort key, present in BelowAnchor); anchor Sort by EventDate.
+    }
+        assertQtfDeclined("SELECT URL FROM hits LIMIT 10", 2);
+    public void testQtfFires_sortColAlsoProjected() {
+        // No ORDER BY → no anchor → no rewrite.
+        // AboveAnchorPhysicalFields = [URL, EventDate] (topmost Project, in SELECT order)
+         * physical-named.
+        );
+import org.apache.calcite.plan.RelOptUtil;
+            "SELECT URL || '-' || Title AS combined FROM hits ORDER BY EventDate LIMIT 10",
+    public void testQtfDeclined_aggregateAboveAnchor() {
+ * compatible open source license.
+    public void testQtfFires_belowProjectAboveExchangeReducer_fieldStorageResolves() {
+            Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
+        assertQtfFired(
+                            "Scan rowType mismatch.\n  expected: "
+            2,
+        // BelowAnchor = {EventDate}; FetchOnly = {URL, Title} → fire.
+        // The ___ugsi FSI override must survive the copy paths FragmentConversionDriver / DAGBuilder
+    public void testQtfFires_aboveChainHasPassthroughSort() {
+        // SELECT * FROM hits ORDER BY EventDate LIMIT 10
+        );
+    public void testQtfDeclined_skipPredicate_filterColIsOnlyProjection() {
+                    }
+         * Outer Project (immediately above wrapper) output field names, in order. Asserts the
+        RelNode optimized = optimize(sql, shardCount);
+                                + Arrays.toString(expectedIndices)
+     * Repro of IndexSortPropagationIT.testSortLimit. QTF's post-CBO input (captured) is
             Expect.aboveAnchorPhysicalFields("CounterID", "UserID", "URL", "Title", "EventDate", "AdvEngineID", "ParamPrice"),
             Expect.erHasUgsi(true),
-            Expect.wrapperOutput("CounterID", "UserID", "URL", "Title", "EventDate", "AdvEngineID", "ParamPrice")
-        );
-    }
-
-    public void testQtfFires_outerFilter() {
-        // SELECT URL, EventDate FROM hits WHERE EventDate > '2020-01-01' ORDER BY EventDate LIMIT 10
-        // Filter on EventDate is below-Filter (predicate pushdown), so EventDate stays in BelowAnchor.
-        // AboveAnchor = [URL, EventDate]; FetchOnly = {URL} → fire.
-        assertQtfFired(
-            "SELECT URL, EventDate FROM hits WHERE EventDate > DATE '2020-01-01' ORDER BY EventDate LIMIT 10",
-            2,
-            Expect.scanCols("EventDate"),
-            Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
-            Expect.erHasUgsi(true),
-            Expect.wrapperOutput("URL", "EventDate")
-        );
-    }
-
-    /**
-     * Above-anchor chain has a Sort that doesn't reshape the rowType (passthrough on type, even
-     * if collation differs). The PPL/SQL frontends emit this when a SystemLimit Sort wraps the
-     * user's Sort+Limit. The rewriter must remap RexInputRefs in EVERY above op — not just the
-     * immediate parent — because each passthrough Sort/Filter leaks the narrowed rowType upward.
-     *
-     * <p>The implicit guarantee under test: the rewrite completes without Calcite's RexChecker
-     * throwing "RexInputRef out of range" — that's exactly what would fire if the remap stopped
-     * at the anchor's immediate parent and missed the outer Project sitting above the
-     * passthrough Sort. {@code assertQtfFired} catches such an exception on the planner call.
-     */
-    public void testQtfFires_aboveChainHasPassthroughSort() {
-        assertQtfFired(
-            "SELECT URL, EventDate FROM ("
-                + "  SELECT URL, EventDate FROM hits ORDER BY EventDate LIMIT 10"
-                + ") AS sub ORDER BY EventDate LIMIT 100",
-            2,
-            Expect.scanCols("EventDate"),
-            Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
-            Expect.wrapperOutput("URL", "EventDate")
-        );
-    }
-
-    /**
-     * Above-anchor Sort's collation index must be remapped from anchor-input space to
-     * wrapper-output space, even when there's no Project sitting between Sort and anchor.
-     */
-    public void testQtfFires_aboveChainSortRemapsCollation() {
-        // Outer Sort by EventDate (= sort key, present in BelowAnchor); anchor Sort by EventDate.
-        // After narrowing, scan = [EventDate, ___row_id] = 2 cols; wrapper output = [URL, EventDate].
-        // Outer Sort's collation index must remap from anchor-space to wrapper-space (where
-        // EventDate is at position 1).
-        assertQtfFired(
-            "SELECT * FROM (" + "  SELECT URL, EventDate FROM hits ORDER BY EventDate LIMIT 10" + ") AS sub ORDER BY EventDate",
-            2,
-            Expect.scanCols("EventDate"),
-            Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
-            Expect.wrapperOutput("URL", "EventDate")
-        );
-    }
-
-    // ── Tests that decline QTF ─────────────────────────────────────────
-
-    public void testQtfDeclined_pureLimit() {
-        // SELECT URL FROM hits LIMIT 10
-        // No ORDER BY → no anchor → no rewrite.
-        assertQtfDeclined("SELECT URL FROM hits LIMIT 10", 2);
-    }
-
-    public void testQtfDeclined_skipPredicate_sortColIsOnlyProjection() {
-        // SELECT EventDate FROM hits ORDER BY EventDate LIMIT 10
-        // AboveAnchor = {EventDate}; BelowAnchor = {EventDate}; FetchOnly = {} → skip.
-        // Refetching EventDate by row id when it already rode through the reduce would be a wash.
-        assertQtfDeclined("SELECT EventDate FROM hits ORDER BY EventDate LIMIT 10", 2);
-    }
-
-    public void testQtfDeclined_skipPredicate_filterColIsOnlyProjection() {
-        // SELECT CounterID FROM hits WHERE CounterID = 5 ORDER BY EventDate LIMIT 10
-        // AboveAnchor = {CounterID}; BelowAnchor = {CounterID, EventDate}; FetchOnly = {} → skip.
-        assertQtfDeclined("SELECT CounterID FROM hits WHERE CounterID = 5 ORDER BY EventDate LIMIT 10", 2);
-    }
-
-    public void testQtfDeclined_aggregateBelowSort() {
-        // SELECT CounterID, COUNT(*) FROM hits GROUP BY CounterID ORDER BY CounterID LIMIT 10
-        // Aggregate sits below the anchor — not in BELOW_INTERMEDIATE_ALLOWED, declined.
-        assertQtfDeclined("SELECT CounterID, COUNT(*) AS c FROM hits GROUP BY CounterID ORDER BY CounterID LIMIT 10", 2);
-    }
-
-    public void testQtfDeclined_aggregateAboveAnchor() {
-        // Aggregate above the anchor — explicitly excluded from ABOVE_ALLOWED in v2.
-        // (Above-Aggregate group/aggCall remap under a moving wrapper rowType is a follow-up.)
-        // SELECT inner.CounterID, COUNT(*) FROM (SELECT CounterID FROM hits ORDER BY CounterID LIMIT 100) AS inner GROUP BY inner.CounterID
-        assertQtfDeclined(
-            "SELECT inner_q.CounterID, COUNT(*) AS c "
-                + "FROM (SELECT CounterID FROM hits ORDER BY CounterID LIMIT 100) AS inner_q "
-                + "GROUP BY inner_q.CounterID",
-            2
-        );
-    }
-
-    public void testQtfDeclined_windowInOuterProject() {
-        // SELECT URL, SUM(ParamPrice) OVER () FROM hits ORDER BY EventDate LIMIT 10
-        // RexOver in the above-Project — declined (window's global frame needs SINGLETON input;
-        // the wrapper would break that).
-        assertQtfDeclined("SELECT URL, SUM(ParamPrice) OVER () AS sp FROM hits ORDER BY EventDate LIMIT 10", 2);
-    }
-
-    public void testQtfDeclined_expressionProjectBelowAnchor() {
-        // SELECT URL FROM hits ORDER BY (CounterID + 1) LIMIT 10
-        // Derived sort key → declines (collation references a derived below-Project slot; can't
-        // sort above the wrapper on it). Display-only expressions DO fire — see compositeExpression*.
-        assertQtfDeclined("SELECT URL FROM hits ORDER BY (CounterID + 1) LIMIT 10", 2);
-    }
-
-    // ── Composable assert API ──────────────────────────────────────────
-
-    private void assertQtfFired(String sql, int shardCount, Expect... expectations) {
-        RelNode optimized = optimize(sql, shardCount);
-        String planText = RelOptUtil.toString(optimized);
-        Inspector ctx = new Inspector(optimized);
-        if (ctx.wrapper == null) {
-            fail("Expected QTF wrapper in plan for SQL: " + sql + "\nPlan:\n" + planText);
-        }
-        for (Expect e : expectations) {
-            e.check(ctx, sql, planText);
-        }
-    }
-
-    private void assertQtfDeclined(String sql, int shardCount) {
-        RelNode optimized = optimize(sql, shardCount);
-        Inspector ctx = new Inspector(optimized);
-        if (ctx.wrapper != null) {
-            fail("QTF should NOT have fired for SQL: " + sql + "\nPlan:\n" + RelOptUtil.toString(optimized));
-        }
-    }
-
-    private abstract static class Expect {
-        abstract void check(Inspector ctx, String sql, String planText);
-
-        /** Scan rowType (post-narrowing) carries exactly these original cols + {@code ___row_id}. */
-        static Expect scanCols(String... expectedNamesInOrder) {
-            return new Expect() {
-                @Override
-                void check(Inspector ctx, String sql, String plan) {
-                    List<String> actual = fieldNames(ctx.scan.getRowType().getFieldList());
-                    List<String> expected = new ArrayList<>(Arrays.asList(expectedNamesInOrder));
-                    expected.add(OpenSearchLateMaterialization.ROW_ID_FIELD);
-                    if (!expected.equals(actual)) {
-                        fail(
-                            "Scan rowType mismatch.\n  expected: "
-                                + expected
-                                + "\n  actual:   "
-                                + actual
-                                + "\nSQL: "
-                                + sql
-                                + "\nPlan:\n"
-                                + plan
-                        );
-                    }
-                }
-            };
-        }
-
-        /**
-         * Wrapper carries exactly these field names as its {@code AboveAnchorPhysicalFields}
-         * (i.e. fetch list, in order).
-         */
-        static Expect aboveAnchorPhysicalFields(String... expectedNamesInOrder) {
-            return new Expect() {
-                @Override
-                void check(Inspector ctx, String sql, String plan) {
-                    List<String> actual = fieldNames(ctx.wrapper.getAboveAnchorPhysicalFields());
-                    List<String> expected = Arrays.asList(expectedNamesInOrder);
-                    if (!expected.equals(actual)) {
-                        fail(
-                            "Wrapper aboveAnchorPhysicalFields mismatch.\n  expected: "
-                                + expected
-                                + "\n  actual:   "
-                                + actual
-                                + "\nSQL: "
-                                + sql
-                                + "\nPlan:\n"
-                                + plan
-                        );
-                    }
-                }
-            };
-        }
-
-        /**
-         * Wrapper output rowType is exactly these names (= {@code AboveAnchorPhysicalFields} in
-         * topmost-op order). Helpers must be absent.
-         */
-        static Expect wrapperOutput(String... expectedNamesInOrder) {
-            return new Expect() {
-                @Override
-                void check(Inspector ctx, String sql, String plan) {
-                    List<String> actual = fieldNames(ctx.wrapper.getRowType().getFieldList());
-                    List<String> expected = Arrays.asList(expectedNamesInOrder);
-                    if (!expected.equals(actual)) {
-                        fail(
-                            "Wrapper output rowType mismatch.\n  expected: "
-                                + expected
-                                + "\n  actual:   "
-                                + actual
-                                + "\nSQL: "
-                                + sql
-                                + "\nPlan:\n"
-                                + plan
-                        );
-                    }
-                    if (actual.contains(OpenSearchLateMaterialization.ROW_ID_FIELD)
-                        || actual.contains(OpenSearchLateMaterialization.UGSI_FIELD)) {
-                        fail("Wrapper output leaked helper col(s) " + actual + "\nSQL: " + sql + "\nPlan:\n" + plan);
-                    }
-                }
-            };
-        }
-
-        /** ER carries (or does not carry) {@code ___ugsi} as its last column. */
-        static Expect erHasUgsi(boolean expected) {
-            return new Expect() {
-                @Override
-                void check(Inspector ctx, String sql, String plan) {
-                    if (expected) {
-                        if (ctx.er == null) fail("Expected ER in plan but none found.\nSQL: " + sql + "\nPlan:\n" + plan);
-                        List<String> erFields = fieldNames(ctx.er.getRowType().getFieldList());
-                        if (!OpenSearchLateMaterialization.UGSI_FIELD.equals(erFields.get(erFields.size() - 1))) {
-                            fail("ER output missing ___ugsi as last col. Fields: " + erFields + "\nSQL: " + sql + "\nPlan:\n" + plan);
-                        }
-                    } else {
-                        if (ctx.er != null) fail("Did not expect ER in plan (single-shard).\nSQL: " + sql + "\nPlan:\n" + plan);
-                    }
-                }
-            };
-        }
-
-        /**
-         * Outer Project (immediately above wrapper) RexInputRef indices, in expression order.
-         * Skip this assertion for projects whose expressions are not bare InputRefs (e.g.
-         * derived expressions like {@code UPPER(URL)}).
-         */
-        static Expect outerProjectExprIndices(int... expectedIndices) {
-            return new Expect() {
-                @Override
-                void check(Inspector ctx, String sql, String plan) {
-                    if (ctx.outerProject == null) {
-                        fail("No outer Project above wrapper.\nSQL: " + sql + "\nPlan:\n" + plan);
-                        return;
-                    }
-                    int[] actual = new int[ctx.outerProject.getProjects().size()];
-                    for (int i = 0; i < actual.length; i++) {
-                        if (ctx.outerProject.getProjects().get(i) instanceof RexInputRef ref) {
-                            actual[i] = ref.getIndex();
-                        } else {
-                            fail(
                                 "Outer Project expr ["
-                                    + i
-                                    + "] is not a RexInputRef: "
-                                    + ctx.outerProject.getProjects().get(i)
-                                    + "\nSQL: "
-                                    + sql
-                                    + "\nPlan:\n"
-                                    + plan
-                            );
                             return;
-                        }
-                    }
-                    if (!Arrays.equals(expectedIndices, actual)) {
                         fail(
-                            "Outer Project RexInputRef indices mismatch.\n  expected: "
-                                + Arrays.toString(expectedIndices)
                                 + "\n  actual:   "
-                                + Arrays.toString(actual)
-                                + "\nSQL: "
-                                + sql
-                                + "\nPlan:\n"
-                                + plan
+            .add("CounterID", scan.getRowType().getFieldList().get(0).getType())
+    public void testQtfFires_compositeExpressionWithDedup() {
+        for (Expect e : expectations) {
+import org.apache.calcite.rel.RelVisitor;
                         );
-                    }
-                }
-            };
-        }
-
-        /**
-         * Outer Project (immediately above wrapper) output field names, in order. Asserts the
-         * SELECT contract — aliases re-applied by the Project even though the wrapper output is
-         * physical-named.
-         */
-        static Expect outerProjectNames(String... expectedNamesInOrder) {
-            return new Expect() {
-                @Override
-                void check(Inspector ctx, String sql, String plan) {
-                    if (ctx.outerProject == null) {
-                        fail("No outer Project above wrapper.\nSQL: " + sql + "\nPlan:\n" + plan);
-                        return;
-                    }
-                    List<String> actual = fieldNames(ctx.outerProject.getRowType().getFieldList());
-                    List<String> expected = Arrays.asList(expectedNamesInOrder);
-                    if (!expected.equals(actual)) {
-                        fail(
-                            "Outer Project output names mismatch.\n  expected: "
-                                + expected
+            2,
+                                + sql
+import org.opensearch.analytics.planner.rel.OpenSearchSort;
+         * Outer Project (immediately above wrapper) RexInputRef indices, in expression order.
                                 + "\n  actual:   "
-                                + actual
-                                + "\nSQL: "
-                                + sql
-                                + "\nPlan:\n"
-                                + plan
-                        );
-                    }
-                }
-            };
-        }
-
-        /** Anchor Sort collation directions in order. */
-        static Expect collationDirections(RelFieldCollation.Direction... expected) {
-            return new Expect() {
-                @Override
-                void check(Inspector ctx, String sql, String plan) {
-                    List<RelFieldCollation> fc = ctx.anchor.getCollation().getFieldCollations();
-                    if (fc.size() != expected.length) {
-                        fail(
-                            "Anchor collation size mismatch. expected="
-                                + expected.length
-                                + " actual="
-                                + fc.size()
-                                + "\nSQL: "
-                                + sql
-                                + "\nPlan:\n"
-                                + plan
-                        );
-                    }
-                    for (int i = 0; i < expected.length; i++) {
-                        if (fc.get(i).getDirection() != expected[i]) {
-                            fail(
-                                "Anchor collation["
-                                    + i
-                                    + "] direction mismatch. expected="
-                                    + expected[i]
-                                    + " actual="
-                                    + fc.get(i).getDirection()
-                                    + "\nSQL: "
-                                    + sql
-                                    + "\nPlan:\n"
-                                    + plan
-                            );
-                        }
-                    }
-                }
-            };
-        }
-    }
-
-    /** Walks an optimized plan once, capturing the QTF-relevant nodes. */
-    private static final class Inspector {
-        OpenSearchLateMaterialization wrapper;
-        OpenSearchSort anchor;
-        OpenSearchTableScan scan;
-        OpenSearchExchangeReducer er;
-        OpenSearchProject outerProject;
-
-        Inspector(RelNode root) {
-            new RelVisitor() {
-                @Override
-                public void visit(RelNode node, int ordinal, RelNode parent) {
-                    if (node instanceof OpenSearchLateMaterialization w && wrapper == null) {
-                        wrapper = w;
-                        if (parent instanceof OpenSearchProject p) outerProject = p;
-                        if (w.getInput() instanceof OpenSearchSort s) anchor = s;
-                    }
-                    if (node instanceof OpenSearchExchangeReducer r && er == null) er = r;
-                    if (node instanceof OpenSearchTableScan t && scan == null) scan = t;
-                    super.visit(node, ordinal, parent);
-                }
-            }.go(root);
-        }
-    }
-
-    private static List<String> fieldNames(List<RelDataTypeField> fields) {
-        List<String> out = new ArrayList<>(fields.size());
-        for (RelDataTypeField f : fields)
-            out.add(f.getName());
-        return out;
-    }
-
-    private RelNode optimize(String sql, int shardCount) {
-        return optimize(sql, shardCount, List.of(DATAFUSION, LUCENE));
-    }
-
-    private RelNode optimize(String sql, int shardCount, List<AnalyticsSearchBackendPlugin> backends) {
-        ClusterState state = SqlPlannerTestFixture.clusterStateWith(ClickBench.INDEX, ClickBench.BASIC_FIELDS, "parquet", shardCount);
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+            Expect.erHasUgsi(true),
+            }
+            "SELECT UPPER(Title) AS tup FROM hits ORDER BY EventDate LIMIT 10",
         PlannerContext context = new PlannerContext(new CapabilityRegistry(backends, FieldStorageResolver::new), state, false);
-        RelNode parsed = SqlPlannerTestFixture.parseSql(sql, state);
-        return PlannerImpl.runAllOptimizations(parsed, context);
-    }
+            fail("Expected QTF wrapper in plan for SQL: " + sql + "\nPlan:\n" + planText);
+            2,
+                    }
+         */
 }
+            Expect.aboveAnchorPhysicalFields("URL", "CounterID"),
+                                + expected
+                                    + i
+    private static FieldStorageInfo physicalFsi(String name, String mappingType, FieldType type) {
+                    List<String> actual = fieldNames(ctx.scan.getRowType().getFieldList());
+            "SELECT EventDate, URL FROM hits ORDER BY EventDate LIMIT 10",
+    public void testQtfFires_outerFilter() {
+            2,
+                                + Arrays.toString(actual)
+        // DESC collation preserved through anchor rebuild.
+                }
+            Expect.wrapperOutput("URL", "EventDate", "CounterID"),
+        static Expect wrapperOutput(String... expectedNamesInOrder) {
+            Expect.wrapperOutput("Title"),
+        // SELECT URL FROM hits LIMIT 10
+                    List<RelFieldCollation> fc = ctx.anchor.getCollation().getFieldCollations();
+            return new Expect() {
+        OpenSearchSort anchor;
+    /** Walks an optimized plan once, capturing the QTF-relevant nodes. */
+                    for (int i = 0; i < expected.length; i++) {
+        Inspector(RelNode root) {
+                                + sql
+                                + "\nSQL: "
+                                + "\n  actual:   "
+    public void testQtfFires_expressionOperandIsSortKey() {
+            Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
+    }
+                            "Wrapper aboveAnchorPhysicalFields mismatch.\n  expected: "
+                    }
+        assertQtfDeclined("SELECT URL FROM hits ORDER BY (CounterID + 1) LIMIT 10", 2);
+            return new Expect() {
+                        return;
+                            actual[i] = ref.getIndex();
+                                    + expected[i]
+                    if (!Arrays.equals(expectedIndices, actual)) {
+ * </ul>
+            2,
+                super.visit(node, ordinal, parent);
+        }
+                }
+            rexBuilder.makeLiteral(10, typeFactory.createSqlType(SqlTypeName.INTEGER), false),
+                        wrapper = w;
+        // AboveAnchor = [URL, EventDate]; FetchOnly = {URL} → fire.
+ * <p>Skip predicate: QTF fires iff
+                    List<String> actual = fieldNames(ctx.outerProject.getRowType().getFieldList());
+    }
+import org.apache.calcite.rel.RelFieldCollation;
+     */
+        );
+            "hits",
+            return new Expect() {
+    // ── Composable assert API ──────────────────────────────────────────
+     * "RexInputRef[N] has no matching FieldStorageInfo entry". This builds that exact input
+            Expect.erHasUgsi(true),
+        // Refetching EventDate by row id when it already rode through the reduce would be a wash.
+                        er.copyResolved("datafusion", er.getInputs(), List.of()),
+            Expect.erHasUgsi(true),
+ *   <li>ER output declares {@code ___ugsi} as the last field. Single-shard plans do not trigger
+                    }
+                                + "\nSQL: "
+    private void assertQtfDeclined(String sql, int shardCount) {
+ *   <li>Wrapper output rowType = {@code AboveAnchorPhysicalFields}, in
+     * user's Sort+Limit. The rewriter must remap RexInputRefs in EVERY above op — not just the
+                                + expected.length
+                                    + fc.get(i).getDirection()
+import java.util.Arrays;
+        OpenSearchLateMaterialization wrapper;
+                @Override
+            cluster.traitSet(),
+            Expect.aboveAnchorPhysicalFields("URL", "Title"),
+        String planText = RelOptUtil.toString(optimized);
+        static Expect scanCols(String... expectedNamesInOrder) {
+        static Expect erHasUgsi(boolean expected) {
+            public void visit(RelNode node, int ordinal, RelNode parent) {
+    }
+        return new FieldStorageInfo(name, mappingType, type, List.of("parquet"), List.of(), List.of(), false);
+            2,
+ * this file be licensed under the Apache-2.0 license or a
+        OpenSearchTableScan scan = new OpenSearchTableScan(cluster, cluster.traitSet(), table, df, scanStorage);
+     * Above-anchor chain has a Sort that doesn't reshape the rowType (passthrough on type, even
+        RelDataType projRowType = typeFactory.builder()
+            @Override
+    public void testQtfFires_filterColAlsoProjected() {
+        assertQtfDeclined("SELECT CounterID, COUNT(*) AS c FROM hits GROUP BY CounterID ORDER BY CounterID LIMIT 10", 2);
+        assertQtfFired(
+                                    + plan
+        // BelowAnchor = {EventDate}. FetchOnly = everything except EventDate → fire.
+        );
+        }
+        // SOURCE(SINGLETON) already satisfies the parent Sort's demand). QTF's win comes from
+            "SELECT URL AS u, EventDate FROM hits ORDER BY EventDate LIMIT 10",
+                    if (fc.size() != expected.length) {
+                                + expected
+    public void testQtfDeclined_aggregateBelowSort() {
+            Expect.wrapperOutput("URL", "EventDate")
+                                + actual
+                    if (expected) {
+        );
+                    }
+import org.apache.calcite.rel.type.RelDataType;
+    public void testQtfDeclined_expressionProjectBelowAnchor() {
+                + "GROUP BY inner_q.CounterID",
+        // RexOver in the above-Project — declined (window's global frame needs SINGLETON input;
+                        if (parent instanceof OpenSearchProject p) outerProject = p;
+            Expect.scanCols("EventDate"),
+        assertQtfFired(
+import org.apache.calcite.rex.RexNode;
+        static Expect collationDirections(RelFieldCollation.Direction... expected) {
+        // EventDate is in BOTH BelowAnchor and AboveAnchor — refetched per v2 (no passthrough trick).
+                        }
+                    if (!expected.equals(actual)) {
+    public void testQtfDeclined_pureLimit() {
+        return out;
+            Expect.wrapperOutput("URL", "Title"),
+            Expect.scanCols("EventDate"),
+                            "Anchor collation size mismatch. expected="
+        assertQtfDeclined("SELECT CounterID FROM hits WHERE CounterID = 5 ORDER BY EventDate LIMIT 10", 2);
+            };
+            .add("URL", scan.getRowType().getFieldList().get(2).getType())
+        );
+     * throwing "RexInputRef out of range" — that's exactly what would fire if the remap stopped
+    }
+            "SELECT * FROM (" + "  SELECT URL, EventDate FROM hits ORDER BY EventDate LIMIT 10" + ") AS sub ORDER BY EventDate",
+        // URL is BOTH the sort key (BelowAnchor → narrowed scan) AND an expression operand
+            "SELECT URL, EventDate FROM hits ORDER BY EventDate LIMIT 10 OFFSET 5",
+    public void testQtfFires_offset() {
+                    if (!expected.equals(actual)) {
+                super.visit(node, ordinal, parent);
+        );
+import org.apache.calcite.rex.RexInputRef;
+                }
+     */
+                                    + "\nSQL: "
+                                    + " actual="
+package org.opensearch.analytics.planner;
+                                + " actual="
+            Expect.scanCols("CounterID", "EventDate"),
+                }
+        RelOptTable table = mockTable(
+                            fail(
+                    if (!expected.equals(actual)) {
+         * (i.e. fetch list, in order).
+        /** Scan rowType (post-narrowing) carries exactly these original cols + {@code ___row_id}. */
+            2,
+            Expect.scanCols("EventDate"),
+            new String[] { "CounterID", "EventDate", "URL" },
+        // AboveAnchorPhysicalFields = [URL, EventDate]
+        // BelowAnchorPhysicalFields = {EventDate}
+            e.check(ctx, sql, planText);
+            rexBuilder.makeInputRef(scan, 0),
+        );
+                                    + "\nPlan:\n"
+        // SELECT URL, EventDate, CounterID FROM hits ORDER BY EventDate ASC, CounterID DESC LIMIT 10
+        }
+                        if (ctx.er == null) fail("Expected ER in plan but none found.\nSQL: " + sql + "\nPlan:\n" + plan);
+                void check(Inspector ctx, String sql, String plan) {
+                                + "\nPlan:\n"
+            Expect.aboveAnchorPhysicalFields("Title", "URL"),
+                    int[] actual = new int[ctx.outerProject.getProjects().size()];
+    }
+        // FetchOnly = {URL} → fire
+        );
+        OpenSearchFilter filter = new OpenSearchFilter(cluster, cluster.traitSet(), scan, gtZero, df);
+    public void testQtfDeclined_windowInOuterProject() {
+                void check(Inspector ctx, String sql, String plan) {
+                        fail(
+                        assertEquals(
+            Expect.scanCols("EventDate"),
+ *   <li>Scan rowType narrowed to {@code BelowAnchorPhysicalFields + ___row_id}.</li>
+                            fail("ER output missing ___ugsi as last col. Fields: " + erFields + "\nSQL: " + sql + "\nPlan:\n" + plan);
+                @Override
+            Expect.outerProjectNames("combined")
+            Expect.aboveAnchorPhysicalFields("URL"),
+                            fail(
+    /**
+        // AboveAnchor = [Title]; BelowAnchor = {EventDate}; FetchOnly = {Title} → fire.
+    public void testQtfFires_expressionOnNeverDisplayedCol() {
+                        fail("No outer Project above wrapper.\nSQL: " + sql + "\nPlan:\n" + plan);
+            Expect.wrapperOutput("URL", "CounterID")
+        // SELECT URL, EventDate FROM hits WHERE EventDate > '2020-01-01' ORDER BY EventDate LIMIT 10
+     * at the anchor's immediate parent and missed the outer Project sitting above the
+            Expect.collationDirections(RelFieldCollation.Direction.ASCENDING, RelFieldCollation.Direction.DESCENDING)
+import org.opensearch.analytics.spi.FieldType;
+            Expect.scanCols("EventDate"),
+        assertQtfDeclined("SELECT EventDate FROM hits ORDER BY EventDate LIMIT 10", 2);
+        Inspector ctx = new Inspector(optimized);
+            Expect.scanCols("EventDate"),
+                                + expected
+        return optimize(sql, shardCount, List.of(DATAFUSION, LUCENE));
+                void check(Inspector ctx, String sql, String plan) {
+                new RelFieldCollation(2, RelFieldCollation.Direction.DESCENDING),
+        assertQtfFired(
+        );
+            .build();
+            public void visit(RelNode node, int ordinal, RelNode parent) {
+            Expect.wrapperOutput("URL", "EventDate")
+            2,
+    public void testQtfFires_multiKeySortMixedDirection() {
+                    if (!expected.equals(actual)) {
+     * directly (no SQL/CBO/cluster) and asserts the rewritten plan's FSI walk does not throw.
+        );
+        abstract void check(Inspector ctx, String sql, String planText);
+        // FetchOnly = {URL} → fire. CounterID refetched.
+    public void testQtfFires_aboveChainSortRemapsCollation() {
+                @Override
+                }
+ *
+ * The OpenSearch Contributors require contributions made to
+                                + "\nPlan:\n"
+        );
+import org.opensearch.analytics.planner.rel.OpenSearchLateMaterialization;
+                        fail(
+            Expect.scanCols("URL"),
+    }
+            Expect.aboveAnchorPhysicalFields("URL", "EventDate", "CounterID"),
+            rexBuilder.makeLiteral(0, typeFactory.createSqlType(SqlTypeName.INTEGER), false)
+        // SELECT URL, CounterID FROM hits WHERE CounterID = 5 ORDER BY EventDate LIMIT 10
+    private RelNode optimize(String sql, int shardCount, List<AnalyticsSearchBackendPlugin> backends) {
+         */
+        }.go(rewritten.get());
+                                + sql
+            return new Expect() {
+    }
+            Expect.scanCols("EventDate"),
+        // SELECT CounterID, COUNT(*) FROM hits GROUP BY CounterID ORDER BY CounterID LIMIT 10
+                    expected.add(OpenSearchLateMaterialization.ROW_ID_FIELD);
+        }
+                        );
+                                    + sql
+                    }
+                            );
+        static Expect outerProjectExprIndices(int... expectedIndices) {
+        Inspector ctx = new Inspector(optimized);
+                + ") AS sub ORDER BY EventDate LIMIT 100",
+         * Wrapper carries exactly these field names as its {@code AboveAnchorPhysicalFields}
+                        OpenSearchExchangeReducer c = (OpenSearchExchangeReducer) copy;
+        assertQtfDeclined("SELECT URL, EventDate FROM hits ORDER BY EventDate LIMIT 10", 1);
+    }
+        // Scan: [CounterID, EventDate, URL] all physical (datafusion-backed), matching the IT.
+            cluster,
+        assertQtfFired(
+                    )) {
+                                + plan
+        assertQtfFired(
+                                + plan
+                    super.visit(node, ordinal, parent);
+                    List<String> expected = Arrays.asList(expectedNamesInOrder);
+        return PlannerImpl.runAllOptimizations(parsed, context);
+        java.util.Optional<RelNode> rewritten = org.opensearch.analytics.planner.rules.OpenSearchLateMaterializationRewriter.rewrite(sort);
+                void check(Inspector ctx, String sql, String plan) {
+ * <ul>
+            physicalFsi("URL", "keyword", FieldType.KEYWORD)
+            2
+            "SELECT Title || '-' || URL AS combined FROM hits ORDER BY URL LIMIT 10",
+    private abstract static class Expect {
+            "SELECT * FROM hits ORDER BY EventDate LIMIT 10",
+                + "  SELECT URL, EventDate FROM hits ORDER BY EventDate LIMIT 10"
+            Expect.erHasUgsi(true),
+        // SELECT URL, EventDate, CounterID FROM hits ORDER BY EventDate, CounterID LIMIT 10
+import org.opensearch.analytics.planner.rel.OpenSearchFilter;
+            Expect.aboveAnchorPhysicalFields("URL", "EventDate"),
+                    if (actual.contains(OpenSearchLateMaterialization.ROW_ID_FIELD)
+                    }
+ * SPDX-License-Identifier: Apache-2.0
+        assertQtfFired(
+    }
+        // BelowAnchor = {EventDate, CounterID}, AboveAnchor = [URL, EventDate, CounterID]
+            List.of(rexBuilder.makeInputRef(er, 2), rexBuilder.makeInputRef(er, 1), rexBuilder.makeInputRef(er, 0)),
+            };
+                @Override
+            new RelVisitor() {
+        // AboveAnchor deps = [Title, URL]; BelowAnchor = {URL}; FetchOnly = {Title} → fire.
+                        fail("Wrapper output leaked helper col(s) " + actual + "\nSQL: " + sql + "\nPlan:\n" + plan);
+        /** Anchor Sort collation directions in order. */
+        List<FieldStorageInfo> scanStorage = List.of(
+            "SELECT URL, EventDate, CounterID FROM hits ORDER BY EventDate ASC, CounterID DESC LIMIT 10",
+                                + "\nSQL: "
+        // Filter on EventDate is below-Filter (predicate pushdown), so EventDate stays in BelowAnchor.
+        // Derived sort key → declines (collation references a derived below-Project slot; can't
+                        er.stripAnnotations(er.getInputs())
+        // Aggregate above the anchor — explicitly excluded from ABOVE_ALLOWED in v2.
+    /**
+                                + sql
+import org.opensearch.analytics.planner.rel.OpenSearchExchangeReducer;
+        // col in both roles, and the merged top Project dropping URL so only `combined` surfaces.
+        );
+    }
+    // ── Tests that fire QTF ────────────────────────────────────────────
+        // no gather there's nothing to save, so the rewriter declines.
+                        );
+        );
+            2,
+            Expect.wrapperOutput("Title", "URL"),
+                                    + i
+    public void testQtfFires_starProjection() {
+    }
+            };
+            2,
+                                + "\nSQL: "
+        }
+        assertQtfDeclined("SELECT URL, SUM(ParamPrice) OVER () AS sp FROM hits ORDER BY EventDate LIMIT 10", 2);
+                    List<String> expected = new ArrayList<>(Arrays.asList(expectedNamesInOrder));
+                    }
+    }
+            SqlStdOperatorTable.GREATER_THAN,
+        /**
+            Expect.erHasUgsi(true),
+     * if collation differs). The PPL/SQL frontends emit this when a SystemLimit Sort wraps the
+            project,
+    }
+        assertQtfFired(
+        // Two collation indices, mixed direction — exercises collationReferencesDerivedSlot over
+            Expect.aboveAnchorPhysicalFields("EventDate", "URL"),
+ *
+            "SELECT inner_q.CounterID, COUNT(*) AS c "
+            "SELECT URL, CounterID FROM hits WHERE CounterID = 5 ORDER BY EventDate LIMIT 10",
+        // SELECT URL, EventDate FROM hits WHERE CounterID = 5 ORDER BY EventDate LIMIT 10
+                    List<String> actual = fieldNames(ctx.wrapper.getAboveAnchorPhysicalFields());
+            Expect.wrapperOutput("URL", "EventDate"),
+        if (ctx.wrapper == null) {
+            Expect.erHasUgsi(true),
+                        );
+            Expect.wrapperOutput("URL"),
+    public void testQtfDeclined_skipPredicate_sortColIsOnlyProjection() {
+        static Expect outerProjectNames(String... expectedNamesInOrder) {
+                                + "\nPlan:\n"
+        assertQtfFired(
+        /**
+        // SELECT URL FROM hits ORDER BY (CounterID + 1) LIMIT 10
+import org.apache.calcite.sql.type.SqlTypeName;
+         * derived expressions like {@code UPPER(URL)}).
+        ClusterState state = SqlPlannerTestFixture.clusterStateWith(ClickBench.INDEX, ClickBench.BASIC_FIELDS, "parquet", shardCount);
+                            c.getOutputFieldStorage().size()
+            };
+    }
+    public void testQtfFires_compositeExpressionMultiCol() {
+            df
+ *   <li>Outer Project's RexInputRefs are remapped to wrapper-output indices.</li>
+    public void testQtfDeclined_singleShard() {
+                            "Outer Project RexInputRef indices mismatch.\n  expected: "
+                        List<String> erFields = fieldNames(ctx.er.getRowType().getFieldList());

@@ -1,1097 +1,978 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import com.carrotsearch.randomizedtesting.generators.RandomPicks;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.DoublePoint;
-import org.apache.lucene.document.FloatPoint;
-import org.apache.lucene.document.IntPoint;
-import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.document.SortedNumericDocValuesField;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.sandbox.document.BigIntegerPoint;
-import org.apache.lucene.sandbox.document.HalfFloatPoint;
-import org.apache.lucene.search.IndexOrDocValuesQuery;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.IndexSortSortedNumericDocValuesRangeQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.util.TestUtil;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.NumericUtils;
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.Numbers;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
+        {
+        Query expected = new ApproximateScoreQuery(
+        assertEquals(1.1f, NumberType.HALF_FLOAT.parse(1.1, true));
+            new IndexOrDocValuesQuery(new BitmapIndexQuery("field", r), new BitmapDocValuesQuery("field", r)),
+    public void testUnsignedLongRangeQuery() {
+        assertEquals(
+        assertEquals(3.5f, NumberType.FLOAT.parse(3.5, true));
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.document.SortedUnsignedLongDocValuesRangeQuery;
-import org.opensearch.index.document.SortedUnsignedLongDocValuesSetQuery;
-import org.opensearch.index.fielddata.IndexNumericFieldData;
-import org.opensearch.index.mapper.MappedFieldType.Relation;
-import org.opensearch.index.mapper.NumberFieldMapper.NumberFieldType;
-import org.opensearch.index.mapper.NumberFieldMapper.NumberType;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.MultiValueMode;
-import org.opensearch.search.approximate.ApproximatePointRangeQuery;
-import org.opensearch.search.approximate.ApproximateScoreQuery;
-import org.opensearch.search.query.Bitmap64DocValuesQuery;
-import org.opensearch.search.query.Bitmap64IndexQuery;
-import org.opensearch.search.query.BitmapDocValuesQuery;
-import org.opensearch.search.query.BitmapIndexQuery;
-import org.junit.Before;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+    public void testDocValueByteRange() throws Exception {
+        );
+            boolean includeUpper = randomBoolean();
+        assertEquals((byte) 5, NumberType.BYTE.parse("5.9", true));
 import java.util.function.Supplier;
-
-import org.roaringbitmap.RoaringBitmap;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.either;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.apache.lucene.document.LongPoint.pack;
-
-public class NumberFieldTypeTests extends FieldTypeTestCase {
-
-    NumberType type;
-
-    @Before
-    public void pickType() {
-        type = RandomPicks.randomFrom(random(), NumberFieldMapper.NumberType.values());
-    }
-
-    public void testEqualsWithDifferentNumberTypes() {
-        NumberType type = randomFrom(NumberType.values());
-        NumberFieldType fieldType = new NumberFieldType("foo", type);
-
-        NumberType otherType = randomValueOtherThan(type, () -> randomFrom(NumberType.values()));
-        NumberFieldType otherFieldType = new NumberFieldType("foo", otherType);
-
-        assertNotEquals(fieldType, otherFieldType);
-    }
-
-    public void testIsFieldWithinQuery() throws IOException {
-        MappedFieldType ft = new NumberFieldType("field", NumberType.INTEGER);
-        // current impl ignores args and should always return INTERSECTS
-        assertEquals(
-            Relation.INTERSECTS,
-            ft.isFieldWithinQuery(null, randomDouble(), randomDouble(), randomBoolean(), randomBoolean(), null, null, null)
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
         );
+            type = t;
+        IndexNumericFieldData fielddata = (IndexNumericFieldData) fieldType.fielddataBuilder("index", () -> {
+                assertEquals(searcher.count(indexOrDvQuery.getIndexQuery()), searcher.count(indexOrDvQuery.getRandomAccessQuery()));
+        assertEquals(3L, NumberType.LONG.parse(3.5, true));
+        assertEquals(1.1d, NumberType.DOUBLE.parse(1.1, true));
+        );
+        assertEquals(BigInteger.valueOf(5), NumberType.UNSIGNED_LONG.parse("5.0", true));
+import org.apache.lucene.document.SortedNumericDocValuesField;
+        e = expectThrows(IllegalArgumentException.class, () -> NumberType.INTEGER.parse(2147483648L, true));
+            boolean includeUpper = randomBoolean();
+        }
     }
-
-    public void testIntegerTermsQueryWithDecimalPart() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.INTEGER);
+        final int numDocs = 10000;
         assertEquals(
-            new IndexOrDocValuesQuery(IntPoint.newSetQuery("field", 1), SortedNumericDocValuesField.newSlowSetQuery("field", 1)),
-            ft.termsQuery(Arrays.asList(1, 2.1), null)
+            ft.rangeQuery(1.1, 10, false, true, null, null, null, MOCK_QSC)
         );
-        assertEquals(
-            new IndexOrDocValuesQuery(IntPoint.newSetQuery("field", 1), SortedNumericDocValuesField.newSlowSetQuery("field", 1)),
-            ft.termsQuery(Arrays.asList(1.0, 2.1), null)
-        );
-        assertTrue(ft.termsQuery(Arrays.asList(1.1, 2.1), null) instanceof MatchNoDocsQuery);
-    }
-
-    public void testLongTermsQueryWithDecimalPart() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.LONG);
-        assertEquals(
-            new IndexOrDocValuesQuery(LongPoint.newSetQuery("field", 1), SortedNumericDocValuesField.newSlowSetQuery("field", 1)),
-            ft.termsQuery(Arrays.asList(1, 2.1), null)
-        );
-        assertEquals(
-            new IndexOrDocValuesQuery(LongPoint.newSetQuery("field", 1), SortedNumericDocValuesField.newSlowSetQuery("field", 1)),
-            ft.termsQuery(Arrays.asList(1.0, 2.1), null)
-        );
-        assertTrue(ft.termsQuery(Arrays.asList(1.1, 2.1), null) instanceof MatchNoDocsQuery);
-    }
-
+            if (value instanceof BigInteger) {
+            ftLong.rangeQuery(0, 2, true, true, null, null, null, MOCK_QSC),
+                DoublePoint.pack(new double[] { 3d }).bytes,
+        assertEquals((short) 5, NumberType.SHORT.parse(new BytesRef("5.3".getBytes(StandardCharsets.UTF_8)), true));
+            NumberType.FLOAT.rangeQuery("field", null, -0f, true, true, false, true, MOCK_QSC),
+        assertEquals(new MatchNoDocsQuery(), ft.bitmapQuery(bitmap).rewrite(newSearcher(reader)));
+    public void testUnsignedLongRangeQueryWithDecimalParts() {
+            ft.rangeQuery(1.1, 10, false, true, null, null, null, MOCK_QSC)
+            ftLong.rangeQuery(0, 0, true, true, null, null, null, MOCK_QSC),
+        ft = new NumberFieldType("field", NumberType.INTEGER, true, false, false, false, true, null, Collections.emptyMap());
+ * the Apache License, Version 2.0 (the "License"); you may
     public void testByteTermQueryWithDecimalPart() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.BYTE);
-        assertTrue(ft.termQuery(42.1, null) instanceof MatchNoDocsQuery);
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.document.IntPoint;
+        assertEquals(
+        final Object value;
+        assertEquals(
+        assertEquals(expected, ft.rangeQuery("1", "3", true, true, null, null, null, MOCK_QSC));
+        IllegalArgumentException e = expectThrows(
+        for (OutOfRangeSpec item : inputs) {
+import org.opensearch.index.document.SortedUnsignedLongDocValuesSetQuery;
+        );
+        );
+            ftInt.rangeQuery(0, 2, true, true, null, null, null, MOCK_QSC),
+    public void testDisplayValue() {
+        Roaring64NavigableMap r = new Roaring64NavigableMap();
+            }
+        assertEquals(3.5d, NumberType.DOUBLE.parse(3.5, true));
+        );
+            OutOfRangeSpec.of(NumberType.HALF_FLOAT, Float.POSITIVE_INFINITY, "[half_float] supports only finite values"),
     }
-
-    public void testShortTermQueryWithDecimalPart() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.SHORT);
-        assertTrue(ft.termQuery(42.1, null) instanceof MatchNoDocsQuery);
+        final int iters = 10;
+        }
+            Double.valueOf(1.2),
+        assertEquals((short) 5, NumberType.SHORT.parse("5", true));
+                "field",
+ * SPDX-License-Identifier: Apache-2.0
+            IndexNumericFieldData fielddata = (IndexNumericFieldData) ft.fielddataBuilder(
+            OutOfRangeSpec.of(NumberType.SHORT, -32769, "is out of range for a short"),
     }
-
-    public void testIntegerTermQueryWithDecimalPart() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.INTEGER);
-        assertTrue(ft.termQuery(42.1, null) instanceof MatchNoDocsQuery);
-    }
-
-    public void testLongTermQueryWithDecimalPart() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.LONG);
-        assertTrue(ft.termQuery(42.1, null) instanceof MatchNoDocsQuery);
-    }
-
-    private static MappedFieldType unsearchable() {
-        return new NumberFieldType("field", NumberType.LONG, false, false, false, false, true, null, Collections.emptyMap());
-    }
-
-    public void testTermQuery() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.LONG);
-        Query dvQuery = SortedNumericDocValuesField.newSlowExactQuery("field", 42);
-        Query query = new IndexOrDocValuesQuery(LongPoint.newExactQuery("field", 42), dvQuery);
-        assertEquals(query, ft.termQuery("42", null));
-
+        NumberFieldType fieldType = new NumberFieldType("field", type);
+            r.serializePortable(dos);
+        );
+import org.opensearch.core.common.bytes.BytesArray;
+        assertEquals(
+    public void testBitmapQuery64() throws IOException {
+            Query unsignedLongQ = NumberType.UNSIGNED_LONG.rangeQuery(
+            ft.rangeQuery(1, 10.1, true, false, null, null, null, MOCK_QSC)
+            ftLong.rangeQuery(-2, 0, true, true, null, null, null, MOCK_QSC),
+                assertThat(
+        reader.close();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import java.util.Arrays;
+            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
+        NumberFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.LONG);
+        for (int i = 0; i < numQueries; ++i) {
+import java.util.Collections;
+            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
+            } else {
+                query,
+            IllegalArgumentException.class,
         MappedFieldType unsearchable = unsearchable();
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> unsearchable.termQuery("42", null));
-        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
-    }
-
-    public void testRangeQueryWithNegativeBounds() {
+            assertThat(NumberType.LONG.parsePoint(bytes), equalTo(value));
+import org.opensearch.common.settings.Settings;
+        final List<OutOfRangeSpec> inputs = Arrays.asList(
+        assertTrue(ft.termQuery(42.1, null) instanceof MatchNoDocsQuery);
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.LONG);
+        );
         MappedFieldType ftInt = new NumberFieldMapper.NumberFieldType("field", NumberType.INTEGER);
+            assertThat(NumberType.DOUBLE.parsePoint(bytes), equalTo(value));
+    public void testDocValueLongRange() throws Exception {
+            OutOfRangeSpec.of(NumberType.HALF_FLOAT, Float.NEGATIVE_INFINITY, "[half_float] supports only finite values"),
+            assertThat(NumberType.BYTE.parsePoint(bytes), equalTo(value));
         assertEquals(
-            ftInt.rangeQuery(-3, -3, true, true, null, null, null, MOCK_QSC),
-            ftInt.rangeQuery(-3.5, -2.5, true, true, null, null, null, MOCK_QSC)
+        DirectoryReader reader = DirectoryReader.open(w);
         );
+        // this test checks that searching half floats yields the same results as
+                item.type.parse(item.value, false);
+import static org.hamcrest.Matchers.instanceOf;
+                ApproximatePointRangeQuery.DOUBLE_FORMAT
+                "field",
+            new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.HALF_FLOAT).valueForDisplay(1.2)
+        reader.close();
+import org.apache.lucene.search.MatchNoDocsQuery;
+        doTestIndexSortRangeQueries(NumberType.LONG, random()::nextLong);
+        final DirectoryReader reader = DirectoryReader.open(w);
         assertEquals(
-            ftInt.rangeQuery(-3, -3, true, true, null, null, null, MOCK_QSC),
-            ftInt.rangeQuery(-3.5, -2.5, false, false, null, null, null, MOCK_QSC)
+        assertTrue(ft.termsQuery(Arrays.asList(1.1, 2.1), null) instanceof MatchNoDocsQuery);
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT.id).build();
+import org.apache.lucene.document.LongPoint;
+ * The OpenSearch Contributors require contributions made to
+        Directory dir = newDirectory();
+        doTestDocValueRangeQueries(NumberType.FLOAT, random()::nextFloat);
+            // ends up being rounded to Infinity by halfFloatToSortableShort()
+            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.BYTE);
+        Query expected = new ApproximateScoreQuery(
+    }
+        assertEquals((short) 5, NumberType.SHORT.parse((byte) 5, true));
+            ft.rangeQuery(1.1, 10, true, true, null, null, null, MOCK_QSC)
+        final int iters = 10;
+            Byte.valueOf((byte) 3),
+import static org.hamcrest.Matchers.either;
+        assertEquals(
+        assertFalse(NumberType.FLOAT.termQuery("field", -0f, true, true).equals(NumberType.FLOAT.termQuery("field", +0f, true, true)));
+    }
+        assertEquals(
+        assertEquals(BigInteger.valueOf(5), NumberType.UNSIGNED_LONG.parse("5", true));
+import org.opensearch.search.MultiValueMode;
+            NumberType.DOUBLE.rangeQuery("field", null, -0d, true, true, false, true, MOCK_QSC),
+            OutOfRangeSpec.of(NumberType.HALF_FLOAT, "65520", "[half_float] supports only finite values"),
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+            OutOfRangeSpec.of(NumberType.DOUBLE, Double.NEGATIVE_INFINITY, "[double] supports only finite values")
+    public void testShortTermQueryWithDecimalPart() {
+            ft.isFieldWithinQuery(null, randomDouble(), randomDouble(), randomBoolean(), randomBoolean(), null, null, null)
+            new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.SHORT).valueForDisplay(3)
+    public void doTestIndexSortRangeQueries(NumberType type, Supplier<Number> valueSupplier) throws IOException {
+            ft.termsQuery(Arrays.asList(1, 2.1), null)
+        }
+ * not use this file except in compliance with the License.
+            )
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.LONG);
+    public void testDocValueShortRange() throws Exception {
+import org.opensearch.search.query.BitmapIndexQuery;
+        assertEquals(
+    public void testFetchSourceValue() throws IOException {
+            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
         );
-        assertEquals(
+            new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.FLOAT).valueForDisplay(1.2)
+ * specific language governing permissions and limitations
+    public void testNegativeZero() {
             ftInt.rangeQuery(0, 0, true, true, null, null, null, MOCK_QSC),
-            ftInt.rangeQuery(-0.5, 0.5, true, true, null, null, null, MOCK_QSC)
+        assertThrows(IllegalArgumentException.class, () -> finalFt.bitmapQuery(bitmap));
+            new ApproximatePointRangeQuery(
+            assertNull(fieldType.valueForDisplay(null));
+public class NumberFieldTypeTests extends FieldTypeTestCase {
+        // searching floats that are rounded to the closest half float
         );
         assertEquals(
-            ftInt.rangeQuery(0, 0, true, true, null, null, null, MOCK_QSC),
-            ftInt.rangeQuery(-0.5, 0.5, false, false, null, null, null, MOCK_QSC)
         );
-        assertEquals(
-            ftInt.rangeQuery(1, 2, true, true, null, null, null, MOCK_QSC),
-            ftInt.rangeQuery(0.5, 2.5, true, true, null, null, null, MOCK_QSC)
         );
+            array = bos.toByteArray();
         assertEquals(
-            ftInt.rangeQuery(1, 2, true, true, null, null, null, MOCK_QSC),
-            ftInt.rangeQuery(0.5, 2.5, false, false, null, null, null, MOCK_QSC)
+            SortedUnsignedLongDocValuesRangeQuery.newSlowRangeQuery("field", BigInteger.valueOf(1), BigInteger.valueOf(3))
+        }
+        assertEquals(5, NumberType.INTEGER.parse("5.9", true));
+        assertEquals(BigInteger.valueOf(3L), NumberType.UNSIGNED_LONG.parse(3.5, true));
+    public void testCoercions() {
+        assertEquals(
         );
-        assertEquals(
-            ftInt.rangeQuery(0, 2, true, true, null, null, null, MOCK_QSC),
-            ftInt.rangeQuery(-0.5, 2.5, true, true, null, null, null, MOCK_QSC)
+        Query indexOrDvQuery = new IndexOrDocValuesQuery(
+            OutOfRangeSpec.of(NumberType.HALF_FLOAT, -65520f, "[half_float] supports only finite values"),
+        }
         );
-        assertEquals(
-            ftInt.rangeQuery(0, 2, true, true, null, null, null, MOCK_QSC),
-            ftInt.rangeQuery(-0.5, 2.5, false, false, null, null, null, MOCK_QSC)
+            short value = randomShort();
         );
-
+            ft.bitmapQuery(bitmap)
+        }
+            OutOfRangeSpec.of(NumberType.FLOAT, Float.NaN, "[float] supports only finite values"),
+            value = v;
+                random().nextBoolean() ? null : valueSupplier.get(),
+        NumberFieldType otherFieldType = new NumberFieldType("foo", otherType);
+        );
+        doTestDocValueRangeQueries(NumberType.UNSIGNED_LONG, FieldTypeTestCase::randomUnsignedLong);
+        IndexWriter w = new IndexWriter(dir, writerConfig);
+    public void testLongTermQueryWithDecimalPart() {
+    public void testLongRangeQuery() {
+            new IndexOrDocValuesQuery(LongPoint.newSetQuery("field", 1), SortedNumericDocValuesField.newSlowSetQuery("field", 1)),
+            NumberFieldMapper.NumberFieldType fieldType = new NumberFieldMapper.NumberFieldType("field", type);
+        assertThrows(IllegalArgumentException.class, () -> finalFt.bitmapQuery(bitmap));
+import org.apache.lucene.search.SortField;
         assertEquals(
-            ftInt.rangeQuery(-2, 0, true, true, null, null, null, MOCK_QSC),
+        ft = new NumberFieldMapper.NumberFieldType("field", type);
+    public void testDocValueUnsignedLongRange() throws Exception {
+            ftLong.rangeQuery(-2, -1, true, true, null, null, null, MOCK_QSC),
+            ft.termsQuery(Arrays.asList(1.0, 2.1), null)
+    }
+        DirectoryReader reader = DirectoryReader.open(w);
+        assertEquals(
             ftInt.rangeQuery(-2.5, 0.5, true, true, null, null, null, MOCK_QSC)
-        );
+import org.roaringbitmap.RoaringBitmap;
+import org.opensearch.search.DocValueFormat;
+        assertEquals(new BitmapDocValuesQuery("field", r), ft.bitmapQuery(bitmap));
+        NumberType type = randomValueOtherThan(NumberType.INTEGER, () -> randomFrom(NumberType.values()));
+ *
+        assertEquals((byte) 5, NumberType.BYTE.parse("5", true));
+            ft.rangeQuery(1.1, 10, false, true, null, null, null, MOCK_QSC)
+            ft.rangeQuery(1, 10.1, true, false, null, null, null, MOCK_QSC)
         assertEquals(
-            ftInt.rangeQuery(-2, 0, true, true, null, null, null, MOCK_QSC),
-            ftInt.rangeQuery(-2.5, 0.5, false, false, null, null, null, MOCK_QSC)
-        );
+        e = expectThrows(IllegalArgumentException.class, () -> NumberType.LONG.parse(10000000000000000000d, true));
+        assertEquals(5, NumberType.INTEGER.parse((byte) 5, true));
+        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
+import org.apache.lucene.util.BytesRef;
+            .fieldType();
+        for (NumberFieldMapper.NumberType type : NumberFieldMapper.NumberType.values()) {
+        assertEquals(3f, NumberType.FLOAT.parse(3d, true));
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.UNSIGNED_LONG);
+            ft.rangeQuery(1, 10.1, true, false, null, null, null, MOCK_QSC)
+        MappedFieldType mapper = new NumberFieldMapper.Builder("field", NumberType.INTEGER, false, true).build(context).fieldType();
+        BytesArray bitmap = new BytesArray(array);
+    // the same ranges
+    public void testByteRangeQueryWithDecimalParts() {
+import org.opensearch.search.approximate.ApproximatePointRangeQuery;
+    }
+        doTestDocValueRangeQueries(NumberType.SHORT, () -> (short) random().nextInt(65536));
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.SHORT);
+            final Object value = fetcher.nextValue();
+            ft.rangeQuery(1.1, 10, true, true, null, null, null, MOCK_QSC)
+    }
+                "field",
+            OutOfRangeSpec.of(NumberType.SHORT, "32768", "out of range for a short"),
+            float value = randomFloat();
         assertEquals(
-            ftInt.rangeQuery(-2, -1, true, true, null, null, null, MOCK_QSC),
-            ftInt.rangeQuery(-2.5, -0.5, true, true, null, null, null, MOCK_QSC)
+            IndexOrDocValuesQuery indexOrDvQuery = (IndexOrDocValuesQuery) fallbackQuery;
+        MappedFieldType unsearchable = unsearchable();
+        type = RandomPicks.randomFrom(random(), NumberFieldMapper.NumberType.values());
+                NumberType.UNSIGNED_LONG.encodePoint(BigInteger.valueOf(3)),
         );
-        assertEquals(
-            ftInt.rangeQuery(-2, -1, true, true, null, null, null, MOCK_QSC),
-            ftInt.rangeQuery(-2.5, -0.5, false, false, null, null, null, MOCK_QSC)
+import org.opensearch.Version;
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
         );
-
-        MappedFieldType ftLong = new NumberFieldMapper.NumberFieldType("field", NumberType.LONG);
+        dir.close();
+    }
+            w.addDocument(type.createFields("field", valueSupplier.get(), true, true, false, false));
         assertEquals(
-            ftLong.rangeQuery(-3, -3, true, true, null, null, null, MOCK_QSC),
-            ftLong.rangeQuery(-3.5, -2.5, true, true, null, null, null, MOCK_QSC)
+import org.opensearch.common.util.io.IOUtils;
+            OutOfRangeSpec.of(NumberType.DOUBLE, Double.POSITIVE_INFINITY, "[double] supports only finite values"),
+        NumberType otherType = randomValueOtherThan(type, () -> randomFrom(NumberType.values()));
+                true,
         );
+    // Make sure we construct the IndexOrDocValuesQuery objects with queries that match
+                randomBoolean(),
+        MappedFieldType ft = new NumberFieldType("field", NumberType.INTEGER);
         assertEquals(
-            ftLong.rangeQuery(-3, -3, true, true, null, null, null, MOCK_QSC),
-            ftLong.rangeQuery(-3.5, -2.5, false, false, null, null, null, MOCK_QSC)
+        Directory dir = newDirectory();
+    }
         );
-        assertEquals(
-            ftLong.rangeQuery(0, 0, true, true, null, null, null, MOCK_QSC),
-            ftLong.rangeQuery(-0.5, 0.5, true, true, null, null, null, MOCK_QSC)
+            Query fallbackQuery;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.DOUBLE);
+            Double.valueOf(1.2),
+    public void testIntegerTermQueryWithDecimalPart() {
+            BigIntegerPoint.newSetQuery("field", BigInteger.valueOf(1), BigInteger.valueOf(3)),
+import com.carrotsearch.randomizedtesting.generators.RandomPicks;
         );
-        assertEquals(
-            ftLong.rangeQuery(0, 0, true, true, null, null, null, MOCK_QSC),
-            ftLong.rangeQuery(-0.5, 0.5, false, false, null, null, null, MOCK_QSC)
+        assertEquals((short) 5, NumberType.SHORT.parse("5.9", true));
+ * GitHub history for details.
+            OutOfRangeSpec.of(NumberType.DOUBLE, new BigDecimal("1.7976931348623157E309"), "[double] supports only finite values"),
         );
-        assertEquals(
-            ftLong.rangeQuery(1, 2, true, true, null, null, null, MOCK_QSC),
-            ftLong.rangeQuery(0.5, 2.5, true, true, null, null, null, MOCK_QSC)
+            } else {
         );
+    }
+            OutOfRangeSpec.of(NumberType.FLOAT, Float.POSITIVE_INFINITY, "[float] supports only finite values"),
+        SortField sortField = fielddata.sortField(null, MultiValueMode.MIN, null, randomBoolean());
+        IndexWriter w = new IndexWriter(dir, new IndexWriterConfig(null));
         assertEquals(
-            ftLong.rangeQuery(1, 2, true, true, null, null, null, MOCK_QSC),
+    public void testParsePoint() {
+            byte[] bytes = new byte[Float.BYTES];
+        }
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.UNSIGNED_LONG);
+    }
+        assertEquals((long) 5, NumberType.LONG.parse(new BytesRef("5.3".getBytes(StandardCharsets.UTF_8)), true));
+        {
+            double value = randomDouble();
+            ft.rangeQuery(1, 10.1, true, true, null, null, null, MOCK_QSC)
+        assertEquals(expected, ft.rangeQuery("1", "3", true, true, null, null, null, MOCK_QSC));
+            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
+        assertEquals(BigInteger.valueOf(3L), NumberType.UNSIGNED_LONG.parse(3d, true));
+    }
+    public void testIndexSortLongRange() throws Exception {
+        public void write(XContentBuilder b) throws IOException {
+        assertEquals(-4115420654264075766L, NumberType.LONG.parse("-4115420654264075766", true));
+        MappedFieldType unsearchable = unsearchable();
+            doc.add(new BigIntegerPoint("unsigned_long", value));
+        IOUtils.close(reader, dir);
             ftLong.rangeQuery(0.5, 2.5, false, false, null, null, null, MOCK_QSC)
-        );
+            Query doubleQ = NumberType.DOUBLE.rangeQuery("double", l, u, includeLower, includeUpper, false, true, MOCK_QSC);
+                DoublePoint.pack(new double[] { 1d }).bytes,
+                "index",
+ * this work for additional information regarding copyright
+        assertEquals(Collections.singletonList(2.71f), fetchSourceValue(nullValueMapper, null));
+        dir.close();
+            int value = randomInt();
+            OutOfRangeSpec.of(NumberType.INTEGER, -2147483649L, "is out of range for an integer"),
+import org.opensearch.common.util.BigArrays;
         assertEquals(
-            ftLong.rangeQuery(0, 2, true, true, null, null, null, MOCK_QSC),
-            ftLong.rangeQuery(-0.5, 2.5, true, true, null, null, null, MOCK_QSC)
-        );
+                context
         assertEquals(
-            ftLong.rangeQuery(0, 2, true, true, null, null, null, MOCK_QSC),
-            ftLong.rangeQuery(-0.5, 2.5, false, false, null, null, null, MOCK_QSC)
+    }
         );
-
-        assertEquals(
-            ftLong.rangeQuery(-2, 0, true, true, null, null, null, MOCK_QSC),
-            ftLong.rangeQuery(-2.5, 0.5, true, true, null, null, null, MOCK_QSC)
+    public void testIntegerRangeQueryWithDecimalParts() {
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.LONG);
+                "foo",
+        for (int i = 0; i < numQueries; ++i) {
+                true,
+            OutOfRangeSpec.of(NumberType.INTEGER, 2147483648L, "is out of range for an integer"),
+        IllegalArgumentException e = expectThrows(
+        for (int i = 0; i < numDocs; ++i) {
+            throw new UnsupportedOperationException();
+            ftLong.rangeQuery(1, 2, true, true, null, null, null, MOCK_QSC),
+            null,
+            byte[] bytes = new byte[Integer.BYTES];
+import org.apache.lucene.index.IndexWriterConfig;
         );
-        assertEquals(
-            ftLong.rangeQuery(-2, 0, true, true, null, null, null, MOCK_QSC),
-            ftLong.rangeQuery(-2.5, 0.5, false, false, null, null, null, MOCK_QSC)
         );
-        assertEquals(
-            ftLong.rangeQuery(-2, -1, true, true, null, null, null, MOCK_QSC),
-            ftLong.rangeQuery(-2.5, -0.5, true, true, null, null, null, MOCK_QSC)
         );
+                    "Incorrect error message for [" + item.type + "] with value [" + item.value + "]",
+        );
+        assertEquals(BigInteger.valueOf(5), NumberType.UNSIGNED_LONG.parse((byte) 5, true));
         assertEquals(
-            ftLong.rangeQuery(-2, -1, true, true, null, null, null, MOCK_QSC),
+    public void doTestDocValueRangeQueries(NumberType type, Supplier<Number> valueSupplier) throws Exception {
+    }
+        QueryShardContext context = new QueryShardContext(
+            NumberType.FLOAT.rangeQuery("field", null, +0f, true, false, false, true, MOCK_QSC)
+            ftInt.rangeQuery(-2.5, -0.5, true, true, null, null, null, MOCK_QSC)
+    public void testIntegerTermsQueryWithDecimalPart() {
+            NumberType.DOUBLE.rangeQuery("field", null, +0d, true, false, false, true, MOCK_QSC)
+import java.io.ByteArrayInputStream;
+        final NumberType type;
+ * Modifications Copyright OpenSearch Contributors. See
+        for (int iter = 0; iter < iters; ++iter) {
+    }
+            null
             ftLong.rangeQuery(-2.5, -0.5, false, false, null, null, null, MOCK_QSC)
         );
-    }
-
-    public void testByteRangeQueryWithDecimalParts() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.BYTE);
-        assertEquals(
-            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1.1, 10, true, true, null, null, null, MOCK_QSC)
         );
-        assertEquals(
-            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1.1, 10, false, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals(
-            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1, 10.1, true, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals(
-            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1, 10.1, true, false, null, null, null, MOCK_QSC)
-        );
-    }
-
-    public void testShortRangeQueryWithDecimalParts() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.SHORT);
-        assertEquals(
-            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1.1, 10, true, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals(
-            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1.1, 10, false, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals(
-            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1, 10.1, true, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals(
-            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1, 10.1, true, false, null, null, null, MOCK_QSC)
-        );
-    }
-
-    public void testIntegerRangeQueryWithDecimalParts() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.INTEGER);
-        assertEquals(
-            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1.1, 10, true, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals(
-            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1.1, 10, false, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals(
-            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1, 10.1, true, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals(
-            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1, 10.1, true, false, null, null, null, MOCK_QSC)
-        );
-    }
-
-    public void testLongRangeQueryWithDecimalParts() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.LONG);
-        assertEquals(
-            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1.1, 10, true, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals(
-            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1.1, 10, false, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals(
-            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1, 10.1, true, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals(
-            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1, 10.1, true, false, null, null, null, MOCK_QSC)
-        );
-    }
-
-    public void testUnsignedLongRangeQueryWithDecimalParts() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.UNSIGNED_LONG);
-        assertEquals(
-            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1.1, 10, true, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals(
-            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1.1, 10, false, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals(
-            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1, 10.1, true, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals(
-            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
-            ft.rangeQuery(1, 10.1, true, false, null, null, null, MOCK_QSC)
-        );
-    }
-
-    public void testLongRangeQuery() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.LONG);
-        Query expected = new ApproximateScoreQuery(
-            new IndexOrDocValuesQuery(LongPoint.newRangeQuery("field", 1, 3), SortedNumericDocValuesField.newSlowRangeQuery("field", 1, 3)),
-            new ApproximatePointRangeQuery("field", pack(1).bytes, pack(3).bytes, 1, ApproximatePointRangeQuery.LONG_FORMAT)
-        );
-        assertEquals(expected, ft.rangeQuery("1", "3", true, true, null, null, null, MOCK_QSC));
-
-        MappedFieldType unsearchable = unsearchable();
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> unsearchable.rangeQuery("1", "3", true, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
-    }
-
-    public void testUnsignedLongRangeQuery() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.UNSIGNED_LONG);
-        Query indexOrDvQuery = new IndexOrDocValuesQuery(
-            BigIntegerPoint.newRangeQuery("field", BigInteger.valueOf(1), BigInteger.valueOf(3)),
-            SortedUnsignedLongDocValuesRangeQuery.newSlowRangeQuery("field", BigInteger.valueOf(1), BigInteger.valueOf(3))
-        );
-        Query expected = new ApproximateScoreQuery(
-            indexOrDvQuery,
-            new ApproximatePointRangeQuery(
-                "field",
-                NumberType.UNSIGNED_LONG.encodePoint(BigInteger.valueOf(1)),
-                NumberType.UNSIGNED_LONG.encodePoint(BigInteger.valueOf(3)),
-                1,
-                ApproximatePointRangeQuery.UNSIGNED_LONG_FORMAT
-            )
-        );
-        assertEquals(expected, ft.rangeQuery("1", "3", true, true, null, null, null, MOCK_QSC));
-
-        MappedFieldType unsearchable = unsearchable();
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> unsearchable.rangeQuery("1", "3", true, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
-    }
-
-    public void testUnsignedLongTermsQuery() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.UNSIGNED_LONG);
-        Query expected = new IndexOrDocValuesQuery(
-            BigIntegerPoint.newSetQuery("field", BigInteger.valueOf(1), BigInteger.valueOf(3)),
-            SortedUnsignedLongDocValuesSetQuery.newSlowSetQuery("field", BigInteger.valueOf(1), BigInteger.valueOf(3))
-        );
-        assertEquals(expected, ft.termsQuery(List.of("1", "3"), MOCK_QSC));
-
-        MappedFieldType unsearchable = unsearchable();
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> unsearchable.termsQuery(List.of("1", "3"), MOCK_QSC)
-        );
-        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
-    }
-
-    public void testDoubleRangeQuery() {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.DOUBLE);
-        Query indexOrDvQuery = new IndexOrDocValuesQuery(
-            DoublePoint.newRangeQuery("field", 1d, 3d),
-            SortedNumericDocValuesField.newSlowRangeQuery(
-                "field",
-                NumericUtils.doubleToSortableLong(1),
-                NumericUtils.doubleToSortableLong(3)
-            )
-        );
-        Query expected = new ApproximateScoreQuery(
-            indexOrDvQuery,
-            new ApproximatePointRangeQuery(
-                "field",
-                DoublePoint.pack(new double[] { 1d }).bytes,
-                DoublePoint.pack(new double[] { 3d }).bytes,
-                1,
-                ApproximatePointRangeQuery.DOUBLE_FORMAT
-            )
-        );
-        assertEquals(expected, ft.rangeQuery("1", "3", true, true, null, null, null, MOCK_QSC));
-
-        MappedFieldType unsearchable = unsearchable();
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> unsearchable.rangeQuery("1", "3", true, true, null, null, null, MOCK_QSC)
-        );
-        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
-    }
-
-    public void testConversions() {
-        assertEquals((byte) 3, NumberType.BYTE.parse(3d, true));
-        assertEquals((short) 3, NumberType.SHORT.parse(3d, true));
-        assertEquals(3, NumberType.INTEGER.parse(3d, true));
-        assertEquals(3L, NumberType.LONG.parse(3d, true));
-        assertEquals(BigInteger.valueOf(3L), NumberType.UNSIGNED_LONG.parse(3d, true));
-        assertEquals(3f, NumberType.HALF_FLOAT.parse(3d, true));
-        assertEquals(3f, NumberType.FLOAT.parse(3d, true));
-        assertEquals(3d, NumberType.DOUBLE.parse(3d, true));
-
-        assertEquals((byte) 3, NumberType.BYTE.parse(3.5, true));
-        assertEquals((short) 3, NumberType.SHORT.parse(3.5, true));
-        assertEquals(3, NumberType.INTEGER.parse(3.5, true));
-        assertEquals(3L, NumberType.LONG.parse(3.5, true));
-        assertEquals(BigInteger.valueOf(3L), NumberType.UNSIGNED_LONG.parse(3.5, true));
-
-        assertEquals(3.5f, NumberType.FLOAT.parse(3.5, true));
-        assertEquals(3.5d, NumberType.DOUBLE.parse(3.5, true));
-
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> NumberType.BYTE.parse(128, true));
-        assertEquals("Value [128] is out of range for a byte", e.getMessage());
-        e = expectThrows(IllegalArgumentException.class, () -> NumberType.SHORT.parse(65536, true));
-        assertEquals("Value [65536] is out of range for a short", e.getMessage());
-        e = expectThrows(IllegalArgumentException.class, () -> NumberType.INTEGER.parse(2147483648L, true));
-        assertEquals("Value [2147483648] is out of range for an integer", e.getMessage());
-        e = expectThrows(IllegalArgumentException.class, () -> NumberType.LONG.parse(10000000000000000000d, true));
-        assertEquals("Value [1.0E19] is out of range for a long", e.getMessage());
-        e = expectThrows(IllegalArgumentException.class, () -> NumberType.UNSIGNED_LONG.parse(100000000000000000000d, true));
-        assertEquals("Value [1.0E20] is out of range for an unsigned long", e.getMessage());
-        assertEquals(1.1f, NumberType.HALF_FLOAT.parse(1.1, true));
-        assertEquals(1.1f, NumberType.FLOAT.parse(1.1, true));
-        assertEquals(1.1d, NumberType.DOUBLE.parse(1.1, true));
-    }
-
-    public void testCoercions() {
-        assertEquals((byte) 5, NumberType.BYTE.parse((short) 5, true));
-        assertEquals((byte) 5, NumberType.BYTE.parse("5", true));
-        assertEquals((byte) 5, NumberType.BYTE.parse("5.0", true));
-        assertEquals((byte) 5, NumberType.BYTE.parse("5.9", true));
-        assertEquals((byte) 5, NumberType.BYTE.parse(new BytesRef("5.3".getBytes(StandardCharsets.UTF_8)), true));
-
-        assertEquals((short) 5, NumberType.SHORT.parse((byte) 5, true));
-        assertEquals((short) 5, NumberType.SHORT.parse("5", true));
-        assertEquals((short) 5, NumberType.SHORT.parse("5.0", true));
-        assertEquals((short) 5, NumberType.SHORT.parse("5.9", true));
-        assertEquals((short) 5, NumberType.SHORT.parse(new BytesRef("5.3".getBytes(StandardCharsets.UTF_8)), true));
-
-        assertEquals(5, NumberType.INTEGER.parse((byte) 5, true));
-        assertEquals(5, NumberType.INTEGER.parse("5", true));
-        assertEquals(5, NumberType.INTEGER.parse("5.0", true));
-        assertEquals(5, NumberType.INTEGER.parse("5.9", true));
-        assertEquals(5, NumberType.INTEGER.parse(new BytesRef("5.3".getBytes(StandardCharsets.UTF_8)), true));
-        assertEquals(Integer.MAX_VALUE, NumberType.INTEGER.parse(Integer.MAX_VALUE, true));
-
-        assertEquals((long) 5, NumberType.LONG.parse((byte) 5, true));
-        assertEquals((long) 5, NumberType.LONG.parse("5", true));
-        assertEquals((long) 5, NumberType.LONG.parse("5.0", true));
-        assertEquals((long) 5, NumberType.LONG.parse("5.9", true));
-        assertEquals((long) 5, NumberType.LONG.parse(new BytesRef("5.3".getBytes(StandardCharsets.UTF_8)), true));
-
-        // these will lose precision if they get treated as a double
-        assertEquals(-4115420654264075766L, NumberType.LONG.parse("-4115420654264075766", true));
-        assertEquals(-4115420654264075766L, NumberType.LONG.parse(-4115420654264075766L, true));
-
-        assertEquals(BigInteger.valueOf(5), NumberType.UNSIGNED_LONG.parse((byte) 5, true));
-        assertEquals(BigInteger.valueOf(5), NumberType.UNSIGNED_LONG.parse("5", true));
-        assertEquals(BigInteger.valueOf(5), NumberType.UNSIGNED_LONG.parse("5.0", true));
-        assertEquals(BigInteger.valueOf(5), NumberType.UNSIGNED_LONG.parse("5.9", true));
-        assertEquals(BigInteger.valueOf(5), NumberType.UNSIGNED_LONG.parse(new BytesRef("5.3".getBytes(StandardCharsets.UTF_8)), true));
-        assertEquals(Numbers.MAX_UNSIGNED_LONG_VALUE, NumberType.UNSIGNED_LONG.parse(Numbers.MAX_UNSIGNED_LONG_VALUE, true));
-    }
-
-    public void testHalfFloatRange() throws IOException {
-        // make sure the accuracy loss of half floats only occurs at index time
-        // this test checks that searching half floats yields the same results as
-        // searching floats that are rounded to the closest half float
-        Directory dir = newDirectory();
-        IndexWriter w = new IndexWriter(dir, new IndexWriterConfig(null));
-        final int numDocs = 10000;
-        for (int i = 0; i < numDocs; ++i) {
-            Document doc = new Document();
-            // Note: this test purposefully allows half-floats to be indexed over their dynamic range (65504), which
-            // ends up being rounded to Infinity by halfFloatToSortableShort()
-            float value = (randomFloat() * 2 - 1) * 70000;
-            float rounded = HalfFloatPoint.sortableShortToHalfFloat(HalfFloatPoint.halfFloatToSortableShort(value));
-            doc.add(new HalfFloatPoint("half_float", value));
-            doc.add(new FloatPoint("float", rounded));
-            w.addDocument(doc);
-        }
-        final DirectoryReader reader = DirectoryReader.open(w);
-        w.close();
-
-        IndexSearcher searcher = newSearcher(reader);
-        final int numQueries = 1000;
-        for (int i = 0; i < numQueries; ++i) {
-            float l = (randomFloat() * 2 - 1) * 65504;
-            float u = (randomFloat() * 2 - 1) * 65504;
-            boolean includeLower = randomBoolean();
-            boolean includeUpper = randomBoolean();
-            Query floatQ = NumberType.FLOAT.rangeQuery("float", l, u, includeLower, includeUpper, false, true, MOCK_QSC);
-            Query halfFloatQ = NumberType.HALF_FLOAT.rangeQuery("half_float", l, u, includeLower, includeUpper, false, true, MOCK_QSC);
-            assertEquals(searcher.count(floatQ), searcher.count(halfFloatQ));
-        }
-        IOUtils.close(reader, dir);
-    }
-
-    public void testUnsignedLongRange() throws IOException {
-        // make sure the accuracy loss of half floats only occurs at index time
-        // this test checks that searching half floats yields the same results as
-        // searching floats that are rounded to the closest half float
-        Directory dir = newDirectory();
-        IndexWriter w = new IndexWriter(dir, new IndexWriterConfig(null));
-        final int numDocs = 10000;
-        for (int i = 0; i < numDocs; ++i) {
-            Document doc = new Document();
-            BigInteger value = randomUnsignedLong();
-            doc.add(new BigIntegerPoint("unsigned_long", value));
-            doc.add(new DoublePoint("double", value.doubleValue()));
-            w.addDocument(doc);
-        }
-        final DirectoryReader reader = DirectoryReader.open(w);
-        w.close();
-
-        IndexSearcher searcher = newSearcher(reader);
-        final int numQueries = 1000;
-        for (int i = 0; i < numQueries; ++i) {
-            BigInteger l = randomUnsignedLong();
-            BigInteger u = randomUnsignedLong();
-            boolean includeLower = randomBoolean();
-            boolean includeUpper = randomBoolean();
-            Query unsignedLongQ = NumberType.UNSIGNED_LONG.rangeQuery(
-                "unsigned_long",
-                l,
-                u,
-                includeLower,
-                includeUpper,
-                false,
-                true,
-                MOCK_QSC
-            );
-            Query doubleQ = NumberType.DOUBLE.rangeQuery("double", l, u, includeLower, includeUpper, false, true, MOCK_QSC);
-            assertEquals(searcher.count(doubleQ), searcher.count(unsignedLongQ));
-        }
-        IOUtils.close(reader, dir);
-    }
-
-    public void testNegativeZero() {
-        assertEquals(
-            NumberType.DOUBLE.rangeQuery("field", null, -0d, true, true, false, true, MOCK_QSC),
-            NumberType.DOUBLE.rangeQuery("field", null, +0d, true, false, false, true, MOCK_QSC)
-        );
-        assertEquals(
-            NumberType.FLOAT.rangeQuery("field", null, -0f, true, true, false, true, MOCK_QSC),
-            NumberType.FLOAT.rangeQuery("field", null, +0f, true, false, false, true, MOCK_QSC)
-        );
-        assertEquals(
-            NumberType.HALF_FLOAT.rangeQuery("field", null, -0f, true, true, false, true, MOCK_QSC),
-            NumberType.HALF_FLOAT.rangeQuery("field", null, +0f, true, false, false, true, MOCK_QSC)
-        );
-
-        assertFalse(NumberType.DOUBLE.termQuery("field", -0d, true, true).equals(NumberType.DOUBLE.termQuery("field", +0d, true, true)));
-        assertFalse(NumberType.FLOAT.termQuery("field", -0f, true, true).equals(NumberType.FLOAT.termQuery("field", +0f, true, true)));
-        assertFalse(
-            NumberType.HALF_FLOAT.termQuery("field", -0f, true, true).equals(NumberType.HALF_FLOAT.termQuery("field", +0f, true, true))
-        );
-    }
-
-    // Make sure we construct the IndexOrDocValuesQuery objects with queries that match
-    // the same ranges
-    public void testDocValueByteRange() throws Exception {
+        IndexWriter w = new IndexWriter(dir, newIndexWriterConfig());
         doTestDocValueRangeQueries(NumberType.BYTE, () -> (byte) random().nextInt(256));
     }
-
-    public void testDocValueShortRange() throws Exception {
-        doTestDocValueRangeQueries(NumberType.SHORT, () -> (short) random().nextInt(65536));
-    }
-
-    public void testDocValueIntRange() throws Exception {
-        doTestDocValueRangeQueries(NumberType.INTEGER, random()::nextInt);
-    }
-
-    public void testDocValueLongRange() throws Exception {
-        doTestDocValueRangeQueries(NumberType.LONG, random()::nextLong);
-    }
-
-    public void testDocValueUnsignedLongRange() throws Exception {
-        doTestDocValueRangeQueries(NumberType.UNSIGNED_LONG, FieldTypeTestCase::randomUnsignedLong);
-    }
-
-    public void testDocValueHalfFloatRange() throws Exception {
-        doTestDocValueRangeQueries(NumberType.HALF_FLOAT, random()::nextFloat);
-    }
-
-    public void testDocValueFloatRange() throws Exception {
-        doTestDocValueRangeQueries(NumberType.FLOAT, random()::nextFloat);
-    }
-
-    public void testDocValueDoubleRange() throws Exception {
-        doTestDocValueRangeQueries(NumberType.DOUBLE, random()::nextDouble);
-    }
-
-    public void doTestDocValueRangeQueries(NumberType type, Supplier<Number> valueSupplier) throws Exception {
-        Directory dir = newDirectory();
-        IndexWriter w = new IndexWriter(dir, newIndexWriterConfig());
-        final int numDocs = TestUtil.nextInt(random(), 100, 500);
-        for (int i = 0; i < numDocs; ++i) {
-            w.addDocument(type.createFields("foo", valueSupplier.get(), true, true, false, false));
-        }
-        DirectoryReader reader = DirectoryReader.open(w);
-        IndexSearcher searcher = newSearcher(reader);
-        w.close();
-        final int iters = 10;
-        for (int iter = 0; iter < iters; ++iter) {
-            Query query = type.rangeQuery(
-                "foo",
-                random().nextBoolean() ? null : valueSupplier.get(),
-                random().nextBoolean() ? null : valueSupplier.get(),
-                randomBoolean(),
-                randomBoolean(),
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream(); DataOutputStream dos = new DataOutputStream(bos)) {
                 true,
-                true,
-                MOCK_QSC
-            );
-            assertThat(
-                query,
-                either(instanceOf(IndexOrDocValuesQuery.class)).or(instanceOf(MatchNoDocsQuery.class))
-                    .or(instanceOf(ApproximateScoreQuery.class))
-            );
-            if (query instanceof IndexOrDocValuesQuery) {
-                IndexOrDocValuesQuery indexOrDvQuery = (IndexOrDocValuesQuery) query;
-                assertEquals(searcher.count(indexOrDvQuery.getIndexQuery()), searcher.count(indexOrDvQuery.getRandomAccessQuery()));
-            }
-        }
-        reader.close();
-        dir.close();
-    }
-
-    public void testIndexSortIntRange() throws Exception {
-        doTestIndexSortRangeQueries(NumberType.INTEGER, random()::nextInt);
-    }
-
-    public void testIndexSortLongRange() throws Exception {
-        doTestIndexSortRangeQueries(NumberType.LONG, random()::nextLong);
-    }
-
-    public void doTestIndexSortRangeQueries(NumberType type, Supplier<Number> valueSupplier) throws IOException {
-        // Create index settings with an index sort.
-        Settings settings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            .put("index.sort.field", "field")
-            .build();
-
-        IndexMetadata indexMetadata = new IndexMetadata.Builder("index").settings(settings).build();
-        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
-
-        // Create an index writer configured with the same index sort.
-        NumberFieldType fieldType = new NumberFieldType("field", type);
-        IndexNumericFieldData fielddata = (IndexNumericFieldData) fieldType.fielddataBuilder("index", () -> {
-            throw new UnsupportedOperationException();
-        }).build(null, null);
-        SortField sortField = fielddata.sortField(null, MultiValueMode.MIN, null, randomBoolean());
-
-        IndexWriterConfig writerConfig = new IndexWriterConfig();
-        writerConfig.setIndexSort(new Sort(sortField));
-
-        Directory dir = newDirectory();
-        IndexWriter w = new IndexWriter(dir, writerConfig);
-        final int numDocs = TestUtil.nextInt(random(), 100, 500);
-        for (int i = 0; i < numDocs; ++i) {
-            w.addDocument(type.createFields("field", valueSupplier.get(), true, true, false, false));
-        }
-
-        // Ensure that the optimized index sort query gives the same results as a points query.
-        DirectoryReader reader = DirectoryReader.open(w);
-        IndexSearcher searcher = newSearcher(reader);
-
-        QueryShardContext context = new QueryShardContext(
-            0,
-            indexSettings,
-            BigArrays.NON_RECYCLING_INSTANCE,
-            null,
-            null,
-            null,
-            null,
-            null,
+        assertEquals(-4115420654264075766L, NumberType.LONG.parse(-4115420654264075766L, true));
+import org.opensearch.index.fielddata.IndexNumericFieldData;
             xContentRegistry(),
-            writableRegistry(),
-            null,
-            null,
-            () -> 0L,
-            null,
-            null,
-            () -> true,
-            null
+            new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.BYTE).valueForDisplay(3)
+            ft.rangeQuery(1, 10.1, true, true, null, null, null, MOCK_QSC)
+        Query indexOrDvQuery = new IndexOrDocValuesQuery(
+        assertEquals(
+                IndexOrDocValuesQuery indexOrDvQuery = (IndexOrDocValuesQuery) query;
+            OutOfRangeSpec.of(NumberType.FLOAT, Float.NEGATIVE_INFINITY, "[float] supports only finite values"),
+            new IndexOrDocValuesQuery(LongPoint.newSetQuery("field", 1), SortedNumericDocValuesField.newSlowSetQuery("field", 1)),
+        assertEquals(5, NumberType.INTEGER.parse(new BytesRef("5.3".getBytes(StandardCharsets.UTF_8)), true));
+            ftInt.rangeQuery(0, 2, true, true, null, null, null, MOCK_QSC),
+            0,
+import java.util.List;
+            Relation.INTERSECTS,
+        // Create index settings with an index sort.
+        assertEquals(Collections.singletonList(42), fetchSourceValue(mapper, "42.9"));
+    }
+        doc.add(new SortedNumericDocValuesField("ul", expectedValue.longValue()));
+        }).build(null, null);
+            ftInt.rangeQuery(-2, 0, true, true, null, null, null, MOCK_QSC),
         );
-
-        final int iters = 10;
-        for (int iter = 0; iter < iters; ++iter) {
-            Query query = type.rangeQuery(
-                "field",
-                random().nextBoolean() ? null : valueSupplier.get(),
-                random().nextBoolean() ? null : valueSupplier.get(),
-                randomBoolean(),
-                randomBoolean(),
-                true,
-                true,
-                context
+ */
+            () -> unsearchable.termsQuery(List.of("1", "3"), MOCK_QSC)
+            ftInt.rangeQuery(0, 0, true, true, null, null, null, MOCK_QSC),
+            return new OutOfRangeSpec(t, v, m);
+        assertEquals("Value [128] is out of range for a byte", e.getMessage());
+    }
+            ftInt.rangeQuery(-3, -3, true, true, null, null, null, MOCK_QSC),
+        );
+        assertEquals(
+            doc.add(new DoublePoint("double", value.doubleValue()));
+        assertEquals(
+        assertEquals(
+                includeLower,
+    @Before
+                NumberType.UNSIGNED_LONG.encodePoint(BigInteger.valueOf(1)),
+        for (int i = 0; i < numDocs; ++i) {
+import org.opensearch.search.query.BitmapDocValuesQuery;
+        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
+import org.opensearch.search.query.Bitmap64DocValuesQuery;
+        final String message;
+        Document doc = new Document();
+    public void testBitmapQuery() throws IOException {
+            ftInt.rangeQuery(-0.5, 0.5, true, true, null, null, null, MOCK_QSC)
+        assertEquals(
+    public void testRangeQueryWithNegativeBounds() {
+import org.opensearch.index.mapper.MappedFieldType.Relation;
+        );
+        doTestDocValueRangeQueries(NumberType.DOUBLE, random()::nextDouble);
+                assertThat(fallbackQuery, instanceOf(IndexOrDocValuesQuery.class));
+import org.opensearch.index.query.QueryShardContext;
+        assertEquals(
+import org.apache.lucene.index.DirectoryReader;
+            OutOfRangeSpec.of(NumberType.HALF_FLOAT, 65520f, "[half_float] supports only finite values"),
+            ftLong.rangeQuery(-0.5, 2.5, false, false, null, null, null, MOCK_QSC)
+            OutOfRangeSpec.of(NumberType.DOUBLE, "1.7976931348623157E309", "[double] supports only finite values"),
+    public void testEqualsWithDifferentNumberTypes() {
+        );
+    }
+            )
+        assertEquals((long) 5, NumberType.LONG.parse("5.9", true));
+        }
+        );
+            ftInt.rangeQuery(0.5, 2.5, true, true, null, null, null, MOCK_QSC)
+        IndexSearcher searcher = newSearcher(reader);
+ * license agreements. See the NOTICE file distributed with
+            ftLong.rangeQuery(-2.5, -0.5, true, true, null, null, null, MOCK_QSC)
+    public void testIsFieldWithinQuery() throws IOException {
+            assertEquals(searcher.count(floatQ), searcher.count(halfFloatQ));
+    }
+                NumericUtils.doubleToSortableLong(3)
+        );
+import org.apache.lucene.store.Directory;
+        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
+            assertThat(NumberType.SHORT.parsePoint(bytes), equalTo(value));
+import org.opensearch.search.approximate.ApproximateScoreQuery;
+            .put("index.sort.field", "field")
+        assertEquals(Numbers.MAX_UNSIGNED_LONG_VALUE, NumberType.UNSIGNED_LONG.parse(Numbers.MAX_UNSIGNED_LONG_VALUE, true));
             );
+                true,
+        w.close();
+        assertEquals(3f, NumberType.HALF_FLOAT.parse(3d, true));
+ * ownership. Elasticsearch licenses this file to you under
+        );
+        w.close();
+            ftInt.rangeQuery(1, 2, true, true, null, null, null, MOCK_QSC),
+        assertEquals(
+        MappedFieldType unsearchable = unsearchable();
+            }
+    public void testDocValueDoubleRange() throws Exception {
+            OutOfRangeSpec.of(NumberType.LONG, "9223372036854775808", "out of range for a long"),
+import org.junit.Before;
+        NumberType type = randomFrom(NumberType.values());
+            IllegalArgumentException.class,
+        assertEquals(
+                random().nextBoolean() ? null : valueSupplier.get(),
+        assertEquals(
+ *
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.INTEGER);
+        {
+        );
+        );
+        assertEquals(Integer.MAX_VALUE, NumberType.INTEGER.parse(Integer.MAX_VALUE, true));
+        BytesArray bitmap = new BytesArray(array);
+            OutOfRangeSpec.of(NumberType.BYTE, -129, "is out of range for a byte"),
+        }
+        );
             assertThat(
-                query,
+        assertEquals(
+            assertEquals(IndexNumericFieldData.NumericType.UNSIGNED_LONG, fielddata.getNumericType());
+        );
+        doTestDocValueRangeQueries(NumberType.LONG, random()::nextLong);
+            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
+ * under the License.
+            ft.rangeQuery(1, 10.1, true, true, null, null, null, MOCK_QSC)
+        assertEquals("Value [65536] is out of range for a short", e.getMessage());
+        assertEquals(
+        ft = new NumberFieldType("field", NumberType.LONG, false, false, true, true, true, null, Collections.emptyMap());
+            assertThat(
+    }
+import java.io.ByteArrayOutputStream;
+        assertEquals(3, NumberType.INTEGER.parse(3d, true));
+            SortedNumericDocValuesField.newSlowRangeQuery(
+            LongPoint.encodeDimension(value, bytes, 0);
+    }
+                1,
+        // these will lose precision if they get treated as a double
+            OutOfRangeSpec.of(NumberType.INTEGER, "2147483648", "out of range for an integer"),
+                    containsString(item.message)
+            new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.DOUBLE).valueForDisplay(1.2)
+            byte[] bytes = new byte[Integer.BYTES];
+        for (int iter = 0; iter < iters; ++iter) {
+        assertFalse(NumberType.DOUBLE.termQuery("field", -0d, true, true).equals(NumberType.DOUBLE.termQuery("field", +0d, true, true)));
                 either(instanceOf(IndexSortSortedNumericDocValuesRangeQuery.class)).or(instanceOf(ApproximateScoreQuery.class))
             );
-
-            Query fallbackQuery;
-            if (query instanceof IndexSortSortedNumericDocValuesRangeQuery) {
-                fallbackQuery = ((IndexSortSortedNumericDocValuesRangeQuery) query).getFallbackQuery();
-                assertThat(fallbackQuery, instanceOf(IndexOrDocValuesQuery.class));
-            } else {
-                fallbackQuery = ((IndexSortSortedNumericDocValuesRangeQuery) ((ApproximateScoreQuery) query).getOriginalQuery())
-                    .getFallbackQuery();
-                assertThat(fallbackQuery, instanceOf(IndexOrDocValuesQuery.class));
-            }
-
-            IndexOrDocValuesQuery indexOrDvQuery = (IndexOrDocValuesQuery) fallbackQuery;
-            assertEquals(searcher.count(query), searcher.count(indexOrDvQuery.getIndexQuery()));
-        }
-
-        reader.close();
-        w.close();
-        dir.close();
-    }
-
-    public void testParseOutOfRangeValues() throws IOException {
-        final List<OutOfRangeSpec> inputs = Arrays.asList(
-            OutOfRangeSpec.of(NumberType.BYTE, "128", "out of range for a byte"),
-            OutOfRangeSpec.of(NumberType.BYTE, 128, "is out of range for a byte"),
-            OutOfRangeSpec.of(NumberType.BYTE, -129, "is out of range for a byte"),
-
-            OutOfRangeSpec.of(NumberType.SHORT, "32768", "out of range for a short"),
-            OutOfRangeSpec.of(NumberType.SHORT, 32768, "is out of range for a short"),
-            OutOfRangeSpec.of(NumberType.SHORT, -32769, "is out of range for a short"),
-
-            OutOfRangeSpec.of(NumberType.INTEGER, "2147483648", "out of range for an integer"),
-            OutOfRangeSpec.of(NumberType.INTEGER, 2147483648L, "is out of range for an integer"),
-            OutOfRangeSpec.of(NumberType.INTEGER, -2147483649L, "is out of range for an integer"),
-
-            OutOfRangeSpec.of(NumberType.LONG, "9223372036854775808", "out of range for a long"),
-            OutOfRangeSpec.of(NumberType.LONG, new BigInteger("9223372036854775808"), " is out of range for a long"),
-            OutOfRangeSpec.of(NumberType.LONG, new BigInteger("-9223372036854775809"), " is out of range for a long"),
-
-            OutOfRangeSpec.of(NumberType.HALF_FLOAT, "65520", "[half_float] supports only finite values"),
-            OutOfRangeSpec.of(NumberType.FLOAT, "3.4028235E39", "[float] supports only finite values"),
-            OutOfRangeSpec.of(NumberType.DOUBLE, "1.7976931348623157E309", "[double] supports only finite values"),
-
-            OutOfRangeSpec.of(NumberType.HALF_FLOAT, 65520f, "[half_float] supports only finite values"),
-            OutOfRangeSpec.of(NumberType.FLOAT, 3.4028235E39d, "[float] supports only finite values"),
-            OutOfRangeSpec.of(NumberType.DOUBLE, new BigDecimal("1.7976931348623157E309"), "[double] supports only finite values"),
-
-            OutOfRangeSpec.of(NumberType.HALF_FLOAT, -65520f, "[half_float] supports only finite values"),
-            OutOfRangeSpec.of(NumberType.FLOAT, -3.4028235E39d, "[float] supports only finite values"),
-            OutOfRangeSpec.of(NumberType.DOUBLE, new BigDecimal("-1.7976931348623157E309"), "[double] supports only finite values"),
-
-            OutOfRangeSpec.of(NumberType.HALF_FLOAT, Float.NaN, "[half_float] supports only finite values"),
-            OutOfRangeSpec.of(NumberType.FLOAT, Float.NaN, "[float] supports only finite values"),
-            OutOfRangeSpec.of(NumberType.DOUBLE, Double.NaN, "[double] supports only finite values"),
-
-            OutOfRangeSpec.of(NumberType.HALF_FLOAT, Float.POSITIVE_INFINITY, "[half_float] supports only finite values"),
-            OutOfRangeSpec.of(NumberType.FLOAT, Float.POSITIVE_INFINITY, "[float] supports only finite values"),
-            OutOfRangeSpec.of(NumberType.DOUBLE, Double.POSITIVE_INFINITY, "[double] supports only finite values"),
-
-            OutOfRangeSpec.of(NumberType.HALF_FLOAT, Float.NEGATIVE_INFINITY, "[half_float] supports only finite values"),
-            OutOfRangeSpec.of(NumberType.FLOAT, Float.NEGATIVE_INFINITY, "[float] supports only finite values"),
-            OutOfRangeSpec.of(NumberType.DOUBLE, Double.NEGATIVE_INFINITY, "[double] supports only finite values")
-        );
-
-        for (OutOfRangeSpec item : inputs) {
-            try {
-                item.type.parse(item.value, false);
-                fail("Parsing exception expected for [" + item.type + "] with value [" + item.value + "]");
-            } catch (IllegalArgumentException e) {
-                assertThat(
-                    "Incorrect error message for [" + item.type + "] with value [" + item.value + "]",
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> unsearchable.termQuery("42", null));
+            null,
+        assertEquals((long) 5, NumberType.LONG.parse("5", true));
+        assertEquals(
+                includeUpper,
+    public void testIndexSortIntRange() throws Exception {
                     e.getMessage(),
-                    containsString(item.message)
-                );
-            }
+            ft.rangeQuery(1.1, 10, true, true, null, null, null, MOCK_QSC)
+        writerConfig.setIndexSort(new Sort(sortField));
         }
-    }
-
-    static class OutOfRangeSpec {
-
-        final NumberType type;
-        final Object value;
-        final String message;
-
-        static OutOfRangeSpec of(NumberType t, Object v, String m) {
-            return new OutOfRangeSpec(t, v, m);
-        }
-
-        OutOfRangeSpec(NumberType t, Object v, String m) {
-            type = t;
-            value = v;
-            message = m;
-        }
-
-        public void write(XContentBuilder b) throws IOException {
-            if (value instanceof BigInteger) {
-                b.rawField("field", new ByteArrayInputStream(value.toString().getBytes("UTF-8")), MediaTypeRegistry.JSON);
-            } else {
-                b.field("field", value);
-            }
-        }
-    }
-
-    public void testDisplayValue() {
-        for (NumberFieldMapper.NumberType type : NumberFieldMapper.NumberType.values()) {
-            NumberFieldMapper.NumberFieldType fieldType = new NumberFieldMapper.NumberFieldType("field", type);
-            assertNull(fieldType.valueForDisplay(null));
-        }
-        assertEquals(
-            Byte.valueOf((byte) 3),
-            new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.BYTE).valueForDisplay(3)
         );
-        assertEquals(
-            Short.valueOf((short) 3),
-            new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.SHORT).valueForDisplay(3)
+import org.apache.lucene.document.Document;
+/*
+        IndexWriterConfig writerConfig = new IndexWriterConfig();
+            OutOfRangeSpec.of(NumberType.HALF_FLOAT, Float.NaN, "[half_float] supports only finite values"),
         );
+        );
+            indexOrDvQuery,
+    public void testDocValueFloatRange() throws Exception {
+        for (int i = 0; i < numDocs; ++i) {
+    public void testUnsignedLongRange() throws IOException {
+import org.opensearch.index.document.SortedUnsignedLongDocValuesRangeQuery;
         assertEquals(
-            Integer.valueOf(3),
+        );
+            Query floatQ = NumberType.FLOAT.rangeQuery("float", l, u, includeLower, includeUpper, false, true, MOCK_QSC);
+            DocValueFetcher.Leaf fetcher = fielddata.load(reader.leaves().get(0)).getLeafValueFetcher(DocValueFormat.UNSIGNED_LONG);
+        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
+            Document doc = new Document();
+        assertEquals((byte) 5, NumberType.BYTE.parse((short) 5, true));
+            OutOfRangeSpec.of(NumberType.LONG, new BigInteger("9223372036854775808"), " is out of range for a long"),
+        // make sure the accuracy loss of half floats only occurs at index time
+            ftInt.rangeQuery(1, 2, true, true, null, null, null, MOCK_QSC),
+    }
+            ftLong.rangeQuery(-3.5, -2.5, false, false, null, null, null, MOCK_QSC)
+            OutOfRangeSpec.of(NumberType.FLOAT, "3.4028235E39", "[float] supports only finite values"),
+    }
+                true,
+            () -> unsearchable.rangeQuery("1", "3", true, true, null, null, null, MOCK_QSC)
+        );
+import java.nio.charset.StandardCharsets;
             new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.INTEGER).valueForDisplay(3)
+            byte value = randomByte();
+            ftInt.rangeQuery(-2, -1, true, true, null, null, null, MOCK_QSC),
+    public void testDocValueIntRange() throws Exception {
+        assertTrue(ft.termQuery(42.1, null) instanceof MatchNoDocsQuery);
+            ftInt.rangeQuery(-2.5, -0.5, false, false, null, null, null, MOCK_QSC)
         );
+            new IndexOrDocValuesQuery(new Bitmap64IndexQuery("field", r), new Bitmap64DocValuesQuery("field", r)),
+                fail("Parsing exception expected for [" + item.type + "] with value [" + item.value + "]");
+        final int numDocs = TestUtil.nextInt(random(), 100, 500);
+            assertThat(NumberType.INTEGER.parsePoint(bytes), equalTo(value));
+            .build(context)
+            null,
+        IndexWriter w = new IndexWriter(dir, new IndexWriterConfig(null));
+    }
+    }
+import java.math.BigInteger;
+            SortedUnsignedLongDocValuesSetQuery.newSlowSetQuery("field", BigInteger.valueOf(1), BigInteger.valueOf(3))
+        OutOfRangeSpec(NumberType t, Object v, String m) {
+    public void testParseOutOfRangeValues() throws IOException {
+/*
+            w.addDocument(doc);
+            float u = (randomFloat() * 2 - 1) * 65504;
+            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
+        static OutOfRangeSpec of(NumberType t, Object v, String m) {
+import java.math.BigDecimal;
         assertEquals(
-            Long.valueOf(3),
+        IOUtils.close(w, dir);
+            doc.add(new HalfFloatPoint("half_float", value));
+        e = expectThrows(IllegalArgumentException.class, () -> NumberType.UNSIGNED_LONG.parse(100000000000000000000d, true));
+    }
+        );
+            boolean includeLower = randomBoolean();
+        MappedFieldType nullValueMapper = new NumberFieldMapper.Builder("field", NumberType.FLOAT, false, true).nullValue(2.71f)
+        assertEquals((long) 5, NumberType.LONG.parse((byte) 5, true));
+            if (query instanceof IndexOrDocValuesQuery) {
+        DirectoryReader reader = DirectoryReader.open(w);
+        assertEquals(BigInteger.valueOf(5), NumberType.UNSIGNED_LONG.parse(new BytesRef("5.3".getBytes(StandardCharsets.UTF_8)), true));
+        }
+        );
+import org.opensearch.search.query.Bitmap64IndexQuery;
+            ftInt.rangeQuery(-2, -1, true, true, null, null, null, MOCK_QSC),
+        reader.close();
+            ftInt.rangeQuery(-0.5, 0.5, false, false, null, null, null, MOCK_QSC)
+        assertEquals(BigInteger.valueOf(5), NumberType.UNSIGNED_LONG.parse("5.9", true));
+            OutOfRangeSpec.of(NumberType.BYTE, "128", "out of range for a byte"),
+        w.close();
+            assertTrue(fetcher.advanceExact(0));
+/*
+            Integer.valueOf(3),
+            ftLong.rangeQuery(-0.5, 0.5, true, true, null, null, null, MOCK_QSC)
+        );
+        assertEquals(new MatchNoDocsQuery(), ft.bitmapQuery(bitmap).rewrite(newSearcher(reader)));
+        assertEquals(expected, ft.termsQuery(List.of("1", "3"), MOCK_QSC));
+        IllegalArgumentException e = expectThrows(
+            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
+        NumberFieldType fieldType = new NumberFieldType("foo", type);
+            ftInt.rangeQuery(-2.5, 0.5, false, false, null, null, null, MOCK_QSC)
+            }
+        assertEquals(
+    }
+                u,
+import org.opensearch.index.mapper.NumberFieldMapper.NumberFieldType;
+        ft = new NumberFieldType("field", NumberType.LONG, true, false, false, false, true, null, Collections.emptyMap());
+    }
+        );
+        assertEquals(3d, NumberType.DOUBLE.parse(3d, true));
+            OutOfRangeSpec.of(NumberType.BYTE, 128, "is out of range for a byte"),
+ * KIND, either express or implied.  See the License for the
+            OutOfRangeSpec.of(NumberType.DOUBLE, new BigDecimal("-1.7976931348623157E309"), "[double] supports only finite values"),
+            ftLong.rangeQuery(0, 0, true, true, null, null, null, MOCK_QSC),
+            ft.rangeQuery(1, 10.1, true, true, null, null, null, MOCK_QSC)
+            OutOfRangeSpec.of(NumberType.LONG, new BigInteger("-9223372036854775809"), " is out of range for a long"),
+        );
+        );
+            IntPoint.encodeDimension(value, bytes, 0);
+        assertEquals((long) 5, NumberType.LONG.parse("5.0", true));
+            Double.valueOf(1.2),
+            null,
+            assertEquals(searcher.count(query), searcher.count(indexOrDvQuery.getIndexQuery()));
+        assertEquals((short) 3, NumberType.SHORT.parse(3.5, true));
+            ft.termsQuery(Arrays.asList(1, 2.1), null)
+    public void testDoubleRangeQuery() {
+    public void pickType() {
+            ftInt.rangeQuery(-0.5, 2.5, true, true, null, null, null, MOCK_QSC)
+import static org.apache.lucene.document.LongPoint.pack;
+            Document doc = new Document();
+import java.nio.ByteBuffer;
+            null,
+        assertEquals("Value [1.0E20] is out of range for an unsigned long", e.getMessage());
+            ft.rangeQuery(1, 10.1, true, true, null, null, null, MOCK_QSC)
+            ftLong.rangeQuery(-2, 0, true, true, null, null, null, MOCK_QSC),
+        RoaringBitmap r = new RoaringBitmap();
+        assertTrue(ft.termQuery(42.1, null) instanceof MatchNoDocsQuery);
+        Directory dir = newDirectory();
+            null,
+            ft.rangeQuery(1.1, 10, false, true, null, null, null, MOCK_QSC)
+import java.io.DataOutputStream;
+        Directory dir = newDirectory();
+        doTestIndexSortRangeQueries(NumberType.INTEGER, random()::nextInt);
+        assertEquals(
+            ft.bitmapQuery(bitmap)
+            () -> unsearchable.rangeQuery("1", "3", true, true, null, null, null, MOCK_QSC)
+        dir.close();
+        assertEquals(expected, ft.rangeQuery("1", "3", true, true, null, null, null, MOCK_QSC));
+        assertTrue(ft.termQuery(42.1, null) instanceof MatchNoDocsQuery);
+        }
+        assertEquals(
+            DoublePoint.encodeDimension(value, bytes, 0);
+ * software distributed under the License is distributed on an
+            OutOfRangeSpec.of(NumberType.FLOAT, 3.4028235E39d, "[float] supports only finite values"),
+        final int numDocs = TestUtil.nextInt(random(), 100, 500);
+        assertEquals(
+            FloatPoint.encodeDimension(value, bytes, 0);
+            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
+        IndexWriter w = new IndexWriter(dir, new IndexWriterConfig(null));
+        // Ensure that the optimized index sort query gives the same results as a points query.
+import static org.hamcrest.Matchers.equalTo;
+            ftLong.rangeQuery(0.5, 2.5, true, true, null, null, null, MOCK_QSC)
+            ft.rangeQuery(1, 10.1, true, false, null, null, null, MOCK_QSC)
+import java.io.IOException;
+            () -> true,
+    }
+                either(instanceOf(IndexOrDocValuesQuery.class)).or(instanceOf(MatchNoDocsQuery.class))
+package org.opensearch.index.mapper;
+            doc.add(new FloatPoint("float", rounded));
+            byte[] bytes = new byte[Long.BYTES];
+import org.apache.lucene.search.IndexSortSortedNumericDocValuesRangeQuery;
+ * this file be licensed under the Apache-2.0 license or a
+            assertTrue(value instanceof BigInteger);
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.LONG);
+            try {
+            new IndexOrDocValuesQuery(IntPoint.newSetQuery("field", 1), SortedNumericDocValuesField.newSlowSetQuery("field", 1)),
+        ft = new NumberFieldType("field", NumberType.INTEGER, false, false, true, true, true, null, Collections.emptyMap());
+ *
+        }
+                randomBoolean(),
+        doTestDocValueRangeQueries(NumberType.INTEGER, random()::nextInt);
+            IllegalArgumentException.class,
+            Query query = type.rangeQuery(
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            ftInt.rangeQuery(-3.5, -2.5, false, false, null, null, null, MOCK_QSC)
+            OutOfRangeSpec.of(NumberType.FLOAT, -3.4028235E39d, "[float] supports only finite values"),
+            final NumberFieldType ft = new NumberFieldType("ul", NumberType.UNSIGNED_LONG);
+        w.close();
+            NumberType.HALF_FLOAT.termQuery("field", -0f, true, true).equals(NumberType.HALF_FLOAT.termQuery("field", +0f, true, true))
+            ft.rangeQuery(1.1, 10, true, true, null, null, null, MOCK_QSC)
+        assertEquals(3L, NumberType.LONG.parse(3d, true));
+            ftInt.rangeQuery(-2, 0, true, true, null, null, null, MOCK_QSC),
+            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
+            ftLong.rangeQuery(0, 2, true, true, null, null, null, MOCK_QSC),
+        }
+        final DirectoryReader reader = DirectoryReader.open(w);
+    }
+        // searching floats that are rounded to the closest half float
+        assertEquals(
+            if (query instanceof IndexSortSortedNumericDocValuesRangeQuery) {
+        IndexMetadata indexMetadata = new IndexMetadata.Builder("index").settings(settings).build();
+            new IndexOrDocValuesQuery(LongPoint.newRangeQuery("field", 1, 3), SortedNumericDocValuesField.newSlowRangeQuery("field", 1, 3)),
+                random().nextBoolean() ? null : valueSupplier.get(),
+                randomBoolean(),
+        );
+        final int numDocs = 10000;
+        byte[] array;
+                fallbackQuery = ((IndexSortSortedNumericDocValuesRangeQuery) query).getFallbackQuery();
+            ft.rangeQuery(1.1, 10, true, true, null, null, null, MOCK_QSC)
+            NumberType.HALF_FLOAT.rangeQuery("field", null, -0f, true, true, false, true, MOCK_QSC),
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            byte[] bytes = new byte[Double.BYTES];
             new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.LONG).valueForDisplay(3L)
         );
-        assertEquals(
-            Double.valueOf(1.2),
-            new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.HALF_FLOAT).valueForDisplay(1.2)
-        );
-        assertEquals(
-            Double.valueOf(1.2),
-            new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.FLOAT).valueForDisplay(1.2)
-        );
-        assertEquals(
-            Double.valueOf(1.2),
-            new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.DOUBLE).valueForDisplay(1.2)
+        IndexSearcher searcher = newSearcher(reader);
         );
     }
-
-    public void testParsePoint() {
-        {
-            byte[] bytes = new byte[Integer.BYTES];
-            byte value = randomByte();
-            IntPoint.encodeDimension(value, bytes, 0);
-            assertThat(NumberType.BYTE.parsePoint(bytes), equalTo(value));
-        }
-        {
-            byte[] bytes = new byte[Integer.BYTES];
-            short value = randomShort();
-            IntPoint.encodeDimension(value, bytes, 0);
-            assertThat(NumberType.SHORT.parsePoint(bytes), equalTo(value));
-        }
-        {
-            byte[] bytes = new byte[Integer.BYTES];
-            int value = randomInt();
-            IntPoint.encodeDimension(value, bytes, 0);
-            assertThat(NumberType.INTEGER.parsePoint(bytes), equalTo(value));
-        }
-        {
-            byte[] bytes = new byte[Long.BYTES];
-            long value = randomLong();
-            LongPoint.encodeDimension(value, bytes, 0);
-            assertThat(NumberType.LONG.parsePoint(bytes), equalTo(value));
-        }
-        {
-            byte[] bytes = new byte[Float.BYTES];
-            float value = randomFloat();
-            FloatPoint.encodeDimension(value, bytes, 0);
-            assertThat(NumberType.FLOAT.parsePoint(bytes), equalTo(value));
-        }
-        {
-            byte[] bytes = new byte[Double.BYTES];
-            double value = randomDouble();
-            DoublePoint.encodeDimension(value, bytes, 0);
-            assertThat(NumberType.DOUBLE.parsePoint(bytes), equalTo(value));
-        }
-        {
-            byte[] bytes = new byte[Float.BYTES];
-            float value = 3f;
-            HalfFloatPoint.encodeDimension(value, bytes, 0);
-            assertThat(NumberType.HALF_FLOAT.parsePoint(bytes), equalTo(value));
-        }
-    }
-
-    public void testFetchSourceValue() throws IOException {
-        Settings settings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT.id).build();
-        Mapper.BuilderContext context = new Mapper.BuilderContext(settings, new ContentPath());
-
-        MappedFieldType mapper = new NumberFieldMapper.Builder("field", NumberType.INTEGER, false, true).build(context).fieldType();
-        assertEquals(Collections.singletonList(3), fetchSourceValue(mapper, 3.14));
-        assertEquals(Collections.singletonList(42), fetchSourceValue(mapper, "42.9"));
-
-        MappedFieldType nullValueMapper = new NumberFieldMapper.Builder("field", NumberType.FLOAT, false, true).nullValue(2.71f)
-            .build(context)
-            .fieldType();
-        assertEquals(Collections.singletonList(2.71f), fetchSourceValue(nullValueMapper, ""));
-        assertEquals(Collections.singletonList(2.71f), fetchSourceValue(nullValueMapper, null));
-    }
-
-    public void testBitmapQuery() throws IOException {
-        RoaringBitmap r = new RoaringBitmap();
-        byte[] array = new byte[r.serializedSizeInBytes()];
-        r.serialize(ByteBuffer.wrap(array));
-        BytesArray bitmap = new BytesArray(array);
-
-        NumberFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.INTEGER);
-        assertEquals(
-            new IndexOrDocValuesQuery(new BitmapIndexQuery("field", r), new BitmapDocValuesQuery("field", r)),
-            ft.bitmapQuery(bitmap)
-        );
-
-        ft = new NumberFieldType("field", NumberType.INTEGER, false, false, true, true, true, null, Collections.emptyMap());
-        assertEquals(new BitmapDocValuesQuery("field", r), ft.bitmapQuery(bitmap));
-
-        ft = new NumberFieldType("field", NumberType.INTEGER, true, false, false, false, true, null, Collections.emptyMap());
-        assertEquals(new BitmapIndexQuery("field", r), ft.bitmapQuery(bitmap));
-
-        Directory dir = newDirectory();
+            BigArrays.NON_RECYCLING_INSTANCE,
         IndexWriter w = new IndexWriter(dir, new IndexWriterConfig());
-        DirectoryReader reader = DirectoryReader.open(w);
-        assertEquals(new MatchNoDocsQuery(), ft.bitmapQuery(bitmap).rewrite(newSearcher(reader)));
-        reader.close();
-        w.close();
-        dir.close();
-
-        NumberType type = randomValueOtherThan(NumberType.INTEGER, () -> randomFrom(NumberType.values()));
-        ft = new NumberFieldMapper.NumberFieldType("field", type);
-        NumberFieldType finalFt = ft;
-        assertThrows(IllegalArgumentException.class, () -> finalFt.bitmapQuery(bitmap));
-    }
-
-    public void testBitmapQuery64() throws IOException {
-        Roaring64NavigableMap r = new Roaring64NavigableMap();
-        byte[] array;
-
-        try (ByteArrayOutputStream bos = new ByteArrayOutputStream(); DataOutputStream dos = new DataOutputStream(bos)) {
-            r.serializePortable(dos);
-            dos.flush();
-            array = bos.toByteArray();
-        }
-
-        BytesArray bitmap = new BytesArray(array);
-
-        NumberFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.LONG);
-
+import org.opensearch.cluster.metadata.IndexMetadata;
+            ft.rangeQuery(1.1, 10, false, true, null, null, null, MOCK_QSC)
         assertEquals(
-            new IndexOrDocValuesQuery(new Bitmap64IndexQuery("field", r), new Bitmap64DocValuesQuery("field", r)),
-            ft.bitmapQuery(bitmap)
-        );
-
-        ft = new NumberFieldType("field", NumberType.LONG, false, false, true, true, true, null, Collections.emptyMap());
-        assertEquals(new Bitmap64DocValuesQuery("field", r), ft.bitmapQuery(bitmap));
-
-        ft = new NumberFieldType("field", NumberType.LONG, true, false, false, false, true, null, Collections.emptyMap());
-        assertEquals(new Bitmap64IndexQuery("field", r), ft.bitmapQuery(bitmap));
-
-        Directory dir = newDirectory();
+        Settings settings = Settings.builder()
+            );
+    public void testHalfFloatRange() throws IOException {
+        {
+            );
+        }
         IndexWriter w = new IndexWriter(dir, new IndexWriterConfig());
-        DirectoryReader reader = DirectoryReader.open(w);
-
-        assertEquals(new MatchNoDocsQuery(), ft.bitmapQuery(bitmap).rewrite(newSearcher(reader)));
-
-        reader.close();
-        w.close();
-        dir.close();
-
+                );
+            ftLong.rangeQuery(-3.5, -2.5, true, true, null, null, null, MOCK_QSC)
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.INTEGER);
+        for (int i = 0; i < numDocs; ++i) {
+            IllegalArgumentException.class,
+            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
+            () -> 0L,
+        assertEquals(
         NumberType type = randomValueOtherThan(NumberType.LONG, () -> randomFrom(NumberType.values()));
-        ft = new NumberFieldMapper.NumberFieldType("field", type);
-        NumberFieldType finalFt = ft;
-
-        assertThrows(IllegalArgumentException.class, () -> finalFt.bitmapQuery(bitmap));
+        assertEquals(
+            ftInt.rangeQuery(0.5, 2.5, false, false, null, null, null, MOCK_QSC)
     }
-
-    public void testFetchUnsignedLongDocValues() throws IOException {
-        Directory dir = newDirectory();
-        IndexWriter w = new IndexWriter(dir, new IndexWriterConfig(null));
-        Document doc = new Document();
-        final BigInteger expectedValue = randomUnsignedLong();
-        doc.add(new SortedNumericDocValuesField("ul", expectedValue.longValue()));
+                b.field("field", value);
+            ftLong.rangeQuery(-0.5, 0.5, false, false, null, null, null, MOCK_QSC)
+            indexSettings,
+        assertEquals(3, NumberType.INTEGER.parse(3.5, true));
+    public void testLongTermsQueryWithDecimalPart() {
+        assertEquals(
+    }
+        );
+        DirectoryReader reader = DirectoryReader.open(w);
+        assertEquals(
+    }
+        );
+import org.apache.lucene.index.IndexWriter;
+            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
+        assertEquals(
+        final int numQueries = 1000;
         w.addDocument(doc);
-        try (DirectoryReader reader = DirectoryReader.open(w)) {
-            final NumberFieldType ft = new NumberFieldType("ul", NumberType.UNSIGNED_LONG);
-            IndexNumericFieldData fielddata = (IndexNumericFieldData) ft.fielddataBuilder(
-                "index",
-                () -> { throw new UnsupportedOperationException(); }
-            ).build(null, null);
-            assertEquals(IndexNumericFieldData.NumericType.UNSIGNED_LONG, fielddata.getNumericType());
-            DocValueFetcher.Leaf fetcher = fielddata.load(reader.leaves().get(0)).getLeafValueFetcher(DocValueFormat.UNSIGNED_LONG);
-            assertTrue(fetcher.advanceExact(0));
-            assertEquals(1, fetcher.docValueCount());
-            final Object value = fetcher.nextValue();
-            assertTrue(value instanceof BigInteger);
-            assertEquals(expectedValue, value);
         }
-        IOUtils.close(w, dir);
+            w.addDocument(doc);
+    NumberType type;
+        );
+        IllegalArgumentException e = expectThrows(
+        // Create an index writer configured with the same index sort.
+                    .getFallbackQuery();
+        assertNotEquals(fieldType, otherFieldType);
+        );
+            assertThat(NumberType.FLOAT.parsePoint(bytes), equalTo(value));
+    }
+            dos.flush();
+            ftLong.rangeQuery(-2.5, 0.5, true, true, null, null, null, MOCK_QSC)
+        }
+            new IndexOrDocValuesQuery(IntPoint.newSetQuery("field", 1), SortedNumericDocValuesField.newSlowSetQuery("field", 1)),
+            HalfFloatPoint.encodeDimension(value, bytes, 0);
+        assertEquals(Collections.singletonList(3), fetchSourceValue(mapper, 3.14));
+        Mapper.BuilderContext context = new Mapper.BuilderContext(settings, new ContentPath());
+        }
+        assertEquals((byte) 3, NumberType.BYTE.parse(3.5, true));
+import org.apache.lucene.search.Query;
+        assertEquals(
+        );
+        assertEquals(
+            float value = (randomFloat() * 2 - 1) * 70000;
+            ).build(null, null);
+import org.apache.lucene.search.IndexOrDocValuesQuery;
+        );
+            );
+                random().nextBoolean() ? null : valueSupplier.get(),
+        NumberFieldType finalFt = ft;
+            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
+                1,
+            long value = randomLong();
+            OutOfRangeSpec.of(NumberType.DOUBLE, Double.NaN, "[double] supports only finite values"),
+            byte[] bytes = new byte[Integer.BYTES];
+            null,
+            } catch (IllegalArgumentException e) {
+        IndexSearcher searcher = newSearcher(reader);
+        return new NumberFieldType("field", NumberType.LONG, false, false, false, false, true, null, Collections.emptyMap());
+        Directory dir = newDirectory();
+        );
+        assertEquals("Value [2147483648] is out of range for an integer", e.getMessage());
+    public void testFetchUnsignedLongDocValues() throws IOException {
+            ftLong.rangeQuery(-0.5, 2.5, true, true, null, null, null, MOCK_QSC)
+        }
+            )
+        reader.close();
+        NumberFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.INTEGER);
+        }
+            ftInt.rangeQuery(-0.5, 2.5, false, false, null, null, null, MOCK_QSC)
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.LONG);
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.INTEGER);
+        assertEquals(Collections.singletonList(2.71f), fetchSourceValue(nullValueMapper, ""));
+import org.opensearch.index.mapper.NumberFieldMapper.NumberType;
+                () -> { throw new UnsupportedOperationException(); }
+        }
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
+                fallbackQuery = ((IndexSortSortedNumericDocValuesRangeQuery) ((ApproximateScoreQuery) query).getOriginalQuery())
+            DoublePoint.newRangeQuery("field", 1d, 3d),
+            assertEquals(expectedValue, value);
+import org.apache.lucene.document.FloatPoint;
+        try (DirectoryReader reader = DirectoryReader.open(w)) {
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.SHORT);
+        ft = new NumberFieldMapper.NumberFieldType("field", type);
+            ftLong.rangeQuery(-2.5, 0.5, false, false, null, null, null, MOCK_QSC)
+            boolean includeLower = randomBoolean();
+            indexOrDvQuery,
+        {
+        IOUtils.close(reader, dir);
+            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
+    public void testUnsignedLongTermsQuery() {
+        assertEquals(
+            BigInteger u = randomUnsignedLong();
+                false,
+        assertEquals(
+    }
+        assertFalse(
+        byte[] array = new byte[r.serializedSizeInBytes()];
+        assertEquals((short) 5, NumberType.SHORT.parse("5.0", true));
+            IntPoint.encodeDimension(value, bytes, 0);
+            ftLong.rangeQuery(-2, -1, true, true, null, null, null, MOCK_QSC),
+import org.apache.lucene.util.NumericUtils;
+        Query expected = new IndexOrDocValuesQuery(
+        assertEquals((byte) 5, NumberType.BYTE.parse(new BytesRef("5.3".getBytes(StandardCharsets.UTF_8)), true));
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.BYTE);
+        assertEquals(new BitmapIndexQuery("field", r), ft.bitmapQuery(bitmap));
+                    .or(instanceOf(ApproximateScoreQuery.class))
+                ApproximatePointRangeQuery.UNSIGNED_LONG_FORMAT
+import org.apache.lucene.sandbox.document.HalfFloatPoint;
+        }
+    public void testTermQuery() {
+        assertEquals("Value [1.0E19] is out of range for a long", e.getMessage());
+            () -> unsearchable.rangeQuery("1", "3", true, true, null, null, null, MOCK_QSC)
+            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
+        IndexSearcher searcher = newSearcher(reader);
+    public void testConversions() {
+            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
+ * Unless required by applicable law or agreed to in writing,
+import org.apache.lucene.document.DoublePoint;
+            assertEquals(1, fetcher.docValueCount());
+        Query expected = new ApproximateScoreQuery(
+            ft.rangeQuery(1, 10, true, true, null, null, null, MOCK_QSC),
+            float value = 3f;
+        assertEquals(5, NumberType.INTEGER.parse("5.0", true));
+        MappedFieldType ftLong = new NumberFieldMapper.NumberFieldType("field", NumberType.LONG);
+    }
+            new ApproximatePointRangeQuery("field", pack(1).bytes, pack(3).bytes, 1, ApproximatePointRangeQuery.LONG_FORMAT)
+            BigIntegerPoint.newRangeQuery("field", BigInteger.valueOf(1), BigInteger.valueOf(3)),
+        dir.close();
+        assertEquals("Cannot search on field [field] since it is both not indexed, and does not have doc_values enabled.", e.getMessage());
+        );
+        assertTrue(ft.termsQuery(Arrays.asList(1.1, 2.1), null) instanceof MatchNoDocsQuery);
+            float l = (randomFloat() * 2 - 1) * 65504;
+import org.opensearch.common.Numbers;
+            null,
+                l,
+            byte[] bytes = new byte[Float.BYTES];
+                NumericUtils.doubleToSortableLong(1),
+        );
+            .build();
+        MappedFieldType unsearchable = unsearchable();
+        assertEquals(
+            }
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberType.UNSIGNED_LONG);
+ * Licensed to Elasticsearch under one or more contributor
+        Query query = new IndexOrDocValuesQuery(LongPoint.newExactQuery("field", 42), dvQuery);
+ * You may obtain a copy of the License at
+            Query query = type.rangeQuery(
+        doTestDocValueRangeQueries(NumberType.HALF_FLOAT, random()::nextFloat);
+            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
+        assertEquals(5, NumberType.INTEGER.parse("5", true));
+                query,
+            OutOfRangeSpec.of(NumberType.SHORT, 32768, "is out of range for a short"),
+            Short.valueOf((short) 3),
+            ftLong.rangeQuery(1, 2, true, true, null, null, null, MOCK_QSC),
+    public void testShortRangeQueryWithDecimalParts() {
+                assertThat(fallbackQuery, instanceOf(IndexOrDocValuesQuery.class));
+            Long.valueOf(3),
+        r.serialize(ByteBuffer.wrap(array));
+                b.rawField("field", new ByteArrayInputStream(value.toString().getBytes("UTF-8")), MediaTypeRegistry.JSON);
+        assertEquals(
+            ftInt.rangeQuery(-3.5, -2.5, true, true, null, null, null, MOCK_QSC)
+            BigInteger l = randomUnsignedLong();
+            BigInteger value = randomUnsignedLong();
+    public void testLongRangeQueryWithDecimalParts() {
+            new ApproximatePointRangeQuery(
+        );
+        w.close();
+    }
+            // Note: this test purposefully allows half-floats to be indexed over their dynamic range (65504), which
+            ft.termsQuery(Arrays.asList(1.0, 2.1), null)
+        final BigInteger expectedValue = randomUnsignedLong();
+                randomBoolean(),
+    }
+        );
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> NumberType.BYTE.parse(128, true));
+        {
+                MOCK_QSC
+            IntPoint.encodeDimension(value, bytes, 0);
+        assertEquals((byte) 5, NumberType.BYTE.parse("5.0", true));
+        e = expectThrows(IllegalArgumentException.class, () -> NumberType.SHORT.parse(65536, true));
+            ftInt.rangeQuery(-3, -3, true, true, null, null, null, MOCK_QSC),
+import static org.hamcrest.Matchers.containsString;
+            null,
+ */
+        );
+        Query dvQuery = SortedNumericDocValuesField.newSlowExactQuery("field", 42);
+            ftLong.rangeQuery(-3, -3, true, true, null, null, null, MOCK_QSC),
+            w.addDocument(type.createFields("foo", valueSupplier.get(), true, true, false, false));
+        // current impl ignores args and should always return INTERSECTS
+            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
+        );
+        assertEquals(new Bitmap64DocValuesQuery("field", r), ft.bitmapQuery(bitmap));
+        assertEquals((short) 3, NumberType.SHORT.parse(3d, true));
+    public void testDocValueHalfFloatRange() throws Exception {
+            float rounded = HalfFloatPoint.sortableShortToHalfFloat(HalfFloatPoint.halfFloatToSortableShort(value));
+ */
+import org.apache.lucene.search.Sort;
+        assertEquals(
+        w.close();
+        final int numQueries = 1000;
+        assertEquals(
+            NumberType.HALF_FLOAT.rangeQuery("field", null, +0f, true, false, false, true, MOCK_QSC)
+            ft.rangeQuery(1, 10.1, true, false, null, null, null, MOCK_QSC)
+        // make sure the accuracy loss of half floats only occurs at index time
+            ft.rangeQuery(2, 10, true, true, null, null, null, MOCK_QSC),
+            Query halfFloatQ = NumberType.HALF_FLOAT.rangeQuery("half_float", l, u, includeLower, includeUpper, false, true, MOCK_QSC);
+            message = m;
+        assertEquals((byte) 3, NumberType.BYTE.parse(3d, true));
+import org.opensearch.index.IndexSettings;
+    }
+        assertEquals(
+        );
+        assertEquals(
+    }
     }
 }
+import org.apache.lucene.tests.util.TestUtil;
+    }
+            assertEquals(searcher.count(doubleQ), searcher.count(unsignedLongQ));
+            ftLong.rangeQuery(-3, -3, true, true, null, null, null, MOCK_QSC),
+        Directory dir = newDirectory();
+        );
+        );
+        assertEquals(
+        assertEquals(query, ft.termQuery("42", null));
+    private static MappedFieldType unsearchable() {
+    static class OutOfRangeSpec {
+        NumberFieldType finalFt = ft;
+                "unsigned_long",
+        Directory dir = newDirectory();
+        assertEquals(
+ * compatible open source license.
+    }
+                MOCK_QSC
+            writableRegistry(),
+        // this test checks that searching half floats yields the same results as
+        assertEquals(
+            assertThat(NumberType.HALF_FLOAT.parsePoint(bytes), equalTo(value));
+                "field",
+        assertEquals(new Bitmap64IndexQuery("field", r), ft.bitmapQuery(bitmap));
+        assertEquals(1.1f, NumberType.FLOAT.parse(1.1, true));
+        {
+import org.apache.lucene.sandbox.document.BigIntegerPoint;

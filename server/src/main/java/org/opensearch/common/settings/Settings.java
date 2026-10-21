@@ -1,1507 +1,1372 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.settings;
-
-import org.apache.logging.log4j.Level;
-import org.opensearch.OpenSearchGenerationException;
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.Version;
-import org.opensearch.common.Booleans;
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.common.logging.LogConfigurator;
-import org.opensearch.common.unit.MemorySizeValue;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.settings.SecureString;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
+        @Override
+        // visible for testing
 import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.core.xcontent.XContentParserUtils;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.GeneralSecurityException;
-import java.util.AbstractMap;
-import java.util.AbstractSet;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.ListIterator;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.function.UnaryOperator;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import static org.opensearch.common.settings.AbstractScopedSettings.ARCHIVED_SETTINGS_PREFIX;
-import static org.opensearch.common.unit.TimeValue.parseTimeValue;
-import static org.opensearch.core.common.unit.ByteSizeValue.parseBytesSizeValue;
-
-/**
- * An immutable settings implementation.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public final class Settings implements ToXContentFragment {
-
-    public static final Settings EMPTY = new Settings(Collections.emptyMap(), null);
-
-    /** The raw settings from the full key to raw string value. */
-    private final Map<String, Object> settings;
-
-    /** The secure settings storage associated with these settings. */
-    private final SecureSettings secureSettings;
-
-    /** The first level of setting names. This is constructed lazily in {@link #names()}. */
-    private final SetOnce<Set<String>> firstLevelNames = new SetOnce<>();
-
     /**
-     * Setting names found in this Settings for both string and secure settings.
-     * This is constructed lazily in {@link #keySet()}.
-     */
-    private final SetOnce<Set<String>> keys = new SetOnce<>();
-
-    private Settings(Map<String, Object> settings, SecureSettings secureSettings) {
-        // we use a sorted map for consistent serialization when using getAsMap()
-        this.settings = Collections.unmodifiableSortedMap(new TreeMap<>(settings));
-        this.secureSettings = secureSettings;
-    }
-
-    /**
-     * Retrieve the secure settings in these settings.
-     */
-    SecureSettings getSecureSettings() {
-        // pkg private so it can only be accessed by local subclasses of SecureSetting
-        return secureSettings;
-    }
-
-    private Map<String, Object> getAsStructuredMap() {
-        Map<String, Object> map = new HashMap<>(2);
-        for (Map.Entry<String, Object> entry : settings.entrySet()) {
-            processSetting(map, "", entry.getKey(), entry.getValue());
-        }
-        for (Map.Entry<String, Object> entry : map.entrySet()) {
-            if (entry.getValue() instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> valMap = (Map<String, Object>) entry.getValue();
-                entry.setValue(convertMapsToArrays(valMap));
-            }
-        }
-
-        return map;
-    }
-
-    private void processSetting(Map<String, Object> map, String prefix, String setting, Object value) {
-        int prefixLength = setting.indexOf('.');
-        if (prefixLength == -1) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> innerMap = (Map<String, Object>) map.get(prefix + setting);
-            if (innerMap != null) {
-                // It supposed to be a value, but we already have a map stored, need to convert this map to "." notation
-                for (Map.Entry<String, Object> entry : innerMap.entrySet()) {
-                    map.put(prefix + setting + "." + entry.getKey(), entry.getValue());
-                }
-            }
-            map.put(prefix + setting, value);
-        } else {
-            String key = setting.substring(0, prefixLength);
-            String rest = setting.substring(prefixLength + 1);
-            Object existingValue = map.get(prefix + key);
-            if (existingValue == null) {
-                Map<String, Object> newMap = new HashMap<>(2);
-                processSetting(newMap, "", rest, value);
-                map.put(prefix + key, newMap);
-            } else {
-                if (existingValue instanceof Map) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> innerMap = (Map<String, Object>) existingValue;
-                    processSetting(innerMap, "", rest, value);
+        return parseTimeValue(get(setting), defaultValue, setting);
+    public List<String> getAsList(String key, List<String> defaultValue) throws SettingsException {
                     map.put(prefix + key, innerMap);
-                } else {
-                    // It supposed to be a map, but we already have a value stored, which is not a map
-                    // fall back to "." notation
-                    processSetting(map, prefix + key + ".", rest, value);
-                }
+            try (
+                    .createParser(NamedXContentRegistry.EMPTY, LoggingDeprecationHandler.INSTANCE, source)
+     * Returns the setting value (as size) associated with the setting key. If it does not exists,
+            ArrayList<Object> newValue = new ArrayList<>(maxIndex + 1);
+    /** Returns the number of settings in this settings object. */
+            if (key instanceof String) {
+                        }
+         * @param level The setting value
+            Map<String, Object> replacements = new HashMap<>();
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            settingPrefix = settingPrefix + ".";
+         */
+        }
+                @Override
+                        return k.substring(0, i);
             }
-        }
-    }
-
-    private Object convertMapsToArrays(Map<String, Object> map) {
-        if (map.isEmpty()) {
-            return map;
-        }
-        boolean isArray = true;
-        int maxIndex = -1;
-        for (Map.Entry<String, Object> entry : map.entrySet()) {
-            if (isArray) {
-                try {
-                    int index = Integer.parseInt(entry.getKey());
+        return new Builder();
+                        + ", new settings: "
+                }
                     if (index >= 0) {
-                        maxIndex = Math.max(maxIndex, index);
-                    } else {
-                        isArray = false;
-                    }
-                } catch (NumberFormatException ex) {
-                    isArray = false;
+                final String theKey = prefix == null ? (String) key : prefix + key;
+        }
+                        } else {
+         * Sets all the provided settings.
+                // Check that the keys are still null now that we have acquired the lock
+    static class DeprecationLoggerHolder {
+    /**
+         *
+                throw e;
+                                currentElement = null;
+            @SuppressWarnings("unchecked")
+        }
+import java.util.Map;
+         */
+        private final String prefix;
+            if (source.settings.containsKey(sourceKey) == false) {
                 }
+         * Builds a {@link Settings} (underlying uses {@link Settings}) based on everything
+                    List<String> values = new ArrayList<>();
+                parser.getTokenLocation().lineNumber,
+         * @return The builder
+        try {
+         * <p>
+            return size;
+    /**
+    /**
+        public Set<String> getSettingNames() {
+                    replacements.put(prefix + key, entry.getValue());
+         */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                    "malformed, expected end of settings but encountered additional content starting at line number: [{}], "
+                                return false;
+    public static Settings readOptionalSettingsFromStream(StreamInput in) throws IOException {
+import java.util.Set;
+    SecureSettings getSecureSettings() {
+        }
+         */
+     */
+                        isArray = false;
+            PropertyPlaceholder propertyPlaceholder = new PropertyPlaceholder("${", "}", false);
+         */
+                }
+     */
+            // ensure we reached the end of the stream
+        return sb.toString();
             }
-            if (entry.getValue() instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> valMap = (Map<String, Object>) entry.getValue();
+ * Unless required by applicable law or agreed to in writing,
+         * Sets the setting with the provided setting key and the float value.
+                    if (parser.nextToken() == null) {
+         */
+         * @param values  The values
+        public Builder put(String setting, long value, ByteSizeUnit sizeUnit) {
+         * @return The builder
+        /**
+     * Writes an optional {@link Settings} to the stream. A {@code null} value is permitted.
+            map.put(key, value);
+        public SecureSettings getSecureSettings() {
+         * Sets a setting with the provided setting key and value.
+                    } else {
+            return put(key, (String) null);
+            return secureSettings.get();
+            if (key instanceof String) {
+        }
                 entry.setValue(convertMapsToArrays(valMap));
+         * Loads settings from a url that represents them using {@link #fromXContent(XContentParser)}
+     */
+                        throw new IllegalStateException(
+            for (Map.Entry<String, Object> entry : settings.settings.entrySet()) {
+     * The values associated with a setting key as an immutable list.
+                    final String value = getenv.apply(placeholderName);
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+            } else {
+     * Counterpart to {@link #readOptionalSettingsFromStream(StreamInput)}.
+     * @param defaultValue   The default value to use if no value is specified
+        }
+         * @param byteSizeValue The setting value
+import java.util.Arrays;
+            } catch (Exception e) {
+        return getGroupsInternal(settingPrefix, ignoreNonGrouped);
+                }
+                entry.setValue(convertMapsToArrays(valMap));
+                            map.remove(listKey);
+import org.opensearch.common.logging.DeprecationLogger;
+            } else {
+        }
+         *
+    private final SecureSettings secureSettings;
+                fromXContent(parser, keyBuilder, builder, allowNullValues);
+     */
+         * @param setting The setting key
+            out.writeString(entry.getKey());
+        new HashSet<>(Arrays.asList("settings_filter", "flat_settings"))
+            Set<Entry<String, Object>> delegateSet = delegate.entrySet();
+        }
+     * The values associated with a setting key as an immutable list.
+                }
+        }
+        public boolean containsKey(Object key) {
+    }
+                        .filter(keyPredicate)
+            Iterator<Map.Entry<String, Object>> iterator = map.entrySet().iterator();
+        Map<String, Object> map = new HashMap<>(2);
+         *
+                        + "column number: [{}]",
+    public boolean equals(Object o) {
+        private final Map<String, Object> delegate;
+         * @return The builder
+                }
+    public static void writeOptionalSettingsToStream(Settings settings, StreamOutput out) throws IOException {
+        }
+ *
             }
+                                    return false;
+     * Returns the setting value associated with the setting key. If it does not exists,
+            if (parser.currentToken() == XContentParser.Token.FIELD_NAME) {
+        fromXContent(parser, currentKeyBuilder, innerBuilder, allowNullValues);
+            return put(key, timeValue.getStringRep());
+     * @return The setting value, {@code null} if it does not exists.
+                        return this; // empty file
+    /** The first level of setting names. This is constructed lazily in {@link #names()}. */
+        String sValue = get(setting);
+        }
+                        .collect(Collectors.toSet());
+                if (key.startsWith(prefix) == false && key.endsWith("*") == false && key.startsWith(ARCHIVED_SETTINGS_PREFIX) == false) {
+    }
+                XContentParser parser = mediaType.xContent()
+    public boolean hasValue(String key) {
+                builder.put(key, value.toString());
+                public String resolvePlaceholder(String placeholderName) {
+import org.opensearch.common.Booleans;
+            writeSettingsToStream(settings, out);
+        if (sValue == null) {
+        /**
+ * license agreements. See the NOTICE file distributed with
+            while (iterator.hasNext()) {
+            }
+            return defaultValue;
+    }
+            );
+                    // a null value obviously can't be replaced
+    /**
+        throws IOException {
+        } catch (NumberFormatException e) {
+     * the numbered format.
+            } else if (commaDelimited) {
+                        }
+        private FilteredMap(Map<String, Object> delegate, Predicate<String> filter, String prefix) {
+        } catch (NumberFormatException e) {
+                String key = keyBuilder.toString();
+     */
+                                public Object setValue(Object value) {
+    }
+                    }
+                public Iterator<Entry<String, Object>> iterator() {
+         * @param settings the settings to set
+        @Override
+        /**
+    public TimeValue getAsTime(String setting, TimeValue defaultValue) {
+         */
+     * Returns a new settings object that contains all setting of the current one filtered by the given settings key predicate.
+        public Builder put(final String key, final TimeValue timeValue) {
+        }
+     * leading to a runtime failure (see {@link LogConfigurator#checkErrorListener()} ). The premature construction would come from any
+        /** Return the current secure settings, or {@code null} if none have been set. */
+ * Modifications Copyright OpenSearch Contributors. See
+         * another setting already set on this builder.
+        }
+    /**
+        return o == null ? null : o.toString();
+        return innerBuilder.build();
+            if (this.secureSettings.get() != null) {
+    public Boolean getAsBoolean(String setting, Boolean defaultValue) {
+        public Builder loadFromSource(String source, MediaType mediaType) {
+        try {
+     * Reads an optional {@link Settings} from the stream. Returns {@code null} if no settings were written.
+        }
+                        result.add(string.trim());
+                    String key = keyBuilder.toString();
+        } catch (Exception e) {
+                                + prefix
+                XContentParser.Token token = xContentParser.nextToken();
+            return defaultValue;
+     */
+            }
+                            final Entry<String, Object> current = this.currentElement;
+    }
+        return builder;
+            } catch (IOException e) {
+            return this;
+        public Builder put(String key, Level level) {
+        public Builder put(Settings settings) {
+                public boolean shouldRemoveMissingPlaceholder(String placeholderName) {
+            return Float.parseFloat(sValue);
+                                public String getKey() {
+        }
+         * Removes the provided setting from the internal map holding the current list of settings.
+        }
+            }
+        return Booleans.parseBoolean(get(setting), defaultValue);
+            return this;
         }
         if (isArray && (maxIndex + 1) == map.size()) {
-            ArrayList<Object> newValue = new ArrayList<>(maxIndex + 1);
-            for (int i = 0; i <= maxIndex; i++) {
-                Object obj = map.get(Integer.toString(i));
-                if (obj == null) {
-                    // Something went wrong. Different format?
-                    // Bailout!
-                    return map;
-                }
-                newValue.add(obj);
-            }
-            return newValue;
-        }
-        return map;
-    }
-
-    /**
-     * A settings that are filtered (and key is removed) with the specified prefix.
-     */
-    public Settings getByPrefix(String prefix) {
-        return new Settings(
-            new FilteredMap(this.settings, (k) -> k.startsWith(prefix), prefix),
-            secureSettings == null ? null : new PrefixedSecureSettings(secureSettings, prefix, s -> s.startsWith(prefix))
-        );
-    }
-
-    /**
-     * Returns a new settings object that contains all setting of the current one filtered by the given settings key predicate.
-     */
-    public Settings filter(Predicate<String> predicate) {
-        return new Settings(
-            new FilteredMap(this.settings, predicate, null),
-            secureSettings == null ? null : new PrefixedSecureSettings(secureSettings, "", predicate)
-        );
-    }
-
-    /**
-     * Returns the settings mapped to the given setting name.
-     */
-    public Settings getAsSettings(String setting) {
-        return getByPrefix(setting + ".");
-    }
-
-    /**
-     * Returns the setting value associated with the setting key.
-     *
-     * @param setting The setting key
-     * @return The setting value, {@code null} if it does not exists.
-     */
-    public String get(String setting) {
-        return toString(settings.get(setting));
-    }
-
-    /**
-     * Returns the setting value associated with the setting key. If it does not exists,
-     * returns the default value provided.
-     */
-    public String get(String setting, String defaultValue) {
-        String retVal = get(setting);
-        return retVal == null ? defaultValue : retVal;
-    }
-
-    /**
-     * Returns the setting value (as float) associated with the setting key. If it does not exists,
-     * returns the default value provided.
-     */
-    public Float getAsFloat(String setting, Float defaultValue) {
-        String sValue = get(setting);
-        if (sValue == null) {
-            return defaultValue;
-        }
-        try {
-            return Float.parseFloat(sValue);
-        } catch (NumberFormatException e) {
-            throw new SettingsException("Failed to parse float setting [" + setting + "] with value [" + sValue + "]", e);
-        }
-    }
-
-    /**
-     * Returns the setting value (as double) associated with the setting key. If it does not exists,
-     * returns the default value provided.
-     */
-    public Double getAsDouble(String setting, Double defaultValue) {
-        String sValue = get(setting);
-        if (sValue == null) {
-            return defaultValue;
-        }
-        try {
-            return Double.parseDouble(sValue);
-        } catch (NumberFormatException e) {
-            throw new SettingsException("Failed to parse double setting [" + setting + "] with value [" + sValue + "]", e);
-        }
-    }
-
-    /**
-     * Returns the setting value (as int) associated with the setting key. If it does not exists,
-     * returns the default value provided.
-     */
-    public Integer getAsInt(String setting, Integer defaultValue) {
-        String sValue = get(setting);
-        if (sValue == null) {
-            return defaultValue;
-        }
-        try {
-            return Integer.parseInt(sValue);
-        } catch (NumberFormatException e) {
-            throw new SettingsException("Failed to parse int setting [" + setting + "] with value [" + sValue + "]", e);
-        }
-    }
-
-    /**
-     * Returns the setting value (as long) associated with the setting key. If it does not exists,
-     * returns the default value provided.
-     */
-    public Long getAsLong(String setting, Long defaultValue) {
-        String sValue = get(setting);
-        if (sValue == null) {
-            return defaultValue;
-        }
-        try {
-            return Long.parseLong(sValue);
-        } catch (NumberFormatException e) {
-            throw new SettingsException("Failed to parse long setting [" + setting + "] with value [" + sValue + "]", e);
-        }
-    }
-
-    /**
-     * Returns <code>true</code> iff the given key has a value in this settings object
-     */
-    public boolean hasValue(String key) {
-        return settings.get(key) != null;
-    }
-
-    /**
-     * We have to lazy initialize the deprecation logger as otherwise a static logger here would be constructed before logging is configured
-     * leading to a runtime failure (see {@link LogConfigurator#checkErrorListener()} ). The premature construction would come from any
-     * {@link Setting} object constructed in, for example, {@link org.opensearch.env.Environment}.
-     *
-     * @opensearch.internal
-     */
-    static class DeprecationLoggerHolder {
-        static DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(Settings.class);
-    }
-
-    /**
-     * Returns the setting value (as boolean) associated with the setting key. If it does not exists,
-     * returns the default value provided.
-     */
-    public Boolean getAsBoolean(String setting, Boolean defaultValue) {
-        return Booleans.parseBoolean(get(setting), defaultValue);
-    }
-
-    /**
-     * Returns the setting value (as time) associated with the setting key. If it does not exists,
-     * returns the default value provided.
-     */
-    public TimeValue getAsTime(String setting, TimeValue defaultValue) {
-        return parseTimeValue(get(setting), defaultValue, setting);
-    }
-
-    /**
-     * Returns the setting value (as size) associated with the setting key. If it does not exists,
-     * returns the default value provided.
-     */
-    public ByteSizeValue getAsBytesSize(String setting, ByteSizeValue defaultValue) throws SettingsException {
-        return parseBytesSizeValue(get(setting), defaultValue, setting);
-    }
-
-    /**
-     * Returns the setting value (as size) associated with the setting key. Provided values can either be
-     * absolute values (interpreted as a number of bytes), byte sizes (eg. 1mb) or percentage of the heap size
-     * (eg. 12%). If it does not exists, parses the default value provided.
-     */
-    public ByteSizeValue getAsMemory(String setting, String defaultValue) throws SettingsException {
-        return MemorySizeValue.parseBytesSizeValueOrHeapRatio(get(setting, defaultValue), setting);
-    }
-
-    /**
-     * The values associated with a setting key as an immutable list.
-     * <p>
-     * It will also automatically load a comma separated list under the settingPrefix and merge with
-     * the numbered format.
-     *
-     * @param key The setting key to load the list by
-     * @return The setting list values
-     */
-    public List<String> getAsList(String key) throws SettingsException {
-        return getAsList(key, Collections.emptyList());
-    }
-
-    /**
-     * The values associated with a setting key as an immutable list.
-     * <p>
-     * If commaDelimited is true, it will automatically load a comma separated list under the settingPrefix and merge with
-     * the numbered format.
-     *
-     * @param key The setting key to load the list by
-     * @return The setting list values
-     */
-    public List<String> getAsList(String key, List<String> defaultValue) throws SettingsException {
-        return getAsList(key, defaultValue, true);
-    }
-
-    /**
-     * The values associated with a setting key as an immutable list.
-     * <p>
-     * It will also automatically load a comma separated list under the settingPrefix and merge with
-     * the numbered format.
-     *
-     * @param key  The setting key to load the list by
-     * @param defaultValue   The default value to use if no value is specified
-     * @param commaDelimited Whether to try to parse a string as a comma-delimited value
-     * @return The setting list values
-     */
-    public List<String> getAsList(String key, List<String> defaultValue, Boolean commaDelimited) throws SettingsException {
-        List<String> result = new ArrayList<>();
         final Object valueFromPrefix = settings.get(key);
-        if (valueFromPrefix != null) {
-            if (valueFromPrefix instanceof List) {
-                return Collections.unmodifiableList((List<String>) valueFromPrefix);
-            } else if (commaDelimited) {
-                String[] strings = Strings.splitStringByCommaToArray(get(key));
-                if (strings.length > 0) {
-                    for (String string : strings) {
-                        result.add(string.trim());
-                    }
-                }
-            } else {
-                result.add(get(key).trim());
-            }
-        }
-
-        if (result.isEmpty()) {
-            return defaultValue;
-        }
-        return Collections.unmodifiableList(result);
-    }
-
-    /**
-     * Returns group settings for the given setting prefix.
-     */
-    public Map<String, Settings> getGroups(String settingPrefix) throws SettingsException {
-        return getGroups(settingPrefix, false);
-    }
-
-    /**
-     * Returns group settings for the given setting prefix.
-     */
-    public Map<String, Settings> getGroups(String settingPrefix, boolean ignoreNonGrouped) throws SettingsException {
-        if (!Strings.hasLength(settingPrefix)) {
-            throw new IllegalArgumentException("illegal setting prefix " + settingPrefix);
-        }
-        if (settingPrefix.charAt(settingPrefix.length() - 1) != '.') {
-            settingPrefix = settingPrefix + ".";
-        }
-        return getGroupsInternal(settingPrefix, ignoreNonGrouped);
-    }
-
-    private Map<String, Settings> getGroupsInternal(String settingPrefix, boolean ignoreNonGrouped) throws SettingsException {
-        Settings prefixSettings = getByPrefix(settingPrefix);
-        Map<String, Settings> groups = new HashMap<>();
-        for (String groupName : prefixSettings.names()) {
-            Settings groupSettings = prefixSettings.getByPrefix(groupName + ".");
-            if (groupSettings.isEmpty()) {
-                if (ignoreNonGrouped) {
-                    continue;
-                }
-                throw new SettingsException(
-                    "Failed to get setting group for ["
-                        + settingPrefix
-                        + "] setting prefix and setting ["
-                        + settingPrefix
-                        + groupName
-                        + "] because of a missing '.'"
-                );
-            }
-            groups.put(groupName, groupSettings);
-        }
-
-        return Collections.unmodifiableMap(groups);
-    }
-
-    /**
-     * Returns group settings for the given setting prefix.
-     */
-    public Map<String, Settings> getAsGroups() throws SettingsException {
-        return getGroupsInternal("", false);
-    }
-
-    /**
-     * Returns a parsed version.
-     */
-    public Version getAsVersion(String setting, Version defaultVersion) throws SettingsException {
-        String sValue = get(setting);
-        if (sValue == null) {
-            return defaultVersion;
-        }
-        try {
-            return Version.fromId(Integer.parseInt(sValue));
-        } catch (Exception e) {
-            throw new SettingsException("Failed to parse version setting [" + setting + "] with value [" + sValue + "]", e);
-        }
-    }
-
-    /**
-     * @return  The direct keys of this settings
-     */
-    public Set<String> names() {
-        synchronized (firstLevelNames) {
-            if (firstLevelNames.get() == null) {
-                Stream<String> stream = settings.keySet().stream();
-                if (secureSettings != null) {
-                    stream = Stream.concat(stream, secureSettings.getSettingNames().stream());
-                }
-                Set<String> names = stream.map(k -> {
-                    int i = k.indexOf('.');
-                    if (i < 0) {
-                        return k;
-                    } else {
-                        return k.substring(0, i);
-                    }
-                }).collect(Collectors.toSet());
-                firstLevelNames.set(Collections.unmodifiableSet(names));
-            }
-        }
-        return firstLevelNames.get();
-    }
-
-    /**
-     * Returns the settings as delimited string.
-     */
-    public String toDelimitedString(char delimiter) {
-        StringBuilder sb = new StringBuilder();
-        for (Map.Entry<String, Object> entry : settings.entrySet()) {
-            sb.append(entry.getKey()).append("=").append(entry.getValue()).append(delimiter);
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-
-        Settings that = (Settings) o;
-        return Objects.equals(settings, that.settings);
-    }
-
-    @Override
-    public int hashCode() {
-        return settings != null ? settings.hashCode() : 0;
-    }
-
-    public static Settings readSettingsFromStream(StreamInput in) throws IOException {
-        Builder builder = new Builder();
-        int numberOfSettings = in.readVInt();
-        for (int i = 0; i < numberOfSettings; i++) {
-            String key = in.readString();
-            Object value = in.readGenericValue();
-            if (value == null) {
-                builder.putNull(key);
-            } else if (value instanceof List) {
-                builder.putList(key, (List<String>) value);
-            } else {
-                builder.put(key, value.toString());
-            }
-        }
-        return builder.build();
-    }
-
-    public static void writeSettingsToStream(Settings settings, StreamOutput out) throws IOException {
-        // pull settings to exclude secure settings in size()
-        Set<Map.Entry<String, Object>> entries = settings.settings.entrySet();
-        out.writeVInt(entries.size());
-        for (Map.Entry<String, Object> entry : entries) {
-            out.writeString(entry.getKey());
-            out.writeGenericValue(entry.getValue());
-        }
-    }
-
-    /**
-     * Reads an optional {@link Settings} from the stream. Returns {@code null} if no settings were written.
-     * Counterpart to {@link #writeOptionalSettingsToStream(Settings, StreamOutput)}.
-     */
-    public static Settings readOptionalSettingsFromStream(StreamInput in) throws IOException {
-        if (in.readBoolean()) {
-            return readSettingsFromStream(in);
-        }
-        return null;
-    }
-
-    /**
-     * Writes an optional {@link Settings} to the stream. A {@code null} value is permitted.
-     * Counterpart to {@link #readOptionalSettingsFromStream(StreamInput)}.
-     */
-    public static void writeOptionalSettingsToStream(Settings settings, StreamOutput out) throws IOException {
-        if (settings != null) {
-            out.writeBoolean(true);
-            writeSettingsToStream(settings, out);
-        } else {
-            out.writeBoolean(false);
-        }
-    }
-
-    /**
-     * Returns a builder to be used in order to build settings.
-     */
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        Settings settings = SettingsFilter.filterSettings(params, this);
-        if (!params.paramAsBoolean("flat_settings", false)) {
-            for (Map.Entry<String, Object> entry : settings.getAsStructuredMap().entrySet()) {
-                builder.field(entry.getKey(), entry.getValue());
-            }
-        } else {
-            for (Map.Entry<String, Object> entry : settings.settings.entrySet()) {
-                builder.field(entry.getKey(), entry.getValue());
-            }
-        }
-        return builder;
-    }
-
-    /**
-     * Parsers the generated xcontent from {@link Settings#toXContent(XContentBuilder, Params)} into a new Settings object.
-     * Note this method requires the parser to either be positioned on a null token or on
-     * {@link XContentParser.Token#START_OBJECT}.
-     */
-    public static Settings fromXContent(XContentParser parser) throws IOException {
-        return fromXContent(parser, true, false);
-    }
-
-    private static Settings fromXContent(XContentParser parser, boolean allowNullValues, boolean validateEndOfStream) throws IOException {
-        if (parser.currentToken() == null) {
-            parser.nextToken();
-        }
-        XContentParserUtils.ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.currentToken(), parser);
-        Builder innerBuilder = Settings.builder();
-        StringBuilder currentKeyBuilder = new StringBuilder();
-        fromXContent(parser, currentKeyBuilder, innerBuilder, allowNullValues);
-        if (validateEndOfStream) {
-            // ensure we reached the end of the stream
-            XContentParser.Token lastToken = null;
-            try {
-                while (!parser.isClosed() && (lastToken = parser.nextToken()) == null)
-                    ;
-            } catch (Exception e) {
-                throw new OpenSearchParseException(
-                    "malformed, expected end of settings but encountered additional content starting at line number: [{}], "
-                        + "column number: [{}]",
-                    e,
-                    parser.getTokenLocation().lineNumber,
-                    parser.getTokenLocation().columnNumber
-                );
-            }
-            if (lastToken != null) {
-                throw new OpenSearchParseException(
-                    "malformed, expected end of settings but encountered additional content starting at line number: [{}], "
-                        + "column number: [{}]",
-                    parser.getTokenLocation().lineNumber,
-                    parser.getTokenLocation().columnNumber
-                );
-            }
-        }
-        return innerBuilder.build();
-    }
-
-    private static void fromXContent(XContentParser parser, StringBuilder keyBuilder, Settings.Builder builder, boolean allowNullValues)
-        throws IOException {
-        final int length = keyBuilder.length();
-        while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
-            if (parser.currentToken() == XContentParser.Token.FIELD_NAME) {
-                keyBuilder.setLength(length);
-                keyBuilder.append(parser.currentName());
-            } else if (parser.currentToken() == XContentParser.Token.START_OBJECT) {
-                keyBuilder.append('.');
-                fromXContent(parser, keyBuilder, builder, allowNullValues);
-            } else if (parser.currentToken() == XContentParser.Token.START_ARRAY) {
-                List<String> list = new ArrayList<>();
-                while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
-                    if (parser.currentToken() == XContentParser.Token.VALUE_STRING) {
-                        list.add(parser.text());
-                    } else if (parser.currentToken() == XContentParser.Token.VALUE_NUMBER) {
-                        list.add(parser.text()); // just use the string representation here
-                    } else if (parser.currentToken() == XContentParser.Token.VALUE_BOOLEAN) {
-                        list.add(String.valueOf(parser.text()));
-                    } else {
-                        throw new IllegalStateException("only value lists are allowed in serialized settings");
-                    }
-                }
-                String key = keyBuilder.toString();
-                validateValue(key, list, parser, allowNullValues);
-                builder.putList(key, list);
-            } else if (parser.currentToken() == XContentParser.Token.VALUE_NULL) {
-                String key = keyBuilder.toString();
-                validateValue(key, null, parser, allowNullValues);
-                builder.putNull(key);
-            } else if (parser.currentToken() == XContentParser.Token.VALUE_STRING
-                || parser.currentToken() == XContentParser.Token.VALUE_NUMBER) {
-                    String key = keyBuilder.toString();
-                    String value = parser.text();
-                    validateValue(key, value, parser, allowNullValues);
-                    builder.put(key, value);
-                } else if (parser.currentToken() == XContentParser.Token.VALUE_BOOLEAN) {
-                    String key = keyBuilder.toString();
-                    validateValue(key, parser.text(), parser, allowNullValues);
-                    builder.put(key, parser.booleanValue());
-                } else {
-                    XContentParserUtils.throwUnknownToken(parser.currentToken(), parser.getTokenLocation());
-                }
-        }
-    }
-
-    private static void validateValue(String key, Object currentValue, XContentParser parser, boolean allowNullValues) {
-        if (currentValue == null && allowNullValues == false) {
-            throw new OpenSearchParseException(
-                "null-valued setting found for key [{}] found at line number [{}], column number [{}]",
-                key,
-                parser.getTokenLocation().lineNumber,
-                parser.getTokenLocation().columnNumber
-            );
-        }
-    }
-
-    public static final Set<String> FORMAT_PARAMS = Collections.unmodifiableSet(
-        new HashSet<>(Arrays.asList("settings_filter", "flat_settings"))
-    );
-
-    /**
-     * Returns {@code true} if this settings object contains no settings
-     * @return {@code true} if this settings object contains no settings
-     */
     public boolean isEmpty() {
-        return this.settings.isEmpty() && (secureSettings == null || secureSettings.getSettingNames().isEmpty());
-    }
-
-    /** Returns the number of settings in this settings object. */
-    public int size() {
-        return keySet().size();
-    }
-
-    /** Returns the fully qualified setting names contained in this settings object. */
-    public Set<String> keySet() {
-        if (keys.get() == null) {
-            synchronized (keys) {
-                // Check that the keys are still null now that we have acquired the lock
-                if (keys.get() == null) {
-                    if (secureSettings == null) {
-                        keys.set(settings.keySet());
-                    } else {
-                        Stream<String> stream = Stream.concat(settings.keySet().stream(), secureSettings.getSettingNames().stream());
-                        // uniquify, since for legacy reasons the same setting name may exist in both
-                        keys.set(Collections.unmodifiableSet(stream.collect(Collectors.toSet())));
-                    }
-                }
-            }
-        }
-        return keys.get();
-    }
-
-    /**
-     * A builder allowing to put different settings and then {@link #build()} an immutable
-     * settings implementation. Use {@link Settings#builder()} in order to
-     * construct it.
-     *
-     * @opensearch.api
+            put(setting, String.valueOf(value));
      */
-    @PublicApi(since = "1.0.0")
-    public static class Builder {
-
-        public static final Settings EMPTY_SETTINGS = Settings.EMPTY;
-
-        // we use a sorted map for consistent serialization when using getAsMap()
-        private final Map<String, Object> map = new TreeMap<>();
-
-        private final SetOnce<SecureSettings> secureSettings = new SetOnce<>();
-
-        private Builder() {
-
-        }
-
-        public Set<String> keys() {
-            return this.map.keySet();
-        }
-
-        /**
-         * Removes the provided setting from the internal map holding the current list of settings.
-         */
-        public String remove(String key) {
-            return Settings.toString(map.remove(key));
-        }
-
-        /**
-         * Returns a setting value based on the setting key.
-         */
-        public String get(String key) {
-            return Settings.toString(map.get(key));
-        }
-
-        /** Return the current secure settings, or {@code null} if none have been set. */
-        public SecureSettings getSecureSettings() {
-            return secureSettings.get();
-        }
-
-        public Builder setSecureSettings(SecureSettings secureSettings) {
-            if (secureSettings.isLoaded() == false) {
-                throw new IllegalStateException("Secure settings must already be loaded");
-            }
-            if (this.secureSettings.get() != null) {
-                throw new IllegalArgumentException(
-                    "Secure settings already set. Existing settings: "
-                        + this.secureSettings.get().getSettingNames()
-                        + ", new settings: "
-                        + secureSettings.getSettingNames()
-                );
-            }
-            this.secureSettings.set(secureSettings);
-            return this;
-        }
-
-        /**
-         * Sets a path setting with the provided setting key and path.
-         *
-         * @param key  The setting key
-         * @param path The setting path
-         * @return The builder
-         */
-        public Builder put(String key, Path path) {
-            return put(key, path.toString());
-        }
-
-        /**
-         * Sets a time value setting with the provided setting key and value.
-         *
-         * @param key  The setting key
-         * @param timeValue The setting timeValue
-         * @return The builder
-         */
-        public Builder put(final String key, final TimeValue timeValue) {
-            return put(key, timeValue.getStringRep());
-        }
-
-        /**
-         * Sets a byteSizeValue setting with the provided setting key and byteSizeValue.
-         *
-         * @param key  The setting key
-         * @param byteSizeValue The setting value
-         * @return The builder
-         */
-        public Builder put(final String key, final ByteSizeValue byteSizeValue) {
-            return put(key, byteSizeValue.getStringRep());
-        }
-
-        /**
-         * Sets an enum setting with the provided setting key and enum instance.
-         *
-         * @param key  The setting key
-         * @param enumValue The setting value
-         * @return The builder
-         */
-        public Builder put(String key, Enum<?> enumValue) {
-            return put(key, enumValue.toString());
-        }
-
-        /**
-         * Sets an level setting with the provided setting key and level instance.
-         *
-         * @param key  The setting key
-         * @param level The setting value
-         * @return The builder
-         */
-        public Builder put(String key, Level level) {
-            return put(key, level.toString());
-        }
-
-        /**
-         * Sets an lucene version setting with the provided setting key and lucene version instance.
-         *
-         * @param key  The setting key
-         * @param luceneVersion The setting value
-         * @return The builder
-         */
-        public Builder put(String key, org.apache.lucene.util.Version luceneVersion) {
-            return put(key, luceneVersion.toString());
-        }
-
-        /**
-         * Sets a setting with the provided setting key and value.
-         *
-         * @param key   The setting key
-         * @param value The setting value
-         * @return The builder
-         */
-        public Builder put(String key, String value) {
-            map.put(key, value);
-            return this;
-        }
-
-        public Builder copy(String key, Settings source) {
-            return copy(key, key, source);
-        }
-
-        public Builder copy(String key, String sourceKey, Settings source) {
-            if (source.settings.containsKey(sourceKey) == false) {
-                throw new IllegalArgumentException("source key not found in the source settings");
-            }
-            final Object value = source.settings.get(sourceKey);
-            if (value instanceof List) {
-                return putList(key, (List) value);
-            } else if (value == null) {
-                return putNull(key);
-            } else {
-                return put(key, Settings.toString(value));
-            }
-        }
-
-        /**
-         * Sets a null value for the given setting key
-         */
-        public Builder putNull(String key) {
-            return put(key, (String) null);
-        }
-
-        /**
-         * Sets the setting with the provided setting key and the boolean value.
-         *
-         * @param setting The setting key
-         * @param value   The boolean value
-         * @return The builder
-         */
-        public Builder put(String setting, boolean value) {
-            put(setting, String.valueOf(value));
-            return this;
-        }
-
-        /**
-         * Sets the setting with the provided setting key and the int value.
-         *
-         * @param setting The setting key
-         * @param value   The int value
-         * @return The builder
-         */
-        public Builder put(String setting, int value) {
-            put(setting, String.valueOf(value));
-            return this;
-        }
-
-        public Builder put(String setting, Version version) {
-            put(setting, version.id);
-            return this;
-        }
-
-        /**
-         * Sets the setting with the provided setting key and the long value.
-         *
-         * @param setting The setting key
-         * @param value   The long value
-         * @return The builder
-         */
-        public Builder put(String setting, long value) {
-            put(setting, String.valueOf(value));
-            return this;
-        }
-
-        /**
-         * Sets the setting with the provided setting key and the float value.
-         *
-         * @param setting The setting key
-         * @param value   The float value
-         * @return The builder
-         */
-        public Builder put(String setting, float value) {
-            put(setting, String.valueOf(value));
-            return this;
-        }
-
-        /**
-         * Sets the setting with the provided setting key and the double value.
-         *
-         * @param setting The setting key
-         * @param value   The double value
-         * @return The builder
-         */
-        public Builder put(String setting, double value) {
-            put(setting, String.valueOf(value));
-            return this;
-        }
-
-        /**
-         * Sets the setting with the provided setting key and the time value.
-         *
-         * @param setting The setting key
-         * @param value   The time value
-         * @return The builder
-         */
-        public Builder put(final String setting, final long value, final TimeUnit timeUnit) {
-            put(setting, new TimeValue(value, timeUnit));
-            return this;
-        }
-
-        /**
-         * Sets the setting with the provided setting key and the size value.
-         *
-         * @param setting The setting key
-         * @param value   The size value
-         * @return The builder
-         */
-        public Builder put(String setting, long value, ByteSizeUnit sizeUnit) {
-            put(setting, sizeUnit.toBytes(value) + "b");
-            return this;
-        }
-
-        /**
-         * Sets the setting with the provided setting key and an array of values.
-         *
-         * @param setting The setting key
-         * @param values  The values
-         * @return The builder
-         */
-        public Builder putList(String setting, String... values) {
-            return putList(setting, Arrays.asList(values));
-        }
-
-        /**
-         * Sets the setting with the provided setting key and a list of values.
-         *
-         * @param setting The setting key
-         * @param values  The values
-         * @return The builder
-         */
-        public Builder putList(String setting, List<String> values) {
-            remove(setting);
-            map.put(setting, new ArrayList<>(values));
-            return this;
-        }
-
-        /**
-         * Sets all the provided settings including secure settings
-         */
-        public Builder put(Settings settings) {
-            return put(settings, true);
-        }
-
-        /**
-         * Sets all the provided settings.
-         * @param settings the settings to set
-         * @param copySecureSettings if <code>true</code> all settings including secure settings are copied.
-         */
-        public Builder put(Settings settings, boolean copySecureSettings) {
-            Map<String, Object> settingsMap = new HashMap<>(settings.settings);
-            processLegacyLists(settingsMap);
-            map.putAll(settingsMap);
-            if (copySecureSettings && settings.getSecureSettings() != null) {
-                setSecureSettings(settings.getSecureSettings());
-            }
-            return this;
-        }
-
-        private void processLegacyLists(Map<String, Object> map) {
-            String[] array = map.keySet().toArray(new String[0]);
-            for (String key : array) {
-                if (key.endsWith(".0")) { // let's only look at the head of the list and convert in order starting there.
-                    int counter = 0;
-                    String prefix = key.substring(0, key.lastIndexOf('.'));
-                    if (map.containsKey(prefix)) {
-                        throw new IllegalStateException(
-                            "settings builder can't contain values for ["
-                                + prefix
-                                + "="
-                                + map.get(prefix)
-                                + "] and ["
-                                + key
-                                + "="
-                                + map.get(key)
-                                + "]"
-                        );
-                    }
-                    List<String> values = new ArrayList<>();
-                    while (true) {
-                        String listKey = prefix + '.' + (counter++);
-                        String value = get(listKey);
-                        if (value == null) {
-                            map.put(prefix, values);
-                            break;
-                        } else {
-                            values.add(value);
-                            map.remove(listKey);
-                        }
-                    }
-                }
-            }
-        }
-
-        /**
-         * Loads settings from a map.
-         */
-        public Builder loadFromMap(Map<String, ?> map) {
-            // TODO: do this without a serialization round-trip
-            try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(MediaTypeRegistry.JSON)) {
-                builder.map(map);
-                return loadFromSource(builder.toString(), builder.contentType());
-            } catch (IOException e) {
-                throw new OpenSearchGenerationException("Failed to generate [" + map + "]", e);
-            }
-        }
-
-        /**
-         * Loads settings from the actual string content that represents them using {@link #fromXContent(XContentParser)}
-         */
-        public Builder loadFromSource(String source, MediaType mediaType) {
-            try (
-                XContentParser parser = mediaType.xContent()
-                    .createParser(NamedXContentRegistry.EMPTY, LoggingDeprecationHandler.INSTANCE, source)
-            ) {
-                this.put(fromXContent(parser, true, true));
-            } catch (Exception e) {
-                throw new SettingsException("Failed to load settings from [" + source + "]", e);
-            }
-            return this;
-        }
-
-        /**
-         * Loads settings from a url that represents them using {@link #fromXContent(XContentParser)}
-         * Note: Loading from a path doesn't allow <code>null</code> values in the incoming xcontent
-         */
-        public Builder loadFromPath(Path path) throws IOException {
-            // NOTE: loadFromStream will close the input stream
-            return loadFromStream(path.getFileName().toString(), Files.newInputStream(path), false);
-        }
-
-        /**
-         * Loads settings from a stream that represents them using {@link #fromXContent(XContentParser)}
-         */
-        public Builder loadFromStream(String resourceName, InputStream is, boolean acceptNullValues) throws IOException {
-            final MediaType mediaType;
-            if (resourceName.endsWith(".json")) {
-                mediaType = MediaTypeRegistry.JSON;
-            } else if (resourceName.endsWith(".yml") || resourceName.endsWith(".yaml")) {
-                mediaType = XContentType.YAML;
-            } else {
-                throw new IllegalArgumentException("unable to detect content type from resource name [" + resourceName + "]");
-            }
-            // fromXContent doesn't use named xcontent or deprecation.
-            try (
-                XContentParser parser = mediaType.xContent()
-                    .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, is)
-            ) {
-                if (parser.currentToken() == null) {
-                    if (parser.nextToken() == null) {
-                        return this; // empty file
-                    }
-                }
-                put(fromXContent(parser, acceptNullValues, true));
-            } catch (OpenSearchParseException e) {
-                throw e;
-            } catch (Exception e) {
-                throw new SettingsException("Failed to load settings from [" + resourceName + "]", e);
-            } finally {
-                IOUtils.close(is);
-            }
-            return this;
-        }
-
-        public Builder putProperties(final Map<String, String> esSettings, final Function<String, String> keyFunction) {
-            for (final Map.Entry<String, String> esSetting : esSettings.entrySet()) {
-                final String key = esSetting.getKey();
-                put(keyFunction.apply(key), esSetting.getValue());
-            }
-            return this;
-        }
-
-        /**
-         * Runs across all the settings set on this builder and
-         * replaces {@code ${...}} elements in each setting with
-         * another setting already set on this builder.
-         */
-        public Builder replacePropertyPlaceholders() {
-            return replacePropertyPlaceholders(System::getenv);
-        }
-
-        // visible for testing
-        Builder replacePropertyPlaceholders(Function<String, String> getenv) {
-            PropertyPlaceholder propertyPlaceholder = new PropertyPlaceholder("${", "}", false);
-            PropertyPlaceholder.PlaceholderResolver placeholderResolver = new PropertyPlaceholder.PlaceholderResolver() {
-                @Override
-                public String resolvePlaceholder(String placeholderName) {
-                    final String value = getenv.apply(placeholderName);
-                    if (value != null) {
-                        return value;
-                    }
-                    return Settings.toString(map.get(placeholderName));
-                }
-
-                @Override
-                public boolean shouldIgnoreMissing(String placeholderName) {
-                    return placeholderName.startsWith("prompt.");
-                }
-
-                @Override
-                public boolean shouldRemoveMissingPlaceholder(String placeholderName) {
-                    return !placeholderName.startsWith("prompt.");
-                }
-            };
-
-            Iterator<Map.Entry<String, Object>> entryItr = map.entrySet().iterator();
-            while (entryItr.hasNext()) {
-                Map.Entry<String, Object> entry = entryItr.next();
-                if (entry.getValue() == null) {
-                    // a null value obviously can't be replaced
-                    continue;
-                }
-                if (entry.getValue() instanceof List) {
+        } else {
+                                }
+     */
+                firstLevelNames.set(Collections.unmodifiableSet(names));
                     final ListIterator<String> li = ((List<String>) entry.getValue()).listIterator();
-                    while (li.hasNext()) {
-                        final String settingValueRaw = li.next();
-                        final String settingValueResolved = propertyPlaceholder.replacePlaceholders(settingValueRaw, placeholderResolver);
-                        li.set(settingValueResolved);
-                    }
-                    continue;
-                }
-
-                String value = propertyPlaceholder.replacePlaceholders(Settings.toString(entry.getValue()), placeholderResolver);
-                // if the values exists and has length, we should maintain it in the map
+        }
+        return fromXContent(parser, true, false);
+        private final SetOnce<SecureSettings> secureSettings = new SetOnce<>();
+            return filterSet;
+            Settings groupSettings = prefixSettings.getByPrefix(groupName + ".");
+                return putNull(key);
+     * Returns the setting value associated with the setting key.
                 // otherwise, the replace process resolved into removing it
-                if (Strings.hasLength(value) == true) {
-                    // try to parse the value as a list first
-                    final Optional<List<String>> optList = tryParseableStringToList(value);
-                    if (optList.isPresent()) {
-                        entry.setValue(optList.get());
-                    } else {
-                        entry.setValue(value);
                     }
-                } else {
-                    entryItr.remove();
-                }
+        return Collections.unmodifiableList(result);
+            return newValue;
+                                }
+         *
             }
-            return this;
+    public List<String> getAsList(String key, List<String> defaultValue, Boolean commaDelimited) throws SettingsException {
+            }
+                if (obj == null) {
+            if (lastToken != null) {
+            if (isArray) {
+import org.opensearch.common.SetOnce;
+            Map<String, Object> innerMap = (Map<String, Object>) map.get(prefix + setting);
+     * Returns the setting value (as size) associated with the setting key. Provided values can either be
+                    String key = keyBuilder.toString();
+        int prefixLength = setting.indexOf('.');
         }
-
+    /**
+         */
+    /**
+         * @return The builder
+    }
+                        + "column number: [{}]",
+    }
+     * {@link XContentParser.Token#START_OBJECT}.
+            return replacePropertyPlaceholders(System::getenv);
+ * ownership. Elasticsearch licenses this file to you under
+            if (valueFromPrefix instanceof List) {
         /**
-         * Checks that all settings(except archived settings and wildcards) in the builder start with the specified prefix.
-         * <p>
+        PrefixedSecureSettings(SecureSettings delegate, String prefix, Predicate<String> keyPredicate) {
+     */
+            return this;
+     *
+    public static Builder builder() {
+         *
+     * returns the default value provided.
          * If a setting doesn't start with the prefix, the builder appends the prefix to such setting.
-         */
+                parser.getTokenLocation().columnNumber
+    public static class Builder {
+        Builder builder = new Builder();
+                public boolean shouldIgnoreMissing(String placeholderName) {
+     * @return The setting list values
+        String retVal = get(setting);
+            }
+                        list.add(parser.text()); // just use the string representation here
+import org.opensearch.core.xcontent.ToXContentFragment;
+        /**
+        return new Settings(
         public Builder normalizePrefix(String prefix) {
-            Map<String, Object> replacements = new HashMap<>();
-            Iterator<Map.Entry<String, Object>> iterator = map.entrySet().iterator();
-            while (iterator.hasNext()) {
+                                throw new NoSuchElementException("make sure to call hasNext first");
+        public Set<Entry<String, Object>> entrySet() {
+        }
+                        String value = get(listKey);
+     * We have to lazy initialize the deprecation logger as otherwise a static logger here would be constructed before logging is configured
+        }
+                return loadFromSource(builder.toString(), builder.contentType());
+                "null-valued setting found for key [{}] found at line number [{}], column number [{}]",
+        /**
+            this.addPrefix = s -> prefix + s;
+                }
+            } finally {
+        /**
+    /**
+                try {
+                                // we didn't find anything
+        }
+        Settings settings = SettingsFilter.filterSettings(params, this);
+                } else {
                 Map.Entry<String, Object> entry = iterator.next();
-                String key = entry.getKey();
-                if (key.startsWith(prefix) == false && key.endsWith("*") == false && key.startsWith(ARCHIVED_SETTINGS_PREFIX) == false) {
-                    replacements.put(prefix + key, entry.getValue());
-                    iterator.remove();
-                }
-            }
-            map.putAll(replacements);
-            return this;
+     * construct it.
+    public List<String> getAsList(String key) throws SettingsException {
+         * @param value The setting value
+                @Override
         }
-
         /**
-         * Builds a {@link Settings} (underlying uses {@link Settings}) based on everything
-         * set on this builder.
-         */
-        public Settings build() {
-            processLegacyLists(map);
-            return new Settings(map, secureSettings.get());
+    @Override
+                Map<String, Object> valMap = (Map<String, Object>) entry.getValue();
+                    parser.getTokenLocation().columnNumber
         }
-
-        /**
-         * Tries to parse the placeholder value as a list (fe [], ["a", "b", "c"])
-         * @param parsableString placeholder value to parse
-         * @return the {@link Optional} result of the parsing attempt
-         */
-        private static Optional<List<String>> tryParseableStringToList(String parsableString) {
-            // fromXContent doesn't use named xcontent or deprecation.
-            try (
-                XContentParser xContentParser = MediaTypeRegistry.JSON.xContent()
-                    .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, parsableString)
-            ) {
-                XContentParser.Token token = xContentParser.nextToken();
-                if (token != XContentParser.Token.START_ARRAY) {
-                    return Optional.empty();
-                }
-                ArrayList<String> list = new ArrayList<>();
-                while ((token = xContentParser.nextToken()) != XContentParser.Token.END_ARRAY) {
-                    if (token != XContentParser.Token.VALUE_STRING) {
-                        return Optional.empty();
-                    }
-                    list.add(xContentParser.text());
-                }
-                return Optional.of(list);
-            } catch (IOException e) {
-                return Optional.empty();
-            }
+         * @return The builder
+                // if the values exists and has length, we should maintain it in the map
         }
     }
-
-    // TODO We could use an FST internally to make things even faster and more compact
-    private static final class FilteredMap extends AbstractMap<String, Object> {
-        private final Map<String, Object> delegate;
-        private final Predicate<String> filter;
-        private final String prefix;
-        // we cache that size since we have to iterate the entire set
-        // this is safe to do since this map is only used with unmodifiable maps
-        private int size = -1;
-
-        @Override
-        public Set<Entry<String, Object>> entrySet() {
-            Set<Entry<String, Object>> delegateSet = delegate.entrySet();
-            AbstractSet<Entry<String, Object>> filterSet = new AbstractSet<Entry<String, Object>>() {
-
-                @Override
-                public Iterator<Entry<String, Object>> iterator() {
-                    Iterator<Entry<String, Object>> iter = delegateSet.iterator();
-
-                    return new Iterator<Entry<String, Object>>() {
-                        private int numIterated;
-                        private Entry<String, Object> currentElement;
-
-                        @Override
-                        public boolean hasNext() {
-                            if (currentElement != null) {
-                                return true; // protect against calling hasNext twice
-                            } else {
+        }
+                } else {
                                 if (numIterated == size) { // early terminate
-                                    assert size != -1 : "size was never set: " + numIterated + " vs. " + size;
-                                    return false;
-                                }
-                                while (iter.hasNext()) {
-                                    if (filter.test((currentElement = iter.next()).getKey())) {
-                                        numIterated++;
-                                        return true;
+    public static Settings readSettingsFromStream(StreamInput in) throws IOException {
                                     }
-                                }
-                                // we didn't find anything
-                                currentElement = null;
-                                return false;
-                            }
-                        }
-
-                        @Override
-                        public Entry<String, Object> next() {
-                            if (currentElement == null && hasNext() == false) { // protect against no #hasNext call or not respecting it
-
-                                throw new NoSuchElementException("make sure to call hasNext first");
-                            }
-                            final Entry<String, Object> current = this.currentElement;
-                            this.currentElement = null;
-                            if (prefix == null) {
-                                return current;
-                            }
-                            return new Entry<String, Object>() {
-                                @Override
-                                public String getKey() {
-                                    return current.getKey().substring(prefix.length());
-                                }
-
-                                @Override
-                                public Object getValue() {
-                                    return current.getValue();
-                                }
-
-                                @Override
-                                public Object setValue(Object value) {
-                                    throw new UnsupportedOperationException();
-                                }
-                            };
-                        }
-                    };
-                }
-
-                @Override
-                public int size() {
-                    return FilteredMap.this.size();
-                }
-            };
-            return filterSet;
         }
-
-        private FilteredMap(Map<String, Object> delegate, Predicate<String> filter, String prefix) {
-            this.delegate = delegate;
-            this.filter = filter;
-            this.prefix = prefix;
+import org.opensearch.core.common.settings.SecureString;
+import org.opensearch.common.xcontent.XContentType;
         }
-
-        @Override
+        }
+            // NOTE: loadFromStream will close the input stream
+import java.util.Iterator;
+                throw new IllegalArgumentException("source key not found in the source settings");
+    /**
+    public Set<String> names() {
+        }
+         * Sets all the provided settings including secure settings
+            Object existingValue = map.get(prefix + key);
+                builder.putNull(key);
+            processLegacyLists(map);
+     * Parsers the generated xcontent from {@link Settings#toXContent(XContentBuilder, Params)} into a new Settings object.
+        }
+    }
+     * It will also automatically load a comma separated list under the settingPrefix and merge with
+     * Returns the setting value (as float) associated with the setting key. If it does not exists,
+        }
+                        private int numIterated;
+                if (secureSettings != null) {
+    @PublicApi(since = "1.0.0")
+        if (o == null || getClass() != o.getClass()) return false;
+        // we use a sorted map for consistent serialization when using getAsMap()
+        for (Map.Entry<String, Object> entry : settings.entrySet()) {
+        }
+                    // try to parse the value as a list first
+        public boolean isLoaded() {
+        out.writeVInt(entries.size());
+        if (!Strings.hasLength(settingPrefix)) {
+         * set on this builder.
+        Builder replacePropertyPlaceholders(Function<String, String> getenv) {
+                return Optional.empty();
+            return Integer.parseInt(sValue);
+     * returns the default value provided.
+                    if (map.containsKey(prefix)) {
+     */
+            return map;
         public Object get(Object key) {
-            if (key instanceof String) {
-                final String theKey = prefix == null ? (String) key : prefix + key;
-                if (filter.test(theKey)) {
-                    return delegate.get(theKey);
-                }
-            }
-            return null;
+        this.secureSettings = secureSettings;
+            processSetting(map, "", entry.getKey(), entry.getValue());
+     * Returns the setting value (as long) associated with the setting key. If it does not exists,
         }
-
-        @Override
-        public boolean containsKey(Object key) {
-            if (key instanceof String) {
-                final String theKey = prefix == null ? (String) key : prefix + key;
-                if (filter.test(theKey)) {
-                    return delegate.containsKey(theKey);
-                }
+         * Sets a path setting with the provided setting key and path.
+                                while (iter.hasNext()) {
+                    } else if (parser.currentToken() == XContentParser.Token.VALUE_NUMBER) {
+                                }
+import java.util.Objects;
+                    return delegate.get(theKey);
+            put(setting, String.valueOf(value));
+                XContentParser parser = mediaType.xContent()
             }
+        /**
+        }
+                    for (String string : strings) {
+    public Set<String> keySet() {
+        public Builder putProperties(final Map<String, String> esSettings, final Function<String, String> keyFunction) {
+        while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
+    }
+                put(fromXContent(parser, acceptNullValues, true));
+            return settingNames.get();
+                        list.add(parser.text());
+         *
+    }
+         * @return The builder
+                    } else {
+            return this;
+            } else {
+    public Double getAsDouble(String setting, Double defaultValue) {
+         * @param setting The setting key
+        }
+            } else if (parser.currentToken() == XContentParser.Token.START_ARRAY) {
+                }
+ * this file be licensed under the Apache-2.0 license or a
+         */
+         *
+import java.util.function.UnaryOperator;
+                Map.Entry<String, Object> entry = entryItr.next();
+                                + map.get(prefix)
+            return put(settings, true);
+                            "settings builder can't contain values for ["
+    /**
+                mediaType = MediaTypeRegistry.JSON;
+                if (filter.test(theKey)) {
+         * @param copySecureSettings if <code>true</code> all settings including secure settings are copied.
+        }
+                } else if (parser.currentToken() == XContentParser.Token.VALUE_BOOLEAN) {
+import org.opensearch.core.common.io.stream.StreamInput;
+        }
+    /**
+         * @param setting The setting key
+    }
+         *
+     */
+                throw new IllegalArgumentException("unable to detect content type from resource name [" + resourceName + "]");
+        }
+    /**
+        return firstLevelNames.get();
+         * @return the {@link Optional} result of the parsing attempt
+        return keys.get();
+        public Builder loadFromPath(Path path) throws IOException {
+                    ;
+            }
+        }
+    public String get(String setting, String defaultValue) {
+            return defaultValue;
+        private final Predicate<String> filter;
+         */
+        for (Map.Entry<String, Object> entry : entries) {
+         * @param value   The size value
+        }
+                size = Math.toIntExact(delegate.keySet().stream().filter(filter).count());
+            return this.map.keySet();
+         * @param key  The setting key
+            }
+                    }
+                        final String settingValueRaw = li.next();
+                while (!parser.isClosed() && (lastToken = parser.nextToken()) == null)
+         * Sets the setting with the provided setting key and the boolean value.
+                List<String> list = new ArrayList<>();
+        /**
+     * Counterpart to {@link #writeOptionalSettingsToStream(Settings, StreamOutput)}.
+    }
+import java.util.HashMap;
+                    }
+                @Override
+         */
+     * Retrieve the secure settings in these settings.
+        if (valueFromPrefix != null) {
+         */
+    public Settings getByPrefix(String prefix) {
+            } catch (IOException e) {
+ * KIND, either express or implied.  See the License for the
+                builder.field(entry.getKey(), entry.getValue());
+        }
+    public Long getAsLong(String setting, Long defaultValue) {
+                                }
+                    iterator.remove();
+    public static Settings fromXContent(XContentParser parser) throws IOException {
+                                @Override
+                result.add(get(key).trim());
+         *
+         * @param setting The setting key
+                    list.add(xContentParser.text());
+        /**
+         */
+            // TODO: do this without a serialization round-trip
+        /**
+            throw new SettingsException("Failed to parse float setting [" + setting + "] with value [" + sValue + "]", e);
+        /**
+            return this;
+                throw new OpenSearchGenerationException("Failed to generate [" + map + "]", e);
+        return new Settings(
+         */
+         * Sets an enum setting with the provided setting key and enum instance.
+            synchronized (keys) {
+        public Builder put(final String setting, final long value, final TimeUnit timeUnit) {
+    }
+        public Builder copy(String key, String sourceKey, Settings source) {
+        }
+        if (in.readBoolean()) {
+         */
+         *
+                builder.map(map);
+                IOUtils.close(is);
+    }
+        }
+        public Builder loadFromMap(Map<String, ?> map) {
+                        throw new IllegalStateException("only value lists are allowed in serialized settings");
+        return map;
+     * <p>
+            if (firstLevelNames.get() == null) {
+    }
+                key,
+            return this;
+         * @return The builder
+        int numberOfSettings = in.readVInt();
+import org.apache.logging.log4j.Level;
+                }
+                    if (optList.isPresent()) {
+    }
+            map.put(setting, new ArrayList<>(values));
+        if (parser.currentToken() == null) {
+                builder.putList(key, list);
+            }
+                }
+import java.io.IOException;
+        } else {
+                validateValue(key, list, parser, allowNullValues);
+     * the numbered format.
+        }
+         */
+            this.filter = filter;
+                }
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+                    int index = Integer.parseInt(entry.getKey());
+                }
+     * returns the default value provided.
+                                    assert size != -1 : "size was never set: " + numIterated + " vs. " + size;
+        return builder.build();
+     */
+         * @return The builder
+        public Builder put(String setting, double value) {
+    // TODO We could use an FST internally to make things even faster and more compact
+                    };
+         *
+    public static void writeSettingsToStream(Settings settings, StreamOutput out) throws IOException {
+            return Settings.toString(map.remove(key));
+                || parser.currentToken() == XContentParser.Token.VALUE_NUMBER) {
+            return Double.parseDouble(sValue);
+            if (innerMap != null) {
+    public int size() {
+     */
+        return settings.get(key) != null;
+                throw new SettingsException("Failed to load settings from [" + source + "]", e);
+                        String listKey = prefix + '.' + (counter++);
+     * It will also automatically load a comma separated list under the settingPrefix and merge with
+        private static Optional<List<String>> tryParseableStringToList(String parsableString) {
+            }
+        if (currentValue == null && allowNullValues == false) {
+                        + secureSettings.getSettingNames()
+                    Set<String> names = delegate.getSettingNames()
+                newValue.add(obj);
+         * @return The builder
+                throw new IllegalStateException("Secure settings must already be loaded");
+                    }
+    public String get(String setting) {
+         * Loads settings from a map.
+    }
+            }
+        String sValue = get(setting);
+            // fromXContent doesn't use named xcontent or deprecation.
+                        maxIndex = Math.max(maxIndex, index);
+                        .stream()
+    public String toString() {
+        StringBuilder currentKeyBuilder = new StringBuilder();
+        return this.settings.isEmpty() && (secureSettings == null || secureSettings.getSettingNames().isEmpty());
+                @SuppressWarnings("unchecked")
+import java.util.stream.Collectors;
+                    settingNames.set(Collections.unmodifiableSet(names));
+            String[] array = map.keySet().toArray(new String[0]);
+import java.util.Optional;
+                    if (secureSettings == null) {
+                    String value = parser.text();
+        int maxIndex = -1;
+            return delegate.getSHA256Digest(addPrefix.apply(setting));
+    public ByteSizeValue getAsBytesSize(String setting, ByteSizeValue defaultValue) throws SettingsException {
+                            };
+                throw new OpenSearchParseException(
+    private Map<String, Object> getAsStructuredMap() {
+                mediaType = XContentType.YAML;
+        public Builder copy(String key, Settings source) {
+                        @Override
+    /**
+import org.opensearch.Version;
+        public Builder replacePropertyPlaceholders() {
+import org.opensearch.common.logging.LogConfigurator;
+    private final SetOnce<Set<String>> keys = new SetOnce<>();
+        public String get(String key) {
+         * @param setting The setting key
+         * @param setting The setting key
+                    continue;
+         * Sets the setting with the provided setting key and the size value.
+            put(setting, new TimeValue(value, timeUnit));
+    /**
+            out.writeGenericValue(entry.getValue());
+     * the numbered format.
+            return Long.parseLong(sValue);
+                    final Optional<List<String>> optList = tryParseableStringToList(value);
+         * @param timeValue The setting timeValue
+    public Map<String, Settings> getGroups(String settingPrefix) throws SettingsException {
             return false;
         }
-
-        @Override
-        public int size() {
-            if (size == -1) {
-                size = Math.toIntExact(delegate.keySet().stream().filter(filter).count());
-            }
-            return size;
-        }
-    }
-
-    /**
-     * Prefixed secure settings
-     *
-     * @opensearch.internal
+            for (Map.Entry<String, Object> entry : settings.getAsStructuredMap().entrySet()) {
+        public Builder loadFromStream(String resourceName, InputStream is, boolean acceptNullValues) throws IOException {
+                    .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, is)
+    public ByteSizeValue getAsMemory(String setting, String defaultValue) throws SettingsException {
+                return Optional.of(list);
+         * @param value   The int value
      */
-    private static class PrefixedSecureSettings implements SecureSettings {
-        private final SecureSettings delegate;
-        private final UnaryOperator<String> addPrefix;
-        private final UnaryOperator<String> removePrefix;
-        private final Predicate<String> keyPredicate;
-        private final SetOnce<Set<String>> settingNames = new SetOnce<>();
-
-        PrefixedSecureSettings(SecureSettings delegate, String prefix, Predicate<String> keyPredicate) {
-            this.delegate = delegate;
-            this.addPrefix = s -> prefix + s;
-            this.removePrefix = s -> s.substring(prefix.length());
-            this.keyPredicate = keyPredicate;
-        }
-
-        @Override
-        public boolean isLoaded() {
-            return delegate.isLoaded();
-        }
-
-        @Override
-        public Set<String> getSettingNames() {
-            synchronized (settingNames) {
-                if (settingNames.get() == null) {
-                    Set<String> names = delegate.getSettingNames()
-                        .stream()
-                        .filter(keyPredicate)
-                        .map(removePrefix)
-                        .collect(Collectors.toSet());
-                    settingNames.set(Collections.unmodifiableSet(names));
-                }
-            }
-            return settingNames.get();
-        }
-
-        @Override
-        public SecureString getString(String setting) throws GeneralSecurityException {
-            return delegate.getString(addPrefix.apply(setting));
-        }
-
-        @Override
-        public InputStream getFile(String setting) throws GeneralSecurityException {
-            return delegate.getFile(addPrefix.apply(setting));
-        }
-
-        @Override
-        public byte[] getSHA256Digest(String setting) throws GeneralSecurityException {
-            return delegate.getSHA256Digest(addPrefix.apply(setting));
-        }
-
-        @Override
-        public void close() throws IOException {
-            delegate.close();
-        }
+                keyBuilder.append('.');
+    public Map<String, Settings> getGroups(String settingPrefix, boolean ignoreNonGrouped) throws SettingsException {
+            ) {
     }
-
-    @Override
-    public String toString() {
-        try (XContentBuilder builder = MediaTypeRegistry.JSON.contentBuilder()) {
-            builder.startObject();
-            toXContent(builder, new MapParams(Collections.singletonMap("flat_settings", "true")));
-            builder.endObject();
-            return builder.toString();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    private static String toString(Object o) {
-        return o == null ? null : o.toString();
-    }
-
+            AbstractSet<Entry<String, Object>> filterSet = new AbstractSet<Entry<String, Object>>() {
+        public Builder putNull(String key) {
+         * @param luceneVersion The setting value
 }
+        // we cache that size since we have to iterate the entire set
+    /**
+                if (entry.getValue() == null) {
+                    String prefix = key.substring(0, key.lastIndexOf('.'));
+                    return map;
+     */
+    /**
+         * @return The builder
+                }
+            try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(MediaTypeRegistry.JSON)) {
+        }
+                    } else {
+        if (sValue == null) {
+        /**
+                builder.field(entry.getKey(), entry.getValue());
+            }
+         * @param values  The values
+     * A builder allowing to put different settings and then {@link #build()} an immutable
+import java.util.stream.Stream;
+                String[] strings = Strings.splitStringByCommaToArray(get(key));
+            try {
+                    XContentParserUtils.throwUnknownToken(parser.currentToken(), parser.getTokenLocation());
+         * @param setting The setting key
+            new FilteredMap(this.settings, predicate, null),
+                }
+        return getGroups(settingPrefix, false);
+     *
+                                + key
+            return defaultValue;
+         */
+        }
+                        private Entry<String, Object> currentElement;
+        public Settings build() {
+     */
+                    processSetting(map, prefix + key + ".", rest, value);
+ * under the License.
+     * returns the default value provided.
+            return put(key, byteSizeValue.getStringRep());
+            } else {
+         * Sets the setting with the provided setting key and the int value.
+        }
+            if (value instanceof List) {
+     */
+        static DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(Settings.class);
+                XContentParser xContentParser = MediaTypeRegistry.JSON.xContent()
+         */
+        /**
+            groups.put(groupName, groupSettings);
+                                + "]"
+@PublicApi(since = "1.0.0")
+            } else if (parser.currentToken() == XContentParser.Token.VALUE_STRING
+                put(keyFunction.apply(key), esSetting.getValue());
+        Settings that = (Settings) o;
+     * returns the default value provided.
+            return delegate.getString(addPrefix.apply(setting));
+            String key = setting.substring(0, prefixLength);
+         * @param value   The double value
+    /**
+     */
+            }
+         * Sets the setting with the provided setting key and the time value.
+            return this;
+                                        return true;
+    }
+     * @opensearch.internal
+    }
+            }
+            synchronized (settingNames) {
+         *
+         *
+        );
+        public Builder put(String setting, float value) {
+         * @param setting The setting key
+import java.util.HashSet;
+            ) {
+            return copy(key, key, source);
+        @Override
+        if (validateEndOfStream) {
+        try {
+    public static final Set<String> FORMAT_PARAMS = Collections.unmodifiableSet(
+    }
+            return this;
+    /**
+            }
+        @Override
+    private static Settings fromXContent(XContentParser parser, boolean allowNullValues, boolean validateEndOfStream) throws IOException {
+                    // fall back to "." notation
+                    validateValue(key, value, parser, allowNullValues);
+                String key = keyBuilder.toString();
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            this.keyPredicate = keyPredicate;
+import org.opensearch.common.annotation.PublicApi;
+                throw new OpenSearchParseException(
+    public Float getAsFloat(String setting, Float defaultValue) {
+            return this;
+            } catch (OpenSearchParseException e) {
+        }
+            if (existingValue == null) {
+            put(setting, String.valueOf(value));
+         * Note: Loading from a path doesn't allow <code>null</code> values in the incoming xcontent
+                                + "="
+         * @return The builder
+     */
+                            }
+ *
+        }
+                }
+        }
+         * Sets an lucene version setting with the provided setting key and lucene version instance.
+         */
+        } else {
+            secureSettings == null ? null : new PrefixedSecureSettings(secureSettings, "", predicate)
+        if (this == o) return true;
+    public int hashCode() {
+                    } else if (parser.currentToken() == XContentParser.Token.VALUE_BOOLEAN) {
+                validateValue(key, null, parser, allowNullValues);
+/*
+        public void close() throws IOException {
+     */
+     * Returns the settings as delimited string.
+                @Override
+         * Sets the setting with the provided setting key and the double value.
+            builder.startObject();
+            return defaultValue;
+         */
+        }
+                    return new Iterator<Entry<String, Object>>() {
+    }
+                );
+                                    return current.getKey().substring(prefix.length());
+    }
+                }
+                        public boolean hasNext() {
+                        return Optional.empty();
+                                @Override
+                    int i = k.indexOf('.');
+         *
+        @Override
+        }
+        // this is safe to do since this map is only used with unmodifiable maps
+    /**
+import org.opensearch.common.util.io.IOUtils;
+                }
+                if (ignoreNonGrouped) {
+            } else if (parser.currentToken() == XContentParser.Token.START_OBJECT) {
+            map.put(prefix + setting, value);
+                    processSetting(innerMap, "", rest, value);
+         *
+    }
+        public static final Settings EMPTY_SETTINGS = Settings.EMPTY;
+import org.opensearch.core.common.unit.ByteSizeValue;
+            ) {
+                        // uniquify, since for legacy reasons the same setting name may exist in both
+                String value = propertyPlaceholder.replacePlaceholders(Settings.toString(entry.getValue()), placeholderResolver);
+            return builder.toString();
+        } catch (NumberFormatException e) {
+            while (entryItr.hasNext()) {
+    }
+import java.util.ListIterator;
+        }
+import org.opensearch.core.xcontent.XContentParser;
+            }
+        public int size() {
+            if (value == null) {
+        final int length = keyBuilder.length();
+import java.util.NoSuchElementException;
+            return Version.fromId(Integer.parseInt(sValue));
+        XContentParserUtils.ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.currentToken(), parser);
+        }
+        }
+     */
+            } else {
+                                public Object getValue() {
+        }
+            return put(key, enumValue.toString());
+        private final SetOnce<Set<String>> settingNames = new SetOnce<>();
+                    Map<String, Object> innerMap = (Map<String, Object>) existingValue;
+        /**
+         * @param value   The boolean value
+     * A settings that are filtered (and key is removed) with the specified prefix.
+                Set<String> names = stream.map(k -> {
+                ArrayList<String> list = new ArrayList<>();
+            }
+                        @Override
+        private void processLegacyLists(Map<String, Object> map) {
+                for (Map.Entry<String, Object> entry : innerMap.entrySet()) {
+         * @param parsableString placeholder value to parse
+ * Licensed to Elasticsearch under one or more contributor
+        if (sValue == null) {
+    }
+ */
+     */
+                    e,
+            } else if (value instanceof List) {
+ * not use this file except in compliance with the License.
+    }
+     * returns the default value provided.
+            try (
+                }
+     * Note this method requires the parser to either be positioned on a null token or on
+         * @param key  The setting key
+                );
+                        li.set(settingValueResolved);
+                            }
+                }
+                keyBuilder.setLength(length);
+/**
+        String sValue = get(setting);
+     * @param commaDelimited Whether to try to parse a string as a comma-delimited value
+                                + "] and ["
+        }
+         * Returns a setting value based on the setting key.
+     *
+        if (settings != null) {
+                                    throw new UnsupportedOperationException();
+     * @opensearch.internal
+            put(setting, sizeUnit.toBytes(value) + "b");
+    /**
+import java.util.TreeMap;
+                        keys.set(Collections.unmodifiableSet(stream.collect(Collectors.toSet())));
+                    if (parser.currentToken() == XContentParser.Token.VALUE_STRING) {
+                setSecureSettings(settings.getSecureSettings());
+                    parser.getTokenLocation().lineNumber,
+                                @Override
+import java.io.InputStream;
+            Object value = in.readGenericValue();
+                        entry.setValue(value);
+            }
+     * @return  The direct keys of this settings
+                }
+ */
+     * Returns the setting value (as int) associated with the setting key. If it does not exists,
+        }
+        try (XContentBuilder builder = MediaTypeRegistry.JSON.contentBuilder()) {
+        }
+            return this;
+         * @return The builder
+            return Settings.toString(map.get(key));
+                        + this.secureSettings.get().getSettingNames()
+    private static String toString(Object o) {
+     *
+     * @param key  The setting key to load the list by
+    }
+                    return !placeholderName.startsWith("prompt.");
+         */
+                // It supposed to be a value, but we already have a map stored, need to convert this map to "." notation
+                    "Secure settings already set. Existing settings: "
+        synchronized (firstLevelNames) {
+            if (secureSettings.isLoaded() == false) {
+        if (sValue == null) {
+            for (String key : array) {
+/*
+            return this;
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+                }
+         *
+                        );
+        return getAsList(key, Collections.emptyList());
+     * Returns a parsed version.
+                    return Optional.empty();
+                        keys.set(settings.keySet());
+            // fromXContent doesn't use named xcontent or deprecation.
+            PropertyPlaceholder.PlaceholderResolver placeholderResolver = new PropertyPlaceholder.PlaceholderResolver() {
+        }
+            toXContent(builder, new MapParams(Collections.singletonMap("flat_settings", "true")));
+import java.nio.file.Path;
+            final MediaType mediaType;
+        public SecureString getString(String setting) throws GeneralSecurityException {
+                } else {
+                        list.add(String.valueOf(parser.text()));
+            }
+            for (int i = 0; i <= maxIndex; i++) {
+            return defaultVersion;
+     * Returns {@code true} if this settings object contains no settings
+         * Checks that all settings(except archived settings and wildcards) in the builder start with the specified prefix.
+     */
+        /**
+        return toString(settings.get(setting));
+    private static void fromXContent(XContentParser parser, StringBuilder keyBuilder, Settings.Builder builder, boolean allowNullValues)
+                                + "="
+    }
+     * @param key The setting key to load the list by
+    /**
+            } catch (Exception e) {
+        }
+    );
+                                    return current.getValue();
+                        return value;
+                    }
+            put(setting, String.valueOf(value));
+                    if (token != XContentParser.Token.VALUE_STRING) {
+        public Builder put(String setting, long value) {
+                        .map(removePrefix)
+import org.opensearch.core.common.Strings;
+            } else if (parser.currentToken() == XContentParser.Token.VALUE_NULL) {
+                @Override
+     * returns the default value provided.
+        /**
+            }
+        String sValue = get(setting);
+     * Returns the setting value (as double) associated with the setting key. If it does not exists,
+        public Builder put(String setting, int value) {
+                    }
+     */
+                    while (true) {
+    private final SetOnce<Set<String>> firstLevelNames = new SetOnce<>();
+            return this;
+    }
+    }
+         * @param key   The setting key
+        @Override
+        try {
+import org.opensearch.core.common.io.stream.StreamOutput;
+                    parser.getTokenLocation().lineNumber,
+        private final UnaryOperator<String> removePrefix;
+        /**
+import java.util.AbstractSet;
+         * Sets the setting with the provided setting key and an array of values.
+    /**
+            }
+        public Builder put(String setting, boolean value) {
+            XContentParser.Token lastToken = null;
+     */
+     * If commaDelimited is true, it will automatically load a comma separated list under the settingPrefix and merge with
+    public Version getAsVersion(String setting, Version defaultVersion) throws SettingsException {
+                        + "] because of a missing '.'"
+        return getAsList(key, defaultValue, true);
+     * Returns group settings for the given setting prefix.
+     * Setting names found in this Settings for both string and secure settings.
+        return MemorySizeValue.parseBytesSizeValueOrHeapRatio(get(setting, defaultValue), setting);
+                                        numIterated++;
+     *
+            } else if (resourceName.endsWith(".yml") || resourceName.endsWith(".yaml")) {
+                        + settingPrefix
+            }
+        public String remove(String key) {
+     * Returns the setting value (as boolean) associated with the setting key. If it does not exists,
+     * Prefixed secure settings
+        boolean isArray = true;
+            throw new SettingsException("Failed to parse double setting [" + setting + "] with value [" + sValue + "]", e);
+    public Integer getAsInt(String setting, Integer defaultValue) {
+         * @param enumValue The setting value
+            map.putAll(replacements);
+            out.writeBoolean(true);
+    private void processSetting(Map<String, Object> map, String prefix, String setting, Object value) {
+     * @return The setting list values
+        try {
+                    if (value != null) {
+            }
+    }
+            throw new SettingsException("Failed to parse version setting [" + setting + "] with value [" + sValue + "]", e);
+        private int size = -1;
+     * settings implementation. Use {@link Settings#builder()} in order to
+                            }
+        );
+                    entryItr.remove();
+                    return FilteredMap.this.size();
+import java.security.GeneralSecurityException;
+        if (result.isEmpty()) {
+     * @return {@code true} if this settings object contains no settings
+    }
+            if (resourceName.endsWith(".json")) {
+    /**
+        /**
+                    .createParser(NamedXContentRegistry.EMPTY, DeprecationHandler.THROW_UNSUPPORTED_OPERATION, parsableString)
+     * @param key The setting key to load the list by
+     */
+        StringBuilder sb = new StringBuilder();
+ */
+                        entry.setValue(optList.get());
+         * @param key  The setting key
+    }
+         * @param key  The setting key
+                            return new Entry<String, Object>() {
+ * You may obtain a copy of the License at
+         * Sets a null value for the given setting key
+ * GitHub history for details.
+         * Loads settings from a stream that represents them using {@link #fromXContent(XContentParser)}
+     */
+            return put(key, path.toString());
+            }
+         */
+     * This is constructed lazily in {@link #keySet()}.
+    }
+                        public Entry<String, Object> next() {
+     * @param setting The setting key
+        /**
+     */
+                    }
+import java.util.ArrayList;
+                    return placeholderName.startsWith("prompt.");
+                while ((token = xContentParser.nextToken()) != XContentParser.Token.END_ARRAY) {
+                    builder.put(key, value);
+        return Objects.equals(settings, that.settings);
+                if (token != XContentParser.Token.START_ARRAY) {
+        for (Map.Entry<String, Object> entry : settings.entrySet()) {
+        }
+        }
+                            } else {
+        return secureSettings;
+     * Returns group settings for the given setting prefix.
+            return this;
+         * Tries to parse the placeholder value as a list (fe [], ["a", "b", "c"])
+        }
+            if (copySecureSettings && settings.getSecureSettings() != null) {
+            throw new UncheckedIOException(e);
+        // pkg private so it can only be accessed by local subclasses of SecureSetting
+                    continue;
+            if (entry.getValue() instanceof Map) {
+                        final String settingValueResolved = propertyPlaceholder.replacePlaceholders(settingValueRaw, placeholderResolver);
+            return put(key, luceneVersion.toString());
+        public InputStream getFile(String setting) throws GeneralSecurityException {
+    private static void validateValue(String key, Object currentValue, XContentParser parser, boolean allowNullValues) {
+        @Override
+        }
+    }
+        public Builder put(String key, Enum<?> enumValue) {
+            remove(setting);
+                while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
+            };
+     */
+         * @param path The setting path
+                    }
+            processLegacyLists(settingsMap);
+                keyBuilder.append(parser.currentName());
+                String key = entry.getKey();
+                if (existingValue instanceof Map) {
+                }
+         */
+                final String key = esSetting.getKey();
+                if (entry.getValue() instanceof List) {
+    public Map<String, Settings> getAsGroups() throws SettingsException {
+    /**
+        public Set<String> keys() {
+                return putList(key, (List) value);
+            return null;
+import static org.opensearch.core.common.unit.ByteSizeValue.parseBytesSizeValue;
+import org.opensearch.core.xcontent.XContentParserUtils;
+     * Returns the settings mapped to the given setting name.
+import org.opensearch.core.common.unit.ByteSizeUnit;
+                        Stream<String> stream = Stream.concat(settings.keySet().stream(), secureSettings.getSettingNames().stream());
+                if (key.endsWith(".0")) { // let's only look at the head of the list and convert in order starting there.
+     */
+            final Object value = source.settings.get(sourceKey);
+ * specific language governing permissions and limitations
+        /**
+ */
+        // we use a sorted map for consistent serialization when using getAsMap()
+package org.opensearch.common.settings;
+            this.secureSettings.set(secureSettings);
+            this.removePrefix = s -> s.substring(prefix.length());
+         * Sets a byteSizeValue setting with the provided setting key and byteSizeValue.
+     * Returns group settings for the given setting prefix.
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+        private final UnaryOperator<String> addPrefix;
+            }
+import java.util.concurrent.TimeUnit;
+            };
+            return this;
+            } else if (value == null) {
+                    if (i < 0) {
+        }
+            out.writeBoolean(false);
+                if (keys.get() == null) {
+import static org.opensearch.common.settings.AbstractScopedSettings.ARCHIVED_SETTINGS_PREFIX;
+import org.opensearch.OpenSearchGenerationException;
+        String sValue = get(setting);
+         * @return The builder
+                throw new SettingsException(
+                            values.add(value);
+        @Override
+            if (groupSettings.isEmpty()) {
+         * Runs across all the settings set on this builder and
+        }
+         */
+            Iterator<Map.Entry<String, Object>> entryItr = map.entrySet().iterator();
+        }
+     * The values associated with a setting key as an immutable list.
+            }
+                            if (currentElement == null && hasNext() == false) { // protect against no #hasNext call or not respecting it
+         * Sets an level setting with the provided setting key and level instance.
+                    // Something went wrong. Different format?
+import java.util.function.Predicate;
+        return getGroupsInternal("", false);
+     * @return The setting list values
+        } catch (NumberFormatException e) {
+            if (entry.getValue() instanceof Map) {
+                    }
+                );
+                            map.put(prefix, values);
+         * Sets the setting with the provided setting key and a list of values.
+     * {@link Setting} object constructed in, for example, {@link org.opensearch.env.Environment}.
+ * The OpenSearch Contributors require contributions made to
+                    parser.getTokenLocation().columnNumber
+        private final Map<String, Object> map = new TreeMap<>();
+                            break;
+                    @SuppressWarnings("unchecked")
+        /**
+     * <p>
+    }
+                Map<String, Object> valMap = (Map<String, Object>) entry.getValue();
+            new FilteredMap(this.settings, (k) -> k.startsWith(prefix), prefix),
+                    } else {
+    }
+                    return delegate.containsKey(theKey);
+        for (int i = 0; i < numberOfSettings; i++) {
+        return null;
+                throw new IllegalArgumentException(
+                    while (li.hasNext()) {
+            return this;
+        }
+            map.putAll(settingsMap);
+            secureSettings == null ? null : new PrefixedSecureSettings(secureSettings, prefix, s -> s.startsWith(prefix))
+    private final Map<String, Object> settings;
+         * @return The builder
+    }
+        return Collections.unmodifiableMap(groups);
+        if (settingPrefix.charAt(settingPrefix.length() - 1) != '.') {
+        }
+        /**
+                    "Failed to get setting group for ["
+import java.util.List;
+ * software distributed under the License is distributed on an
+    }
+                                    if (filter.test((currentElement = iter.next()).getKey())) {
+         */
+        Builder innerBuilder = Settings.builder();
+                                return true; // protect against calling hasNext twice
+        @Override
+            return putList(setting, Arrays.asList(values));
+        private final Predicate<String> keyPredicate;
+            String key = in.readString();
+     *
+    @Override
+            throw new SettingsException("Failed to parse int setting [" + setting + "] with value [" + sValue + "]", e);
+            return delegate.isLoaded();
+/*
+     * Returns the setting value (as time) associated with the setting key. If it does not exists,
+                                return current;
+    private static class PrefixedSecureSettings implements SecureSettings {
+    }
+        if (sValue == null) {
+        public Builder setSecureSettings(SecureSettings secureSettings) {
+            return loadFromStream(path.getFileName().toString(), Files.newInputStream(path), false);
+         * @param value   The time value
+        }
+ *
+    /** Returns the fully qualified setting names contained in this settings object. */
+import org.opensearch.OpenSearchParseException;
+        for (String groupName : prefixSettings.names()) {
+                @SuppressWarnings("unchecked")
+                }).collect(Collectors.toSet());
+ * SPDX-License-Identifier: Apache-2.0
+    }
+         * Sets the setting with the provided setting key and the long value.
+        } catch (IOException e) {
+    /**
+ * An immutable settings implementation.
+                            if (currentElement != null) {
+        }
+                if (filter.test(theKey)) {
+                    return Settings.toString(map.get(placeholderName));
+import org.opensearch.common.unit.TimeValue;
+     * @opensearch.api
+            Map<String, Object> settingsMap = new HashMap<>(settings.settings);
+    /**
+public final class Settings implements ToXContentFragment {
+            return delegate.getFile(addPrefix.apply(setting));
+    }
+         * @param value   The long value
+            return put(key, level.toString());
+                processSetting(newMap, "", rest, value);
+                        + settingPrefix
+    /**
+    /**
+ *
+        private final SecureSettings delegate;
+    public Settings getAsSettings(String setting) {
+            return this;
+            throw new IllegalArgumentException("illegal setting prefix " + settingPrefix);
+     *
+        Map<String, Settings> groups = new HashMap<>();
+                        return k;
+    @Override
+        /**
+            for (final Map.Entry<String, String> esSetting : esSettings.entrySet()) {
+    public Settings filter(Predicate<String> predicate) {
+                Stream<String> stream = settings.keySet().stream();
+                throw new SettingsException("Failed to load settings from [" + resourceName + "]", e);
+import static org.opensearch.common.unit.TimeValue.parseTimeValue;
+                map.put(prefix + key, newMap);
+                if (Strings.hasLength(value) == true) {
+            sb.append(entry.getKey()).append("=").append(entry.getValue()).append(delimiter);
+        }
+import java.util.AbstractMap;
+    }
+        }
+        public Builder put(String key, String value) {
+    private Map<String, Settings> getGroupsInternal(String settingPrefix, boolean ignoreNonGrouped) throws SettingsException {
+                builder.putList(key, (List<String>) value);
+    private static final class FilteredMap extends AbstractMap<String, Object> {
+ * this work for additional information regarding copyright
+        return getByPrefix(setting + ".");
+            }
+        }
+    }
+            }
+         */
+    /**
+        /**
+            delegate.close();
+                    // It supposed to be a map, but we already have a value stored, which is not a map
+                    validateValue(key, parser.text(), parser, allowNullValues);
+            if (size == -1) {
+                }
+         * @param key  The setting key
+                        if (value == null) {
+                    Iterator<Entry<String, Object>> iter = delegateSet.iterator();
+        public Builder put(String key, Path path) {
+        public Builder putList(String setting, List<String> values) {
+                    stream = Stream.concat(stream, secureSettings.getSettingNames().stream());
+                Object obj = map.get(Integer.toString(i));
+        public Builder put(Settings settings, boolean copySecureSettings) {
+        public Builder putList(String setting, String... values) {
+            throw new OpenSearchParseException(
+            this.delegate = delegate;
+                if (parser.currentToken() == null) {
+    }
+        if (prefixLength == -1) {
+                return put(key, Settings.toString(value));
+        if (map.isEmpty()) {
+        return parseBytesSizeValue(get(setting), defaultValue, setting);
+        if (!params.paramAsBoolean("flat_settings", false)) {
+    @Override
+        /**
+         */
+         * @return The builder
+        Settings prefixSettings = getByPrefix(settingPrefix);
+                if (strings.length > 0) {
+    /**
+ * @opensearch.api
+import org.opensearch.common.unit.MemorySizeValue;
+                        }
+        Set<Map.Entry<String, Object>> entries = settings.settings.entrySet();
+        }
+        this.settings = Collections.unmodifiableSortedMap(new TreeMap<>(settings));
+import java.util.Collections;
+        }
+            try (
+                builder.putNull(key);
+        private Builder() {
+            this.prefix = prefix;
+        }
+     * Returns <code>true</code> iff the given key has a value in this settings object
+            }
+            return readSettingsFromStream(in);
+            put(setting, String.valueOf(value));
+    }
+    /**
+        public Builder put(String setting, Version version) {
+            put(setting, version.id);
+import java.io.UncheckedIOException;
+     * <p>
+        return map;
+        /**
+                            this.currentElement = null;
+                Map<String, Object> newMap = new HashMap<>(2);
+import java.util.function.Function;
+     * returns the default value provided.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                    builder.put(key, parser.booleanValue());
+         * @param key  The setting key
+                }
+                    "malformed, expected end of settings but encountered additional content starting at line number: [{}], "
+    private Object convertMapsToArrays(Map<String, Object> map) {
+         */
+                    continue;
+        return retVal == null ? defaultValue : retVal;
+         * replaces {@code ${...}} elements in each setting with
+    public String toDelimitedString(char delimiter) {
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+    public static final Settings EMPTY = new Settings(Collections.emptyMap(), null);
+        List<String> result = new ArrayList<>();
+     */
+        // pull settings to exclude secure settings in size()
+        @Override
+         * Sets a time value setting with the provided setting key and value.
+                                + map.get(key)
+            String rest = setting.substring(prefixLength + 1);
+                if (settingNames.get() == null) {
+ * compatible open source license.
+                    // Bailout!
+    /** The raw settings from the full key to raw string value. */
+                    map.put(prefix + setting + "." + entry.getKey(), entry.getValue());
+                }
+import java.nio.file.Files;
+        }
+                    int counter = 0;
+            builder.endObject();
+                    } else {
+     * Returns a builder to be used in order to build settings.
+            return new Settings(map, secureSettings.get());
+        public Builder put(final String key, final ByteSizeValue byteSizeValue) {
+        return settings != null ? settings.hashCode() : 0;
+                    }
+        if (keys.get() == null) {
+        return keySet().size();
+         */
+                final String theKey = prefix == null ? (String) key : prefix + key;
+         * Loads settings from the actual string content that represents them using {@link #fromXContent(XContentParser)}
+            throw new SettingsException("Failed to parse long setting [" + setting + "] with value [" + sValue + "]", e);
+        }
+    /**
+     */
+    private Settings(Map<String, Object> settings, SecureSettings secureSettings) {
+                } catch (NumberFormatException ex) {
+                    }
+        }
+                }
+                                }
+            return this;
+         * @param setting The setting key
+import org.opensearch.core.xcontent.XContentBuilder;
+    }
+    /** The secure settings storage associated with these settings. */
+        /**
+     * (eg. 12%). If it does not exists, parses the default value provided.
+                    isArray = false;
+     * absolute values (interpreted as a number of bytes), byte sizes (eg. 1mb) or percentage of the heap size
+import org.opensearch.core.xcontent.MediaType;
+        }
+            parser.nextToken();
+         * @param value   The float value
+                public int size() {
+                return Collections.unmodifiableList((List<String>) valueFromPrefix);
+            } catch (Exception e) {
+                this.put(fromXContent(parser, true, true));
+        public Builder put(String key, org.apache.lucene.util.Version luceneVersion) {
+                        + groupName
+            this.delegate = delegate;
+        public byte[] getSHA256Digest(String setting) throws GeneralSecurityException {
+        }
+     */
+         * @return The builder
+                );
+                            if (prefix == null) {
+                        + "] setting prefix and setting ["

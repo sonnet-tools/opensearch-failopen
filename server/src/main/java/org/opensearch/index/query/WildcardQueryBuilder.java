@@ -1,271 +1,240 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
+        out.writeString(fieldName);
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.MultiTermQuery;
-import org.apache.lucene.search.Query;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
+        return this;
 import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.mapper.ConstantFieldType;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.query.support.QueryParsers;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * Implements the wildcard search query. Supported wildcards are {@code *}, which
- * matches any character sequence (including the empty one), and {@code ?},
- * which matches any single character. Note this query can be slow, as it
- * needs to iterate over many terms. In order to prevent extremely slow WildcardQueries,
- * a Wildcard term should not start with one of the wildcards {@code *} or
- * {@code ?}.
- *
- * @opensearch.internal
- */
-public class WildcardQueryBuilder extends AbstractQueryBuilder<WildcardQueryBuilder> implements MultiTermQueryBuilder {
-    public static final String NAME = "wildcard";
-
-    private static final ParseField WILDCARD_FIELD = new ParseField("wildcard");
-    private static final ParseField VALUE_FIELD = new ParseField("value");
-    private static final ParseField REWRITE_FIELD = new ParseField("rewrite");
-
-    private final String fieldName;
-
-    private final String value;
-
-    private String rewrite;
-
-    public static final boolean DEFAULT_CASE_INSENSITIVITY = false;
-    private static final ParseField CASE_INSENSITIVE_FIELD = new ParseField("case_insensitive");
-    private boolean caseInsensitive = DEFAULT_CASE_INSENSITIVITY;
-
-    /**
-     * Implements the wildcard search query. Supported wildcards are {@code *}, which
-     * matches any character sequence (including the empty one), and {@code ?},
-     * which matches any single character. Note this query can be slow, as it
-     * needs to iterate over many terms. In order to prevent extremely slow WildcardQueries,
-     * a Wildcard term should not start with one of the wildcards {@code *} or
-     * {@code ?}.
-     *
-     * @param fieldName The field name
-     * @param value The wildcard query string
-     */
-    public WildcardQueryBuilder(String fieldName, String value) {
-        if (Strings.isEmpty(fieldName)) {
-            throw new IllegalArgumentException("field name is null or empty");
         }
         if (value == null) {
-            throw new IllegalArgumentException("value cannot be null");
-        }
-        this.fieldName = fieldName;
-        this.value = value;
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public WildcardQueryBuilder(StreamInput in) throws IOException {
-        super(in);
-        fieldName = in.readString();
-        value = in.readString();
-        rewrite = in.readOptionalString();
-        caseInsensitive = in.readBoolean();
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeString(fieldName);
-        out.writeString(value);
-        out.writeOptionalString(rewrite);
-        out.writeBoolean(caseInsensitive);
-    }
-
-    @Override
-    public String fieldName() {
-        return fieldName;
-    }
-
-    public String value() {
-        return value;
-    }
-
-    public WildcardQueryBuilder rewrite(String rewrite) {
-        this.rewrite = rewrite;
-        return this;
-    }
-
-    public String rewrite() {
-        return this.rewrite;
-    }
-
-    public WildcardQueryBuilder caseInsensitive(boolean caseInsensitive) {
-        this.caseInsensitive = caseInsensitive;
-        return this;
-    }
-
-    public boolean caseInsensitive() {
-        return this.caseInsensitive;
-    }
-
-    @Override
-    public String getWriteableName() {
-        return NAME;
-    }
-
-    @Override
-    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(NAME);
-        builder.startObject(fieldName);
-        builder.field(WILDCARD_FIELD.getPreferredName(), value);
-        if (rewrite != null) {
-            builder.field(REWRITE_FIELD.getPreferredName(), rewrite);
-        }
-        if (caseInsensitive != DEFAULT_CASE_INSENSITIVITY) {
-            builder.field(CASE_INSENSITIVE_FIELD.getPreferredName(), caseInsensitive);
-        }
-        printBoostAndQueryName(builder);
-        builder.endObject();
-        builder.endObject();
-    }
-
-    public static WildcardQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        String fieldName = null;
-        String rewrite = null;
-        String value = null;
-        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
-        boolean caseInsensitive = DEFAULT_CASE_INSENSITIVITY;
-        String queryName = null;
-        String currentFieldName = null;
-        XContentParser.Token token;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, currentFieldName);
-                fieldName = currentFieldName;
-                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                    if (token == XContentParser.Token.FIELD_NAME) {
-                        currentFieldName = parser.currentName();
-                    } else {
-                        if (WILDCARD_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            value = parser.text();
-                        } else if (VALUE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            value = parser.text();
-                        } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            boost = parser.floatValue();
-                        } else if (REWRITE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            rewrite = parser.textOrNull();
-                        } else if (CASE_INSENSITIVE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            caseInsensitive = parser.booleanValue();
-                        } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            queryName = parser.text();
-                        } else {
-                            throw new ParsingException(
-                                parser.getTokenLocation(),
-                                "[wildcard] query does not support [" + currentFieldName + "]"
-                            );
-                        }
-                    }
-                }
-            } else {
-                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, parser.currentName());
-                fieldName = parser.currentName();
-                value = parser.text();
-            }
-        }
-
-        return new WildcardQueryBuilder(fieldName, value).rewrite(rewrite)
-            .boost(boost)
-            .queryName(queryName)
-            .caseInsensitive(caseInsensitive);
-    }
-
-    @Override
-    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
-        QueryShardContext context = queryRewriteContext.convertToShardContext();
-        if (context != null) {
-            MappedFieldType fieldType = context.fieldMapper(this.fieldName);
-            if (fieldType == null) {
-                return new MatchNoneQueryBuilder();
-            } else if (fieldType.unwrap() instanceof ConstantFieldType) {
-                // This logic is correct for all field types, but by only applying it to constant
-                // fields we also have the guarantee that it doesn't perform I/O, which is important
-                // since rewrites might happen on a network thread.
-                Query query = fieldType.wildcardQuery(value, null, caseInsensitive, context); // the rewrite method doesn't matter
-                if (query instanceof MatchAllDocsQuery) {
-                    return new MatchAllQueryBuilder();
-                } else if (query instanceof MatchNoDocsQuery) {
-                    return new MatchNoneQueryBuilder();
-                } else {
-                    assert false : "Constant fields must produce match-all or match-none queries, got " + query;
-                }
-            }
-        }
-
-        return super.doRewrite(queryRewriteContext);
-    }
-
-    @Override
-    protected Query doToQuery(QueryShardContext context) throws IOException {
-        MappedFieldType fieldType = context.fieldMapper(fieldName);
-
-        if (fieldType == null) {
-            throw new IllegalStateException("Rewrite first");
-        }
-
-        MultiTermQuery.RewriteMethod method = QueryParsers.parseRewriteMethod(rewrite, null, LoggingDeprecationHandler.INSTANCE);
-        return fieldType.wildcardQuery(value, method, caseInsensitive, context);
-    }
-
-    @Override
-    protected int doHashCode() {
-        return Objects.hash(fieldName, value, rewrite, caseInsensitive);
-    }
-
-    @Override
-    protected boolean doEquals(WildcardQueryBuilder other) {
-        return Objects.equals(fieldName, other.fieldName)
-            && Objects.equals(value, other.value)
-            && Objects.equals(rewrite, other.rewrite)
             && Objects.equals(caseInsensitive, other.caseInsensitive);
     }
+                    }
+    public static WildcardQueryBuilder fromXContent(XContentParser parser) throws IOException {
+    }
+                            caseInsensitive = parser.booleanValue();
+                // since rewrites might happen on a network thread.
+    private boolean caseInsensitive = DEFAULT_CASE_INSENSITIVITY;
+            MappedFieldType fieldType = context.fieldMapper(this.fieldName);
+            .boost(boost)
+import org.apache.lucene.search.MultiTermQuery;
+                            throw new ParsingException(
+                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, parser.currentName());
+        String fieldName = null;
+        return this;
+            .queryName(queryName)
+        this.value = value;
+     * @param fieldName The field name
+ * the Apache License, Version 2.0 (the "License"); you may
+ * under the License.
+                            queryName = parser.text();
+import org.opensearch.core.ParseField;
+ * this file be licensed under the Apache-2.0 license or a
+    }
+                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+            }
+     * @param value The wildcard query string
+        super(in);
+        }
+        }
+    private final String value;
+                }
+ * compatible open source license.
+    }
+    public boolean caseInsensitive() {
+                Query query = fieldType.wildcardQuery(value, null, caseInsensitive, context); // the rewrite method doesn't matter
+                        } else {
+            } else {
+        }
+        String currentFieldName = null;
+                        }
+        return fieldType.wildcardQuery(value, method, caseInsensitive, context);
+        builder.endObject();
+                        if (WILDCARD_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+ * this work for additional information regarding copyright
+                        currentFieldName = parser.currentName();
+            && Objects.equals(value, other.value)
+    @Override
+     * {@code ?}.
+ * The OpenSearch Contributors require contributions made to
+ * Implements the wildcard search query. Supported wildcards are {@code *}, which
+        if (rewrite != null) {
+     * Read from a stream.
+        caseInsensitive = in.readBoolean();
+    private static final ParseField REWRITE_FIELD = new ParseField("rewrite");
+        out.writeOptionalString(rewrite);
+                            rewrite = parser.textOrNull();
+    protected Query doToQuery(QueryShardContext context) throws IOException {
+                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, currentFieldName);
+        String rewrite = null;
+                }
+        this.rewrite = rewrite;
+        String queryName = null;
+        if (fieldType == null) {
+/*
+    public WildcardQueryBuilder(StreamInput in) throws IOException {
+import org.opensearch.core.common.ParsingException;
+    public String fieldName() {
+    }
+        }
+        out.writeBoolean(caseInsensitive);
+                            );
+                        } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        builder.field(WILDCARD_FIELD.getPreferredName(), value);
+ * @opensearch.internal
+    }
+import org.opensearch.core.xcontent.XContentParser;
+                            value = parser.text();
+ */
+            throw new IllegalArgumentException("field name is null or empty");
+        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
+        MappedFieldType fieldType = context.fieldMapper(fieldName);
+    @Override
+                        } else if (REWRITE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
+ *
+import org.opensearch.core.common.Strings;
+        fieldName = in.readString();
+                            value = parser.text();
+        QueryShardContext context = queryRewriteContext.convertToShardContext();
+                    if (token == XContentParser.Token.FIELD_NAME) {
+     * Implements the wildcard search query. Supported wildcards are {@code *}, which
 }
+     * needs to iterate over many terms. In order to prevent extremely slow WildcardQueries,
+ * needs to iterate over many terms. In order to prevent extremely slow WildcardQueries,
+        return new WildcardQueryBuilder(fieldName, value).rewrite(rewrite)
+ * {@code ?}.
+        if (caseInsensitive != DEFAULT_CASE_INSENSITIVITY) {
+import org.opensearch.index.query.support.QueryParsers;
+    }
+        return Objects.hash(fieldName, value, rewrite, caseInsensitive);
+ * a Wildcard term should not start with one of the wildcards {@code *} or
+                        } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    @Override
+            if (fieldType == null) {
+            builder.field(CASE_INSENSITIVE_FIELD.getPreferredName(), caseInsensitive);
+    }
+    }
+    private static final ParseField CASE_INSENSITIVE_FIELD = new ParseField("case_insensitive");
+                        } else if (VALUE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+            }
+ * GitHub history for details.
+            } else if (token == XContentParser.Token.START_OBJECT) {
+    @Override
+    protected boolean doEquals(WildcardQueryBuilder other) {
+                // fields we also have the guarantee that it doesn't perform I/O, which is important
+     */
+        builder.endObject();
+/**
+    @Override
+            throw new IllegalStateException("Rewrite first");
+    private final String fieldName;
+import org.opensearch.core.xcontent.XContentBuilder;
+                fieldName = parser.currentName();
+        String value = null;
+     * matches any character sequence (including the empty one), and {@code ?},
+ *
+    public static final boolean DEFAULT_CASE_INSENSITIVITY = false;
+    }
+                value = parser.text();
+        }
+    }
+        MultiTermQuery.RewriteMethod method = QueryParsers.parseRewriteMethod(rewrite, null, LoggingDeprecationHandler.INSTANCE);
+        if (Strings.isEmpty(fieldName)) {
+                                "[wildcard] query does not support [" + currentFieldName + "]"
+import org.apache.lucene.search.MatchNoDocsQuery;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    public WildcardQueryBuilder rewrite(String rewrite) {
+ * which matches any single character. Note this query can be slow, as it
+import org.apache.lucene.search.Query;
+    @Override
+ * KIND, either express or implied.  See the License for the
+ */
+ * Unless required by applicable law or agreed to in writing,
+                    return new MatchNoneQueryBuilder();
+        return this.rewrite;
+        printBoostAndQueryName(builder);
+ * Licensed to Elasticsearch under one or more contributor
+    protected void doWriteTo(StreamOutput out) throws IOException {
+                // This logic is correct for all field types, but by only applying it to constant
+ * matches any character sequence (including the empty one), and {@code ?},
+            } else if (fieldType.unwrap() instanceof ConstantFieldType) {
+ *
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+     * which matches any single character. Note this query can be slow, as it
+            .caseInsensitive(caseInsensitive);
+ * Modifications Copyright OpenSearch Contributors. See
+    public String rewrite() {
+    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
+        return fieldName;
+ * not use this file except in compliance with the License.
+        XContentParser.Token token;
+                } else {
+    private static final ParseField WILDCARD_FIELD = new ParseField("wildcard");
+        out.writeString(value);
+                        } else if (CASE_INSENSITIVE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        return this.caseInsensitive;
+ * license agreements. See the NOTICE file distributed with
+    /**
+                                parser.getTokenLocation(),
+    public WildcardQueryBuilder caseInsensitive(boolean caseInsensitive) {
+/*
+ */
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+        boolean caseInsensitive = DEFAULT_CASE_INSENSITIVITY;
+    @Override
+        return NAME;
+    /**
+            && Objects.equals(rewrite, other.rewrite)
+    private String rewrite;
+                    } else {
+                    return new MatchAllQueryBuilder();
+import java.io.IOException;
+import org.opensearch.index.mapper.MappedFieldType;
+        builder.startObject(fieldName);
+        builder.startObject(NAME);
+    public String getWriteableName() {
+                fieldName = currentFieldName;
+    @Override
+        this.fieldName = fieldName;
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        return value;
+ * SPDX-License-Identifier: Apache-2.0
+        }
+ * ownership. Elasticsearch licenses this file to you under
+        rewrite = in.readOptionalString();
+            if (token == XContentParser.Token.FIELD_NAME) {
+    }
+        this.caseInsensitive = caseInsensitive;
+    protected int doHashCode() {
+public class WildcardQueryBuilder extends AbstractQueryBuilder<WildcardQueryBuilder> implements MultiTermQueryBuilder {
+import java.util.Objects;
+ */
+     *
+    }
+    public String value() {
+ * specific language governing permissions and limitations
+            builder.field(REWRITE_FIELD.getPreferredName(), rewrite);
+                    assert false : "Constant fields must produce match-all or match-none queries, got " + query;
+        value = in.readString();
+    public WildcardQueryBuilder(String fieldName, String value) {
+     */
+import org.opensearch.core.common.io.stream.StreamInput;
+    private static final ParseField VALUE_FIELD = new ParseField("value");
+                currentFieldName = parser.currentName();
+            throw new IllegalArgumentException("value cannot be null");
+    }
+        return Objects.equals(fieldName, other.fieldName)
+import org.apache.lucene.search.MatchAllDocsQuery;
+     * a Wildcard term should not start with one of the wildcards {@code *} or
+    public static final String NAME = "wildcard";
+package org.opensearch.index.query;
+                if (query instanceof MatchAllDocsQuery) {
+ * You may obtain a copy of the License at
+        if (context != null) {
+                            boost = parser.floatValue();
+import org.opensearch.index.mapper.ConstantFieldType;
+                return new MatchNoneQueryBuilder();
+    }
+        return super.doRewrite(queryRewriteContext);
+/*
+                } else if (query instanceof MatchNoDocsQuery) {

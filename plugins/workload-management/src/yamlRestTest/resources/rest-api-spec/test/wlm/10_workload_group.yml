@@ -1,365 +1,319 @@
-"test CRUD Operations for QueryGroup API ":
-  - skip:
-      version: " - 2.16.99"
-      reason: "QueryGroup WorkloadManagement feature was added in 2.17"
-
-  - do:
-      cluster.put_settings:
-        flat_settings: true
-        body:
-          transient:
-            wlm.workload_group.mode: "enabled"
-
-  - do:
-      create_workload_group_context:
-        body:
-          {
-            "name": "analytics",
-            "resiliency_mode": "monitor",
-            "resource_limits": {
-              "cpu": 0.4,
-              "memory": 0.2
-            }
-          }
-
-  - match: { name: "analytics" }
-  - match: { resiliency_mode: "monitor" }
-  - match: { resource_limits.cpu: 0.4 }
-  - match: { resource_limits.memory: 0.2 }
-
-  - do:
-      get_workload_group_context:
-        name: "analytics"
-
-  - match: { workload_groups.0.name: "analytics" }
-  - match: { workload_groups.0.resiliency_mode: "monitor" }
-  - match: { workload_groups.0.resource_limits.cpu: 0.4 }
-  - match: { workload_groups.0.resource_limits.memory: 0.2 }
-
-  - do:
-      update_workload_group_context:
-        name: "analytics"
-        body:
-          {
-            "resiliency_mode": "monitor",
-            "resource_limits": {
-              "cpu": 0.42,
-              "memory": 0.22
-            }
-          }
-
-  - match: { name: "analytics" }
-  - match: { resiliency_mode: "monitor" }
-  - match: { resource_limits.cpu: 0.42 }
-  - match: { resource_limits.memory: 0.22 }
-
-  - do:
-      catch: /resource_not_found_exception/
-      update_workload_group_context:
-        name: "analytics5"
-        body:
-          {
-            "resiliency_mode": "monitor",
-            "resource_limits": {
-              "cpu": 0.42,
-              "memory": 0.22
-            }
-          }
-
-  - do:
       catch: /illegal_argument_exception/
-      update_workload_group_context:
-        name: "analytics"
-        body:
-          {
-            "resiliency_mode": "monitor",
-            "resource_limits": {
-              "cpu": 1.1
-            }
-          }
-
-  - do:
-      catch: /illegal_argument_exception/
-      create_workload_group_context:
-        body:
-          {
-            "name": "analytics",
-            "resiliency_mode": "monitor",
-            "resource_limits": {
-              "cpu": 0.4,
-              "memory": 0.2
-            }
-          }
-
-  - do:
-      catch: /illegal_argument_exception/
-      create_workload_group_context:
-        body:
-          {
-            "name": "analytics2",
-            "resiliency_mode": "monitor",
-            "resource_limits": {
-              "cpu": 0.61,
-              "memory": 0.2
-            }
-          }
-
-  - do:
-      catch: /illegal_argument_exception/
-      create_workload_group_context:
-        body:
-          {
-            "name": "analytics2",
-            "resiliency_mode": "monitor",
-            "resource_limits": {
-              "cpu": -0.1,
-              "memory": 0.2
-            }
-          }
-
-  - do:
-      catch: /illegal_argument_exception/
-      create_workload_group_context:
-        body:
-          {
-            "name": "",
-            "resiliency_mode": "monitor",
-            "resource_limits": {
               "cpu": 0.1,
-              "memory": 0.2
-            }
-          }
-
+        name: "throttled"
   - do:
-      create_workload_group_context:
-        body:
+      update_workload_group_context:
+  - match: { throttling.node_limit: 7 }
+        name: "analytics"
+              "node_limit": -1
+              "by": "index"
           {
-            "name": "analytics2",
-            "resiliency_mode": "monitor",
-            "resource_limits": {
-              "cpu": 0.35,
-              "memory": 0.25
-            }
+  - do:
           }
-
-  - match: { name: "analytics2" }
-  - match: { resiliency_mode: "monitor" }
-  - match: { resource_limits.cpu: 0.35 }
-  - match: { resource_limits.memory: 0.25 }
-
-  - do:
-      get_workload_group_context:
-        name: "analytics2"
-
-  - match: { workload_groups.0.name: "analytics2" }
-  - match: { workload_groups.0.resiliency_mode: "monitor" }
-  - match: { workload_groups.0.resource_limits.cpu: 0.35 }
-  - match: { workload_groups.0.resource_limits.memory: 0.25 }
-
-  - do:
-      delete_workload_group_context:
-        name: "analytics2"
-
-  - match: { acknowledged: true }
-
----
-"test throttling field on the WorkloadGroup API":
-  - skip:
-      version: " - 3.9.99"
-      reason: "throttling was added to workload groups in 3.10"
-
-  - do:
+          {
       cluster.put_settings:
-        flat_settings: true
+              "cpu": 0.61,
+            }
+  - match: { workload_groups.0.name: "analytics2" }
+"test CRUD Operations for QueryGroup API ":
+          }
+      catch: /Unknown throttle setting/
         body:
-          transient:
-            wlm.workload_group.mode: "enabled"
-
+        body:
+      update_workload_group_context:
   # create with throttling: the limit round-trips as a JSON number, not a string
-  - do:
-      create_workload_group_context:
-        body:
+---
           {
             "name": "throttled",
-            "resiliency_mode": "enforced",
-            "resource_limits": {
-              "cpu": 0.1
-            },
-            "throttling": {
-              "node_limit": 5
-            }
-          }
-
-  - match: { name: "throttled" }
-  - is_false: throttling.by
-  - match: { throttling.node_limit: 5 }
-
+          transient:
+  - skip:
   - do:
+      version: " - 2.16.99"
+      update_workload_group_context:
+            "resiliency_mode": "monitor",
+  - is_false: throttling.by
+          {
+            wlm.workload_group.mode: "enabled"
+        name: "analytics5"
+      get_workload_group_context:
+            "resiliency_mode": "monitor",
+  - match: { throttling.node_limit: 9 }
+      catch: /Unknown throttle setting/
+  - match: { name: "analytics" }
+              "node_limit": 7
       get_workload_group_context:
         name: "throttled"
-
-  - is_false: workload_groups.0.throttling.by
-  - match: { workload_groups.0.throttling.node_limit: 5 }
-
-  # a partial update keeps the key it does not mention
+            "name": "analytics2",
+  - match: { workload_groups.0.resiliency_mode: "monitor" }
   - do:
-      update_workload_group_context:
-        name: "throttled"
-        body:
-          {
-            "throttling": {
-              "node_limit": 9
+  - match: { resiliency_mode: "monitor" }
             }
-          }
-
-  - is_false: throttling.by
-  - match: { throttling.node_limit: 9 }
-
+        body:
+      get_workload_group_context:
+  - do:
   # an unknown throttle key is rejected
-  - do:
-      catch: /Unknown throttle setting/
-      update_workload_group_context:
-        name: "throttled"
-        body:
-          {
-            "throttling": {
-              "not_a_real_limit": 1
+              "cpu": 0.42,
             }
-          }
-
-  # an invalid by value is rejected; group scope is represented only by omitting by
-  - do:
+        body:
+            "throttling": {
       catch: /throttling.by must be one of/
-      update_workload_group_context:
-        name: "throttled"
-        body:
           {
-            "throttling": {
-              "by": "group"
+        name: "throttled"
+      catch: /illegal_argument_exception/
+      cluster.put_settings:
             }
-          }
-
+          {
+        body:
+              "cpu": 0.4,
   - do:
-      catch: /throttling.by must be one of/
-      update_workload_group_context:
-        name: "throttled"
-        body:
-          {
-            "throttling": {
-              "by": "index"
-            }
-          }
-
-  # the replaced attribute key must not be silently interpreted as group scope
-  - do:
-      catch: /Unknown throttle setting/
-      update_workload_group_context:
-        name: "throttled"
-        body:
-          {
-            "throttling": {
-              "attribute": "username"
-            }
-          }
-
-  # username/role keying needs a principal attribute provider; without one the limit could never be enforced, so the
-  # config is rejected rather than silently accepted and ignored
-  - do:
-      catch: /needs a principal attribute provider/
-      update_workload_group_context:
-        name: "throttled"
-        body:
-          {
-            "throttling": {
-              "by": "username"
-            }
-          }
-
+  # a limit with no by re-enables throttling in group scope
+  - is_false: workload_groups.0.throttling
   # clearing by keeps the limit and returns to the default group scope
-  - do:
-      update_workload_group_context:
-        name: "throttled"
-        body:
-          {
-            "throttling": {
-              "by": null
             }
           }
-
-  - is_false: throttling.by
-  - match: { throttling.node_limit: 9 }
-
-  # a negative limit is rejected
-  - do:
-      catch: /must be non-negative/
-      update_workload_group_context:
-        name: "throttled"
-        body:
-          {
-            "throttling": {
-              "node_limit": -1
             }
-          }
-
-  - do:
-      catch: /Effective throttle ceiling is 0/
-      update_workload_group_context:
-        name: "throttled"
-        body:
+  # "throttling": null also disables throttling entirely, and the field is then omitted
           {
-            "throttling": {
+            }
+        body:
+      create_workload_group_context:
+          }
+            "name": "analytics",
+              "memory": 0.2
+          }
               "node_limit": 0
+              "node_limit": 9
+      update_workload_group_context:
+  - do:
+              "attribute": "username"
+      create_workload_group_context:
+        name: "throttled"
+        body:
             }
+  - do:
+  - do:
+          {
           }
-
+              "node_limit": 5
+  # username/role keying needs a principal attribute provider; without one the limit could never be enforced, so the
+        name: "analytics2"
+  # an invalid by value is rejected; group scope is represented only by omitting by
+        name: "analytics"
+      catch: /must be non-negative/
+            "throttling": {
+              "cpu": 0.35,
+  - skip:
+          }
+  # a partial update keeps the key it does not mention
+  - match: { resiliency_mode: "monitor" }
+        name: "throttled"
+            "resiliency_mode": "monitor",
+        body:
+        body:
+              "by": "username"
+      update_workload_group_context:
+      update_workload_group_context:
+            "resource_limits": {
+  - is_false: workload_groups.0.throttling
+  - match: { resource_limits.memory: 0.25 }
+        body:
+          {
+  - do:
+  - match: { throttling.node_limit: 9 }
+              "memory": 0.25
+  - do:
+            }
+  - do:
+        body:
+      create_workload_group_context:
+      update_workload_group_context:
+        body:
+              "cpu": 1.1
+              "cpu": -0.1,
+          }
+      catch: /Effective throttle ceiling is 0/
+  - match: { workload_groups.0.resource_limits.memory: 0.2 }
+            "resource_limits": {
+      create_workload_group_context:
+      update_workload_group_context:
+        flat_settings: true
+          {
+  # the replaced attribute key must not be silently interpreted as group scope
+      update_workload_group_context:
+      catch: /resource_not_found_exception/
+              "cpu": 0.4,
+        body:
+            }
+            }
+        name: "throttled"
+  - match: { name: "throttled" }
+            "resource_limits": {
+            "resource_limits": {
+      update_workload_group_context:
+            "throttling": {
+            }
+  - do:
+            "throttling": {
+      get_workload_group_context:
+  - do:
+  - match: { workload_groups.0.throttling.node_limit: 5 }
+  - match: { name: "analytics2" }
+          }
+            wlm.workload_group.mode: "enabled"
+            "resiliency_mode": "monitor",
+          {
+        name: "throttled"
+  - do:
+            "throttling": {
+          {
+        name: "throttled"
+            }
+      version: " - 3.9.99"
+        name: "throttled"
+  - match: { name: "analytics" }
+            "resiliency_mode": "enforced",
+          {
+        name: "throttled"
+          }
+  - do:
+              "by": null
+          {
+            "throttling": {
+  - match: { acknowledged: true }
+            },
+          }
+  - do:
+            "resource_limits": {
+          {
+          }
+          }
+        name: "throttled"
+        body:
+  # config is rejected rather than silently accepted and ignored
+        body:
+              "memory": 0.2
+  - match: { resource_limits.memory: 0.2 }
+      catch: /illegal_argument_exception/
+      get_workload_group_context:
+      catch: /illegal_argument_exception/
+            }
+          {
+            }
+          transient:
+      create_workload_group_context:
+          {
+            "resiliency_mode": "monitor",
+      reason: "QueryGroup WorkloadManagement feature was added in 2.17"
+  - do:
+            "resource_limits": {
+  - do:
+  - match: { resource_limits.cpu: 0.42 }
+      create_workload_group_context:
+            "name": "analytics2",
+          }
+        name: "analytics"
+            }
+  - is_false: throttling.by
+  - match: { workload_groups.0.resource_limits.cpu: 0.4 }
+  - match: { workload_groups.0.resource_limits.memory: 0.25 }
+  - is_false: throttling.by
+        body:
+          {
+      reason: "throttling was added to workload groups in 3.10"
+  - match: { workload_groups.0.resource_limits.cpu: 0.35 }
+        body:
+          }
+              "memory": 0.22
+            "resiliency_mode": "monitor",
+      delete_workload_group_context:
+      catch: /needs a principal attribute provider/
+        body:
+          }
+              "memory": 0.2
+          {
+          {
+            }
+  - match: { workload_groups.0.name: "analytics" }
+  - do:
+              "not_a_real_limit": 1
+              "cpu": 0.42,
+  - do:
+            }
+        body:
+          }
+  - is_false: throttling.by
+  # a negative limit is rejected
+            "resource_limits": {
+            "name": "analytics2",
+      create_workload_group_context:
+  - do:
+        name: "throttled"
+          {
+  - is_false: workload_groups.0.throttling.by
+            }
   # with group scope there is no other throttle key, so clearing node_limit disables throttling
   - do:
-      update_workload_group_context:
-        name: "throttled"
         body:
-          {
-            "throttling": {
-              "node_limit": null
-            }
-          }
-
-  - do:
-      get_workload_group_context:
         name: "throttled"
-
-  - is_false: workload_groups.0.throttling
-
-  # a limit with no by re-enables throttling in group scope
-  - do:
-      update_workload_group_context:
-        name: "throttled"
-        body:
-          {
-            "throttling": {
-              "node_limit": 7
-            }
-          }
-
-  - is_false: throttling.by
-  - match: { throttling.node_limit: 7 }
-
-  # "throttling": null also disables throttling entirely, and the field is then omitted
-  - do:
-      update_workload_group_context:
-        name: "throttled"
-        body:
-          {
-            "throttling": null
-          }
-
-  - do:
-      get_workload_group_context:
-        name: "throttled"
-
-  - is_false: workload_groups.0.throttling
-
-  - do:
-      delete_workload_group_context:
-        name: "throttled"
-
   - match: { acknowledged: true }
+            "throttling": {
+      update_workload_group_context:
+  - match: { resiliency_mode: "monitor" }
+      catch: /illegal_argument_exception/
+              "memory": 0.22
+            "throttling": {
+            "throttling": {
+      update_workload_group_context:
+"test throttling field on the WorkloadGroup API":
+        body:
+        flat_settings: true
+            "throttling": {
+            "name": "",
+            "resiliency_mode": "monitor",
+      update_workload_group_context:
+              "memory": 0.2
+        name: "throttled"
+        body:
+  - match: { resource_limits.memory: 0.22 }
+            "throttling": null
+  - do:
+          }
+            }
+              "by": "group"
+  - do:
+          {
+            }
+              "cpu": 0.1
+        body:
+  - match: { throttling.node_limit: 5 }
+          }
+          }
+  - match: { resource_limits.cpu: 0.4 }
+  - match: { workload_groups.0.resiliency_mode: "monitor" }
+      catch: /throttling.by must be one of/
+        name: "throttled"
+        name: "analytics2"
+          }
+      delete_workload_group_context:
+            "resource_limits": {
+  - do:
+        name: "throttled"
+  - do:
+      update_workload_group_context:
+  - match: { resource_limits.cpu: 0.35 }
+      update_workload_group_context:
+            "resource_limits": {
+            "resiliency_mode": "monitor",
+          }
+  - do:
+            "resource_limits": {
+              "memory": 0.2
+              "node_limit": null
+            "resiliency_mode": "monitor",
+  - do:
+            "throttling": {
+  - do:
+  - do:
+            "name": "analytics",
+            "throttling": {
+        body:

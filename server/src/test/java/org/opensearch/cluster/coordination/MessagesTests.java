@@ -1,385 +1,369 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.coordination;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.util.set.Sets;
-import org.opensearch.test.EqualsHashCodeTestUtils;
-import org.opensearch.test.EqualsHashCodeTestUtils.CopyFunction;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Optional;
-
+            initialPublishRequest,
 public class MessagesTests extends OpenSearchTestCase {
-
-    private DiscoveryNode createNode(String id) {
+            randomNonNegativeLong(),
+                    case 0:
+                    case 1:
+                            join.getLastAcceptedTerm(),
+                    case 3:
+ * ownership. Elasticsearch licenses this file to you under
+        long currentTerm = randomNonNegativeLong();
+                        throw new AssertionError();
+ */
+    public ClusterState randomClusterState() {
+            (CopyFunction<StartJoinRequest>) startJoinRequest -> copyWriteable(startJoinRequest, writableRegistry(), StartJoinRequest::new),
+ * You may obtain a copy of the License at
+                            preVoteResponse.getCurrentTerm(),
+        PublishResponse initialPublishResponse = new PublishResponse(randomNonNegativeLong(), randomNonNegativeLong());
+                    case 0:
+                    case 4:
+                            randomValueOtherThan(join.getLastAcceptedTerm(), OpenSearchTestCase::randomNonNegativeLong),
+            publishWithJoinResponse -> {
+                        newOptionalJoin = Optional.empty();
+                        // change term
+                    return new JoinRequest(
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        Join initialJoin = new Join(
+    public void testPreVoteRequestEqualsHashCodeSerialization() {
+                            publishWithJoinResponse.getJoin().isPresent() && randomBoolean() ? Optional.empty() : Optional.of(newJoin)
+            randomNonNegativeLong(),
+                            preVoteResponse.getCurrentTerm(),
+            in -> new PublishRequest(randomClusterState())
+                        // change term
+            randomLongBetween(1, currentTerm),
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                            join.getSourceNode(),
+            randomNonNegativeLong(),
+                        // change sourceNode
+                            randomValueOtherThan(join.getLastAcceptedVersion(), OpenSearchTestCase::randomNonNegativeLong)
+            initialJoin,
+                            startJoinRequest.getSourceNode(),
+                        // change version
+ * SPDX-License-Identifier: Apache-2.0
+            (CopyFunction<PreVoteRequest>) preVoteRequest -> copyWriteable(preVoteRequest, writableRegistry(), PreVoteRequest::new),
+        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
+        );
+                    }
+                        return new PublishWithJoinResponse(
+/*
+                switch (randomInt(1)) {
+        );
+ * The OpenSearch Contributors require contributions made to
+                            join.getLastAcceptedVersion()
+                    } else {
+        Join initialJoin = new Join(
+            }
+            preVoteResponse -> {
+                            randomNonNegativeLong(),
+                        );
+            initialPublishResponse,
+            }
+        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+        );
+                }
+                        // change last accepted term
+                        );
+                        newOptionalJoin = Optional.of(
+                            publishResponse.getVersion()
+ * this file be licensed under the Apache-2.0 license or a
+                switch (randomInt(4)) {
+        return CoordinationStateTests.clusterState(
+ *
+            publishRequest -> new PublishRequest(publishRequest.getAcceptedState()),
+                            randomNonNegativeLong()
+                    default:
+                        return new Join(
+        );
+}
+                            randomValueOtherThan(preVoteResponse.getLastAcceptedVersion(), OpenSearchTestCase::randomNonNegativeLong)
+            }
+                }
+    public void testPreVoteResponseEqualsHashCodeSerialization() {
+                        );
+                        // change optional join
+            (CopyFunction<PreVoteResponse>) preVoteResponse -> copyWriteable(preVoteResponse, writableRegistry(), PreVoteResponse::new),
+            joinRequest -> {
+                            preVoteResponse.getLastAcceptedVersion()
+                            new Join(
+        Join initialJoin = new Join(
+                        );
+                        );
+                            preVoteResponse.getLastAcceptedTerm(),
+            randomNonNegativeLong()
+            randomNonNegativeLong(),
+            }
+                        return new StartJoinRequest(createNode(randomAlphaOfLength(20)), startJoinRequest.getTerm());
+                    default:
+            (CopyFunction<PublishResponse>) publishResponse -> copyWriteable(publishResponse, writableRegistry(), PublishResponse::new),
+                        );
+ * under the License.
+                    case 2:
+        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+            publishResponse -> {
+                            randomValueOtherThan(applyCommit.getVersion(), OpenSearchTestCase::randomNonNegativeLong)
+ * compatible open source license.
+        );
+                                preVoteResponse.getCurrentTerm(),
+                                randomNonNegativeLong()
+                        joinRequest.getOptionalJoin()
+                    case 1:
+                    case 0:
+                        );
+ */
+                            publishWithJoinResponse.getPublishResponse(),
+    }
+                        // change term
+                            join.getSourceNode(),
+        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
+                                joinRequest.getSourceNode(),
+package org.opensearch.cluster.coordination;
+            createNode(randomAlphaOfLength(10)),
         return new DiscoveryNode(id, buildNewFakeTransportAddress(), Version.CURRENT);
     }
-
-    public void testJoinEqualsHashCodeSerialization() {
-        Join initialJoin = new Join(
-            createNode(randomAlphaOfLength(10)),
-            createNode(randomAlphaOfLength(10)),
-            randomNonNegativeLong(),
-            randomNonNegativeLong(),
-            randomNonNegativeLong()
-        );
-        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
-        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-            initialJoin,
-            (CopyFunction<Join>) join -> copyWriteable(join, writableRegistry(), Join::new),
-            join -> {
-                switch (randomInt(4)) {
-                    case 0:
-                        // change sourceNode
-                        return new Join(
-                            createNode(randomAlphaOfLength(20)),
-                            join.getTargetNode(),
-                            join.getTerm(),
-                            join.getLastAcceptedTerm(),
-                            join.getLastAcceptedVersion()
-                        );
                     case 1:
-                        // change targetNode
-                        return new Join(
-                            join.getSourceNode(),
-                            createNode(randomAlphaOfLength(20)),
-                            join.getTerm(),
-                            join.getLastAcceptedTerm(),
-                            join.getLastAcceptedVersion()
-                        );
-                    case 2:
-                        // change term
-                        return new Join(
-                            join.getSourceNode(),
-                            join.getTargetNode(),
-                            randomValueOtherThan(join.getTerm(), OpenSearchTestCase::randomNonNegativeLong),
-                            join.getLastAcceptedTerm(),
-                            join.getLastAcceptedVersion()
-                        );
-                    case 3:
-                        // change last accepted term
-                        return new Join(
-                            join.getSourceNode(),
-                            join.getTargetNode(),
-                            join.getTerm(),
-                            randomValueOtherThan(join.getLastAcceptedTerm(), OpenSearchTestCase::randomNonNegativeLong),
-                            join.getLastAcceptedVersion()
-                        );
-                    case 4:
-                        // change version
-                        return new Join(
-                            join.getSourceNode(),
-                            join.getTargetNode(),
-                            join.getTerm(),
-                            join.getLastAcceptedTerm(),
-                            randomValueOtherThan(join.getLastAcceptedVersion(), OpenSearchTestCase::randomNonNegativeLong)
-                        );
-                    default:
+                    return new PreVoteRequest(createNode(randomAlphaOfLength(10)), preVoteRequest.getCurrentTerm());
+                switch (randomInt(2)) {
                         throw new AssertionError();
+                            ),
+    }
+                        );
+                            randomValueOtherThan(startJoinRequest.getTerm(), OpenSearchTestCase::randomNonNegativeLong)
+            (CopyFunction<PublishWithJoinResponse>) publishWithJoinResponse -> copyWriteable(
+/*
                 }
-            }
-        );
+                        return new StartJoinRequest(
     }
-
-    public void testPublishRequestEqualsHashCode() {
-        PublishRequest initialPublishRequest = new PublishRequest(randomClusterState());
-        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-            initialPublishRequest,
-            publishRequest -> new PublishRequest(publishRequest.getAcceptedState()),
-            in -> new PublishRequest(randomClusterState())
         );
-    }
-
-    public void testPublishResponseEqualsHashCodeSerialization() {
-        PublishResponse initialPublishResponse = new PublishResponse(randomNonNegativeLong(), randomNonNegativeLong());
-        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
-        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+                            new PublishResponse(randomNonNegativeLong(), randomNonNegativeLong()),
+            randomNonNegativeLong(),
+                            randomValueOtherThan(
+        StartJoinRequest initialStartJoinRequest = new StartJoinRequest(createNode(randomAlphaOfLength(10)), randomNonNegativeLong());
+                        // change version
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.common.util.set.Sets;
+            randomNonNegativeLong(),
+                                preVoteResponse.getLastAcceptedTerm(),
+            currentTerm,
             initialPublishResponse,
-            (CopyFunction<PublishResponse>) publishResponse -> copyWriteable(publishResponse, writableRegistry(), PublishResponse::new),
-            publishResponse -> {
-                switch (randomInt(1)) {
-                    case 0:
-                        // change term
-                        return new PublishResponse(
-                            randomValueOtherThan(publishResponse.getTerm(), OpenSearchTestCase::randomNonNegativeLong),
-                            publishResponse.getVersion()
+import org.opensearch.Version;
+                        return new PublishWithJoinResponse(
                         );
-                    case 1:
-                        // change version
-                        return new PublishResponse(
-                            publishResponse.getTerm(),
-                            randomValueOtherThan(publishResponse.getVersion(), OpenSearchTestCase::randomNonNegativeLong)
-                        );
-                    default:
-                        throw new AssertionError();
-                }
-            }
         );
-    }
-
+                            join.getTerm(),
+                    // change OptionalJoin
     public void testPublishWithJoinResponseEqualsHashCodeSerialization() {
+ * specific language governing permissions and limitations
+            randomNonNegativeLong(),
+    public void testApplyCommitEqualsHashCodeSerialization() {
+                        return new ApplyCommitRequest(
+                        return new ApplyCommitRequest(
+                        );
+                            join.getTargetNode(),
+/*
+                                () -> randomLongBetween(1, preVoteResponse.getCurrentTerm())
+                        // change publish response
+        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+                            randomNonNegativeLong(),
+                            randomValueOtherThan(applyCommit.getTerm(), OpenSearchTestCase::randomNonNegativeLong),
+                        throw new AssertionError();
+                        return new PreVoteResponse(
+                PublishWithJoinResponse::new
+        );
+            createNode(randomAlphaOfLength(10)),
+                            createNode(randomAlphaOfLength(20)),
+            randomNonNegativeLong(),
+        );
+                        return new PublishResponse(
+                } else {
+ * this work for additional information regarding copyright
+            initialPreVoteRequest,
+                    return new JoinRequest(
+                    default:
+ * Modifications Copyright OpenSearch Contributors. See
+            ),
+                    );
+        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
+            randomBoolean() ? Optional.empty() : Optional.of(initialJoin)
+            preVoteRequest -> {
+                        return new Join(
+ */
+                }
+                }
+                        );
+            randomLong()
+        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
+    }
+                            join.getTerm(),
+ * Unless required by applicable law or agreed to in writing,
+                            createNode(randomAlphaOfLength(10)),
+                        );
+                            randomValueOtherThan(publishResponse.getTerm(), OpenSearchTestCase::randomNonNegativeLong),
+                            applyCommit.getSourceNode(),
+                    case 1:
+                            join.getSourceNode(),
+                        // change version
+            startJoinRequest -> {
+                            applyCommit.getVersion()
+                }
+import org.opensearch.test.EqualsHashCodeTestUtils.CopyFunction;
+                            randomValueOtherThan(publishResponse.getVersion(), OpenSearchTestCase::randomNonNegativeLong)
+                    default:
+            randomNonNegativeLong(),
+                            publishResponse.getTerm(),
+                        // change targetNode
+    private DiscoveryNode createNode(String id) {
+                                randomNonNegativeLong(),
+import java.util.Optional;
+                switch (randomInt(1)) {
         PublishResponse initialPublishResponse = new PublishResponse(randomNonNegativeLong(), randomNonNegativeLong());
-        Join initialJoin = new Join(
+                        return new PublishResponse(
+    }
+        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
+        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+    public void testPublishRequestEqualsHashCode() {
+                        // change sourceNode
+                                createNode(randomAlphaOfLength(10)),
+                    case 0:
+                        createNode(randomAlphaOfLength(10)),
+                    default:
+                        assumeTrue("last-accepted term is Long.MAX_VALUE", preVoteResponse.getLastAcceptedTerm() < Long.MAX_VALUE);
+                    final Optional<Join> newOptionalJoin;
+        );
+import org.opensearch.cluster.ClusterState;
+                        joinRequest.getMinimumTerm(),
+ *
+                switch (randomInt(1)) {
+        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+                        throw new AssertionError();
+                    case 1:
+            (CopyFunction<ApplyCommitRequest>) applyCommit -> copyWriteable(applyCommit, writableRegistry(), ApplyCommitRequest::new),
+                            ),
+                    case 2:
+        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
+                } else {
+                    );
+                            applyCommit.getTerm(),
+    }
             createNode(randomAlphaOfLength(10)),
-            createNode(randomAlphaOfLength(10)),
-            randomNonNegativeLong(),
-            randomNonNegativeLong(),
+                        Join newJoin = new Join(
+                        return new Join(
+                publishWithJoinResponse,
+                            join.getTerm(),
             randomNonNegativeLong()
+            createNode(randomAlphaOfLength(10)),
+            randomNonNegativeLong()
+        PreVoteResponse initialPreVoteResponse = new PreVoteResponse(
+ * not use this file except in compliance with the License.
+        JoinRequest initialJoinRequest = new JoinRequest(
+            }
+            }
+                        throw new AssertionError();
+                        );
+            initialPreVoteResponse,
+                            join.getTerm(),
+                            applyCommit.getSourceNode(),
+            join -> {
+        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+import org.opensearch.cluster.node.DiscoveryNode;
+                    return new PreVoteRequest(preVoteRequest.getSourceNode(), randomNonNegativeLong());
+            createNode(randomAlphaOfLength(10)),
+        PublishRequest initialPublishRequest = new PublishRequest(randomClusterState());
+        );
+                    return new JoinRequest(joinRequest.getSourceNode(), joinRequest.getMinimumTerm(), newOptionalJoin);
+import org.opensearch.test.OpenSearchTestCase;
+                            join.getLastAcceptedVersion()
+                }
+            createNode(randomAlphaOfLength(10)),
+ * software distributed under the License is distributed on an
+            initialPublishWithJoinResponse,
+        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
+                            join.getTargetNode(),
+                        );
+            initialApplyCommit,
+                                randomNonNegativeLong(),
+    }
+                        return new PreVoteResponse(
+                    case 0:
+    public void testPublishResponseEqualsHashCodeSerialization() {
+            }
+                        randomValueOtherThan(joinRequest.getMinimumTerm(), OpenSearchTestCase::randomNonNegativeLong),
+                    case 0:
+            randomBoolean() ? Optional.empty() : Optional.of(initialJoin)
+                    default:
+                if (randomBoolean() && joinRequest.getOptionalJoin().isPresent() == false) {
+    public void testStartJoinRequestEqualsHashCodeSerialization() {
+                        // change term
+    }
+            new CoordinationMetadata.VotingConfiguration(Sets.newHashSet(generateRandomStringArray(10, 10, false))),
+ * the Apache License, Version 2.0 (the "License"); you may
+                        );
+                        assumeTrue("current term is 1", 1 < preVoteResponse.getCurrentTerm());
+                            publishWithJoinResponse.getJoin()
+                            join.getSourceNode(),
+        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
+        );
+            initialStartJoinRequest,
+ * license agreements. See the NOTICE file distributed with
+            initialJoin.getSourceNode(),
+    }
+        );
+                            randomValueOtherThan(join.getTerm(), OpenSearchTestCase::randomNonNegativeLong),
+                        return new Join(
+                            createNode(randomAlphaOfLength(10)),
+    }
+                            join.getTargetNode(),
+            randomNonNegativeLong()
+        PreVoteRequest initialPreVoteRequest = new PreVoteRequest(createNode(randomAlphaOfLength(10)), randomNonNegativeLong());
+        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+                switch (randomInt(2)) {
         );
         PublishWithJoinResponse initialPublishWithJoinResponse = new PublishWithJoinResponse(
-            initialPublishResponse,
-            randomBoolean() ? Optional.empty() : Optional.of(initialJoin)
-        );
-        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
-        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-            initialPublishWithJoinResponse,
-            (CopyFunction<PublishWithJoinResponse>) publishWithJoinResponse -> copyWriteable(
-                publishWithJoinResponse,
-                writableRegistry(),
-                PublishWithJoinResponse::new
-            ),
-            publishWithJoinResponse -> {
-                switch (randomInt(1)) {
-                    case 0:
-                        // change publish response
-                        return new PublishWithJoinResponse(
-                            new PublishResponse(randomNonNegativeLong(), randomNonNegativeLong()),
-                            publishWithJoinResponse.getJoin()
-                        );
-                    case 1:
-                        // change optional join
-                        Join newJoin = new Join(
-                            createNode(randomAlphaOfLength(10)),
-                            createNode(randomAlphaOfLength(10)),
-                            randomNonNegativeLong(),
-                            randomNonNegativeLong(),
-                            randomNonNegativeLong()
-                        );
-                        return new PublishWithJoinResponse(
-                            publishWithJoinResponse.getPublishResponse(),
-                            publishWithJoinResponse.getJoin().isPresent() && randomBoolean() ? Optional.empty() : Optional.of(newJoin)
-                        );
-                    default:
-                        throw new AssertionError();
+                            join.getLastAcceptedTerm(),
+                            createNode(randomAlphaOfLength(20)),
+                            preVoteResponse.getLastAcceptedVersion()
+                        return new PreVoteResponse(
                 }
-            }
-        );
-    }
-
-    public void testStartJoinRequestEqualsHashCodeSerialization() {
-        StartJoinRequest initialStartJoinRequest = new StartJoinRequest(createNode(randomAlphaOfLength(10)), randomNonNegativeLong());
-        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
-        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-            initialStartJoinRequest,
-            (CopyFunction<StartJoinRequest>) startJoinRequest -> copyWriteable(startJoinRequest, writableRegistry(), StartJoinRequest::new),
-            startJoinRequest -> {
-                switch (randomInt(1)) {
-                    case 0:
-                        // change sourceNode
-                        return new StartJoinRequest(createNode(randomAlphaOfLength(20)), startJoinRequest.getTerm());
-                    case 1:
-                        // change term
-                        return new StartJoinRequest(
-                            startJoinRequest.getSourceNode(),
-                            randomValueOtherThan(startJoinRequest.getTerm(), OpenSearchTestCase::randomNonNegativeLong)
-                        );
-                    default:
-                        throw new AssertionError();
-                }
-            }
-        );
-    }
-
-    public void testApplyCommitEqualsHashCodeSerialization() {
-        ApplyCommitRequest initialApplyCommit = new ApplyCommitRequest(
-            createNode(randomAlphaOfLength(10)),
-            randomNonNegativeLong(),
-            randomNonNegativeLong()
-        );
-        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
-        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-            initialApplyCommit,
-            (CopyFunction<ApplyCommitRequest>) applyCommit -> copyWriteable(applyCommit, writableRegistry(), ApplyCommitRequest::new),
-            applyCommit -> {
-                switch (randomInt(2)) {
-                    case 0:
-                        // change sourceNode
-                        return new ApplyCommitRequest(createNode(randomAlphaOfLength(20)), applyCommit.getTerm(), applyCommit.getVersion());
-                    case 1:
-                        // change term
-                        return new ApplyCommitRequest(
-                            applyCommit.getSourceNode(),
-                            randomValueOtherThan(applyCommit.getTerm(), OpenSearchTestCase::randomNonNegativeLong),
-                            applyCommit.getVersion()
-                        );
-                    case 2:
-                        // change version
-                        return new ApplyCommitRequest(
-                            applyCommit.getSourceNode(),
-                            applyCommit.getTerm(),
-                            randomValueOtherThan(applyCommit.getVersion(), OpenSearchTestCase::randomNonNegativeLong)
-                        );
-                    default:
-                        throw new AssertionError();
-                }
-            }
-        );
-    }
-
+                if (randomBoolean()) {
+import org.opensearch.test.EqualsHashCodeTestUtils;
     public void testJoinRequestEqualsHashCodeSerialization() {
-        Join initialJoin = new Join(
+        ApplyCommitRequest initialApplyCommit = new ApplyCommitRequest(
+    public void testJoinEqualsHashCodeSerialization() {
+            (CopyFunction<Join>) join -> copyWriteable(join, writableRegistry(), Join::new),
+                    case 2:
+                        // change sourceNode
             createNode(randomAlphaOfLength(10)),
-            createNode(randomAlphaOfLength(10)),
-            randomNonNegativeLong(),
-            randomNonNegativeLong(),
-            randomNonNegativeLong()
-        );
-        JoinRequest initialJoinRequest = new JoinRequest(
-            initialJoin.getSourceNode(),
-            randomNonNegativeLong(),
-            randomBoolean() ? Optional.empty() : Optional.of(initialJoin)
-        );
-        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
-        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+                            randomValueOtherThan(
+                        joinRequest.getSourceNode(),
+                                () -> randomLongBetween(preVoteResponse.getLastAcceptedTerm(), Long.MAX_VALUE)
+                        joinRequest.getOptionalJoin()
+ * GitHub history for details.
             initialJoinRequest,
             (CopyFunction<JoinRequest>) joinRequest -> copyWriteable(joinRequest, writableRegistry(), JoinRequest::new),
-            joinRequest -> {
-                if (randomBoolean() && joinRequest.getOptionalJoin().isPresent() == false) {
-                    return new JoinRequest(
-                        createNode(randomAlphaOfLength(10)),
-                        joinRequest.getMinimumTerm(),
-                        joinRequest.getOptionalJoin()
-                    );
-                } else if (randomBoolean()) {
-                    return new JoinRequest(
-                        joinRequest.getSourceNode(),
-                        randomValueOtherThan(joinRequest.getMinimumTerm(), OpenSearchTestCase::randomNonNegativeLong),
-                        joinRequest.getOptionalJoin()
-                    );
-                } else {
-                    // change OptionalJoin
-                    final Optional<Join> newOptionalJoin;
-                    if (joinRequest.getOptionalJoin().isPresent() && randomBoolean()) {
-                        newOptionalJoin = Optional.empty();
-                    } else {
-                        newOptionalJoin = Optional.of(
-                            new Join(
-                                joinRequest.getSourceNode(),
-                                createNode(randomAlphaOfLength(10)),
-                                randomNonNegativeLong(),
-                                randomNonNegativeLong(),
-                                randomNonNegativeLong()
-                            )
-                        );
-                    }
-                    return new JoinRequest(joinRequest.getSourceNode(), joinRequest.getMinimumTerm(), newOptionalJoin);
-                }
-            }
+                        return new ApplyCommitRequest(createNode(randomAlphaOfLength(20)), applyCommit.getTerm(), applyCommit.getVersion());
+                            join.getLastAcceptedTerm(),
         );
-    }
-
-    public ClusterState randomClusterState() {
-        return CoordinationStateTests.clusterState(
-            randomNonNegativeLong(),
-            randomNonNegativeLong(),
+                    if (joinRequest.getOptionalJoin().isPresent() && randomBoolean()) {
+                            preVoteResponse.getLastAcceptedTerm(),
+                    case 1:
+            applyCommit -> {
+            randomNonNegativeLong()
+                            )
             createNode(randomAlphaOfLength(10)),
             new CoordinationMetadata.VotingConfiguration(Sets.newHashSet(generateRandomStringArray(10, 10, false))),
-            new CoordinationMetadata.VotingConfiguration(Sets.newHashSet(generateRandomStringArray(10, 10, false))),
-            randomLong()
-        );
-    }
-
-    public void testPreVoteRequestEqualsHashCodeSerialization() {
-        PreVoteRequest initialPreVoteRequest = new PreVoteRequest(createNode(randomAlphaOfLength(10)), randomNonNegativeLong());
-        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
-        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-            initialPreVoteRequest,
-            (CopyFunction<PreVoteRequest>) preVoteRequest -> copyWriteable(preVoteRequest, writableRegistry(), PreVoteRequest::new),
-            preVoteRequest -> {
-                if (randomBoolean()) {
-                    return new PreVoteRequest(createNode(randomAlphaOfLength(10)), preVoteRequest.getCurrentTerm());
-                } else {
-                    return new PreVoteRequest(preVoteRequest.getSourceNode(), randomNonNegativeLong());
-                }
+                        );
+                            join.getLastAcceptedVersion()
+                } else if (randomBoolean()) {
+                writableRegistry(),
+            randomNonNegativeLong(),
+                            join.getTargetNode(),
             }
-        );
-    }
-
-    public void testPreVoteResponseEqualsHashCodeSerialization() {
-        long currentTerm = randomNonNegativeLong();
-        PreVoteResponse initialPreVoteResponse = new PreVoteResponse(
-            currentTerm,
-            randomLongBetween(1, currentTerm),
-            randomNonNegativeLong()
-        );
-        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
+                        return new Join(
         EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-            initialPreVoteResponse,
-            (CopyFunction<PreVoteResponse>) preVoteResponse -> copyWriteable(preVoteResponse, writableRegistry(), PreVoteResponse::new),
-            preVoteResponse -> {
-                switch (randomInt(2)) {
-                    case 0:
-                        assumeTrue("last-accepted term is Long.MAX_VALUE", preVoteResponse.getLastAcceptedTerm() < Long.MAX_VALUE);
-                        return new PreVoteResponse(
-                            randomValueOtherThan(
-                                preVoteResponse.getCurrentTerm(),
-                                () -> randomLongBetween(preVoteResponse.getLastAcceptedTerm(), Long.MAX_VALUE)
-                            ),
-                            preVoteResponse.getLastAcceptedTerm(),
-                            preVoteResponse.getLastAcceptedVersion()
+ * Licensed to Elasticsearch under one or more contributor
                         );
-                    case 1:
-                        assumeTrue("current term is 1", 1 < preVoteResponse.getCurrentTerm());
-                        return new PreVoteResponse(
-                            preVoteResponse.getCurrentTerm(),
-                            randomValueOtherThan(
-                                preVoteResponse.getLastAcceptedTerm(),
-                                () -> randomLongBetween(1, preVoteResponse.getCurrentTerm())
-                            ),
-                            preVoteResponse.getLastAcceptedVersion()
-                        );
-                    case 2:
-                        return new PreVoteResponse(
-                            preVoteResponse.getCurrentTerm(),
-                            preVoteResponse.getLastAcceptedTerm(),
-                            randomValueOtherThan(preVoteResponse.getLastAcceptedVersion(), OpenSearchTestCase::randomNonNegativeLong)
-                        );
-                    default:
+ *
+        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
                         throw new AssertionError();
-                }
-            }
+                            join.getLastAcceptedTerm(),
         );
-    }
-}
+                            join.getLastAcceptedVersion()
+        );

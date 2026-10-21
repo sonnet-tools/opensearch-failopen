@@ -1,319 +1,287 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+                            logger.warn(
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.gateway;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.Version;
-import org.opensearch.action.ActionListenerResponseHandler;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateUpdateTask;
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.metadata.MetadataIndexUpgradeService;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.transport.TransportResponse;
-import org.opensearch.discovery.ClusterManagerNotDiscoveredException;
-import org.opensearch.tasks.Task;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportChannel;
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportRequestHandler;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collection;
-
-import static org.opensearch.cluster.metadata.MetadataIndexStateService.isIndexVerifiedBeforeClosed;
-
-/**
- * Allocates dangled indices
- *
- * @opensearch.internal
- */
-public class LocalAllocateDangledIndices {
-
-    private static final Logger logger = LogManager.getLogger(LocalAllocateDangledIndices.class);
-
+ * compatible open source license.
     public static final String ACTION_NAME = "internal:gateway/local/allocate_dangled";
-
-    private final TransportService transportService;
-
-    private final ClusterService clusterService;
-
-    private final AllocationService allocationService;
-
-    private final MetadataIndexUpgradeService metadataIndexUpgradeService;
-
-    @Inject
-    public LocalAllocateDangledIndices(
-        TransportService transportService,
-        ClusterService clusterService,
-        AllocationService allocationService,
-        MetadataIndexUpgradeService metadataIndexUpgradeService
-    ) {
-        this.transportService = transportService;
-        this.clusterService = clusterService;
-        this.allocationService = allocationService;
-        this.metadataIndexUpgradeService = metadataIndexUpgradeService;
-        transportService.registerRequestHandler(
-            ACTION_NAME,
-            ThreadPool.Names.SAME,
-            AllocateDangledRequest::new,
-            new AllocateDangledRequestHandler()
-        );
-    }
-
-    public void allocateDangled(Collection<IndexMetadata> indices, ActionListener<AllocateDangledResponse> listener) {
-        ClusterState clusterState = clusterService.state();
-        DiscoveryNode clusterManagerNode = clusterState.nodes().getClusterManagerNode();
-        if (clusterManagerNode == null) {
-            listener.onFailure(new ClusterManagerNotDiscoveredException("no cluster-manager to send allocate dangled request"));
-            return;
-        }
-        AllocateDangledRequest request = new AllocateDangledRequest(clusterService.localNode(), indices.toArray(new IndexMetadata[0]));
-        transportService.sendRequest(
-            clusterManagerNode,
-            ACTION_NAME,
             request,
+        ClusterState clusterState = clusterService.state();
+            ack = in.readBoolean();
+ * license agreements. See the NOTICE file distributed with
+                }
+     * @opensearch.internal
+                        }
+                }
+    public LocalAllocateDangledIndices(
+/**
+ * You may obtain a copy of the License at
+                                request.fromNode,
+                    ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
             new ActionListenerResponseHandler<>(listener, AllocateDangledResponse::new, ThreadPool.Names.SAME)
-        );
     }
-
-    class AllocateDangledRequestHandler implements TransportRequestHandler<AllocateDangledRequest> {
-        @Override
-        public void messageReceived(final AllocateDangledRequest request, final TransportChannel channel, Task task) throws Exception {
-            String[] indexNames = new String[request.indices.length];
-            for (int i = 0; i < request.indices.length; i++) {
-                indexNames[i] = request.indices[i].getIndex().getName();
-            }
-            clusterService.submitStateUpdateTask("allocation dangled indices " + Arrays.toString(indexNames), new ClusterStateUpdateTask() {
-                @Override
-                public ClusterState execute(ClusterState currentState) {
-                    if (currentState.blocks().disableStatePersistence()) {
+                        "dangling indices allocated"
+                                indexMetadata,
+                                indexMetadata.getIndex(),
+                                minIndexCompatibilityVersion
+                        .metadata(metadata)
+    private static final Logger logger = LogManager.getLogger(LocalAllocateDangledIndices.class);
+            clusterManagerNode,
+import org.opensearch.cluster.ClusterStateUpdateTask;
+    ) {
+ * Allocates dangled indices
+    }
+     */
+                    try {
+import org.opensearch.cluster.metadata.MetadataIndexUpgradeService;
+        AllocationService allocationService,
+     * The request.
+                        logger.warn("failed send response for allocating dangled", inner);
                         return currentState;
                     }
-                    Metadata.Builder metadata = Metadata.builder(currentState.metadata());
-                    ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
-                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
-                    final Version minIndexCompatibilityVersion = currentState.getNodes()
-                        .getMaxNodeVersion()
-                        .minimumIndexCompatibilityVersion();
-                    boolean importNeeded = false;
-                    StringBuilder sb = new StringBuilder();
-                    for (IndexMetadata indexMetadata : request.indices) {
-                        if (indexMetadata.getCreationVersion().before(minIndexCompatibilityVersion)) {
-                            logger.warn(
-                                "ignoring dangled index [{}] on node [{}]"
-                                    + " since it's created version [{}] is not supported by at least one node in the cluster minVersion [{}]",
-                                indexMetadata.getIndex(),
-                                request.fromNode,
-                                indexMetadata.getCreationVersion(),
-                                minIndexCompatibilityVersion
-                            );
-                            continue;
-                        }
-                        if (currentState.nodes().getMinNodeVersion().before(indexMetadata.getCreationVersion())) {
-                            logger.warn(
-                                "ignoring dangled index [{}] on node [{}]"
-                                    + " since its created version [{}] is later than the oldest versioned node in the cluster [{}]",
-                                indexMetadata.getIndex(),
-                                request.fromNode,
-                                indexMetadata.getCreationVersion(),
-                                currentState.getNodes().getClusterManagerNode().getVersion()
-                            );
-                            continue;
-                        }
-                        if (currentState.metadata().hasIndex(indexMetadata.getIndex().getName())) {
-                            continue;
-                        }
-                        if (currentState.metadata().hasAlias(indexMetadata.getIndex().getName())) {
-                            logger.warn(
-                                "ignoring dangled index [{}] on node [{}] due to an existing alias with the same name",
-                                indexMetadata.getIndex(),
-                                request.fromNode
-                            );
-                            continue;
-                        }
-                        importNeeded = true;
-
-                        IndexMetadata upgradedIndexMetadata;
-                        try {
-                            // The dangled index might be from an older version, we need to make sure it's compatible
-                            // with the current version and upgrade it if needed.
-                            upgradedIndexMetadata = metadataIndexUpgradeService.upgradeIndexMetadata(
-                                indexMetadata,
-                                minIndexCompatibilityVersion
-                            );
-                            upgradedIndexMetadata = IndexMetadata.builder(upgradedIndexMetadata)
-                                .settings(
-                                    Settings.builder()
-                                        .put(upgradedIndexMetadata.getSettings())
-                                        .put(IndexMetadata.SETTING_HISTORY_UUID, UUIDs.randomBase64UUID())
-                                )
-                                .build();
-                        } catch (Exception ex) {
-                            // upgrade failed - adding index as closed
-                            logger.warn(
-                                () -> new ParameterizedMessage(
-                                    "found dangled index [{}] on node [{}]. This index cannot be "
-                                        + "upgraded to the latest version, adding as closed",
-                                    indexMetadata.getIndex(),
-                                    request.fromNode
-                                ),
-                                ex
-                            );
-                            upgradedIndexMetadata = IndexMetadata.builder(indexMetadata)
-                                .state(IndexMetadata.State.CLOSE)
-                                .version(indexMetadata.getVersion() + 1)
-                                .build();
-                        }
-                        metadata.put(upgradedIndexMetadata, false);
-                        blocks.addBlocks(upgradedIndexMetadata);
-                        if (upgradedIndexMetadata.getState() == IndexMetadata.State.OPEN || isIndexVerifiedBeforeClosed(indexMetadata)) {
+                        ClusterState.builder(updatedState).routingTable(routingTable).build(),
                             routingTableBuilder.addAsFromDangling(upgradedIndexMetadata);
                         }
-                        sb.append("[")
-                            .append(upgradedIndexMetadata.getIndex())
-                            .append("/")
-                            .append(upgradedIndexMetadata.getState())
-                            .append("]");
-                    }
-                    if (!importNeeded) {
-                        return currentState;
-                    }
-                    logger.info("auto importing dangled indices {} from [{}]", sb.toString(), request.fromNode);
-
-                    RoutingTable routingTable = routingTableBuilder.build();
-                    ClusterState updatedState = ClusterState.builder(currentState)
-                        .metadata(metadata)
                         .blocks(blocks)
-                        .routingTable(routingTable)
-                        .build();
-
+import org.opensearch.cluster.node.DiscoveryNode;
+        if (clusterManagerNode == null) {
                     // now, reroute
-                    return allocationService.reroute(
-                        ClusterState.builder(updatedState).routingTable(routingTable).build(),
-                        "dangling indices allocated"
-                    );
-                }
-
-                @Override
-                public void onFailure(String source, Exception e) {
-                    logger.error(() -> new ParameterizedMessage("unexpected failure during [{}]", source), e);
-                    try {
-                        channel.sendResponse(e);
-                    } catch (Exception inner) {
-                        inner.addSuppressed(e);
-                        logger.warn("failed send response for allocating dangled", inner);
-                    }
-                }
-
-                @Override
-                public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                    try {
-                        channel.sendResponse(new AllocateDangledResponse(true));
-                    } catch (IOException e) {
-                        logger.warn("failed send response for allocating dangled", e);
-                    }
-                }
-            });
-        }
-    }
-
-    /**
-     * The request.
-     *
-     * @opensearch.internal
-     */
-
-    public static class AllocateDangledRequest extends TransportRequest {
-
-        DiscoveryNode fromNode;
-        IndexMetadata[] indices;
-
-        public AllocateDangledRequest(StreamInput in) throws IOException {
+import java.util.Collection;
+            clusterService.submitStateUpdateTask("allocation dangled indices " + Arrays.toString(indexNames), new ClusterStateUpdateTask() {
+                    logger.info("auto importing dangled indices {} from [{}]", sb.toString(), request.fromNode);
             super(in);
-            fromNode = new DiscoveryNode(in);
+                @Override
+                        blocks.addBlocks(upgradedIndexMetadata);
+            super.writeTo(out);
+                                minIndexCompatibilityVersion
+        );
+        }
+                    logger.error(() -> new ParameterizedMessage("unexpected failure during [{}]", source), e);
+import org.opensearch.transport.TransportService;
+                            );
+                public ClusterState execute(ClusterState currentState) {
+import org.opensearch.cluster.block.ClusterBlocks;
+import org.opensearch.threadpool.ThreadPool;
+ * this work for additional information regarding copyright
+    }
+                                "ignoring dangled index [{}] on node [{}]"
+                            // upgrade failed - adding index as closed
+ * under the License.
+                            upgradedIndexMetadata = IndexMetadata.builder(upgradedIndexMetadata)
+        MetadataIndexUpgradeService metadataIndexUpgradeService
+                    }
+                                        + "upgraded to the latest version, adding as closed",
+                    final Version minIndexCompatibilityVersion = currentState.getNodes()
+                                .build();
+        }
+    class AllocateDangledRequestHandler implements TransportRequestHandler<AllocateDangledRequest> {
+                                () -> new ParameterizedMessage(
+                                indexMetadata.getIndex(),
+                                currentState.getNodes().getClusterManagerNode().getVersion()
+    /**
+     */
+                                ex
+                        if (currentState.nodes().getMinNodeVersion().before(indexMetadata.getCreationVersion())) {
+                                    + " since it's created version [{}] is not supported by at least one node in the cluster minVersion [{}]",
+            String[] indexNames = new String[request.indices.length];
+ * The OpenSearch Contributors require contributions made to
+                        }
+                    RoutingTable routingTable = routingTableBuilder.build();
+ */
+                            .append("/")
+                @Override
+                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
+    }
+                                        .put(IndexMetadata.SETTING_HISTORY_UUID, UUIDs.randomBase64UUID())
+            for (int i = 0; i < request.indices.length; i++) {
+    public void allocateDangled(Collection<IndexMetadata> indices, ActionListener<AllocateDangledResponse> listener) {
+    @Inject
+    }
+                        .minimumIndexCompatibilityVersion();
+                            upgradedIndexMetadata = metadataIndexUpgradeService.upgradeIndexMetadata(
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.cluster.routing.allocation.AllocationService;
             indices = in.readArray(IndexMetadata::readFrom, IndexMetadata[]::new);
         }
-
-        AllocateDangledRequest(DiscoveryNode fromNode, IndexMetadata[] indices) {
+    private final ClusterService clusterService;
+                        IndexMetadata upgradedIndexMetadata;
+            listener.onFailure(new ClusterManagerNotDiscoveredException("no cluster-manager to send allocate dangled request"));
+        }
+        }
+ * software distributed under the License is distributed on an
+import java.util.Arrays;
+                    return allocationService.reroute(
+ */
+import org.opensearch.cluster.metadata.Metadata;
+            ThreadPool.Names.SAME,
+import org.opensearch.common.settings.Settings;
+                            logger.warn(
+ *
+                        .routingTable(routingTable)
+import org.apache.logging.log4j.message.ParameterizedMessage;
+                                indexMetadata.getIndex(),
+        @Override
             this.fromNode = fromNode;
-            this.indices = indices;
+/*
+                public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+            AllocateDangledRequest::new,
         }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
-            fromNode.writeTo(out);
-            out.writeArray(indices);
-        }
-    }
-
-    /**
-     * The response.
+ * SPDX-License-Identifier: Apache-2.0
+                        logger.warn("failed send response for allocating dangled", e);
+                    }
+                                .state(IndexMetadata.State.CLOSE)
+                                request.fromNode
      *
-     * @opensearch.internal
-     */
-    public static class AllocateDangledResponse extends TransportResponse {
-
-        private boolean ack;
-
+                                    indexMetadata.getIndex(),
+                    Metadata.Builder metadata = Metadata.builder(currentState.metadata());
+import org.opensearch.core.common.io.stream.StreamOutput;
+                    try {
+                            );
+ * GitHub history for details.
+                        importNeeded = true;
+                        metadata.put(upgradedIndexMetadata, false);
+                                    + " since its created version [{}] is later than the oldest versioned node in the cluster [{}]",
+import java.io.IOException;
+package org.opensearch.gateway;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+/*
+            this.indices = indices;
+                                "ignoring dangled index [{}] on node [{}] due to an existing alias with the same name",
+                                        .put(upgradedIndexMetadata.getSettings())
+                        .build();
+        );
+                    if (!importNeeded) {
+                            logger.warn(
+ * Unless required by applicable law or agreed to in writing,
+        }
+ * Licensed to Elasticsearch under one or more contributor
         public AllocateDangledResponse(StreamInput in) throws IOException {
-            super(in);
-            ack = in.readBoolean();
-        }
-
+                    } catch (IOException e) {
         AllocateDangledResponse(boolean ack) {
-            this.ack = ack;
-        }
-
-        @Override
+ *
+                            );
+                                indexMetadata.getCreationVersion(),
+ */
+                        } catch (Exception ex) {
         public void writeTo(StreamOutput out) throws IOException {
+                        if (indexMetadata.getCreationVersion().before(minIndexCompatibilityVersion)) {
+                        if (currentState.metadata().hasIndex(indexMetadata.getIndex().getName())) {
             out.writeBoolean(ack);
+        @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                            upgradedIndexMetadata = IndexMetadata.builder(indexMetadata)
+        public AllocateDangledRequest(StreamInput in) throws IOException {
+        this.metadataIndexUpgradeService = metadataIndexUpgradeService;
+        private boolean ack;
+        transportService.sendRequest(
+            super(in);
+import org.opensearch.cluster.service.ClusterService;
+                                    "found dangled index [{}] on node [{}]. This index cannot be "
+                    } catch (Exception inner) {
+            this.ack = ack;
+        DiscoveryNode clusterManagerNode = clusterState.nodes().getClusterManagerNode();
+/*
+import org.opensearch.common.inject.Inject;
+                    }
+                        }
+ * Modifications Copyright OpenSearch Contributors. See
+                            );
+                        return currentState;
+    private final MetadataIndexUpgradeService metadataIndexUpgradeService;
+                }
+                                "ignoring dangled index [{}] on node [{}]"
+        IndexMetadata[] indices;
+                    for (IndexMetadata indexMetadata : request.indices) {
+ */
+public class LocalAllocateDangledIndices {
+    public static class AllocateDangledRequest extends TransportRequest {
+        DiscoveryNode fromNode;
+                        .getMaxNodeVersion()
+            fromNode.writeTo(out);
+ * specific language governing permissions and limitations
         }
-    }
+ * not use this file except in compliance with the License.
+                @Override
+import org.opensearch.common.UUIDs;
+import org.opensearch.cluster.ClusterState;
+        public void writeTo(StreamOutput out) throws IOException {
+import org.apache.logging.log4j.Logger;
+                                indexMetadata.getCreationVersion(),
+                            // The dangled index might be from an older version, we need to make sure it's compatible
+                        }
+                            logger.warn(
+                    );
+        TransportService transportService,
+ * @opensearch.internal
+                    ClusterState updatedState = ClusterState.builder(currentState)
+ *
 }
+                            );
+    private final AllocationService allocationService;
+     * @opensearch.internal
+                                .version(indexMetadata.getVersion() + 1)
+                            // with the current version and upgrade it if needed.
+                        sb.append("[")
+                        }
+                                )
+            });
+        AllocateDangledRequest(DiscoveryNode fromNode, IndexMetadata[] indices) {
+                        channel.sendResponse(new AllocateDangledResponse(true));
+    public static class AllocateDangledResponse extends TransportResponse {
+import org.opensearch.core.transport.TransportResponse;
+import org.apache.logging.log4j.LogManager;
+import org.opensearch.transport.TransportRequestHandler;
+import org.opensearch.tasks.Task;
+import org.opensearch.cluster.metadata.IndexMetadata;
+                indexNames[i] = request.indices[i].getIndex().getName();
+                            .append(upgradedIndexMetadata.getState())
+                            continue;
+            ACTION_NAME,
+        this.transportService = transportService;
+import org.opensearch.transport.TransportRequest;
+     *
+        ClusterService clusterService,
+import org.opensearch.action.ActionListenerResponseHandler;
+import org.opensearch.core.action.ActionListener;
+                            continue;
+                                    Settings.builder()
+        AllocateDangledRequest request = new AllocateDangledRequest(clusterService.localNode(), indices.toArray(new IndexMetadata[0]));
+import org.opensearch.cluster.routing.RoutingTable;
+ * this file be licensed under the Apache-2.0 license or a
+                public void onFailure(String source, Exception e) {
+                        inner.addSuppressed(e);
+                    boolean importNeeded = false;
+    /**
+                                ),
+                    if (currentState.blocks().disableStatePersistence()) {
+                        if (currentState.metadata().hasAlias(indexMetadata.getIndex().getName())) {
+                        channel.sendResponse(e);
+            return;
+            out.writeArray(indices);
+                                    request.fromNode
+import org.opensearch.transport.TransportChannel;
+                                .settings(
+     * The response.
+            }
+            ACTION_NAME,
+        this.clusterService = clusterService;
+                                .build();
+ *
+            new AllocateDangledRequestHandler()
+                            continue;
+import org.opensearch.Version;
+                            .append("]");
+    private final TransportService transportService;
+                            .append(upgradedIndexMetadata.getIndex())
+                                request.fromNode,
+import org.opensearch.discovery.ClusterManagerNotDiscoveredException;
+ * KIND, either express or implied.  See the License for the
+            fromNode = new DiscoveryNode(in);
+        transportService.registerRequestHandler(
+                        if (upgradedIndexMetadata.getState() == IndexMetadata.State.OPEN || isIndexVerifiedBeforeClosed(indexMetadata)) {
+import static org.opensearch.cluster.metadata.MetadataIndexStateService.isIndexVerifiedBeforeClosed;
+ * ownership. Elasticsearch licenses this file to you under
+        public void messageReceived(final AllocateDangledRequest request, final TransportChannel channel, Task task) throws Exception {
+        @Override
+                    }
+                        try {
+        this.allocationService = allocationService;
+                            continue;
+                    StringBuilder sb = new StringBuilder();

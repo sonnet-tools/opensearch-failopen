@@ -1,1160 +1,1129 @@
----
-teardown:
-  - do:
-      ingest.delete_pipeline:
-        id: "my_pipeline"
-        ignore: 404
-
----
-"Test simulate with stored ingest pipeline":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "set" : {
-                  "field" : "field2",
-                  "value" : "_value"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      ingest.simulate:
-        id: "my_pipeline"
-        body: >
-          {
-            "docs": [
-              {
                 "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "foo": "bar"
-                }
-              }
-            ]
-          }
-  - length: { docs: 1 }
-  - match: { docs.0.doc._source.foo: "bar" }
-  - match: { docs.0.doc._source.field2: "_value" }
-  - length: { docs.0.doc._ingest: 1 }
-  - is_true: docs.0.doc._ingest.timestamp
-
----
-"Test simulate with provided pipeline definition":
-  - do:
-      ingest.simulate:
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "set" : {
-                    "field" : "field2",
-                    "value" : "_value"
-                  }
                 }
               ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "foo": "bar"
-                }
-              }
-            ]
-          }
-  - length: { docs: 1 }
-
----
-"Test simulate with provided invalid pipeline definition":
-  - do:
-      catch: bad_request
-      ingest.simulate:
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "set" : {
-                    "tag" : "fails",
-                    "value" : "_value"
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "foo": "bar"
-                }
-              }
-            ]
-          }
-  - match: { error.root_cause.0.type: "parse_exception" }
-  - match: { error.root_cause.0.reason: "[field] required property is missing" }
-  - match: { error.root_cause.0.processor_tag: "fails" }
-  - match: { error.root_cause.0.processor_type: "set" }
-  - match: { error.root_cause.0.property_name: "field" }
-
----
-"Test simulate without id":
-  - do:
-      ingest.simulate:
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "set" : {
-                    "field" : "field2",
-                    "value" : "_value"
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_source": {
-                  "foo": "bar"
-                }
-              }
-            ]
-          }
-  - length: { docs: 1 }
-
----
-"Test simulate with provided pipeline definition with on_failure block":
-  - do:
-      ingest.simulate:
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "rename" : {
-                    "field" : "does_not_exist",
-                    "target_field" : "field2",
-                    "on_failure" : [
-                      {
-                        "set" : {
-                          "field" : "field2",
-                          "value" : "_value"
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "foo": "bar"
-                }
-              }
-            ]
-          }
-  - length: { docs: 1 }
-  - match: { docs.0.doc._source.foo: "bar" }
-  - match: { docs.0.doc._source.field2: "_value" }
-  - length: { docs.0.doc._ingest: 1 }
-  - is_true: docs.0.doc._ingest.timestamp
-
----
-"Test simulate with no provided pipeline or pipeline_id":
-  - do:
-      catch: bad_request
-      ingest.simulate:
-        body: >
-          {
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "foo": "bar"
-                }
-              }
-            ]
-          }
-  - is_false: error.root_cause.0.processor_type
-  - is_false: error.root_cause.0.processor_tag
-  - match: { error.root_cause.0.property_name: "pipeline" }
-  - match: { error.reason: "[pipeline] required property is missing" }
-
----
-"Test simulate with invalid processor config":
-  - do:
-      catch: bad_request
-      ingest.simulate:
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "set" : {
-                    "field" : "field2"
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "foo": "bar"
-                }
-              }
-            ]
-          }
-  - match: { error.root_cause.0.type: "parse_exception" }
-  - match: { error.root_cause.0.reason: "[value] required property is missing" }
-  - match: { error.root_cause.0.processor_type: "set" }
-  - match: { error.root_cause.0.property_name: "value" }
-  - is_false: error.root_cause.0.processor_tag
-
----
-"Test simulate with verbose flag":
-  - do:
-      ingest.simulate:
-        verbose: true
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "set" : {
-                    "tag" : "processor[set]-0",
-                    "field" : "field2.value",
-                    "value" : "_value"
-                  }
-                },
-                {
-                  "set" : {
-                    "field" : "field3",
-                    "value" : "third_val"
-                  }
-                },
-                {
-                  "uppercase" : {
-                    "field" : "field2.value"
-                  }
-                },
-                {
-                  "lowercase" : {
-                    "field" : "foo.bar.0.item"
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "foo": {
-                    "bar" : [ {"item": "HELLO"} ]
-                  }
-                }
-              }
-            ]
-          }
-  - length: { docs: 1 }
-  - length: { docs.0.processor_results: 4 }
-  - match: { docs.0.processor_results.0.tag: "processor[set]-0" }
-  - length: { docs.0.processor_results.0.doc._source: 2 }
-  - match: { docs.0.processor_results.0.doc._source.foo.bar.0.item: "HELLO" }
-  - match: { docs.0.processor_results.0.doc._source.field2.value: "_value" }
-  - length: { docs.0.processor_results.0.doc._ingest: 2 }
-  - is_true: docs.0.processor_results.0.doc._ingest.timestamp
-  - is_true: docs.0.processor_results.0.doc._ingest.pipeline
-  - length: { docs.0.processor_results.1.doc._source: 3 }
-  - match: { docs.0.processor_results.1.doc._source.foo.bar.0.item: "HELLO" }
-  - match: { docs.0.processor_results.1.doc._source.field2.value: "_value" }
-  - match: { docs.0.processor_results.1.doc._source.field3: "third_val" }
-  - length: { docs.0.processor_results.1.doc._ingest: 2 }
-  - is_true: docs.0.processor_results.1.doc._ingest.timestamp
-  - is_true: docs.0.processor_results.1.doc._ingest.pipeline
-  - length: { docs.0.processor_results.2.doc._source: 3 }
-  - match: { docs.0.processor_results.2.doc._source.foo.bar.0.item: "HELLO" }
-  - match: { docs.0.processor_results.2.doc._source.field2.value: "_VALUE" }
-  - match: { docs.0.processor_results.2.doc._source.field3: "third_val" }
-  - length: { docs.0.processor_results.2.doc._ingest: 2 }
-  - is_true: docs.0.processor_results.2.doc._ingest.timestamp
-  - is_true: docs.0.processor_results.2.doc._ingest.pipeline
-  - length: { docs.0.processor_results.3.doc._source: 3 }
-  - match: { docs.0.processor_results.3.doc._source.foo.bar.0.item: "hello" }
-  - match: { docs.0.processor_results.3.doc._source.field2.value: "_VALUE" }
-  - match: { docs.0.processor_results.3.doc._source.field3: "third_val" }
-  - length: { docs.0.processor_results.3.doc._ingest: 2 }
-  - is_true: docs.0.processor_results.3.doc._ingest.timestamp
-  - is_true: docs.0.processor_results.3.doc._ingest.pipeline
-
----
-"Test simulate with exception thrown":
-  - do:
-      ingest.simulate:
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "uppercase" : {
-                    "field" : "foo"
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "not_foo": "bar"
-                }
-              },
-              {
-                "_index": "index",
-                "_id": "id2",
-                "_source": {
-                  "foo": "bar"
-                }
-              }
-            ]
-          }
-  - length: { docs: 2 }
-  - match: { docs.0.error.type: "illegal_argument_exception" }
-  - match: { docs.1.doc._source.foo: "BAR" }
-  - length: { docs.1.doc._ingest: 1 }
-  - is_true: docs.1.doc._ingest.timestamp
-
----
-"Test verbose simulate with exception thrown":
-  - do:
-      ingest.simulate:
-        verbose: true
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "convert" : {
-                    "field" : "foo",
-                    "type" : "integer"
-                  }
-                },
-                {
-                  "uppercase" : {
-                    "field" : "bar"
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "foo": "bar",
-                  "bar": "hello"
-                }
-              },
-              {
-                "_index": "index",
-                "_id": "id2",
-                "_source": {
-                  "foo": "5",
-                  "bar": "hello"
-                }
-              }
-            ]
-          }
-  - length: { docs: 2 }
-  - length: { docs.0.processor_results: 1 }
-  - match: { docs.0.processor_results.0.error.type: "illegal_argument_exception" }
-  - length: { docs.1.processor_results: 2 }
-  - match: { docs.1.processor_results.0.doc._index: "index" }
-  - match: { docs.1.processor_results.0.doc._source.foo: 5 }
-  - match: { docs.1.processor_results.0.doc._source.bar: "hello" }
   - length: { docs.1.processor_results.0.doc._ingest: 2 }
-  - is_true: docs.1.processor_results.0.doc._ingest.timestamp
-  - is_true: docs.1.processor_results.0.doc._ingest.pipeline
-  - match: { docs.1.processor_results.1.doc._source.foo: 5 }
-  - match: { docs.1.processor_results.1.doc._source.bar: "HELLO" }
-  - length: { docs.1.processor_results.1.doc._ingest: 2 }
-  - is_true: docs.1.processor_results.1.doc._ingest.timestamp
-  - is_true: docs.1.processor_results.1.doc._ingest.pipeline
-
----
-"Test verbose simulate with error in pipeline":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "rename" : {
-                  "field" : "does_not_exist",
-                  "target_field" : "_value"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      ingest.simulate:
-        verbose: true
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "pipeline" : {
-                    "name" : "my_pipeline"
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "foo": "bar",
-                  "bar": "hello"
-                }
-              }
-            ]
-          }
-  - length: { docs: 1 }
-  - length: { docs.0.processor_results: 2 }
-  - match: { docs.0.processor_results.0.processor_type: "pipeline" }
-  - match: { docs.0.processor_results.0.status: "success" }
-  - match: { docs.0.processor_results.1.processor_type: "rename" }
-  - match: { docs.0.processor_results.1.status: "error" }
-  - match: { docs.0.processor_results.1.error.root_cause.0.type: "illegal_argument_exception" }
-  - match: { docs.0.processor_results.1.error.root_cause.0.reason: "field [does_not_exist] doesn't exist" }
-  - match: { docs.0.processor_results.1.error.type: "illegal_argument_exception" }
-  - match: { docs.0.processor_results.1.error.reason: "field [does_not_exist] doesn't exist" }
-
----
-"Test verbose simulate with on_failure":
-  - do:
-      ingest.simulate:
-        verbose: true
-        body: >
-          {
-            "pipeline" : {
-              "description": "_description",
-              "processors": [
-                {
-                  "set" : {
-                    "tag" : "setstatus-1",
-                    "field" : "status",
-                    "value" : 200
-                  }
-                },
-                {
-                  "rename" : {
-                    "tag" : "rename-1",
                     "field" : "foofield",
-                    "target_field" : "field1",
-                    "on_failure" : [
-                      {
-                        "set" : {
-                          "tag" : "set on_failure rename",
-                          "field" : "foofield",
-                          "value" : "exists"
-                        }
-                      },
-                      {
-                        "rename" : {
-                          "field" : "foofield2",
-                          "target_field" : "field1",
-                          "on_failure" : [
-                            {
-                              "set" : {
-                                "field" : "foofield2",
-                                "value" : "ran"
-                              }
-                            }
-                          ]
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "field1": "123.42 400 <foo>"
-                }
-              }
-            ]
-          }
-  - length: { docs: 1 }
-  - length: { docs.0.processor_results: 5 }
-  - match: { docs.0.processor_results.0.tag: "setstatus-1" }
   - match: { docs.0.processor_results.0.doc._source.field1: "123.42 400 <foo>" }
-  - match: { docs.0.processor_results.0.doc._source.status: 200 }
-  - match: { docs.0.processor_results.1.tag: "rename-1" }
-  - match: { docs.0.processor_results.1.error.type: "illegal_argument_exception" }
-  - match: { docs.0.processor_results.1.error.reason: "field [foofield] doesn't exist" }
-  - match: { docs.0.processor_results.2.tag: "set on_failure rename" }
-  - is_false: docs.0.processor_results.3.tag
-  - is_false: docs.0.processor_results.4.tag
-  - match: { docs.0.processor_results.4.doc._source.foofield: "exists" }
-  - match: { docs.0.processor_results.4.doc._source.foofield2: "ran" }
-  - match: { docs.0.processor_results.4.doc._source.field1: "123.42 400 <foo>" }
-  - match: { docs.0.processor_results.4.doc._source.status: 200 }
-
----
-"Test verbose simulate with ignore_failure and thrown exception":
-  - do:
-      ingest.simulate:
-        verbose: true
-        body: >
-          {
-            "pipeline" : {
-              "description": "_description",
-              "processors": [
-                {
-                  "set" : {
-                    "tag" : "setstatus-1",
-                    "field" : "status",
-                    "value" : 200
-                  }
-                },
-                {
-                  "rename" : {
-                    "tag" : "rename-1",
-                    "field" : "foofield",
-                    "target_field" : "field1",
-                    "ignore_failure": true,
-                    "on_failure" : [
-                      {
-                        "set" : {
-                          "tag" : "set on_failure rename",
-                          "field" : "foofield",
-                          "value" : "exists"
-                        }
-                      },
-                      {
-                        "rename" : {
-                          "field" : "foofield2",
-                          "target_field" : "field1",
-                          "on_failure" : [
-                            {
-                              "set" : {
-                                "field" : "foofield2",
-                                "value" : "ran"
-                              }
-                            }
-                          ]
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "field1": "123.42 400 <foo>"
-                }
-              }
-            ]
-          }
-  - length: { docs: 1 }
-  - length: { docs.0.processor_results: 2 }
-  - match: { docs.0.processor_results.0.tag: "setstatus-1" }
-  - match: { docs.0.processor_results.0.doc._source.field1: "123.42 400 <foo>" }
-  - match: { docs.0.processor_results.0.doc._source.status: 200 }
-  - match: { docs.0.processor_results.0.status: "success" }
-  - match: { docs.0.processor_results.0.processor_type: "set" }
-  - match: { docs.0.processor_results.1.tag: "rename-1" }
-  - match: { docs.0.processor_results.1.ignored_error.error.type: "illegal_argument_exception" }
-  - match: { docs.0.processor_results.1.ignored_error.error.reason: "field [foofield] doesn't exist" }
-  - match: { docs.0.processor_results.1.doc._source.field1: "123.42 400 <foo>" }
-  - match: { docs.0.processor_results.1.doc._source.status: 200 }
-  - match: { docs.0.processor_results.1.status: "error_ignored" }
-  - match: { docs.0.processor_results.1.processor_type: "rename" }
-
----
-"Test verbose simulate with ignore_failure and no exception thrown":
-  - do:
-      ingest.simulate:
-        verbose: true
-        body: >
-          {
-            "pipeline" : {
-              "description": "_description",
-              "processors": [
-                {
-                  "set" : {
-                    "tag" : "setstatus-1",
-                    "field" : "status",
-                    "value" : 200
-                  }
-                },
-                {
-                  "rename" : {
-                    "tag" : "rename-1",
-                    "field" : "status",
-                    "target_field" : "new_status",
-                    "ignore_failure": true
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
-                  "field1": "123.42 400 <foo>"
-                }
-              }
-            ]
-          }
-  - length: { docs: 1 }
-  - length: { docs.0.processor_results: 2 }
-  - length: { docs.0.processor_results.0: 4 }
-  - match: { docs.0.processor_results.0.tag: "setstatus-1" }
-  - match: { docs.0.processor_results.0.status: "success" }
-  - match: { docs.0.processor_results.0.processor_type: "set" }
-  - match: { docs.0.processor_results.0.doc._source.field1: "123.42 400 <foo>" }
-  - match: { docs.0.processor_results.0.doc._source.status: 200 }
-  - length: { docs.0.processor_results.1: 4 }
-  - match: { docs.0.processor_results.1.tag: "rename-1" }
-  - match: { docs.0.processor_results.1.status: "success" }
-  - match: { docs.0.processor_results.1.processor_type: "rename" }
-  - match: { docs.0.processor_results.1.doc._source.new_status: 200 }
-
----
-"Test verbose simulate with Pipeline Processor with Circular Pipelines":
-- do:
-    ingest.put_pipeline:
-      id: "outer"
-      body:  >
-        {
-          "description" : "outer pipeline",
-          "processors" : [
-            {
-              "pipeline" : {
-                "name": "inner"
-              }
-            }
-          ]
-        }
-- match: { acknowledged: true }
-
-- do:
-    ingest.put_pipeline:
-      id: "inner"
-      body:  >
-        {
-          "description" : "inner pipeline",
-          "processors" : [
-            {
-              "pipeline" : {
-                "name": "outer"
-              }
-            }
-          ]
-        }
-- match: { acknowledged: true }
-
-- do:
-    ingest.simulate:
-      verbose: true
-      body: >
-        {
-          "pipeline": {
-            "processors" : [
-            {
-              "pipeline" : {
-                "name": "outer"
-              }
-            }
-            ]
-          }
-          ,
-          "docs": [
-          {
-            "_index": "index",
-            "_id": "id",
-            "_source": {
-              "field1": "123.42 400 <foo>"
-            }
-          }
-          ]
-        }
-- length: { docs: 1 }
-- length: { docs.0.processor_results: 1 }
-- match: { docs.0.processor_results.0.error.reason: "Cycle detected for pipeline: outer" }
-
----
-"Test verbose simulate with Pipeline Processor with Multiple Pipelines":
-- do:
-    ingest.put_pipeline:
-      id: "pipeline1"
-      body:  >
-        {
-          "processors": [
-          {
-            "set": {
-              "field": "pipeline1",
-              "value": true
-            }
-          },
-          {
-            "pipeline": {
-              "name": "pipeline2"
-            }
-          }
-          ]
-        }
-- match: { acknowledged: true }
-
-- do:
-    ingest.put_pipeline:
-      id: "pipeline2"
-      body:  >
-        {
-          "processors": [
-          {
-            "set": {
-              "field": "pipeline2",
-              "value": true
-            }
-          }
-          ]
-        }
-- match: { acknowledged: true }
-
-- do:
-    ingest.simulate:
-      verbose: true
-      body: >
-        {
-          "pipeline": {
-            "processors": [
-            {
-              "set": {
-                "field": "pipeline0",
-                "value": true,
-                "description" : "first_set"
-              }
-            },
-            {
-              "pipeline": {
-                "name": "pipeline1"
-              }
-            }
-            ]
-          },
-          "docs": [
-          {
-            "_index": "index",
-            "_id": "id",
-            "_source": {
-              "field1": "123.42 400 <foo>"
-            }
-          }
-          ]
-        }
-- length: { docs: 1 }
-- length: { docs.0.processor_results: 5 }
-- match: { docs.0.processor_results.0.doc._source.pipeline0: true }
-- match: { docs.0.processor_results.0.status: "success" }
-- match: { docs.0.processor_results.0.processor_type: "set" }
-- match: { docs.0.processor_results.0.description: "first_set" }
-- is_false: docs.0.processor_results.0.doc._source.pipeline1
-- is_false: docs.0.processor_results.0.doc._source.pipeline2
-- match: { docs.0.processor_results.1.doc: null }
-- match: { docs.0.processor_results.1.status: "success" }
-- match: { docs.0.processor_results.1.processor_type: "pipeline" }
-- match: { docs.0.processor_results.2.doc._source.pipeline0: true }
-- match: { docs.0.processor_results.2.doc._source.pipeline1: true }
-- is_false: docs.0.processor_results.2.doc._source.pipeline2
-- match: { docs.0.processor_results.3.doc: null }
-- match: { docs.0.processor_results.3.status: "success" }
-- match: { docs.0.processor_results.3.processor_type: "pipeline" }
-- match: { docs.0.processor_results.4.doc._source.pipeline0: true }
-- match: { docs.0.processor_results.4.doc._source.pipeline1: true }
-- match: { docs.0.processor_results.4.doc._source.pipeline2: true }
-
----
-"Test verbose simulate with true conditional and on failure":
-- do:
-    ingest.simulate:
-      verbose: true
-      body: >
-        {
-          "pipeline": {
-            "processors": [
-              {
-                "rename": {
-                  "tag": "gunna_fail",
-                  "if": "true",
-                  "field": "foo1",
-                  "target_field": "fieldA",
-                  "on_failure": [
-                    {
-                      "set": {
-                        "field": "failed1",
-                        "value": "failed1",
-                        "tag": "failed1"
-                      }
-                    },
-                    {
-                      "rename": {
-                        "tag": "gunna_fail_again",
                         "if": "true",
-                        "field": "foo2",
-                        "target_field": "fieldA",
-                        "on_failure": [
-                          {
-                            "set": {
-                              "field": "failed2",
-                              "value": "failed2",
-                              "tag": "failed2"
-                            }
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
+                "value": true,
               }
-            ]
-          },
-          "docs": [
-            {
-              "_index": "index",
-              "_id": "id",
-              "_source": {
-                "foo": "bar"
-              }
-            }
-          ]
-        }
-- length: { docs: 1 }
-- length: { docs.0.processor_results: 4 }
-- match: { docs.0.processor_results.0.tag: "gunna_fail" }
-- match: { docs.0.processor_results.0.error.reason: "field [foo1] doesn't exist" }
-- match: { docs.0.processor_results.0.status: "error" }
-- match: { docs.0.processor_results.0.processor_type: "rename" }
-- match: { docs.0.processor_results.1.tag: "failed1" }
-- match: { docs.0.processor_results.1.doc._source.failed1: "failed1" }
-- match: { docs.0.processor_results.1.doc._ingest.on_failure_processor_tag: "gunna_fail" }
-- match: { docs.0.processor_results.1.status: "success" }
-- match: { docs.0.processor_results.1.processor_type: "set" }
-- match: { docs.0.processor_results.2.tag: "gunna_fail_again" }
-- match: { docs.0.processor_results.2.error.reason: "field [foo2] doesn't exist" }
-- match: { docs.0.processor_results.2.status: "error" }
-- match: { docs.0.processor_results.2.processor_type: "rename" }
-- match: { docs.0.processor_results.3.tag: "failed2" }
-- match: { docs.0.processor_results.3.doc._source.failed1: "failed1" }
-- match: { docs.0.processor_results.3.doc._source.failed2: "failed2" }
-- match: { docs.0.processor_results.3.doc._ingest.on_failure_processor_tag: "gunna_fail_again" }
-- match: { docs.0.processor_results.3.status: "success" }
-- match: { docs.0.processor_results.3.processor_type: "set" }
-
-
 ---
-"Test simulate with pipeline with conditional and skipped and dropped":
+                    {
+  - length: { docs.0.processor_results.1.doc._source: 3 }
+  - match: { docs.0.processor_results.0.doc._source.field2.value: "_value" }
+              {
+                  }
+          ]
+          {
+              {
+- match: { docs.0.processor_results.0.description: "first_set" }
+  - match: { error.root_cause.0.property_name: "pipeline" }
+- match: { docs.0.processor_results.0.processor_type: "set" }
+                {
+      ingest.simulate:
+                    "ignore_failure" : true,
+  - length: { docs.0.processor_results.3.doc._source: 3 }
+                    "tag" : "processor[set]-0",
+            },
+  - match: { error.root_cause.0.property_name: "value" }
+              {
+                  "field" : "does_not_exist",
+                            }
+  - match: { docs.0.processor_results.0.status: "success" }
+  - match: { docs.0.processor_results.1.tag: "rename-1" }
+              "processors": [
+- length: { docs.0.processor_results: 1 }
+  - length: { docs: 1 }
+          {
+  - match: { error.root_cause.0.processor_type: "set" }
+            ]
+- match: { docs.0.processor_results.0.status: "error" }
+        }
+  - match: { docs.0.processor_results.1.error.type: "illegal_argument_exception" }
+          }
+                  }
+  - do:
+                "_id": "id",
+                },
+          }
+              {
+                  "foo": "bar",
+"Test simulate with provided pipeline definition":
+- match: { docs.0.processor_results.0.error.reason: "Cycle detected for pipeline: outer" }
+                "_source": {
+                "rename": {
+                }
+            "docs": [
+                }
+          }
+                                "field" : "foofield2",
+                    "field" : "foo"
+            ]
+            {
+                  "foo": "bar"
+---
+  - match: { error.root_cause.0.property_name: "field" }
+- match: { docs.0.processor_results.0.error.reason: "field [foo1] doesn't exist" }
+                }
+                    "type" : "integer"
+            ]
+                    "field" : "field2",
+  - match: { docs.0.processor_results.2.doc._source.field3: "third_val" }
+          "processors" : [
+                  }
+              {
+  - match: { docs.0.processor_results.1.status: "success" }
+              }
+              }
+      id: "inner"
   - do:
       ingest.simulate:
-        verbose: true
+            "pipeline": {
+              }
+  - match: { docs.0.doc._source.field2: "_value" }
+            },
+              }
+              }
+                              }
+  - match: { error.root_cause.0.reason: "Failed to parse parameter [_version], only int or long is accepted" }
+                  "set" : {
+                "_index": "index",
+        body: >
+                "_id": "id",
+  - match: { error.root_cause.0.reason: "Failed to parse parameter [_if_seq_no], only int or long is accepted" }
+                }
+                "_source": {
+  - match: { docs.0.processor_results.1.tag: "rename-1" }
+                },
+  - length: { docs: 1 }
+                  }
+                    "on_failure" : [
+        body:  >
+                  "set" : {
+            "pipeline": {
+                  "set" : {
+      body:  >
+                    "target_field" : "new_status",
+  - is_true: docs.0.doc._ingest.timestamp
+                  "value" : "_value"
+        body: >
+  - match: { docs.0.processor_results.1.doc._source.field3: "third_val" }
+                    "field" : "field2.value",
+  - match: { docs.0.processor_results.1.error.type: "illegal_argument_exception" }
+  - do:
+                }
+                }
+                  "foo": "bar"
+            ]
+                          ]
+                    "description": "processor_description",
+                                "value" : "ran"
+          }
+"Test simulate with docs containing metadata fields":
+          }
+                          "target_field" : "field1",
+              "description": "_description",
+              {
+            "docs": [
+                  }
+                  }
+          {
+      ingest.simulate:
+            ]
+---
+  - match: { docs.0.processor_results.1.ignored_error.error.type: "illegal_argument_exception" }
+        {
+                    "value" : 200
+          {
+              "description": "_description",
+  - match: { docs.0.doc._index: "index" }
+        body:  >
+  - match: { docs.0.processor_results.1.doc._source.field2.value: "_value" }
+                    "field" : "field2",
+                "_id": "id",
+          "docs": [
+  - match: { docs.1.processor_results.1.doc._source.bar: "HELLO" }
+    ingest.simulate:
+              "processors": [
+                    "target_field" : "field1",
+              "_index": "index",
+                  }
+    ingest.simulate:
+---
+            "docs": [
+            "_id": "id",
+                    "ignore_failure": true
+              "processors": [
+                      {
+              ]
+              {
+                }
+              "field1": "123.42 400 <foo>"
+  - match: { docs.0.doc._source.foo: "bar" }
+        body: >
+                  ]
+            },
+                  "set" : {
+  - length: { docs.0.doc._ingest: 1 }
+              }
+                "_if_seq_no": "123",
+        }
+              {
+- is_false: docs.0.processor_results.0.doc._source.pipeline1
+          }
+                      {
+        }
+                    "value" : "third_val"
+                  "tag": "gunna_fail",
+  - length: { docs.0.processor_results.3.doc._ingest: 2 }
+              "processors": [
+  - do:
+- match: { docs.0.processor_results.4.doc._source.pipeline2: true }
+"Test simulate with invalid processor config":
+                  "foo": "bar"
+  - length: { docs: 2 }
+- match: { docs.0.processor_results.3.doc._ingest.on_failure_processor_tag: "gunna_fail_again" }
+        }
+                "_if_seq_no": 12333333333333333,
+          {
+                "_id": "id",
+                    "source" : "ctx.target_field = Processors.uppercase(ctx.foo.foo)"
+              "pipeline" : {
+                    ]
+                "_if_primary_term": "1",
+  - match: { docs.0.processor_results.1.processor_type: "rename" }
+      ingest.simulate:
+                  }
+            "pipeline": {
+                  }
+            ]
+                }
+                "_index": "index",
+                              "field": "failed2",
+- match: { docs.0.processor_results.3.tag: "failed2" }
+                  "target_field": "fieldA",
+- match: { docs.0.processor_results.1.status: "success" }
         body: >
           {
+        body: >
+            "processors": [
             "pipeline": {
+          }
+      ingest.simulate:
+              ]
+                "_source": {
+              }
+- match: { docs.0.processor_results.0.doc._source.pipeline0: true }
+              ]
+                    {
+                  "bar": "hello"
+        id: "my_pipeline"
+- match: { docs.0.processor_results.1.doc._source.failed1: "failed1" }
+                {
+- is_false: docs.0.processor_results.2.doc._source.pipeline2
+            "processors": [
+                        }
+                "field": "pipeline0",
+  - match: { docs.0.processor_results.0.doc._source.field1: "123.42 400 <foo>" }
               "description": "_description",
               "processors": [
-                {
-                  "set" : {
-                    "description": "processor_description",
-                    "tag": "processor_tag",
+- match: { docs.0.processor_results.2.status: "error" }
+              {
+          {
+              "pipeline" : {
+  - do:
                     "field" : "field2",
-                    "value" : "_value"
-                  }
-                },
+                              "value": "failed2",
+                  "uppercase" : {
+                "_index": "index",
+                "_index": "index",
+          }
+              }
+                  "set" : {
+  - match: { docs.0.processor_results.1.doc._source.target_field: "BAR" }
+      ingest.simulate:
+      catch: bad_request
+  - match: { docs.0.processor_results.0.processor_type: "set" }
+  - match: { docs.0.processor_results.4.doc._source.status: 200 }
+- match: { docs.0.processor_results.3.status: "success" }
+        body: >
+          }
+        body: >
+          }
+            },
+"Test simulate with provided pipeline definition with on_failure block":
+      body: >
+                  "foo": "bar",
+          "description" : "outer pipeline",
+- match: { acknowledged: true }
+              }
+            },
+              {
+                  "if": "true",
+                      {
+- do:
+                  "uppercase" : {
+  - do:
+        body: >
+                  "field": "foo1",
+                  "rename" : {
+  - length: { docs.0.processor_results.1.doc._ingest: 2 }
+  - match: { docs.0.processor_results.4.doc._source.foofield2: "ran" }
+        verbose: true
                 {
+              "description": "_description",
+  - length: { docs: 1 }
+                        }
+  - match: { docs.0.processor_results.0.processor_type: "pipeline" }
+      id: "outer"
+  - match: { docs.0.processor_results.1.status: "success" }
+                  "not_foo": "bar"
+            },
+                          "field" : "foofield",
+              "_id": "id",
+  - match: { docs.0.processor_results.1.tag: "rename-1" }
+    ingest.put_pipeline:
+  - match: { docs.0.processor_results.0.status: "success" }
+                          "value" : "_value"
+  - length: { docs: 1 }
+  - match: { docs.0.processor_results.0.doc._source.tag: null }
+              }
+                {
+                }
+        body: >
+            }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+            ]
+            ]
+                      }
+                "_routing": "foo",
+  - match: { docs.1.processor_results.0.doc._source.bar: "hello" }
+              {
+              }
+                "_index": "index",
+              "processors": [
+                "_id": "id2",
+              {
+            ]
+                    "field" : "bar"
+- match: { docs.0.processor_results.1.processor_type: "set" }
+        id: "my_pipeline"
+        body: >
+                    "field" : "status",
+                      },
+                      "set": {
+                }
+              ]
+              }
+  - match: { docs.0.processor_results.3.doc._source.field2.value: "_VALUE" }
+                  }
+                "_source": {
+                          ]
+              }
+  - match: { docs.0.processor_results.2.status: "dropped" }
+          "processors": [
+  - match: { docs.0.processor_results.0.doc._source.status: 200 }
+                },
+                  }
+                    "tag" : "setstatus-1",
+          }
+- match: { docs.0.processor_results.0.status: "success" }
+  - length: { docs: 2 }
+          {
+                "_source": {
+            }
+        verbose: true
+                    "lang": "painless",
+                "_source": {
+  - match: { error.root_cause.0.type: "parse_exception" }
+            ]
+  - match: { acknowledged: true }
+  - is_true: docs.1.processor_results.1.doc._ingest.pipeline
+          ,
+            "pipeline": {
+- match: { acknowledged: true }
+      catch: bad_request
+          {
+- match: { docs.0.processor_results.3.doc._source.failed1: "failed1" }
+                    "value": "foo"
+              "description": "_description",
+                "_id": "id",
+              "description": "_description",
+      body:  >
+              }
+- match: { docs.0.processor_results.4.doc._source.pipeline0: true }
+              "pipeline" : {
+              "value": true
+  - length: { docs: 1 }
+                              }
+              "description": "_description",
+                    "tag" : "rename-1",
+          {
+              "description": "_description",
+        body: >
+                  "foo": {
+                  "rename" : {
+        ignore: 404
+"Test verbose simulate with true conditional and on failure":
+              {
+            },
+  - match: { docs.0.processor_results.0.tag: "processor_tag" }
+              "processors": [
+                "_index": "index",
+            "docs": [
+              ]
+            {
+            "set": {
+            "docs": [
+  - match: { docs.0.processor_results.1.if.condition: "false" }
+                "_id": "id",
+                  "foo": "bar"
+            },
+                                "value" : "ran"
+                {
+  - length: { docs.1.processor_results: 2 }
+  - is_true: docs.1.processor_results.0.doc._ingest.pipeline
+  - match: { docs.0.processor_results.0.doc._source.status: 200 }
+          {
+  - match: { docs.0.error.type: "illegal_argument_exception" }
+          }
+  - match: { error.root_cause.0.processor_type: "set" }
+          "processors" : [
+                }
+- match: { docs.0.processor_results.2.doc._source.pipeline0: true }
+                "name": "pipeline1"
+            ]
+                      }
+          "processors": [
+          }
+                              "tag": "failed2"
+  - match: { docs.0.processor_results.1.error.reason: "field [does_not_exist] doesn't exist" }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+                "_id": "id",
+                    ]
+      ingest.put_pipeline:
+  - is_false: error.root_cause.0.processor_type
+                    "field" : "foo",
+            "pipeline": {
+                          "target_field" : "field1",
+                    "value" : "_value"
+      ingest.simulate:
+  - match: { docs.0.processor_results.2.tag: "set on_failure rename" }
+  - match: { docs.0.processor_results.2.processor_type: "drop" }
+                "_source": {
+                            {
+  - match: { docs.0.doc._if_seq_no: "12333333333333333" }
+              "description": "_description",
+  - match: { docs.0.processor_results.1.processor_type: "rename" }
+              "processors": [
+      verbose: true
+            "_index": "index",
+            "docs": [
+              }
+  - match: { docs.0.processor_results.1.ignored_error.error.reason: "field [foofield] doesn't exist" }
+                   }
+                {
+            },
+---
+                          {
+                "_id": "id",
+  - do:
+  - do:
+                {
+                            "set": {
+      ingest.simulate:
+                "_id": "id",
+              }
+  - match: { docs.0.processor_results.2.doc._source.foo.bar.0.item: "HELLO" }
+  - is_false: error.root_cause.0.processor_tag
+            "pipeline": {
+                    "bar" : [ {"item": "HELLO"} ]
+                  "script" : {
+- length: { docs.0.processor_results: 5 }
+        body: >
+  - length: { docs: 1 }
+                "name": "inner"
+              "description": "_description",
+                     "name": "____pipeline_doesnot_exist___"
+        body: >
+                    "source": "ctx.foo['foo']=ctx.foo;ctx.tag='recursive'"
+---
+                {
+              }
+                }
+              {
+                  "field1": "123.42 400 <foo>"
+          {
+  - match: { status: 400 }
+            ]
+                }
+                    "field" : "field2",
+"Test verbose simulate with ignore_failure and no exception thrown":
+                        ]
+---
+---
+  - match: { docs.0.processor_results.4.doc._source.foofield: "exists" }
+          },
+  - length: { docs.0.processor_results.0: 4 }
+            ]
+                          "field" : "foofield",
+                "_id": "id2",
+                }
+  - match: { error.root_cause.0.reason: "[value] required property is missing" }
+            "pipeline": {
+  - is_false: docs.0.processor_results.3.tag
+                  "set" : {
+                    "tag": "processor_tag",
+  - do:
+                "_id": "id",
+                "_index": "index",
+                "_source": {
+              {
+                }
+          {
+                    "field" : "status",
+      catch: bad_request
+            "docs": [
+teardown:
+  - match: { docs.1.processor_results.0.doc._source.foo: 5 }
+                "_routing": "foo",
+                {
+          {
+                    "field" : "status",
+              }
+                }
+            ]
+                    "on_failure" : [
+  - do:
+            {
+  - match: { docs.0.processor_results.1.doc._source.status: 200 }
+"Test simulate with pipeline with ignore failure and cyclic field assignments in script":
+            },
+              ]
+          {
+                    "value" : "_value"
+"Test verbose simulate with error in pipeline":
+                        "tag": "failed1"
+                  "foo": "bar"
+                  "set" : {
                   "drop" : {
+        verbose: true
+              "description": "_description",
+            "pipeline": {
+                    "field" : "foo.bar.0.item"
+  - length: { docs.0.processor_results: 2 }
+                  "set" : {
+                      }
+  - is_true: docs.0.processor_results.0.doc._ingest.timestamp
+            "docs": [
+        {
+                "_source": {
+                    "value": "foo"
+                {
+                        "on_failure": [
+                          "on_failure" : [
+  - match: { docs.0.processor_results.2.if.result: true }
+            ]
                     "if": "false"
                   }
-                },
-                {
-                  "drop" : {
-                     "if": "true"
-                   }
-                }
-              ]
-            },
+          {
+  - match: { docs.0.processor_results.1.error.root_cause.0.reason: "field [does_not_exist] doesn't exist" }
+                      }
+              "processors": [
+                  "foo": "bar"
             "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_source": {
+              },
+  - is_true: docs.1.doc._ingest.timestamp
+                  }
+  - length: { docs.0.processor_results: 2 }
+                {
+            "_source": {
+  - do:
+              }
+          }
+              "processors": [
+            "docs": [
+            }
+"Test simulate with no provided pipeline or pipeline_id":
+                }
+                          "tag" : "set on_failure rename",
+  - match: { docs.0.doc._version: "100" }
+      body:  >
+        body: >
+"Test simulate with pipeline with conditional and skipped and dropped":
+  - match: { docs.0.processor_results.0.tag: "processor[set]-0" }
                   "foo": "bar"
                 }
+                  "foo": "bar"
+    ingest.put_pipeline:
+  - length: { docs: 1 }
+  - length: { docs.0.processor_results: 5 }
+  - match: { docs.0.processor_results.1.status: "error_ignored" }
+                {
+          ]
+                "rename" : {
+                }
+              {
+                          "on_failure" : [
+          "pipeline": {
+"Test verbose simulate with exception thrown":
+  - is_true: docs.0.processor_results.2.doc._ingest.pipeline
+                {
+  - length: { docs: 1 }
+                "_id": "id",
+                {
+                              "set" : {
+            },
+- match: { docs.0.processor_results.1.doc: null }
+---
+      ingest.simulate:
+- match: { docs.0.processor_results.2.error.reason: "field [foo2] doesn't exist" }
+        }
+  - match: { docs.0.processor_results.4.doc._source.field1: "123.42 400 <foo>" }
+                "_source": {
               }
-            ]
-          }
+                        "target_field": "fieldA",
+- match: { acknowledged: true }
+        }
+              "name": "pipeline2"
+            },
+- match: { docs.0.processor_results.2.tag: "gunna_fail_again" }
+          },
+                  "pipeline": {
+  - length: { docs: 1 }
+"Test simulate with exception thrown":
+  - do:
+  - do:
+              {
+                }
+          ]
+  - length: { docs.0.processor_results: 4 }
+  - match: { docs.0.processor_results.0.processor_type: "set" }
+              "description": "_description",
+"Test verbose simulate with ignore_failure and thrown exception":
+              {
+- length: { docs: 1 }
+                    },
+          {
+  - match: { status: 400 }
+  - match: { error.root_cause.0.processor_tag: "fails" }
+  - is_true: docs.0.processor_results.1.doc._ingest.pipeline
+        body: >
+                {
+- match: { docs.0.processor_results.3.processor_type: "pipeline" }
+        verbose: true
+                "_source": {
+                    "ignore_failure": true,
+                "_index": "index",
+                  "foo": "bar"
+  - match: { error.root_cause.0.reason: "Pipeline processor configured for non-existent pipeline [____pipeline_doesnot_exist___]" }
+              "processors": [
+            },
+"Test simulate with stored ingest pipeline":
+                "_if_primary_term": 1,
+        verbose: true
+  - is_true: docs.0.processor_results.2.doc._ingest.timestamp
+  - match: { docs.0.processor_results.1.doc._source.new_status: 200 }
+                "_index": "index",
+- match: { docs.0.processor_results.0.tag: "gunna_fail" }
+- match: { acknowledged: true }
+                {
+  - match: { docs.0.processor_results.0.processor_type: "set" }
+              }
+            {
+                          "field" : "foofield2",
   - length: { docs: 1 }
   - length: { docs.0.processor_results: 3 }
-  - match: { docs.0.processor_results.0.doc._source.field2: "_value" }
-  - match: { docs.0.processor_results.0.description: "processor_description" }
-  - match: { docs.0.processor_results.0.tag: "processor_tag" }
-  - match: { docs.0.processor_results.0.status: "success" }
-  - match: { docs.0.processor_results.0.processor_type: "set" }
-  - match: { docs.0.processor_results.1.status: "skipped" }
-  - match: { docs.0.processor_results.1.processor_type: "drop" }
-  - match: { docs.0.processor_results.1.if.condition: "false" }
-  - match: { docs.0.processor_results.1.if.result: false }
-  - match: { docs.0.processor_results.2.status: "dropped" }
-  - match: { docs.0.processor_results.2.processor_type: "drop" }
-  - match: { docs.0.processor_results.2.if.condition: "true" }
-  - match: { docs.0.processor_results.2.if.result: true }
----
-"Test simulate with provided pipeline that does not exist":
-  - do:
-      catch: bad_request
-      ingest.simulate:
-        verbose: true
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "pipeline": {
-                     "name": "____pipeline_doesnot_exist___"
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_source": {}
-              }
-            ]
-          }
-  - match: { error.root_cause.0.type: "illegal_argument_exception" }
-  - match: { error.root_cause.0.reason: "Pipeline processor configured for non-existent pipeline [____pipeline_doesnot_exist___]" }
-
----
-"Test simulate with docs containing metadata fields":
-  - do:
-      ingest.simulate:
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "set" : {
-                    "field": "field2",
-                    "value": "foo"
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_routing": "foo",
-                "_version": 100,
-                "_if_seq_no": 12333333333333333,
-                "_if_primary_term": 1,
                 "_source": {
                   "foo": "bar"
-                }
-              }
+  - is_true: docs.1.processor_results.1.doc._ingest.timestamp
+          ]
+- do:
+                "_id": "id",
             ]
+  - is_false: error.root_cause.0.processor_tag
+              }
+                }
+              "description": "_description",
           }
-
-  - length: { docs: 1 }
-  - match: { docs.0.doc._index: "index" }
-  - match: { docs.0.doc._id: "id" }
-  - match: { docs.0.doc._routing: "foo" }
-  - match: { docs.0.doc._version: "100" }
-  - match: { docs.0.doc._if_seq_no: "12333333333333333" }
+            ]
+                "_id": "id",
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+            "pipeline": {
+  - match: { error.root_cause.0.type: "parse_exception" }
+      ingest.simulate:
+          {
+  - do:
+                  "rename" : {
+          ]
   - match: { docs.0.doc._if_primary_term: "1" }
-  - match: { docs.0.doc._source.foo: "bar" }
-
-  - do:
-      catch: bad_request
-      ingest.simulate:
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "set" : {
-                    "field" : "field2",
-                    "value": "foo"
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_routing": "foo",
-                "_version": "bar",
-                "_source": {
-                  "foo": "bar"
-                }
-              }
-            ]
-          }
-  - match: { status: 400 }
-  - match: { error.root_cause.0.type: "illegal_argument_exception" }
-  - match: { error.root_cause.0.reason: "Failed to parse parameter [_version], only int or long is accepted" }
-
-  - do:
-      catch: bad_request
-      ingest.simulate:
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "set" : {
-                    "field" : "field2",
-                    "value": "foo"
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_routing": "foo",
-                "_if_seq_no": "123",
-                "_source": {
-                  "foo": "bar"
-                }
-              }
-            ]
-          }
-  - match: { status: 400 }
-  - match: { error.root_cause.0.type: "illegal_argument_exception" }
-  - match: { error.root_cause.0.reason: "Failed to parse parameter [_if_seq_no], only int or long is accepted" }
-
-  - do:
-      catch: bad_request
-      ingest.simulate:
-        body: >
-          {
-            "pipeline": {
-              "description": "_description",
-              "processors": [
-                {
-                  "set" : {
-                    "field" : "field2",
-                    "value": "foo"
-                  }
-                }
-              ]
-            },
-            "docs": [
-              {
-                "_index": "index",
-                "_id": "id",
-                "_routing": "foo",
-                "_if_primary_term": "1",
-                "_source": {
-                  "foo": "bar"
-                }
-              }
-            ]
-          }
-  - match: { status: 400 }
-  - match: { error.root_cause.0.type: "illegal_argument_exception" }
-  - match: { error.root_cause.0.reason: "Failed to parse parameter [_if_primary_term], only int or long is accepted" }
-
+                  "pipeline" : {
 ---
-"Test simulate with pipeline with ignore failure and cyclic field assignments in script":
-  - do:
-      ingest.simulate:
-        verbose: true
-        body: >
+- length: { docs: 1 }
+                    "value" : "_value"
+                          }
+- match: { docs.0.processor_results.3.doc._source.failed2: "failed2" }
+          "docs": [
           {
-            "pipeline": {
-              "description": "_description",
+              },
+            }
+            ]
+                    "field" : "status",
+                  "drop" : {
+  - do:
+---
+          }
+                        "value": "failed1",
+              ]
+      catch: bad_request
+  - do:
+            },
               "processors": [
+                "_index": "index",
+---
+                    "on_failure" : [
+            ]
+                "_index": "index",
+      ingest.simulate:
+            "docs": [
+                "_id": "id",
+                "_source": {}
                 {
-                  "script" : {
-                    "ignore_failure" : true,
-                    "lang": "painless",
-                    "source": "ctx.foo['foo']=ctx.foo;ctx.tag='recursive'"
+                }
+                "_index": "index",
+            "docs": [
+                    "tag" : "setstatus-1",
                   }
+---
+          {
+        {
+- match: { docs.0.processor_results.1.status: "success" }
+            {
+  - match: { docs.0.processor_results.0.doc._source.field1: "123.42 400 <foo>" }
+- do:
+          }
+            },
+          {
+              {
+            ]
+                  "foo": "bar"
+      ingest.simulate:
+      catch: bad_request
+        id: "my_pipeline"
+        {
+                        }
+              "processors": [
+            "processors": [
+                  }
+"Test verbose simulate with Pipeline Processor with Circular Pipelines":
+                    "field" : "foofield",
+                "_source": {
+  - match: { docs.0.doc._source.foo: "bar" }
+  - match: { docs.0.processor_results.0.tag: "setstatus-1" }
+- is_false: docs.0.processor_results.0.doc._source.pipeline2
+                    "value" : "_value"
+  - match: { docs.0.processor_results.2.doc._source.field2.value: "_VALUE" }
                 },
                 {
-                  "script" : {
-                    "lang": "painless",
-                    "source" : "ctx.target_field = Processors.uppercase(ctx.foo.foo)"
                   }
-                }
+"Test simulate with provided invalid pipeline definition":
+          "pipeline": {
+                        "set" : {
+                          "field" : "field2",
+                  "rename" : {
               ]
+  - match: { docs.0.processor_results.0.tag: "setstatus-1" }
             },
-            "docs": [
-              {
+              "field1": "123.42 400 <foo>"
+        body: >
                 "_source": {
-                  "foo": {
-                    "foo": "bar"
+                    "value": "foo"
                   }
+      ingest.delete_pipeline:
+              ]
+                "_id": "id",
+            "description": "_description",
+                  }
+            "processors" : [
+              "processors": [
+  - do:
+    ingest.simulate:
+            "description": "_description",
+  - length: { docs.0.processor_results.0.doc._ingest: 2 }
+      ingest.simulate:
+- match: { docs.0.processor_results.3.processor_type: "set" }
+          {
+- match: { docs.0.processor_results.1.doc._ingest.on_failure_processor_tag: "gunna_fail" }
+                    "tag" : "setstatus-1",
+  - match: { docs.1.processor_results.0.doc._index: "index" }
+                    "field" : "field2",
+                  "set" : {
+              "description": "_description",
+            },
+        body: >
+  - match: { docs.0.processor_results.3.doc._source.field3: "third_val" }
+            {
+                "_source": {
+      ingest.simulate:
+- match: { docs.0.processor_results.0.processor_type: "rename" }
+  - match: { docs.0.processor_results.1.status: "error" }
+  - is_true: docs.0.processor_results.3.doc._ingest.timestamp
+                  "set" : {
+              "description": "_description",
+  - match: { docs.0.processor_results.1.if.result: false }
+                  "set" : {
+                },
+          {
+                {
+                "_routing": "foo",
+                    "field" : "field3",
+              "processors": [
+                    "tag" : "fails",
+    ingest.put_pipeline:
+  - match: { docs.0.doc._routing: "foo" }
+              ]
+---
+          }
+            "docs": [
+                },
+                  }
+  - match: { docs.1.processor_results.1.doc._source.foo: 5 }
+  - is_true: docs.0.processor_results.0.doc._ingest.pipeline
+  - match: { docs.0.processor_results.0.description: "processor_description" }
+"Test simulate with provided pipeline that does not exist":
+---
+- match: { docs.0.processor_results.3.status: "success" }
+            "pipeline": {
+              "description": "_description",
+  - match: { docs.0.processor_results.0.doc._source.status: 200 }
+      catch: bad_request
+          }
+              "field": "pipeline2",
+                  }
+              ]
+                "name": "outer"
+          }
+              {
+                        "rename" : {
+            }
+                "_id": "id",
+            }
+            "docs": [
+            "_id": "id",
+              "description": "_description",
+              {
+        body: >
+  - match: { error.root_cause.0.reason: "[field] required property is missing" }
+                {
+"Test simulate with verbose flag":
+          {
+            },
+  - match: { docs.1.doc._source.foo: "BAR" }
+      body: >
+                {
+        {
+  - match: { docs.0.processor_results.0.status: "error_ignored" }
+          ]
+            "pipeline": {
+              ]
+      verbose: true
+                    "tag" : "rename-1",
+          {
+            "processors": [
+                "_source": {
+              }
+          {
+            "docs": [
+                }
+        verbose: true
+  - length: { docs.0.processor_results.1: 4 }
+  - match: { docs.0.processor_results.0.tag: "setstatus-1" }
+                "_index": "index",
+  - is_true: docs.0.processor_results.1.doc._ingest.timestamp
+- match: { docs.0.processor_results.3.doc: null }
+---
+                      "rename": {
+                }
+  - match: { docs.0.processor_results.1.status: "skipped" }
+            "pipeline" : {
+                        "set" : {
+            }
+        body: >
+            "pipeline" : {
+- match: { docs.0.processor_results.2.processor_type: "rename" }
+  - length: { docs: 1 }
+            "pipeline": {
+                "_source": {
+                },
+                  }
+                    "value" : 200
+  - match: { status: 400 }
+              ]
+  - do:
+                      {
+              "processors": [
+                }
+      id: "pipeline2"
+                }
+            "docs": [
+---
+                {
+              {
+              "value": true
+                  "convert" : {
+                },
+  - is_false: docs.0.processor_results.4.tag
+                      },
+                  }
+---
+              "_source": {
+- match: { docs.0.processor_results.2.doc._source.pipeline1: true }
+  - do:
+                }
+  - is_true: docs.1.processor_results.0.doc._ingest.timestamp
+                  "uppercase" : {
                 }
               }
-            ]
-          }
   - length: { docs: 1 }
-  - length: { docs.0.processor_results: 2 }
-  - match: { docs.0.processor_results.0.status: "error_ignored" }
-  - match: { docs.0.processor_results.0.ignored_error.error.type: "illegal_argument_exception" }
-  - match: { docs.0.processor_results.0.doc._source.tag: null }
-  - match: { docs.0.processor_results.1.doc._source.target_field: "BAR" }
+  - length: { docs.0.processor_results.2.doc._source: 3 }
+                     "if": "true"
   - match: { docs.0.processor_results.1.doc._source.foo.foo: "bar" }
-  - match: { docs.0.processor_results.1.status: "success" }
+                    "field" : "field2.value"
+              ]
+                "_source": {
+                "_index": "index",
+                }
+              {
+                  }
+          },
+                          "field" : "foofield2",
+  - is_true: docs.0.processor_results.3.doc._ingest.pipeline
+  - match: { acknowledged: true }
+          }
+                            }
+              }
+                  "script" : {
+                "_index": "index",
+                    "field" : "field2",
+              ]
+        verbose: true
+                  }
+            ]
+  - match: { docs.0.processor_results.1.processor_type: "rename" }
+                  }
+  - match: { docs.0.processor_results.0.doc._source.foo.bar.0.item: "HELLO" }
+      catch: bad_request
+            "set": {
+  - do:
+                    "value" : 200
+              }
+                },
+          ]
+        id: "my_pipeline"
+            ]
+                            }
+          }
+              "description": "_description",
+          }
+      verbose: true
+            },
+  - match: { docs.0.processor_results.0.error.type: "illegal_argument_exception" }
+            ]
+            }
+        body: >
+                }
+          }
+            "docs": [
+                    "target_field" : "field2",
+      ingest.put_pipeline:
+                "_routing": "foo",
+        verbose: true
+                }
+                "_version": 100,
+                  "foo": "5",
+              "set": {
+                },
+- do:
+      ingest.simulate:
+                  "target_field" : "_value"
+          "description" : "inner pipeline",
+                    ]
+      id: "pipeline1"
+  - match: { docs.0.processor_results.0.ignored_error.error.type: "illegal_argument_exception" }
+                "_id": "id",
+                  "bar": "hello"
+  - do:
+                        "field": "failed1",
+  - match: { docs.0.processor_results.3.doc._source.foo.bar.0.item: "hello" }
+                  }
+                        }
+        body: >
+  - match: { docs.0.processor_results.0.doc._source.field2: "_value" }
+                  "set" : {
+                }
+                    "name" : "my_pipeline"
+            "docs": [
+      ingest.simulate:
+                }
+              "processors": [
+                  "field1": "123.42 400 <foo>"
+                "name": "outer"
+                }
+                  "lowercase" : {
+                }
+  - match: { docs.0.processor_results.0.status: "success" }
+  - length: { docs.1.processor_results.1.doc._ingest: 2 }
+            "docs": [
+                {
+          }
+- match: { docs.0.processor_results.1.tag: "failed1" }
+                }
+- match: { docs.0.processor_results.1.processor_type: "pipeline" }
+                            {
+                "_source": {
+  - match: { docs.0.processor_results.0.status: "success" }
+                  "foo": "bar"
+                          "value" : "exists"
+            ]
+                {
+                    }
+  - length: { docs.0.doc._ingest: 1 }
+                "_index": "index",
+              {
+  - do:
+                }
+"Test verbose simulate with Pipeline Processor with Multiple Pipelines":
+- match: { docs.0.processor_results.4.doc._source.pipeline1: true }
+                    "tag" : "rename-1",
+        {
+                        }
+            "_source": {
+                {
+              }
+  - length: { docs.0.processor_results.2.doc._ingest: 2 }
+                }
+                }
+                  "field1": "123.42 400 <foo>"
+"Test verbose simulate with on_failure":
+                                "field" : "foofield2",
+              "processors": [
+"Test simulate without id":
+                  "bar": "hello"
+                "_id": "id",
+- do:
+        verbose: true
+                  "on_failure": [
+                        "field": "foo2",
+            ]
+        }
+                  }
+  - match: { docs.0.processor_results.2.if.condition: "true" }
+  - match: { error.reason: "[pipeline] required property is missing" }
+  - do:
+  - match: { docs.0.processor_results.1.error.root_cause.0.type: "illegal_argument_exception" }
+                  "foo": {
+                "_source": {
+                          "tag" : "set on_failure rename",
+      body:  >
+          }
+                }
+          {
+  - do:
+                "_index": "index",
+  - match: { docs.0.processor_results.1.doc._source.field1: "123.42 400 <foo>" }
+                "_index": "index",
+      ingest.simulate:
+            }
+            "pipeline": {
+                "_version": "bar",
+                  }
+                  "field" : "field2",
+          {
+            "pipeline" : {
+---
+  - length: { docs.1.doc._ingest: 1 }
+- length: { docs: 1 }
+                "description" : "first_set"
+                  "set" : {
+      ingest.simulate:
+              {
+                    "value" : "_value"
+                "set" : {
+---
+                "foo": "bar"
+          }
+                  }
+              "pipeline": {
+      ingest.simulate:
+- length: { docs.0.processor_results: 4 }
+          "docs": [
+  - match: { error.root_cause.0.reason: "Failed to parse parameter [_if_primary_term], only int or long is accepted" }
+                        "tag": "gunna_fail_again",
+                "_index": "index",
+              {
+  - is_true: docs.0.doc._ingest.timestamp
+                "_source": {
+      body: >
+                    "field": "field2",
+          "pipeline": {
+                  "set" : {
+  - length: { docs.0.processor_results.0.doc._source: 2 }
+  - match: { docs.0.processor_results.1.error.reason: "field [foofield] doesn't exist" }
+                    "field" : "does_not_exist",
+                          "value" : "exists"
+                }
+                    "lang": "painless",
+    ingest.put_pipeline:
+                    "value": "foo"
+              ]
+  - match: { docs.0.processor_results.1.doc._source.foo.bar.0.item: "HELLO" }
+              "field": "pipeline1",
+  - length: { docs.0.processor_results: 2 }
+                              "set" : {
+- do:
+  - length: { docs.0.processor_results: 2 }
+              "processors": [
+                  }
+                "_source": {
+      ingest.simulate:
+                        "set" : {
+            "pipeline": {
+            "pipeline": {
+            "docs": [
+            ]
+                    "target_field" : "field1",
+                    "foo": "bar"
+            "docs": [
+  - match: { docs.0.doc._id: "id" }
+                        "rename" : {
+            },
+                    "field" : "field2"
+        {
+            "_index": "index",
+              "description": "_description",
+            }
+              }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+---
+                      {
+      ingest.simulate:
+  - length: { docs.0.processor_results: 1 }
+                {
+  - match: { docs.0.processor_results.1.processor_type: "drop" }
+  - match: { docs.0.doc._source.field2: "_value" }
+                      }
+  - match: { docs.0.doc._source.foo: "bar" }
+              ]
+                {
+          }
+                {
+                  "foo": "bar"
+            "pipeline": {
   - match: { docs.0.processor_results.1.processor_type: "script" }
+                }
+- do:
+              }
+                }
+              ]
+                {
+---

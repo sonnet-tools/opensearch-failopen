@@ -1,617 +1,564 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
+            if (state.metadata().hasIndex(index.getName())) {
+            );
+                TestRequest::new,
+            ActionListener.wrap(r -> success.set(true), failure::set)
+        @SuppressWarnings({ "unchecked", "rawtypes" })
+            refreshListener.getValue().accept(forcedRefresh);
+        @Override
+                shardFailedRequest.requestId,
+        TestRequest request = new TestRequest();
+        AtomicBoolean success = new AtomicBoolean();
+        ShardStateAction shardStateAction = new ShardStateAction(clusterService, transportService, null, null, threadPool);
+        assertNull(listener.response); // Haven't responded yet
+        if (randomBoolean()) {
+            ShardRoutingState.RELOCATING
+                return replicaResult;
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.support.replication;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.ActionTestUtils;
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.action.support.WriteRequest.RefreshPolicy;
-import org.opensearch.action.support.WriteResponse;
-import org.opensearch.action.support.replication.ReplicationOperation.ReplicaResponse;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.action.shard.ShardStateAction;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.RoutingNode;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.TestShardRouting;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.transport.TransportResponse;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.IndexingPressureService;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.ShardNotFoundException;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.SystemIndices;
-import org.opensearch.node.NodeClosedException;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.ClusterServiceUtils;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.transport.CapturingTransport;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.Transport;
-import org.opensearch.transport.TransportException;
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.transport.NoNodeAvailableException;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Locale;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
-
-import org.mockito.ArgumentCaptor;
-
-import static java.util.Collections.emptyMap;
-import static org.opensearch.test.ClusterServiceUtils.createClusterService;
-import static org.hamcrest.Matchers.arrayWithSize;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyInt;
-import static org.mockito.Mockito.anyLong;
-import static org.mockito.Mockito.anyString;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
+        @Override
+            x -> clusterService.localNode(),
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class TransportWriteActionTests extends OpenSearchTestCase {
-
-    private static ThreadPool threadPool;
-
+                clusterService,
+            result.runPostReplicationActions(ActionListener.map(listener, ignore -> result.finalResponseIfSuccessful));
+        }).when(indexShard).acquirePrimaryOperationPermit(any(ActionListener.class), anyString(), any());
+        }
+ * this file be licensed under the Apache-2.0 license or a
+        ) {
+        return indexService;
+            assertNull(listener.failure);
+            return "TestRequest{}";
+        // the shard the request was sent to and the shard to be failed should be the same
+                routingState == ShardRoutingState.RELOCATING ? state.nodes().iterator().next().getId() : null,
+                } else {
+        final TransportReplicationAction.ReplicaResult result = future.actionGet();
+        }
+        testAction.dispatchedShardOperationOnPrimary(request, indexShard, ActionTestUtils.assertNoFailureListener(result -> {
+        clusterService.close();
+                    replicaResult = new WriteReplicaResult<>(request, null, new RuntimeException("simulated"), replica, logger);
+        refreshListener.getValue().accept(forcedRefresh);
+import org.opensearch.OpenSearchException;
+ * not use this file except in compliance with the License.
+                null,
+import java.util.HashSet;
+        // A write replication action proxy should fail the shard
+import java.util.concurrent.atomic.AtomicReference;
+                    Settings.EMPTY,
+    private class TestAction extends TransportWriteAction<TestRequest, TestRequest, TestResponse> {
+            ActionListener<Releasable> callback = (ActionListener<Releasable>) invocation.getArguments()[0];
+import org.opensearch.action.support.PlainActionFuture;
+    }
+            Index index = (Index) invocation.getArguments()[0];
+            randomNonNegativeLong(),
+        protected void dispatchedShardOperationOnPrimary(
+                new ActionFilters(new HashSet<>()),
+    @After
+        try {
+            assertNull(listener.response); // Haven't really responded yet
+                }
+            if (term < primaryTerm) {
+                ignore -> ThreadPool.Names.SAME,
+                if (withDocumentFailureOnPrimary) {
+    public void testReplicaNoRefreshCall() throws Exception {
+            ClusterService clusterService,
+            verify(indexShard).refresh("refresh_flag_index");
+                false,
+        verify(indexShard).refresh("refresh_flag_index");
+    public void testDocumentFailureInShardOperationOnReplica() throws Exception {
+/*
+import org.opensearch.threadpool.ThreadPool;
+        final ShardId shardId = new ShardId(index, "_na_", 0);
+ * The OpenSearch Contributors require contributions made to
+        proxy.performOn(
+    }
+        CapturingTransport.CapturedRequest[] captures = transport.getCapturedRequestsAndClear();
+        protected TestAction(boolean withDocumentFailureOnPrimary, boolean withDocumentFailureOnReplica) {
+        super.tearDown();
+                mockIndicesService(clusterService),
+        transportService.acceptIncomingRequests();
+        ArgumentCaptor<Consumer<Boolean>> refreshListener = ArgumentCaptor.forClass((Class) Consumer.class);
+ * KIND, either express or implied.  See the License for the
+        });
+    }
+        }
+    }
+        CapturingActionListener<TransportResponse.Empty> listener = new CapturingActionListener<>();
+        assertNotNull(listener.response);
+            verify(indexShard, never()).refresh(any());
+    private final AtomicBoolean isRelocated = new AtomicBoolean(false);
+            ShardRoutingState.INITIALIZING,
+ */
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+            String actionName,
+    public void initCommonMocks() {
+        // Now we can fire the listener manually and we'll get a response
+                "internal:test",
     private ClusterService clusterService;
-    private IndexShard indexShard;
-    private Translog.Location location;
-
-    @BeforeClass
+        TestAction testAction = new TestAction();
+import org.opensearch.indices.IndicesService;
+import org.opensearch.cluster.routing.ShardRoutingState;
+                null,
+                TestRequest::new,
+        indexShard = mock(IndexShard.class);
+            // simulate the primary has been demoted
+ * Unless required by applicable law or agreed to in writing,
+            final ClusterState state = clusterService.state();
+            primaryTerm,
+                    null,
+ * this work for additional information regarding copyright
+        assertNull(listener.failure);
+                new SystemIndices(emptyMap()),
+    public void testPrimaryNoRefreshCall() throws Exception {
+        public String toString() {
+        } else {
+            assertThat(listener.get(), equalTo(response));
+        final PlainActionFuture<TransportReplicationAction.ReplicaResult> future = PlainActionFuture.newFuture();
+                "NOT THERE",
+            this(false, false);
+ * the Apache License, Version 2.0 (the "License"); you may
+                new ShardStateAction.NoLongerPrimaryShardException(replica.shardId(), "shard-failed-test")
+ * You may obtain a copy of the License at
+        doThrow(new AssertionError("failed shard is not supported")).when(indexShard).failShard(anyString(), any(Exception.class));
+        private R response;
+            assertFalse(success.get());
+                throw new ShardNotFoundException(shardId);
+            return new TestResponse();
+        @Override
+            this.forcedRefresh = forcedRefresh;
+import static org.mockito.Mockito.when;
+            this.withDocumentFailureOnReplica = withDocumentFailureOnReplica;
+import org.opensearch.action.support.WriteResponse;
+        } else if (randomBoolean()) {
+        }
+        }
+        assertNotNull(listener.response);
+            CapturingActionListener<TestResponse> listener = new CapturingActionListener<>();
     public static void beforeClass() {
+    public void testReplicaWaitForRefresh() throws Exception {
+    private Translog.Location location;
+        doAnswer(invocation -> {
+                threadPool,
+            final IndexMetadata indexSafe = state.metadata().getIndexSafe(index);
+                TestRequest::new,
+        testAction.dispatchedShardOperationOnPrimary(request, indexShard, ActionTestUtils.assertNoFailureListener(result -> {
+ * GitHub history for details.
+import org.junit.After;
+                randomLong()
+ * Licensed to Elasticsearch under one or more contributor
+        }
+            });
+        boolean forcedRefresh = randomBoolean();
+        TestRequest request = new TestRequest();
+        result.runPostReplicaActions(ActionListener.map(listener, ignore -> TransportResponse.Empty.INSTANCE));
+            assertNotNull(failure.get());
+        }
+            CapturingActionListener<TestResponse> listener = new CapturingActionListener<>();
+import org.opensearch.action.support.ActionTestUtils;
+            this.withDocumentFailureOnReplica = false;
+            ActionListener.completeWith(listener, () -> {
+            Settings.EMPTY,
+            final ClusterState state = clusterService.state();
+            verify(indexShard, never()).addRefreshListener(any(), any());
+            result.runPostReplicationActions(ActionListener.map(listener, ignore -> result.finalResponseIfSuccessful));
+            super(
+        }
+    public void testDocumentFailureInShardOperationOnPrimary() throws Exception {
+                    mock(Transport.class),
+            randomNonNegativeLong(),
+import org.opensearch.core.common.io.stream.StreamInput;
+        assertTrue(listener.isDone());
+import org.opensearch.core.index.Index;
+import java.util.concurrent.ExecutionException;
+        assertNotNull(listener.failure);
+        result.runPostReplicaActions(ActionListener.map(listener, ignore -> TransportResponse.Empty.INSTANCE));
+import org.opensearch.threadpool.TestThreadPool;
+        }
+            super(in);
+ */
+        }
+import org.opensearch.index.shard.IndexShard;
+        assertEquals(shardEntry.getShardId(), replica.shardId());
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+import org.junit.Before;
+            count.incrementAndGet();
+            assertNull(failure.get());
+    final IndexService mockIndexService(final IndexMetadata indexMetadata, ClusterService clusterService) {
+            );
+        boolean forcedRefresh;
+        protected TestAction() {
+            assertEquals(forcedRefresh, listener.response.forcedRefresh);
+                new IndexingPressureService(settings, clusterService),
+        });
+            i -> clusterService.state().metadata().getIndexSafe(shardId.getIndex()).primaryTerm(shardId.id())
+    @Before
+        ) {
+import static org.mockito.Mockito.verify;
+    }
+        request.setRefreshPolicy(RefreshPolicy.WAIT_UNTIL);
+public class TransportWriteActionTests extends OpenSearchTestCase {
+        );
+            "internal:testAction",
+import org.opensearch.action.support.ActionFilters;
+            return null;
+        verify(indexShard, never()).addRefreshListener(any(), any());
+        } else if (randomBoolean()) {
+    public void testPrimaryImmediateRefresh() throws Exception {
+        }
+ */
+            assertNotNull(listener.response);
+    }
+import org.opensearch.transport.Transport;
+                new TransportService(
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.Settings;
+        );
+        final PlainActionFuture<TransportReplicationAction.ReplicaResult> future = PlainActionFuture.newFuture();
+        TestRequest request = new TestRequest();
+        );
+            verify(indexShard).addRefreshListener(any(), refreshListener.capture());
+                settings,
+        assertListenerThrows("non existent node should throw a NoNodeAvailableException", listener, NoNodeAvailableException.class);
+            final ClusterState state = clusterService.state();
+                NoopTracer.INSTANCE
+    private static class TestResponse extends ReplicationResponse implements WriteResponse {
+            transport.handleRemoteError(captures[0].requestId, new OpenSearchException("simulated"));
+            fail(msg);
+            if (shard > indexMetadata.getNumberOfShards()) {
+        final long primaryTerm = state.metadata().index(index).primaryTerm(0);
+        ClusterServiceUtils.setState(clusterService, state);
+                ),
+        doAnswer(invocation -> {
+    private IndexShard mockIndexShard(ShardId shardId, ClusterService clusterService) {
+        CapturingActionListener<TransportResponse.Empty> listener = new CapturingActionListener<>();
+        final IndexService indexService = mock(IndexService.class);
+    }
+            replica,
+        clusterService = createClusterService(threadPool);
+        request.setRefreshPolicy(RefreshPolicy.IMMEDIATE);
+            threadPool,
+    public void testReplicaProxy() throws InterruptedException, ExecutionException {
+            // Now we can fire the listener manually and we'll get a response
+            callback.onResponse(count::decrementAndGet);
+            assertFalse(success.get());
+    final IndicesService mockIndicesService(ClusterService clusterService) {
+        testAction.dispatchedShardOperationOnReplica(request, indexShard, future);
+        result.runPostReplicaActions(ActionListener.map(listener, ignore -> TransportResponse.Empty.INSTANCE));
+ * software distributed under the License is distributed on an
+    private final AtomicInteger count = new AtomicInteger(0);
+ *
+import static org.hamcrest.Matchers.equalTo;
+            );
+            return mockIndexShard(shardId, clusterService);
+        }));
+        assertNotNull(listener.response);
+        testAction.dispatchedShardOperationOnReplica(request, indexShard, future);
+        TestAction testAction = new TestAction();
+        TestRequest request = new TestRequest();
+                ignore -> ThreadPool.Names.SAME,
+ * license agreements. See the NOTICE file distributed with
+import java.util.concurrent.TimeUnit;
+        listener = new PlainActionFuture<>();
+            this.withDocumentFailureOnPrimary = withDocumentFailureOnPrimary;
+        }));
+                new ActionFilters(new HashSet<>()),
+import java.util.Collections;
+        TestRequest request = new TestRequest();
+            @SuppressWarnings({ "unchecked", "rawtypes" })
+        final String index = "test";
+            assertTrue(listener.isDone());
+            ShardRoutingState.STARTED,
+            new TestRequest(),
+        final TransportReplicationAction.ReplicaResult result = future.actionGet();
+        TestAction testAction = new TestAction();
+    @BeforeClass
+            Collections.emptySet(),
+                randomLong(),
+            // simulated a node closing exception
+        final IndexShard indexShard = mock(IndexShard.class);
+import java.util.concurrent.atomic.AtomicBoolean;
+    public void testReplicaImmediateRefresh() throws Exception {
+        TestAction testAction = new TestAction(true, true);
+    }
+        CapturingTransport.CapturedRequest shardFailedRequest = shardFailedRequests[0];
+        assertNull(listener.failure);
+            Settings settings,
+import org.opensearch.core.transport.TransportResponse;
+    }
+import org.opensearch.cluster.routing.TestShardRouting;
+            );
+        request.setRefreshPolicy(RefreshPolicy.WAIT_UNTIL);
+                final WriteReplicaResult<TestRequest> replicaResult;
+        proxy.performOn(replica, new TestRequest(), primaryTerm, randomNonNegativeLong(), randomNonNegativeLong(), listener);
+import static java.util.Collections.emptyMap;
+        // check that at unknown node fails
+            assertNotNull(listener.response);
+                return null;
+        } else {
+        assertEquals(1, shardFailedRequests.length);
+            super(
+import static org.mockito.Mockito.mock;
+            transport.handleRemoteError(shardFailedRequest.requestId, new NodeClosedException(state.nodes().getLocalNode()));
+            final RoutingNode node = state.getRoutingNodes().node(state.nodes().getLocalNodeId());
+        ReplicationOperation.Replicas<TestRequest> proxy = action.newReplicasProxy();
+            listener.get();
+            long term = (Long) invocation.getArguments()[0];
+        verify(indexShard).addRefreshListener(any(), refreshListener.capture());
+        );
+        verify(indexShard, never()).addRefreshListener(any(), any());
+        public void setForcedRefresh(boolean forcedRefresh) {
+            result.runPostReplicationActions(ActionListener.map(listener, ignore -> result.finalResponseIfSuccessful));
+import static org.mockito.Mockito.any;
+            // simulate success
+            null,
+            ActionListener.completeWith(listener, () -> {
+import org.opensearch.cluster.metadata.IndexMetadata;
+            assertTrue(success.get());
+        private Exception failure;
+import java.util.Locale;
+        );
+                false,
+            transport.handleResponse(captures[0].requestId, response);
+                new IndexingPressureService(Settings.EMPTY, TransportWriteActionTests.this.clusterService),
+import static org.hamcrest.Matchers.arrayWithSize;
+                TestRequest::new,
+        TestRequest request = new TestRequest();
+/*
+            assertNull(listener.response);
+        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
+        testAction.dispatchedShardOperationOnPrimary(request, indexShard, ActionTestUtils.assertNoFailureListener(result -> {
+    @Override
+import org.opensearch.test.ClusterServiceUtils;
+import org.opensearch.test.transport.CapturingTransport;
+            return routing;
+import java.io.IOException;
+                    return new WritePrimaryResult<>(request, null, null, new RuntimeException("simulated"), primary, logger);
+import org.opensearch.index.shard.ShardNotFoundException;
+        verify(indexShard, never()).refresh(any());
+        TestAction testAction = new TestAction(randomBoolean(), true);
+        @Override
+            shardStateAction,
+        final TransportReplicationAction.ReplicaResult result = future.actionGet();
+        assertEquals(shardEntry.getAllocationId(), replica.allocationId().getId());
+        public void onResponse(R response) {
+    }
+            this.failure = failure;
+            transport.handleError(captures[0].requestId, new TransportException("simulated"));
+        TestRequest(StreamInput in) throws IOException {
+            shardRoutings.replicaShards().stream().filter(ShardRouting::assignedToNode).collect(Collectors.toList())
+            super(new ShardId("test", "test", 1));
+        final PlainActionFuture<TransportReplicationAction.ReplicaResult> future = PlainActionFuture.newFuture();
+import org.opensearch.node.NodeClosedException;
+            IndexShard primary,
+                    return new WritePrimaryResult<>(request, new TestResponse(), location, null, primary, logger);
+            int shard = (Integer) invocation.getArguments()[0];
+                Settings.EMPTY,
+    public void tearDown() throws Exception {
+            assertThat(ex.getCause(), instanceOf(klass));
+        TestAction testAction = new TestAction();
+                    String.format(Locale.ROOT, "%s operation term [%d] is too old (current [%d])", shardId, term, primaryTerm)
+            Index index = (Index) invocation.getArguments()[0];
+        verify(indexShard, never()).refresh(any());
+                transportService,
+    @AfterClass
+        threadPool = null;
+            transportService,
+        request.setRefreshPolicy(RefreshPolicy.IMMEDIATE);
+        testAction.dispatchedShardOperationOnReplica(request, indexShard, future);
+    }
+        CapturingTransport transport = new CapturingTransport();
+import org.opensearch.index.IndexService;
+        logger.info("using state: {}", state);
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+            TransportService transportService,
+        TestRequest request = new TestRequest();
+import static org.mockito.Mockito.doThrow;
+import org.opensearch.index.IndexingPressureService;
+            CapturingActionListener<TestResponse> listener = new CapturingActionListener<>();
+                shardId,
+            verify(indexShard, never()).refresh(any());
+            listener
+import org.opensearch.action.support.replication.ReplicationOperation.ReplicaResponse;
+            final ShardRouting routing = node.getByShardId(shardId);
+                false,
+        return indexShard;
+            return mockIndexService(indexSafe, clusterService);
+        @Override
+import java.util.stream.Collectors;
+        }
+                if (withDocumentFailureOnReplica) {
+import org.opensearch.cluster.routing.RoutingNode;
+import org.opensearch.transport.TransportService;
+                new SystemIndices(emptyMap()),
+import static org.mockito.Mockito.anyLong;
+}
+import static org.mockito.Mockito.anyInt;
+                return mockIndexService(clusterService.state().metadata().getIndexSafe(index), clusterService);
+            });
+        TestAction testAction = new TestAction();
+import org.mockito.ArgumentCaptor;
+        when(indexShard.routingEntry()).thenAnswer(invocationOnMock -> {
+            assertTrue(listener.response.forcedRefresh);
+            assertNull(listener.failure);
+        testAction.dispatchedShardOperationOnReplica(request, indexShard, future);
+            if (routing == null) {
+        PlainActionFuture<ReplicaResponse> listener = new PlainActionFuture<>();
+import org.junit.BeforeClass;
+            "test",
+            }
+    private static ThreadPool threadPool;
+            } else {
+            transport.handleResponse(shardFailedRequest.requestId, TransportResponse.Empty.INSTANCE);
+            }
+import static org.mockito.Mockito.doAnswer;
+import java.util.concurrent.atomic.AtomicInteger;
+    }
+            CapturingActionListener<TestResponse> listener = new CapturingActionListener<>();
+            boolean forcedRefresh = randomBoolean();
+        protected void dispatchedShardOperationOnReplica(TestRequest request, IndexShard replica, ActionListener<ReplicaResult> listener) {
+            new OpenSearchException("simulated"),
+            TestRequest request,
+            return null;
+            assertTrue(listener.isDone());
+        @Override
+    <T> void assertListenerThrows(String msg, PlainActionFuture<T> listener, Class<?> klass) throws InterruptedException {
+            }
+        } catch (ExecutionException ex) {
+    private static class CapturingActionListener<R> implements ActionListener<R> {
+            verify(indexShard, never()).addRefreshListener(any(), any());
+import static org.hamcrest.Matchers.instanceOf;
+ * Modifications Copyright OpenSearch Contributors. See
+                null,
+            }
+            callback.onResponse(count::decrementAndGet);
+    }
+ *
+        }
+            transport.handleRemoteError(
+        CapturingTransport.CapturedRequest[] shardFailedRequests = transport.getCapturedRequestsAndClear();
+            primaryTerm,
+        AtomicReference<Object> failure = new AtomicReference<>();
+                routingState
+        private final boolean withDocumentFailureOnPrimary;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        final IndicesService indicesService = mock(IndicesService.class);
+                    null,
+            assertNotNull(listener.failure);
+            TestShardRouting.newShardRouting(
         threadPool = new TestThreadPool("ShardReplicationTests");
     }
-
-    @Before
-    public void initCommonMocks() {
-        indexShard = mock(IndexShard.class);
-        location = mock(Translog.Location.class);
-        clusterService = createClusterService(threadPool);
-    }
-
-    @Override
-    @After
-    public void tearDown() throws Exception {
-        super.tearDown();
-        clusterService.close();
-    }
-
-    @AfterClass
-    public static void afterClass() {
-        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
-        threadPool = null;
-    }
-
-    <T> void assertListenerThrows(String msg, PlainActionFuture<T> listener, Class<?> klass) throws InterruptedException {
-        try {
-            listener.get();
-            fail(msg);
-        } catch (ExecutionException ex) {
-            assertThat(ex.getCause(), instanceOf(klass));
-        }
-    }
-
-    public void testPrimaryNoRefreshCall() throws Exception {
-        TestRequest request = new TestRequest();
-        request.setRefreshPolicy(RefreshPolicy.NONE); // The default, but we'll set it anyway just to be explicit
-        TestAction testAction = new TestAction();
-        testAction.dispatchedShardOperationOnPrimary(request, indexShard, ActionTestUtils.assertNoFailureListener(result -> {
-            CapturingActionListener<TestResponse> listener = new CapturingActionListener<>();
-            result.runPostReplicationActions(ActionListener.map(listener, ignore -> result.finalResponseIfSuccessful));
-            assertNotNull(listener.response);
-            assertNull(listener.failure);
-            verify(indexShard, never()).refresh(any());
-            verify(indexShard, never()).addRefreshListener(any(), any());
+                    NoopTracer.INSTANCE
+                    TransportService.NOOP_TRANSPORT_INTERCEPTOR,
         }));
-    }
-
-    public void testReplicaNoRefreshCall() throws Exception {
-        TestRequest request = new TestRequest();
-        request.setRefreshPolicy(RefreshPolicy.NONE); // The default, but we'll set it anyway just to be explicit
-        TestAction testAction = new TestAction();
-        final PlainActionFuture<TransportReplicationAction.ReplicaResult> future = PlainActionFuture.newFuture();
-        testAction.dispatchedShardOperationOnReplica(request, indexShard, future);
-        final TransportReplicationAction.ReplicaResult result = future.actionGet();
+import org.opensearch.transport.client.transport.NoNodeAvailableException;
+        private final boolean withDocumentFailureOnReplica;
+        final ShardRouting replica = randomFrom(
+import org.junit.AfterClass;
+ * SPDX-License-Identifier: Apache-2.0
         CapturingActionListener<TransportResponse.Empty> listener = new CapturingActionListener<>();
-        result.runPostReplicaActions(ActionListener.map(listener, ignore -> TransportResponse.Empty.INSTANCE));
-        assertNotNull(listener.response);
-        assertNull(listener.failure);
-        verify(indexShard, never()).refresh(any());
-        verify(indexShard, never()).addRefreshListener(any(), any());
-    }
-
-    public void testPrimaryImmediateRefresh() throws Exception {
-        TestRequest request = new TestRequest();
-        request.setRefreshPolicy(RefreshPolicy.IMMEDIATE);
-        TestAction testAction = new TestAction();
-        testAction.dispatchedShardOperationOnPrimary(request, indexShard, ActionTestUtils.assertNoFailureListener(result -> {
-            CapturingActionListener<TestResponse> listener = new CapturingActionListener<>();
-            result.runPostReplicationActions(ActionListener.map(listener, ignore -> result.finalResponseIfSuccessful));
-            assertNotNull(listener.response);
-            assertNull(listener.failure);
-            assertTrue(listener.response.forcedRefresh);
-            verify(indexShard).refresh("refresh_flag_index");
-            verify(indexShard, never()).addRefreshListener(any(), any());
-        }));
-    }
-
-    public void testReplicaImmediateRefresh() throws Exception {
-        TestRequest request = new TestRequest();
-        request.setRefreshPolicy(RefreshPolicy.IMMEDIATE);
-        TestAction testAction = new TestAction();
+                NoopTracer.INSTANCE
+        when(indexService.getShard(anyInt())).then(invocation -> {
+        ShardStateAction.FailedShardEntry shardEntry = (ShardStateAction.FailedShardEntry) shardFailedRequest.request;
+                }
+            final long primaryTerm = indexShard.getPendingPrimaryTerm();
+        }).when(indexShard).acquireReplicaOperationPermit(anyLong(), anyLong(), anyLong(), any(ActionListener.class), anyString(), any());
         final PlainActionFuture<TransportReplicationAction.ReplicaResult> future = PlainActionFuture.newFuture();
-        testAction.dispatchedShardOperationOnReplica(request, indexShard, future);
-        final TransportReplicationAction.ReplicaResult result = future.actionGet();
-        CapturingActionListener<TransportResponse.Empty> listener = new CapturingActionListener<>();
-        result.runPostReplicaActions(ActionListener.map(listener, ignore -> TransportResponse.Empty.INSTANCE));
-        assertNotNull(listener.response);
-        assertNull(listener.failure);
-        verify(indexShard).refresh("refresh_flag_index");
-        verify(indexShard, never()).addRefreshListener(any(), any());
-    }
-
-    public void testPrimaryWaitForRefresh() throws Exception {
+import org.opensearch.common.lease.Releasable;
+                    x -> null,
+        protected TestAction(
+        ClusterState state = ClusterStateCreationUtils.stateWithActivePrimary(index, true, 1 + randomInt(3), randomInt(2));
+import org.opensearch.core.index.shard.ShardId;
         TestRequest request = new TestRequest();
-        request.setRefreshPolicy(RefreshPolicy.WAIT_UNTIL);
-
-        TestAction testAction = new TestAction();
-        testAction.dispatchedShardOperationOnPrimary(request, indexShard, ActionTestUtils.assertNoFailureListener(result -> {
-            CapturingActionListener<TestResponse> listener = new CapturingActionListener<>();
-            result.runPostReplicationActions(ActionListener.map(listener, ignore -> result.finalResponseIfSuccessful));
-            assertNull(listener.response); // Haven't really responded yet
-
-            @SuppressWarnings({ "unchecked", "rawtypes" })
-            ArgumentCaptor<Consumer<Boolean>> refreshListener = ArgumentCaptor.forClass((Class) Consumer.class);
-            verify(indexShard, never()).refresh(any());
-            verify(indexShard).addRefreshListener(any(), refreshListener.capture());
-
-            // Now we can fire the listener manually and we'll get a response
-            boolean forcedRefresh = randomBoolean();
-            refreshListener.getValue().accept(forcedRefresh);
-            assertNotNull(listener.response);
-            assertNull(listener.failure);
-            assertEquals(forcedRefresh, listener.response.forcedRefresh);
-        }));
-    }
-
-    public void testReplicaWaitForRefresh() throws Exception {
-        TestRequest request = new TestRequest();
-        request.setRefreshPolicy(RefreshPolicy.WAIT_UNTIL);
-        TestAction testAction = new TestAction();
-        final PlainActionFuture<TransportReplicationAction.ReplicaResult> future = PlainActionFuture.newFuture();
-        testAction.dispatchedShardOperationOnReplica(request, indexShard, future);
-        final TransportReplicationAction.ReplicaResult result = future.actionGet();
-        CapturingActionListener<TransportResponse.Empty> listener = new CapturingActionListener<>();
-        result.runPostReplicaActions(ActionListener.map(listener, ignore -> TransportResponse.Empty.INSTANCE));
-        assertNull(listener.response); // Haven't responded yet
-        @SuppressWarnings({ "unchecked", "rawtypes" })
-        ArgumentCaptor<Consumer<Boolean>> refreshListener = ArgumentCaptor.forClass((Class) Consumer.class);
-        verify(indexShard, never()).refresh(any());
-        verify(indexShard).addRefreshListener(any(), refreshListener.capture());
-
-        // Now we can fire the listener manually and we'll get a response
-        boolean forcedRefresh = randomBoolean();
-        refreshListener.getValue().accept(forcedRefresh);
-        assertNotNull(listener.response);
-        assertNull(listener.failure);
-    }
-
-    public void testDocumentFailureInShardOperationOnPrimary() throws Exception {
-        TestRequest request = new TestRequest();
-        TestAction testAction = new TestAction(true, true);
-        testAction.dispatchedShardOperationOnPrimary(request, indexShard, ActionTestUtils.assertNoFailureListener(result -> {
-            CapturingActionListener<TestResponse> listener = new CapturingActionListener<>();
-            result.runPostReplicationActions(ActionListener.map(listener, ignore -> result.finalResponseIfSuccessful));
-            assertNull(listener.response);
-            assertNotNull(listener.failure);
-        }));
-    }
-
-    public void testDocumentFailureInShardOperationOnReplica() throws Exception {
-        TestRequest request = new TestRequest();
-        TestAction testAction = new TestAction(randomBoolean(), true);
-        final PlainActionFuture<TransportReplicationAction.ReplicaResult> future = PlainActionFuture.newFuture();
-        testAction.dispatchedShardOperationOnReplica(request, indexShard, future);
-        final TransportReplicationAction.ReplicaResult result = future.actionGet();
-        CapturingActionListener<TransportResponse.Empty> listener = new CapturingActionListener<>();
-        result.runPostReplicaActions(ActionListener.map(listener, ignore -> TransportResponse.Empty.INSTANCE));
-        assertNull(listener.response);
-        assertNotNull(listener.failure);
-    }
-
-    public void testReplicaProxy() throws InterruptedException, ExecutionException {
-        CapturingTransport transport = new CapturingTransport();
+        when(indicesService.indexService(any(Index.class))).then(invocation -> {
         TransportService transportService = transport.createTransportService(
+import static org.opensearch.test.ClusterServiceUtils.createClusterService;
+        );
+    }
+ * compatible open source license.
+        transportService.start();
+            assertNotNull(failure.get());
+    public void testPrimaryWaitForRefresh() throws Exception {
+                );
+import org.opensearch.cluster.routing.ShardRouting;
+        @Override
+    }
+        }));
             clusterService.getSettings(),
-            threadPool,
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            x -> clusterService.localNode(),
-            null,
-            Collections.emptySet(),
+        protected TestResponse newResponseInstance(StreamInput in) throws IOException {
+        request.setRefreshPolicy(RefreshPolicy.NONE); // The default, but we'll set it anyway just to be explicit
+    }
+        }
+            assertTrue(listener.isDone());
+        when(indicesService.indexServiceSafe(any(Index.class))).then(invocation -> {
+            this.withDocumentFailureOnPrimary = false;
+/*
+package org.opensearch.action.support.replication;
+    private static class TestRequest extends ReplicatedWriteRequest<TestRequest> {
+            assertNull(listener.failure);
+import org.opensearch.transport.TransportException;
+                } else {
+        });
+        TestAction action = new TestAction(
+        CapturingActionListener<TransportResponse.Empty> listener = new CapturingActionListener<>();
+    private IndexShard indexShard;
+        });
+            ActionListener<Releasable> callback = (ActionListener<Releasable>) invocation.getArguments()[1];
+        public void onFailure(Exception failure) {
+        final TransportReplicationAction.ReplicaResult result = future.actionGet();
+                actionName,
+import java.util.function.Consumer;
+            count.incrementAndGet();
+            ),
+import static org.mockito.Mockito.anyString;
+ * specific language governing permissions and limitations
+        assertFalse(listener.isDone());
+        if (randomBoolean()) {
+import org.opensearch.action.support.WriteRequest.RefreshPolicy;
+        assertThat(captures, arrayWithSize(1));
+            threadPool
+    }
+    public static void afterClass() {
+                    replicaResult = new WriteReplicaResult<>(request, location, null, replica, logger);
+    }
+import org.opensearch.cluster.ClusterState;
+        }
             NoopTracer.INSTANCE
         );
-        transportService.start();
-        transportService.acceptIncomingRequests();
-        ShardStateAction shardStateAction = new ShardStateAction(clusterService, transportService, null, null, threadPool);
-        TestAction action = new TestAction(
-            Settings.EMPTY,
-            "internal:testAction",
-            transportService,
-            clusterService,
-            shardStateAction,
-            threadPool
-        );
-        final String index = "test";
-        final ShardId shardId = new ShardId(index, "_na_", 0);
-        ClusterState state = ClusterStateCreationUtils.stateWithActivePrimary(index, true, 1 + randomInt(3), randomInt(2));
-        logger.info("using state: {}", state);
-        ClusterServiceUtils.setState(clusterService, state);
-        final long primaryTerm = state.metadata().index(index).primaryTerm(0);
-        ReplicationOperation.Replicas<TestRequest> proxy = action.newReplicasProxy();
-
-        // check that at unknown node fails
-        PlainActionFuture<ReplicaResponse> listener = new PlainActionFuture<>();
+        request.setRefreshPolicy(RefreshPolicy.NONE); // The default, but we'll set it anyway just to be explicit
         ShardRoutingState routingState = randomFrom(
-            ShardRoutingState.INITIALIZING,
-            ShardRoutingState.STARTED,
-            ShardRoutingState.RELOCATING
-        );
-        proxy.performOn(
-            TestShardRouting.newShardRouting(
-                shardId,
-                "NOT THERE",
-                routingState == ShardRoutingState.RELOCATING ? state.nodes().iterator().next().getId() : null,
-                false,
-                routingState
-            ),
-            new TestRequest(),
-            primaryTerm,
-            randomNonNegativeLong(),
-            randomNonNegativeLong(),
-            listener
-        );
-        assertTrue(listener.isDone());
-        assertListenerThrows("non existent node should throw a NoNodeAvailableException", listener, NoNodeAvailableException.class);
-
-        final IndexShardRoutingTable shardRoutings = state.routingTable().shardRoutingTable(shardId);
-        final ShardRouting replica = randomFrom(
-            shardRoutings.replicaShards().stream().filter(ShardRouting::assignedToNode).collect(Collectors.toList())
-        );
-        listener = new PlainActionFuture<>();
-        proxy.performOn(replica, new TestRequest(), primaryTerm, randomNonNegativeLong(), randomNonNegativeLong(), listener);
-        assertFalse(listener.isDone());
-
-        CapturingTransport.CapturedRequest[] captures = transport.getCapturedRequestsAndClear();
-        assertThat(captures, arrayWithSize(1));
-        if (randomBoolean()) {
-            final TransportReplicationAction.ReplicaResponse response = new TransportReplicationAction.ReplicaResponse(
-                randomLong(),
-                randomLong()
-            );
-            transport.handleResponse(captures[0].requestId, response);
-            assertTrue(listener.isDone());
-            assertThat(listener.get(), equalTo(response));
-        } else if (randomBoolean()) {
-            transport.handleRemoteError(captures[0].requestId, new OpenSearchException("simulated"));
-            assertTrue(listener.isDone());
+        assertNull(listener.response);
             assertListenerThrows("listener should reflect remote error", listener, OpenSearchException.class);
-        } else {
-            transport.handleError(captures[0].requestId, new TransportException("simulated"));
-            assertTrue(listener.isDone());
+ *
             assertListenerThrows("listener should reflect remote error", listener, TransportException.class);
-        }
-
-        AtomicReference<Object> failure = new AtomicReference<>();
-        AtomicBoolean success = new AtomicBoolean();
-        proxy.failShardIfNeeded(
-            replica,
-            primaryTerm,
-            "test",
-            new OpenSearchException("simulated"),
-            ActionListener.wrap(r -> success.set(true), failure::set)
-        );
-        CapturingTransport.CapturedRequest[] shardFailedRequests = transport.getCapturedRequestsAndClear();
-        // A write replication action proxy should fail the shard
-        assertEquals(1, shardFailedRequests.length);
-        CapturingTransport.CapturedRequest shardFailedRequest = shardFailedRequests[0];
-        ShardStateAction.FailedShardEntry shardEntry = (ShardStateAction.FailedShardEntry) shardFailedRequest.request;
-        // the shard the request was sent to and the shard to be failed should be the same
-        assertEquals(shardEntry.getShardId(), replica.shardId());
-        assertEquals(shardEntry.getAllocationId(), replica.allocationId().getId());
-        if (randomBoolean()) {
-            // simulate success
-            transport.handleResponse(shardFailedRequest.requestId, TransportResponse.Empty.INSTANCE);
-            assertTrue(success.get());
-            assertNull(failure.get());
-        } else if (randomBoolean()) {
-            // simulate the primary has been demoted
-            transport.handleRemoteError(
-                shardFailedRequest.requestId,
-                new ShardStateAction.NoLongerPrimaryShardException(replica.shardId(), "shard-failed-test")
-            );
-            assertFalse(success.get());
-            assertNotNull(failure.get());
-        } else {
-            // simulated a node closing exception
-            transport.handleRemoteError(shardFailedRequest.requestId, new NodeClosedException(state.nodes().getLocalNode()));
-            assertFalse(success.get());
-            assertNotNull(failure.get());
-        }
-    }
-
-    private class TestAction extends TransportWriteAction<TestRequest, TestRequest, TestResponse> {
-
-        private final boolean withDocumentFailureOnPrimary;
-        private final boolean withDocumentFailureOnReplica;
-
-        protected TestAction() {
-            this(false, false);
-        }
-
-        protected TestAction(boolean withDocumentFailureOnPrimary, boolean withDocumentFailureOnReplica) {
-            super(
-                Settings.EMPTY,
-                "internal:test",
-                new TransportService(
-                    Settings.EMPTY,
-                    mock(Transport.class),
-                    null,
-                    TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-                    x -> null,
-                    null,
-                    Collections.emptySet(),
-                    NoopTracer.INSTANCE
-                ),
-                TransportWriteActionTests.this.clusterService,
-                null,
-                null,
-                null,
-                new ActionFilters(new HashSet<>()),
-                TestRequest::new,
-                TestRequest::new,
-                ignore -> ThreadPool.Names.SAME,
-                false,
-                new IndexingPressureService(Settings.EMPTY, TransportWriteActionTests.this.clusterService),
-                new SystemIndices(emptyMap()),
-                NoopTracer.INSTANCE
-            );
-            this.withDocumentFailureOnPrimary = withDocumentFailureOnPrimary;
-            this.withDocumentFailureOnReplica = withDocumentFailureOnReplica;
-        }
-
-        protected TestAction(
-            Settings settings,
-            String actionName,
-            TransportService transportService,
-            ClusterService clusterService,
-            ShardStateAction shardStateAction,
-            ThreadPool threadPool
-        ) {
-            super(
-                settings,
-                actionName,
-                transportService,
-                clusterService,
-                mockIndicesService(clusterService),
-                threadPool,
-                shardStateAction,
-                new ActionFilters(new HashSet<>()),
-                TestRequest::new,
-                TestRequest::new,
-                ignore -> ThreadPool.Names.SAME,
-                false,
-                new IndexingPressureService(settings, clusterService),
-                new SystemIndices(emptyMap()),
-                NoopTracer.INSTANCE
-            );
-            this.withDocumentFailureOnPrimary = false;
-            this.withDocumentFailureOnReplica = false;
-        }
-
-        @Override
-        protected TestResponse newResponseInstance(StreamInput in) throws IOException {
-            return new TestResponse();
-        }
-
-        @Override
-        protected void dispatchedShardOperationOnPrimary(
-            TestRequest request,
-            IndexShard primary,
-            ActionListener<PrimaryResult<TestRequest, TestResponse>> listener
-        ) {
-            ActionListener.completeWith(listener, () -> {
-                if (withDocumentFailureOnPrimary) {
-                    return new WritePrimaryResult<>(request, null, null, new RuntimeException("simulated"), primary, logger);
-                } else {
-                    return new WritePrimaryResult<>(request, new TestResponse(), location, null, primary, logger);
-                }
-            });
-        }
-
-        @Override
-        protected void dispatchedShardOperationOnReplica(TestRequest request, IndexShard replica, ActionListener<ReplicaResult> listener) {
-            ActionListener.completeWith(listener, () -> {
-                final WriteReplicaResult<TestRequest> replicaResult;
-                if (withDocumentFailureOnReplica) {
-                    replicaResult = new WriteReplicaResult<>(request, null, new RuntimeException("simulated"), replica, logger);
-                } else {
-                    replicaResult = new WriteReplicaResult<>(request, location, null, replica, logger);
-                }
-                return replicaResult;
-            });
-        }
-    }
-
-    final IndexService mockIndexService(final IndexMetadata indexMetadata, ClusterService clusterService) {
-        final IndexService indexService = mock(IndexService.class);
-        when(indexService.getShard(anyInt())).then(invocation -> {
-            int shard = (Integer) invocation.getArguments()[0];
-            final ShardId shardId = new ShardId(indexMetadata.getIndex(), shard);
-            if (shard > indexMetadata.getNumberOfShards()) {
-                throw new ShardNotFoundException(shardId);
-            }
-            return mockIndexShard(shardId, clusterService);
-        });
-        return indexService;
-    }
-
-    final IndicesService mockIndicesService(ClusterService clusterService) {
-        final IndicesService indicesService = mock(IndicesService.class);
-        when(indicesService.indexServiceSafe(any(Index.class))).then(invocation -> {
-            Index index = (Index) invocation.getArguments()[0];
-            final ClusterState state = clusterService.state();
-            final IndexMetadata indexSafe = state.metadata().getIndexSafe(index);
-            return mockIndexService(indexSafe, clusterService);
-        });
-        when(indicesService.indexService(any(Index.class))).then(invocation -> {
-            Index index = (Index) invocation.getArguments()[0];
-            final ClusterState state = clusterService.state();
-            if (state.metadata().hasIndex(index.getName())) {
-                return mockIndexService(clusterService.state().metadata().getIndexSafe(index), clusterService);
-            } else {
-                return null;
-            }
-        });
-        return indicesService;
-    }
-
-    private final AtomicInteger count = new AtomicInteger(0);
-
-    private final AtomicBoolean isRelocated = new AtomicBoolean(false);
-
-    private IndexShard mockIndexShard(ShardId shardId, ClusterService clusterService) {
-        final IndexShard indexShard = mock(IndexShard.class);
-        doAnswer(invocation -> {
-            ActionListener<Releasable> callback = (ActionListener<Releasable>) invocation.getArguments()[0];
-            count.incrementAndGet();
-            callback.onResponse(count::decrementAndGet);
-            return null;
-        }).when(indexShard).acquirePrimaryOperationPermit(any(ActionListener.class), anyString(), any());
-        doAnswer(invocation -> {
-            long term = (Long) invocation.getArguments()[0];
-            ActionListener<Releasable> callback = (ActionListener<Releasable>) invocation.getArguments()[1];
-            final long primaryTerm = indexShard.getPendingPrimaryTerm();
-            if (term < primaryTerm) {
-                throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "%s operation term [%d] is too old (current [%d])", shardId, term, primaryTerm)
-                );
-            }
-            count.incrementAndGet();
-            callback.onResponse(count::decrementAndGet);
-            return null;
-        }).when(indexShard).acquireReplicaOperationPermit(anyLong(), anyLong(), anyLong(), any(ActionListener.class), anyString(), any());
-        when(indexShard.routingEntry()).thenAnswer(invocationOnMock -> {
-            final ClusterState state = clusterService.state();
-            final RoutingNode node = state.getRoutingNodes().node(state.nodes().getLocalNodeId());
-            final ShardRouting routing = node.getByShardId(shardId);
-            if (routing == null) {
-                throw new ShardNotFoundException(shardId, "shard is no longer assigned to current node");
-            }
-            return routing;
-        });
-        when(indexShard.isRelocatedPrimary()).thenAnswer(invocationOnMock -> isRelocated.get());
-        doThrow(new AssertionError("failed shard is not supported")).when(indexShard).failShard(anyString(), any(Exception.class));
         when(indexShard.getPendingPrimaryTerm()).thenAnswer(
-            i -> clusterService.state().metadata().getIndexSafe(shardId.getIndex()).primaryTerm(shardId.id())
-        );
-        return indexShard;
+        return indicesService;
+            ThreadPool threadPool
     }
-
-    private static class TestRequest extends ReplicatedWriteRequest<TestRequest> {
-        TestRequest(StreamInput in) throws IOException {
-            super(in);
-        }
-
-        TestRequest() {
-            super(new ShardId("test", "test", 1));
-        }
-
-        @Override
-        public String toString() {
-            return "TestRequest{}";
-        }
-    }
-
-    private static class TestResponse extends ReplicationResponse implements WriteResponse {
-        boolean forcedRefresh;
-
-        @Override
-        public void setForcedRefresh(boolean forcedRefresh) {
-            this.forcedRefresh = forcedRefresh;
-        }
-    }
-
-    private static class CapturingActionListener<R> implements ActionListener<R> {
-        private R response;
-        private Exception failure;
-
-        @Override
-        public void onResponse(R response) {
+        assertNull(listener.failure);
+        TestAction testAction = new TestAction();
+        final IndexShardRoutingTable shardRoutings = state.routingTable().shardRoutingTable(shardId);
+            assertNotNull(listener.response);
+                TransportWriteActionTests.this.clusterService,
+        location = mock(Translog.Location.class);
+        proxy.failShardIfNeeded(
+        result.runPostReplicaActions(ActionListener.map(listener, ignore -> TransportResponse.Empty.INSTANCE));
+            final ShardId shardId = new ShardId(indexMetadata.getIndex(), shard);
+            clusterService,
+                    Collections.emptySet(),
+import org.opensearch.index.translog.Translog;
+                throw new IllegalArgumentException(
+                throw new ShardNotFoundException(shardId, "shard is no longer assigned to current node");
+            ShardStateAction shardStateAction,
             this.response = response;
-        }
-
-        @Override
-        public void onFailure(Exception failure) {
-            this.failure = failure;
-        }
+        testAction.dispatchedShardOperationOnPrimary(request, indexShard, ActionTestUtils.assertNoFailureListener(result -> {
+import org.opensearch.core.action.ActionListener;
+import org.opensearch.test.OpenSearchTestCase;
+            final TransportReplicationAction.ReplicaResponse response = new TransportReplicationAction.ReplicaResponse(
     }
-}
+            ActionListener<PrimaryResult<TestRequest, TestResponse>> listener
+            result.runPostReplicationActions(ActionListener.map(listener, ignore -> result.finalResponseIfSuccessful));
+import org.opensearch.cluster.action.shard.ShardStateAction;
+            ArgumentCaptor<Consumer<Boolean>> refreshListener = ArgumentCaptor.forClass((Class) Consumer.class);
+ * ownership. Elasticsearch licenses this file to you under
+ * under the License.
+        when(indexShard.isRelocatedPrimary()).thenAnswer(invocationOnMock -> isRelocated.get());
+                shardStateAction,
+        TestRequest() {

@@ -1,211 +1,193 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.script;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.InputStreamStreamInput;
-import org.opensearch.core.common.io.stream.OutputStreamStreamOutput;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.hamcrest.Matchers.equalTo;
-
-public class ScriptTests extends OpenSearchTestCase {
-
-    public void testScriptParsing() throws IOException {
-        Script expectedScript = createScript();
-        try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()))) {
-            expectedScript.toXContent(builder, ToXContent.EMPTY_PARAMS);
-            try (XContentParser parser = createParser(builder)) {
-                Script actualScript = Script.parse(parser);
-                assertThat(actualScript, equalTo(expectedScript));
-            }
-        }
     }
-
-    public void testScriptSerialization() throws IOException {
-        Script expectedScript = createScript();
-        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            expectedScript.writeTo(new OutputStreamStreamOutput(out));
-            try (ByteArrayInputStream in = new ByteArrayInputStream(out.toByteArray())) {
+            OpenSearchParseException exc = expectThrows(OpenSearchParseException.class, () -> Script.parse(Collections.emptyMap()));
                 Script actualScript = new Script(new InputStreamStreamInput(in));
-                assertThat(actualScript, equalTo(expectedScript));
-            }
         }
-    }
-
-    private Script createScript() throws IOException {
-        final Map<String, Object> params = randomBoolean() ? Collections.emptyMap() : Collections.singletonMap("key", "value");
-        ScriptType scriptType = randomFrom(ScriptType.values());
-        String script;
-        if (scriptType == ScriptType.INLINE) {
             try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
-                builder.startObject();
-                builder.field("field", randomAlphaOfLengthBetween(1, 5));
-                builder.endObject();
-                script = builder.toString();
-            }
-        } else {
-            script = randomAlphaOfLengthBetween(1, 5);
-        }
-        return new Script(
-            scriptType,
-            scriptType == ScriptType.STORED ? null : randomFrom("_lang1", "_lang2", "_lang3"),
-            script,
-            scriptType == ScriptType.INLINE
-                ? Collections.singletonMap(Script.CONTENT_TYPE_OPTION, MediaTypeRegistry.JSON.mediaType())
-                : null,
-            params
-        );
-    }
-
-    public void testParse() throws IOException {
-        Script expectedScript = createScript();
-        try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()))) {
-            expectedScript.toXContent(builder, ToXContent.EMPTY_PARAMS);
-            try (XContentParser xParser = createParser(builder)) {
-                Settings settings = Settings.fromXContent(xParser);
-                Script actualScript = Script.parse(settings);
-                assertThat(actualScript, equalTo(expectedScript));
-            }
-        }
-    }
-
-    public void testParseFromObjectShortSyntax() {
-        Script script = Script.parse("doc['my_field']");
-        assertEquals(Script.DEFAULT_SCRIPT_LANG, script.getLang());
-        assertEquals("doc['my_field']", script.getIdOrCode());
-        assertEquals(0, script.getParams().size());
-        assertEquals(0, script.getOptions().size());
-        assertEquals(ScriptType.INLINE, script.getType());
-    }
-
-    public void testParseFromObject() {
-        Map<String, Object> map = new HashMap<>();
-        map.put("source", "doc['my_field']");
-        Map<String, Object> params = new HashMap<>();
-        int numParams = randomIntBetween(0, 3);
-        for (int i = 0; i < numParams; i++) {
-            params.put("param" + i, i);
-        }
-        map.put("params", params);
-        Map<String, String> options = new HashMap<>();
-        int numOptions = randomIntBetween(0, 3);
-        for (int i = 0; i < numOptions; i++) {
-            options.put("option" + i, Integer.toString(i));
+ * under the License.
+import java.util.HashMap;
         }
         map.put("options", options);
-        String lang = Script.DEFAULT_SCRIPT_LANG;
-        ;
-        if (randomBoolean()) {
-            map.put("lang", lang);
-        } else if (randomBoolean()) {
-            lang = "expression";
-            map.put("lang", lang);
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
         }
-
-        Script script = Script.parse(map);
-        assertEquals(lang, script.getLang());
-        assertEquals("doc['my_field']", script.getIdOrCode());
-        assertEquals(ScriptType.INLINE, script.getType());
-        assertEquals(params, script.getParams());
-        assertEquals(options, script.getOptions());
-    }
-
-    public void testParseFromObjectFromScript() {
+import org.opensearch.core.common.io.stream.OutputStreamStreamOutput;
+            assertEquals("Expected one of [source] or [id] fields, but found none", exc.getMessage());
         Map<String, Object> params = new HashMap<>();
-        int numParams = randomIntBetween(0, 3);
+    public void testParseFromObjectWrongOptionsFormat() {
+import java.util.Collections;
+ * compatible open source license.
+ * GitHub history for details.
+        assertEquals(options, script.getOptions());
+import org.opensearch.core.xcontent.XContentBuilder;
+            scriptType == ScriptType.STORED ? null : randomFrom("_lang1", "_lang2", "_lang3"),
+        }
+ * this file be licensed under the Apache-2.0 license or a
+import java.io.ByteArrayInputStream;
+ *
+import org.opensearch.core.xcontent.ToXContent;
+import org.opensearch.common.settings.Settings;
+            lang = "expression";
+ * Modifications Copyright OpenSearch Contributors. See
+                ? Collections.singletonMap(Script.CONTENT_TYPE_OPTION, MediaTypeRegistry.JSON.mediaType())
+    }
+            try (ByteArrayInputStream in = new ByteArrayInputStream(out.toByteArray())) {
+                Settings settings = Settings.fromXContent(xParser);
+        for (int i = 0; i < numOptions; i++) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("source", "doc['my_field']");
+        assertEquals("doc['my_field']", script.getIdOrCode());
+/*
+ * You may obtain a copy of the License at
+        }
+import org.opensearch.OpenSearchParseException;
+    public void testParseFromObjectWrongParamsFormat() {
+        map.put("options", 3);
+    }
+            }
+        Script expectedScript = createScript();
+        }
+            expectedScript.toXContent(builder, ToXContent.EMPTY_PARAMS);
         for (int i = 0; i < numParams; i++) {
+            script,
+        assertEquals("doc['my_field']", script.getIdOrCode());
+            scriptType == ScriptType.INLINE
+                builder.endObject();
+import static org.hamcrest.Matchers.equalTo;
+                Script actualScript = Script.parse(settings);
+ * ownership. Elasticsearch licenses this file to you under
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * Licensed to Elasticsearch under one or more contributor
+                Script actualScript = Script.parse(parser);
+        assertEquals(lang, script.getLang());
+        {
+public class ScriptTests extends OpenSearchTestCase {
+            script = randomAlphaOfLengthBetween(1, 5);
+        final Map<String, Object> params = randomBoolean() ? Collections.emptyMap() : Collections.singletonMap("key", "value");
+            map.put("lang", lang);
+        ;
+import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.test.OpenSearchTestCase;
+        Script expectedScript = createScript();
+        Script parsedScript = Script.parse(scriptObject);
+        map.put("source", "doc['my_field']");
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        Map<String, String> options = new HashMap<>();
+        ScriptType scriptType = randomFrom(ScriptType.values());
+ */
+import org.opensearch.common.xcontent.XContentHelper;
+package org.opensearch.script;
+    }
+    }
+ */
+ * The OpenSearch Contributors require contributions made to
+import java.util.Map;
+ * license agreements. See the NOTICE file distributed with
+                builder.field("field", randomAlphaOfLengthBetween(1, 5));
+        int numParams = randomIntBetween(0, 3);
+ *
+    }
+            try (XContentParser xParser = createParser(builder)) {
+import org.opensearch.common.xcontent.XContentType;
+    public void testParseFromObject() {
+        String script;
+        map.put("params", 3);
+            expectedScript.toXContent(builder, ToXContent.EMPTY_PARAMS);
             params.put("param" + i, i);
+ * KIND, either express or implied.  See the License for the
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.core.common.Strings;
+        Map<String, Object> map = new HashMap<>();
+            options.put("option" + i, Integer.toString(i));
+        OpenSearchParseException exc = expectThrows(OpenSearchParseException.class, () -> Script.parse(map));
+            assertEquals("Script must not be null", exc.getMessage());
+        {
+    private Script createScript() throws IOException {
+        {
+                builder.startObject();
+            scriptType,
+        int numOptions = randomIntBetween(0, 3);
+                script = builder.toString();
+        Script script = new Script(ScriptType.INLINE, Script.DEFAULT_SCRIPT_LANG, "doc['field']", options, params);
+        assertEquals(0, script.getOptions().size());
+ *
+}
+ * not use this file except in compliance with the License.
+        try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()))) {
+        );
+ * this work for additional information regarding copyright
+            }
+        assertEquals(ScriptType.INLINE, script.getType());
+        } else if (randomBoolean()) {
+    public void testScriptParsing() throws IOException {
+        );
+                assertThat(actualScript, equalTo(expectedScript));
+            MediaTypeRegistry.JSON.xContent(),
+                assertThat(actualScript, equalTo(expectedScript));
+            try (XContentParser parser = createParser(builder)) {
+            expectedScript.writeTo(new OutputStreamStreamOutput(out));
+        } else {
+        Script script = Script.parse(map);
+        }
+import org.opensearch.common.xcontent.XContentFactory;
+    }
+    public void testParseFromObjectShortSyntax() {
+    public void testScriptSerialization() throws IOException {
+        for (int i = 0; i < numOptions; i++) {
+        Map<String, Object> map = new HashMap<>();
+        assertEquals(params, script.getParams());
+ * specific language governing permissions and limitations
+        String lang = Script.DEFAULT_SCRIPT_LANG;
+    }
+            params.put("param" + i, i);
+                : null,
+            options.put("option" + i, Integer.toString(i));
+            }
+            false
+            Strings.toString(MediaTypeRegistry.JSON, script),
+ */
+import org.opensearch.core.common.io.stream.InputStreamStreamInput;
+    public void testParseFromObjectFromScript() {
+                assertThat(actualScript, equalTo(expectedScript));
+        }
+        Script expectedScript = createScript();
+        }
+        Map<String, Object> params = new HashMap<>();
+            map.put("lang", lang);
+/*
+    public void testParse() throws IOException {
+        assertEquals(Script.DEFAULT_SCRIPT_LANG, script.getLang());
+    }
+import java.io.ByteArrayOutputStream;
+        assertEquals("Value must be of type Map: [params]", exc.getMessage());
+        Script script = Script.parse("doc['my_field']");
+ * software distributed under the License is distributed on an
         }
         Map<String, String> options = new HashMap<>();
-        int numOptions = randomIntBetween(0, 3);
-        for (int i = 0; i < numOptions; i++) {
-            options.put("option" + i, Integer.toString(i));
+        int numParams = randomIntBetween(0, 3);
+        try (XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()))) {
+        OpenSearchParseException exc = expectThrows(OpenSearchParseException.class, () -> Script.parse(map));
+        for (int i = 0; i < numParams; i++) {
         }
-        Script script = new Script(ScriptType.INLINE, Script.DEFAULT_SCRIPT_LANG, "doc['field']", options, params);
-        Map<String, Object> scriptObject = XContentHelper.convertToMap(
-            MediaTypeRegistry.JSON.xContent(),
-            Strings.toString(MediaTypeRegistry.JSON, script),
-            false
-        );
-        Script parsedScript = Script.parse(scriptObject);
-        assertEquals(script, parsedScript);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }
     }
-
-    public void testParseFromObjectWrongFormat() {
-        {
-            NullPointerException exc = expectThrows(NullPointerException.class, () -> Script.parse((Object) null));
-            assertEquals("Script must not be null", exc.getMessage());
-        }
-        {
-            IllegalArgumentException exc = expectThrows(IllegalArgumentException.class, () -> Script.parse(3));
             assertEquals("Script value should be a String or a Map", exc.getMessage());
-        }
-        {
-            OpenSearchParseException exc = expectThrows(OpenSearchParseException.class, () -> Script.parse(Collections.emptyMap()));
-            assertEquals("Expected one of [source] or [id] fields, but found none", exc.getMessage());
-        }
-    }
-
-    public void testParseFromObjectWrongOptionsFormat() {
-        Map<String, Object> map = new HashMap<>();
+    public void testParseFromObjectWrongFormat() {
+        int numOptions = randomIntBetween(0, 3);
+        return new Script(
+ * SPDX-License-Identifier: Apache-2.0
+/*
+        if (scriptType == ScriptType.INLINE) {
+        if (randomBoolean()) {
+        assertEquals(ScriptType.INLINE, script.getType());
+        assertEquals(script, parsedScript);
+            NullPointerException exc = expectThrows(NullPointerException.class, () -> Script.parse((Object) null));
+import java.io.IOException;
         map.put("source", "doc['my_field']");
-        map.put("options", 3);
-        OpenSearchParseException exc = expectThrows(OpenSearchParseException.class, () -> Script.parse(map));
+            params
+        assertEquals(0, script.getParams().size());
+        Map<String, Object> scriptObject = XContentHelper.convertToMap(
+            }
+            IllegalArgumentException exc = expectThrows(IllegalArgumentException.class, () -> Script.parse(3));
         assertEquals("Value must be of type Map: [options]", exc.getMessage());
-    }
-
-    public void testParseFromObjectWrongParamsFormat() {
-        Map<String, Object> map = new HashMap<>();
-        map.put("source", "doc['my_field']");
-        map.put("params", 3);
-        OpenSearchParseException exc = expectThrows(OpenSearchParseException.class, () -> Script.parse(map));
-        assertEquals("Value must be of type Map: [params]", exc.getMessage());
-    }
-}
+        map.put("params", params);

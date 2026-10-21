@@ -1,311 +1,265 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
+        }
+        @Override
+            }
+        }
+        this.two_pow_maxRelevance = Math.pow(2, this.maxRelevance);
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.rankeval;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.SearchHit;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.OptionalInt;
-
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
-import static org.opensearch.index.rankeval.EvaluationMetric.joinHitsWithRatings;
-
-/**
- * Implementation of the Expected Reciprocal Rank metric described in:<p>
- *
- * Chapelle, O., Metlzer, D., Zhang, Y., &amp; Grinspan, P. (2009).<br>
  * Expected reciprocal rank for graded relevance.<br>
- * Proceeding of the 18th ACM Conference on Information and Knowledge Management - CIKM ’09, 621.<br>
- * https://doi.org/10.1145/1645953.1646033
- */
-public class ExpectedReciprocalRank implements EvaluationMetric {
-
-    /** the default search window size */
-    private static final int DEFAULT_K = 10;
-
-    /** the search window size */
-    private final int k;
-
-    /**
-     * Optional. If set, this will be the rating for docs that are unrated in the ranking evaluation request
-     */
-    private final Integer unknownDocRating;
-
-    private final int maxRelevance;
-
-    private final double two_pow_maxRelevance;
-
-    public static final String NAME = "expected_reciprocal_rank";
-
-    /**
-     * @param maxRelevance the highest expected relevance in the data
-     */
-    public ExpectedReciprocalRank(int maxRelevance) {
-        this(maxRelevance, null, DEFAULT_K);
-    }
-
-    /**
-     * @param maxRelevance
-     *            the maximal relevance judgment in the evaluation dataset
-     * @param unknownDocRating
-     *            the rating for documents the user hasn't supplied an explicit
-     *            rating for. Can be {@code null}, in which case document is
-     *            skipped.
-     * @param k
-     *            the search window size all request use.
-     */
-    public ExpectedReciprocalRank(int maxRelevance, @Nullable Integer unknownDocRating, int k) {
-        this.maxRelevance = maxRelevance;
-        this.unknownDocRating = unknownDocRating;
-        this.k = k;
-        // we can pre-calculate the constant used in metric calculation
-        this.two_pow_maxRelevance = Math.pow(2, this.maxRelevance);
-    }
-
-    ExpectedReciprocalRank(StreamInput in) throws IOException {
-        this.maxRelevance = in.readVInt();
-        this.unknownDocRating = in.readOptionalVInt();
-        this.k = in.readVInt();
-        this.two_pow_maxRelevance = Math.pow(2, this.maxRelevance);
-    }
-
+        double err = 0;
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeVInt(maxRelevance);
-        out.writeOptionalVInt(unknownDocRating);
-        out.writeVInt(k);
-    }
-
-    @Override
-    public String getWriteableName() {
-        return NAME;
-    }
-
-    int getK() {
-        return this.k;
-    }
-
-    int getMaxRelevance() {
-        return this.maxRelevance;
-    }
-
-    /**
-     * get the rating used for unrated documents
+        }
      */
-    public Integer getUnknownDocRating() {
-        return this.unknownDocRating;
-    }
-
-    @Override
-    public OptionalInt forcedSearchSize() {
-        return OptionalInt.of(k);
-    }
-
-    @Override
-    public EvalQueryQuality evaluate(String taskId, SearchHit[] hits, List<RatedDocument> ratedDocs) {
-        List<RatedSearchHit> ratedHits = joinHitsWithRatings(hits, ratedDocs);
-        if (ratedHits.size() > this.k) {
-            ratedHits = ratedHits.subList(0, k);
-        }
-        List<Integer> ratingsInSearchHits = new ArrayList<>(ratedHits.size());
-        int unratedResults = 0;
-        for (RatedSearchHit hit : ratedHits) {
-            if (hit.getRating().isPresent()) {
-                ratingsInSearchHits.add(hit.getRating().getAsInt());
-            } else {
-                // unknownDocRating might be null, in which case unrated docs will be ignored in the dcg calculation.
-                // we still need to add them as a placeholder so the rank of the subsequent ratings is correct
-                ratingsInSearchHits.add(unknownDocRating);
-            }
-            if (hit.getRating().isPresent() == false) {
-                unratedResults++;
-            }
-        }
-
-        double p = 1;
-        double err = 0;
-        int rank = 1;
-        for (Integer rating : ratingsInSearchHits) {
-            if (rating != null) {
-                double probR = probabilityOfRelevance(rating);
-                err = err + (p * probR / rank);
-                p = p * (1 - probR);
-            }
-            rank++;
-        }
-
-        EvalQueryQuality evalQueryQuality = new EvalQueryQuality(taskId, err);
-        evalQueryQuality.addHitsAndRatings(ratedHits);
-        evalQueryQuality.setMetricDetails(new Detail(unratedResults));
-        return evalQueryQuality;
-    }
-
-    double probabilityOfRelevance(Integer rating) {
-        return (Math.pow(2, rating) - 1) / this.two_pow_maxRelevance;
-    }
-
-    private static final ParseField K_FIELD = new ParseField("k");
-    private static final ParseField UNKNOWN_DOC_RATING_FIELD = new ParseField("unknown_doc_rating");
-    private static final ParseField MAX_RELEVANCE_FIELD = new ParseField("maximum_relevance");
     private static final ConstructingObjectParser<ExpectedReciprocalRank, Void> PARSER = new ConstructingObjectParser<>(
-        "dcg",
-        false,
-        args -> {
-            int maxRelevance = (Integer) args[0];
-            Integer optK = (Integer) args[2];
-            return new ExpectedReciprocalRank(maxRelevance, (Integer) args[1], optK == null ? DEFAULT_K : optK);
-        }
-    );
-
-    static {
-        PARSER.declareInt(constructorArg(), MAX_RELEVANCE_FIELD);
-        PARSER.declareInt(optionalConstructorArg(), UNKNOWN_DOC_RATING_FIELD);
-        PARSER.declareInt(optionalConstructorArg(), K_FIELD);
-    }
-
-    public static ExpectedReciprocalRank fromXContent(XContentParser parser) {
-        return PARSER.apply(parser, null);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.startObject(NAME);
-        builder.field(MAX_RELEVANCE_FIELD.getPreferredName(), this.maxRelevance);
-        if (unknownDocRating != null) {
-            builder.field(UNKNOWN_DOC_RATING_FIELD.getPreferredName(), this.unknownDocRating);
-        }
-        builder.field(K_FIELD.getPreferredName(), this.k);
-        builder.endObject();
-        builder.endObject();
-        return builder;
-    }
-
-    @Override
-    public final boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }
-        ExpectedReciprocalRank other = (ExpectedReciprocalRank) obj;
-        return this.k == other.k && this.maxRelevance == other.maxRelevance && Objects.equals(unknownDocRating, other.unknownDocRating);
-    }
-
-    @Override
-    public final int hashCode() {
-        return Objects.hash(unknownDocRating, k, maxRelevance);
-    }
-
-    public static final class Detail implements MetricDetail {
-
-        private static ParseField UNRATED_FIELD = new ParseField("unrated_docs");
-        private final int unratedDocs;
-
-        Detail(int unratedDocs) {
-            this.unratedDocs = unratedDocs;
-        }
-
-        Detail(StreamInput in) throws IOException {
-            this.unratedDocs = in.readVInt();
-        }
-
-        @Override
-        public String getMetricName() {
-            return NAME;
-        }
-
-        @Override
-        public XContentBuilder innerToXContent(XContentBuilder builder, Params params) throws IOException {
-            return builder.field(UNRATED_FIELD.getPreferredName(), this.unratedDocs);
-        }
-
-        private static final ConstructingObjectParser<Detail, Void> PARSER = new ConstructingObjectParser<>(NAME, true, args -> {
-            return new Detail((Integer) args[0]);
+        List<RatedSearchHit> ratedHits = joinHitsWithRatings(hits, ratedDocs);
+ *    http://www.apache.org/licenses/LICENSE-2.0
         });
-
-        static {
+    @Override
+    /**
             PARSER.declareInt(constructorArg(), UNRATED_FIELD);
-        }
-
-        public static Detail fromXContent(XContentParser parser) {
-            return PARSER.apply(parser, null);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeVInt(this.unratedDocs);
-        }
-
-        @Override
-        public String getWriteableName() {
-            return NAME;
-        }
-
-        /**
-         * @return the number of unrated documents in the search results
-         */
-        public Object getUnratedDocs() {
-            return this.unratedDocs;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (obj == null || getClass() != obj.getClass()) {
-                return false;
-            }
-            ExpectedReciprocalRank.Detail other = (ExpectedReciprocalRank.Detail) obj;
-            return this.unratedDocs == other.unratedDocs;
-        }
-
-        @Override
-        public int hashCode() {
+ * Chapelle, O., Metlzer, D., Zhang, Y., &amp; Grinspan, P. (2009).<br>
+}
+        this.two_pow_maxRelevance = Math.pow(2, this.maxRelevance);
+     * @param maxRelevance
+ * You may obtain a copy of the License at
+        builder.endObject();
+        public XContentBuilder innerToXContent(XContentBuilder builder, Params params) throws IOException {
             return Objects.hash(this.unratedDocs);
+    }
+            return new Detail((Integer) args[0]);
+        return this.k == other.k && this.maxRelevance == other.maxRelevance && Objects.equals(unknownDocRating, other.unknownDocRating);
+import java.util.Objects;
+package org.opensearch.index.rankeval;
+import org.opensearch.core.xcontent.XContentParser;
+import java.util.ArrayList;
+        }
+            return true;
+            this.unratedDocs = in.readVInt();
+            return false;
+        out.writeVInt(maxRelevance);
+        EvalQueryQuality evalQueryQuality = new EvalQueryQuality(taskId, err);
+     *            the rating for documents the user hasn't supplied an explicit
+        for (Integer rating : ratingsInSearchHits) {
+ * this work for additional information regarding copyright
+    }
+            builder.field(UNKNOWN_DOC_RATING_FIELD.getPreferredName(), this.unknownDocRating);
+        for (RatedSearchHit hit : ratedHits) {
+            if (this == obj) {
+        Detail(StreamInput in) throws IOException {
+        return OptionalInt.of(k);
+        @Override
+        public static Detail fromXContent(XContentParser parser) {
+ * compatible open source license.
+     */
+        }
+ * GitHub history for details.
+        evalQueryQuality.addHitsAndRatings(ratedHits);
+        public int hashCode() {
+            Integer optK = (Integer) args[2];
+ * Modifications Copyright OpenSearch Contributors. See
+        public String getWriteableName() {
+                err = err + (p * probR / rank);
+import java.util.List;
+            int maxRelevance = (Integer) args[0];
+ * https://doi.org/10.1145/1645953.1646033
+        }
+    @Override
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+ * SPDX-License-Identifier: Apache-2.0
+        ExpectedReciprocalRank other = (ExpectedReciprocalRank) obj;
+    ExpectedReciprocalRank(StreamInput in) throws IOException {
+        @Override
         }
     }
-}
+        }
+        this.maxRelevance = in.readVInt();
+                return false;
+     */
+            }
+    public static final class Detail implements MetricDetail {
+    private static final ParseField UNKNOWN_DOC_RATING_FIELD = new ParseField("unknown_doc_rating");
+    public ExpectedReciprocalRank(int maxRelevance) {
+        this.k = k;
+    private final int maxRelevance;
+ * ownership. Elasticsearch licenses this file to you under
+            if (rating != null) {
+        builder.field(MAX_RELEVANCE_FIELD.getPreferredName(), this.maxRelevance);
+        return PARSER.apply(parser, null);
+        return builder;
+            return NAME;
+        out.writeOptionalVInt(unknownDocRating);
+    public static ExpectedReciprocalRank fromXContent(XContentParser parser) {
+     * Optional. If set, this will be the rating for docs that are unrated in the ranking evaluation request
+import java.util.OptionalInt;
+            return new ExpectedReciprocalRank(maxRelevance, (Integer) args[1], optK == null ? DEFAULT_K : optK);
+/*
+    public Integer getUnknownDocRating() {
+            rank++;
+public class ExpectedReciprocalRank implements EvaluationMetric {
+        if (obj == null || getClass() != obj.getClass()) {
+ * specific language governing permissions and limitations
+import org.opensearch.core.common.io.stream.StreamInput;
+ */
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+ * KIND, either express or implied.  See the License for the
+     * get the rating used for unrated documents
+        PARSER.declareInt(constructorArg(), MAX_RELEVANCE_FIELD);
+        }
+import java.io.IOException;
+        this.unknownDocRating = in.readOptionalVInt();
+    }
+    }
+            }
+/**
+        PARSER.declareInt(optionalConstructorArg(), K_FIELD);
+ * under the License.
+        evalQueryQuality.setMetricDetails(new Detail(unratedResults));
+    );
+    int getK() {
+import org.opensearch.core.common.io.stream.StreamOutput;
+ *
+        return Objects.hash(unknownDocRating, k, maxRelevance);
+        "dcg",
+        List<Integer> ratingsInSearchHits = new ArrayList<>(ratedHits.size());
+        }
+                ratingsInSearchHits.add(hit.getRating().getAsInt());
+    public ExpectedReciprocalRank(int maxRelevance, @Nullable Integer unknownDocRating, int k) {
+                ratingsInSearchHits.add(unknownDocRating);
+import org.opensearch.search.SearchHit;
+    }
+    public OptionalInt forcedSearchSize() {
+        if (ratedHits.size() > this.k) {
+        return this.k;
+        PARSER.declareInt(optionalConstructorArg(), UNKNOWN_DOC_RATING_FIELD);
+     */
+/*
+ * Unless required by applicable law or agreed to in writing,
+        public void writeTo(StreamOutput out) throws IOException {
+            }
+/*
+        @Override
+    }
+         * @return the number of unrated documents in the search results
+     *            the maximal relevance judgment in the evaluation dataset
+ * Proceeding of the 18th ACM Conference on Information and Knowledge Management - CIKM ’09, 621.<br>
+            return builder.field(UNRATED_FIELD.getPreferredName(), this.unratedDocs);
+    @Override
+        this.k = in.readVInt();
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    }
+ */
+    public final int hashCode() {
+import org.opensearch.common.Nullable;
+            this.unratedDocs = unratedDocs;
+        int unratedResults = 0;
+    private static final ParseField MAX_RELEVANCE_FIELD = new ParseField("maximum_relevance");
+    private static final int DEFAULT_K = 10;
+ * not use this file except in compliance with the License.
+     * @param unknownDocRating
+        /**
+            if (obj == null || getClass() != obj.getClass()) {
+        if (unknownDocRating != null) {
+        }
+        int rank = 1;
+        private final int unratedDocs;
+    public EvalQueryQuality evaluate(String taskId, SearchHit[] hits, List<RatedDocument> ratedDocs) {
+import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
+    public final boolean equals(Object obj) {
+    }
+        args -> {
+        }
+ * Implementation of the Expected Reciprocal Rank metric described in:<p>
+    /**
+        double p = 1;
+        }
+ * license agreements. See the NOTICE file distributed with
+            return this.unratedDocs;
+    }
+import static org.opensearch.index.rankeval.EvaluationMetric.joinHitsWithRatings;
+        builder.field(K_FIELD.getPreferredName(), this.k);
+     * @param k
+    /**
+    private static final ParseField K_FIELD = new ParseField("k");
+            if (hit.getRating().isPresent()) {
+    int getMaxRelevance() {
+    private final int k;
+            }
+ */
+            return NAME;
+ * the Apache License, Version 2.0 (the "License"); you may
+        static {
+import org.opensearch.core.ParseField;
+        }
+        return (Math.pow(2, rating) - 1) / this.two_pow_maxRelevance;
+ * The OpenSearch Contributors require contributions made to
+    @Override
+            ratedHits = ratedHits.subList(0, k);
+    }
+        public String getMetricName() {
+        }
+        this.maxRelevance = maxRelevance;
+        }
+    /** the default search window size */
+    private final Integer unknownDocRating;
+                return true;
+     *            skipped.
+    }
+        // we can pre-calculate the constant used in metric calculation
+    /**
+        return this.maxRelevance;
+     *            the search window size all request use.
+ *
+                unratedResults++;
+                // we still need to add them as a placeholder so the rank of the subsequent ratings is correct
+ *
+    }
+            return PARSER.apply(parser, null);
+        public Object getUnratedDocs() {
+                p = p * (1 - probR);
+    }
+        this(maxRelevance, null, DEFAULT_K);
+        }
+     * @param maxRelevance the highest expected relevance in the data
+    }
+    public String getWriteableName() {
+    double probabilityOfRelevance(Integer rating) {
+    static {
+        Detail(int unratedDocs) {
+                double probR = probabilityOfRelevance(rating);
+    @Override
+    }
+        private static final ConstructingObjectParser<Detail, Void> PARSER = new ConstructingObjectParser<>(NAME, true, args -> {
+        builder.endObject();
+ */
+        false,
+        }
+        out.writeVInt(k);
+            if (hit.getRating().isPresent() == false) {
+    public static final String NAME = "expected_reciprocal_rank";
+    private final double two_pow_maxRelevance;
+        @Override
+        builder.startObject();
+            out.writeVInt(this.unratedDocs);
+            } else {
+        return NAME;
+         */
+    }
+            return this.unratedDocs == other.unratedDocs;
+     *            rating for. Can be {@code null}, in which case document is
+ * software distributed under the License is distributed on an
+        if (this == obj) {
+import org.opensearch.core.xcontent.XContentBuilder;
+        private static ParseField UNRATED_FIELD = new ParseField("unrated_docs");
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+        this.unknownDocRating = unknownDocRating;
+                // unknownDocRating might be null, in which case unrated docs will be ignored in the dcg calculation.
+        public boolean equals(Object obj) {
+        builder.startObject(NAME);
+        return evalQueryQuality;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            ExpectedReciprocalRank.Detail other = (ExpectedReciprocalRank.Detail) obj;
+    /** the search window size */
+        return this.unknownDocRating;
+        @Override
+ * Licensed to Elasticsearch under one or more contributor

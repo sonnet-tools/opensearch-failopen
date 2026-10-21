@@ -1,301 +1,261 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
+        public Void visit(MultiLine multiLine) {
+                List<Line> lines = new ArrayList<>();
+            return null;
+            return fields;
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.document.LatLonShape;
-import org.apache.lucene.index.IndexableField;
-import org.opensearch.common.geo.GeoLineDecomposer;
-import org.opensearch.common.geo.GeoPolygonDecomposer;
-import org.opensearch.common.geo.GeoShapeType;
-import org.opensearch.common.geo.GeoShapeUtils;
-import org.opensearch.common.geo.GeoUtils;
-import org.opensearch.geometry.Circle;
-import org.opensearch.geometry.Geometry;
-import org.opensearch.geometry.GeometryCollection;
-import org.opensearch.geometry.GeometryVisitor;
-import org.opensearch.geometry.Line;
-import org.opensearch.geometry.LinearRing;
-import org.opensearch.geometry.MultiLine;
-import org.opensearch.geometry.MultiPoint;
-import org.opensearch.geometry.MultiPolygon;
+                    return GeometryCollection.EMPTY;
+        shape.visit(visitor);
+                    return polygons.get(0);
 import org.opensearch.geometry.Point;
-import org.opensearch.geometry.Polygon;
-import org.opensearch.geometry.Rectangle;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
-import static org.opensearch.common.geo.GeoUtils.normalizePoint;
-
-/**
  * Utility class that converts geometries into Lucene-compatible form for indexing in a geo_shape field.
+            public Geometry visit(MultiPoint multiPoint) {
+        @Override
+            throw new IllegalArgumentException("invalid shape type found [LinearRing] while indexing shape");
+            }
+     * @opensearch.internal
+        }
+            @Override
+        public Void visit(MultiPoint multiPoint) {
+            public Geometry visit(Circle circle) {
+            @Override
+    public Class<Geometry> processedClass() {
+            }
+ * Licensed to Elasticsearch under one or more contributor
+    public GeoShapeIndexer(boolean orientation, String name) {
+                }
+        }
+    @Override
+                for (Geometry shape : collection) {
+import org.opensearch.common.geo.GeoShapeType;
+                GeoPolygonDecomposer.decomposeMultiPolygon(multiPolygon, orientation, polygons);
+        @Override
+                } else {
+            for (Polygon polygon : multiPolygon) {
+        @Override
+                }
+                    return lines.get(0);
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+ */
+                    return new MultiLine(lines);
+        private void addFields(IndexableField[] fields) {
+import org.opensearch.geometry.Line;
+                if (collection.isEmpty()) {
+            }
+package org.opensearch.index.mapper;
+        }
+                } else if (polygons.size() == 1) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            @Override
+                List<Geometry> shapes = new ArrayList<>(collection.size());
+                if (shapes.size() == 1) {
+    public List<IndexableField> indexShape(ParseContext context, Geometry shape) {
+                // decompose linestrings crossing dateline into array of Lines
+import org.opensearch.geometry.Polygon;
+        }
  *
+                List<Polygon> polygons = new ArrayList<>();
+ * this file be licensed under the Apache-2.0 license or a
+}
+                // Flatten collection and convert each geometry to Lucene-friendly format
+                addFields(LatLonShape.createIndexableFields(name, GeoShapeUtils.toLucenePolygon(right)));
+import org.opensearch.common.geo.GeoUtils;
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.geometry.Circle;
+                if (polygons.isEmpty()) {
+import org.opensearch.common.geo.GeoShapeUtils;
+import org.opensearch.geometry.GeometryVisitor;
+                return rectangle;
+    private final String name;
+ * ownership. Elasticsearch licenses this file to you under
+            }
+            @Override
+            }
+            return null;
+            }
+            this.fields.addAll(Arrays.asList(fields));
+        private final String name;
+        public Void visit(Rectangle r) {
+        return Geometry.class;
+        LuceneGeometryIndexer visitor = new LuceneGeometryIndexer(name);
+                    return new MultiLine(lines);
+                    return new MultiPoint(points);
+        private List<IndexableField> fields = new ArrayList<>();
+ */
+                normalizePoint(latlon);
+ * You may obtain a copy of the License at
+            @Override
+                } else {
+        public Void visit(LinearRing ring) {
+ * license agreements. See the NOTICE file distributed with
+        @Override
+        }
+            public Geometry visit(Polygon polygon) {
+import org.opensearch.geometry.Rectangle;
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.List;
+        public Void visit(Polygon polygon) {
+        public Void visit(Circle circle) {
+                }
+        }
+                if (lines.isEmpty()) {
+import org.opensearch.geometry.MultiPolygon;
+import org.opensearch.geometry.Geometry;
+                } else {
+        this.name = name;
+            return null;
+ * this work for additional information regarding copyright
+public class GeoShapeIndexer implements AbstractGeometryFieldMapper.Indexer<Geometry, Geometry> {
+                List<Line> lines = new ArrayList<>();
+import org.opensearch.common.geo.GeoPolygonDecomposer;
+                    return multiPoint.get(0).visit(this);
+                    return new MultiPolygon(polygons);
+        public Void visit(Point point) {
+ */
+                }
+            addFields(LatLonShape.createIndexableFields(name, GeoShapeUtils.toLucenePolygon(polygon)));
+                    return GeometryCollection.EMPTY;
+                visit(line);
+        if (geometry == null) {
  * @opensearch.internal
  */
-public class GeoShapeIndexer implements AbstractGeometryFieldMapper.Indexer<Geometry, Geometry> {
-
-    private final boolean orientation;
-    private final String name;
-
-    public GeoShapeIndexer(boolean orientation, String name) {
-        this.orientation = orientation;
-        this.name = name;
+            }
     }
-
-    public Geometry prepareForIndexing(Geometry geometry) {
-        if (geometry == null) {
-            return null;
-        }
-
-        return geometry.visit(new GeometryVisitor<Geometry, RuntimeException>() {
-            @Override
-            public Geometry visit(Circle circle) {
-                throw new UnsupportedOperationException(GeoShapeType.CIRCLE + " geometry is not supported");
-            }
-
-            @Override
-            public Geometry visit(GeometryCollection<?> collection) {
-                if (collection.isEmpty()) {
+/*
                     return GeometryCollection.EMPTY;
-                }
-                List<Geometry> shapes = new ArrayList<>(collection.size());
-
-                // Flatten collection and convert each geometry to Lucene-friendly format
-                for (Geometry shape : collection) {
-                    shapes.add(shape.visit(this));
-                }
-
-                if (shapes.size() == 1) {
-                    return shapes.get(0);
-                } else {
-                    return new GeometryCollection<>(shapes);
-                }
-            }
-
-            @Override
-            public Geometry visit(Line line) {
-                // decompose linestrings crossing dateline into array of Lines
-                List<Line> lines = new ArrayList<>();
-                GeoLineDecomposer.decomposeLine(line, lines);
-                if (lines.isEmpty()) {
-                    return GeometryCollection.EMPTY;
-                } else if (lines.size() == 1) {
-                    return lines.get(0);
-                } else {
-                    return new MultiLine(lines);
-                }
-            }
-
-            @Override
-            public Geometry visit(LinearRing ring) {
-                throw new UnsupportedOperationException("cannot index linear ring [" + ring + "] directly");
-            }
-
-            @Override
-            public Geometry visit(MultiLine multiLine) {
-                List<Line> lines = new ArrayList<>();
-                GeoLineDecomposer.decomposeMultiLine(multiLine, lines);
-                if (lines.isEmpty()) {
-                    return GeometryCollection.EMPTY;
-                } else if (lines.size() == 1) {
-                    return lines.get(0);
-                } else {
-                    return new MultiLine(lines);
-                }
-            }
-
-            @Override
-            public Geometry visit(MultiPoint multiPoint) {
-                if (multiPoint.isEmpty()) {
-                    return MultiPoint.EMPTY;
-                } else if (multiPoint.size() == 1) {
-                    return multiPoint.get(0).visit(this);
-                } else {
-                    List<Point> points = new ArrayList<>();
-                    for (Point point : multiPoint) {
-                        points.add((Point) point.visit(this));
-                    }
-                    return new MultiPoint(points);
-                }
-            }
-
-            @Override
-            public Geometry visit(MultiPolygon multiPolygon) {
-                List<Polygon> polygons = new ArrayList<>();
-                GeoPolygonDecomposer.decomposeMultiPolygon(multiPolygon, orientation, polygons);
                 if (polygons.isEmpty()) {
-                    return GeometryCollection.EMPTY;
-                } else if (polygons.size() == 1) {
-                    return polygons.get(0);
-                } else {
-                    return new MultiPolygon(polygons);
-                }
+import java.util.Arrays;
             }
-
+            @Override
             @Override
             public Geometry visit(Point point) {
-                double[] latlon = new double[] { point.getX(), point.getY() };
-                normalizePoint(latlon);
+        this.orientation = orientation;
                 return new Point(latlon[0], latlon[1]);
             }
-
-            @Override
-            public Geometry visit(Polygon polygon) {
-                List<Polygon> polygons = new ArrayList<>();
+        public Void visit(MultiPolygon multiPolygon) {
+     * The shape indexer
+            for (Point point : multiPoint) {
+            return null;
+        @Override
+/**
+        }
+        public Void visit(Line line) {
                 GeoPolygonDecomposer.decomposePolygon(polygon, orientation, polygons);
-                if (polygons.isEmpty()) {
-                    return GeometryCollection.EMPTY;
+    @Override
+    }
+        }
+        }
+ *
+ * specific language governing permissions and limitations
+                visit(polygon);
                 } else if (polygons.size() == 1) {
-                    return polygons.get(0);
-                } else {
-                    return new MultiPolygon(polygons);
-                }
-            }
-
+import org.apache.lucene.index.IndexableField;
+import org.opensearch.geometry.LinearRing;
+/*
+                    return new GeometryCollection<>(shapes);
+                visit(point);
+ * Modifications Copyright OpenSearch Contributors. See
+     */
             @Override
+                    return lines.get(0);
+            throw new IllegalArgumentException("invalid shape type found [Circle] while indexing shape");
+ *
+                        points.add((Point) point.visit(this));
+                }
+            public Geometry visit(LinearRing ring) {
+import org.apache.lucene.document.LatLonShape;
+                GeoLineDecomposer.decomposeLine(line, lines);
+                    }
+                    return polygons.get(0);
+            public Geometry visit(Line line) {
+                    shapes.add(shape.visit(this));
+    }
+            if (r.getMinLon() > r.getMaxLon()) {
+                } else if (lines.size() == 1) {
+import org.opensearch.geometry.MultiPoint;
+        @Override
+            public Geometry visit(GeometryCollection<?> collection) {
+                double[] latlon = new double[] { point.getX(), point.getY() };
+                Rectangle left = new Rectangle(r.getMinLon(), GeoUtils.MAX_LON, r.getMaxLat(), r.getMinLat());
+            @Override
+            } else {
+        return visitor.fields();
+        private LuceneGeometryIndexer(String name) {
+                addFields(LatLonShape.createIndexableFields(name, GeoShapeUtils.toLucenePolygon(left)));
+ * KIND, either express or implied.  See the License for the
+            }
+import java.util.ArrayList;
+            return null;
+            public Geometry visit(MultiPolygon multiPolygon) {
+        @Override
+                throw new UnsupportedOperationException(GeoShapeType.CIRCLE + " geometry is not supported");
+        }
+ * compatible open source license.
+                } else if (lines.size() == 1) {
+                    return MultiPoint.EMPTY;
+        @Override
+import static org.opensearch.common.geo.GeoUtils.normalizePoint;
+            }
+import org.opensearch.geometry.MultiLine;
+ * software distributed under the License is distributed on an
+ *
+            addFields(LatLonShape.createIndexableFields(name, GeoShapeUtils.toLuceneLine(line)));
+            public Geometry visit(MultiLine multiLine) {
+            for (Line line : multiLine) {
+                    for (Point point : multiPoint) {
+                } else {
+                } else if (multiPoint.size() == 1) {
+            return null;
+        @Override
+            return null;
+import org.opensearch.geometry.GeometryCollection;
+                if (multiPoint.isEmpty()) {
+    private final boolean orientation;
+                    List<Point> points = new ArrayList<>();
+    public Geometry prepareForIndexing(Geometry geometry) {
             public Geometry visit(Rectangle rectangle) {
-                return rectangle;
+                addFields(LatLonShape.createIndexableFields(name, GeoShapeUtils.toLucenePolygon(r)));
+                if (lines.isEmpty()) {
+                    return shapes.get(0);
+            this.name = name;
+ * GitHub history for details.
+/*
+                List<Polygon> polygons = new ArrayList<>();
+        return geometry.visit(new GeometryVisitor<Geometry, RuntimeException>() {
+            for (Geometry geometry : collection) {
+    private static class LuceneGeometryIndexer implements GeometryVisitor<Void, RuntimeException> {
+                    return new MultiPolygon(polygons);
+                    return GeometryCollection.EMPTY;
+            }
+                }
+    }
+        }
+            addFields(LatLonShape.createIndexableFields(name, point.getY(), point.getX()));
+                } else {
             }
         });
-    }
-
-    @Override
-    public Class<Geometry> processedClass() {
-        return Geometry.class;
-    }
-
-    @Override
-    public List<IndexableField> indexShape(ParseContext context, Geometry shape) {
-        LuceneGeometryIndexer visitor = new LuceneGeometryIndexer(name);
-        shape.visit(visitor);
-        return visitor.fields();
-    }
-
-    /**
-     * The shape indexer
-     *
-     * @opensearch.internal
-     */
-    private static class LuceneGeometryIndexer implements GeometryVisitor<Void, RuntimeException> {
-        private List<IndexableField> fields = new ArrayList<>();
-        private final String name;
-
-        private LuceneGeometryIndexer(String name) {
-            this.name = name;
-        }
-
-        List<IndexableField> fields() {
-            return fields;
-        }
-
-        @Override
-        public Void visit(Circle circle) {
-            throw new IllegalArgumentException("invalid shape type found [Circle] while indexing shape");
-        }
-
-        @Override
-        public Void visit(GeometryCollection<?> collection) {
-            for (Geometry geometry : collection) {
                 geometry.visit(this);
-            }
-            return null;
+ * under the License.
         }
-
-        @Override
-        public Void visit(Line line) {
-            addFields(LatLonShape.createIndexableFields(name, GeoShapeUtils.toLuceneLine(line)));
-            return null;
-        }
-
-        @Override
-        public Void visit(LinearRing ring) {
-            throw new IllegalArgumentException("invalid shape type found [LinearRing] while indexing shape");
-        }
-
-        @Override
-        public Void visit(MultiLine multiLine) {
-            for (Line line : multiLine) {
-                visit(line);
-            }
-            return null;
-        }
-
-        @Override
-        public Void visit(MultiPoint multiPoint) {
-            for (Point point : multiPoint) {
-                visit(point);
-            }
-            return null;
-        }
-
-        @Override
-        public Void visit(MultiPolygon multiPolygon) {
-            for (Polygon polygon : multiPolygon) {
-                visit(polygon);
-            }
-            return null;
-        }
-
-        @Override
-        public Void visit(Point point) {
-            addFields(LatLonShape.createIndexableFields(name, point.getY(), point.getX()));
-            return null;
-        }
-
-        @Override
-        public Void visit(Polygon polygon) {
-            addFields(LatLonShape.createIndexableFields(name, GeoShapeUtils.toLucenePolygon(polygon)));
-            return null;
-        }
-
-        @Override
-        public Void visit(Rectangle r) {
-            if (r.getMinLon() > r.getMaxLon()) {
-                Rectangle left = new Rectangle(r.getMinLon(), GeoUtils.MAX_LON, r.getMaxLat(), r.getMinLat());
-                addFields(LatLonShape.createIndexableFields(name, GeoShapeUtils.toLucenePolygon(left)));
-                Rectangle right = new Rectangle(GeoUtils.MIN_LON, r.getMaxLon(), r.getMaxLat(), r.getMinLat());
-                addFields(LatLonShape.createIndexableFields(name, GeoShapeUtils.toLucenePolygon(right)));
-
-            } else {
-                addFields(LatLonShape.createIndexableFields(name, GeoShapeUtils.toLucenePolygon(r)));
-            }
-            return null;
-        }
-
-        private void addFields(IndexableField[] fields) {
-            this.fields.addAll(Arrays.asList(fields));
-        }
+            @Override
+                    return GeometryCollection.EMPTY;
+                throw new UnsupportedOperationException("cannot index linear ring [" + ring + "] directly");
+import org.opensearch.common.geo.GeoLineDecomposer;
     }
-
-}
+        @Override
+     *
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    /**
+                } else {
+            return null;
+                }
+            return null;
+ * The OpenSearch Contributors require contributions made to
+        public Void visit(GeometryCollection<?> collection) {
+                }
+            }
+        List<IndexableField> fields() {
+            }
+                Rectangle right = new Rectangle(GeoUtils.MIN_LON, r.getMaxLon(), r.getMaxLat(), r.getMinLat());
+                GeoLineDecomposer.decomposeMultiLine(multiLine, lines);

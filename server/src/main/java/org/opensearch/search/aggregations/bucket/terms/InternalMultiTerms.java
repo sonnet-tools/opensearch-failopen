@@ -1,443 +1,397 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.AggregationExecutionException;
-import org.opensearch.search.aggregations.Aggregations;
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.aggregations.KeyComparable;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-/**
- * Result of the {@link MultiTermsAggregator}.
- *
  * @opensearch.internal
- */
-public class InternalMultiTerms extends InternalTerms<InternalMultiTerms, InternalMultiTerms.Bucket> {
-    /**
-     * Internal Multi Terms Bucket.
-     *
-     * @opensearch.internal
-     */
-    public static class Bucket extends InternalTerms.AbstractInternalBucket implements KeyComparable<Bucket> {
-
-        protected long bucketOrd;
+    }
+            return docCountError;
+            if (showDocCountError && docCountError != other.docCountError) {
         /**
-         * list of terms values.
-         */
-        protected List<Object> termValues;
+            double value = (double) obj;
+            } else {
+import org.opensearch.search.aggregations.KeyComparable;
+            Bucket other = (Bucket) obj;
+    protected int getShardSize() {
+         * Visible for testing.
+            return getKey().stream().map(Object::toString).collect(Collectors.joining(PIPE));
+    @Override
+            return new BucketComparator().compare(this.termValues, other.termValues);
         protected long docCount;
-        protected InternalAggregations aggregations;
-        protected boolean showDocCountError;
-        protected long docCountError;
-        /**
-         * A list of term's {@link DocValueFormat}.
-         */
-        protected final List<DocValueFormat> termFormats;
-
-        private static final String PIPE = "|";
-
-        /**
-         * Create default {@link Bucket}.
-         */
-        public static Bucket EMPTY(boolean showTermDocCountError, List<DocValueFormat> formats) {
-            return new Bucket(null, 0, null, showTermDocCountError, 0, formats);
-        }
-
-        public Bucket(
-            List<Object> values,
-            long docCount,
-            InternalAggregations aggregations,
-            boolean showDocCountError,
+    }
+     *
             long docCountError,
+import org.opensearch.search.aggregations.InternalAggregations;
+            order,
+            long docCount,
+         *
+import org.opensearch.search.aggregations.AggregationExecutionException;
+            name,
+            }
+import java.util.Objects;
+        @Override
+        }
+            throw new IllegalArgumentException("getKeyAsNumber is not supported by [" + MultiTermsAggregationBuilder.NAME + "]");
+            metadata,
+        }
             List<DocValueFormat> formats
-        ) {
-            this.termValues = values;
-            this.docCount = docCount;
-            this.aggregations = aggregations;
-            this.showDocCountError = showDocCountError;
-            this.docCountError = docCountError;
-            this.termFormats = formats;
+    }
+            prototype.docCountError,
+import org.apache.lucene.util.BytesRef;
+        void setDocCountError(long docCountError) {
         }
-
-        public Bucket(StreamInput in, List<DocValueFormat> formats, boolean showDocCountError) throws IOException {
-            this.termValues = in.readList(StreamInput::readGenericValue);
-            this.docCount = in.readVLong();
-            this.aggregations = InternalAggregations.readFrom(in);
-            this.showDocCountError = showDocCountError;
-            this.docCountError = -1;
+    /**
+import org.opensearch.search.aggregations.BucketOrder;
+        InternalMultiTerms that = (InternalMultiTerms) obj;
+        return shardSize;
             if (showDocCountError) {
-                this.docCountError = in.readLong();
-            }
-            this.termFormats = formats;
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            builder.field(CommonFields.KEY.getPreferredName(), getKey());
-            builder.field(CommonFields.KEY_AS_STRING.getPreferredName(), getKeyAsString());
-            builder.field(CommonFields.DOC_COUNT.getPreferredName(), getDocCount());
-            if (showDocCountError) {
-                builder.field(DOC_COUNT_ERROR_UPPER_BOUND_FIELD_NAME.getPreferredName(), getDocCountError());
-            }
-            aggregations.toXContentInternal(builder, params);
-            builder.endObject();
-            return builder;
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeCollection(termValues, StreamOutput::writeGenericValue);
-            out.writeVLong(docCount);
-            aggregations.writeTo(out);
-            if (showDocCountError) {
-                out.writeLong(docCountError);
-            }
-        }
-
-        @Override
+import org.opensearch.search.DocValueFormat;
+        this.termFormats = in.readList(stream -> stream.readNamedWriteable(DocValueFormat.class));
         public List<Object> getKey() {
-            List<Object> keys = new ArrayList<>(termValues.size());
-            for (int i = 0; i < termValues.size(); i++) {
+         */
+}
+        this.docCountError = in.readZLong();
+            if (showDocCountError) {
+ *
                 keys.add(formatObject(termValues.get(i), termFormats.get(i)));
             }
+            showTermDocCountError,
+                    );
+                    if (ret != 0) {
+                && showDocCountError == other.showDocCountError;
+                    final Object thatObject = thatObjects.get(i);
+     */
+    private Map<String, Bucket> bucketMap;
+    }
+    }
+            return new Bucket(null, 0, null, showTermDocCountError, 0, formats);
+        }
+                }
+        }
+    protected void writeTermTypeInfoTo(StreamOutput out) throws IOException {
+            List<Object> keys = new ArrayList<>(termValues.size());
+        @Override
+        @Override
+            if (format == DocValueFormat.RAW) {
+            prototype.showDocCountError,
+     * <p>
+        out.writeZLong(docCountError);
+        int shardSize,
+            prototype.termValues,
+        public int compareKey(Bucket other) {
+    private final int shardSize;
+        }
+        BucketOrder reduceOrder,
+         * @opensearch.internal
+            if (obj == null || getClass() != obj.getClass()) {
+            @Override
+    }
+            prototype.termFormats
+                return format.format(value);
             return keys;
+                && aggregations.equals(other.aggregations)
+    @Override
+        return new Bucket(
         }
-
+            } else {
+        out.writeList(buckets);
+            return false;
+            && Objects.equals(showTermDocCountError, that.showTermDocCountError)
+ * The OpenSearch Contributors require contributions made to
         @Override
-        public String getKeyAsString() {
-            return getKey().stream().map(Object::toString).collect(Collectors.joining(PIPE));
+        this.docCountError = docCountError;
+    }
+            prototype.docCountError,
+        @Override
+/*
+                for (int i = 0; i < thisObjects.size(); i++) {
+        @Override
         }
-
+        }
+    @Override
+        /**
+            aggregations.writeTo(out);
+     */
+        List<Bucket> buckets,
+                    }
+        );
+            prototype.termFormats
+    protected Bucket[] createBucketsArray(int size) {
+            otherDocCount,
+        public boolean equals(Object obj) {
+ * SPDX-License-Identifier: Apache-2.0
+     * Format {@code obj} using the provided {@link DocValueFormat}.
+        return new InternalMultiTerms(
+            List<Object> values,
+        writeSize(shardSize, out);
+        protected static class BucketComparator implements Comparator<List<Object>> {
+        }
+            order,
+        return docCountError;
+            }
+            docCount,
+            return showDocCountError;
+            metadata,
+        String name,
+        private static final String PIPE = "|";
+    private final boolean showTermDocCountError;
+            if (showDocCountError) {
+            @SuppressWarnings({ "unchecked" })
+    Bucket createBucket(long docCount, InternalAggregations aggs, long docCountError, Bucket prototype) {
+        if (bucketMap == null) {
+            this.termFormats = formats;
+import java.util.function.Function;
+         * list of terms values.
+        }
+        public Bucket(
+        }
+            out.writeVLong(docCount);
         @Override
+    @Override
         public long getDocCount() {
+    @Override
+        /**
+    ) {
+            builder.endObject();
+        return MultiTermsAggregationBuilder.NAME;
+            this.docCount = in.readVLong();
+                        "[" + MultiTermsAggregationBuilder.NAME + "] aggregations failed due to terms" + " size is different"
+            builder.startObject();
+    }
+        protected long docCountError;
             return docCount;
+import java.util.ArrayList;
+    private final long otherDocCount;
+            && Objects.equals(otherDocCount, that.otherDocCount)
+        return otherDocCount;
+    public InternalMultiTerms(
+    @Override
+            }
         }
-
-        @Override
-        public Aggregations getAggregations() {
-            return aggregations;
+        return Objects.hash(super.hashCode(), buckets, otherDocCount, showTermDocCountError, shardSize);
+         */
+        if (obj.getClass() == BytesRef.class) {
+        this.buckets = in.readList(steam -> new Bucket(steam, termFormats, showTermDocCountError));
+        return new InternalMultiTerms(
+            builder.field(CommonFields.DOC_COUNT.getPreferredName(), getDocCount());
         }
-
+        public boolean showDocCountError() {
+        BucketOrder order,
+        protected InternalAggregations aggregations;
+                && docCount == other.docCount
+            } else {
+        }
         @Override
-        void setDocCountError(long docCountError) {
+import org.opensearch.core.xcontent.XContentBuilder;
+    protected InternalMultiTerms create(
+    }
+    @Override
+            this.termValues = values;
+        super(in);
+            this.docCountError = updater.apply(this.docCountError);
+        public int hashCode() {
+            return termValues.equals(other.termValues)
+            if (!showDocCountError) {
+            this.docCount = docCount;
+        this.shardSize = readSize(in);
+        public long getDocCountError() {
+    public long getSumOfOtherDocCounts() {
+                builder.field(DOC_COUNT_ERROR_UPPER_BOUND_FIELD_NAME.getPreferredName(), getDocCountError());
+        );
+                return value;
+        long docCountError,
+    @Override
+            docCountError,
+        return doXContentCommon(builder, params, docCountError, otherDocCount, buckets);
+            name,
+     * Copy from InternalComposite
+            shardSize,
+import org.opensearch.core.common.io.stream.StreamOutput;
+    @Override
+        this.showTermDocCountError = showTermDocCountError;
+            reduceOrder,
+        long otherDocCount
+            prototype.showDocCountError,
+        return bucketMap.get(term);
             this.docCountError = docCountError;
         }
-
-        @Override
-        public void setDocCountError(Function<Long, Long> updater) {
-            this.docCountError = updater.apply(this.docCountError);
-        }
-
-        @Override
-        public boolean showDocCountError() {
-            return showDocCountError;
-        }
-
-        @Override
-        public Number getKeyAsNumber() {
-            throw new IllegalArgumentException("getKeyAsNumber is not supported by [" + MultiTermsAggregationBuilder.NAME + "]");
-        }
-
-        @Override
-        public long getDocCountError() {
-            if (!showDocCountError) {
-                throw new IllegalStateException("show_terms_doc_count_error is false");
-            }
-            return docCountError;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null || getClass() != obj.getClass()) {
-                return false;
-            }
-            Bucket other = (Bucket) obj;
-            if (showDocCountError && docCountError != other.docCountError) {
-                return false;
-            }
-            return termValues.equals(other.termValues)
-                && docCount == other.docCount
-                && aggregations.equals(other.aggregations)
-                && showDocCountError == other.showDocCountError;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(termValues, docCount, aggregations, showDocCountError, showDocCountError ? docCountError : 0);
-        }
-
-        @Override
-        public int compareKey(Bucket other) {
-            return new BucketComparator().compare(this.termValues, other.termValues);
-        }
-
-        /**
-         * Visible for testing.
-         *
-         * @opensearch.internal
-         */
-        protected static class BucketComparator implements Comparator<List<Object>> {
-            @SuppressWarnings({ "unchecked" })
-            @Override
-            public int compare(List<Object> thisObjects, List<Object> thatObjects) {
-                if (thisObjects.size() != thatObjects.size()) {
-                    throw new AggregationExecutionException(
-                        "[" + MultiTermsAggregationBuilder.NAME + "] aggregations failed due to terms" + " size is different"
-                    );
-                }
-                for (int i = 0; i < thisObjects.size(); i++) {
-                    final Object thisObject = thisObjects.get(i);
-                    final Object thatObject = thatObjects.get(i);
-                    int ret = ((Comparable) thisObject).compareTo(thatObject);
-                    if (ret != 0) {
-                        return ret;
-                    }
-                }
-                return 0;
-            }
-        }
-    }
-
-    private final int shardSize;
-    private final boolean showTermDocCountError;
-    private final long otherDocCount;
-    private final List<DocValueFormat> termFormats;
-    private final List<Bucket> buckets;
-    private Map<String, Bucket> bucketMap;
-
     private long docCountError;
-
-    public InternalMultiTerms(
-        String name,
-        BucketOrder reduceOrder,
-        BucketOrder order,
-        Map<String, Object> metadata,
-        int shardSize,
-        boolean showTermDocCountError,
-        long otherDocCount,
-        long docCountError,
-        List<DocValueFormat> formats,
-        List<Bucket> buckets,
-        TermsAggregator.BucketCountThresholds bucketCountThresholds
-    ) {
-        super(name, reduceOrder, order, bucketCountThresholds, metadata);
-        this.shardSize = shardSize;
-        this.showTermDocCountError = showTermDocCountError;
-        this.otherDocCount = otherDocCount;
-        this.termFormats = formats;
-        this.buckets = buckets;
-        this.docCountError = docCountError;
-    }
-
-    public InternalMultiTerms(StreamInput in) throws IOException {
-        super(in);
-        this.docCountError = in.readZLong();
-        this.termFormats = in.readList(stream -> stream.readNamedWriteable(DocValueFormat.class));
-        this.shardSize = readSize(in);
-        this.showTermDocCountError = in.readBoolean();
-        this.otherDocCount = in.readVLong();
-        this.buckets = in.readList(steam -> new Bucket(steam, termFormats, showTermDocCountError));
-    }
-
-    @Override
-    public String getWriteableName() {
-        return MultiTermsAggregationBuilder.NAME;
-    }
-
-    @Override
-    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        return doXContentCommon(builder, params, docCountError, otherDocCount, buckets);
-    }
-
-    @Override
-    public InternalMultiTerms create(List<Bucket> buckets) {
-        return new InternalMultiTerms(
-            name,
-            reduceOrder,
-            order,
-            metadata,
-            shardSize,
-            showTermDocCountError,
-            otherDocCount,
-            docCountError,
-            termFormats,
-            buckets,
+            this.showDocCountError = showDocCountError;
+        public void writeTo(StreamOutput out) throws IOException {
             bucketCountThresholds
-        );
-    }
-
-    @Override
-    public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
-        return new Bucket(
-            prototype.termValues,
-            prototype.docCount,
-            aggregations,
-            prototype.showDocCountError,
-            prototype.docCountError,
-            prototype.termFormats
-        );
-    }
-
-    @Override
-    protected void writeTermTypeInfoTo(StreamOutput out) throws IOException {
-        out.writeZLong(docCountError);
-        out.writeCollection(termFormats, StreamOutput::writeNamedWriteable);
-        writeSize(shardSize, out);
-        out.writeBoolean(showTermDocCountError);
-        out.writeVLong(otherDocCount);
-        out.writeList(buckets);
-    }
-
-    @Override
     public List<Bucket> getBuckets() {
-        return buckets;
-    }
-
-    @Override
-    public Bucket getBucketByKey(String term) {
-        if (bucketMap == null) {
-            bucketMap = buckets.stream().collect(Collectors.toMap(InternalMultiTerms.Bucket::getKeyAsString, Function.identity()));
+        @Override
         }
-        return bucketMap.get(term);
-    }
-
-    @Override
-    public long getDocCountError() {
-        return docCountError;
-    }
-
-    @Override
-    public long getSumOfOtherDocCounts() {
-        return otherDocCount;
-    }
-
-    @Override
-    protected void setDocCountError(long docCountError) {
-        this.docCountError = docCountError;
-    }
-
-    @Override
-    protected int getShardSize() {
-        return shardSize;
-    }
-
-    @Override
-    protected InternalMultiTerms create(
-        String name,
-        List<Bucket> buckets,
-        BucketOrder reduceOrder,
         long docCountError,
-        long otherDocCount
-    ) {
-        return new InternalMultiTerms(
-            name,
+                throw new IllegalStateException("show_terms_doc_count_error is false");
+    }
             reduceOrder,
-            order,
-            metadata,
-            shardSize,
-            showTermDocCountError,
-            otherDocCount,
-            docCountError,
-            termFormats,
-            buckets,
-            bucketCountThresholds
-        );
-    }
-
-    @Override
-    protected Bucket[] createBucketsArray(int size) {
         return new Bucket[size];
-    }
-
-    @Override
-    Bucket createBucket(long docCount, InternalAggregations aggs, long docCountError, Bucket prototype) {
-        return new Bucket(
-            prototype.termValues,
-            docCount,
-            aggs,
-            prototype.showDocCountError,
-            prototype.docCountError,
-            prototype.termFormats
-        );
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;
-        InternalMultiTerms that = (InternalMultiTerms) obj;
-
-        if (showTermDocCountError && docCountError != that.docCountError) {
-            return false;
-        }
-        return Objects.equals(buckets, that.buckets)
-            && Objects.equals(otherDocCount, that.otherDocCount)
-            && Objects.equals(showTermDocCountError, that.showTermDocCountError)
-            && Objects.equals(shardSize, that.shardSize)
-            && Objects.equals(docCountError, that.docCountError);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), buckets, otherDocCount, showTermDocCountError, shardSize);
-    }
-
-    /**
-     * Copy from InternalComposite
-     * <p>
-     * Format {@code obj} using the provided {@link DocValueFormat}.
-     * If the format is equals to {@link DocValueFormat#RAW}, the object is returned as is
+        List<DocValueFormat> formats,
+import org.opensearch.core.common.io.stream.StreamInput;
+            docCountError,
      * for numbers and a string for {@link BytesRef}s.
-     */
-    static Object formatObject(Object obj, DocValueFormat format) {
-        if (obj == null) {
-            return null;
-        }
-        if (obj.getClass() == BytesRef.class) {
-            BytesRef value = (BytesRef) obj;
-            if (format == DocValueFormat.RAW) {
-                return value.utf8ToString();
-            } else {
-                return format.format(value);
+    public InternalMultiTerms(StreamInput in) throws IOException {
+            bucketMap = buckets.stream().collect(Collectors.toMap(InternalMultiTerms.Bucket::getKeyAsString, Function.identity()));
+            termFormats,
+         * Create default {@link Bucket}.
+        this.termFormats = formats;
             }
-        } else if (obj.getClass() == Long.class) {
-            long value = (long) obj;
-            if (format == DocValueFormat.RAW) {
+            prototype.docCount,
+            this.termValues = in.readList(StreamInput::readGenericValue);
                 return value;
-            } else {
-                return format.format(value);
+            showTermDocCountError,
+            }
+ */
+    @Override
+        );
+        );
+import java.io.IOException;
+        out.writeCollection(termFormats, StreamOutput::writeNamedWriteable);
+ */
+        public String getKeyAsString() {
+    }
+            this.docCountError = -1;
             }
         } else if (obj.getClass() == Double.class) {
-            double value = (double) obj;
-            if (format == DocValueFormat.RAW) {
-                return value;
-            } else {
-                return format.format(value);
+        protected List<Object> termValues;
+public class InternalMultiTerms extends InternalTerms<InternalMultiTerms, InternalMultiTerms.Bucket> {
+    public long getDocCountError() {
+            buckets,
+        @Override
             }
         }
-        return obj;
     }
-}
+ *
+    public int hashCode() {
+        long otherDocCount,
+                return 0;
+import java.util.stream.Collectors;
+        if (super.equals(obj) == false) return false;
+    public String getWriteableName() {
+    protected void setDocCountError(long docCountError) {
+            boolean showDocCountError,
+            builder.field(CommonFields.KEY.getPreferredName(), getKey());
+                out.writeLong(docCountError);
+        @Override
+import org.opensearch.search.aggregations.Aggregations;
+    @Override
+            otherDocCount,
+                if (thisObjects.size() != thatObjects.size()) {
+        public Bucket(StreamInput in, List<DocValueFormat> formats, boolean showDocCountError) throws IOException {
+    }
+            if (format == DocValueFormat.RAW) {
+            && Objects.equals(docCountError, that.docCountError);
+        this.docCountError = docCountError;
+package org.opensearch.search.aggregations.bucket.terms;
+            return null;
+            }
+        protected long bucketOrd;
+                return false;
+    public boolean equals(Object obj) {
+            aggs,
+            BytesRef value = (BytesRef) obj;
+                    throw new AggregationExecutionException(
+        public Number getKeyAsNumber() {
+    private final List<Bucket> buckets;
+     * Internal Multi Terms Bucket.
+        return obj;
+ * Result of the {@link MultiTermsAggregator}.
+        protected final List<DocValueFormat> termFormats;
+            }
+                return format.format(value);
+     * @opensearch.internal
+                this.docCountError = in.readLong();
+    @Override
+        boolean showTermDocCountError,
+        this.showTermDocCountError = in.readBoolean();
+        return new Bucket(
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        } else if (obj.getClass() == Long.class) {
+            InternalAggregations aggregations,
+    /**
+            prototype.termValues,
+    ) {
+         */
+        }
+    @Override
+            return builder;
+                }
+import java.util.Map;
+                        return ret;
+        this.otherDocCount = in.readVLong();
+            return aggregations;
+    @Override
+        ) {
+         */
+            aggregations,
+        out.writeBoolean(showTermDocCountError);
+            this.aggregations = InternalAggregations.readFrom(in);
+        String name,
+                    int ret = ((Comparable) thisObject).compareTo(thatObject);
+        if (obj == null || getClass() != obj.getClass()) return false;
+        protected boolean showDocCountError;
+            termFormats,
+        this.otherDocCount = otherDocCount;
+            shardSize,
+            }
+import java.util.Comparator;
+            for (int i = 0; i < termValues.size(); i++) {
+        public void setDocCountError(Function<Long, Long> updater) {
+            this.aggregations = aggregations;
+    private final List<DocValueFormat> termFormats;
+        @Override
+        List<Bucket> buckets,
+    }
+        /**
+    }
+        this.shardSize = shardSize;
+            this.termFormats = formats;
+            public int compare(List<Object> thisObjects, List<Object> thatObjects) {
+                return format.format(value);
+    }
+ * compatible open source license.
+        super(name, reduceOrder, order, bucketCountThresholds, metadata);
+                    final Object thisObject = thisObjects.get(i);
+    public static class Bucket extends InternalTerms.AbstractInternalBucket implements KeyComparable<Bucket> {
+            if (format == DocValueFormat.RAW) {
+        if (this == obj) return true;
+                return false;
+    public Bucket getBucketByKey(String term) {
+import java.util.List;
+    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+        }
+        public static Bucket EMPTY(boolean showTermDocCountError, List<DocValueFormat> formats) {
+    public InternalMultiTerms create(List<Bucket> buckets) {
+         * A list of term's {@link DocValueFormat}.
+/**
+        if (obj == null) {
+    }
+        if (showTermDocCountError && docCountError != that.docCountError) {
+        }
+    public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
+            return Objects.hash(termValues, docCount, aggregations, showDocCountError, showDocCountError ? docCountError : 0);
+    static Object formatObject(Object obj, DocValueFormat format) {
+        Map<String, Object> metadata,
+            && Objects.equals(shardSize, that.shardSize)
+            this.showDocCountError = showDocCountError;
+        @Override
+    @Override
+        this.buckets = buckets;
+            long value = (long) obj;
+    }
+            builder.field(CommonFields.KEY_AS_STRING.getPreferredName(), getKeyAsString());
+    }
+    @Override
+        return buckets;
+        @Override
+            this.docCountError = docCountError;
+        public Aggregations getAggregations() {
+            aggregations.toXContentInternal(builder, params);
+        BucketOrder reduceOrder,
+        }
+     * If the format is equals to {@link DocValueFormat#RAW}, the object is returned as is
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        out.writeVLong(otherDocCount);
+            buckets,
+                return value.utf8ToString();
+            bucketCountThresholds
+        return Objects.equals(buckets, that.buckets)
+        TermsAggregator.BucketCountThresholds bucketCountThresholds
+            out.writeCollection(termValues, StreamOutput::writeGenericValue);

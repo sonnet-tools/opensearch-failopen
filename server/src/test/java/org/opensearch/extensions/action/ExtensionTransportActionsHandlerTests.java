@@ -1,181 +1,165 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.extensions.action;
-
-import com.google.protobuf.ByteString;
-import org.opensearch.Version;
-import org.opensearch.action.ActionModule;
-import org.opensearch.action.ActionModule.DynamicActionRegistry;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.network.NetworkService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.PageCacheRecycler;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
-import org.opensearch.extensions.AcknowledgedResponse;
-import org.opensearch.extensions.DiscoveryExtensionNode;
-import org.opensearch.extensions.rest.RestSendToExtensionActionTests;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.client.NoOpNodeClient;
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.ActionNotFoundTransportException;
-import org.opensearch.transport.NodeNotConnectedException;
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.node.NodeClient;
-import org.opensearch.transport.nio.MockNioTransport;
-import org.junit.After;
-import org.junit.Before;
-
-import java.net.InetAddress;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class ExtensionTransportActionsHandlerTests extends OpenSearchTestCase {
-    private static final ActionFilters EMPTY_FILTERS = new ActionFilters(Collections.emptySet());
-    private TransportService transportService;
-    private MockNioTransport transport;
-    private DiscoveryExtensionNode discoveryExtensionNode;
-    private ExtensionTransportActionsHandler extensionTransportActionsHandler;
-    private NodeClient client;
-    private final ThreadPool threadPool = new TestThreadPool(RestSendToExtensionActionTests.class.getSimpleName());
-
-    @Before
-    public void setup() throws Exception {
-        Settings settings = Settings.builder().put("cluster.name", "test").build();
-        transport = new MockNioTransport(
-            settings,
-            Version.CURRENT,
-            threadPool,
-            new NetworkService(Collections.emptyList()),
-            PageCacheRecycler.NON_RECYCLING_INSTANCE,
-            new NamedWriteableRegistry(Collections.emptyList()),
-            new NoneCircuitBreakerService(),
-            NoopTracer.INSTANCE
-        );
         transportService = new MockTransportService(
-            settings,
-            transport,
-            threadPool,
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            (boundAddress) -> new DiscoveryNode(
-                "test_node",
-                "test_node",
-                boundAddress.publishAddress(),
-                emptyMap(),
-                emptySet(),
-                Version.CURRENT
-            ),
-            null,
-            Collections.emptySet(),
-            NoopTracer.INSTANCE
         );
-        discoveryExtensionNode = new DiscoveryExtensionNode(
-            "firstExtension",
-            "uniqueid1",
-            new TransportAddress(InetAddress.getByName("127.0.0.0"), 9300),
-            new HashMap<String, String>(),
             Version.fromString("3.0.0"),
-            Version.fromString("3.0.0"),
-            Collections.emptyList()
-        );
-        client = new NoOpNodeClient(this.getTestName());
-        ActionModule mockActionModule = mock(ActionModule.class);
-        DynamicActionRegistry dynamicActionRegistry = new DynamicActionRegistry();
-        dynamicActionRegistry.registerUnmodifiableActionMap(Collections.emptyMap());
-        when(mockActionModule.getDynamicActionRegistry()).thenReturn(dynamicActionRegistry);
-        when(mockActionModule.getActionFilters()).thenReturn(EMPTY_FILTERS);
-        extensionTransportActionsHandler = new ExtensionTransportActionsHandler(
-            Map.of("uniqueid1", discoveryExtensionNode),
-            transportService,
-            client,
-            mockActionModule,
-            null
-        );
-    }
-
-    @Override
-    @After
-    public void tearDown() throws Exception {
-        super.tearDown();
         transportService.close();
-        client.close();
-        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
-    }
-
-    public void testRegisterAction() {
-        String action = "test-action";
-        extensionTransportActionsHandler.registerAction(action, discoveryExtensionNode.getId());
-        assertEquals(discoveryExtensionNode, extensionTransportActionsHandler.getExtension(action));
-
-        // Test duplicate action registration
+        RemoteExtensionActionResponse response = extensionTransportActionsHandler.handleTransportActionRequestFromExtension(request);
+        assertTrue(response.getStatus());
+    public void testSendTransportRequestToExtension() throws InterruptedException {
+import org.opensearch.action.ActionModule.DynamicActionRegistry;
+            new TransportAddress(InetAddress.getByName("127.0.0.0"), 9300),
+import org.opensearch.Version;
         expectThrows(
-            IllegalArgumentException.class,
-            () -> extensionTransportActionsHandler.registerAction(action, discoveryExtensionNode.getId())
         );
-        assertEquals(discoveryExtensionNode, extensionTransportActionsHandler.getExtension(action));
+        assertFalse(response.isSuccess());
+        transport = new MockNioTransport(
+ *
+import org.opensearch.extensions.DiscoveryExtensionNode;
     }
-
-    public void testRegisterTransportActionsRequest() {
+import static org.mockito.Mockito.mock;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        response = (AcknowledgedResponse) extensionTransportActionsHandler.handleRegisterTransportActionsRequest(request);
+    @Override
+        ByteString requestBytes = ByteString.copyFromUtf8("requestBytes");
         String action = "test-action";
         RegisterTransportActionsRequest request = new RegisterTransportActionsRequest("uniqueid1", Set.of(action));
-        AcknowledgedResponse response = (AcknowledgedResponse) extensionTransportActionsHandler.handleRegisterTransportActionsRequest(
-            request
-        );
-        assertTrue(response.getStatus());
-        assertEquals(discoveryExtensionNode, extensionTransportActionsHandler.getExtension(action));
-
+import java.util.concurrent.TimeUnit;
+        DynamicActionRegistry dynamicActionRegistry = new DynamicActionRegistry();
+public class ExtensionTransportActionsHandlerTests extends OpenSearchTestCase {
         // Test duplicate action registration
-        response = (AcknowledgedResponse) extensionTransportActionsHandler.handleRegisterTransportActionsRequest(request);
-        assertFalse(response.getStatus());
-    }
-
-    public void testTransportActionRequestFromExtension() throws Exception {
-        String action = "test-action";
-        ByteString requestBytes = ByteString.copyFromUtf8("requestBytes");
-        TransportActionRequestFromExtension request = new TransportActionRequestFromExtension(action, requestBytes, "uniqueid1");
-        RemoteExtensionActionResponse response = extensionTransportActionsHandler.handleTransportActionRequestFromExtension(request);
-        assertFalse(response.isSuccess());
-        String responseString = response.getResponseBytesAsString();
+            Collections.emptyList()
+    private NodeClient client;
+        ActionModule mockActionModule = mock(ActionModule.class);
+            request
         assertEquals("Request failed: action [test-action] is not registered for any extension.", responseString);
-    }
-
-    public void testSendTransportRequestToExtension() throws InterruptedException {
-        String action = "test-action";
-        ByteString requestBytes = ByteString.copyFromUtf8("requestBytes");
-        ExtensionActionRequest request = new ExtensionActionRequest(action, requestBytes);
-
-        // Action not registered, expect exception
-        expectThrows(
-            ActionNotFoundTransportException.class,
-            () -> extensionTransportActionsHandler.sendTransportRequestToExtension(request)
+import org.opensearch.extensions.AcknowledgedResponse;
+        super.tearDown();
+        client = new NoOpNodeClient(this.getTestName());
+                emptySet(),
+    private ExtensionTransportActionsHandler extensionTransportActionsHandler;
+import org.opensearch.common.network.NetworkService;
+        TransportActionRequestFromExtension request = new TransportActionRequestFromExtension(action, requestBytes, "uniqueid1");
+import org.opensearch.threadpool.ThreadPool;
         );
-
-        // Register Action
-        RegisterTransportActionsRequest registerRequest = new RegisterTransportActionsRequest("uniqueid1", Set.of(action));
-        AcknowledgedResponse response = (AcknowledgedResponse) extensionTransportActionsHandler.handleRegisterTransportActionsRequest(
-            registerRequest
+            new NamedWriteableRegistry(Collections.emptyList()),
+ * The OpenSearch Contributors require contributions made to
+import com.google.protobuf.ByteString;
+            Version.CURRENT,
+    private final ThreadPool threadPool = new TestThreadPool(RestSendToExtensionActionTests.class.getSimpleName());
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+            PageCacheRecycler.NON_RECYCLING_INSTANCE,
+import org.opensearch.transport.TransportService;
+        assertEquals(discoveryExtensionNode, extensionTransportActionsHandler.getExtension(action));
+            Version.fromString("3.0.0"),
+import org.opensearch.cluster.node.DiscoveryNode;
+        assertFalse(response.getStatus());
+            client,
         );
+import org.opensearch.common.settings.Settings;
+        client.close();
+            "uniqueid1",
+    public void testRegisterAction() {
+import java.util.HashMap;
+        assertEquals(discoveryExtensionNode, extensionTransportActionsHandler.getExtension(action));
+            null,
+            IllegalArgumentException.class,
         assertTrue(response.getStatus());
-
-        expectThrows(NodeNotConnectedException.class, () -> extensionTransportActionsHandler.sendTransportRequestToExtension(request));
+import static org.mockito.Mockito.when;
+        extensionTransportActionsHandler = new ExtensionTransportActionsHandler(
+                "test_node",
+            "firstExtension",
+import org.opensearch.transport.NodeNotConnectedException;
+    public void testTransportActionRequestFromExtension() throws Exception {
     }
+import org.opensearch.extensions.rest.RestSendToExtensionActionTests;
+import org.junit.After;
+        extensionTransportActionsHandler.registerAction(action, discoveryExtensionNode.getId());
+                "test_node",
+    public void setup() throws Exception {
+            new NetworkService(Collections.emptyList()),
+        dynamicActionRegistry.registerUnmodifiableActionMap(Collections.emptyMap());
+        String action = "test-action";
+import org.junit.Before;
+    }
+import java.util.Set;
+            Collections.emptySet(),
+            ),
+    }
+            (boundAddress) -> new DiscoveryNode(
+import java.util.Map;
+        ExtensionActionRequest request = new ExtensionActionRequest(action, requestBytes);
+            NoopTracer.INSTANCE
+import org.opensearch.core.common.transport.TransportAddress;
+        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
+ * this file be licensed under the Apache-2.0 license or a
+            new HashMap<String, String>(),
+                boundAddress.publishAddress(),
+    @Before
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+        when(mockActionModule.getActionFilters()).thenReturn(EMPTY_FILTERS);
+        String action = "test-action";
+import org.opensearch.test.client.NoOpNodeClient;
+import org.opensearch.test.OpenSearchTestCase;
+    @After
+    private DiscoveryExtensionNode discoveryExtensionNode;
+        Settings settings = Settings.builder().put("cluster.name", "test").build();
+        discoveryExtensionNode = new DiscoveryExtensionNode(
+        );
+        String action = "test-action";
+ * compatible open source license.
+    private static final ActionFilters EMPTY_FILTERS = new ActionFilters(Collections.emptySet());
+import org.opensearch.action.ActionModule;
+import org.opensearch.transport.client.node.NodeClient;
+    public void tearDown() throws Exception {
+        expectThrows(
+                emptyMap(),
+import org.opensearch.threadpool.TestThreadPool;
+        String responseString = response.getResponseBytesAsString();
+        ByteString requestBytes = ByteString.copyFromUtf8("requestBytes");
+import static java.util.Collections.emptySet;
+        );
+import java.util.Collections;
+import org.opensearch.transport.nio.MockNioTransport;
+            registerRequest
+        when(mockActionModule.getDynamicActionRegistry()).thenReturn(dynamicActionRegistry);
+        AcknowledgedResponse response = (AcknowledgedResponse) extensionTransportActionsHandler.handleRegisterTransportActionsRequest(
+            settings,
+        // Register Action
+package org.opensearch.extensions.action;
+ * SPDX-License-Identifier: Apache-2.0
+    }
+            mockActionModule,
+/*
+        );
+    private TransportService transportService;
+            ActionNotFoundTransportException.class,
+            NoopTracer.INSTANCE
+import org.opensearch.transport.ActionNotFoundTransportException;
+            () -> extensionTransportActionsHandler.registerAction(action, discoveryExtensionNode.getId())
+            () -> extensionTransportActionsHandler.sendTransportRequestToExtension(request)
+import static java.util.Collections.emptyMap;
+        expectThrows(NodeNotConnectedException.class, () -> extensionTransportActionsHandler.sendTransportRequestToExtension(request));
+import java.net.InetAddress;
+import org.opensearch.test.transport.MockTransportService;
+        // Action not registered, expect exception
+            transport,
+    private MockNioTransport transport;
+        // Test duplicate action registration
+            settings,
+            null
+            new NoneCircuitBreakerService(),
+    public void testRegisterTransportActionsRequest() {
+        );
+    }
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
+        RegisterTransportActionsRequest registerRequest = new RegisterTransportActionsRequest("uniqueid1", Set.of(action));
+            Map.of("uniqueid1", discoveryExtensionNode),
 }
+            threadPool,
+            transportService,
+import org.opensearch.common.util.PageCacheRecycler;
+ */
+        assertEquals(discoveryExtensionNode, extensionTransportActionsHandler.getExtension(action));
+import org.opensearch.action.support.ActionFilters;
+            threadPool,
+        AcknowledgedResponse response = (AcknowledgedResponse) extensionTransportActionsHandler.handleRegisterTransportActionsRequest(
+                Version.CURRENT

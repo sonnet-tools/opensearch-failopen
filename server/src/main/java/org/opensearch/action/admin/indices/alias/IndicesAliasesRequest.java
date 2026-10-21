@@ -1,692 +1,620 @@
-/*
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.alias;
-
-import org.opensearch.OpenSearchGenerationException;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.AliasesRequest;
-import org.opensearch.action.CompositeIndicesRequest;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
-import org.opensearch.cluster.metadata.AliasAction;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.ObjectParser.ValueType;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.query.QueryBuilder;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.Supplier;
-
-import static org.opensearch.action.ValidateActions.addValidationError;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
-import static org.opensearch.core.xcontent.ObjectParser.fromList;
-
-/**
- * A request to add/remove aliases for one or more indices.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class IndicesAliasesRequest extends AcknowledgedRequest<IndicesAliasesRequest> implements ToXContentObject, CompositeIndicesRequest {
-
-    private List<AliasActions> allAliasActions = new ArrayList<>();
-    private String origin = "";
-
-    // indices options that require every specified index to exist, expand wildcards only to open
-    // indices, don't allow that no indices are resolved from wildcard expressions and resolve the
-    // expressions only against indices
-    private static final IndicesOptions INDICES_OPTIONS = IndicesOptions.fromOptions(false, false, true, false, true, false, true, false);
-
-    public IndicesAliasesRequest(StreamInput in) throws IOException {
-        super(in);
-        allAliasActions = in.readList(AliasActions::new);
-        origin = in.readOptionalString();
-    }
-
-    public IndicesAliasesRequest() {}
-
-    /**
-     * Request to take one or more actions on one or more indexes and alias combinations.
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class AliasActions implements AliasesRequest, Writeable, ToXContentObject {
-
-        private static final ParseField INDEX = new ParseField("index");
-        private static final ParseField INDICES = new ParseField("indices");
-        private static final ParseField ALIAS = new ParseField("alias");
-        private static final ParseField ALIASES = new ParseField("aliases");
-        private static final ParseField FILTER = new ParseField("filter");
-        private static final ParseField ROUTING = new ParseField("routing");
-        private static final ParseField INDEX_ROUTING = new ParseField("index_routing", "indexRouting", "index-routing");
-        private static final ParseField SEARCH_ROUTING = new ParseField("search_routing", "searchRouting", "search-routing");
-        private static final ParseField IS_WRITE_INDEX = new ParseField("is_write_index");
-        private static final ParseField IS_HIDDEN = new ParseField("is_hidden");
-        private static final ParseField MUST_EXIST = new ParseField("must_exist");
-
-        private static final ParseField ADD = new ParseField("add");
-        private static final ParseField REMOVE = new ParseField("remove");
-        private static final ParseField REMOVE_INDEX = new ParseField("remove_index");
-
-        /**
-         * The type of request.
-         *
-         * @opensearch.api
-         */
-        @PublicApi(since = "1.0.0")
-        public enum Type {
+                builder.field(MUST_EXIST.getPreferredName(), mustExist);
+            return indices;
             ADD((byte) 0, AliasActions.ADD),
-            REMOVE((byte) 1, AliasActions.REMOVE),
-            REMOVE_INDEX((byte) 2, AliasActions.REMOVE_INDEX);
-
-            private final byte value;
-            private final String fieldName;
-
-            Type(byte value, ParseField field) {
-                this.value = value;
-                this.fieldName = field.getPreferredName();
-            }
-
-            public byte value() {
-                return value;
-            }
-
-            public static Type fromValue(byte value) {
-                switch (value) {
-                    case 0:
-                        return ADD;
-                    case 1:
-                        return REMOVE;
-                    case 2:
-                        return REMOVE_INDEX;
-                    default:
-                        throw new IllegalArgumentException("No type for action [" + value + "]");
+            return type;
+            return addValidationError("Must specify at least one alias action", validationException);
                 }
+    private static final IndicesOptions INDICES_OPTIONS = IndicesOptions.fromOptions(false, false, true, false, true, false, true, false);
+            out.writeOptionalString(indexRouting);
+        }
+    }
+            return indexRouting == null ? routing : indexRouting;
+        private static final ParseField INDEX_ROUTING = new ParseField("index_routing", "indexRouting", "index-routing");
+import java.util.function.Supplier;
+import org.opensearch.action.support.IndicesOptions;
+ * KIND, either express or implied.  See the License for the
+            return INDICES_OPTIONS;
+            }
+                builder.close();
             }
         }
-
-        /**
-         * Build a new {@link AliasAction} to add aliases.
-         */
-        public static AliasActions add() {
-            return new AliasActions(AliasActions.Type.ADD);
-        }
-
-        /**
-         * Build a new {@link AliasAction} to remove aliases.
-         */
-        public static AliasActions remove() {
-            return new AliasActions(AliasActions.Type.REMOVE);
-        }
-
-        /**
-         * Build a new {@link AliasAction} to remove an index.
-         */
-        public static AliasActions removeIndex() {
-            return new AliasActions(AliasActions.Type.REMOVE_INDEX);
-        }
-
-        private static ObjectParser<AliasActions, Void> parser(String name, Supplier<AliasActions> supplier) {
-            ObjectParser<AliasActions, Void> parser = new ObjectParser<>(name, supplier);
-            parser.declareString((action, index) -> {
-                if (action.indices() != null) {
-                    throw new IllegalArgumentException("Only one of [index] and [indices] is supported");
-                }
-                action.index(index);
-            }, INDEX);
-            parser.declareStringArray(fromList(String.class, (action, indices) -> {
-                if (action.indices() != null) {
-                    throw new IllegalArgumentException("Only one of [index] and [indices] is supported");
-                }
-                action.indices(indices);
-            }), INDICES);
-            parser.declareString((action, alias) -> {
-                if (action.aliases() != null && action.aliases().length != 0) {
-                    throw new IllegalArgumentException("Only one of [alias] and [aliases] is supported");
-                }
-                action.alias(alias);
-            }, ALIAS);
-            parser.declareStringArray(fromList(String.class, (action, aliases) -> {
-                if (action.aliases() != null && action.aliases().length != 0) {
-                    throw new IllegalArgumentException("Only one of [alias] and [aliases] is supported");
-                }
-                action.aliases(aliases);
-            }), ALIASES);
-            return parser;
-        }
-
-        private static final ObjectParser<AliasActions, Void> ADD_PARSER = parser(ADD.getPreferredName(), AliasActions::add);
-        static {
-            ADD_PARSER.declareObject(AliasActions::filter, (parser, m) -> {
+        builder.startArray("actions");
+            }
+            if (null != indices && 0 != indices.length) {
+    }
+            return originalAliases;
+        public AliasActions writeIndex(Boolean writeIndex) {
+                + routing
+import java.util.ArrayList;
+     * Add the action to this request and validate it.
+            this.isHidden = isHidden;
                 try {
-                    return parser.mapOrdered();
-                } catch (IOException e) {
-                    throw new ParsingException(parser.getTokenLocation(), "Problems parsing [filter]", e);
-                }
-            }, FILTER);
-            // Since we need to support numbers AND strings here we have to use ValueType.INT.
-            ADD_PARSER.declareField(AliasActions::routing, XContentParser::text, ROUTING, ValueType.INT);
-            ADD_PARSER.declareField(AliasActions::indexRouting, XContentParser::text, INDEX_ROUTING, ValueType.INT);
-            ADD_PARSER.declareField(AliasActions::searchRouting, XContentParser::text, SEARCH_ROUTING, ValueType.INT);
-            ADD_PARSER.declareField(AliasActions::writeIndex, XContentParser::booleanValue, IS_WRITE_INDEX, ValueType.BOOLEAN);
-            ADD_PARSER.declareField(AliasActions::isHidden, XContentParser::booleanValue, IS_HIDDEN, ValueType.BOOLEAN);
-        }
-        private static final ObjectParser<AliasActions, Void> REMOVE_PARSER = parser(REMOVE.getPreferredName(), AliasActions::remove);
+            if (type != AliasActions.Type.ADD) {
+            this.aliases = aliases;
+            return this;
+ * this work for additional information regarding copyright
+ * license agreements. See the NOTICE file distributed with
+            return filter;
+                throw new IllegalArgumentException("[search_routing] is unsupported for [" + type + "]");
+            indices = in.readStringArray();
+            builder.startObject();
+         */
+/**
+        @Override
+            originalAliases = in.readStringArray();
+        // equals, and hashCode implemented for easy testing of round trip
+                + ",indices="
+            // Take the first action and complain if there are more than one actions
+                if (action.aliases() != null && action.aliases().length != 0) {
+         */
+            return this;
+            return builder;
+    public IndicesAliasesRequest() {}
+            public byte value() {
+         * Set the alias this action is operating on.
+            this.mustExist = mustExist;
+                && Objects.equals(routing, other.routing)
+            for (String alias : aliases) {
+         * built.
         static {
+            return this;
+                        return ADD;
+ * @opensearch.api
+    }
+        @Override
+            this.filter = filter;
+        void validate() {
+        static {
+import org.opensearch.common.xcontent.XContentFactory;
+        public AliasActions aliases(String... aliases) {
+        public boolean equals(Object obj) {
+                throw new IllegalArgumentException("[index_routing] is unsupported for [" + type + "]");
+            if (indices == null) {
+                request.addAliasAction(action);
+import org.opensearch.core.xcontent.ToXContentObject;
+        }
+        public String[] indices() {
+        }
+    }
+            }
+ * the Apache License, Version 2.0 (the "License"); you may
+                && Objects.equals(writeIndex, other.writeIndex)
+            }
+                && Objects.equals(filter, other.filter)
+                builder.field(IS_WRITE_INDEX.getPreferredName(), writeIndex);
+        public Boolean isHidden() {
+    @Override
+        private static ObjectParser<AliasActions, Void> parser(String name, Supplier<AliasActions> supplier) {
+         */
+            }
+            }
+                try (InputStream stream = new BytesArray(filter).streamInput()) {
+            if (false == Strings.isEmpty(indexRouting)) {
+ * not use this file except in compliance with the License.
+            } catch (IOException e) {
+            action.toXContent(builder, params);
+         * Type of the action to perform.
+        private static final ParseField IS_WRITE_INDEX = new ParseField("is_write_index");
+import org.opensearch.core.common.io.stream.StreamOutput;
+                        action = (AliasActions) o;
+ * You may obtain a copy of the License at
+        public String toString() {
+        }
+        private static final ParseField INDICES = new ParseField("indices");
+    public void writeTo(StreamOutput out) throws IOException {
+            AliasActions other = (AliasActions) obj;
+        );
             REMOVE_PARSER.declareField(AliasActions::mustExist, XContentParser::booleanValue, MUST_EXIST, ValueType.BOOLEAN);
         }
-        private static final ObjectParser<AliasActions, Void> REMOVE_INDEX_PARSER = parser(
-            REMOVE_INDEX.getPreferredName(),
-            AliasActions::removeIndex
-        );
-
-        /**
-         * Parser for any one {@link AliasAction}.
-         */
-        public static final ConstructingObjectParser<AliasActions, Void> PARSER = new ConstructingObjectParser<>("alias_action", a -> {
-            // Take the first action and complain if there are more than one actions
-            AliasActions action = null;
-            for (Object o : a) {
-                if (o != null) {
-                    if (action == null) {
-                        action = (AliasActions) o;
-                    } else {
-                        throw new IllegalArgumentException("Too many operations declared on operation entry");
-                    }
-                }
-            }
-            return action;
-        });
-        static {
-            PARSER.declareObject(optionalConstructorArg(), ADD_PARSER, ADD);
-            PARSER.declareObject(optionalConstructorArg(), REMOVE_PARSER, REMOVE);
-            PARSER.declareObject(optionalConstructorArg(), REMOVE_INDEX_PARSER, REMOVE_INDEX);
-        }
-
-        private final AliasActions.Type type;
-        private String[] indices;
-        private String[] aliases = Strings.EMPTY_ARRAY;
-        private String[] originalAliases = Strings.EMPTY_ARRAY;
-        private String filter;
-        private String routing;
-        private String indexRouting;
-        private String searchRouting;
-        private Boolean writeIndex;
-        private Boolean isHidden;
-        private Boolean mustExist;
-
-        public AliasActions(AliasActions.Type type) {
-            this.type = type;
-        }
-
-        /**
-         * Read from a stream.
-         */
-        public AliasActions(StreamInput in) throws IOException {
-            type = AliasActions.Type.fromValue(in.readByte());
-            indices = in.readStringArray();
-            aliases = in.readStringArray();
-            filter = in.readOptionalString();
-            routing = in.readOptionalString();
-            searchRouting = in.readOptionalString();
-            indexRouting = in.readOptionalString();
-            writeIndex = in.readOptionalBoolean();
-            isHidden = in.readOptionalBoolean();
-            originalAliases = in.readStringArray();
-            mustExist = in.readOptionalBoolean();
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeByte(type.value());
-            out.writeStringArray(indices);
-            out.writeStringArray(aliases);
-            out.writeOptionalString(filter);
-            out.writeOptionalString(routing);
-            out.writeOptionalString(searchRouting);
-            out.writeOptionalString(indexRouting);
-            out.writeOptionalBoolean(writeIndex);
-            out.writeOptionalBoolean(isHidden);
-            out.writeStringArray(originalAliases);
-            out.writeOptionalBoolean(mustExist);
-        }
-
-        /**
-         * Validate that the action is sane. Called when the action is added to the request because actions can be invalid while being
-         * built.
-         */
-        void validate() {
-            if (indices == null) {
-                throw new IllegalArgumentException("One of [index] or [indices] is required");
-            }
-            if (type != AliasActions.Type.REMOVE_INDEX && (aliases == null || aliases.length == 0)) {
-                throw new IllegalArgumentException("One of [alias] or [aliases] is required");
-            }
-        }
-
-        /**
-         * Type of the action to perform.
-         */
-        public AliasActions.Type actionType() {
-            return type;
-        }
-
-        @Override
-        public AliasActions indices(String... indices) {
-            if (indices == null || indices.length == 0) {
-                throw new IllegalArgumentException("[indices] can't be empty");
-            }
-            for (String index : indices) {
-                if (false == Strings.hasLength(index)) {
-                    throw new IllegalArgumentException("[indices] can't contain empty string");
-                }
-            }
-            this.indices = indices;
-            return this;
-        }
-
-        /**
-         * Set the index this action is operating on.
-         */
-        public AliasActions index(String index) {
-            if (false == Strings.hasLength(index)) {
-                throw new IllegalArgumentException("[index] can't be empty string");
-            }
-            this.indices = new String[] { index };
-            return this;
-        }
-
-        /**
-         * Aliases to use with this action.
-         */
-        public AliasActions aliases(String... aliases) {
-            if (type == AliasActions.Type.REMOVE_INDEX) {
-                throw new IllegalArgumentException("[aliases] is unsupported for [" + type + "]");
-            }
-            if (aliases == null || aliases.length == 0) {
-                throw new IllegalArgumentException("[aliases] can't be empty");
-            }
-            for (String alias : aliases) {
-                if (false == Strings.hasLength(alias)) {
-                    throw new IllegalArgumentException("[aliases] can't contain empty string");
-                }
-            }
-            this.aliases = aliases;
-            this.originalAliases = aliases;
-            return this;
-        }
-
-        /**
-         * Set the alias this action is operating on.
-         */
-        public AliasActions alias(String alias) {
-            if (type == AliasActions.Type.REMOVE_INDEX) {
-                throw new IllegalArgumentException("[alias] is unsupported for [" + type + "]");
-            }
-            if (false == Strings.hasLength(alias)) {
-                throw new IllegalArgumentException("[alias] can't be empty string");
-            }
-            this.aliases = new String[] { alias };
-            this.originalAliases = aliases;
-            return this;
-        }
-
-        /**
-         * Set the default routing.
-         */
-        public AliasActions routing(String routing) {
-            if (type != AliasActions.Type.ADD) {
-                throw new IllegalArgumentException("[routing] is unsupported for [" + type + "]");
-            }
-            this.routing = routing;
-            return this;
-        }
-
-        public String searchRouting() {
-            return searchRouting == null ? routing : searchRouting;
-        }
-
-        public AliasActions searchRouting(String searchRouting) {
-            if (type != AliasActions.Type.ADD) {
-                throw new IllegalArgumentException("[search_routing] is unsupported for [" + type + "]");
-            }
-            this.searchRouting = searchRouting;
-            return this;
-        }
-
-        public String indexRouting() {
-            return indexRouting == null ? routing : indexRouting;
-        }
-
-        public AliasActions indexRouting(String indexRouting) {
-            if (type != AliasActions.Type.ADD) {
-                throw new IllegalArgumentException("[index_routing] is unsupported for [" + type + "]");
-            }
-            this.indexRouting = indexRouting;
-            return this;
-        }
-
-        public String filter() {
-            return filter;
-        }
-
-        public AliasActions filter(String filter) {
-            if (type != AliasActions.Type.ADD) {
-                throw new IllegalArgumentException("[filter] is unsupported for [" + type + "]");
-            }
-            this.filter = filter;
-            return this;
-        }
-
-        public AliasActions filter(Map<String, Object> filter) {
-            if (filter == null || filter.isEmpty()) {
-                this.filter = null;
-                return this;
-            }
-            try {
-                XContentBuilder builder = MediaTypeRegistry.JSON.contentBuilder();
-                builder.map(filter);
-                this.filter = builder.toString();
-                return this;
-            } catch (IOException e) {
-                throw new OpenSearchGenerationException("Failed to generate [" + filter + "]", e);
-            }
-        }
-
-        public AliasActions filter(QueryBuilder filter) {
-            if (filter == null) {
-                this.filter = null;
-                return this;
-            }
-            try {
-                XContentBuilder builder = XContentFactory.jsonBuilder();
-                filter.toXContent(builder, ToXContent.EMPTY_PARAMS);
-                builder.close();
-                this.filter = builder.toString();
-                return this;
-            } catch (IOException e) {
-                throw new OpenSearchGenerationException("Failed to build json for alias request", e);
-            }
-        }
-
-        public AliasActions writeIndex(Boolean writeIndex) {
-            if (type != AliasActions.Type.ADD) {
-                throw new IllegalArgumentException("[is_write_index] is unsupported for [" + type + "]");
-            }
-            this.writeIndex = writeIndex;
-            return this;
-        }
-
-        public Boolean writeIndex() {
-            return writeIndex;
-        }
-
-        public AliasActions isHidden(Boolean isHidden) {
-            if (type != AliasActions.Type.ADD) {
-                throw new IllegalArgumentException("[" + IS_HIDDEN.getPreferredName() + "] is unsupported for [" + type + "]");
-            }
-            this.isHidden = isHidden;
-            return this;
-        }
-
-        public Boolean isHidden() {
-            return isHidden;
-        }
-
-        public AliasActions mustExist(Boolean mustExist) {
-            if (type != Type.REMOVE) {
-                throw new IllegalArgumentException("[" + MUST_EXIST.getPreferredName() + "] is unsupported for [" + type + "]");
-            }
-            this.mustExist = mustExist;
-            return this;
-        }
-
-        public Boolean mustExist() {
-            return mustExist;
-        }
-
-        @Override
-        public String[] aliases() {
-            return aliases;
-        }
-
-        @Override
-        public void replaceAliases(String... aliases) {
-            this.aliases = aliases;
-        }
-
-        @Override
-        public String[] getOriginalAliases() {
-            return originalAliases;
-        }
-
-        @Override
-        public boolean expandAliasesWildcards() {
-            // remove operations support wildcards among aliases, add operations don't
-            return type == Type.REMOVE;
-        }
-
-        @Override
-        public String[] indices() {
-            return indices;
-        }
-
-        @Override
-        public IndicesOptions indicesOptions() {
-            return INDICES_OPTIONS;
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            builder.startObject(type.fieldName);
-            if (null != indices && 0 != indices.length) {
-                builder.array(INDICES.getPreferredName(), indices);
-            }
-            if (0 != aliases.length) {
-                builder.array(ALIASES.getPreferredName(), aliases);
-            }
-            if (false == Strings.isEmpty(filter)) {
-                try (InputStream stream = new BytesArray(filter).streamInput()) {
-                    builder.rawField(FILTER.getPreferredName(), stream, MediaTypeRegistry.JSON);
-                }
-            }
-            if (false == Strings.isEmpty(routing)) {
-                builder.field(ROUTING.getPreferredName(), routing);
-            }
-            if (false == Strings.isEmpty(indexRouting)) {
-                builder.field(INDEX_ROUTING.getPreferredName(), indexRouting);
-            }
-            if (false == Strings.isEmpty(searchRouting)) {
-                builder.field(SEARCH_ROUTING.getPreferredName(), searchRouting);
-            }
-            if (null != writeIndex) {
-                builder.field(IS_WRITE_INDEX.getPreferredName(), writeIndex);
-            }
-            if (null != isHidden) {
-                builder.field(IS_HIDDEN.getPreferredName(), isHidden);
-            }
-            if (null != mustExist) {
-                builder.field(MUST_EXIST.getPreferredName(), mustExist);
-            }
-            builder.endObject();
-            builder.endObject();
-            return builder;
-        }
-
-        public static AliasActions fromXContent(XContentParser parser) throws IOException {
-            return PARSER.apply(parser, null);
-        }
-
-        @Override
-        public String toString() {
-            return "AliasActions["
-                + "type="
-                + type
-                + ",indices="
-                + Arrays.toString(indices)
-                + ",aliases="
-                + Arrays.deepToString(aliases)
-                + ",filter="
-                + filter
-                + ",routing="
-                + routing
-                + ",indexRouting="
-                + indexRouting
-                + ",searchRouting="
-                + searchRouting
-                + ",writeIndex="
-                + writeIndex
                 + ",mustExist="
-                + mustExist
-                + "]";
-        }
-
-        // equals, and hashCode implemented for easy testing of round trip
         @Override
-        public boolean equals(Object obj) {
-            if (obj == null || obj.getClass() != getClass()) {
-                return false;
+            if (null != writeIndex) {
+            ObjectParser<AliasActions, Void> parser = new ObjectParser<>(name, supplier);
+         * Build a new {@link AliasAction} to remove an index.
             }
-            AliasActions other = (AliasActions) obj;
-            return Objects.equals(type, other.type)
-                && Arrays.equals(indices, other.indices)
-                && Arrays.equals(aliases, other.aliases)
-                && Objects.equals(filter, other.filter)
-                && Objects.equals(routing, other.routing)
-                && Objects.equals(indexRouting, other.indexRouting)
-                && Objects.equals(searchRouting, other.searchRouting)
-                && Objects.equals(writeIndex, other.writeIndex)
-                && Objects.equals(isHidden, other.isHidden)
-                && Objects.equals(mustExist, other.mustExist);
         }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(type, indices, aliases, filter, routing, indexRouting, searchRouting, writeIndex, isHidden, mustExist);
-        }
-    }
-
-    public String origin() {
-        return origin;
-    }
-
-    public IndicesAliasesRequest origin(final String origin) {
-        this.origin = Objects.requireNonNull(origin);
-        return this;
-    }
-
-    /**
-     * Add the action to this request and validate it.
-     */
-    public IndicesAliasesRequest addAliasAction(AliasActions aliasAction) {
-        aliasAction.validate();
-        allAliasActions.add(aliasAction);
-        return this;
-    }
-
-    List<AliasActions> aliasActions() {
-        return this.allAliasActions;
-    }
-
-    public List<AliasActions> getAliasActions() {
-        return aliasActions();
-    }
-
-    @Override
-    public ActionRequestValidationException validate() {
-        ActionRequestValidationException validationException = null;
-        if (allAliasActions.isEmpty()) {
-            return addValidationError("Must specify at least one alias action", validationException);
-        }
-        return validationException;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeList(allAliasActions);
-        // noinspection StatementWithEmptyBody
+import org.opensearch.core.common.bytes.BytesArray;
+            if (type == AliasActions.Type.REMOVE_INDEX) {
+            Type(byte value, ParseField field) {
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                + mustExist
+        public static AliasActions remove() {
+            out.writeStringArray(indices);
+                throw new IllegalArgumentException("[filter] is unsupported for [" + type + "]");
         out.writeOptionalString(origin);
     }
-
-    public IndicesOptions indicesOptions() {
-        return INDICES_OPTIONS;
+        private Boolean mustExist;
+                }
+                return this;
     }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.startArray("actions");
-        for (AliasActions action : allAliasActions) {
-            action.toXContent(builder, params);
+                + Arrays.toString(indices)
+        private static final ParseField ALIASES = new ParseField("aliases");
+     * @opensearch.api
         }
-        builder.endArray();
-        builder.endObject();
-        return builder;
-    }
-
-    public static final ObjectParser<IndicesAliasesRequest, Void> PARSER = new ObjectParser<>("aliases", IndicesAliasesRequest::new);
-    static {
+    // indices, don't allow that no indices are resolved from wildcard expressions and resolve the
+        }
+         * Validate that the action is sane. Called when the action is added to the request because actions can be invalid while being
+ * software distributed under the License is distributed on an
+                    default:
+ * this file be licensed under the Apache-2.0 license or a
+                this.value = value;
         PARSER.declareObjectArray((request, actions) -> {
-            for (AliasActions action : actions) {
-                request.addAliasAction(action);
+            return this;
+                filter.toXContent(builder, ToXContent.EMPTY_PARAMS);
+import java.io.IOException;
+        allAliasActions.add(aliasAction);
+        public IndicesOptions indicesOptions() {
+            return aliases;
+ * A request to add/remove aliases for one or more indices.
+                return value;
+                    return parser.mapOrdered();
+     *
+ */
+        }
+            return this;
+                throw new IllegalArgumentException("[routing] is unsupported for [" + type + "]");
+            if (obj == null || obj.getClass() != getClass()) {
+        public static final ConstructingObjectParser<AliasActions, Void> PARSER = new ConstructingObjectParser<>("alias_action", a -> {
+ */
+        private static final ParseField SEARCH_ROUTING = new ParseField("search_routing", "searchRouting", "search-routing");
+            indexRouting = in.readOptionalString();
+        /**
+        });
+         */
+            if (false == Strings.hasLength(alias)) {
+    @PublicApi(since = "1.0.0")
+            return action;
+    List<AliasActions> aliasActions() {
+        public String[] aliases() {
+        return this;
+            return mustExist;
+                switch (value) {
+        }
+        }
+                + writeIndex
+    public IndicesAliasesRequest addAliasAction(AliasActions aliasAction) {
+        }
+        }
+                throw new IllegalArgumentException("One of [index] or [indices] is required");
+            return isHidden;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        }
+    public List<AliasActions> getAliasActions() {
             }
+        private String filter;
+        }
+                action.indices(indices);
+        static {
+                }
+            return parser;
+            this.writeIndex = writeIndex;
+                    if (action == null) {
+        public void writeTo(StreamOutput out) throws IOException {
+    }
+            this.aliases = new String[] { alias };
+            out.writeByte(type.value());
+    // indices options that require every specified index to exist, expand wildcards only to open
+import org.opensearch.action.support.clustermanager.AcknowledgedRequest;
+import org.opensearch.OpenSearchGenerationException;
+        @PublicApi(since = "1.0.0")
+                && Objects.equals(isHidden, other.isHidden)
+        public AliasActions alias(String alias) {
+                }
+         * Aliases to use with this action.
+import org.opensearch.common.annotation.PublicApi;
+            builder.endObject();
+                this.fieldName = field.getPreferredName();
+            }
+        /**
+            if (0 != aliases.length) {
+ * ownership. Elasticsearch licenses this file to you under
+                builder.field(INDEX_ROUTING.getPreferredName(), indexRouting);
+/*
         }, AliasActions.PARSER, new ParseField("actions"));
+        public static AliasActions removeIndex() {
+        }
+    public String origin() {
+                throw new IllegalArgumentException("[" + MUST_EXIST.getPreferredName() + "] is unsupported for [" + type + "]");
+                if (false == Strings.hasLength(index)) {
+            }
+        @Override
+                        throw new IllegalArgumentException("Too many operations declared on operation entry");
+        /**
+            }
+                action.alias(alias);
+        /**
+                        return REMOVE_INDEX;
+         */
+        return aliasActions();
+import org.opensearch.core.xcontent.ObjectParser;
+        private static final ObjectParser<AliasActions, Void> REMOVE_PARSER = parser(REMOVE.getPreferredName(), AliasActions::remove);
+        }
+                }
+            if (type != AliasActions.Type.ADD) {
+        public static AliasActions add() {
+    private List<AliasActions> allAliasActions = new ArrayList<>();
+        }
+         */
+            out.writeOptionalString(filter);
+            this.type = type;
+            ADD_PARSER.declareField(AliasActions::searchRouting, XContentParser::text, SEARCH_ROUTING, ValueType.INT);
+        private static final ParseField REMOVE = new ParseField("remove");
+            ADD_PARSER.declareField(AliasActions::indexRouting, XContentParser::text, INDEX_ROUTING, ValueType.INT);
+                }
+            for (Object o : a) {
+ * specific language governing permissions and limitations
+                builder.field(ROUTING.getPreferredName(), routing);
+ *
     }
-
-    public static IndicesAliasesRequest fromXContent(XContentParser parser) {
-        return PARSER.apply(parser, null);
+            return this;
+        public AliasActions indices(String... indices) {
+            try {
+                this.filter = builder.toString();
+            }), ALIASES);
+                + ",writeIndex="
+    public IndicesAliasesRequest(StreamInput in) throws IOException {
+            private final String fieldName;
+ * Modifications Copyright OpenSearch Contributors. See
+            parser.declareString((action, index) -> {
+        /**
+        return this.allAliasActions;
+        /**
+            return writeIndex;
+                if (action.indices() != null) {
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            return new AliasActions(AliasActions.Type.REMOVE);
+            }
+public class IndicesAliasesRequest extends AcknowledgedRequest<IndicesAliasesRequest> implements ToXContentObject, CompositeIndicesRequest {
+        public AliasActions.Type actionType() {
+                throw new IllegalArgumentException("[alias] is unsupported for [" + type + "]");
+        @Override
+            out.writeStringArray(aliases);
+        /**
+                    builder.rawField(FILTER.getPreferredName(), stream, MediaTypeRegistry.JSON);
+ *
+        @Override
+        public static AliasActions fromXContent(XContentParser parser) throws IOException {
+                return false;
     }
+    @Override
+            }
+            if (type != Type.REMOVE) {
+        /**
+            }
+            if (null != isHidden) {
+        @Override
+            // Since we need to support numbers AND strings here we have to use ValueType.INT.
+        }
+            isHidden = in.readOptionalBoolean();
+            if (type != AliasActions.Type.ADD) {
+            this.indices = indices;
+            AliasActions action = null;
+ * GitHub history for details.
+        }
+    }
+                    case 2:
+            ADD_PARSER.declareField(AliasActions::writeIndex, XContentParser::booleanValue, IS_WRITE_INDEX, ValueType.BOOLEAN);
+            builder.endObject();
+            }), INDICES);
+import java.util.Map;
+                builder.field(SEARCH_ROUTING.getPreferredName(), searchRouting);
+        allAliasActions = in.readList(AliasActions::new);
+        }
+        public String searchRouting() {
+         */
+            ADD_PARSER.declareObject(AliasActions::filter, (parser, m) -> {
+        /**
+import org.opensearch.index.query.QueryBuilder;
+        }
+import org.opensearch.core.xcontent.ObjectParser.ValueType;
+            routing = in.readOptionalString();
+            for (String index : indices) {
+            }
+            } catch (IOException e) {
+            REMOVE_INDEX((byte) 2, AliasActions.REMOVE_INDEX);
+            }
+        private static final ObjectParser<AliasActions, Void> ADD_PARSER = parser(ADD.getPreferredName(), AliasActions::add);
+        public AliasActions indexRouting(String indexRouting) {
+            ADD_PARSER.declareField(AliasActions::routing, XContentParser::text, ROUTING, ValueType.INT);
+                    } else {
+            PARSER.declareObject(optionalConstructorArg(), ADD_PARSER, ADD);
+    }
+import static org.opensearch.action.ValidateActions.addValidationError;
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+        return validationException;
+         * Read from a stream.
+            mustExist = in.readOptionalBoolean();
+            }
+                + type
+         */
+import org.opensearch.core.xcontent.XContentBuilder;
+ * compatible open source license.
+    public static final ObjectParser<IndicesAliasesRequest, Void> PARSER = new ObjectParser<>("aliases", IndicesAliasesRequest::new);
+                }
+            }, ALIAS);
+            parser.declareStringArray(fromList(String.class, (action, aliases) -> {
+            REMOVE((byte) 1, AliasActions.REMOVE),
+        public AliasActions index(String index) {
+    private String origin = "";
+            this.searchRouting = searchRouting;
+            }
+            this.aliases = aliases;
+        public void replaceAliases(String... aliases) {
+            return Objects.equals(type, other.type)
+                    case 0:
+                && Objects.equals(mustExist, other.mustExist);
+            }, FILTER);
+                    throw new IllegalArgumentException("Only one of [alias] and [aliases] is supported");
+        public String[] getOriginalAliases() {
+                return this;
+         */
+                    case 1:
+        ActionRequestValidationException validationException = null;
+                throw new IllegalArgumentException("[indices] can't be empty");
+                    throw new IllegalArgumentException("[indices] can't contain empty string");
+        @Override
+                + "type="
+    public ActionRequestValidationException validate() {
+        if (allAliasActions.isEmpty()) {
+        /**
+        public AliasActions(StreamInput in) throws IOException {
+            PARSER.declareObject(optionalConstructorArg(), REMOVE_PARSER, REMOVE);
+                    throw new IllegalArgumentException("Only one of [index] and [indices] is supported");
+         * Set the index this action is operating on.
+ */
+            if (false == Strings.isEmpty(routing)) {
+        }
+                if (action.indices() != null) {
+        public Boolean mustExist() {
+         *
+        public AliasActions filter(Map<String, Object> filter) {
+        private static final ParseField ROUTING = new ParseField("routing");
+@PublicApi(since = "1.0.0")
+         * Build a new {@link AliasAction} to remove aliases.
+                XContentBuilder builder = XContentFactory.jsonBuilder();
 }
+                return this;
+        private final AliasActions.Type type;
+        }
+            return this;
+        public AliasActions filter(String filter) {
+                && Objects.equals(indexRouting, other.indexRouting)
+                        return REMOVE;
+        public AliasActions isHidden(Boolean isHidden) {
+            if (type != AliasActions.Type.ADD) {
+            }
+        private Boolean isHidden;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.core.ParseField;
+         * Set the default routing.
+                if (action.aliases() != null && action.aliases().length != 0) {
+        public AliasActions routing(String routing) {
+                    throw new IllegalArgumentException("Only one of [index] and [indices] is supported");
+         */
+            return new AliasActions(AliasActions.Type.REMOVE_INDEX);
+            return this;
+            return this;
+    }
+            this.indices = new String[] { index };
+        }
+            }
+                this.filter = null;
+        }
+        private static final ParseField ADD = new ParseField("add");
+        // noinspection StatementWithEmptyBody
+        private String searchRouting;
+                + filter
+        out.writeList(allAliasActions);
+        public Boolean writeIndex() {
+            parser.declareStringArray(fromList(String.class, (action, indices) -> {
+            out.writeOptionalBoolean(isHidden);
+            return Objects.hash(type, indices, aliases, filter, routing, indexRouting, searchRouting, writeIndex, isHidden, mustExist);
+            this.originalAliases = aliases;
+                throw new IllegalArgumentException("[" + IS_HIDDEN.getPreferredName() + "] is unsupported for [" + type + "]");
+            }, INDEX);
+        public int hashCode() {
+                builder.array(ALIASES.getPreferredName(), aliases);
+            if (type == AliasActions.Type.REMOVE_INDEX) {
+                throw new OpenSearchGenerationException("Failed to build json for alias request", e);
+            if (false == Strings.isEmpty(filter)) {
+            if (filter == null || filter.isEmpty()) {
+        builder.endArray();
+            searchRouting = in.readOptionalString();
+            if (false == Strings.isEmpty(searchRouting)) {
+                }
+        public String indexRouting() {
+                builder.map(filter);
+import org.opensearch.core.xcontent.XContentParser;
+                + searchRouting
+                + ",routing="
+         */
+            this.routing = routing;
+import java.util.Arrays;
+            }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    public IndicesAliasesRequest origin(final String origin) {
+        }
+                    throw new IllegalArgumentException("Only one of [alias] and [aliases] is supported");
+            out.writeStringArray(originalAliases);
+                action.aliases(aliases);
+            PARSER.declareObject(optionalConstructorArg(), REMOVE_INDEX_PARSER, REMOVE_INDEX);
+        /**
+    public IndicesOptions indicesOptions() {
+            public static Type fromValue(byte value) {
+        this.origin = Objects.requireNonNull(origin);
+import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
+                action.index(index);
+        super.writeTo(out);
+                throw new IllegalArgumentException("[is_write_index] is unsupported for [" + type + "]");
+        origin = in.readOptionalString();
+ *
+    static {
+        private String[] originalAliases = Strings.EMPTY_ARRAY;
+            builder.startObject(type.fieldName);
+        }
+                this.filter = null;
+            }
+            if (aliases == null || aliases.length == 0) {
+    /**
+            return searchRouting == null ? routing : searchRouting;
+                        throw new IllegalArgumentException("No type for action [" + value + "]");
+            for (AliasActions action : actions) {
+            if (filter == null) {
+        private String[] aliases = Strings.EMPTY_ARRAY;
+        return PARSER.apply(parser, null);
+                throw new IllegalArgumentException("[aliases] can't be empty");
+                && Arrays.equals(indices, other.indices)
+        for (AliasActions action : allAliasActions) {
+import org.opensearch.cluster.metadata.AliasAction;
+import java.util.Objects;
+import org.opensearch.action.AliasesRequest;
+        @Override
+package org.opensearch.action.admin.indices.alias;
+import org.opensearch.action.CompositeIndicesRequest;
+                if (false == Strings.hasLength(alias)) {
+                + ",indexRouting="
+import org.opensearch.core.common.Strings;
+        builder.startObject();
+        }
+                && Arrays.equals(aliases, other.aliases)
+        return origin;
+            }
+         * Build a new {@link AliasAction} to add aliases.
+            if (type != AliasActions.Type.REMOVE_INDEX && (aliases == null || aliases.length == 0)) {
+            }
+            out.writeOptionalBoolean(mustExist);
+                throw new IllegalArgumentException("[aliases] is unsupported for [" + type + "]");
+ * The OpenSearch Contributors require contributions made to
+/*
+            }
+            if (indices == null || indices.length == 0) {
+            this.originalAliases = aliases;
+        aliasAction.validate();
+     */
+        private static final ParseField INDEX = new ParseField("index");
+            REMOVE_INDEX.getPreferredName(),
+                this.filter = builder.toString();
+            if (null != mustExist) {
+        private static final ObjectParser<AliasActions, Void> REMOVE_INDEX_PARSER = parser(
+        private String routing;
+            filter = in.readOptionalString();
+            if (type != AliasActions.Type.ADD) {
+        public String filter() {
+                throw new IllegalArgumentException("One of [alias] or [aliases] is required");
+        }
+            parser.declareString((action, alias) -> {
+                if (o != null) {
+            }
+    public static IndicesAliasesRequest fromXContent(XContentParser parser) {
+ *
+        private static final ParseField ALIAS = new ParseField("alias");
+                throw new IllegalArgumentException("[alias] can't be empty string");
+            out.writeOptionalBoolean(writeIndex);
+        @Override
+                    throw new ParsingException(parser.getTokenLocation(), "Problems parsing [filter]", e);
+            }
+        }
+    @Override
+            }
+            return "AliasActions["
+            return new AliasActions(AliasActions.Type.ADD);
+            }
+        }
+            if (false == Strings.hasLength(index)) {
+    }
+         * The type of request.
+        super(in);
+ */
+                XContentBuilder builder = MediaTypeRegistry.JSON.contentBuilder();
+        }
+     * Request to take one or more actions on one or more indexes and alias combinations.
+            writeIndex = in.readOptionalBoolean();
+import java.io.InputStream;
+         * Parser for any one {@link AliasAction}.
+    // expressions only against indices
+     */
+import org.opensearch.core.common.io.stream.Writeable;
+        return INDICES_OPTIONS;
+import org.opensearch.core.xcontent.ToXContent;
+            ADD_PARSER.declareField(AliasActions::isHidden, XContentParser::booleanValue, IS_HIDDEN, ValueType.BOOLEAN);
+                throw new OpenSearchGenerationException("Failed to generate [" + filter + "]", e);
+import org.opensearch.action.ActionRequestValidationException;
+        private String indexRouting;
+        }
+            out.writeOptionalString(routing);
+            type = AliasActions.Type.fromValue(in.readByte());
+            return type == Type.REMOVE;
+         * @opensearch.api
+                builder.field(IS_HIDDEN.getPreferredName(), isHidden);
+/*
+ * Licensed to Elasticsearch under one or more contributor
+        return builder;
+                + "]";
+        private static final ParseField MUST_EXIST = new ParseField("must_exist");
+import static org.opensearch.core.xcontent.ObjectParser.fromList;
+                    throw new IllegalArgumentException("[aliases] can't contain empty string");
+ * under the License.
+ * Unless required by applicable law or agreed to in writing,
+            this.indexRouting = indexRouting;
+                }
+                }
+        }
+        public enum Type {
+                + ",searchRouting="
+        }
+                && Objects.equals(searchRouting, other.searchRouting)
+    /**
+        private static final ParseField FILTER = new ParseField("filter");
+                } catch (IOException e) {
+        private static final ParseField REMOVE_INDEX = new ParseField("remove_index");
+                builder.array(INDICES.getPreferredName(), indices);
+        }
+            }
+        }
+import org.opensearch.core.common.ParsingException;
+            private final byte value;
+        public AliasActions(AliasActions.Type type) {
+        public boolean expandAliasesWildcards() {
+        public AliasActions filter(QueryBuilder filter) {
+                    }
+                + ",aliases="
+                + indexRouting
+            }
+        /**
+            return PARSER.apply(parser, null);
+import java.util.List;
+                throw new IllegalArgumentException("[index] can't be empty string");
+        }
+            // remove operations support wildcards among aliases, add operations don't
+            return this;
+            }
+        }
+        private static final ParseField IS_HIDDEN = new ParseField("is_hidden");
+            }
+            aliases = in.readStringArray();
+            if (type != AliasActions.Type.ADD) {
+    public static class AliasActions implements AliasesRequest, Writeable, ToXContentObject {
+        }
+        public AliasActions mustExist(Boolean mustExist) {
+            try {
+        }
+        private Boolean writeIndex;
+            }
+import org.opensearch.core.common.io.stream.StreamInput;
+        }
+        }
+            }
+        private String[] indices;
+        @Override
+        return this;
+            AliasActions::removeIndex
+        builder.endObject();
+         */
+            out.writeOptionalString(searchRouting);
+            return this;
+                + Arrays.deepToString(aliases)
+        public AliasActions searchRouting(String searchRouting) {
+                return this;
+        @Override
+                + ",filter="

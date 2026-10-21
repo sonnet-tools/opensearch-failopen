@@ -1,236 +1,181 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-package org.opensearch.transport.grpc.proto.request.search.aggregation.support;
-
-import org.opensearch.protobufs.FieldValue;
-import org.opensearch.protobufs.GeneralNumber;
-import org.opensearch.protobufs.InlineScript;
-import org.opensearch.protobufs.Script;
-import org.opensearch.protobufs.ValueType;
-import org.opensearch.search.aggregations.metrics.MinAggregationBuilder;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.grpc.proto.request.common.ScriptProtoUtils;
-import org.opensearch.transport.grpc.proto.response.common.FieldValueProtoUtils;
-
-/**
- * Unit tests for ValuesSourceAggregationProtoUtils.
- * Tests verify that gRPC proto conversion matches REST API behavior from ValuesSourceAggregationBuilder.
- */
+        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder()
+            false,
+                fields,
+        MinAggregationBuilder builder = new MinAggregationBuilder("test");
+            .missing(FieldValueProtoUtils.fromProto(missingValue))
+        assertNotNull(builder.script());
+        assertNotNull(builder.script());
 public class ValuesSourceAggregationProtoUtilsTests extends OpenSearchTestCase {
-
-    // ========================================
+        );
+            true,
+        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().build();
+        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().build();
+            .build();
+    }
+            .field("price")
+            UnsupportedOperationException.class,
+            true  // scriptable=true, fieldRequired=true
+/*
+        FieldValue missingValue = FieldValue.newBuilder().setGeneralNumber(GeneralNumber.newBuilder().setDoubleValue(10.5).build()).build();
+        ValuesSourceAggregationProtoUtils.declareFields(builder, fields, true, true, false, true);
+        MinAggregationBuilder builder = new MinAggregationBuilder("test");
+ * Tests verify that gRPC proto conversion matches REST API behavior from ValuesSourceAggregationBuilder.
+    }
+        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().field("price").build();
+ * Unit tests for ValuesSourceAggregationProtoUtils.
+        ValuesSourceAggregationProtoUtils.declareFields(
+            .script(ScriptProtoUtils.parseFromProtoRequest(scriptProto))
+        ValuesSourceAggregationProtoUtils.declareFields(builder, fields, true, true, false, true);
+package org.opensearch.transport.grpc.proto.request.search.aggregation.support;
+            .script(ScriptProtoUtils.parseFromProtoRequest(scriptProto))
+        assertTrue(ex.getMessage().contains("field"));
+    }
+import org.opensearch.protobufs.Script;
+import org.opensearch.protobufs.GeneralNumber;
+        );
+        IllegalArgumentException ex = expectThrows(
+                fields,
+        ValuesSourceAggregationProtoUtils.declareFields(
+        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().field("price").build();
+            true,
+        assertEquals(org.opensearch.search.aggregations.support.ValueType.STRING, builder.userValueTypeHint());
     // declareFields() tests
-    // ========================================
-
+            false,
+        MinAggregationBuilder builder = new MinAggregationBuilder("test");
+            () -> ValuesSourceAggregationProtoUtils.declareFields(
+    }
+        UnsupportedOperationException ex = expectThrows(
+        assertTrue(ex.getMessage().contains("field") || ex.getMessage().contains("script"));
+            fields,
+            true  // scriptable=true
+import org.opensearch.transport.grpc.proto.response.common.FieldValueProtoUtils;
+        assertNotNull(builder.script());
+            fields,
+    public void testDeclareFieldsThrowsWhenNotScriptableButNoField() {
+ */
+                false,
     public void testDeclareFieldsWithField() {
         MinAggregationBuilder builder = new MinAggregationBuilder("test");
-
-        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().field("price").build();
-
-        ValuesSourceAggregationProtoUtils.declareFields(builder, fields, true, true, false, true);
-
-        assertEquals("price", builder.field());
-    }
-
-    public void testDeclareFieldsWithMissing() {
         MinAggregationBuilder builder = new MinAggregationBuilder("test");
-
-        FieldValue missingValue = FieldValue.newBuilder().setGeneralNumber(GeneralNumber.newBuilder().setDoubleValue(10.5).build()).build();
-
+                true,
+import org.opensearch.search.aggregations.metrics.MinAggregationBuilder;
+        Script scriptProto = Script.newBuilder().setInline(InlineScript.newBuilder().setSource("_value * 2").build()).build();
+        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().build();
         ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder()
-            .field("price")
-            .missing(FieldValueProtoUtils.fromProto(missingValue))
-            .build();
-
-        ValuesSourceAggregationProtoUtils.declareFields(builder, fields, true, true, false, true);
-
-        assertEquals(10.5, builder.missing());
-    }
-
-    public void testDeclareFieldsWithValueType() {
-        MinAggregationBuilder builder = new MinAggregationBuilder("test");
-
-        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().field("price").valueType(ValueType.VALUE_TYPE_STRING).build();
-
-        ValuesSourceAggregationProtoUtils.declareFields(builder, fields, true, true, false, true);
-
-        assertNotNull(builder.userValueTypeHint());
-        assertEquals(org.opensearch.search.aggregations.support.ValueType.STRING, builder.userValueTypeHint());
-    }
-
-    public void testDeclareFieldsWithFormat() {
-        MinAggregationBuilder builder = new MinAggregationBuilder("test");
-
-        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().field("price").format("0.00").build();
-
-        ValuesSourceAggregationProtoUtils.declareFields(
-            builder,
-            fields,
-            true,
-            true,
-            false,
-            true  // formattable=true
         );
-
-        assertEquals("0.00", builder.format());
-    }
-
     public void testDeclareFieldsIgnoresFormatWhenNotFormattable() {
-        MinAggregationBuilder builder = new MinAggregationBuilder("test");
-
-        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().field("price").format("0.00").build();
-
-        ValuesSourceAggregationProtoUtils.declareFields(
-            builder,
-            fields,
-            true,
-            false,
-            false,
-            true  // formattable=false
         );
-
-        assertNull(builder.format());
-    }
-
-    public void testDeclareFieldsWithScript() {
-        MinAggregationBuilder builder = new MinAggregationBuilder("test");
-
-        Script scriptProto = Script.newBuilder().setInline(InlineScript.newBuilder().setSource("_value * 2").build()).build();
-
-        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder()
-            .field("price")
-            .script(ScriptProtoUtils.parseFromProtoRequest(scriptProto))
-            .build();
-
-        ValuesSourceAggregationProtoUtils.declareFields(
-            builder,
-            fields,
-            true,
-            true,
-            false,
-            true  // scriptable=true
-        );
-
-        assertNotNull(builder.script());
-    }
-
+                builder,
+                true,
     public void testDeclareFieldsWithScriptOnly() {
+            )
+            builder,
+ * The OpenSearch Contributors require contributions made to
+        assertEquals(10.5, builder.missing());
+            false,
         MinAggregationBuilder builder = new MinAggregationBuilder("test");
-
-        Script scriptProto = Script.newBuilder().setInline(InlineScript.newBuilder().setSource("_value * 2").build()).build();
-
-        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder()
-            .script(ScriptProtoUtils.parseFromProtoRequest(scriptProto))
             .build();
-
-        ValuesSourceAggregationProtoUtils.declareFields(
-            builder,
-            fields,
+ * compatible open source license.
+        );
             true,
-            true,
-            false,
-            true  // scriptable=true, fieldRequired=true
-        );
-
-        assertNotNull(builder.script());
-    }
-
-    public void testDeclareFieldsThrowsWhenNeitherFieldNorScript() {
-        MinAggregationBuilder builder = new MinAggregationBuilder("test");
-
-        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().build();
-
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,
-            () -> ValuesSourceAggregationProtoUtils.declareFields(
-                builder,
-                fields,
-                true,
-                true,
-                false,
-                true  // scriptable=true, fieldRequired=true
-            )
-        );
-
-        assertTrue(ex.getMessage().contains("field") || ex.getMessage().contains("script"));
-        assertTrue(ex.getMessage().contains("Required"));
-    }
-
-    public void testDeclareFieldsThrowsWhenNotScriptableButNoField() {
-        MinAggregationBuilder builder = new MinAggregationBuilder("test");
-
-        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().build();
-
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,
-            () -> ValuesSourceAggregationProtoUtils.declareFields(
-                builder,
-                fields,
-                false,
-                true,
-                false,
-                true  // scriptable=false, fieldRequired=true
-            )
-        );
-
-        assertTrue(ex.getMessage().contains("field"));
-        assertTrue(ex.getMessage().contains("Required"));
-    }
-
-    public void testDeclareFieldsSucceedsWhenFieldNotRequired() {
-        MinAggregationBuilder builder = new MinAggregationBuilder("test");
-
-        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().build();
-
-        ValuesSourceAggregationProtoUtils.declareFields(
-            builder,
-            fields,
-            false,
-            true,
-            false,
-            false  // scriptable=false, fieldRequired=false
-        );
-
-        // No exception = success
-    }
-
     public void testDeclareFieldsWithBothFieldAndScript() {
-        MinAggregationBuilder builder = new MinAggregationBuilder("test");
-
-        Script scriptProto = Script.newBuilder().setInline(InlineScript.newBuilder().setSource("_value * 2").build()).build();
-
-        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder()
-            .field("price")
-            .script(ScriptProtoUtils.parseFromProtoRequest(scriptProto))
-            .build();
-
-        ValuesSourceAggregationProtoUtils.declareFields(builder, fields, true, true, false, true);
-
-        assertNotNull(builder.script());
     }
-
     public void testDeclareFieldsThrowsForTimezoneAware() {
-        MinAggregationBuilder builder = new MinAggregationBuilder("test");
-
-        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().field("price").build();
-
-        UnsupportedOperationException ex = expectThrows(
-            UnsupportedOperationException.class,
-            () -> ValuesSourceAggregationProtoUtils.declareFields(
-                builder,
-                fields,
-                true,
-                true,
-                true,
+            false,
+        IllegalArgumentException ex = expectThrows(
+        Script scriptProto = Script.newBuilder().setInline(InlineScript.newBuilder().setSource("_value * 2").build()).build();
+    }
                 true  // timezoneAware=true
-            )
-        );
-
+ */
+    }
+            IllegalArgumentException.class,
+            false  // scriptable=false, fieldRequired=false
+    public void testDeclareFieldsWithFormat() {
+            true,
+    }
+                true,
+        ValuesSourceAggregationProtoUtils.declareFields(builder, fields, true, true, false, true);
+            builder,
+                true  // scriptable=true, fieldRequired=true
+import org.opensearch.protobufs.InlineScript;
+import org.opensearch.protobufs.FieldValue;
+        MinAggregationBuilder builder = new MinAggregationBuilder("test");
+        assertNull(builder.format());
         assertTrue(ex.getMessage().contains("Timezone"));
     }
+import org.opensearch.transport.grpc.proto.request.common.ScriptProtoUtils;
+ *
+                true,
+                false,
+            )
+                true,
+        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder()
+    // ========================================
+/**
+            false,
+        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder()
+                builder,
+            .script(ScriptProtoUtils.parseFromProtoRequest(scriptProto))
+            .build();
+        MinAggregationBuilder builder = new MinAggregationBuilder("test");
+        assertEquals("price", builder.field());
+            .build();
+        ValuesSourceAggregationProtoUtils.declareFields(builder, fields, true, true, false, true);
+    }
+        );
+        MinAggregationBuilder builder = new MinAggregationBuilder("test");
+            true,
+    public void testDeclareFieldsSucceedsWhenFieldNotRequired() {
+        MinAggregationBuilder builder = new MinAggregationBuilder("test");
+        assertEquals("0.00", builder.format());
+            true  // formattable=false
+        assertNotNull(builder.userValueTypeHint());
+        );
+        ValuesSourceAggregationProtoUtils.declareFields(
+            false,
+            .field("price")
+            fields,
+        ValuesSourceAggregationProtoUtils.declareFields(
+        assertTrue(ex.getMessage().contains("Required"));
+                fields,
+                true  // scriptable=false, fieldRequired=true
+        MinAggregationBuilder builder = new MinAggregationBuilder("test");
+            builder,
+ * this file be licensed under the Apache-2.0 license or a
+        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().field("price").format("0.00").build();
+        // No exception = success
+        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().field("price").format("0.00").build();
+            true  // formattable=true
+import org.opensearch.protobufs.ValueType;
+    public void testDeclareFieldsWithMissing() {
+    }
+            .field("price")
+        assertTrue(ex.getMessage().contains("Required"));
+        );
+    // ========================================
+        Script scriptProto = Script.newBuilder().setInline(InlineScript.newBuilder().setSource("_value * 2").build()).build();
 }
+            builder,
+            () -> ValuesSourceAggregationProtoUtils.declareFields(
+import org.opensearch.test.OpenSearchTestCase;
+            true,
+ * SPDX-License-Identifier: Apache-2.0
+            () -> ValuesSourceAggregationProtoUtils.declareFields(
+                false,
+            false,
+    }
+            IllegalArgumentException.class,
+            true,
+        ValuesSourceProtoFields fields = ValuesSourceProtoFields.builder().field("price").valueType(ValueType.VALUE_TYPE_STRING).build();
+            fields,
+                true,
+        MinAggregationBuilder builder = new MinAggregationBuilder("test");
+            )
+    public void testDeclareFieldsWithValueType() {
+            true,
+    public void testDeclareFieldsThrowsWhenNeitherFieldNorScript() {
+            fields,
+            builder,
+    public void testDeclareFieldsWithScript() {
+                builder,
+        ValuesSourceAggregationProtoUtils.declareFields(

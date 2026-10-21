@@ -1,339 +1,267 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.action.pagination;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.action.admin.cluster.wlm.WlmStatsResponse;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.wlm.ResourceType;
-import org.opensearch.wlm.stats.SortBy;
-import org.opensearch.wlm.stats.SortOrder;
-import org.opensearch.wlm.stats.WlmStats;
-import org.opensearch.wlm.stats.WorkloadGroupStats;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.OptionalInt;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class WlmPaginationStrategyTests extends OpenSearchTestCase {
-    private WlmStatsResponse mockResponse(int count) {
-        List<WlmStats> stats = generateRandomWlmStats(count);
-        return new WlmStatsResponse(ClusterName.DEFAULT, stats, Collections.emptyList());
-    }
-
-    public List<WlmStats> generateRandomWlmStats(int count) {
-        List<WlmStats> statsList = new ArrayList<>();
-
-        for (int i = 1; i <= count; i++) {
-            DiscoveryNode mockNode = DiscoveryNodeMock.createDummyNode(i);
-
-            WorkloadGroupStats.WorkloadGroupStatsHolder statsHolder = new WorkloadGroupStats.WorkloadGroupStatsHolder();
-            Map<String, WorkloadGroupStats.WorkloadGroupStatsHolder> workloadStats = new HashMap<>();
-            workloadStats.put("workload-group-" + i, statsHolder);
-
-            WlmStats wlmStats = new WlmStats(mockNode, new WorkloadGroupStats(workloadStats));
-            statsList.add(wlmStats);
-        }
-        return statsList;
-    }
-
-    public void testValid() {
-        int pageSize = 10;
-        String nextToken = null;
-        SortBy sortBy = SortBy.WORKLOAD_GROUP;
-        SortOrder sortOrder = SortOrder.ASC;
-
-        WlmStatsResponse response = mockResponse(5);  // Mocking a response with 5 entries
-
-        WlmPaginationStrategy paginationStrategy = new WlmPaginationStrategy(pageSize, nextToken, sortBy, sortOrder, response);
-
-        assertNotNull(paginationStrategy);
-        assertEquals(5, paginationStrategy.getRequestedEntities().size());
-    }
-
-    public void testToken() {
-        String nodeId = "node1";
-        String workloadGroupId = "workloadGroup1";
-        int workloadGroupCount = 5;
-        String currentHash = "somehashvalue";
-        String sortOrder = SortOrder.ASC.name();
-        String sortBy = SortBy.WORKLOAD_GROUP.name();
-
-        String token = WlmPaginationStrategy.WlmStrategyToken.generateEncryptedToken(
-            nodeId,
-            workloadGroupId,
-            workloadGroupCount,
-            currentHash,
-            sortOrder,
-            sortBy
+            pageSize,
+        OpenSearchParseException ex = assertThrows(OpenSearchParseException.class, () -> new WlmPaginationStrategy.WlmStrategyToken(token));
         );
-
-        assertNotNull(token);
-        assertFalse(token.isEmpty());
-    }
-
-    public void testEmpty() {
-        int pageSize = 10;
-        String nextToken = null;
-        SortBy sortBy = SortBy.WORKLOAD_GROUP;
         SortOrder sortOrder = SortOrder.ASC;
-
-        WlmStatsResponse response = mockResponse(0);
-
-        WlmPaginationStrategy paginationStrategy = new WlmPaginationStrategy(pageSize, nextToken, sortBy, sortOrder, response);
-
-        assertTrue(paginationStrategy.getRequestedEntities().isEmpty());
-    }
-
-    public void testInvalid() {
-        int pageSize = 10;
-        String nextToken = "invalid-token";
-        SortBy sortBy = SortBy.WORKLOAD_GROUP;
-        SortOrder sortOrder = SortOrder.ASC;
-
-        WlmStatsResponse response = mockResponse(5);
-
-        OpenSearchParseException thrown = assertThrows(OpenSearchParseException.class, () -> {
-            new WlmPaginationStrategy(pageSize, nextToken, sortBy, sortOrder, response);
-        });
-
-        assertEquals("Parameter [next_token] has been tainted and is incorrect. Please provide a valid [next_token].", thrown.getMessage());
-    }
-
-    public void testStart() {
-        int pageSize = 3;
-        String nextToken = null;
-        SortBy sortBy = SortBy.WORKLOAD_GROUP;
-        SortOrder sortOrder = SortOrder.ASC;
-
-        WlmStatsResponse response = mockResponse(5);
-
-        WlmPaginationStrategy paginationStrategy = new WlmPaginationStrategy(pageSize, nextToken, sortBy, sortOrder, response);
-
-        assertNotNull(paginationStrategy.getRequestedEntities());
-        assertEquals(pageSize, paginationStrategy.getRequestedEntities().size());
-    }
-
-    public void testPageLimit() {
-        int pageSize = 10;
-        String nextToken = null;
-        SortBy sortBy = SortBy.WORKLOAD_GROUP;
-        SortOrder sortOrder = SortOrder.ASC;
-
-        WlmStatsResponse response = mockResponse(5);
-
-        WlmPaginationStrategy paginationStrategy = new WlmPaginationStrategy(pageSize, nextToken, sortBy, sortOrder, response);
-
-        assertNotNull(paginationStrategy.getRequestedEntities());
-        assertEquals(5, paginationStrategy.getRequestedEntities().size());
-    }
-
-    public void testSorting() {
-        List<WlmStats> statsList = mockResponse(10).getNodes();
-
-        for (SortBy sortBy : SortBy.values()) {
-            for (SortOrder sortOrder : SortOrder.values()) {
-                WlmPaginationStrategy strategy = new WlmPaginationStrategy(
-                    5,
-                    null,
-                    sortBy,
-                    sortOrder,
-                    new WlmStatsResponse(ClusterName.DEFAULT, statsList, Collections.emptyList())
-                );
-                List<WlmStats> stats = strategy.getRequestedEntities();
-
-                assertNotNull(stats);
-                assertFalse(stats.isEmpty());
-
-                if (sortBy == SortBy.NODE_ID) {
-                    assertTrue(
-                        "Sorting should be in " + sortOrder + " order by node_id",
-                        stats.get(0).getNode().getId().compareTo(stats.get(1).getNode().getId()) <= (sortOrder == SortOrder.ASC ? 0 : 1)
-                    );
-                } else if (sortBy == SortBy.WORKLOAD_GROUP) {
-                    assertTrue(
-                        "Sorting should be in " + sortOrder + " order by workload_group",
+            pageSize,
                         stats.get(0)
-                            .getWorkloadGroupStats()
-                            .getStats()
-                            .keySet()
-                            .iterator()
+        String sortBy = SortBy.WORKLOAD_GROUP.name();
+import org.opensearch.wlm.ResourceType;
+        return statsList;
+            new WlmStatsResponse(ClusterName.DEFAULT, statsList, Collections.emptyList())
+        assertEquals("hashval", parsed.getHash());
+            SortBy.NODE_ID,
+            SortOrder.ASC,
+                WlmPaginationStrategy strategy = new WlmPaginationStrategy(
+        WlmPaginationStrategy paginationStrategy = new WlmPaginationStrategy(pageSize, nextToken, sortBy, sortOrder, response);
+        Map<String, WorkloadGroupStats.WorkloadGroupStatsHolder> groupStats = new HashMap<>();
+        assertFalse(token.isEmpty());
+        assertEquals(5, paginationStrategy.getRequestedEntities().size());
+    public void testValid() {
+    }
+    public void testPaginationWithMoreThanPageSize() {
+        SortOrder sortOrder = SortOrder.ASC;
+        WlmPaginationStrategy strategy = new WlmPaginationStrategy(
+                    sortBy,
+            response
+        String token = PaginationStrategy.encryptStringToken("node1|groupX|7|hashval|ASC|NODE_ID");
+            sortOrder,
+        when(node.getId()).thenReturn("node-1");
+    }
+    public void testStart() {
+    public void testFindIndex_found() {
+        int workloadGroupCount = 5;
+import org.opensearch.wlm.stats.WorkloadGroupStats;
+    }
+import org.opensearch.wlm.stats.SortOrder;
+        // SortOrder and SortBy are blank
+        SortBy sortBy = SortBy.WORKLOAD_GROUP;
+            "NODE_ID"
+            SortOrder.ASC,
+        String nextToken = null;
+            SortBy.NODE_ID,
+                List<WlmStats> stats = strategy.getRequestedEntities();
+    private WlmStatsResponse mockResponse(int count) {
+                    new WlmStatsResponse(ClusterName.DEFAULT, statsList, Collections.emptyList())
+        String sortOrder = SortOrder.ASC.name();
+    }
+import java.util.Collections;
+            SortBy.NODE_ID,
+        OpenSearchParseException ex = assertThrows(OpenSearchParseException.class, () -> new WlmPaginationStrategy.WlmStrategyToken(token));
+        String malformedToken = PaginationStrategy.encryptStringToken("abc|def|ghi"); // only 3 parts, not 6
+                    assertTrue(
+            WorkloadGroupStats.WorkloadGroupStatsHolder statsHolder = new WorkloadGroupStats.WorkloadGroupStatsHolder();
+            SortBy.WORKLOAD_GROUP,
+        assertEquals(5, paginationStrategy.getRequestedEntities().size());
+        assertNotNull(paginationStrategy.getRequestedEntities());
                             .next()
-                            .compareTo(
-                                stats.get(1).getWorkloadGroupStats().getStats().keySet().iterator().next()
-                            ) <= (sortOrder == SortOrder.ASC ? 0 : 1)
-                    );
-                }
-            }
+        assertTrue(ex.getMessage().contains("Invalid pagination token format"));
+        OpenSearchParseException ex = assertThrows(OpenSearchParseException.class, () -> strategy.getStartIndex(statsList, token));
+                    5,
+                            .keySet()
+        List<WlmStats> statsList = mockResponse(10).getNodes();
         }
     }
-
-    public void testPaginationWithExactPageSize() {
-        int pageSize = 3;
-        WlmStatsResponse response = mockResponse(3);
-
-        WlmPaginationStrategy paginationStrategy = new WlmPaginationStrategy(
-            pageSize,
-            null,
-            SortBy.WORKLOAD_GROUP,
-            SortOrder.ASC,
-            response
-        );
-
-        assertEquals(3, paginationStrategy.getRequestedEntities().size());
-        assertNull(paginationStrategy.getResponseToken()); // Should not have a next page
     }
-
-    public void testPaginationWithMoreThanPageSize() {
-        int pageSize = 3;
-        WlmStatsResponse response = mockResponse(6);
-
-        WlmPaginationStrategy paginationStrategy = new WlmPaginationStrategy(
-            pageSize,
-            null,
-            SortBy.WORKLOAD_GROUP,
-            SortOrder.ASC,
-            response
-        );
-
-        assertEquals(3, paginationStrategy.getRequestedEntities().size());
-        assertNotNull(paginationStrategy.getResponseToken()); // Should have a next page token
-    }
-
+        DiscoveryNode node = mock(DiscoveryNode.class);
+        WlmStatsResponse response = mockResponse(5);
     public void testTokenStructureValidationFailure() {
-        String malformedToken = PaginationStrategy.encryptStringToken("abc|def|ghi"); // only 3 parts, not 6
-
-        OpenSearchParseException ex = assertThrows(
-            OpenSearchParseException.class,
-            () -> new WlmPaginationStrategy(5, malformedToken, SortBy.NODE_ID, SortOrder.DESC, mockResponse(1))
-        );
-
-        assertTrue(ex.getMessage().contains("Invalid pagination token format"));
-    }
-
-    public void testEmptyStatsNoResponseToken() {
-        WlmStatsResponse response = new WlmStatsResponse(ClusterName.DEFAULT, new ArrayList<>(), Collections.emptyList());
-
-        WlmPaginationStrategy strategy = new WlmPaginationStrategy(10, null, SortBy.NODE_ID, SortOrder.ASC, response);
-        assertTrue(strategy.getRequestedEntities().isEmpty());
-        assertNull(strategy.getResponseToken());
-    }
-
-    public void testFindIndex_found() {
-        DiscoveryNode node = mock(DiscoveryNode.class);
-        when(node.getId()).thenReturn("node-1");
-
-        WorkloadGroupStats.ResourceStats dummyStats = new WorkloadGroupStats.ResourceStats(0.1, 2, 3);
-        Map<ResourceType, WorkloadGroupStats.ResourceStats> resourceMap = Map.of(ResourceType.CPU, dummyStats);
-
-        WorkloadGroupStats.WorkloadGroupStatsHolder holder = new WorkloadGroupStats.WorkloadGroupStatsHolder(1, 2, 3, 4, 5, 6, resourceMap);
-        Map<String, WorkloadGroupStats.WorkloadGroupStatsHolder> groupStats = new HashMap<>();
-        groupStats.put("group-1", holder);
-
-        WorkloadGroupStats stats = new WorkloadGroupStats(groupStats);
-        WlmStats wlmStats = new WlmStats(node, stats);
-
-        List<WlmStats> statsList = List.of(wlmStats);
-
-        OptionalInt result = new WlmPaginationStrategy(
-            1,
-            null,
-            SortBy.NODE_ID,
+public class WlmPaginationStrategyTests extends OpenSearchTestCase {
+        WlmStatsResponse response = mockResponse(5);  // Mocking a response with 5 entries
+                                stats.get(1).getWorkloadGroupStats().getStats().keySet().iterator().next()
             SortOrder.ASC,
-            new WlmStatsResponse(ClusterName.DEFAULT, statsList, Collections.emptyList())
-        ).findIndex(statsList, "node-1", "group-1");
-
-        assertTrue(result.isPresent());
-        assertEquals(1, result.getAsInt());
-    }
-
-    public void testFindIndex_notFound() {
-        DiscoveryNode node = mock(DiscoveryNode.class);
-        when(node.getId()).thenReturn("node-1");
-
-        Map<String, WorkloadGroupStats.WorkloadGroupStatsHolder> groupStats = new HashMap<>();
-        WorkloadGroupStats stats = new WorkloadGroupStats(groupStats);
-        WlmStats wlmStats = new WlmStats(node, stats);
-
-        List<WlmStats> statsList = List.of(wlmStats);
-
-        OptionalInt result = new WlmPaginationStrategy(
-            1,
-            null,
-            SortBy.NODE_ID,
-            SortOrder.ASC,
-            new WlmStatsResponse(ClusterName.DEFAULT, statsList, Collections.emptyList())
-        ).findIndex(statsList, "node-1", "missing-group");
-
-        assertFalse(result.isPresent());
-    }
-
-    public void testValidTokenParsing() {
-        String token = PaginationStrategy.encryptStringToken("node1|groupX|7|hashval|ASC|NODE_ID");
-        WlmPaginationStrategy.WlmStrategyToken parsed = new WlmPaginationStrategy.WlmStrategyToken(token);
-
-        assertEquals("node1", parsed.getNodeId());
+        }
         assertEquals("groupX", parsed.getWorkloadGroupId());
-        assertEquals(7, parsed.getWorkloadGroupCount());
-        assertEquals("hashval", parsed.getHash());
-        assertEquals("ASC", parsed.getSortOrder());
-        assertEquals("NODE_ID", parsed.getSortBy());
-    }
-
+        OptionalInt result = new WlmPaginationStrategy(
+        Map<ResourceType, WorkloadGroupStats.ResourceStats> resourceMap = Map.of(ResourceType.CPU, dummyStats);
+        assertNotNull(paginationStrategy.getResponseToken()); // Should have a next page token
+        List<WlmStats> stats = generateRandomWlmStats(count);
+            WlmStats wlmStats = new WlmStats(mockNode, new WorkloadGroupStats(workloadStats));
+        WlmStatsResponse response = mockResponse(3);
+        OpenSearchParseException ex = assertThrows(
     public void testInvalidTokenStructureTooShort() {
-        String token = PaginationStrategy.encryptStringToken("a|b|c");
-
-        OpenSearchParseException ex = assertThrows(OpenSearchParseException.class, () -> new WlmPaginationStrategy.WlmStrategyToken(token));
-
-        assertTrue(ex.getMessage().contains("Invalid pagination token format"));
-    }
-
-    public void testInvalidTokenEmptyFields() {
-        // SortOrder and SortBy are blank
-        String token = PaginationStrategy.encryptStringToken("node1|group1|3|hashval||");
-
-        OpenSearchParseException ex = assertThrows(OpenSearchParseException.class, () -> new WlmPaginationStrategy.WlmStrategyToken(token));
-
-        assertTrue(ex.getMessage().contains("Invalid pagination token format"));
-    }
-
-    public void testGetStartIndexInvalidTokenThrows() {
-        List<WlmStats> statsList = generateRandomWlmStats(3);
-
-        String tokenStr = WlmPaginationStrategy.WlmStrategyToken.generateEncryptedToken(
-            "nonexistentNode",
-            "nonexistentGroup",
-            3,
-            "dummyhash",
-            "ASC",
-            "NODE_ID"
-        );
-
-        WlmPaginationStrategy strategy = new WlmPaginationStrategy(
-            10,
+            workloadGroupCount,
+                    );
             null,
-            SortBy.NODE_ID,
-            SortOrder.ASC,
-            new WlmStatsResponse(ClusterName.DEFAULT, statsList, Collections.emptyList())
-        );
-
-        WlmPaginationStrategy.WlmStrategyToken token = new WlmPaginationStrategy.WlmStrategyToken(tokenStr);
-
-        OpenSearchParseException ex = assertThrows(OpenSearchParseException.class, () -> strategy.getStartIndex(statsList, token));
-        assertTrue(ex.getMessage().contains("Invalid or outdated token"));
+import org.opensearch.action.admin.cluster.wlm.WlmStatsResponse;
+import org.opensearch.cluster.node.DiscoveryNode;
+            new WlmPaginationStrategy(pageSize, nextToken, sortBy, sortOrder, response);
     }
+            null,
+    public void testEmpty() {
+        WorkloadGroupStats.WorkloadGroupStatsHolder holder = new WorkloadGroupStats.WorkloadGroupStatsHolder(1, 2, 3, 4, 5, 6, resourceMap);
+        WlmPaginationStrategy paginationStrategy = new WlmPaginationStrategy(
+        for (int i = 1; i <= count; i++) {
+            null,
+            for (SortOrder sortOrder : SortOrder.values()) {
+            workloadGroupId,
+ * The OpenSearch Contributors require contributions made to
+/*
+        assertNull(paginationStrategy.getResponseToken()); // Should not have a next page
+        assertEquals("NODE_ID", parsed.getSortBy());
+        assertEquals("Parameter [next_token] has been tainted and is incorrect. Please provide a valid [next_token].", thrown.getMessage());
+        assertTrue(paginationStrategy.getRequestedEntities().isEmpty());
+            response
+            DiscoveryNode mockNode = DiscoveryNodeMock.createDummyNode(i);
+        DiscoveryNode node = mock(DiscoveryNode.class);
+        assertNotNull(token);
+        String nextToken = null;
+        int pageSize = 10;
+    }
+ */
+            workloadStats.put("workload-group-" + i, statsHolder);
+                            .getWorkloadGroupStats()
+        String nextToken = null;
+        assertEquals(pageSize, paginationStrategy.getRequestedEntities().size());
+        assertEquals("ASC", parsed.getSortOrder());
+        WlmStatsResponse response = mockResponse(0);
+        WlmPaginationStrategy paginationStrategy = new WlmPaginationStrategy(pageSize, nextToken, sortBy, sortOrder, response);
+        SortBy sortBy = SortBy.WORKLOAD_GROUP;
+    public void testInvalidTokenEmptyFields() {
+    public List<WlmStats> generateRandomWlmStats(int count) {
+        List<WlmStats> statsList = generateRandomWlmStats(3);
+                            .iterator()
+            nodeId,
+            "nonexistentGroup",
+            SortOrder.ASC,
+        List<WlmStats> statsList = List.of(wlmStats);
+        SortBy sortBy = SortBy.WORKLOAD_GROUP;
+        for (SortBy sortBy : SortBy.values()) {
+                            .getStats()
+    }
+        WlmStats wlmStats = new WlmStats(node, stats);
+        when(node.getId()).thenReturn("node-1");
+        String token = PaginationStrategy.encryptStringToken("a|b|c");
+                }
+        assertTrue(ex.getMessage().contains("Invalid or outdated token"));
+            10,
+        assertTrue(ex.getMessage().contains("Invalid pagination token format"));
+                        "Sorting should be in " + sortOrder + " order by node_id",
+    }
+            3,
+        int pageSize = 10;
+            null,
+        assertTrue(result.isPresent());
 }
+    }
+        int pageSize = 10;
+            "nonexistentNode",
+        OptionalInt result = new WlmPaginationStrategy(
+        assertEquals(1, result.getAsInt());
+    public void testInvalid() {
+    public void testToken() {
+        groupStats.put("group-1", holder);
+import java.util.Map;
+            SortBy.WORKLOAD_GROUP,
+    }
+    public void testGetStartIndexInvalidTokenThrows() {
+    }
+                } else if (sortBy == SortBy.WORKLOAD_GROUP) {
+        ).findIndex(statsList, "node-1", "missing-group");
+    }
+        });
+        WlmStatsResponse response = mockResponse(5);
+        );
+    }
+        SortOrder sortOrder = SortOrder.ASC;
+            null,
+            currentHash,
+                );
+    public void testEmptyStatsNoResponseToken() {
+import org.opensearch.cluster.ClusterName;
+import java.util.List;
+        WlmPaginationStrategy.WlmStrategyToken token = new WlmPaginationStrategy.WlmStrategyToken(tokenStr);
+                if (sortBy == SortBy.NODE_ID) {
+                assertFalse(stats.isEmpty());
+import java.util.ArrayList;
+    public void testPaginationWithExactPageSize() {
+        WlmStatsResponse response = mockResponse(5);
+        );
+        SortBy sortBy = SortBy.WORKLOAD_GROUP;
+                assertNotNull(stats);
+        int pageSize = 3;
+        String nodeId = "node1";
+                    );
+        );
+            OpenSearchParseException.class,
+        );
+        assertEquals(3, paginationStrategy.getRequestedEntities().size());
+    public void testPageLimit() {
+ * SPDX-License-Identifier: Apache-2.0
+            1,
+        );
+            () -> new WlmPaginationStrategy(5, malformedToken, SortBy.NODE_ID, SortOrder.DESC, mockResponse(1))
+        List<WlmStats> statsList = new ArrayList<>();
+            new WlmStatsResponse(ClusterName.DEFAULT, statsList, Collections.emptyList())
+    }
+        return new WlmStatsResponse(ClusterName.DEFAULT, stats, Collections.emptyList());
+        WlmStatsResponse response = mockResponse(6);
+            "ASC",
+            new WlmStatsResponse(ClusterName.DEFAULT, statsList, Collections.emptyList())
+    }
+        assertEquals(3, paginationStrategy.getRequestedEntities().size());
+import org.opensearch.OpenSearchParseException;
+        WlmPaginationStrategy paginationStrategy = new WlmPaginationStrategy(pageSize, nextToken, sortBy, sortOrder, response);
+        int pageSize = 3;
+        WorkloadGroupStats stats = new WorkloadGroupStats(groupStats);
+        WorkloadGroupStats stats = new WorkloadGroupStats(groupStats);
+ * compatible open source license.
+        WlmStats wlmStats = new WlmStats(node, stats);
+import org.opensearch.wlm.stats.WlmStats;
+        String nextToken = null;
+                            .compareTo(
+        assertEquals(7, parsed.getWorkloadGroupCount());
+ *
+import java.util.HashMap;
+                    null,
+        String nextToken = "invalid-token";
+        int pageSize = 3;
+                    assertTrue(
+        OpenSearchParseException thrown = assertThrows(OpenSearchParseException.class, () -> {
+            }
+                            ) <= (sortOrder == SortOrder.ASC ? 0 : 1)
+        assertTrue(strategy.getRequestedEntities().isEmpty());
+        String workloadGroupId = "workloadGroup1";
+        SortOrder sortOrder = SortOrder.ASC;
+            statsList.add(wlmStats);
+    public void testFindIndex_notFound() {
+        String token = WlmPaginationStrategy.WlmStrategyToken.generateEncryptedToken(
+package org.opensearch.action.pagination;
+import static org.mockito.Mockito.mock;
+        Map<String, WorkloadGroupStats.WorkloadGroupStatsHolder> groupStats = new HashMap<>();
+                        "Sorting should be in " + sortOrder + " order by workload_group",
+        WlmPaginationStrategy paginationStrategy = new WlmPaginationStrategy(pageSize, nextToken, sortBy, sortOrder, response);
+        assertNotNull(paginationStrategy);
+        WlmPaginationStrategy strategy = new WlmPaginationStrategy(10, null, SortBy.NODE_ID, SortOrder.ASC, response);
+    public void testSorting() {
+            sortBy
+        assertFalse(result.isPresent());
+        ).findIndex(statsList, "node-1", "group-1");
+import org.opensearch.test.OpenSearchTestCase;
+            Map<String, WorkloadGroupStats.WorkloadGroupStatsHolder> workloadStats = new HashMap<>();
+    }
+        int pageSize = 10;
+        WlmPaginationStrategy paginationStrategy = new WlmPaginationStrategy(
+        assertNull(strategy.getResponseToken());
+                    sortOrder,
+        List<WlmStats> statsList = List.of(wlmStats);
+        WlmStatsResponse response = new WlmStatsResponse(ClusterName.DEFAULT, new ArrayList<>(), Collections.emptyList());
+                        stats.get(0).getNode().getId().compareTo(stats.get(1).getNode().getId()) <= (sortOrder == SortOrder.ASC ? 0 : 1)
+        String currentHash = "somehashvalue";
+        WorkloadGroupStats.ResourceStats dummyStats = new WorkloadGroupStats.ResourceStats(0.1, 2, 3);
+import static org.mockito.Mockito.when;
+import org.opensearch.wlm.stats.SortBy;
+    }
+        String token = PaginationStrategy.encryptStringToken("node1|group1|3|hashval||");
+            "dummyhash",
+        String tokenStr = WlmPaginationStrategy.WlmStrategyToken.generateEncryptedToken(
+ * this file be licensed under the Apache-2.0 license or a
+        assertEquals("node1", parsed.getNodeId());
+import java.util.OptionalInt;
+        assertNotNull(paginationStrategy.getRequestedEntities());
+        assertTrue(ex.getMessage().contains("Invalid pagination token format"));
+        SortOrder sortOrder = SortOrder.ASC;
+    public void testValidTokenParsing() {
+        SortBy sortBy = SortBy.WORKLOAD_GROUP;
+            SortOrder.ASC,
+        WlmPaginationStrategy.WlmStrategyToken parsed = new WlmPaginationStrategy.WlmStrategyToken(token);
+            1,

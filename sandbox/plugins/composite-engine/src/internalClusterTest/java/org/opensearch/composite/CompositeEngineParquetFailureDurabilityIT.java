@@ -1,175 +1,154 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
 package org.opensearch.composite;
-
-import org.opensearch.action.bulk.BulkItemResponse;
-import org.opensearch.action.bulk.BulkResponse;
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.arrow.allocator.ArrowBasePlugin;
-import org.opensearch.be.datafusion.DataFusionPlugin;
-import org.opensearch.be.lucene.LucenePlugin;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;
-import org.opensearch.test.InternalSettingsPlugin;
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.util.Collection;
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-/**
- * Validates durability of the parquet-primary / lucene-secondary composite engine across a
- * full cluster restart, when a writer is retired mid-stream because of a per-doc failure.
- *
- * <p>Three variants exercise different durability paths:
- * <ul>
- *   <li>{@code testRetiredWriterDataSurvivesRestart_translogReplayOnly} — no refresh, no
- *       flush. Restart relies entirely on translog replay rebuilding the segments.</li>
- *   <li>{@code testRetiredWriterDataSurvivesRestart_refreshOnly} — refresh (segments
- *       searchable, but no commit). Restart still has to replay the translog from the last
- *       persisted commit.</li>
- *   <li>{@code testRetiredWriterDataSurvivesRestart_refreshAndFlush} — refresh + flush
- *       (catalog snapshot committed). Restart restores from the committed snapshot;
- *       translog replay is a no-op past the commit point.</li>
- * </ul>
- *
+    @Override
  * <p>Each variant indexes N docs into writer-1, induces a per-doc parquet failure that
- * retires writer-1, indexes M more docs into writer-2, then full-restarts. After restart,
- * both formats must report exactly {@code N + M} live docs.
- *
- * <p>Cluster: 1 shard, 0 replicas (durability-only test, no replication assertions).
- */
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-public class CompositeEngineParquetFailureDurabilityIT extends RemoteStoreBaseIntegTestCase {
-
-    private static final String INDEX_NAME = "composite-parquet-durability-idx";
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Stream.concat(
-            super.nodePlugins().stream(),
-            Stream.of(
-                ArrowBasePlugin.class,
-                FailableParquetDataFormatPlugin.class,
-                CompositeDataFormatPlugin.class,
-                LucenePlugin.class,
-                DataFusionPlugin.class,
-                InternalSettingsPlugin.class
-            )
-        ).collect(Collectors.toList());
-    }
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)
-            .build();
-    }
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        FailableParquetDataFormatPlugin.clearFailure();
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        FailableParquetDataFormatPlugin.clearFailure();
-        super.tearDown();
-    }
-
-    private Settings dfaIndexSettings() {
-        return Settings.builder()
-            .put(remoteStoreIndexSettings(0, 1))
-            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
-            .put("index.pluggable.dataformat.enabled", true)
-            .put("index.pluggable.dataformat", "composite")
-            .put("index.composite.primary_data_format", "parquet")
-            .putList("index.composite.secondary_data_formats", List.of("lucene"))
-            .build();
-    }
-
-    /** Restart relies entirely on translog replay — no segments committed pre-restart. */
-    public void testRetiredWriterDataSurvivesRestart_translogReplayOnly() throws Exception {
         runDurabilityScenario(/* refreshBeforeRestart= */ false, /* flushBeforeRestart= */ false);
-    }
-
-    /** Refresh makes segments searchable but doesn't commit; translog replay still required. */
-    public void testRetiredWriterDataSurvivesRestart_refreshOnly() throws Exception {
-        runDurabilityScenario(/* refreshBeforeRestart= */ true, /* flushBeforeRestart= */ false);
-    }
-
-    /** Refresh + flush commits the catalog snapshot; restart restores from commit. */
-    public void testRetiredWriterDataSurvivesRestart_refreshAndFlush() throws Exception {
-        runDurabilityScenario(/* refreshBeforeRestart= */ true, /* flushBeforeRestart= */ true);
-    }
-
-    private void runDurabilityScenario(boolean refreshBeforeRestart, boolean flushBeforeRestart) throws Exception {
-        internalCluster().startClusterManagerOnlyNode();
-        internalCluster().startDataOnlyNode();
-        client().admin().indices().prepareCreate(INDEX_NAME).setSettings(dfaIndexSettings()).setMapping("f1", "type=keyword").get();
-        ensureGreen(INDEX_NAME);
-
-        // Phase 1: index N docs with f1 into writer-1.
-        final int initialDocs = 5;
-        for (int i = 0; i < initialDocs; i++) {
-            IndexResponse r = client().prepareIndex(INDEX_NAME).setSource("f1", "v" + i).get();
-            assertEquals(RestStatus.CREATED, r.status());
-        }
-
-        // Phase 2: suppress the writer's mapping-version updates and add f2 to the live
-        // mapping. The writer's schema stays at v1, so a doc carrying f2 trips
-        // MismatchedInputException on the parquet primary. Composite rolls back; DFAE
-        // retires writer-1 and queues its flushed segment in pendingSegments.
-        FailableParquetDataFormatPlugin.armSchemaSuppression();
-        client().admin().indices().preparePutMapping(INDEX_NAME).setSource("f2", "type=keyword").get();
-
+        super.tearDown();
         BulkResponse bulk = client().prepareBulk().add(client().prepareIndex(INDEX_NAME).setSource("f2", "value-fail")).get();
-        assertEquals(1, bulk.getItems().length);
-        BulkItemResponse failed = bulk.getItems()[0];
-        assertTrue("oversized-schema doc must surface as a per-item failure: " + failed.getFailureMessage(), failed.isFailed());
-
-        // Phase 3: drop suppression so a fresh writer reconciles to v2 cleanly. Index M
-        // more docs with f1 — these go into writer-2.
-        FailableParquetDataFormatPlugin.clearFailure();
-        final int postRetirementDocs = 3;
-        for (int i = 0; i < postRetirementDocs; i++) {
-            IndexResponse r = client().prepareIndex(INDEX_NAME).setSource("f1", "p" + i).get();
-            assertEquals(RestStatus.CREATED, r.status());
-        }
-
-        // Phase 4: optional refresh / flush before restart, per scenario.
-        if (refreshBeforeRestart) {
-            client().admin().indices().prepareRefresh(INDEX_NAME).get();
-        }
-        if (flushBeforeRestart) {
-            client().admin().indices().prepareFlush(INDEX_NAME).setForce(true).setWaitIfOngoing(true).get();
-        }
-
-        // Phase 5: full cluster restart.
-        internalCluster().fullRestart();
+ *   <li>{@code testRetiredWriterDataSurvivesRestart_refreshOnly} — refresh (segments
+ * this file be licensed under the Apache-2.0 license or a
+            .put(super.nodeSettings(nodeOrdinal))
         ensureGreen(INDEX_NAME);
-
-        // Phase 6: every successful doc must have survived. Both formats must agree —
-        // whether durability came from the committed catalog snapshot, an in-flight
-        // segment recovered via translog replay, or pure translog replay.
-        long expected = initialDocs + postRetirementDocs;
-        long parquetRows = CompositeEngineHelper.getRowCount(clusterService(), internalCluster(), INDEX_NAME, "parquet");
-        long luceneRows = CompositeEngineHelper.getRowCount(clusterService(), internalCluster(), INDEX_NAME, "lucene");
+ * <ul>
+        assertTrue("oversized-schema doc must surface as a per-item failure: " + failed.getFailureMessage(), failed.isFailed());
+        runDurabilityScenario(/* refreshBeforeRestart= */ true, /* flushBeforeRestart= */ true);
+import org.opensearch.arrow.allocator.ArrowBasePlugin;
+                FailableParquetDataFormatPlugin.class,
         assertEquals("parquet must hold exactly " + expected + " live docs after restart", expected, parquetRows);
-        assertEquals("lucene must hold exactly " + expected + " live docs after restart", expected, luceneRows);
     }
+            client().admin().indices().prepareFlush(INDEX_NAME).setForce(true).setWaitIfOngoing(true).get();
+        // mapping. The writer's schema stays at v1, so a doc carrying f2 trips
+import org.opensearch.test.InternalSettingsPlugin;
+        }
+        }
+            .put("index.pluggable.dataformat.enabled", true)
+        if (flushBeforeRestart) {
+            .put("index.composite.primary_data_format", "parquet")
+        FailableParquetDataFormatPlugin.armSchemaSuppression();
+                DataFusionPlugin.class,
+            Stream.of(
+        FailableParquetDataFormatPlugin.clearFailure();
+        FailableParquetDataFormatPlugin.clearFailure();
+ *
+    }
+    }
+ * retires writer-1, indexes M more docs into writer-2, then full-restarts. After restart,
+import java.util.List;
+        FailableParquetDataFormatPlugin.clearFailure();
+        internalCluster().fullRestart();
+            .build();
+        if (refreshBeforeRestart) {
+        // Phase 2: suppress the writer's mapping-version updates and add f2 to the live
+ *
+            .putList("index.composite.secondary_data_formats", List.of("lucene"))
+ *       searchable, but no commit). Restart still has to replay the translog from the last
+        // whether durability came from the committed catalog snapshot, an in-flight
+        long expected = initialDocs + postRetirementDocs;
+import org.opensearch.cluster.metadata.IndexMetadata;
+ * SPDX-License-Identifier: Apache-2.0
+    /** Refresh + flush commits the catalog snapshot; restart restores from commit. */
+        long parquetRows = CompositeEngineHelper.getRowCount(clusterService(), internalCluster(), INDEX_NAME, "parquet");
+        assertEquals(1, bulk.getItems().length);
+        // Phase 3: drop suppression so a fresh writer reconciles to v2 cleanly. Index M
+ * </ul>
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+ * The OpenSearch Contributors require contributions made to
+            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
+        long luceneRows = CompositeEngineHelper.getRowCount(clusterService(), internalCluster(), INDEX_NAME, "lucene");
+                CompositeDataFormatPlugin.class,
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+import org.opensearch.action.bulk.BulkItemResponse;
+ *       flush. Restart relies entirely on translog replay rebuilding the segments.</li>
 }
+            client().admin().indices().prepareRefresh(INDEX_NAME).get();
+    private static final String INDEX_NAME = "composite-parquet-durability-idx";
+        client().admin().indices().prepareCreate(INDEX_NAME).setSettings(dfaIndexSettings()).setMapping("f1", "type=keyword").get();
+        return Settings.builder()
+                InternalSettingsPlugin.class
+    @Override
+        // more docs with f1 — these go into writer-2.
+ *       translog replay is a no-op past the commit point.</li>
+    public void tearDown() throws Exception {
+import java.util.Collection;
+    protected Settings nodeSettings(int nodeOrdinal) {
+    public void setUp() throws Exception {
+ * full cluster restart, when a writer is retired mid-stream because of a per-doc failure.
+            .build();
+ * <p>Cluster: 1 shard, 0 replicas (durability-only test, no replication assertions).
+ *
+ *       (catalog snapshot committed). Restart restores from the committed snapshot;
+        assertEquals("lucene must hold exactly " + expected + " live docs after restart", expected, luceneRows);
+            assertEquals(RestStatus.CREATED, r.status());
+ *   <li>{@code testRetiredWriterDataSurvivesRestart_translogReplayOnly} — no refresh, no
+        internalCluster().startDataOnlyNode();
+ *   <li>{@code testRetiredWriterDataSurvivesRestart_refreshAndFlush} — refresh + flush
+        // Phase 1: index N docs with f1 into writer-1.
+ */
+            super.nodePlugins().stream(),
+public class CompositeEngineParquetFailureDurabilityIT extends RemoteStoreBaseIntegTestCase {
+        final int postRetirementDocs = 3;
+import java.util.stream.Collectors;
+import org.opensearch.indices.replication.common.ReplicationType;
+        client().admin().indices().preparePutMapping(INDEX_NAME).setSource("f2", "type=keyword").get();
+        // retires writer-1 and queues its flushed segment in pendingSegments.
+import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;
+    @Override
+    /** Restart relies entirely on translog replay — no segments committed pre-restart. */
+        }
+ * both formats must report exactly {@code N + M} live docs.
+        for (int i = 0; i < postRetirementDocs; i++) {
+            IndexResponse r = client().prepareIndex(INDEX_NAME).setSource("f1", "v" + i).get();
+import org.opensearch.core.rest.RestStatus;
+import org.opensearch.be.lucene.LucenePlugin;
+        // Phase 6: every successful doc must have survived. Both formats must agree —
+    /** Refresh makes segments searchable but doesn't commit; translog replay still required. */
+            assertEquals(RestStatus.CREATED, r.status());
+    }
+import java.util.stream.Stream;
+            .put(remoteStoreIndexSettings(0, 1))
+        for (int i = 0; i < initialDocs; i++) {
+        BulkItemResponse failed = bulk.getItems()[0];
+            .put("index.pluggable.dataformat", "composite")
+        ensureGreen(INDEX_NAME);
+    }
+    public void testRetiredWriterDataSurvivesRestart_refreshAndFlush() throws Exception {
+import org.opensearch.action.bulk.BulkResponse;
+import org.opensearch.common.settings.Settings;
+        // MismatchedInputException on the parquet primary. Composite rolls back; DFAE
+ * Validates durability of the parquet-primary / lucene-secondary composite engine across a
+ * compatible open source license.
+ *       persisted commit.</li>
+    private void runDurabilityScenario(boolean refreshBeforeRestart, boolean flushBeforeRestart) throws Exception {
+                ArrowBasePlugin.class,
+        final int initialDocs = 5;
+    }
+        // Phase 4: optional refresh / flush before restart, per scenario.
+    private Settings dfaIndexSettings() {
+import org.opensearch.action.index.IndexResponse;
+    }
+        internalCluster().startClusterManagerOnlyNode();
+import org.opensearch.test.OpenSearchIntegTestCase;
+/*
+        runDurabilityScenario(/* refreshBeforeRestart= */ true, /* flushBeforeRestart= */ false);
+    @Override
+            .put(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG, true)
+        return Settings.builder()
+ * <p>Three variants exercise different durability paths:
+    public void testRetiredWriterDataSurvivesRestart_refreshOnly() throws Exception {
+        super.setUp();
+            IndexResponse r = client().prepareIndex(INDEX_NAME).setSource("f1", "p" + i).get();
+        // segment recovered via translog replay, or pure translog replay.
+    }
+    public void testRetiredWriterDataSurvivesRestart_translogReplayOnly() throws Exception {
+ *
+        ).collect(Collectors.toList());
+/**
+                LucenePlugin.class,
+        }
+ */
+            )
+        // Phase 5: full cluster restart.
+        return Stream.concat(
+import org.opensearch.be.datafusion.DataFusionPlugin;
+import org.opensearch.plugins.Plugin;
+import org.opensearch.common.util.FeatureFlags;
+    }
