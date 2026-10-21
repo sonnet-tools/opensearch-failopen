@@ -1,304 +1,268 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.Query;
-import org.opensearch.common.geo.ShapeRelation;
-import org.opensearch.common.geo.SpatialStrategy;
-import org.opensearch.common.geo.builders.ShapeBuilder;
-import org.opensearch.common.geo.parsers.ShapeParser;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.geometry.Geometry;
-import org.opensearch.index.mapper.GeoShapeQueryable;
-import org.opensearch.index.mapper.MappedFieldType;
-
-import java.io.IOException;
-import java.util.Objects;
-import java.util.function.Supplier;
-
-/**
- * Derived {@link AbstractGeometryQueryBuilder} that builds a lat, lon GeoShape Query. It
- * can be applied to any {@link MappedFieldType} that implements {@link GeoShapeQueryable}.
- * <p>
- * GeoJson and WKT shape definitions are supported
- *
- * @opensearch.internal
- */
-public class GeoShapeQueryBuilder extends AbstractGeometryQueryBuilder<GeoShapeQueryBuilder> {
-    public static final String NAME = "geo_shape";
-    protected static final ParseField STRATEGY_FIELD = new ParseField("strategy");
-
-    private SpatialStrategy strategy;
-
-    /**
-     * Creates a new GeoShapeQueryBuilder whose Query will be against the given
-     * field name using the given Shape
-     *
-     * @param fieldName
-     *            Name of the field that will be queried
+    }
      * @param shape
-     *            Shape used in the Query
-     */
-    public GeoShapeQueryBuilder(String fieldName, Geometry shape) {
-        super(fieldName, shape);
-    }
-
-    /**
-     * Creates a new GeoShapeQueryBuilder whose Query will be against the given
-     * field name using the given Shape
+        );
+        }
      *
-     * @param fieldName
-     *            Name of the field that will be queried
-     * @param shape
-     *            Shape used in the Query
-     *
-     * @deprecated use {@link #GeoShapeQueryBuilder(String, Geometry)} instead
-     */
-    @Deprecated
-    public GeoShapeQueryBuilder(String fieldName, ShapeBuilder shape) {
-        super(fieldName, shape);
-    }
-
-    public GeoShapeQueryBuilder(String fieldName, Supplier<Geometry> shapeSupplier, String indexedShapeId) {
-        super(fieldName, shapeSupplier, indexedShapeId);
-    }
-
-    /**
-     * Creates a new GeoShapeQueryBuilder whose Query will be against the given
-     * field name and will use the Shape found with the given ID
-     *
-     * @param fieldName
+        GeoShapeQueryBuilder builder = (GeoShapeQueryBuilder) super.doRewrite(queryRewriteContext);
      *            Name of the field that will be filtered
-     * @param indexedShapeId
-     *            ID of the indexed Shape that will be used in the Query
-     */
-    public GeoShapeQueryBuilder(String fieldName, String indexedShapeId) {
-        super(fieldName, indexedShapeId);
-    }
-
-    public GeoShapeQueryBuilder(StreamInput in) throws IOException {
-        super(in);
-        strategy = in.readOptionalWriteable(SpatialStrategy::readFromStream);
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        super.doWriteTo(out);
-        out.writeOptionalWriteable(strategy);
-    }
-
-    @Override
-    public String getWriteableName() {
-        return NAME;
-    }
-
-    /**
-     * Sets the relation of query shape and indexed shape.
-     *
-     * @param relation relation of the shapes
-     * @return this
-     */
-    public GeoShapeQueryBuilder relation(ShapeRelation relation) {
-        if (relation == null) {
-            throw new IllegalArgumentException("No Shape Relation defined");
-        }
-        if (SpatialStrategy.TERM.equals(strategy) && relation != ShapeRelation.INTERSECTS) {
-            throw new IllegalArgumentException(
-                "current strategy ["
-                    + strategy.getStrategyName()
-                    + "] only supports relation ["
-                    + ShapeRelation.INTERSECTS.getRelationName()
-                    + "] found relation ["
-                    + relation.getRelationName()
-                    + "]"
             );
-        }
+            builder.strategy(pgsqp.strategy);
+     *            Name of the field that will be queried
+    @Override
+    @Override
+    /**
+    protected static final ParseField STRATEGY_FIELD = new ParseField("strategy");
+        } else {
+        protected boolean parseXContentField(XContentParser parser) throws IOException {
+     *            Name of the field that will be queried
+/*
+ * ownership. Elasticsearch licenses this file to you under
+ * license agreements. See the NOTICE file distributed with
+                context,
+        if (pgsqp.shape != null) {
+ * compatible open source license.
+     */
+        SpatialStrategy strategy;
         this.relation = relation;
-        return this;
-    }
-
-    /**
-     * Defines which spatial strategy will be used for building the geo shape
-     * Query. When not set, the strategy that will be used will be the one that
-     * is associated with the geo shape field in the mappings.
      *
-     * @param strategy
-     *            The spatial strategy to use for building the geo shape Query
-     * @return this
-     */
-    public GeoShapeQueryBuilder strategy(SpatialStrategy strategy) {
-        if (strategy != null && strategy == SpatialStrategy.TERM && relation != ShapeRelation.INTERSECTS) {
-            throw new IllegalArgumentException(
-                "strategy ["
-                    + strategy.getStrategyName()
-                    + "] only supports relation ["
-                    + ShapeRelation.INTERSECTS.getRelationName()
-                    + "] found relation ["
-                    + relation.getRelationName()
-                    + "]"
-            );
-        }
-        this.strategy = strategy;
-        return this;
     }
-
+                strategy = SpatialStrategy.fromString(strategyName);
     /**
-     * @return The spatial strategy to use for building the geo shape Query
+    protected void doWriteTo(StreamOutput out) throws IOException {
+ * <p>
+                this.shape = ShapeParser.parse(parser);
      */
-    public SpatialStrategy strategy() {
-        return strategy;
-    }
-
-    @Override
-    public void doShapeQueryXContent(XContentBuilder builder, Params params) throws IOException {
         if (strategy != null) {
             builder.field(STRATEGY_FIELD.getPreferredName(), strategy.getStrategyName());
-        }
-    }
-
-    @Override
-    protected GeoShapeQueryBuilder newShapeQueryBuilder(String fieldName, Geometry shape) {
-        return new GeoShapeQueryBuilder(fieldName, shape);
-    }
-
-    @Override
-    protected GeoShapeQueryBuilder newShapeQueryBuilder(String fieldName, Supplier<Geometry> shapeSupplier, String indexedShapeId) {
-        return new GeoShapeQueryBuilder(fieldName, shapeSupplier, indexedShapeId);
-    }
-
-    @Override
-    public Query buildShapeQuery(QueryShardContext context, MappedFieldType fieldType) {
-        if ((fieldType instanceof GeoShapeQueryable) == false) {
-            throw new QueryShardException(
-                context,
-                "Field [" + fieldName + "] is of unsupported type [" + fieldType.typeName() + "] for [" + NAME + "] query"
-            );
-        }
-        final GeoShapeQueryable ft = (GeoShapeQueryable) fieldType;
-        return new ConstantScoreQuery(ft.geoShapeQuery(shape, fieldName, strategy, relation, context));
-    }
-
-    @Override
-    protected boolean doEquals(GeoShapeQueryBuilder other) {
-        return super.doEquals((AbstractGeometryQueryBuilder) other) && Objects.equals(strategy, other.strategy);
-    }
-
-    @Override
-    protected int doHashCode() {
-        return Objects.hash(super.doHashCode(), strategy);
-    }
-
-    @Override
-    protected GeoShapeQueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
-        GeoShapeQueryBuilder builder = (GeoShapeQueryBuilder) super.doRewrite(queryRewriteContext);
-        builder.strategy(strategy);
-        return builder;
-    }
-
-    /**
-     * Geoshape query parameters that have been parsed from xcontent
-     *
-     * @opensearch.internal
-     */
-    private static class ParsedGeoShapeQueryParams extends ParsedGeometryQueryParams {
-        SpatialStrategy strategy;
-
-        @Override
-        protected boolean parseXContentField(XContentParser parser) throws IOException {
-            SpatialStrategy strategy;
-            if (SHAPE_FIELD.match(parser.currentName(), parser.getDeprecationHandler())) {
-                this.shape = ShapeParser.parse(parser);
-                return true;
-            } else if (STRATEGY_FIELD.match(parser.currentName(), parser.getDeprecationHandler())) {
-                String strategyName = parser.text();
-                strategy = SpatialStrategy.fromString(strategyName);
-                if (strategy == null) {
-                    throw new ParsingException(parser.getTokenLocation(), "Unknown strategy [" + strategyName + " ]");
-                } else {
-                    this.strategy = strategy;
-                }
-                return true;
-            }
-            return false;
-        }
-    }
-
     public static GeoShapeQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        ParsedGeoShapeQueryParams pgsqp = (ParsedGeoShapeQueryParams) AbstractGeometryQueryBuilder.parsedParamsFromXContent(
-            parser,
-            new ParsedGeoShapeQueryParams()
-        );
-
-        GeoShapeQueryBuilder builder;
-
-        if (pgsqp.shape != null) {
-            builder = new GeoShapeQueryBuilder(pgsqp.fieldName, pgsqp.shape);
-        } else {
-            builder = new GeoShapeQueryBuilder(pgsqp.fieldName, pgsqp.id);
-        }
-
-        if (pgsqp.index != null) {
-            builder.indexedShapeIndex(pgsqp.index);
-        }
-
-        if (pgsqp.shapePath != null) {
-            builder.indexedShapePath(pgsqp.shapePath);
-        }
-
-        if (pgsqp.shapeRouting != null) {
-            builder.indexedShapeRouting(pgsqp.shapeRouting);
-        }
-
-        if (pgsqp.relation != null) {
-            builder.relation(pgsqp.relation);
-        }
-
-        if (pgsqp.strategy != null) {
-            builder.strategy(pgsqp.strategy);
-        }
-
-        if (pgsqp.queryName != null) {
-            builder.queryName(pgsqp.queryName);
-        }
-
-        builder.boost(pgsqp.boost);
-        builder.ignoreUnmapped(pgsqp.ignoreUnmapped);
-        return builder;
+     * field name using the given Shape
+     * Defines which spatial strategy will be used for building the geo shape
+ * can be applied to any {@link MappedFieldType} that implements {@link GeoShapeQueryable}.
     }
+import org.opensearch.index.mapper.MappedFieldType;
+        if ((fieldType instanceof GeoShapeQueryable) == false) {
+        }
+    @Deprecated
+ * the Apache License, Version 2.0 (the "License"); you may
+package org.opensearch.index.query;
+import org.opensearch.common.geo.builders.ShapeBuilder;
+    public GeoShapeQueryBuilder(String fieldName, Geometry shape) {
+     * @param fieldName
+    }
+                if (strategy == null) {
+    @Override
+            builder = new GeoShapeQueryBuilder(pgsqp.fieldName, pgsqp.id);
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.common.geo.parsers.ShapeParser;
+     * field name and will use the Shape found with the given ID
+    public void doShapeQueryXContent(XContentBuilder builder, Params params) throws IOException {
+import org.opensearch.core.common.io.stream.StreamOutput;
+     * Creates a new GeoShapeQueryBuilder whose Query will be against the given
+        final GeoShapeQueryable ft = (GeoShapeQueryable) fieldType;
+     */
+                    + "]"
+    }
+        ParsedGeoShapeQueryParams pgsqp = (ParsedGeoShapeQueryParams) AbstractGeometryQueryBuilder.parsedParamsFromXContent(
+     * @opensearch.internal
+import org.opensearch.core.ParseField;
+     * Sets the relation of query shape and indexed shape.
+    public Query buildShapeQuery(QueryShardContext context, MappedFieldType fieldType) {
+    }
+import org.opensearch.core.xcontent.XContentBuilder;
+                "strategy ["
+     * @param shape
+ */
+                String strategyName = parser.text();
+        return strategy;
+        super(in);
+                    + ShapeRelation.INTERSECTS.getRelationName()
+/*
+        super(fieldName, shape);
+            if (SHAPE_FIELD.match(parser.currentName(), parser.getDeprecationHandler())) {
+    public GeoShapeQueryBuilder(StreamInput in) throws IOException {
+        builder.strategy(strategy);
+        }
+     */
+ * SPDX-License-Identifier: Apache-2.0
+    public GeoShapeQueryBuilder(String fieldName, ShapeBuilder shape) {
+ * You may obtain a copy of the License at
+            builder.relation(pgsqp.relation);
+    }
+        }
+ * under the License.
+    }
+     */
+import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.common.geo.ShapeRelation;
+        return NAME;
+     *
+        super(fieldName, shape);
+            throw new QueryShardException(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        GeoShapeQueryBuilder builder;
+import java.util.function.Supplier;
 }
+    @Override
+ *
+    /**
+        return new GeoShapeQueryBuilder(fieldName, shape);
+import org.opensearch.core.common.ParsingException;
+ * GitHub history for details.
+            );
+     * Query. When not set, the strategy that will be used will be the one that
+ */
+ * specific language governing permissions and limitations
+        }
+            throw new IllegalArgumentException(
+        if (relation == null) {
+            builder.indexedShapeIndex(pgsqp.index);
+                    + "] only supports relation ["
+            new ParsedGeoShapeQueryParams()
+                "current strategy ["
+                    + relation.getRelationName()
+    /**
+import java.util.Objects;
+            }
+                } else {
+     * is associated with the geo shape field in the mappings.
+    private static class ParsedGeoShapeQueryParams extends ParsedGeometryQueryParams {
+        if (pgsqp.queryName != null) {
+            );
+     *            The spatial strategy to use for building the geo shape Query
+                return true;
+ * not use this file except in compliance with the License.
+     * @deprecated use {@link #GeoShapeQueryBuilder(String, Geometry)} instead
+        super.doWriteTo(out);
+    @Override
+    public SpatialStrategy strategy() {
+            throw new IllegalArgumentException(
+    /**
+    public GeoShapeQueryBuilder(String fieldName, String indexedShapeId) {
+        return this;
+import java.io.IOException;
+        return builder;
+            parser,
+     * Creates a new GeoShapeQueryBuilder whose Query will be against the given
+     *
+     * Geoshape query parameters that have been parsed from xcontent
+        out.writeOptionalWriteable(strategy);
+ */
+    }
+        if (pgsqp.shapeRouting != null) {
+import org.opensearch.common.geo.SpatialStrategy;
+    @Override
+                    this.strategy = strategy;
+        super(fieldName, indexedShapeId);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+     * @param fieldName
+    }
+    }
+import org.opensearch.core.common.io.stream.StreamInput;
+ * Derived {@link AbstractGeometryQueryBuilder} that builds a lat, lon GeoShape Query. It
+            builder.queryName(pgsqp.queryName);
+            return false;
+ * this file be licensed under the Apache-2.0 license or a
+                    + ShapeRelation.INTERSECTS.getRelationName()
+            builder.indexedShapeRouting(pgsqp.shapeRouting);
+ */
+        }
+        if (pgsqp.strategy != null) {
+            } else if (STRATEGY_FIELD.match(parser.currentName(), parser.getDeprecationHandler())) {
+        builder.ignoreUnmapped(pgsqp.ignoreUnmapped);
+        if (SpatialStrategy.TERM.equals(strategy) && relation != ShapeRelation.INTERSECTS) {
+ *
+    public static final String NAME = "geo_shape";
+     * field name using the given Shape
+ * Unless required by applicable law or agreed to in writing,
+     */
+     * @param relation relation of the shapes
+                }
+     *
+        return new GeoShapeQueryBuilder(fieldName, shapeSupplier, indexedShapeId);
+                    + strategy.getStrategyName()
+                    + "]"
+        if (pgsqp.shapePath != null) {
+     * @param fieldName
+    protected GeoShapeQueryBuilder newShapeQueryBuilder(String fieldName, Geometry shape) {
+    }
+        builder.boost(pgsqp.boost);
+    public String getWriteableName() {
+    }
+import org.opensearch.geometry.Geometry;
+    }
+    public GeoShapeQueryBuilder(String fieldName, Supplier<Geometry> shapeSupplier, String indexedShapeId) {
+            builder.indexedShapePath(pgsqp.shapePath);
+     * @return this
+import org.apache.lucene.search.Query;
+        }
+    }
+/*
+    }
+        }
+        return builder;
+    private SpatialStrategy strategy;
+        }
+     *            Shape used in the Query
+        super(fieldName, shapeSupplier, indexedShapeId);
+                    + "] found relation ["
+        }
+        }
+    @Override
+ * software distributed under the License is distributed on an
+        if (strategy != null && strategy == SpatialStrategy.TERM && relation != ShapeRelation.INTERSECTS) {
+                    + relation.getRelationName()
+                return true;
+ * GeoJson and WKT shape definitions are supported
+    }
+                    + strategy.getStrategyName()
+                    + "] only supports relation ["
+    /**
+        if (pgsqp.relation != null) {
+ *
+ * this work for additional information regarding copyright
+import org.apache.lucene.search.ConstantScoreQuery;
+    @Override
+                    + "] found relation ["
+        @Override
+ * KIND, either express or implied.  See the License for the
+        }
+    public GeoShapeQueryBuilder strategy(SpatialStrategy strategy) {
+     */
+    }
+     * @return The spatial strategy to use for building the geo shape Query
+import org.opensearch.index.mapper.GeoShapeQueryable;
+            throw new IllegalArgumentException("No Shape Relation defined");
+        return this;
+    protected GeoShapeQueryBuilder newShapeQueryBuilder(String fieldName, Supplier<Geometry> shapeSupplier, String indexedShapeId) {
+ *
+        }
+        return super.doEquals((AbstractGeometryQueryBuilder) other) && Objects.equals(strategy, other.strategy);
+     * @param strategy
+            SpatialStrategy strategy;
+ * @opensearch.internal
+     *
+        this.strategy = strategy;
+    }
+                    throw new ParsingException(parser.getTokenLocation(), "Unknown strategy [" + strategyName + " ]");
+     *            ID of the indexed Shape that will be used in the Query
+        if (pgsqp.index != null) {
+     *            Shape used in the Query
+     * @param indexedShapeId
+ * The OpenSearch Contributors require contributions made to
+    protected int doHashCode() {
+        strategy = in.readOptionalWriteable(SpatialStrategy::readFromStream);
+    public GeoShapeQueryBuilder relation(ShapeRelation relation) {
+     * Creates a new GeoShapeQueryBuilder whose Query will be against the given
+            builder = new GeoShapeQueryBuilder(pgsqp.fieldName, pgsqp.shape);
+ * Licensed to Elasticsearch under one or more contributor
+     * @return this
+        return Objects.hash(super.doHashCode(), strategy);
+    @Override
+     *
+        return new ConstantScoreQuery(ft.geoShapeQuery(shape, fieldName, strategy, relation, context));
+/**
+    protected GeoShapeQueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
+    /**
+    protected boolean doEquals(GeoShapeQueryBuilder other) {
+                "Field [" + fieldName + "] is of unsupported type [" + fieldType.typeName() + "] for [" + NAME + "] query"
+public class GeoShapeQueryBuilder extends AbstractGeometryQueryBuilder<GeoShapeQueryBuilder> {

@@ -1,265 +1,241 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
+            ) {
+                    if (root.getRowCount() == 0) return null;
+    public DocumentLookupService documentLookupService(DocumentMetadataResolver resolver) {
+                // any index sort) and remaps into the Lucene secondary index, so the resolver's rowId
+                    configSegment.address(),
+            Long.MAX_VALUE
+        }
+            }
+        private final BufferAllocator sharedAllocator = new RootAllocator(64 * 1024 * 1024);
+        public String formatName() {
+            try (
+import java.util.List;
+package org.opensearch.be.datafusion;
+                    readerHandle.getPointer(),
+                MemorySegment configSegment = arena.allocate(WireConfigSnapshot.BYTE_SIZE);
+                        "Segments read together must share a directory, but generation "
+            try (
+        @Override
+                // Internal-search get-by-row-id: the native side ignores Substrait and builds a
  *
- * The OpenSearch Contributors require contributions made to
+                            + "]"
+                            }
+                DatafusionResultStream stream = new DatafusionResultStream(streamHandle, sharedAllocator, importStagingAllocator)
+    static final class NativeBridgeExecutor implements DocumentRowReader, Closeable {
+         */
+import org.apache.arrow.vector.VectorSchemaRoot;
+            long runtimePtr = dfPlugin.getDataFusionService().getNativeRuntime().get();
+                    }
+                DatafusionResultStream stream = new DatafusionResultStream(streamHandle, sharedAllocator, importStagingAllocator)
+         * {@link #close()} runs.
+        /**
+         * filter plan from {@code mode} + {@code bound} via the DataFrame API. The plan is empty,
+                    return ArrowValues.toSourceMap(root, 0);
+                    runtimePtr,
+import java.util.Map;
+import org.opensearch.analytics.spi.DocumentLookupService;
+                        for (int i = 0; i < root.getRowCount(); i++) {
+import org.apache.arrow.vector.FieldVector;
+                    mode,
+            c.close();
+            String parquetDir = parquetSet.directory();
+                    var batch = iter.next();
+                    GET_BY_ID_TABLE_ALIAS,
+ * SPDX-License-Identifier: Apache-2.0
+                    runtimePtr,
+                }
  * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
-
-package org.opensearch.be.datafusion;
-
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.FieldVector;
-import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.analytics.exec.ArrowValues;
-import org.opensearch.analytics.spi.DocumentLookupService;
-import org.opensearch.analytics.spi.DocumentRowReader;
-import org.opensearch.be.datafusion.nativelib.NativeBridge;
-import org.opensearch.be.datafusion.nativelib.ReaderHandle;
-import org.opensearch.be.datafusion.nativelib.StreamHandle;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.index.engine.exec.DocumentMetadataResolver;
-import org.opensearch.index.engine.exec.MonoFileWriterSet;
-import org.opensearch.index.engine.exec.WriterFileSet;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.Uid;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.lang.foreign.Arena;
-import java.lang.foreign.MemorySegment;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-
-/**
- * DataFusion-backed get-by-id executor. The resolver maps an {@code _id} to a
- * {@code (writerGeneration, rowId)}; this locates the parquet file in the {@link CatalogSnapshot}
- * and reads that row via a Substrait scan on the native runtime, flattening the Arrow batch into a
- * source map.
- */
-@ExperimentalApi
-public class GetService implements Closeable {
-
-    private static final Logger logger = LogManager.getLogger(GetService.class);
-
-    private final DocumentRowReader executor;
-
-    /** Production constructor. */
-    public GetService(DataFusionPlugin dfPlugin) {
-        this(new NativeBridgeExecutor(dfPlugin));
-    }
-
-    GetService(DocumentRowReader executor) {
-        this.executor = executor;
-    }
-
-    /** Returns a core-layer DocumentLookupService wired with this backend's executor and the supplied document resolver. */
-    public DocumentLookupService documentLookupService(DocumentMetadataResolver resolver) {
-        return new DocumentLookupService(resolver, executor);
-    }
-
-    @Override
-    public void close() throws IOException {
-        if (executor instanceof Closeable c) {
-            c.close();
-        }
-    }
-
-    /**
-     * Production executor driving {@link NativeBridge}. Spins up a short-lived
-     * reader scoped to one parquet file, executes the plan, imports the single resulting batch
-     * via the Arrow C Data Interface, and flattens the first row into a Java map.
-     */
-    static final class NativeBridgeExecutor implements DocumentRowReader, Closeable {
-
-        private static final String GET_BY_ID_TABLE_ALIAS = "_t";
-        private static final String PARQUET_FORMAT = "parquet";
-        /** Empty Substrait plan — the internal-search path builds its plan natively and ignores it. */
-        private static final byte[] EMPTY_PLAN = new byte[0];
-
-        private static final long GET_BY_ID_TIMEOUT_MILLIS = 30_000L;
-
-        private final DataFusionPlugin dfPlugin;
-        private final BufferAllocator sharedAllocator = new RootAllocator(64 * 1024 * 1024);
-        /**
-         * Unbounded staging child every batch of every stream this executor opens is imported onto — never
-         * one per stream, see {@code DatafusionResultStream.BatchIterator#stagingAllocator}. These streams are
-         * drained inline (not handed to the Flight transport), so it is always drained by the time
-         * {@link #close()} runs.
-         */
-        private final BufferAllocator importStagingAllocator = sharedAllocator.newChildAllocator(
-            "datafusion-get-import-staging",
-            0,
-            Long.MAX_VALUE
-        );
-
-        NativeBridgeExecutor(DataFusionPlugin dfPlugin) {
-            this.dfPlugin = dfPlugin;
-        }
-
-        @Override
-        public void close() {
-            importStagingAllocator.close();
-            sharedAllocator.close();
-        }
-
-        @Override
-        public String formatName() {
-            return PARQUET_FORMAT;
-        }
-
-        @Override
-        public Map<String, Object> executeSingleRow(long rowId, WriterFileSet parquetSet) throws IOException {
-            if (rowId < 0) {
-                throw new IllegalArgumentException("rowId must be non-negative, got: " + rowId);
-            }
-            String parquetDir = parquetSet.directory();
-            String parquetFile = parquetSet.files().iterator().next();
-            long runtimePtr = dfPlugin.getDataFusionService().getNativeRuntime().get();
-            // ReaderHandle registers the native pointer with NativeHandle so downstream
-            // validatePointer() calls in executeQueryAsync() find it in the live set.
-            MonoFileWriterSet segment = MonoFileWriterSet.of(parquetDir, parquetSet.writerGeneration(), parquetFile, 0L);
-            try (ReaderHandle readerHandle = new ReaderHandle(parquetDir, List.of(segment), null, List.of(), List.of())) {
-                long readerPtr = readerHandle.getPointer();
-                // Internal-search get-by-row-id: the native side ignores Substrait and builds a
-                // DataFrame plan filtering `__row_id__ = rowId` with pushdown enabled. __row_id__ is
-                // the physical row position the parquet writer stamps at flush (sequential 0..N after
-                // any index sort) and remaps into the Lucene secondary index, so the resolver's rowId
-                // equals the row's __row_id__. An equality predicate returns exactly that row
-                // independent of scan order and lets DataFusion prune row-groups/pages via the
-                // column's min/max statistics.
-                long streamPtr = executeInternalSearch(
-                    readerPtr,
-                    runtimePtr,
-                    NativeBridge.INTERNAL_SEARCH_BY_ROW_ID,
-                    rowId,
-                    "DataFusion get-by-id query failed"
-                );
-                return readSingleRow(streamPtr);
-            }
-        }
-
-        @Override
-        public List<Map<String, Object>> executeRowsAboveSeqNo(List<WriterFileSet> fileSets, long seqNoFloor) throws IOException {
-            if (fileSets.isEmpty()) {
-                return List.of();
-            }
-            String parquetDir = fileSets.get(0).directory();
-            List<MonoFileWriterSet> segments = new ArrayList<>(fileSets.size());
-            for (WriterFileSet parquetSet : fileSets) {
-                if (parquetDir.equals(parquetSet.directory()) == false) {
-                    throw new IllegalArgumentException(
-                        "Segments read together must share a directory, but generation "
-                            + parquetSet.writerGeneration()
-                            + " is in ["
-                            + parquetSet.directory()
-                            + "] not ["
-                            + parquetDir
-                            + "]"
-                    );
-                }
-                segments.add(MonoFileWriterSet.from(parquetSet));
-            }
-            long runtimePtr = dfPlugin.getDataFusionService().getNativeRuntime().get();
-            try (ReaderHandle readerHandle = new ReaderHandle(parquetDir, segments, null, List.of(), List.of())) {
-                long streamPtr = executeInternalSearch(
-                    readerHandle.getPointer(),
-                    runtimePtr,
-                    NativeBridge.INTERNAL_SEARCH_SEQ_NO_ABOVE,
-                    seqNoFloor,
-                    "DataFusion range query failed"
-                );
-                return readAllRows(streamPtr);
-            }
-        }
-
-        private List<Map<String, Object>> readAllRows(long streamPtr) {
-            List<Map<String, Object>> results = new ArrayList<>();
-            try (
-                StreamHandle streamHandle = new StreamHandle(streamPtr, dfPlugin.getDataFusionService().getNativeRuntime());
-                DatafusionResultStream stream = new DatafusionResultStream(streamHandle, sharedAllocator, importStagingAllocator)
-            ) {
-                var iter = stream.iterator();
-                while (iter.hasNext()) {
-                    var batch = iter.next();
-                    try (VectorSchemaRoot root = batch.getArrowRoot()) {
-                        FieldVector idVec = root.getVector(IdFieldMapper.NAME);
-                        for (int i = 0; i < root.getRowCount(); i++) {
-                            Map<String, Object> row = ArrowValues.toSourceMap(root, i);
-                            if (idVec != null && !idVec.isNull(i)) {
-                                row.put(IdFieldMapper.NAME, Uid.decodeId((byte[]) idVec.getObject(i)));
-                            }
-                            results.add(row);
-                        }
-                    }
-                }
-            }
-            return results;
-        }
-
-        private Map<String, Object> readSingleRow(long streamPtr) {
-            try (
-                StreamHandle streamHandle = new StreamHandle(streamPtr, dfPlugin.getDataFusionService().getNativeRuntime());
-                DatafusionResultStream stream = new DatafusionResultStream(streamHandle, sharedAllocator, importStagingAllocator)
-            ) {
-                var iter = stream.iterator();
-                if (!iter.hasNext()) return null;
-                var batch = iter.next();
-                try (VectorSchemaRoot root = batch.getArrowRoot()) {
-                    if (root.getRowCount() == 0) return null;
-                    return ArrowValues.toSourceMap(root, 0);
-                }
-            }
-        }
-
-        /**
-         * Runs an engine-internal point lookup through {@link NativeBridge#executeQueryAsync} and
-         * returns the result stream pointer. No Substrait is generated: the native side builds the
-         * filter plan from {@code mode} + {@code bound} via the DataFrame API. The plan is empty,
-         * but a valid {@link WireConfigSnapshot} is still required.
-         */
-        private long executeInternalSearch(long readerPtr, long runtimePtr, long mode, long bound, String errorMessage) throws IOException {
-            CompletableFuture<Long> future = new CompletableFuture<>();
-            WireConfigSnapshot configSnapshot = WireConfigSnapshot.builder(dfPlugin.getDatafusionSettings().getSnapshot()).build();
-            try (Arena arena = Arena.ofConfined()) {
-                MemorySegment configSegment = arena.allocate(WireConfigSnapshot.BYTE_SIZE);
-                configSnapshot.writeTo(configSegment);
-                NativeBridge.executeQueryAsync(
-                    readerPtr,
-                    GET_BY_ID_TABLE_ALIAS,
-                    EMPTY_PLAN,
-                    runtimePtr,
-                    0L,
-                    configSegment.address(),
-                    mode,
-                    bound,
-                    new ActionListener<>() {
-                        @Override
-                        public void onResponse(Long v) {
-                            future.complete(v);
-                        }
-
-                        @Override
-                        public void onFailure(Exception e) {
-                            future.completeExceptionally(e);
-                        }
-                    }
-                );
                 try {
-                    return future.get(GET_BY_ID_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
-                } catch (Exception e) {
-                    throw new IOException(errorMessage, e);
+        private static final String GET_BY_ID_TABLE_ALIAS = "_t";
+            List<Map<String, Object>> results = new ArrayList<>();
+ * and reads that row via a Substrait scan on the native runtime, flattening the Arrow batch into a
+        }
+        }
+                StreamHandle streamHandle = new StreamHandle(streamPtr, dfPlugin.getDataFusionService().getNativeRuntime());
+                );
+                StreamHandle streamHandle = new StreamHandle(streamPtr, dfPlugin.getDataFusionService().getNativeRuntime());
+                    "DataFusion range query failed"
+import org.opensearch.common.annotation.ExperimentalApi;
+            }
+            CompletableFuture<Long> future = new CompletableFuture<>();
+                long streamPtr = executeInternalSearch(
+import org.opensearch.index.engine.exec.MonoFileWriterSet;
+        private Map<String, Object> readSingleRow(long streamPtr) {
+    /**
+            if (rowId < 0) {
+         */
+ */
+    }
+        }
+                long streamPtr = executeInternalSearch(
+import org.opensearch.be.datafusion.nativelib.NativeBridge;
+            WireConfigSnapshot configSnapshot = WireConfigSnapshot.builder(dfPlugin.getDatafusionSettings().getSnapshot()).build();
+                try (VectorSchemaRoot root = batch.getArrowRoot()) {
+import java.util.concurrent.CompletableFuture;
+                    NativeBridge.INTERNAL_SEARCH_SEQ_NO_ABOVE,
+import java.util.concurrent.TimeUnit;
+                    new ActionListener<>() {
+            try (ReaderHandle readerHandle = new ReaderHandle(parquetDir, List.of(segment), null, List.of(), List.of())) {
+                // independent of scan order and lets DataFusion prune row-groups/pages via the
+        public List<Map<String, Object>> executeRowsAboveSeqNo(List<WriterFileSet> fileSets, long seqNoFloor) throws IOException {
+                            if (idVec != null && !idVec.isNull(i)) {
+                            Map<String, Object> row = ArrowValues.toSourceMap(root, i);
+            }
                 }
+        return new DocumentLookupService(resolver, executor);
+import org.opensearch.core.action.ActionListener;
+                throw new IllegalArgumentException("rowId must be non-negative, got: " + rowId);
+                // equals the row's __row_id__. An equality predicate returns exactly that row
+            sharedAllocator.close();
+import org.opensearch.index.engine.exec.DocumentMetadataResolver;
+            List<MonoFileWriterSet> segments = new ArrayList<>(fileSets.size());
+            ) {
+    private static final Logger logger = LogManager.getLogger(GetService.class);
+import java.io.IOException;
+                    throw new IllegalArgumentException(
+        /**
+     */
+/**
+        private final BufferAllocator importStagingAllocator = sharedAllocator.newChildAllocator(
+        private final DataFusionPlugin dfPlugin;
+            // validatePointer() calls in executeQueryAsync() find it in the live set.
+    /** Production constructor. */
+    @Override
+                configSnapshot.writeTo(configSegment);
+        @Override
+            try (ReaderHandle readerHandle = new ReaderHandle(parquetDir, segments, null, List.of(), List.of())) {
+        }
+ * The OpenSearch Contributors require contributions made to
+                    );
+import org.apache.arrow.memory.RootAllocator;
+    public GetService(DataFusionPlugin dfPlugin) {
+ * source map.
+                            + "] not ["
+                var iter = stream.iterator();
+                segments.add(MonoFileWriterSet.from(parquetSet));
+                        public void onResponse(Long v) {
+import org.apache.logging.log4j.Logger;
+        /** Empty Substrait plan — the internal-search path builds its plan natively and ignores it. */
+            return PARQUET_FORMAT;
+                    rowId,
+                NativeBridge.executeQueryAsync(
+                        }
+                        }
+import org.opensearch.index.engine.exec.WriterFileSet;
+        @Override
+                    readerPtr,
+import java.io.Closeable;
+        private List<Map<String, Object>> readAllRows(long streamPtr) {
+            MonoFileWriterSet segment = MonoFileWriterSet.of(parquetDir, parquetSet.writerGeneration(), parquetFile, 0L);
+                            + " is in ["
+                    0L,
+            importStagingAllocator.close();
+ */
+                long readerPtr = readerHandle.getPointer();
+            }
+        this.executor = executor;
+public class GetService implements Closeable {
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+            // ReaderHandle registers the native pointer with NativeHandle so downstream
+            String parquetFile = parquetSet.files().iterator().next();
+                return readSingleRow(streamPtr);
+                if (!iter.hasNext()) return null;
+import org.opensearch.be.datafusion.nativelib.ReaderHandle;
+         * but a valid {@link WireConfigSnapshot} is still required.
+                            + parquetSet.directory()
+         * Runs an engine-internal point lookup through {@link NativeBridge#executeQueryAsync} and
+                var iter = stream.iterator();
+import org.opensearch.index.mapper.Uid;
+                while (iter.hasNext()) {
+                            + parquetDir
+    }
+/*
+            0,
+            String parquetDir = fileSets.get(0).directory();
+    /** Returns a core-layer DocumentLookupService wired with this backend's executor and the supplied document resolver. */
+        @Override
+                var batch = iter.next();
+import java.util.ArrayList;
+                );
+            return results;
+import org.opensearch.index.mapper.IdFieldMapper;
+                return List.of();
+                    "DataFusion get-by-id query failed"
+    }
+                    try (VectorSchemaRoot root = batch.getArrowRoot()) {
+                    runtimePtr,
+                        FieldVector idVec = root.getVector(IdFieldMapper.NAME);
+                        public void onFailure(Exception e) {
+import org.opensearch.be.datafusion.nativelib.StreamHandle;
+        }
+        private static final byte[] EMPTY_PLAN = new byte[0];
+            }
+        private static final long GET_BY_ID_TIMEOUT_MILLIS = 30_000L;
+    }
+                    readerPtr,
+        if (executor instanceof Closeable c) {
+            }
+            if (fileSets.isEmpty()) {
+        public Map<String, Object> executeSingleRow(long rowId, WriterFileSet parquetSet) throws IOException {
+     * Production executor driving {@link NativeBridge}. Spins up a short-lived
+ * {@code (writerGeneration, rowId)}; this locates the parquet file in the {@link CatalogSnapshot}
+                    seqNoFloor,
+        this(new NativeBridgeExecutor(dfPlugin));
+                    NativeBridge.INTERNAL_SEARCH_BY_ROW_ID,
+import org.opensearch.analytics.exec.ArrowValues;
+                    bound,
+}
+                // column's min/max statistics.
+                        @Override
+            for (WriterFileSet parquetSet : fileSets) {
+    GetService(DocumentRowReader executor) {
+@ExperimentalApi
+                    throw new IOException(errorMessage, e);
+import org.apache.arrow.memory.BufferAllocator;
+                    EMPTY_PLAN,
+        }
+            long runtimePtr = dfPlugin.getDataFusionService().getNativeRuntime().get();
+         * one per stream, see {@code DatafusionResultStream.BatchIterator#stagingAllocator}. These streams are
+                return readAllRows(streamPtr);
+                } catch (Exception e) {
+import java.lang.foreign.MemorySegment;
+            }
+     * via the Arrow C Data Interface, and flattens the first row into a Java map.
+                            results.add(row);
+         * drained inline (not handed to the Flight transport), so it is always drained by the time
+                        @Override
+                        }
+ * DataFusion-backed get-by-id executor. The resolver maps an {@code _id} to a
+        NativeBridgeExecutor(DataFusionPlugin dfPlugin) {
+                // DataFrame plan filtering `__row_id__ = rowId` with pushdown enabled. __row_id__ is
+                            future.complete(v);
+                    return future.get(GET_BY_ID_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
+                );
+            this.dfPlugin = dfPlugin;
+import org.opensearch.analytics.spi.DocumentRowReader;
+        public void close() {
+                                row.put(IdFieldMapper.NAME, Uid.decodeId((byte[]) idVec.getObject(i)));
+         * Unbounded staging child every batch of every stream this executor opens is imported onto — never
+                    }
+    public void close() throws IOException {
+                if (parquetDir.equals(parquetSet.directory()) == false) {
+                // the physical row position the parquet writer stamps at flush (sequential 0..N after
+import java.lang.foreign.Arena;
+        private long executeInternalSearch(long readerPtr, long runtimePtr, long mode, long bound, String errorMessage) throws IOException {
+         * returns the result stream pointer. No Substrait is generated: the native side builds the
             }
         }
+            try (Arena arena = Arena.ofConfined()) {
     }
-
-}
+     * reader scoped to one parquet file, executes the plan, imports the single resulting batch
+                }
+                            future.completeExceptionally(e);
+        );
+    private final DocumentRowReader executor;
+        private static final String PARQUET_FORMAT = "parquet";
+                }
+        }
+import org.apache.logging.log4j.LogManager;
+            "datafusion-get-import-staging",
+                            + parquetSet.writerGeneration()

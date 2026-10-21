@@ -1,365 +1,326 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.merge;
-
-import org.opensearch.action.admin.cluster.node.stats.NodeStats;
-import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest;
-import org.opensearch.action.admin.cluster.node.stats.NodesStatsResponse;
-import org.opensearch.action.admin.indices.forcemerge.ForceMergeRequest;
-import org.opensearch.action.admin.indices.stats.CommonStats;
-import org.opensearch.action.admin.indices.stats.CommonStatsFlags;
-import org.opensearch.action.admin.indices.stats.IndexStats;
-import org.opensearch.action.admin.indices.stats.IndicesStatsRequest;
-import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
-import org.opensearch.action.admin.indices.stats.ShardStats;
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.index.merge.MergeStats;
-import org.opensearch.index.merge.MergedSegmentWarmerStats;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
+            );
+            assertTrue("Expected warmerStats.getOngoingCount >= 0, found " + stats.getOngoingCount(), stats.getOngoingCount() >= 0);
+                stats.getTotalInvocationsCount() >= 1
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
-/*
- * Integration tests asserting on MergeStats for remote store enabled domains.
- */
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-public class MergeStatsIT extends RemoteStoreBaseIntegTestCase {
-
-    private static final String INDEX_NAME = "test-idx";
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(RecoverySettings.INDICES_MERGED_SEGMENT_REPLICATION_WARMER_ENABLED_SETTING.getKey(), true)
-            .put(RecoverySettings.INDICES_REPLICATION_MERGES_WARMER_MIN_SEGMENT_SIZE_THRESHOLD_SETTING.getKey(), "1b")
-            .build();
+                }
+            }
+    public void testNodesStats() throws Exception {
+                            put("SENT", mergedSegmentWarmerStats.getTotalSentSize());
+        for (String index : indices) {
+                // nodes and updated by different callbacks in the warmer flow, so they only
     }
-
-    @Override
-    public Settings indexSettings() {
-        return Settings.builder()
-            .put(super.indexSettings())
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 2)
-            .put(ShardsLimitAllocationDecider.INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 1)
-            .put(ShardsLimitAllocationDecider.INDEX_TOTAL_SHARDS_PER_NODE_SETTING.getKey(), 2)
-            .build();
+        List<String> nodes = state.nodes().getNodes().values().stream().map(DiscoveryNode::getName).toList();
+            assertTrue("Primary shard warm invocations should be >= 1", stats.getTotalInvocationsCount() >= 1);
+        for (String node : nodes) {
+                    StatsScope type = shardStats.getShardRouting().primary() ? StatsScope.PRIMARY_SHARD : StatsScope.REPLICA_SHARD;
+            );
+            // fully completed on both sides.
+            assertEquals("Replica shard total merges should be 0", 0, stats.getTotal());
+                    assertNotNull(mergeStats);
+            assertEquals("Primary shard warm failures should be == 0", 0, stats.getTotalFailureCount());
+                    MergedSegmentWarmerStats priMergedSegmentWarmerStats = priMergeStats.getWarmerStats();
+        ClusterState state = getClusterState();
+            searchRequest.preference("_replica");
+        REPLICA_SHARD,
+            assertTrue("Total merges should be >= 1", stats.getTotal() >= 1);
+                ShardStats[] allShardStats = response.getShards();
+            indexDocs(index);
+            }
+        AGGREGATED
+        }, 30, TimeUnit.SECONDS);
+                    allNodesStats.get(0).getIndices().getMerge().getWarmerStats().getTotalSentSize(),
+                    assertMergedSegmentWarmerStats(mergedSegmentWarmerStats, StatsScope.AGGREGATED);
+        } else if (type == StatsScope.AGGREGATED) {
+            for (int i = 0; i < randomIntBetween(25, 30); i++) {
+            assertEquals("Replica shard total merge time should be 0", 0, stats.getTotalTime().getMillis());
+            assertTrue("Total stopped time should be >= 0", stats.getTotalStoppedTimeInMillis() >= 0);
+        } else if (type == StatsScope.REPLICA_SHARD) {
+                Map<String, IndexStats> allIndicesStats = response.getIndices();
+        if (count <= 0) {
+            assertTrue("Total throttled time should be >= 0", stats.getTotalThrottledTime().getMillis() >= 0);
     }
-
-    private void setup() {
+            );
+    }
+import org.opensearch.index.merge.MergedSegmentWarmerStats;
+        return indices;
         internalCluster().startNodes(2);
     }
-
-    public void testNodesStats() throws Exception {
-        setup();
-        String[] indices = setupIndices(1);
-
-        ClusterState state = getClusterState();
-        List<String> nodes = state.nodes().getNodes().values().stream().map(DiscoveryNode::getName).toList();
-
-        // Wait for the force merge itself to finish. The warmer push to the replica is triggered
-        // during the merge but its receive-side accounting on the replica completes asynchronously,
-        // so we still need to poll the cross-node counters below.
-        for (String index : indices) {
-            client().admin().indices().forceMerge(new ForceMergeRequest(index).maxNumSegments(2)).get();
-        }
-        final NodesStatsRequest nodesStatsRequest = new NodesStatsRequest("data:true");
-        nodesStatsRequest.indices(CommonStatsFlags.ALL);
-        for (String node : nodes) {
-            assertBusy(() -> {
-                NodesStatsResponse response = client(node).admin().cluster().nodesStats(nodesStatsRequest).get();
-
-                List<NodeStats> allNodesStats = response.getNodes();
-                assertEquals(2, allNodesStats.size());
-                for (NodeStats nodeStats : allNodesStats) {
-                    assertNotNull(nodeStats.getIndices());
-                    MergeStats mergeStats = nodeStats.getIndices().getMerge();
-                    assertNotNull(mergeStats);
-                    assertMergeStats(mergeStats, StatsScope.AGGREGATED);
-                    MergedSegmentWarmerStats mergedSegmentWarmerStats = mergeStats.getWarmerStats();
-                    assertNotNull(mergedSegmentWarmerStats);
-                    assertMergedSegmentWarmerStats(mergedSegmentWarmerStats, StatsScope.AGGREGATED);
-                }
-
-                // Primary-sent and replica-received byte counters are maintained on different
-                // nodes and updated by different callbacks in the warmer flow, so they only
-                // reconcile once the async warmer push has fully completed on both sides.
-                assertEquals(
-                    "Expected sent size by node 2 to be equal to received size by node 1.",
-                    allNodesStats.get(0).getIndices().getMerge().getWarmerStats().getTotalReceivedSize(),
-                    allNodesStats.get(1).getIndices().getMerge().getWarmerStats().getTotalSentSize()
-                );
-                assertEquals(
-                    "Expected sent size by node 1 to be equal to received size by node 2.",
-                    allNodesStats.get(0).getIndices().getMerge().getWarmerStats().getTotalSentSize(),
-                    allNodesStats.get(1).getIndices().getMerge().getWarmerStats().getTotalReceivedSize()
-                );
-            }, 30, TimeUnit.SECONDS);
-        }
     }
-
-    public void testShardStats() throws Exception {
-        setup();
-
-        String[] indices = setupIndices(1);
-
-        ClusterState state = getClusterState();
-        List<String> nodes = state.nodes().getNodes().values().stream().map(DiscoveryNode::getName).toList();
-
-        // Wait for the force merge itself to finish. The warmer push to the replica is triggered
-        // during the merge but its receive-side accounting on the replica completes asynchronously,
-        // so we still need to poll the cross-shard counters below.
-        for (String index : indices) {
-            client().admin().indices().forceMerge(new ForceMergeRequest(index).maxNumSegments(2)).get();
-        }
-
-        assertBusy(() -> {
-            // Re-collect stats on every attempt; the primary-sent and replica-received byte
-            // counters are maintained on different nodes and updated by different callbacks
-            // in the warmer flow, so they only reconcile once the async warmer push has
-            // fully completed on both sides.
-            Map<String, Map<String, ByteSizeValue>> shardsSentAndReceivedSize = new HashMap<>();
-
-            for (String node : nodes) {
-                IndicesStatsResponse response = client(node).admin().indices().stats(new IndicesStatsRequest()).get();
-
-                // Shard stats
-                ShardStats[] allShardStats = response.getShards();
-                assertEquals(4, allShardStats.length);
-
-                for (ShardStats shardStats : allShardStats) {
-                    StatsScope type = shardStats.getShardRouting().primary() ? StatsScope.PRIMARY_SHARD : StatsScope.REPLICA_SHARD;
-                    CommonStats commonStats = shardStats.getStats();
-                    assertNotNull(commonStats);
-                    MergeStats mergeStats = commonStats.getMerge();
-                    assertNotNull(mergeStats);
-                    assertMergeStats(mergeStats, type);
-                    MergedSegmentWarmerStats mergedSegmentWarmerStats = mergeStats.getWarmerStats();
-                    assertNotNull(mergedSegmentWarmerStats);
-                    assertMergedSegmentWarmerStats(mergedSegmentWarmerStats, type);
-
-                    String primaryOrReplica = type.equals(StatsScope.PRIMARY_SHARD) ? "[P]" : "[R]";
-                    shardsSentAndReceivedSize.put(shardStats.getShardRouting().shardId() + primaryOrReplica, new HashMap<>() {
-                        {
-                            put("RECEIVED", mergedSegmentWarmerStats.getTotalReceivedSize());
-                            put("SENT", mergedSegmentWarmerStats.getTotalSentSize());
-                        }
-                    });
-                }
-            }
-
-            for (int shard = 0; shard <= 1; shard++) {
-                assertEquals(
-                    "Expected sent size by primary shard to be equal to received size by replica shard.",
-                    shardsSentAndReceivedSize.get("[" + indices[0] + "][" + shard + "][R]").get("RECEIVED"),
-                    shardsSentAndReceivedSize.get("[" + indices[0] + "][" + shard + "][P]").get("SENT")
-                );
-                assertEquals(
-                    "Expected sent size by replica shard to be equal to received size by primary shard.",
-                    shardsSentAndReceivedSize.get("[" + indices[0] + "][" + shard + "][R]").get("SENT"),
-                    shardsSentAndReceivedSize.get("[" + indices[0] + "][" + shard + "][P]").get("RECEIVED")
-                );
-            }
-        }, 30, TimeUnit.SECONDS);
-    }
-
-    public void testIndicesStats() throws Exception {
-        setup();
-        String[] indices = setupIndices(1);
-
-        ClusterState state = getClusterState();
-        List<String> nodes = state.nodes().getNodes().values().stream().map(DiscoveryNode::getName).toList();
-
-        // Wait for the force merge itself to finish. The warmer push to the replica is triggered
-        // during the merge but its receive-side accounting on the replica completes asynchronously,
-        // so we still need to poll the aggregated warmer counters below.
-        for (String index : indices) {
-            client().admin().indices().forceMerge(new ForceMergeRequest(index).maxNumSegments(2)).get();
-        }
-
-        for (String node : nodes) {
-            assertBusy(() -> {
-                IndicesStatsResponse response = client(node).admin().indices().stats(new IndicesStatsRequest()).get();
-
-                // Shard stats
-                Map<String, IndexStats> allIndicesStats = response.getIndices();
-                assertEquals(1, allIndicesStats.size());
-                for (String index : indices) {
-                    IndexStats indexStats = allIndicesStats.get(index);
-                    CommonStats totalStats = indexStats.getTotal();
-                    CommonStats priStats = indexStats.getPrimaries();
-                    assertNotNull(totalStats);
-                    assertNotNull(priStats);
-
-                    MergeStats totalMergeStats = totalStats.getMerge();
-                    assertNotNull(totalMergeStats);
-                    MergeStats priMergeStats = priStats.getMerge();
-                    assertNotNull(priMergeStats);
-
-                    assertMergeStats(priMergeStats, StatsScope.PRIMARY_SHARD);
-                    assertMergeStats(totalMergeStats, StatsScope.AGGREGATED);
-
                     MergedSegmentWarmerStats totalMergedSegmentWarmerStats = totalMergeStats.getWarmerStats();
-                    MergedSegmentWarmerStats priMergedSegmentWarmerStats = priMergeStats.getWarmerStats();
-
-                    assertNotNull(totalMergedSegmentWarmerStats);
-                    assertNotNull(priMergedSegmentWarmerStats);
-
-                    assertMergedSegmentWarmerStats(priMergedSegmentWarmerStats, StatsScope.PRIMARY_SHARD);
-                    assertMergedSegmentWarmerStats(totalMergedSegmentWarmerStats, StatsScope.AGGREGATED);
-                }
-            }, 30, TimeUnit.SECONDS);
+                    assertNotNull(mergedSegmentWarmerStats);
+    public void testIndicesStats() throws Exception {
+import org.opensearch.test.OpenSearchIntegTestCase;
+        for (String indexName : indexNames) {
+                // Primary-sent and replica-received byte counters are maintained on different
         }
     }
-
-    private void assertMergeStats(MergeStats stats, StatsScope type) {
-        if (Arrays.asList(StatsScope.PRIMARY_SHARD, StatsScope.AGGREGATED).contains(type)) {
-            assertTrue("Current merges should be >= 0", stats.getCurrent() >= 0);
-            assertTrue("Current merge docs should be >= 0", stats.getCurrentNumDocs() >= 0);
-            assertTrue("Current merge size should be >= 0", stats.getCurrentSizeInBytes() >= 0);
-            assertTrue("Total merges should be >= 1", stats.getTotal() >= 1);
-            assertTrue("Total merge time should be >= 1ms", stats.getTotalTimeInMillis() >= 1);
-            assertTrue("Total merge time should be >= 1ms", stats.getTotalTime().getMillis() >= 1);
-            assertTrue("Total merged docs should be >= 1", stats.getTotalNumDocs() >= 1);
-            assertTrue("Total merged size should be >= 1 byte", stats.getTotalSizeInBytes() >= 1);
-            assertTrue("Total merged size should be >= 1 byte", stats.getTotalSize().getBytes() >= 1);
-            assertTrue("Total stopped time should be >= 0", stats.getTotalStoppedTimeInMillis() >= 0);
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 2)
             assertTrue("Total stopped time should be >= 0", stats.getTotalStoppedTime().getMillis() >= 0);
-            assertTrue("Total throttled time should be >= 0", stats.getTotalThrottledTime().getMillis() >= 0);
-            assertTrue("Total throttled time should be >= 0", stats.getTotalThrottledTimeInMillis() >= 0);
-        } else if (type == StatsScope.REPLICA_SHARD) {
-            assertEquals("Replica shard current merges should be 0", 0, stats.getCurrent());
-            assertEquals("Replica shard current merge docs should be 0", 0, stats.getCurrentNumDocs());
-            assertEquals("Replica shard current merge size should be 0", 0, stats.getCurrentSizeInBytes());
-            assertEquals("Replica shard total merges should be 0", 0, stats.getTotal());
-            assertEquals("Replica shard total merge time should be 0", 0, stats.getTotalTimeInMillis());
-            assertEquals("Replica shard total merge time should be 0", 0, stats.getTotalTime().getMillis());
-            assertEquals("Replica shard total merged docs should be 0", 0, stats.getTotalNumDocs());
-            assertEquals("Replica shard total merged size should be 0", 0, stats.getTotalSizeInBytes());
-            assertEquals("Replica shard total merged size should be 0", 0, stats.getTotalSize().getBytes());
-            assertEquals("Replica shard total stopped time should be 0", 0, stats.getTotalStoppedTimeInMillis());
-            assertEquals("Replica shard total stopped time should be 0", 0, stats.getTotalStoppedTime().getMillis());
-            assertEquals("Replica shard total throttled time should be 0", 0, stats.getTotalThrottledTime().getMillis());
-            assertEquals("Replica shard total throttled time should be 0", 0, stats.getTotalThrottledTimeInMillis());
-        }
-    }
-
-    private void assertMergedSegmentWarmerStats(MergedSegmentWarmerStats stats, StatsScope type) {
-        if (type == StatsScope.PRIMARY_SHARD) {
-            assertTrue("Primary shard warm invocations should be >= 1", stats.getTotalInvocationsCount() >= 1);
-            assertTrue("Primary shard warm time should be >= 1ms", stats.getTotalTime().getMillis() >= 1);
-            assertEquals("Primary shard warm failures should be == 0", 0, stats.getTotalFailureCount());
-            assertTrue("Primary shard sent size should be >= 0", stats.getTotalSentSize().getBytes() >= 0);
-            assertEquals("Primary shard received size should be 0", 0, stats.getTotalReceivedSize().getBytes());
-            assertTrue("Primary shard send time should be >= 0", stats.getTotalSendTime().millis() >= 0);
-            assertEquals("Primary shard receive time should be 0", 0, stats.getTotalReceiveTime().millis());
-            assertTrue("Primary shard ongoing warms should be >= 0", stats.getOngoingCount() >= 0);
-        } else if (type == StatsScope.REPLICA_SHARD) {
-            assertEquals("Replica shard warm invocations should be 0", 0, stats.getTotalInvocationsCount());
-            assertEquals("Replica shard warm time should be 0", 0, stats.getTotalTime().getMillis());
-            assertEquals("Replica shard warm failures should be 0", 0, stats.getTotalFailureCount());
-            assertEquals("Replica shard sent size should be 0", 0, stats.getTotalSentSize().getBytes());
-            assertTrue("Replica shard received size should be >= 1", stats.getTotalReceivedSize().getBytes() >= 1);
+            SearchRequest searchRequest = new SearchRequest(index);
+public class MergeStatsIT extends RemoteStoreBaseIntegTestCase {
             assertEquals("Replica shard send time should be 0", 0, stats.getTotalSendTime().millis());
-            assertTrue("Replica shard receive time should be >= 1ms", stats.getTotalReceiveTime().millis() >= 1);
-            assertEquals("Replica shard ongoing warms should be 0", 0, stats.getOngoingCount());
-        } else if (type == StatsScope.AGGREGATED) {
-            assertTrue("Expected warmerStats.getOngoingCount >= 0, found " + stats.getOngoingCount(), stats.getOngoingCount() >= 0);
+            assertEquals("Replica shard current merge docs should be 0", 0, stats.getCurrentNumDocs());
+        // Wait for the force merge itself to finish. The warmer push to the replica is triggered
+import org.opensearch.index.merge.MergeStats;
+            assertEquals("Replica shard total merge time should be 0", 0, stats.getTotalTimeInMillis());
+                for (String index : indices) {
+ * Integration tests asserting on MergeStats for remote store enabled domains.
+                    "Expected sent size by replica shard to be equal to received size by primary shard.",
+    public void testShardStats() throws Exception {
+                );
+        for (String index : indices) {
+                    });
+        nodesStatsRequest.indices(CommonStatsFlags.ALL);
+            assertEquals("Replica shard total merged size should be 0", 0, stats.getTotalSizeInBytes());
+            assertEquals("Replica shard warm invocations should be 0", 0, stats.getTotalInvocationsCount());
+    protected Settings nodeSettings(int nodeOrdinal) {
+                assertTrue("Docs should be searchable on replicas", totalDocs > 0);
+                    String primaryOrReplica = type.equals(StatsScope.PRIMARY_SHARD) ? "[P]" : "[R]";
+                assertEquals(
+import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest;
             assertTrue(
-                "Expected warmerStats.getTotalTime >= 1, found " + stats.getTotalTime().millis(),
-                stats.getTotalTime().getMillis() >= 1
+import java.util.HashMap;
+                    assertNotNull(totalStats);
+                    assertNotNull(priMergedSegmentWarmerStats);
+        }
+                    "Expected sent size by primary shard to be equal to received size by replica shard.",
+        if (Arrays.asList(StatsScope.PRIMARY_SHARD, StatsScope.AGGREGATED).contains(type)) {
+                "Expected warmerStats.getTotalSentSize >= 1, found " + stats.getTotalSentSize().getBytes(),
+        return Settings.builder()
+            assertEquals("Replica shard current merges should be 0", 0, stats.getCurrent());
+                    refresh(indexName);
+                stats.getTotalSentSize().getBytes() >= 1
+        }
+                int numberOfOperations = randomIntBetween(25, 30);
+            // counters are maintained on different nodes and updated by different callbacks
+                    CommonStats priStats = indexStats.getPrimaries();
+                // Shard stats
+                "Expected warmerStats.getTotalReceivedSize >= 1, found " + stats.getTotalReceivedSize().getBytes(),
+                stats.getTotalReceiveTime().getMillis() >= 1
+                    assertMergeStats(mergeStats, StatsScope.AGGREGATED);
+                assertEquals(4, allShardStats.length);
+        List<String> nodes = state.nodes().getNodes().values().stream().map(DiscoveryNode::getName).toList();
+            }
+                        {
+    @Override
+                            put("RECEIVED", mergedSegmentWarmerStats.getTotalReceivedSize());
+            client().admin().indices().forceMerge(new ForceMergeRequest(index).maxNumSegments(2)).get();
+import java.util.List;
+        ClusterState state = getClusterState();
+                }
+                );
+                // reconcile once the async warmer push has fully completed on both sides.
+        String[] indices = setupIndices(1);
+                "Expected warmerStats.getTotalReceiveTime >= 1, found " + stats.getTotalReceiveTime().getMillis(),
+            .put(RecoverySettings.INDICES_MERGED_SEGMENT_REPLICATION_WARMER_ENABLED_SETTING.getKey(), true)
+                assertEquals(2, allNodesStats.size());
+                // Shard stats
+/*
+                    MergeStats mergeStats = nodeStats.getIndices().getMerge();
+                    MergeStats totalMergeStats = totalStats.getMerge();
+        String[] indices = new String[count];
+            .put(super.nodeSettings(nodeOrdinal))
+import org.opensearch.action.admin.indices.stats.CommonStatsFlags;
+            .put(ShardsLimitAllocationDecider.INDEX_TOTAL_SHARDS_PER_NODE_SETTING.getKey(), 2)
+        // Wait for the force merge itself to finish. The warmer push to the replica is triggered
+                        }
+import org.opensearch.action.admin.cluster.node.stats.NodeStats;
+                    MergedSegmentWarmerStats mergedSegmentWarmerStats = mergeStats.getWarmerStats();
+                assertEquals(
+                "Expected warmerStats.getTotalInvocationsCount >= 1, found " + stats.getTotalInvocationsCount(),
+        }
+import org.opensearch.indices.recovery.RecoverySettings;
+            assertEquals("Replica shard total stopped time should be 0", 0, stats.getTotalStoppedTime().getMillis());
+        ensureGreen(indices);
+                    assertNotNull(priMergeStats);
+ * The OpenSearch Contributors require contributions made to
+                    allNodesStats.get(1).getIndices().getMerge().getWarmerStats().getTotalReceivedSize()
+                IndicesStatsResponse response = client(node).admin().indices().stats(new IndicesStatsRequest()).get();
+    private void waitForDocsOnReplicas(String... indices) throws Exception {
+import org.opensearch.action.admin.cluster.node.stats.NodesStatsResponse;
+        waitForDocsOnReplicas(indices);
+            assertTrue("Primary shard ongoing warms should be >= 0", stats.getOngoingCount() >= 0);
+            client().admin().indices().forceMerge(new ForceMergeRequest(index).maxNumSegments(2)).get();
+import org.opensearch.common.settings.Settings;
+        for (String index : indices) {
+        // so we still need to poll the aggregated warmer counters below.
+            assertTrue("Current merge docs should be >= 0", stats.getCurrentNumDocs() >= 0);
+        }
+            .build();
+    private void assertMergeStats(MergeStats stats, StatsScope type) {
+            assertBusy(() -> {
+                    allNodesStats.get(0).getIndices().getMerge().getWarmerStats().getTotalReceivedSize(),
+            // in the warmer flow, so they only reconcile once the async warmer push has
+        final NodesStatsRequest nodesStatsRequest = new NodesStatsRequest("data:true");
+                } else {
+            assertTrue("Current merges should be >= 0", stats.getCurrent() >= 0);
+        }
+ * this file be licensed under the Apache-2.0 license or a
+        setup();
+            assertEquals("Replica shard total merged size should be 0", 0, stats.getTotalSize().getBytes());
+        String[] indices = setupIndices(1);
+            .build();
+                    assertMergedSegmentWarmerStats(mergedSegmentWarmerStats, type);
+    @Override
+    private void setup() {
+ */
+                    assertNotNull(mergeStats);
+import org.opensearch.cluster.ClusterState;
+                    assertMergedSegmentWarmerStats(totalMergedSegmentWarmerStats, StatsScope.AGGREGATED);
+            assertTrue("Replica shard received size should be >= 1", stats.getTotalReceivedSize().getBytes() >= 1);
+                    IndexStats indexStats = allIndicesStats.get(index);
+        // so we still need to poll the cross-node counters below.
+            // Re-collect stats on every attempt; the primary-sent and replica-received byte
+        setup();
+                    shardsSentAndReceivedSize.get("[" + indices[0] + "][" + shard + "][R]").get("RECEIVED"),
+ * compatible open source license.
+import org.opensearch.action.admin.indices.stats.CommonStats;
+                    assertNotNull(mergedSegmentWarmerStats);
+            }, 30, TimeUnit.SECONDS);
+            .put(ShardsLimitAllocationDecider.INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 1)
+import org.opensearch.action.admin.indices.stats.IndexStats;
+            indices[i] = INDEX_NAME + i;
+import org.opensearch.action.search.SearchRequest;
+        String[] indices = setupIndices(1);
+            assertEquals("Primary shard receive time should be 0", 0, stats.getTotalReceiveTime().millis());
+                stats.getTotalFailureCount()
+import java.util.Arrays;
+    }
+                );
+        for (String index : indices) {
+                    assertNotNull(totalMergedSegmentWarmerStats);
+        return Settings.builder()
+            assertTrue("Total merged docs should be >= 1", stats.getTotalNumDocs() >= 1);
+        List<String> nodes = state.nodes().getNodes().values().stream().map(DiscoveryNode::getName).toList();
+    private enum StatsScope {
+            assertTrue("Primary shard send time should be >= 0", stats.getTotalSendTime().millis() >= 0);
+            assertEquals("Replica shard total throttled time should be 0", 0, stats.getTotalThrottledTimeInMillis());
+                    shardsSentAndReceivedSize.get("[" + indices[0] + "][" + shard + "][P]").get("SENT")
+            .put(super.indexSettings())
+                    shardsSentAndReceivedSize.put(shardStats.getShardRouting().shardId() + primaryOrReplica, new HashMap<>() {
             );
-            assertTrue(
+                }
                 "Expected warmerStats.getTotalSendTime >= 1, found " + stats.getTotalSendTime().getMillis(),
+                assertEquals(1, allIndicesStats.size());
+        PRIMARY_SHARD,
+                0,
+import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;
+ */
+    public Settings indexSettings() {
+        setup();
+                for (ShardStats shardStats : allShardStats) {
+                    MergedSegmentWarmerStats mergedSegmentWarmerStats = mergeStats.getWarmerStats();
+            }, 10, TimeUnit.SECONDS);
+import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
+/*
+}
+            );
+                    assertNotNull(commonStats);
+            assertEquals("Replica shard total merged docs should be 0", 0, stats.getTotalNumDocs());
+        }
+                    CommonStats commonStats = shardStats.getStats();
+                    flush(indexName);
+import org.opensearch.action.admin.indices.forcemerge.ForceMergeRequest;
+import org.opensearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider;
+        ClusterState state = getClusterState();
+    }
+                stats.getTotalTime().getMillis() >= 1
+        for (String index : indices) {
+                    assertNotNull(totalMergeStats);
+                IndicesStatsResponse response = client(node).admin().indices().stats(new IndicesStatsRequest()).get();
+                indexBulk(indexName, numberOfOperations);
+        }
+                    allNodesStats.get(1).getIndices().getMerge().getWarmerStats().getTotalSentSize()
+import org.opensearch.cluster.node.DiscoveryNode;
+                for (NodeStats nodeStats : allNodesStats) {
+        for (String node : nodes) {
+import java.util.concurrent.TimeUnit;
+            assertTrue("Replica shard receive time should be >= 1ms", stats.getTotalReceiveTime().millis() >= 1);
+            assertEquals("Replica shard current merge size should be 0", 0, stats.getCurrentSizeInBytes());
+            client().admin().indices().forceMerge(new ForceMergeRequest(index).maxNumSegments(2)).get();
+            assertTrue(
+            assertBusy(() -> {
+            assertEquals("Replica shard warm time should be 0", 0, stats.getTotalTime().getMillis());
+            assertTrue(
+        }
+            assertTrue("Total merged size should be >= 1 byte", stats.getTotalSize().getBytes() >= 1);
+                }
+            Map<String, Map<String, ByteSizeValue>> shardsSentAndReceivedSize = new HashMap<>();
+            );
+        // so we still need to poll the cross-shard counters below.
+                    assertNotNull(nodeStats.getIndices());
+            assertTrue("Total merge time should be >= 1ms", stats.getTotalTime().getMillis() >= 1);
+            assertEquals("Replica shard sent size should be 0", 0, stats.getTotalSentSize().getBytes());
+    }
+        } else if (type == StatsScope.REPLICA_SHARD) {
+        }
+import org.opensearch.core.common.unit.ByteSizeValue;
+                    "Expected sent size by node 1 to be equal to received size by node 2.",
+                    assertMergeStats(totalMergeStats, StatsScope.AGGREGATED);
+            assertTrue(
+                    shardsSentAndReceivedSize.get("[" + indices[0] + "][" + shard + "][R]").get("SENT"),
+                    assertMergeStats(mergeStats, type);
                 stats.getTotalSendTime().getMillis() >= 1
             );
-            assertTrue(
-                "Expected warmerStats.getTotalReceiveTime >= 1, found " + stats.getTotalReceiveTime().getMillis(),
-                stats.getTotalReceiveTime().getMillis() >= 1
-            );
-            assertTrue(
-                "Expected warmerStats.getTotalInvocationsCount >= 1, found " + stats.getTotalInvocationsCount(),
-                stats.getTotalInvocationsCount() >= 1
-            );
-            assertTrue(
-                "Expected warmerStats.getTotalReceivedSize >= 1, found " + stats.getTotalReceivedSize().getBytes(),
-                stats.getTotalReceivedSize().getBytes() >= 1
-            );
-            assertTrue(
-                "Expected warmerStats.getTotalSentSize >= 1, found " + stats.getTotalSentSize().getBytes(),
-                stats.getTotalSentSize().getBytes() >= 1
-            );
-            assertEquals(
-                "Expected warmerStats.getTotalFailureCount == 0, found " + stats.getTotalFailureCount(),
-                0,
-                stats.getTotalFailureCount()
-            );
-        }
+                "Expected warmerStats.getTotalTime >= 1, found " + stats.getTotalTime().millis(),
     }
-
-    private void indexDocs(String... indexNames) {
-        for (String indexName : indexNames) {
-            for (int i = 0; i < randomIntBetween(25, 30); i++) {
-                if (randomBoolean()) {
-                    flush(indexName);
-                } else {
-                    refresh(indexName);
-                }
-                int numberOfOperations = randomIntBetween(25, 30);
-                indexBulk(indexName, numberOfOperations);
-            }
-        }
+        if (type == StatsScope.PRIMARY_SHARD) {
+            assertEquals("Replica shard warm failures should be 0", 0, stats.getTotalFailureCount());
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+                    assertNotNull(priStats);
+            assertTrue("Total merge time should be >= 1ms", stats.getTotalTimeInMillis() >= 1);
+ *
+                List<NodeStats> allNodesStats = response.getNodes();
+import org.opensearch.cluster.metadata.IndexMetadata;
+                );
+            assertTrue("Primary shard sent size should be >= 0", stats.getTotalSentSize().getBytes() >= 0);
+            .put(RecoverySettings.INDICES_REPLICATION_MERGES_WARMER_MIN_SEGMENT_SIZE_THRESHOLD_SETTING.getKey(), "1b")
+                    CommonStats totalStats = indexStats.getTotal();
+                    MergeStats priMergeStats = priStats.getMerge();
+                assertEquals(
     }
-
-    private String[] setupIndices(int count) throws Exception {
-        if (count <= 0) {
-            return new String[0];
-        }
-        String[] indices = new String[count];
-        for (int i = 0; i < count; i++) {
-            indices[i] = INDEX_NAME + i;
-        }
+                    assertMergedSegmentWarmerStats(priMergedSegmentWarmerStats, StatsScope.PRIMARY_SHARD);
+            assertEquals("Replica shard ongoing warms should be 0", 0, stats.getOngoingCount());
+                    assertMergeStats(priMergeStats, StatsScope.PRIMARY_SHARD);
         createIndex(indices);
-        ensureGreen(indices);
-        for (String index : indices) {
-            indexDocs(index);
-        }
-        waitForDocsOnReplicas(indices);
-        return indices;
-    }
-
-    private void waitForDocsOnReplicas(String... indices) throws Exception {
-        for (String index : indices) {
-            SearchRequest searchRequest = new SearchRequest(index);
-            searchRequest.preference("_replica");
+            assertTrue("Current merge size should be >= 0", stats.getCurrentSizeInBytes() >= 0);
+            assertEquals("Primary shard received size should be 0", 0, stats.getTotalReceivedSize().getBytes());
+ * SPDX-License-Identifier: Apache-2.0
             assertBusy(() -> {
+        for (int i = 0; i < count; i++) {
+    private static final String INDEX_NAME = "test-idx";
                 long totalDocs = client().search(searchRequest).actionGet().getHits().getTotalHits().value();
-                assertTrue("Docs should be searchable on replicas", totalDocs > 0);
-            }, 10, TimeUnit.SECONDS);
+        // during the merge but its receive-side accounting on the replica completes asynchronously,
+        // Wait for the force merge itself to finish. The warmer push to the replica is triggered
+            assertEquals(
+                if (randomBoolean()) {
+            assertTrue(
+            assertTrue(
+                stats.getTotalReceivedSize().getBytes() >= 1
+        // during the merge but its receive-side accounting on the replica completes asynchronously,
+                NodesStatsResponse response = client(node).admin().cluster().nodesStats(nodesStatsRequest).get();
         }
+    private void indexDocs(String... indexNames) {
+            for (int shard = 0; shard <= 1; shard++) {
+import org.opensearch.action.admin.indices.stats.ShardStats;
+            assertTrue("Total throttled time should be >= 0", stats.getTotalThrottledTimeInMillis() >= 0);
+    private void assertMergedSegmentWarmerStats(MergedSegmentWarmerStats stats, StatsScope type) {
+package org.opensearch.merge;
+            }, 30, TimeUnit.SECONDS);
+                    "Expected sent size by node 2 to be equal to received size by node 1.",
+            for (String node : nodes) {
     }
-
-    private enum StatsScope {
-        PRIMARY_SHARD,
-        REPLICA_SHARD,
-        AGGREGATED
-    }
-}
+            assertTrue("Primary shard warm time should be >= 1ms", stats.getTotalTime().getMillis() >= 1);
+            return new String[0];
+    private String[] setupIndices(int count) throws Exception {
+            assertTrue("Total merged size should be >= 1 byte", stats.getTotalSizeInBytes() >= 1);
+            assertEquals("Replica shard total stopped time should be 0", 0, stats.getTotalStoppedTimeInMillis());
+                "Expected warmerStats.getTotalFailureCount == 0, found " + stats.getTotalFailureCount(),
+        // during the merge but its receive-side accounting on the replica completes asynchronously,
+                    MergeStats mergeStats = commonStats.getMerge();
+import org.opensearch.action.admin.indices.stats.IndicesStatsRequest;
+                assertEquals(
+                    shardsSentAndReceivedSize.get("[" + indices[0] + "][" + shard + "][P]").get("RECEIVED")
+        assertBusy(() -> {
+        }
+            assertEquals("Replica shard total throttled time should be 0", 0, stats.getTotalThrottledTime().getMillis());

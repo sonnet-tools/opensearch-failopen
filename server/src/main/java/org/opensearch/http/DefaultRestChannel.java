@@ -1,220 +1,191 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.http;
-
-import org.opensearch.Build;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.io.stream.ReleasableBytesStreamOutput;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.network.CloseableChannel;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.rest.AbstractRestChannel;
-import org.opensearch.rest.RestChannel;
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.RestResponse;
-
+            }
 import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
-import static org.opensearch.tasks.Task.X_OPAQUE_ID;
-import static org.opensearch.tasks.Task.X_REQUEST_ID;
-
-/**
- * The default rest channel for incoming requests. This class implements the basic logic for sending a rest
- * response. It will set necessary headers and ensure that bytes are released after the response is sent.
- *
- * @opensearch.internal
- */
-class DefaultRestChannel extends AbstractRestChannel implements RestChannel {
-
-    static final String CLOSE = "close";
-    static final String CONNECTION = "connection";
-    static final String KEEP_ALIVE = "keep-alive";
-    static final String CONTENT_TYPE = "content-type";
-    static final String CONTENT_LENGTH = "content-length";
-    static final String SET_COOKIE = "set-cookie";
-    static final String SERVER_VERSION = "X-OpenSearch-Version";
-    static final String SERVER_VERSION_VALUE = "OpenSearch/"
-        + Build.CURRENT.getQualifiedVersion()
-        + " ("
-        + Build.CURRENT.getDistribution()
-        + ")";
-
-    private final HttpRequest httpRequest;
-    private final BigArrays bigArrays;
-    private final HttpHandlingSettings settings;
-    private final ThreadContext threadContext;
-    private final HttpChannel httpChannel;
-    private final CorsHandler corsHandler;
-    private final Map<String, List<String>> SERVER_VERSION_HEADER = Map.of(SERVER_VERSION, List.of(SERVER_VERSION_VALUE));
-
-    @Nullable
-    private final HttpTracer tracerLog;
-
-    DefaultRestChannel(
-        HttpChannel httpChannel,
-        HttpRequest httpRequest,
-        RestRequest request,
-        BigArrays bigArrays,
-        HttpHandlingSettings settings,
-        ThreadContext threadContext,
-        CorsHandler corsHandler,
-        @Nullable HttpTracer tracerLog
-    ) {
-        super(request, settings.getDetailedErrorsEnabled());
-        this.httpChannel = httpChannel;
-        this.httpRequest = httpRequest;
-        this.bigArrays = bigArrays;
-        this.settings = settings;
-        this.threadContext = threadContext;
-        this.corsHandler = corsHandler;
-        this.tracerLog = tracerLog;
-    }
-
-    @Override
-    protected BytesStreamOutput newBytesOutput() {
-        return new ReleasableBytesStreamOutput(bigArrays);
-    }
-
-    @Override
-    public void sendResponse(RestResponse restResponse) {
         // We're sending a response so we know we won't be needing the request content again and release it
-        Releasables.closeWhileHandlingException(httpRequest::release);
-
-        final ArrayList<Releasable> toClose = new ArrayList<>(3);
-        if (HttpUtils.shouldCloseConnection(httpRequest)) {
-            toClose.add(() -> CloseableChannel.closeChannel(httpChannel));
-        }
-
-        boolean success = false;
-        String opaque = null;
-        String contentLength = null;
-        try {
-            final BytesReference content = restResponse.content();
-            if (content instanceof Releasable) {
-                toClose.add((Releasable) content);
-            }
-
-            BytesReference finalContent = content;
-            try {
                 if (request.method() == RestRequest.Method.HEAD) {
-                    finalContent = BytesArray.EMPTY;
-                }
-            } catch (IllegalArgumentException ignored) {
-                assert restResponse.status() == RestStatus.METHOD_NOT_ALLOWED
-                    : "request HTTP method is unsupported but HTTP status is not METHOD_NOT_ALLOWED(405)";
+    static final String SERVER_VERSION = "X-OpenSearch-Version";
             }
-
-            final HttpResponse httpResponse = httpRequest.createResponse(restResponse.status(), finalContent);
-
-            corsHandler.setCorsResponseHeaders(httpRequest, httpResponse);
-
-            opaque = request.header(X_OPAQUE_ID);
+        BigArrays bigArrays,
+    static final String SERVER_VERSION_VALUE = "OpenSearch/"
+            }
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.rest.RestRequest;
+        Releasables.closeWhileHandlingException(httpRequest::release);
+import org.opensearch.common.io.stream.ReleasableBytesStreamOutput;
+        @Nullable HttpTracer tracerLog
+        + Build.CURRENT.getDistribution()
+                tracerLog.traceResponse(restResponse, httpChannel, contentLength, opaque, request.getRequestId(), success);
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        if (customHeaders != null) {
+import org.opensearch.common.Nullable;
+    static final String KEEP_ALIVE = "keep-alive";
             if (opaque != null) {
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import static org.opensearch.tasks.Task.X_REQUEST_ID;
+ * @opensearch.internal
+            }
+ */
+            if (tracerLog != null) {
+            // If our response doesn't specify a content-type header, set one
+        HttpRequest httpRequest,
+                }
+            addCustomHeaders(httpResponse, restResponse.getHeaders());
+ * compatible open source license.
+        this.httpRequest = httpRequest;
+ * Unless required by applicable law or agreed to in writing,
+        }
+ *
+        if (override || !response.containsHeader(headerField)) {
+    private void addCookies(HttpResponse response) {
+class DefaultRestChannel extends AbstractRestChannel implements RestChannel {
+    private final BigArrays bigArrays;
+                for (String cookie : cookies) {
+import org.opensearch.rest.AbstractRestChannel;
+        HttpChannel httpChannel,
+        RestRequest request,
+    private final HttpHandlingSettings settings;
+            addCookies(httpResponse);
+    static final String CONTENT_LENGTH = "content-length";
+ * this file be licensed under the Apache-2.0 license or a
+            final BytesReference content = restResponse.content();
+            setHeaderField(httpResponse, CONTENT_LENGTH, contentLength, false);
+import org.opensearch.core.action.ActionListener;
+        + " ("
+    }
+ * under the License.
+import org.opensearch.common.lease.Releasable;
+    private final Map<String, List<String>> SERVER_VERSION_HEADER = Map.of(SERVER_VERSION, List.of(SERVER_VERSION_VALUE));
+ *
+        this.bigArrays = bigArrays;
+            addCustomHeaders(httpResponse, threadContext.getResponseHeaders());
+            ActionListener<Void> listener = ActionListener.wrap(() -> Releasables.close(toClose));
+        }
+                toClose.add((Releasable) content);
+        this.httpChannel = httpChannel;
+        final ArrayList<Releasable> toClose = new ArrayList<>(3);
+import org.opensearch.Build;
+        ThreadContext threadContext,
+        String opaque = null;
+import org.opensearch.common.util.BigArrays;
+                }
+    @Override
+ *
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            addCustomHeaders(httpResponse, SERVER_VERSION_HEADER);
+ * The default rest channel for incoming requests. This class implements the basic logic for sending a rest
+        setHeaderField(response, headerField, value, true);
+                    finalContent = BytesArray.EMPTY;
+                toClose.add((Releasable) bytesStreamOutput);
+import java.util.List;
+ * The OpenSearch Contributors require contributions made to
+            success = true;
+            contentLength = String.valueOf(restResponse.content().length());
+import org.opensearch.rest.RestChannel;
+        try {
+            }
+import org.opensearch.common.network.CloseableChannel;
+import org.opensearch.common.lease.Releasables;
+ */
+        this.settings = settings;
+ * You may obtain a copy of the License at
+        + ")";
+            opaque = request.header(X_OPAQUE_ID);
+            // If our response has no content-length, calculate and set one
+                    : "request HTTP method is unsupported but HTTP status is not METHOD_NOT_ALLOWED(405)";
+            BytesReference finalContent = content;
+        HttpHandlingSettings settings,
+import static org.opensearch.tasks.Task.X_OPAQUE_ID;
+                    setHeaderField(response, headerEntry.getKey(), headerValue);
+        }
+                }
+    private final CorsHandler corsHandler;
+                setHeaderField(httpResponse, X_REQUEST_ID, request.header(X_REQUEST_ID));
+    private void setHeaderField(HttpResponse response, String headerField, String value, boolean override) {
+ * response. It will set necessary headers and ensure that bytes are released after the response is sent.
+    static final String CONTENT_TYPE = "content-type";
+    private final ThreadContext threadContext;
+        CorsHandler corsHandler,
+ * specific language governing permissions and limitations
+ *
+    }
+    static final String CONNECTION = "connection";
+                assert restResponse.status() == RestStatus.METHOD_NOT_ALLOWED
+    @Nullable
+ */
+ * GitHub history for details.
+    private final HttpChannel httpChannel;
+ * Licensed to Elasticsearch under one or more contributor
+    }
+            httpChannel.sendResponse(httpResponse, listener);
+import org.opensearch.common.util.concurrent.ThreadContext;
+    private void addCustomHeaders(HttpResponse response, Map<String, List<String>> customHeaders) {
+        this.corsHandler = corsHandler;
+            if (content instanceof Releasable) {
+}
+ * this work for additional information regarding copyright
+import org.opensearch.rest.RestResponse;
+            List<String> cookies = request.getHttpRequest().strictCookies();
+    protected BytesStreamOutput newBytesOutput() {
+    }
+            }
+ * SPDX-License-Identifier: Apache-2.0
+ * ownership. Elasticsearch licenses this file to you under
+            setHeaderField(httpResponse, CONTENT_TYPE, restResponse.contentType(), false);
+/*
+            if (success == false) {
+    private final HttpTracer tracerLog;
+            toClose.add(() -> CloseableChannel.closeChannel(httpChannel));
+import org.opensearch.core.common.bytes.BytesReference;
+            for (Map.Entry<String, List<String>> headerEntry : customHeaders.entrySet()) {
+                Releasables.close(toClose);
+            if (bytesStreamOutput instanceof ReleasableBytesStreamOutput) {
+        }
+        }
+            if (cookies.isEmpty() == false) {
+            } catch (IllegalArgumentException ignored) {
+            // Add all custom headers
                 setHeaderField(httpResponse, X_OPAQUE_ID, opaque);
+            response.addHeader(headerField, value);
+            final HttpResponse httpResponse = httpRequest.createResponse(restResponse.status(), finalContent);
+    ) {
+        this.tracerLog = tracerLog;
+        if (HttpUtils.shouldCloseConnection(httpRequest)) {
+        boolean success = false;
+                    response.addHeader(SET_COOKIE, cookie);
+                for (String headerValue : headerEntry.getValue()) {
+    static final String CLOSE = "close";
             }
             if (request.header(X_REQUEST_ID) != null) {
-                setHeaderField(httpResponse, X_REQUEST_ID, request.header(X_REQUEST_ID));
             }
-
-            // Add all custom headers
-            addCustomHeaders(httpResponse, restResponse.getHeaders());
-            addCustomHeaders(httpResponse, threadContext.getResponseHeaders());
-
-            addCustomHeaders(httpResponse, SERVER_VERSION_HEADER);
-
-            // If our response doesn't specify a content-type header, set one
-            setHeaderField(httpResponse, CONTENT_TYPE, restResponse.contentType(), false);
-            // If our response has no content-length, calculate and set one
-            contentLength = String.valueOf(restResponse.content().length());
-            setHeaderField(httpResponse, CONTENT_LENGTH, contentLength, false);
-
-            addCookies(httpResponse);
-
+    private final HttpRequest httpRequest;
+    DefaultRestChannel(
+        + Build.CURRENT.getQualifiedVersion()
+ * Modifications Copyright OpenSearch Contributors. See
             BytesStreamOutput bytesStreamOutput = bytesOutputOrNull();
-            if (bytesStreamOutput instanceof ReleasableBytesStreamOutput) {
-                toClose.add((Releasable) bytesStreamOutput);
-            }
-
-            ActionListener<Void> listener = ActionListener.wrap(() -> Releasables.close(toClose));
-            httpChannel.sendResponse(httpResponse, listener);
-            success = true;
-        } finally {
-            if (success == false) {
-                Releasables.close(toClose);
-            }
-            if (tracerLog != null) {
-                tracerLog.traceResponse(restResponse, httpChannel, contentLength, opaque, request.getRequestId(), success);
-            }
-        }
-    }
-
+        super(request, settings.getDetailedErrorsEnabled());
+/*
     private void setHeaderField(HttpResponse response, String headerField, String value) {
-        setHeaderField(response, headerField, value, true);
+        return new ReleasableBytesStreamOutput(bigArrays);
+        } finally {
+import java.util.Map;
+package org.opensearch.http;
+    @Override
+ * not use this file except in compliance with the License.
+ * license agreements. See the NOTICE file distributed with
+        String contentLength = null;
+import org.opensearch.core.common.bytes.BytesArray;
     }
-
-    private void setHeaderField(HttpResponse response, String headerField, String value, boolean override) {
-        if (override || !response.containsHeader(headerField)) {
-            response.addHeader(headerField, value);
-        }
-    }
-
-    private void addCustomHeaders(HttpResponse response, Map<String, List<String>> customHeaders) {
-        if (customHeaders != null) {
-            for (Map.Entry<String, List<String>> headerEntry : customHeaders.entrySet()) {
-                for (String headerValue : headerEntry.getValue()) {
-                    setHeaderField(response, headerEntry.getKey(), headerValue);
-                }
-            }
-        }
-    }
-
-    private void addCookies(HttpResponse response) {
+ * software distributed under the License is distributed on an
+/**
+ */
+/*
         if (settings.isResetCookies()) {
-            List<String> cookies = request.getHttpRequest().strictCookies();
-            if (cookies.isEmpty() == false) {
-                for (String cookie : cookies) {
-                    response.addHeader(SET_COOKIE, cookie);
-                }
+    static final String SET_COOKIE = "set-cookie";
+import org.opensearch.core.rest.RestStatus;
+        this.threadContext = threadContext;
+            try {
             }
-        }
-    }
-}
+            corsHandler.setCorsResponseHeaders(httpRequest, httpResponse);
+    public void sendResponse(RestResponse restResponse) {

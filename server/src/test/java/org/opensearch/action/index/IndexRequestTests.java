@@ -1,260 +1,235 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.index;
-
-import org.opensearch.Version;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.DocWriteRequest;
-import org.opensearch.action.RoutingMissingException;
-import org.opensearch.action.support.ActiveShardCount;
-import org.opensearch.action.support.replication.ReplicationResponse;
-import org.opensearch.cluster.metadata.MappingMetadata;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.index.VersionType;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.notNullValue;
-
-public class IndexRequestTests extends OpenSearchTestCase {
-    public void testIndexRequestOpTypeFromString() throws Exception {
-        String create = "create";
-        String index = "index";
-        String createUpper = "CREATE";
-        String indexUpper = "INDEX";
-
-        IndexRequest indexRequest = new IndexRequest("");
         indexRequest.opType(create);
-        assertThat(indexRequest.opType(), equalTo(DocWriteRequest.OpType.CREATE));
-        indexRequest.opType(createUpper);
-        assertThat(indexRequest.opType(), equalTo(DocWriteRequest.OpType.CREATE));
-        indexRequest.opType(index);
-        assertThat(indexRequest.opType(), equalTo(DocWriteRequest.OpType.INDEX));
-        indexRequest.opType(indexUpper);
-        assertThat(indexRequest.opType(), equalTo(DocWriteRequest.OpType.INDEX));
-    }
-
-    public void testReadIncorrectOpType() {
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndexRequest("").opType("foobar"));
-        assertThat(e.getMessage(), equalTo("opType must be 'create' or 'index', found: [foobar]"));
-    }
-
-    public void testCreateOperationRejectsVersions() {
-        Set<VersionType> allButInternalSet = new HashSet<>(Arrays.asList(VersionType.values()));
-        allButInternalSet.remove(VersionType.INTERNAL);
-        VersionType[] allButInternal = allButInternalSet.toArray(new VersionType[] {});
-        IndexRequest request = new IndexRequest("index").id("1");
-        request.opType(IndexRequest.OpType.CREATE);
-        request.versionType(randomFrom(allButInternal));
-        assertThat(request.validate().validationErrors(), not(empty()));
-
-        request.versionType(VersionType.INTERNAL);
-        request.version(randomIntBetween(0, Integer.MAX_VALUE));
-        assertThat(request.validate().validationErrors(), not(empty()));
-    }
-
-    public void testIndexingRejectsLongIds() {
-        String id = randomAlphaOfLength(511);
-        IndexRequest request = new IndexRequest("index").id(id);
-        request.source("{}", MediaTypeRegistry.JSON);
-        ActionRequestValidationException validate = request.validate();
-        assertNull(validate);
-
-        id = randomAlphaOfLength(512);
-        request = new IndexRequest("index").id(id);
-        request.source("{}", MediaTypeRegistry.JSON);
-        validate = request.validate();
-        assertNull(validate);
-
-        id = randomAlphaOfLength(513);
-        request = new IndexRequest("index").id(id);
-        request.source("{}", MediaTypeRegistry.JSON);
-        validate = request.validate();
-        assertThat(validate, notNullValue());
-        assertThat(validate.getMessage(), containsString("id [" + id + "] is too long, must be no longer than 512 bytes but was: 513"));
-    }
-
-    public void testWaitForActiveShards() {
-        IndexRequest request = new IndexRequest("index");
-        final int count = randomIntBetween(0, 10);
-        request.waitForActiveShards(ActiveShardCount.from(count));
-        assertEquals(request.waitForActiveShards(), ActiveShardCount.from(count));
-        // test negative shard count value not allowed
-        expectThrows(IllegalArgumentException.class, () -> request.waitForActiveShards(ActiveShardCount.from(randomIntBetween(-10, -1))));
-    }
-
-    public void testAutoGenIdTimestampIsSet() {
-        IndexRequest request = new IndexRequest("index");
-        request.process(Version.CURRENT, null, "index");
-        assertTrue("expected > 0 but got: " + request.getAutoGeneratedTimestamp(), request.getAutoGeneratedTimestamp() > 0);
-        request = new IndexRequest("index").id("1");
-        request.process(Version.CURRENT, null, "index");
-        assertEquals(IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP, request.getAutoGeneratedTimestamp());
-    }
-
-    public void testIndexResponse() {
-        ShardId shardId = new ShardId(randomAlphaOfLengthBetween(3, 10), randomAlphaOfLengthBetween(3, 10), randomIntBetween(0, 1000));
-        String id = randomAlphaOfLengthBetween(3, 10);
-        long version = randomLong();
-        boolean created = randomBoolean();
-        IndexResponse indexResponse = new IndexResponse(shardId, id, SequenceNumbers.UNASSIGNED_SEQ_NO, 0, version, created);
-        int total = randomIntBetween(1, 10);
-        int successful = randomIntBetween(1, 10);
-        ReplicationResponse.ShardInfo shardInfo = new ReplicationResponse.ShardInfo(total, successful);
-        indexResponse.setShardInfo(shardInfo);
-        boolean forcedRefresh = false;
-        if (randomBoolean()) {
-            forcedRefresh = randomBoolean();
-            indexResponse.setForcedRefresh(forcedRefresh);
-        }
+ * The OpenSearch Contributors require contributions made to
+                IndexRequest serialized = new IndexRequest(in);
         assertEquals(id, indexResponse.getId());
-        assertEquals(version, indexResponse.getVersion());
-        assertEquals(shardId, indexResponse.getShardId());
-        assertEquals(created ? RestStatus.CREATED : RestStatus.OK, indexResponse.status());
-        assertEquals(total, indexResponse.getShardInfo().getTotal());
-        assertEquals(successful, indexResponse.getShardInfo().getSuccessful());
-        assertEquals(forcedRefresh, indexResponse.forcedRefresh());
-        assertEquals(
-            "IndexResponse[index="
-                + shardId.getIndexName()
-                + ",id="
-                + id
-                + ",version="
-                + version
-                + ",result="
-                + (created ? "created" : "updated")
-                + ",seqNo="
-                + SequenceNumbers.UNASSIGNED_SEQ_NO
-                + ",primaryTerm="
-                + 0
-                + ",shards={\"total\":"
-                + total
+        request.version(randomIntBetween(0, Integer.MAX_VALUE));
                 + ",\"successful\":"
+                + (created ? "created" : "updated")
+    }
+        IndexRequest indexRequest = new IndexRequest("foo").id("1");
+ */
+    public void testIndexRequestOpTypeFromString() throws Exception {
+        ActionRequestValidationException validate = request.validate();
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        assertEquals(forcedRefresh, indexResponse.forcedRefresh());
+    public void testWaitForActiveShards() {
+import org.opensearch.core.common.io.stream.StreamInput;
+        request.opType(IndexRequest.OpType.CREATE);
+ * compatible open source license.
+                + total
+        IndexRequest request = new IndexRequest("index");
+ * Unless required by applicable law or agreed to in writing,
+        IndexRequest request = new IndexRequest("index").id("1");
+ * this file be licensed under the Apache-2.0 license or a
+        boolean forcedRefresh = false;
+        indexRequest.opType(createUpper);
+        allButInternalSet.remove(VersionType.INTERNAL);
+ * ownership. Elasticsearch licenses this file to you under
+        assertNull(validate);
+        ReplicationResponse.ShardInfo shardInfo = new ReplicationResponse.ShardInfo(total, successful);
+        validate = request.validate();
+        assertThat(validate.getMessage(), containsString("pipeline cannot be an empty string"));
+        // no id set, no routing set — simulates POST /<index>/_doc without ?routing=
+import org.opensearch.action.RoutingMissingException;
+        IndexRequest serialized = new IndexRequest(in);
+        assertEquals(request.waitForActiveShards(), ActiveShardCount.from(count));
+import org.opensearch.test.OpenSearchTestCase;
+        assertThat(validate, notNullValue());
+                + ",shards={\"total\":"
+        assertEquals(shardId, indexResponse.getShardId());
+        IndexRequest indexRequest = new IndexRequest("");
+        assertEquals(
+        String create = "create";
+        IndexRequest request = new IndexRequest("index");
+ * You may obtain a copy of the License at
+        request.source("{}", MediaTypeRegistry.JSON);
+        String indexUpper = "INDEX";
+ *
+        ShardId shardId = new ShardId(randomAlphaOfLengthBetween(3, 10), randomAlphaOfLengthBetween(3, 10), randomIntBetween(0, 1000));
+        IndexResponse indexResponse = new IndexResponse(shardId, id, SequenceNumbers.UNASSIGNED_SEQ_NO, 0, version, created);
+        int successful = randomIntBetween(1, 10);
+import org.opensearch.action.ActionRequestValidationException;
+        BytesStreamOutput out = new BytesStreamOutput();
+ * under the License.
+import java.util.Arrays;
+        indexResponse.setShardInfo(shardInfo);
+        assertThat(request.validate().validationErrors(), not(empty()));
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+    public void testIndexResponse() {
+import org.opensearch.index.VersionType;
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+import org.opensearch.action.support.replication.ReplicationResponse;
+        request.source("{}", MediaTypeRegistry.JSON);
+        assertThat(indexRequest.opType(), equalTo(DocWriteRequest.OpType.INDEX));
+        assertTrue("expected > 0 but got: " + request.getAutoGeneratedTimestamp(), request.getAutoGeneratedTimestamp() > 0);
+import org.opensearch.core.rest.RestStatus;
+        assertThat(validate, notNullValue());
+        assertThat(e.getMessage(), equalTo("opType must be 'create' or 'index', found: [foobar]"));
+        assertEquals(total, indexResponse.getShardInfo().getTotal());
+                + new ByteSizeValue(IndexRequest.MAX_SOURCE_LENGTH_IN_TOSTRING).toString()
+        assertEquals(successful, indexResponse.getShardInfo().getSuccessful());
+        request.process(Version.CURRENT, null, "index");
+import org.opensearch.index.seqno.SequenceNumbers;
+import java.io.UnsupportedEncodingException;
+import static org.hamcrest.Matchers.notNullValue;
+        request.process(Version.CURRENT, null, "index");
+ * the Apache License, Version 2.0 (the "License"); you may
+            }
+        indexRequest.opType(indexUpper);
+        boolean created = randomBoolean();
+        request.source(source, MediaTypeRegistry.JSON);
+}
+    }
+    public void testSerializationOfEmptyRequestWorks() throws IOException {
+    }
+        }
+        // When routing is required and no explicit id is provided, process() must throw
+ * specific language governing permissions and limitations
+        request = new IndexRequest("index").id(id);
+        request.setPipeline("");
+                assertNull(serialized.getContentType());
+import org.opensearch.core.common.bytes.BytesArray;
+        IndexRequest request = new IndexRequest("index").id(id);
+            () -> request.process(Version.CURRENT, mappingMd, "test-index")
+        assertEquals("index {[index][null], source[" + source + "]}", request.toString());
+/*
+        Set<VersionType> allButInternalSet = new HashSet<>(Arrays.asList(VersionType.values()));
+    }
+            "IndexResponse[index="
+        indexRequest.source("{}", MediaTypeRegistry.JSON);
+ */
+    }
+        int total = randomIntBetween(1, 10);
+import java.util.Map;
+        source = "{\"name\":\"" + randomUnicodeOfLength(IndexRequest.MAX_SOURCE_LENGTH_IN_TOSTRING) + "\"}";
+        // RoutingMissingException (HTTP 400) and not NullPointerException (HTTP 500).
+        IndexRequest request = new IndexRequest("index");
                 + successful
-                + ",\"failed\":0}]",
+        assertNull(request.getContentType());
+ *
+ * Licensed to Elasticsearch under one or more contributor
+ * SPDX-License-Identifier: Apache-2.0
+ * KIND, either express or implied.  See the License for the
+ * this work for additional information regarding copyright
+            "index {[index][null], source[n/a, actual length: ["
+                + ",result="
+import org.opensearch.core.index.shard.ShardId;
             indexResponse.toString()
         );
-    }
-
-    public void testIndexRequestXContentSerialization() throws IOException {
-        IndexRequest indexRequest = new IndexRequest("foo").id("1");
-        boolean isRequireAlias = randomBoolean();
-        indexRequest.source("{}", MediaTypeRegistry.JSON);
-        indexRequest.setRequireAlias(isRequireAlias);
-        assertEquals(MediaTypeRegistry.JSON, indexRequest.getContentType());
-
-        BytesStreamOutput out = new BytesStreamOutput();
-        indexRequest.writeTo(out);
-        StreamInput in = StreamInput.wrap(out.bytes().toBytesRef().bytes);
-        IndexRequest serialized = new IndexRequest(in);
-        assertEquals(MediaTypeRegistry.JSON, serialized.getContentType());
-        assertEquals(new BytesArray("{}"), serialized.source());
-        assertEquals(isRequireAlias, serialized.isRequireAlias());
-    }
-
-    // reindex makes use of index requests without a source so this needs to be handled
-    public void testSerializationOfEmptyRequestWorks() throws IOException {
-        IndexRequest request = new IndexRequest("index");
-        assertNull(request.getContentType());
-        assertEquals("index", request.index());
-
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            request.writeTo(out);
-            try (StreamInput in = out.bytes().streamInput()) {
-                IndexRequest serialized = new IndexRequest(in);
-                assertNull(serialized.getContentType());
-                assertEquals("index", serialized.index());
-            }
-        }
-    }
-
-    public void testToStringSizeLimit() throws UnsupportedEncodingException {
-        IndexRequest request = new IndexRequest("index");
-
-        String source = "{\"name\":\"value\"}";
-        request.source(source, MediaTypeRegistry.JSON);
-        assertEquals("index {[index][null], source[" + source + "]}", request.toString());
-
-        source = "{\"name\":\"" + randomUnicodeOfLength(IndexRequest.MAX_SOURCE_LENGTH_IN_TOSTRING) + "\"}";
-        request.source(source, MediaTypeRegistry.JSON);
-        int actualBytes = source.getBytes("UTF-8").length;
-        assertEquals(
-            "index {[index][null], source[n/a, actual length: ["
-                + new ByteSizeValue(actualBytes).toString()
-                + "], max length: "
-                + new ByteSizeValue(IndexRequest.MAX_SOURCE_LENGTH_IN_TOSTRING).toString()
-                + "]}",
-            request.toString()
-        );
-    }
-
-    public void testRejectsEmptyStringPipeline() {
-        IndexRequest request = new IndexRequest("index");
-        request.source("{}", MediaTypeRegistry.JSON);
-        request.setPipeline("");
-        ActionRequestValidationException validate = request.validate();
-        assertThat(validate, notNullValue());
-        assertThat(validate.getMessage(), containsString("pipeline cannot be an empty string"));
-    }
-
-    public void testRoutingMissingExceptionWithGeneratedId() {
-        // When routing is required and no explicit id is provided, process() must throw
-        // RoutingMissingException (HTTP 400) and not NullPointerException (HTTP 500).
         // The id is generated before the routing check so the exception can include it.
-        MappingMetadata mappingMd = new MappingMetadata(MapperService.SINGLE_MAPPING_NAME, Map.of("_routing", Map.of("required", true)));
-        IndexRequest request = new IndexRequest("test-index");
-        // no id set, no routing set — simulates POST /<index>/_doc without ?routing=
-        RoutingMissingException ex = expectThrows(
-            RoutingMissingException.class,
-            () -> request.process(Version.CURRENT, mappingMd, "test-index")
+import static org.hamcrest.Matchers.not;
         );
-        assertNotNull("id must not be null in RoutingMissingException", ex.getId());
     }
-}
+        assertEquals(IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP, request.getAutoGeneratedTimestamp());
+        request = new IndexRequest("index").id("1");
+                + ",seqNo="
+        );
+        String id = randomAlphaOfLengthBetween(3, 10);
+                + ",id="
+/*
+        assertThat(indexRequest.opType(), equalTo(DocWriteRequest.OpType.CREATE));
+                assertEquals("index", serialized.index());
+    public void testIndexingRejectsLongIds() {
+        request.source("{}", MediaTypeRegistry.JSON);
+    }
+        validate = request.validate();
+                + new ByteSizeValue(actualBytes).toString()
+            indexResponse.setForcedRefresh(forcedRefresh);
+                + version
+        assertEquals(version, indexResponse.getVersion());
+                + "]}",
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> new IndexRequest("").opType("foobar"));
+        String id = randomAlphaOfLength(511);
+ * GitHub history for details.
+        String createUpper = "CREATE";
+        long version = randomLong();
+        ActionRequestValidationException validate = request.validate();
+    public void testCreateOperationRejectsVersions() {
+        assertEquals(created ? RestStatus.CREATED : RestStatus.OK, indexResponse.status());
+            request.toString()
+    }
+        StreamInput in = StreamInput.wrap(out.bytes().toBytesRef().bytes);
+                + 0
+        assertEquals(
+        request.versionType(VersionType.INTERNAL);
+        assertEquals(new BytesArray("{}"), serialized.source());
+    public void testRoutingMissingExceptionWithGeneratedId() {
+import org.opensearch.index.mapper.MapperService;
+        indexRequest.setRequireAlias(isRequireAlias);
+import org.opensearch.core.common.unit.ByteSizeValue;
+import org.opensearch.Version;
+ *
+import static org.hamcrest.Matchers.equalTo;
+        assertThat(request.validate().validationErrors(), not(empty()));
+        final int count = randomIntBetween(0, 10);
+        assertNull(validate);
+        IndexRequest request = new IndexRequest("index");
+        assertThat(indexRequest.opType(), equalTo(DocWriteRequest.OpType.INDEX));
+                + id
+        boolean isRequireAlias = randomBoolean();
+import org.opensearch.common.io.stream.BytesStreamOutput;
+    public void testIndexRequestXContentSerialization() throws IOException {
+    public void testReadIncorrectOpType() {
+            RoutingMissingException.class,
+import org.opensearch.action.DocWriteRequest;
+        id = randomAlphaOfLength(513);
+        indexRequest.writeTo(out);
+        request.source(source, MediaTypeRegistry.JSON);
+        IndexRequest request = new IndexRequest("test-index");
+        int actualBytes = source.getBytes("UTF-8").length;
+        IndexRequest request = new IndexRequest("index");
+        request.waitForActiveShards(ActiveShardCount.from(count));
+            try (StreamInput in = out.bytes().streamInput()) {
+        assertThat(validate.getMessage(), containsString("id [" + id + "] is too long, must be no longer than 512 bytes but was: 513"));
+ * license agreements. See the NOTICE file distributed with
+        if (randomBoolean()) {
+    }
+    public void testRejectsEmptyStringPipeline() {
+        VersionType[] allButInternal = allButInternalSet.toArray(new VersionType[] {});
+        assertEquals(isRequireAlias, serialized.isRequireAlias());
+        assertEquals(MediaTypeRegistry.JSON, indexRequest.getContentType());
+        assertThat(indexRequest.opType(), equalTo(DocWriteRequest.OpType.CREATE));
+                + shardId.getIndexName()
+package org.opensearch.action.index;
+import java.util.HashSet;
+ */
+        request = new IndexRequest("index").id(id);
+                + ",primaryTerm="
+        request.source("{}", MediaTypeRegistry.JSON);
+        assertEquals("index", request.index());
+/*
+import org.opensearch.cluster.metadata.MappingMetadata;
+    public void testAutoGenIdTimestampIsSet() {
+ * software distributed under the License is distributed on an
+import org.opensearch.action.support.ActiveShardCount;
+        assertEquals(MediaTypeRegistry.JSON, serialized.getContentType());
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        id = randomAlphaOfLength(512);
+public class IndexRequestTests extends OpenSearchTestCase {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            forcedRefresh = randomBoolean();
+            request.writeTo(out);
+                + "], max length: "
+        // test negative shard count value not allowed
+    }
+    public void testToStringSizeLimit() throws UnsupportedEncodingException {
+import static org.hamcrest.Matchers.empty;
+        indexRequest.opType(index);
+                + SequenceNumbers.UNASSIGNED_SEQ_NO
+                + ",version="
+        expectThrows(IllegalArgumentException.class, () -> request.waitForActiveShards(ActiveShardCount.from(randomIntBetween(-10, -1))));
+import static org.hamcrest.Matchers.containsString;
+    }
+        request.versionType(randomFrom(allButInternal));
+        String source = "{\"name\":\"value\"}";
+ * not use this file except in compliance with the License.
+    // reindex makes use of index requests without a source so this needs to be handled
+        assertNotNull("id must not be null in RoutingMissingException", ex.getId());
+import java.util.Set;
+import java.io.IOException;
+                + ",\"failed\":0}]",
+    }
+        RoutingMissingException ex = expectThrows(
+        MappingMetadata mappingMd = new MappingMetadata(MapperService.SINGLE_MAPPING_NAME, Map.of("_routing", Map.of("required", true)));
+        String index = "index";

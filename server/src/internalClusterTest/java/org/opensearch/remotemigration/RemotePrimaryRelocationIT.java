@@ -1,286 +1,238 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.remotemigration;
-
-import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
-import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
-import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesRequest;
-import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesResponse;
-import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
-import org.opensearch.cluster.routing.allocation.command.MoveAllocationCommand;
-import org.opensearch.common.Priority;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.indices.recovery.PeerRecoveryTargetService;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.hamcrest.OpenSearchAssertions;
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.Client;
-import org.opensearch.transport.client.Requests;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static java.util.Arrays.asList;
+        client().admin()
+        asyncIndexingService.stopIndexing();
+            .prepareHealth()
+        // create shard with 0 replica and 1 shard
 import static org.opensearch.node.remotestore.RemoteStoreNodeService.MIGRATION_DIRECTION_SETTING;
-import static org.opensearch.node.remotestore.RemoteStoreNodeService.REMOTE_STORE_COMPATIBILITY_MODE_SETTING;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-public class RemotePrimaryRelocationIT extends MigrationBaseTestCase {
-    protected int maximumNumberOfShards() {
+import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesRequest;
+import org.opensearch.transport.TransportService;
+            .actionGet();
+        logger.info("Unblocking the finalize recovery now");
+            .get();
+        String remoteNode2 = internalCluster().startNode();
+        List<String> docRepNodes = internalCluster().startNodes(2);
+            TransportService.class,
+        updateSettingsRequest.persistentSettings(Settings.builder().put(MIGRATION_DIRECTION_SETTING.getKey(), "remote_store"));
+            .setWaitForNoRelocatingShards(true)
+        );
+        ClusterHealthResponse actionGet = client().admin().cluster().health(healthRequest).actionGet();
+        // Change direction to remote store
+            .add(new MoveAllocationCommand("test", 0, primaryNodeName("test"), remoteNode))
+    public void testMixedModeRelocation_RemoteSeedingFail() throws Exception {
+        assertEquals(remoteNode, primaryNodeName("test"));
+        ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
+        int finalCurrentDoc1 = currentDoc;
+        String remoteNode = internalCluster().startNode();
+        return 0;
+        );
+        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
+            .prepareUpdateSettings()
+        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
+        assertEquals(actionGet.getRelocatingShards(), 0);
+        // Index some more docs
+        client().admin().indices().prepareCreate("test").setSettings(indexSettings()).setMapping("field", "type=text").get();
+        client().admin().cluster().prepareReroute().add(new MoveAllocationCommand("test", 0, docRepNode, remoteNode)).execute().actionGet();
         return 1;
     }
-
-    protected int maximumNumberOfReplicas() {
-        return 0;
-    }
-
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return asList(MockTransportService.TestPlugin.class);
-    }
-
-    public void testRemotePrimaryRelocation() throws Exception {
-        List<String> docRepNodes = internalCluster().startNodes(2);
-        Client client = internalCluster().client(docRepNodes.get(0));
-        ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
-        updateSettingsRequest.persistentSettings(Settings.builder().put(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey(), "mixed"));
-        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
-
-        // create shard with 0 replica and 1 shard
-        client().admin().indices().prepareCreate("test").setSettings(indexSettings()).setMapping("field", "type=text").get();
-        ensureGreen("test");
-
-        AtomicInteger numAutoGenDocs = new AtomicInteger();
-        final AtomicBoolean finished = new AtomicBoolean(false);
-        AsyncIndexingService asyncIndexingService = new AsyncIndexingService("test");
-        asyncIndexingService.startIndexing();
-        refresh("test");
-
-        // add remote node in mixed mode cluster
-        setAddRemote(true);
-        String remoteNode = internalCluster().startNode();
-        internalCluster().validateClusterFormed();
-
-        updateSettingsRequest.persistentSettings(Settings.builder().put(MIGRATION_DIRECTION_SETTING.getKey(), "remote_store"));
-        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
-
-        String remoteNode2 = internalCluster().startNode();
-        internalCluster().validateClusterFormed();
-
-        // assert repo gets registered
-        GetRepositoriesRequest gr = new GetRepositoriesRequest(new String[] { REPOSITORY_NAME });
-        GetRepositoriesResponse getRepositoriesResponse = client.admin().cluster().getRepositories(gr).actionGet();
-        assertEquals(1, getRepositoriesResponse.repositories().size());
-
-        // Index some more docs
-        int currentDoc = numAutoGenDocs.get();
-        int finalCurrentDoc1 = currentDoc;
-        waitUntil(() -> numAutoGenDocs.get() > finalCurrentDoc1 + 5);
-
-        // Change direction to remote store
-        updateSettingsRequest.persistentSettings(Settings.builder().put(MIGRATION_DIRECTION_SETTING.getKey(), "remote_store"));
-        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
-
-        logger.info("-->  relocating from {} to {} ", docRepNodes, remoteNode);
-        client().admin()
-            .cluster()
-            .prepareReroute()
-            .add(new MoveAllocationCommand("test", 0, primaryNodeName("test"), remoteNode))
-            .execute()
-            .actionGet();
-        waitForRelocation();
-        assertEquals(remoteNode, primaryNodeName("test"));
-        logger.info("-->  relocation from docrep to remote  complete");
-
-        // Index some more docs
-        currentDoc = numAutoGenDocs.get();
-        int finalCurrentDoc = currentDoc;
-        waitUntil(() -> numAutoGenDocs.get() > finalCurrentDoc + 5);
-
-        client().admin()
-            .cluster()
-            .prepareReroute()
-            .add(new MoveAllocationCommand("test", 0, remoteNode, remoteNode2))
-            .execute()
-            .actionGet();
-        waitForRelocation();
-        assertEquals(remoteNode2, primaryNodeName("test"));
-
-        logger.info("-->  relocation from remote to remote  complete");
-
-        finished.set(true);
-        asyncIndexingService.stopIndexing();
-        refresh("test");
         OpenSearchAssertions.assertHitCount(
-            client().prepareSearch("test").setTrackTotalHits(true).get(),
-            asyncIndexingService.getIndexedDocs()
-        );
-        OpenSearchAssertions.assertHitCount(
+        assertTrue(clusterHealthResponse.getRelocatingShards() == 1);
             client().prepareSearch("test")
-                .setTrackTotalHits(true)// extra paranoia ;)
-                .setQuery(QueryBuilders.termQuery("auto", true))
-                .get(),
-            asyncIndexingService.getIndexedDocs()
-        );
-    }
-
-    @SuppressForbidden(reason = "Waiting longer than timeout")
-    public void testMixedModeRelocation_RemoteSeedingFail() throws Exception {
-        String docRepNode = internalCluster().startNode();
-        ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
-        updateSettingsRequest.persistentSettings(Settings.builder().put(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey(), "mixed"));
-        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
-
-        // create shard with 0 replica and 1 shard
-        client().admin().indices().prepareCreate("test").setSettings(indexSettings()).setMapping("field", "type=text").get();
-        ensureGreen("test");
-
-        AsyncIndexingService asyncIndexingService = new AsyncIndexingService("test");
-        asyncIndexingService.startIndexing();
-
+import java.io.IOException;
         refresh("test");
-
-        // add remote node in mixed mode cluster
-        setAddRemote(true);
-        String remoteNode = internalCluster().startNode();
-        internalCluster().validateClusterFormed();
-
-        setFailRate(REPOSITORY_NAME, 100);
+import org.opensearch.test.OpenSearchIntegTestCase;
         client().admin()
-            .cluster()
-            .prepareUpdateSettings()
-            .setTransientSettings(Settings.builder().put(RecoverySettings.INDICES_INTERNAL_REMOTE_UPLOAD_TIMEOUT.getKey(), "10s"))
-            .get();
-
         // Change direction to remote store
-        updateSettingsRequest.persistentSettings(Settings.builder().put(MIGRATION_DIRECTION_SETTING.getKey(), "remote_store"));
-        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
-
-        logger.info("--> relocating from {} to {} ", docRepNode, remoteNode);
-        client().admin().cluster().prepareReroute().add(new MoveAllocationCommand("test", 0, docRepNode, remoteNode)).execute().actionGet();
-        ClusterHealthResponse clusterHealthResponse = client().admin()
-            .cluster()
-            .prepareHealth()
-            .setTimeout(TimeValue.timeValueSeconds(5))
-            .setWaitForEvents(Priority.LANGUID)
-            .setWaitForNoRelocatingShards(true)
-            .execute()
-            .actionGet();
-
-        assertTrue(clusterHealthResponse.getRelocatingShards() == 1);
-        // waiting more than waitForRemoteStoreSync's sleep time of 30 sec to deterministically fail
-        Thread.sleep(40000);
-
-        ClusterHealthRequest healthRequest = Requests.clusterHealthRequest()
-            .waitForNoRelocatingShards(true)
-            .waitForNoInitializingShards(true);
-        ClusterHealthResponse actionGet = client().admin().cluster().health(healthRequest).actionGet();
-        assertEquals(actionGet.getRelocatingShards(), 0);
         assertEquals(docRepNode, primaryNodeName("test"));
-
-        asyncIndexingService.stopIndexing();
-        client().admin()
+        client().admin().cluster().prepareReroute().add(new MoveAllocationCommand("test", 0, docRepNode, remoteNode)).execute().actionGet();
             .cluster()
-            .prepareUpdateSettings()
-            .setTransientSettings(Settings.builder().put(RecoverySettings.INDICES_INTERNAL_REMOTE_UPLOAD_TIMEOUT.getKey(), (String) null))
-            .get();
-    }
-
-    public void testMixedModeRelocation_FailInFinalize() throws Exception {
-        String docRepNode = internalCluster().startNode();
-        ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
-        updateSettingsRequest.persistentSettings(Settings.builder().put(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey(), "mixed"));
-        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
-
-        // create shard with 0 replica and 1 shard
-        client().admin().indices().prepareCreate("test").setSettings(indexSettings()).setMapping("field", "type=text").get();
-        ensureGreen("test");
-
-        AsyncIndexingService asyncIndexingService = new AsyncIndexingService("test");
-        asyncIndexingService.startIndexing();
-
-        refresh("test");
-
+        ClusterHealthResponse clusterHealthResponse = client().admin()
+        asyncIndexingService.stopIndexing();
+import org.opensearch.index.query.QueryBuilders;
         // add remote node in mixed mode cluster
-        setAddRemote(true);
-        String remoteNode = internalCluster().startNode();
-        internalCluster().validateClusterFormed();
-
-        AtomicBoolean failFinalize = new AtomicBoolean(true);
-
-        MockTransportService remoteNodeTransportService = (MockTransportService) internalCluster().getInstance(
-            TransportService.class,
-            remoteNode
-        );
-
-        remoteNodeTransportService.addRequestHandlingBehavior(
-            PeerRecoveryTargetService.Actions.FINALIZE,
-            (handler, request, channel, task) -> {
-                if (failFinalize.get()) {
-                    throw new IOException("Failing finalize");
-                } else {
-                    handler.messageReceived(request, channel, task);
-                }
-            }
-        );
-
-        client().admin()
-            .cluster()
-            .prepareUpdateSettings()
-            .setTransientSettings(Settings.builder().put(RecoverySettings.INDICES_INTERNAL_REMOTE_UPLOAD_TIMEOUT.getKey(), "40s"))
-            .get();
-
-        // Change direction to remote store
-        updateSettingsRequest.persistentSettings(Settings.builder().put(MIGRATION_DIRECTION_SETTING.getKey(), "remote_store"));
-        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
-
-        logger.info("--> relocating from {} to {} ", docRepNode, remoteNode);
-        client().admin().cluster().prepareReroute().add(new MoveAllocationCommand("test", 0, docRepNode, remoteNode)).execute().actionGet();
-        ClusterHealthResponse clusterHealthResponse = client().admin()
-            .cluster()
-            .prepareHealth()
-            .setTimeout(TimeValue.timeValueSeconds(5))
-            .setWaitForEvents(Priority.LANGUID)
-            .setWaitForNoRelocatingShards(true)
-            .execute()
             .actionGet();
-
-        assertTrue(clusterHealthResponse.getRelocatingShards() == 1);
-
-        ClusterHealthRequest healthRequest = Requests.clusterHealthRequest()
-            .waitForNoRelocatingShards(true)
-            .waitForNoInitializingShards(true);
-        ClusterHealthResponse actionGet = client().admin().cluster().health(healthRequest).actionGet();
-        assertEquals(actionGet.getRelocatingShards(), 0);
-        assertEquals(docRepNode, primaryNodeName("test"));
-
-        // now unblock it
-        logger.info("Unblocking the finalize recovery now");
-        failFinalize.set(false);
-
-        client().admin().cluster().prepareReroute().add(new MoveAllocationCommand("test", 0, docRepNode, remoteNode)).execute().actionGet();
-        waitForRelocation(TimeValue.timeValueSeconds(90));
-
-        asyncIndexingService.stopIndexing();
-        client().admin()
+        );
             .cluster()
-            .prepareUpdateSettings()
-            .setTransientSettings(Settings.builder().put(RecoverySettings.INDICES_INTERNAL_REMOTE_UPLOAD_TIMEOUT.getKey(), (String) null))
-            .get();
-    }
+        waitUntil(() -> numAutoGenDocs.get() > finalCurrentDoc + 5);
+        logger.info("-->  relocation from docrep to remote  complete");
+        GetRepositoriesRequest gr = new GetRepositoriesRequest(new String[] { REPOSITORY_NAME });
+        // assert repo gets registered
 }
+            .setTransientSettings(Settings.builder().put(RecoverySettings.INDICES_INTERNAL_REMOTE_UPLOAD_TIMEOUT.getKey(), (String) null))
+        assertEquals(actionGet.getRelocatingShards(), 0);
+        logger.info("--> relocating from {} to {} ", docRepNode, remoteNode);
+        waitUntil(() -> numAutoGenDocs.get() > finalCurrentDoc1 + 5);
+                    throw new IOException("Failing finalize");
+        internalCluster().validateClusterFormed();
+        // Index some more docs
+            .execute()
+            .setWaitForEvents(Priority.LANGUID)
+    }
+        asyncIndexingService.startIndexing();
+import org.opensearch.transport.client.Client;
+        waitForRelocation();
+        finished.set(true);
+ * SPDX-License-Identifier: Apache-2.0
+    }
+            .waitForNoInitializingShards(true);
+        setAddRemote(true);
+        int finalCurrentDoc = currentDoc;
+    protected int maximumNumberOfReplicas() {
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+ * this file be licensed under the Apache-2.0 license or a
+        refresh("test");
+    }
+        internalCluster().validateClusterFormed();
+        String remoteNode = internalCluster().startNode();
+        updateSettingsRequest.persistentSettings(Settings.builder().put(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey(), "mixed"));
+    }
+        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
+        AsyncIndexingService asyncIndexingService = new AsyncIndexingService("test");
+            .execute()
+            .execute()
+import org.opensearch.common.SuppressForbidden;
+        updateSettingsRequest.persistentSettings(Settings.builder().put(MIGRATION_DIRECTION_SETTING.getKey(), "remote_store"));
+        // create shard with 0 replica and 1 shard
+        asyncIndexingService.stopIndexing();
+            .prepareHealth()
+        logger.info("-->  relocation from remote to remote  complete");
+        // create shard with 0 replica and 1 shard
+import java.util.concurrent.atomic.AtomicInteger;
+    protected int maximumNumberOfShards() {
+            (handler, request, channel, task) -> {
+        internalCluster().validateClusterFormed();
+/*
+        AsyncIndexingService asyncIndexingService = new AsyncIndexingService("test");
+        assertEquals(remoteNode2, primaryNodeName("test"));
+        client().admin()
+        setAddRemote(true);
+        Client client = internalCluster().client(docRepNodes.get(0));
+        return asList(MockTransportService.TestPlugin.class);
+import org.opensearch.test.hamcrest.OpenSearchAssertions;
+        // add remote node in mixed mode cluster
+            .setTimeout(TimeValue.timeValueSeconds(5))
+            .setTransientSettings(Settings.builder().put(RecoverySettings.INDICES_INTERNAL_REMOTE_UPLOAD_TIMEOUT.getKey(), "10s"))
+            remoteNode
+import java.util.Collection;
+            .setTransientSettings(Settings.builder().put(RecoverySettings.INDICES_INTERNAL_REMOTE_UPLOAD_TIMEOUT.getKey(), (String) null))
+        // waiting more than waitForRemoteStoreSync's sleep time of 30 sec to deterministically fail
+        updateSettingsRequest.persistentSettings(Settings.builder().put(MIGRATION_DIRECTION_SETTING.getKey(), "remote_store"));
+import org.opensearch.transport.client.Requests;
+            PeerRecoveryTargetService.Actions.FINALIZE,
+        ClusterHealthResponse clusterHealthResponse = client().admin()
+            .setTimeout(TimeValue.timeValueSeconds(5))
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
+        AtomicBoolean failFinalize = new AtomicBoolean(true);
+                if (failFinalize.get()) {
+import org.opensearch.indices.recovery.PeerRecoveryTargetService;
+            .prepareReroute()
+            asyncIndexingService.getIndexedDocs()
+        client().admin().indices().prepareCreate("test").setSettings(indexSettings()).setMapping("field", "type=text").get();
+            .waitForNoInitializingShards(true);
+            .cluster()
+        asyncIndexingService.startIndexing();
+        logger.info("-->  relocating from {} to {} ", docRepNodes, remoteNode);
+                }
+        ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
+        assertEquals(1, getRepositoriesResponse.repositories().size());
+        waitForRelocation();
+import org.opensearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
+            asyncIndexingService.getIndexedDocs()
+        OpenSearchAssertions.assertHitCount(
+        ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
+            .actionGet();
+import org.opensearch.common.settings.Settings;
+            .get();
+ * compatible open source license.
+        client().admin().cluster().prepareReroute().add(new MoveAllocationCommand("test", 0, docRepNode, remoteNode)).execute().actionGet();
+                    handler.messageReceived(request, channel, task);
+ * The OpenSearch Contributors require contributions made to
+        final AtomicBoolean finished = new AtomicBoolean(false);
+                .get(),
+        updateSettingsRequest.persistentSettings(Settings.builder().put(MIGRATION_DIRECTION_SETTING.getKey(), "remote_store"));
+        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
+    @SuppressForbidden(reason = "Waiting longer than timeout")
+            .cluster()
+ */
+        asyncIndexingService.startIndexing();
+            .add(new MoveAllocationCommand("test", 0, remoteNode, remoteNode2))
+import org.opensearch.action.admin.cluster.repositories.get.GetRepositoriesResponse;
+                .setQuery(QueryBuilders.termQuery("auto", true))
+        Thread.sleep(40000);
+        AtomicInteger numAutoGenDocs = new AtomicInteger();
+        refresh("test");
+            .prepareUpdateSettings()
+            .get();
+            .actionGet();
+import org.opensearch.test.transport.MockTransportService;
+        ClusterHealthRequest healthRequest = Requests.clusterHealthRequest()
+            .prepareUpdateSettings()
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+                .setTrackTotalHits(true)// extra paranoia ;)
+import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
+        String docRepNode = internalCluster().startNode();
+package org.opensearch.remotemigration;
+        client().admin()
+        ClusterHealthResponse actionGet = client().admin().cluster().health(healthRequest).actionGet();
+            .waitForNoRelocatingShards(true)
+            .cluster()
+        setAddRemote(true);
+        GetRepositoriesResponse getRepositoriesResponse = client.admin().cluster().getRepositories(gr).actionGet();
+            .setWaitForNoRelocatingShards(true)
+            .setWaitForEvents(Priority.LANGUID)
+        // Change direction to remote store
+        AsyncIndexingService asyncIndexingService = new AsyncIndexingService("test");
+        internalCluster().validateClusterFormed();
+        );
+        ClusterHealthRequest healthRequest = Requests.clusterHealthRequest()
+import org.opensearch.indices.recovery.RecoverySettings;
+import static java.util.Arrays.asList;
+        MockTransportService remoteNodeTransportService = (MockTransportService) internalCluster().getInstance(
+            .prepareReroute()
+        String remoteNode = internalCluster().startNode();
+    public void testRemotePrimaryRelocation() throws Exception {
+        assertTrue(clusterHealthResponse.getRelocatingShards() == 1);
+            .cluster()
+        String docRepNode = internalCluster().startNode();
+        client().admin()
+        refresh("test");
+                } else {
+import org.opensearch.common.Priority;
+        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
+        remoteNodeTransportService.addRequestHandlingBehavior(
+        setFailRate(REPOSITORY_NAME, 100);
+import org.opensearch.plugins.Plugin;
+        client().admin().indices().prepareCreate("test").setSettings(indexSettings()).setMapping("field", "type=text").get();
+            .waitForNoRelocatingShards(true)
+import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
+            .cluster()
+    }
+import static org.opensearch.node.remotestore.RemoteStoreNodeService.REMOTE_STORE_COMPATIBILITY_MODE_SETTING;
+import org.opensearch.cluster.routing.allocation.command.MoveAllocationCommand;
+            }
+public class RemotePrimaryRelocationIT extends MigrationBaseTestCase {
+import java.util.List;
+        assertEquals(docRepNode, primaryNodeName("test"));
+        ensureGreen("test");
+import org.opensearch.common.unit.TimeValue;
+            .prepareUpdateSettings()
+        int currentDoc = numAutoGenDocs.get();
+ *
+import java.util.concurrent.atomic.AtomicBoolean;
+            .cluster()
+        ensureGreen("test");
+            .get();
+        updateSettingsRequest.persistentSettings(Settings.builder().put(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey(), "mixed"));
+        waitForRelocation(TimeValue.timeValueSeconds(90));
+        failFinalize.set(false);
+        updateSettingsRequest.persistentSettings(Settings.builder().put(REMOTE_STORE_COMPATIBILITY_MODE_SETTING.getKey(), "mixed"));
+            .setTransientSettings(Settings.builder().put(RecoverySettings.INDICES_INTERNAL_REMOTE_UPLOAD_TIMEOUT.getKey(), "40s"))
+    public void testMixedModeRelocation_FailInFinalize() throws Exception {
+            client().prepareSearch("test").setTrackTotalHits(true).get(),
+            .execute()
+        currentDoc = numAutoGenDocs.get();
+        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
+        logger.info("--> relocating from {} to {} ", docRepNode, remoteNode);
+        client().admin()
+        // now unblock it
+        ensureGreen("test");
+        // add remote node in mixed mode cluster

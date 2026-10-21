@@ -1,573 +1,503 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.indices.store;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
-import org.opensearch.action.admin.cluster.state.ClusterStateResponse;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.health.ClusterHealthStatus;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.RoutingNode;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.TestShardRouting;
-import org.opensearch.cluster.routing.allocation.command.MoveAllocationCommand;
-import org.opensearch.cluster.routing.allocation.decider.EnableAllocationDecider;
-import org.opensearch.cluster.service.ClusterApplier.ClusterApplyListener;
-import org.opensearch.cluster.service.ClusterApplierService;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.env.Environment;
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.indices.recovery.PeerRecoveryTargetService;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
-import org.opensearch.test.OpenSearchIntegTestCase.Scope;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-import org.opensearch.test.disruption.BlockClusterStateProcessing;
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.transport.ConnectTransportException;
-import org.opensearch.transport.TransportMessageListener;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-
-import static org.opensearch.test.NodeRoles.nonClusterManagerNode;
-import static org.opensearch.test.NodeRoles.nonDataNode;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.hamcrest.Matchers.equalTo;
-
-@ClusterScope(scope = Scope.TEST, numDataNodes = 0)
-public class IndicesStoreIntegrationIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
-    public IndicesStoreIntegrationIT(Settings nodeSettings) {
-        super(nodeSettings);
     }
-
-    @ParametersFactory
-    public static Collection<Object[]> parameters() {
-        return remoteStoreSettings;
-    }
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) { // simplify this and only use a single data path
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(Environment.PATH_DATA_SETTING.getKey(), createTempDir())
-            // by default this value is 1 sec in tests (30 sec in practice) but we adding disruption here
-            // which is between 1 and 2 sec can cause each of the shard deletion requests to timeout.
-            // to prevent this we are setting the timeout here to something highish ie. the default in practice
-            .put(IndicesStore.INDICES_STORE_DELETE_SHARD_TIMEOUT.getKey(), new TimeValue(30, TimeUnit.SECONDS))
-            .build();
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(MockTransportService.TestPlugin.class);
-    }
-
-    @Override
-    protected void ensureClusterStateConsistency() throws IOException {
-        // testShardActiveElseWhere might change the state of a non-cluster-manager node
-        // so we cannot check state consistency of this cluster
-    }
-
-    public void testIndexCleanup() throws Exception {
-        internalCluster().startNode(nonDataNode());
-        final String node_1 = internalCluster().startNode(nonClusterManagerNode());
-        final String node_2 = internalCluster().startNode(nonClusterManagerNode());
-        logger.info("--> creating index [test] with one shard and on replica");
-        assertAcked(
-            prepareCreate("test").setSettings(
-                Settings.builder()
-                    .put(indexSettings())
-                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            )
-        );
-        ensureGreen("test");
-        ClusterState state = client().admin().cluster().prepareState().get().getState();
-        Index index = state.metadata().index("test").getIndex();
-
-        logger.info("--> making sure that shard and its replica are allocated on node_1 and node_2");
-        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(true));
-        assertThat(Files.exists(indexDirectory(node_1, index)), equalTo(true));
-        assertThat(Files.exists(shardDirectory(node_2, index, 0)), equalTo(true));
-        assertThat(Files.exists(indexDirectory(node_2, index)), equalTo(true));
-
-        logger.info("--> starting node server3");
-        final String node_3 = internalCluster().startNode(nonClusterManagerNode());
-        logger.info("--> running cluster_health");
-        ClusterHealthResponse clusterHealth = client().admin()
-            .cluster()
-            .prepareHealth()
-            .setWaitForNodes("4")
-            .setWaitForNoRelocatingShards(true)
-            .get();
-        assertThat(clusterHealth.isTimedOut(), equalTo(false));
-
-        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(true));
-        assertThat(Files.exists(indexDirectory(node_1, index)), equalTo(true));
-        assertThat(Files.exists(shardDirectory(node_2, index, 0)), equalTo(true));
-        assertThat(Files.exists(indexDirectory(node_2, index)), equalTo(true));
-        assertThat(Files.exists(shardDirectory(node_3, index, 0)), equalTo(false));
-        assertThat(Files.exists(indexDirectory(node_3, index)), equalTo(false));
-
-        logger.info("--> move shard from node_1 to node_3, and wait for relocation to finish");
-
-        if (randomBoolean()) { // sometimes add cluster-state delay to trigger observers in IndicesStore.ShardActiveRequestHandler
-            BlockClusterStateProcessing disruption = relocateAndBlockCompletion(logger, "test", 0, node_1, node_3);
-            // wait a little so that cluster state observer is registered
-            Thread.yield();
-            logger.info("--> stopping disruption");
-            disruption.stopDisrupting();
-        } else {
-            internalCluster().client().admin().cluster().prepareReroute().add(new MoveAllocationCommand("test", 0, node_1, node_3)).get();
-        }
-        clusterHealth = client().admin().cluster().prepareHealth().setWaitForNoRelocatingShards(true).get();
-        assertThat(clusterHealth.isTimedOut(), equalTo(false));
-
-        assertShardDeleted(node_1, index, 0);
-        assertIndexDeleted(node_1, index);
-        assertThat(Files.exists(shardDirectory(node_2, index, 0)), equalTo(true));
-        assertThat(Files.exists(indexDirectory(node_2, index)), equalTo(true));
-        assertThat(Files.exists(shardDirectory(node_3, index, 0)), equalTo(true));
-        assertThat(Files.exists(indexDirectory(node_3, index)), equalTo(true));
-
-    }
-
-    /**
-     * relocate a shard and block cluster state processing on the relocation target node to activate the shard
-     */
-    public static BlockClusterStateProcessing relocateAndBlockCompletion(
-        Logger logger,
-        String index,
-        int shard,
-        String nodeFrom,
-        String nodeTo
-    ) throws InterruptedException {
-        BlockClusterStateProcessing disruption = new BlockClusterStateProcessing(nodeTo, random());
-        internalCluster().setDisruptionScheme(disruption);
-        MockTransportService transportService = (MockTransportService) internalCluster().getInstance(TransportService.class, nodeTo);
-        CountDownLatch beginRelocationLatch = new CountDownLatch(1);
-        CountDownLatch receivedShardExistsRequestLatch = new CountDownLatch(1);
-        // use a tracer on the target node to track relocation start and end
-        transportService.addMessageListener(new TransportMessageListener() {
-            @Override
-            public void onRequestReceived(long requestId, String action) {
-                if (action.equals(PeerRecoveryTargetService.Actions.FILES_INFO)) {
-                    logger.info("received: {}, relocation starts", action);
-                    beginRelocationLatch.countDown();
-                } else if (action.equals(IndicesStore.ACTION_SHARD_EXISTS)) {
-                    // Whenever a node deletes a shard because it was relocated somewhere else, it first
-                    // checks if enough other copies are started somewhere else. The node sends a ShardActiveRequest
-                    // to the other nodes that should have a copy according to cluster state.
-                    receivedShardExistsRequestLatch.countDown();
-                    logger.info("received: {}, relocation done", action);
-                }
-            }
-        });
-        internalCluster().client().admin().cluster().prepareReroute().add(new MoveAllocationCommand(index, shard, nodeFrom, nodeTo)).get();
-        logger.info("--> waiting for relocation to start");
-        beginRelocationLatch.await();
-        logger.info("--> starting disruption");
-        disruption.startDisrupting();
-        logger.info("--> waiting for relocation to finish");
-        receivedShardExistsRequestLatch.await();
         logger.info("--> relocation completed (but cluster state processing block still in place)");
-        return disruption;
-    }
-
-    /* Test that shard is deleted in case ShardActiveRequest after relocation and next incoming cluster state is an index delete. */
-    public void testShardCleanupIfShardDeletionAfterRelocationFailedAndIndexDeleted() throws Exception {
-        final String node_1 = internalCluster().startNode();
-        logger.info("--> creating index [test] with one shard and on replica");
-        assertAcked(
-            prepareCreate("test").setSettings(
-                Settings.builder()
-                    .put(indexSettings())
-                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+        NodeEnvironment env = internalCluster().getInstance(NodeEnvironment.class, server);
             )
-        );
-        ensureGreen("test");
-        ClusterState state = client().admin().cluster().prepareState().get().getState();
+import org.opensearch.cluster.service.ClusterApplier.ClusterApplyListener;
         Index index = state.metadata().index("test").getIndex();
-        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(true));
-        assertThat(Files.exists(indexDirectory(node_1, index)), equalTo(true));
-
-        final String node_2 = internalCluster().startDataOnlyNode(Settings.builder().build());
-        assertFalse(client().admin().cluster().prepareHealth().setWaitForNodes("2").get().isTimedOut());
-
-        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(true));
-        assertThat(Files.exists(indexDirectory(node_1, index)), equalTo(true));
-        assertThat(Files.exists(shardDirectory(node_2, index, 0)), equalTo(false));
-        assertThat(Files.exists(indexDirectory(node_2, index)), equalTo(false));
-
-        // add a transport delegate that will prevent the shard active request to succeed the first time after relocation has finished.
-        // node_1 will then wait for the next cluster state change before it tries a next attempt to delete the shard.
-        MockTransportService transportServiceNode_1 = (MockTransportService) internalCluster().getInstance(TransportService.class, node_1);
-        TransportService transportServiceNode_2 = internalCluster().getInstance(TransportService.class, node_2);
-        final CountDownLatch shardActiveRequestSent = new CountDownLatch(1);
-        transportServiceNode_1.addSendBehavior(transportServiceNode_2, (connection, requestId, action, request, options) -> {
-            if (action.equals("internal:index/shard/exists") && shardActiveRequestSent.getCount() > 0) {
-                shardActiveRequestSent.countDown();
-                logger.info("prevent shard active request from being sent");
-                throw new ConnectTransportException(connection.getNode(), "DISCONNECT: simulated");
-            }
-            connection.sendRequest(requestId, action, request, options);
-        });
-
-        logger.info("--> move shard from {} to {}, and wait for relocation to finish", node_1, node_2);
-        internalCluster().client().admin().cluster().prepareReroute().add(new MoveAllocationCommand("test", 0, node_1, node_2)).get();
-        shardActiveRequestSent.await();
-        ClusterHealthResponse clusterHealth = client().admin().cluster().prepareHealth().setWaitForNoRelocatingShards(true).get();
-        assertThat(clusterHealth.isTimedOut(), equalTo(false));
-        logClusterState();
-        // delete the index. node_1 that still waits for the next cluster state update will then get the delete index next.
-        // it must still delete the shard, even if it cannot find it anymore in indicesservice
-        client().admin().indices().prepareDelete("test").get();
-
-        assertShardDeleted(node_1, index, 0);
-        assertIndexDeleted(node_1, index);
-        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(false));
-        assertThat(Files.exists(indexDirectory(node_1, index)), equalTo(false));
-
-        assertShardDeleted(node_2, index, 0);
-        assertIndexDeleted(node_2, index);
-        assertThat(Files.exists(shardDirectory(node_2, index, 0)), equalTo(false));
-        assertThat(Files.exists(indexDirectory(node_2, index)), equalTo(false));
-    }
-
-    public void testShardsCleanup() throws Exception {
-        final String node_1 = internalCluster().startNode();
-        final String node_2 = internalCluster().startNode();
-        logger.info("--> creating index [test] with one shard and on replica");
-        assertAcked(
-            prepareCreate("test").setSettings(
-                Settings.builder()
-                    .put(indexSettings())
-                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            )
-        );
-        ensureGreen("test");
-
-        ClusterState state = client().admin().cluster().prepareState().get().getState();
-        Index index = state.metadata().index("test").getIndex();
-        logger.info("--> making sure that shard and its replica are allocated on node_1 and node_2");
-        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(true));
-        assertThat(Files.exists(shardDirectory(node_2, index, 0)), equalTo(true));
-
-        logger.info("--> starting node server3");
-        String node_3 = internalCluster().startNode();
-        logger.info("--> running cluster_health");
-        ClusterHealthResponse clusterHealth = client().admin()
-            .cluster()
-            .prepareHealth()
-            .setWaitForNodes("3")
-            .setWaitForNoRelocatingShards(true)
-            .get();
-        assertThat(clusterHealth.isTimedOut(), equalTo(false));
-
-        logger.info("--> making sure that shard is not allocated on server3");
-        assertShardDeleted(node_3, index, 0);
-
-        Path server2Shard = shardDirectory(node_2, index, 0);
-        logger.info("--> stopping node {}", node_2);
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(node_2));
-
-        logger.info("--> running cluster_health");
-        clusterHealth = client().admin()
-            .cluster()
-            .prepareHealth()
-            .setWaitForGreenStatus()
-            .setWaitForNodes("2")
-            .setWaitForNoRelocatingShards(true)
-            .get();
-        assertThat(clusterHealth.isTimedOut(), equalTo(false));
-        logger.info("--> done cluster_health, status {}", clusterHealth.getStatus());
-
-        assertThat(Files.exists(server2Shard), equalTo(true));
-
-        logger.info("--> making sure that shard and its replica exist on server1, server2 and server3");
-        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(true));
-        assertThat(Files.exists(server2Shard), equalTo(true));
-        assertThat(Files.exists(shardDirectory(node_3, index, 0)), equalTo(true));
-
-        logger.info("--> starting node node_4");
-        final String node_4 = internalCluster().startNode();
-
-        logger.info("--> running cluster_health");
-        ensureGreen();
-
-        logger.info("--> making sure that shard and its replica are allocated on server1 and server3 but not on server2");
-        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(true));
-        assertThat(Files.exists(shardDirectory(node_3, index, 0)), equalTo(true));
-        assertShardDeleted(node_4, index, 0);
-    }
-
-    public void testShardActiveElsewhereDoesNotDeleteAnother() throws Exception {
-        internalCluster().startClusterManagerOnlyNode();
-        final List<String> nodes = internalCluster().startDataOnlyNodes(4);
-
-        final String node1 = nodes.get(0);
-        final String node2 = nodes.get(1);
-        final String node3 = nodes.get(2);
-        // we will use this later on, handy to start now to make sure it has a different data folder that node 1,2 &3
-        final String node4 = nodes.get(3);
-
-        assertAcked(
-            prepareCreate("test").setSettings(
-                Settings.builder()
-                    .put(indexSettings())
-                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 3)
-                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-                    .put(IndexMetadata.INDEX_ROUTING_EXCLUDE_GROUP_SETTING.getKey() + "_name", node4)
-            )
-        );
-        assertFalse(
-            client().admin()
-                .cluster()
-                .prepareHealth()
-                .setWaitForNoRelocatingShards(true)
-                .setWaitForGreenStatus()
-                .setWaitForNodes("5")
-                .get()
-                .isTimedOut()
-        );
-
-        // disable allocation to control the situation more easily
-        assertAcked(
-            client().admin()
-                .cluster()
-                .prepareUpdateSettings()
-                .setTransientSettings(
-                    Settings.builder().put(EnableAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), "none")
-                )
-        );
-
-        logger.debug("--> shutting down two random nodes");
-        List<String> nodesToShutDown = randomSubsetOf(2, node1, node2, node3);
-        Settings node1DataPathSettings = internalCluster().dataPathSettings(nodesToShutDown.get(0));
-        Settings node2DataPathSettings = internalCluster().dataPathSettings(nodesToShutDown.get(1));
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodesToShutDown.get(0)));
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodesToShutDown.get(1)));
-
-        logger.debug("--> verifying index is red");
-        ClusterHealthResponse health = client().admin().cluster().prepareHealth().setWaitForNodes("3").get();
-        if (health.getStatus() != ClusterHealthStatus.RED) {
-            logClusterState();
-            fail("cluster didn't become red, despite of shutting 2 of 3 nodes");
-        }
-
-        logger.debug("--> allowing index to be assigned to node [{}]", node4);
-        assertAcked(
-            client().admin()
-                .indices()
-                .prepareUpdateSettings("test")
-                .setSettings(Settings.builder().put(IndexMetadata.INDEX_ROUTING_EXCLUDE_GROUP_SETTING.getKey() + "_name", "NONE"))
-        );
-
-        assertAcked(
-            client().admin()
-                .cluster()
-                .prepareUpdateSettings()
-                .setTransientSettings(
-                    Settings.builder().put(EnableAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), "all")
-                )
-        );
-
-        logger.debug("--> waiting for shards to recover on [{}]", node4);
-        // we have to do this in two steps as we now do async shard fetching before assigning, so the change to the
-        // allocation filtering may not have immediate effect
-        // TODO: we should add an easier to do this. It's too much of a song and dance..
-        Index index = resolveIndex("test");
-        assertBusy(() -> assertTrue(internalCluster().getInstance(IndicesService.class, node4).hasIndex(index)));
-
-        // wait for 4 active shards - we should have lost one shard
-        assertFalse(client().admin().cluster().prepareHealth().setWaitForActiveShards(4).get().isTimedOut());
-
-        // disable allocation again to control concurrency a bit and allow shard active to kick in before allocation
-        assertAcked(
-            client().admin()
-                .cluster()
-                .prepareUpdateSettings()
-                .setTransientSettings(
-                    Settings.builder().put(EnableAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), "none")
-                )
-        );
-
-        logger.debug("--> starting the two old nodes back");
-
-        internalCluster().startNodes(node1DataPathSettings, node2DataPathSettings);
-
-        assertFalse(client().admin().cluster().prepareHealth().setWaitForNodes("5").get().isTimedOut());
-
-        assertAcked(
-            client().admin()
-                .cluster()
-                .prepareUpdateSettings()
-                .setTransientSettings(
-                    Settings.builder().put(EnableAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), "all")
-                )
-        );
-
-        logger.debug("--> waiting for the lost shard to be recovered");
-
-        ensureGreen("test");
-
-    }
-
-    public void testShardActiveElseWhere() throws Exception {
-        List<String> nodes = internalCluster().startNodes(2);
-
-        final String clusterManagerNode = internalCluster().getClusterManagerName();
         final String nonClusterManagerNode = nodes.get(0).equals(clusterManagerNode) ? nodes.get(1) : nodes.get(0);
-
-        final String clusterManagerId = internalCluster().clusterService(clusterManagerNode).localNode().getId();
-        final String nonClusterManagerId = internalCluster().clusterService(nonClusterManagerNode).localNode().getId();
-
-        final int numShards = scaledRandomIntBetween(2, 10);
+                .setWaitForNodes("5")
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodesToShutDown.get(1)));
+        List<String> nodesToShutDown = randomSubsetOf(2, node1, node2, node3);
+            .put(super.nodeSettings(nodeOrdinal))
+                .prepareUpdateSettings("test")
+            BlockClusterStateProcessing disruption = relocateAndBlockCompletion(logger, "test", 0, node_1, node_3);
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+        final Path path = shardDirectory(server, index, shard);
+            )
+        assertThat(Files.exists(shardDirectory(node_2, index, 0)), equalTo(true));
+        Index index = resolveIndex("test");
+        assertThat(Files.exists(indexDirectory(node_1, index)), equalTo(true));
+        internalCluster().client().admin().cluster().prepareReroute().add(new MoveAllocationCommand("test", 0, node_1, node_2)).get();
+            Thread.yield();
+        final String node4 = nodes.get(3);
         assertAcked(
-            prepareCreate("test").setSettings(
-                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0).put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, numShards)
-            )
-        );
-        ensureGreen("test");
-
-        waitNoPendingTasksOnAll();
-        ClusterStateResponse stateResponse = client().admin().cluster().prepareState().get();
-        final Index index = stateResponse.getState().metadata().index("test").getIndex();
-        RoutingNode routingNode = stateResponse.getState().getRoutingNodes().node(nonClusterManagerId);
-        final int[] node2Shards = new int[routingNode.numberOfOwningShards()];
-        int i = 0;
-        for (ShardRouting shardRouting : routingNode) {
-            node2Shards[i] = shardRouting.shardId().id();
-            i++;
+                throw new ConnectTransportException(connection.getNode(), "DISCONNECT: simulated");
+ * under the License.
         }
-        logger.info("Node [{}] has shards: {}", nonClusterManagerNode, Arrays.toString(node2Shards));
-
-        // disable relocations when we do this, to make sure the shards are not relocated from node2
-        // due to rebalancing, and delete its content
-        client().admin()
-            .cluster()
-            .prepareUpdateSettings()
-            .setTransientSettings(
-                Settings.builder()
-                    .put(EnableAllocationDecider.CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), EnableAllocationDecider.Rebalance.NONE)
-            )
-            .get();
-
-        ClusterApplierService clusterApplierService = internalCluster().getInstance(ClusterService.class, nonClusterManagerNode)
-            .getClusterApplierService();
-        ClusterState currentState = clusterApplierService.state();
-        IndexRoutingTable.Builder indexRoutingTableBuilder = IndexRoutingTable.builder(index);
-        for (int j = 0; j < numShards; j++) {
-            indexRoutingTableBuilder.addIndexShard(
-                new IndexShardRoutingTable.Builder(new ShardId(index, j)).addShard(
-                    TestShardRouting.newShardRouting("test", j, clusterManagerId, true, ShardRoutingState.STARTED)
-                ).build()
-            );
-        }
+                )
+                    receivedShardExistsRequestLatch.countDown();
+        // wait for 4 active shards - we should have lost one shard
+        CountDownLatch receivedShardExistsRequestLatch = new CountDownLatch(1);
+    public void testShardCleanupIfShardDeletionAfterRelocationFailedAndIndexDeleted() throws Exception {
         ClusterState newState = ClusterState.builder(currentState)
-            .incrementVersion()
-            .routingTable(RoutingTable.builder().add(indexRoutingTableBuilder).build())
-            .build();
-        CountDownLatch latch = new CountDownLatch(1);
-        clusterApplierService.onNewClusterState("test", () -> newState, new ClusterApplyListener() {
-            @Override
-            public void onSuccess(String source) {
-                latch.countDown();
-            }
-
-            @Override
-            public void onFailure(String source, Exception e) {
-                latch.countDown();
-                throw new AssertionError("Expected a proper response", e);
-            }
-        });
-        latch.await();
-        waitNoPendingTasksOnAll();
-        logger.info("Checking if shards aren't removed");
-        for (int shard : node2Shards) {
-            assertShardExists(nonClusterManagerNode, index, shard);
-        }
-    }
-
+        );
     private Path indexDirectory(String server, Index index) {
-        NodeEnvironment env = internalCluster().getInstance(NodeEnvironment.class, server);
-        final Path[] paths = env.indexPaths(index);
-        assert paths.length == 1;
-        return paths[0];
+ * Licensed to Elasticsearch under one or more contributor
+                    .put(EnableAllocationDecider.CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), EnableAllocationDecider.Rebalance.NONE)
+        logger.info("--> making sure that shard is not allocated on server3");
+        // node_1 will then wait for the next cluster state change before it tries a next attempt to delete the shard.
+        ClusterHealthResponse health = client().admin().cluster().prepareHealth().setWaitForNodes("3").get();
+import org.opensearch.test.OpenSearchIntegTestCase.ClusterScope;
+        assertBusy(() -> assertTrue(internalCluster().getInstance(IndicesService.class, node4).hasIndex(index)));
+        assertThat(Files.exists(shardDirectory(node_2, index, 0)), equalTo(true));
+ * Unless required by applicable law or agreed to in writing,
+        assertAcked(
+        if (health.getStatus() != ClusterHealthStatus.RED) {
+        internalCluster().setDisruptionScheme(disruption);
+        logger.info("--> running cluster_health");
     }
-
-    private Path shardDirectory(String server, Index index, int shard) {
-        NodeEnvironment env = internalCluster().getInstance(NodeEnvironment.class, server);
-        final Path[] paths = env.availableShardPaths(new ShardId(index, shard));
-        assert paths.length == 1;
-        return paths[0];
-    }
-
-    private void assertShardDeleted(final String server, final Index index, final int shard) throws Exception {
-        final Path path = shardDirectory(server, index, shard);
-        assertBusy(() -> assertFalse("Expected shard to not exist: " + path, Files.exists(path)));
-    }
-
-    private void assertShardExists(final String server, final Index index, final int shard) throws Exception {
-        final Path path = shardDirectory(server, index, shard);
-        assertBusy(() -> assertTrue("Expected shard to exist: " + path, Files.exists(path)));
-    }
-
-    private void assertIndexDeleted(final String server, final Index index) throws Exception {
+                    .put(indexSettings())
+        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(true));
+            );
+import org.opensearch.transport.TransportMessageListener;
+            if (action.equals("internal:index/shard/exists") && shardActiveRequestSent.getCount() > 0) {
+        );
+                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+            // to prevent this we are setting the timeout here to something highish ie. the default in practice
+        // TODO: we should add an easier to do this. It's too much of a song and dance..
+        logClusterState();
+import java.io.IOException;
+            .setWaitForNodes("2")
+        logger.debug("--> waiting for shards to recover on [{}]", node4);
+    public void testShardsCleanup() throws Exception {
+                .cluster()
         final Path path = indexDirectory(server, index);
-        assertBusy(() -> assertFalse("Expected index to be deleted: " + path, Files.exists(path)));
+        logger.info("--> creating index [test] with one shard and on replica");
+                .cluster()
+import org.opensearch.transport.ConnectTransportException;
+        final CountDownLatch shardActiveRequestSent = new CountDownLatch(1);
+        final Index index = stateResponse.getState().metadata().index("test").getIndex();
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(node_2));
+        return paths[0];
+        clusterApplierService.onNewClusterState("test", () -> newState, new ClusterApplyListener() {
+        ensureGreen("test");
+        for (ShardRouting shardRouting : routingNode) {
+        assertThat(Files.exists(shardDirectory(node_3, index, 0)), equalTo(false));
+        ClusterHealthResponse clusterHealth = client().admin()
+                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+        assertThat(Files.exists(indexDirectory(node_2, index)), equalTo(true));
+import java.util.List;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        logger.info("Checking if shards aren't removed");
+import org.opensearch.common.settings.Settings;
+            .put(Environment.PATH_DATA_SETTING.getKey(), createTempDir())
+ * this file be licensed under the Apache-2.0 license or a
+     */
+                }
+                .prepareUpdateSettings()
+        );
+                )
+import org.opensearch.action.admin.cluster.state.ClusterStateResponse;
+        int i = 0;
+ * SPDX-License-Identifier: Apache-2.0
+            logClusterState();
+        if (randomBoolean()) { // sometimes add cluster-state delay to trigger observers in IndicesStore.ShardActiveRequestHandler
+        logger.info("--> making sure that shard and its replica are allocated on node_1 and node_2");
+                .prepareUpdateSettings()
+            }
+        assertThat(Files.exists(indexDirectory(node_3, index)), equalTo(false));
+                latch.countDown();
+                if (action.equals(PeerRecoveryTargetService.Actions.FILES_INFO)) {
+        logger.debug("--> allowing index to be assigned to node [{}]", node4);
+                new IndexShardRoutingTable.Builder(new ShardId(index, j)).addShard(
+        IndexRoutingTable.Builder indexRoutingTableBuilder = IndexRoutingTable.builder(index);
+            i++;
+import org.opensearch.common.unit.TimeValue;
+        assertAcked(
+        final String clusterManagerId = internalCluster().clusterService(clusterManagerNode).localNode().getId();
+        final String node3 = nodes.get(2);
+ * this work for additional information regarding copyright
+            .getClusterApplierService();
+/*
+    /* Test that shard is deleted in case ShardActiveRequest after relocation and next incoming cluster state is an index delete. */
+        super(nodeSettings);
+                .cluster()
+        final Path[] paths = env.availableShardPaths(new ShardId(index, shard));
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+        // disable allocation to control the situation more easily
+            .setWaitForNoRelocatingShards(true)
+        );
+ * You may obtain a copy of the License at
+                    Settings.builder().put(EnableAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), "none")
+        final String node_3 = internalCluster().startNode(nonClusterManagerNode());
+            .get();
+        final String node_2 = internalCluster().startNode();
+                    .put(IndexMetadata.INDEX_ROUTING_EXCLUDE_GROUP_SETTING.getKey() + "_name", node4)
+        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(false));
+                .setSettings(Settings.builder().put(IndexMetadata.INDEX_ROUTING_EXCLUDE_GROUP_SETTING.getKey() + "_name", "NONE"))
+            .get();
+        logger.info("Node [{}] has shards: {}", nonClusterManagerNode, Arrays.toString(node2Shards));
+        logger.info("--> starting node server3");
+        assertBusy(() -> assertTrue("Expected shard to exist: " + path, Files.exists(path)));
+import static org.hamcrest.Matchers.equalTo;
+import org.opensearch.core.index.shard.ShardId;
+ * The OpenSearch Contributors require contributions made to
+        assertFalse(client().admin().cluster().prepareHealth().setWaitForNodes("2").get().isTimedOut());
+        logger.info("--> done cluster_health, status {}", clusterHealth.getStatus());
+import org.opensearch.test.OpenSearchIntegTestCase.Scope;
+                .cluster()
+import org.opensearch.plugins.Plugin;
+        ensureGreen("test");
+ * not use this file except in compliance with the License.
+            client().admin()
+public class IndicesStoreIntegrationIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
+            .setTransientSettings(
+            public void onSuccess(String source) {
+        );
+        assertIndexDeleted(node_1, index);
+        internalCluster().client().admin().cluster().prepareReroute().add(new MoveAllocationCommand(index, shard, nodeFrom, nodeTo)).get();
+        latch.await();
+        }
+        final String node_1 = internalCluster().startNode(nonClusterManagerNode());
+        assertThat(clusterHealth.isTimedOut(), equalTo(false));
+        }
+import org.opensearch.cluster.metadata.IndexMetadata;
+        String index,
+            .setWaitForGreenStatus()
+import org.opensearch.test.transport.MockTransportService;
     }
+        Path server2Shard = shardDirectory(node_2, index, 0);
+            .prepareHealth()
+    protected Settings nodeSettings(int nodeOrdinal) { // simplify this and only use a single data path
+                .prepareUpdateSettings()
+        ensureGreen("test");
+    }
+import java.util.concurrent.CountDownLatch;
+import org.opensearch.indices.recovery.PeerRecoveryTargetService;
+            disruption.stopDisrupting();
+            }
+ */
+                    // checks if enough other copies are started somewhere else. The node sends a ShardActiveRequest
+    }
+    }
+        logger.debug("--> shutting down two random nodes");
+import java.nio.file.Files;
+        return paths[0];
+                    .put(indexSettings())
+        assertAcked(
+    @ParametersFactory
+                Settings.builder()
+        // testShardActiveElseWhere might change the state of a non-cluster-manager node
+        logger.info("--> making sure that shard and its replica are allocated on node_1 and node_2");
+        String node_3 = internalCluster().startNode();
+                    Settings.builder().put(EnableAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), "all")
+        // so we cannot check state consistency of this cluster
+                .setWaitForGreenStatus()
+        client().admin()
+        assertThat(Files.exists(shardDirectory(node_3, index, 0)), equalTo(true));
+        ClusterState currentState = clusterApplierService.state();
+        final Path[] paths = env.indexPaths(index);
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+    @Override
+        List<String> nodes = internalCluster().startNodes(2);
+        );
+        );
+        for (int j = 0; j < numShards; j++) {
+    public void testShardActiveElseWhere() throws Exception {
+        });
+        assertThat(clusterHealth.isTimedOut(), equalTo(false));
+    }
+        assertShardDeleted(node_1, index, 0);
+        MockTransportService transportService = (MockTransportService) internalCluster().getInstance(TransportService.class, nodeTo);
+        assertThat(clusterHealth.isTimedOut(), equalTo(false));
+        Logger logger,
+                .prepareUpdateSettings()
+        assertThat(Files.exists(server2Shard), equalTo(true));
+import org.opensearch.test.disruption.BlockClusterStateProcessing;
+        RoutingNode routingNode = stateResponse.getState().getRoutingNodes().node(nonClusterManagerId);
+            client().admin()
+            )
+            logger.info("--> stopping disruption");
+        assertIndexDeleted(node_1, index);
+        Index index = state.metadata().index("test").getIndex();
+            .incrementVersion()
+        assertFalse(client().admin().cluster().prepareHealth().setWaitForActiveShards(4).get().isTimedOut());
+            client().admin()
+            assertShardExists(nonClusterManagerNode, index, shard);
+            public void onFailure(String source, Exception e) {
+import org.opensearch.indices.IndicesService;
+        ClusterStateResponse stateResponse = client().admin().cluster().prepareState().get();
+        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(true));
+                .prepareHealth()
+    private Path shardDirectory(String server, Index index, int shard) {
+import org.opensearch.cluster.service.ClusterApplierService;
+        assertThat(Files.exists(shardDirectory(node_2, index, 0)), equalTo(true));
+        assertThat(clusterHealth.isTimedOut(), equalTo(false));
+        return remoteStoreSettings;
+     * relocate a shard and block cluster state processing on the relocation target node to activate the shard
+                    Settings.builder().put(EnableAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), "all")
+        internalCluster().startNodes(node1DataPathSettings, node2DataPathSettings);
+            .prepareHealth()
+        assertAcked(
+        final String node_4 = internalCluster().startNode();
+        logger.info("--> creating index [test] with one shard and on replica");
+    }
+        assertAcked(
+ *
+        assertFalse(client().admin().cluster().prepareHealth().setWaitForNodes("5").get().isTimedOut());
+        // delete the index. node_1 that still waits for the next cluster state update will then get the delete index next.
+        Settings node2DataPathSettings = internalCluster().dataPathSettings(nodesToShutDown.get(1));
+        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(true));
+        // disable allocation again to control concurrency a bit and allow shard active to kick in before allocation
+    }
+            .cluster()
+            fail("cluster didn't become red, despite of shutting 2 of 3 nodes");
+import org.opensearch.cluster.service.ClusterService;
+            indexRoutingTableBuilder.addIndexShard(
+                .setWaitForNoRelocatingShards(true)
+            .setWaitForNodes("3")
+            // by default this value is 1 sec in tests (30 sec in practice) but we adding disruption here
+    }
+ *
+import org.opensearch.cluster.routing.IndexRoutingTable;
+            prepareCreate("test").setSettings(
+        ensureGreen("test");
+        return Arrays.asList(MockTransportService.TestPlugin.class);
+        // disable relocations when we do this, to make sure the shards are not relocated from node2
+            .setWaitForNoRelocatingShards(true)
+        assertAcked(
+        assertThat(Files.exists(indexDirectory(node_1, index)), equalTo(false));
+        return Settings.builder()
+            public void onRequestReceived(long requestId, String action) {
+        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(true));
+        CountDownLatch beginRelocationLatch = new CountDownLatch(1);
+        );
+                    .put(indexSettings())
+        ClusterState state = client().admin().cluster().prepareState().get().getState();
+        internalCluster().startNode(nonDataNode());
+import java.util.Collection;
+        // due to rebalancing, and delete its content
+            .cluster()
+ * GitHub history for details.
+                    logger.info("received: {}, relocation done", action);
+import org.opensearch.cluster.health.ClusterHealthStatus;
+        final String node_2 = internalCluster().startDataOnlyNode(Settings.builder().build());
+        assertThat(Files.exists(indexDirectory(node_1, index)), equalTo(true));
+            @Override
+        logger.info("--> move shard from {} to {}, and wait for relocation to finish", node_1, node_2);
+        );
+        logger.info("--> waiting for relocation to start");
+                    Settings.builder().put(EnableAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), "none")
+            )
+                    .put(indexSettings())
+                    // Whenever a node deletes a shard because it was relocated somewhere else, it first
+            prepareCreate("test").setSettings(
+        final Path path = shardDirectory(server, index, shard);
+                throw new AssertionError("Expected a proper response", e);
+        assertAcked(
+        ClusterState state = client().admin().cluster().prepareState().get().getState();
+        final int numShards = scaledRandomIntBetween(2, 10);
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+                )
+        NodeEnvironment env = internalCluster().getInstance(NodeEnvironment.class, server);
+        });
+                .indices()
+        assertThat(Files.exists(indexDirectory(node_1, index)), equalTo(true));
+        transportServiceNode_1.addSendBehavior(transportServiceNode_2, (connection, requestId, action, request, options) -> {
+import org.opensearch.env.Environment;
+        logger.info("--> making sure that shard and its replica exist on server1, server2 and server3");
+import org.opensearch.cluster.routing.allocation.command.MoveAllocationCommand;
+        assertShardDeleted(node_1, index, 0);
+            .get();
+        assert paths.length == 1;
+        assert paths.length == 1;
+                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 3)
+import org.opensearch.cluster.routing.RoutingNode;
+        assertIndexDeleted(node_2, index);
+        logger.info("--> running cluster_health");
+            .cluster()
+        assertAcked(
+        // allocation filtering may not have immediate effect
+    }
+        assertThat(Files.exists(indexDirectory(node_2, index)), equalTo(true));
+    }
+    protected void ensureClusterStateConsistency() throws IOException {
+import org.opensearch.transport.TransportService;
+    }
+            .put(IndicesStore.INDICES_STORE_DELETE_SHARD_TIMEOUT.getKey(), new TimeValue(30, TimeUnit.SECONDS))
+            client().admin()
+        int shard,
+            )
+        assertThat(Files.exists(shardDirectory(node_2, index, 0)), equalTo(false));
+                    logger.info("received: {}, relocation starts", action);
+        clusterHealth = client().admin().cluster().prepareHealth().setWaitForNoRelocatingShards(true).get();
+        });
+import org.opensearch.cluster.routing.ShardRouting;
+                    beginRelocationLatch.countDown();
+                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+/*
+        logger.info("--> starting disruption");
+import java.util.concurrent.TimeUnit;
+    }
+        ClusterHealthResponse clusterHealth = client().admin().cluster().prepareHealth().setWaitForNoRelocatingShards(true).get();
+        assertShardDeleted(node_3, index, 0);
+        waitNoPendingTasksOnAll();
+            .prepareHealth()
+                .setTransientSettings(
+        ensureGreen("test");
+        assertThat(clusterHealth.isTimedOut(), equalTo(false));
+import java.util.Arrays;
+            // which is between 1 and 2 sec can cause each of the shard deletion requests to timeout.
+    ) throws InterruptedException {
+            )
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+        final String node_1 = internalCluster().startNode();
+        for (int shard : node2Shards) {
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+    @Override
+            node2Shards[i] = shardRouting.shardId().id();
+            }
+            .routingTable(RoutingTable.builder().add(indexRoutingTableBuilder).build())
+                Settings.builder()
+import org.opensearch.cluster.routing.TestShardRouting;
+        assertThat(Files.exists(shardDirectory(node_2, index, 0)), equalTo(false));
+    private void assertShardExists(final String server, final Index index, final int shard) throws Exception {
+        logger.info("--> running cluster_health");
+        beginRelocationLatch.await();
+                ).build()
+        logger.info("--> making sure that shard and its replica are allocated on server1 and server3 but not on server2");
+        client().admin().indices().prepareDelete("test").get();
+                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+        disruption.startDisrupting();
+                Settings.builder()
+    @Override
+import org.opensearch.cluster.ClusterState;
+        logger.info("--> starting node node_4");
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(nodesToShutDown.get(0)));
+        assertThat(Files.exists(indexDirectory(node_2, index)), equalTo(true));
+        logger.info("--> creating index [test] with one shard and on replica");
+        logger.info("--> stopping node {}", node_2);
+        // we will use this later on, handy to start now to make sure it has a different data folder that node 1,2 &3
+import org.apache.logging.log4j.Logger;
+        logger.info("--> move shard from node_1 to node_3, and wait for relocation to finish");
+        logger.info("--> waiting for relocation to finish");
+            .setWaitForNodes("4")
+        final String nonClusterManagerId = internalCluster().clusterService(nonClusterManagerNode).localNode().getId();
+        assertBusy(() -> assertFalse("Expected index to be deleted: " + path, Files.exists(path)));
+        assertShardDeleted(node_4, index, 0);
+        logger.debug("--> waiting for the lost shard to be recovered");
+                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0).put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, numShards)
+                .cluster()
+        }
+        logger.debug("--> verifying index is red");
+                .setTransientSettings(
+        ClusterApplierService clusterApplierService = internalCluster().getInstance(ClusterService.class, nonClusterManagerNode)
+        final String clusterManagerNode = internalCluster().getClusterManagerName();
+ */
+import java.nio.file.Path;
+                Settings.builder()
+        logger.info("--> running cluster_health");
+        receivedShardExistsRequestLatch.await();
+        ClusterState state = client().admin().cluster().prepareState().get().getState();
+        Settings node1DataPathSettings = internalCluster().dataPathSettings(nodesToShutDown.get(0));
+        assertThat(Files.exists(server2Shard), equalTo(true));
+        shardActiveRequestSent.await();
+        final String node_2 = internalCluster().startNode(nonClusterManagerNode());
+        assertBusy(() -> assertFalse("Expected shard to not exist: " + path, Files.exists(path)));
+import org.opensearch.cluster.routing.allocation.decider.EnableAllocationDecider;
+                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+@ClusterScope(scope = Scope.TEST, numDataNodes = 0)
+    private void assertShardDeleted(final String server, final Index index, final int shard) throws Exception {
+                shardActiveRequestSent.countDown();
+        String nodeFrom,
+            .prepareUpdateSettings()
+        assertThat(Files.exists(shardDirectory(node_3, index, 0)), equalTo(true));
+import static org.opensearch.test.NodeRoles.nonClusterManagerNode;
+        );
+            connection.sendRequest(requestId, action, request, options);
+        String nodeTo
+                )
+            // wait a little so that cluster state observer is registered
+import org.opensearch.env.NodeEnvironment;
+                latch.countDown();
+ * compatible open source license.
+                .get()
+            .build();
+        logger.debug("--> starting the two old nodes back");
+        assertThat(Files.exists(shardDirectory(node_2, index, 0)), equalTo(true));
+    public IndicesStoreIntegrationIT(Settings nodeSettings) {
+        final String node1 = nodes.get(0);
+    /**
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.cluster.routing.RoutingTable;
+            .setWaitForNoRelocatingShards(true)
+        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(true));
+    public void testShardActiveElsewhereDoesNotDeleteAnother() throws Exception {
+            prepareCreate("test").setSettings(
+        final String node_1 = internalCluster().startNode();
+                Settings.builder()
+        assertThat(Files.exists(shardDirectory(node_3, index, 0)), equalTo(true));
 }
+        assertThat(Files.exists(indexDirectory(node_3, index)), equalTo(true));
+package org.opensearch.indices.store;
+                .isTimedOut()
+        Index index = state.metadata().index("test").getIndex();
+            prepareCreate("test").setSettings(
+import static org.opensearch.test.NodeRoles.nonDataNode;
+            prepareCreate("test").setSettings(
+ * specific language governing permissions and limitations
+            }
+            .get();
+            client().admin()
+        BlockClusterStateProcessing disruption = new BlockClusterStateProcessing(nodeTo, random());
+            .build();
+                } else if (action.equals(IndicesStore.ACTION_SHARD_EXISTS)) {
+    }
+                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        }
+        final List<String> nodes = internalCluster().startDataOnlyNodes(4);
+    public void testIndexCleanup() throws Exception {
+            client().admin()
+        assertThat(Files.exists(indexDirectory(node_1, index)), equalTo(true));
+        transportService.addMessageListener(new TransportMessageListener() {
+    public static BlockClusterStateProcessing relocateAndBlockCompletion(
+            @Override
+        // add a transport delegate that will prevent the shard active request to succeed the first time after relocation has finished.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                logger.info("prevent shard active request from being sent");
+                .setTransientSettings(
+        // it must still delete the shard, even if it cannot find it anymore in indicesservice
+        clusterHealth = client().admin()
+    public static Collection<Object[]> parameters() {
+ * software distributed under the License is distributed on an
+        // we have to do this in two steps as we now do async shard fetching before assigning, so the change to the
+        logger.info("--> starting node server3");
+        assertFalse(
+        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(true));
+                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+import org.opensearch.test.InternalTestCluster;
+        waitNoPendingTasksOnAll();
+        final String node2 = nodes.get(1);
+/*
+import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
+        assertThat(Files.exists(indexDirectory(node_2, index)), equalTo(false));
+import org.opensearch.core.index.Index;
+            .cluster()
+        );
+        internalCluster().startClusterManagerOnlyNode();
+        return disruption;
+        assertThat(Files.exists(shardDirectory(node_1, index, 0)), equalTo(true));
+ * the Apache License, Version 2.0 (the "License"); you may
+        MockTransportService transportServiceNode_1 = (MockTransportService) internalCluster().getInstance(TransportService.class, node_1);
+        ensureGreen();
+                    // to the other nodes that should have a copy according to cluster state.
+        ClusterHealthResponse clusterHealth = client().admin()
+        // use a tracer on the target node to track relocation start and end
+                    TestShardRouting.newShardRouting("test", j, clusterManagerId, true, ShardRoutingState.STARTED)
+    }
+                .setTransientSettings(
+            internalCluster().client().admin().cluster().prepareReroute().add(new MoveAllocationCommand("test", 0, node_1, node_3)).get();
+ * ownership. Elasticsearch licenses this file to you under
+            @Override
+    private void assertIndexDeleted(final String server, final Index index) throws Exception {
+        assertAcked(
+        } else {
+        TransportService transportServiceNode_2 = internalCluster().getInstance(TransportService.class, node_2);
+        assertThat(Files.exists(indexDirectory(node_2, index)), equalTo(false));
+        final int[] node2Shards = new int[routingNode.numberOfOwningShards()];
+import org.opensearch.cluster.routing.ShardRoutingState;
+ * KIND, either express or implied.  See the License for the
+        CountDownLatch latch = new CountDownLatch(1);
+        assertShardDeleted(node_2, index, 0);

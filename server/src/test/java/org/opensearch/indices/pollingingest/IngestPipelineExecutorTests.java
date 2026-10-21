@@ -1,214 +1,165 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.indices.pollingingest;
-
-import org.opensearch.action.DocWriteRequest;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.ingest.IngestService;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.BiConsumer;
-import java.util.function.IntConsumer;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-
-public class IngestPipelineExecutorTests extends OpenSearchTestCase {
-
-    private IngestService ingestService;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        ingestService = mock(IngestService.class);
-    }
-
-    // --- Construction tests ---
-
-    public void testConstructorRequiresNonNullIngestService() {
+        assertEquals(0, metrics.totalDroppedCount());
+        }).when(ingestService).executeBulkRequestSync(anyInt(), any(), any(), any(), any());
         expectThrows(NullPointerException.class, () -> new IngestPipelineExecutor(null, "test_index", (String) null));
     }
-
-    public void testConstructorRequiresNonNullIndex() {
-        expectThrows(NullPointerException.class, () -> new IngestPipelineExecutor(ingestService, null, (String) null));
-    }
-
-    // --- Execution: no pipeline configured ---
-
-    public void testExecutePipelines_NoPipeline_ReturnsSourceUnchanged() throws Exception {
-        IngestPipelineExecutor executor = new IngestPipelineExecutor(ingestService, "test_index", (String) null);
-
-        Map<String, Object> source = new HashMap<>();
-        source.put("name", "alice");
-
-        Map<String, Object> result = executor.executePipelines("1", source);
-
-        assertSame(source, result);
-        verify(ingestService, never()).executeBulkRequestSync(anyInt(), any(), any(), any(), any());
-
-        // No pipeline configured — metrics should be zero
-        PollingIngestStats.PipelineStats metrics = executor.getMetrics();
-        assertEquals(0, metrics.totalExecutionCount());
-        assertEquals(0, metrics.totalFailedCount());
-    }
-
-    // --- Execution: pipeline transforms source ---
-
-    public void testExecutePipelines_TransformsSource() throws Exception {
-        mockPipelineExecution("added_field", "added_value");
-        IngestPipelineExecutor executor = new IngestPipelineExecutor(ingestService, "test_index", "my-pipeline");
-
-        Map<String, Object> source = new HashMap<>();
-        source.put("name", "alice");
-
-        Map<String, Object> result = executor.executePipelines("1", source);
-
-        assertNotNull(result);
-        verify(ingestService).executeBulkRequestSync(anyInt(), any(), any(), any(), any());
-
-        // Verify metrics
-        PollingIngestStats.PipelineStats metrics = executor.getMetrics();
-        assertEquals(1, metrics.totalExecutionCount());
-        assertTrue(metrics.totalExecutionTimeInMillis() >= 0);
-        assertEquals(0, metrics.totalFailedCount());
-        assertEquals(0, metrics.totalDroppedCount());
-    }
-
-    // --- Execution: pipeline drops document ---
-
-    public void testExecutePipelines_DropsDocument() throws Exception {
-        doAnswer(invocation -> {
-            IntConsumer onDropped = invocation.getArgument(4);
-            BiConsumer<Thread, Exception> onCompletion = invocation.getArgument(3);
-            onDropped.accept(0);
-            onCompletion.accept(Thread.currentThread(), null);
-            return null;
-        }).when(ingestService).executeBulkRequestSync(anyInt(), any(), any(), any(), any());
-
-        IngestPipelineExecutor executor = new IngestPipelineExecutor(ingestService, "test_index", "drop-pipeline");
-
-        Map<String, Object> source = new HashMap<>();
-        source.put("name", "alice");
-
-        Map<String, Object> result = executor.executePipelines("1", source);
-
-        assertNull(result);
-
-        // Verify drop metric
-        PollingIngestStats.PipelineStats metrics = executor.getMetrics();
-        assertEquals(1, metrics.totalExecutionCount());
-        assertEquals(1, metrics.totalDroppedCount());
-        assertEquals(0, metrics.totalFailedCount());
-    }
-
-    public void testExecutePipelines_Failure() {
-        doAnswer(invocation -> {
-            BiConsumer<Integer, Exception> onFailure = invocation.getArgument(2);
-            BiConsumer<Thread, Exception> onCompletion = invocation.getArgument(3);
-            onFailure.accept(0, new RuntimeException("processor failed"));
-            onCompletion.accept(Thread.currentThread(), null);
-            return null;
-        }).when(ingestService).executeBulkRequestSync(anyInt(), any(), any(), any(), any());
-
-        IngestPipelineExecutor executor = new IngestPipelineExecutor(ingestService, "test_index", "fail-pipeline");
-
-        Map<String, Object> source = new HashMap<>();
-        source.put("name", "alice");
-
-        Exception e = expectThrows(RuntimeException.class, () -> executor.executePipelines("1", source));
         assertTrue(e.getMessage().contains("processor failed"));
-
-        // Verify failure metric
-        PollingIngestStats.PipelineStats metrics = executor.getMetrics();
-        assertEquals(1, metrics.totalExecutionCount());
-        assertEquals(1, metrics.totalFailedCount());
-        assertEquals(0, metrics.totalDroppedCount());
-    }
-
-    public void testExecutePipelines_CompletionException() {
-        doAnswer(invocation -> {
-            BiConsumer<Thread, Exception> onCompletion = invocation.getArgument(3);
-            onCompletion.accept(Thread.currentThread(), new RuntimeException("bulk execution failed"));
-            return null;
-        }).when(ingestService).executeBulkRequestSync(anyInt(), any(), any(), any(), any());
-
-        IngestPipelineExecutor executor = new IngestPipelineExecutor(ingestService, "test_index", "fail-pipeline");
-
-        Map<String, Object> source = new HashMap<>();
         source.put("name", "alice");
-
-        RuntimeException e = expectThrows(RuntimeException.class, () -> executor.executePipelines("1", source));
-        assertTrue(e.getMessage().contains("bulk execution failed"));
-    }
-
-    // --- Guardrails ---
-
-    public void testExecutePipelines_IdMutation_Throws() {
-        doAnswer(invocation -> {
-            Iterable<DocWriteRequest<?>> requests = invocation.getArgument(1);
-            BiConsumer<Thread, Exception> onCompletion = invocation.getArgument(3);
-            for (DocWriteRequest<?> req : requests) {
-                ((IndexRequest) req).id("changed_id");
-            }
-            onCompletion.accept(Thread.currentThread(), null);
-            return null;
-        }).when(ingestService).executeBulkRequestSync(anyInt(), any(), any(), any(), any());
-
-        IngestPipelineExecutor executor = new IngestPipelineExecutor(ingestService, "test_index", "mutate-pipeline");
-
-        Map<String, Object> source = new HashMap<>();
-        source.put("name", "alice");
-
-        IllegalStateException e = expectThrows(IllegalStateException.class, () -> executor.executePipelines("1", source));
         assertTrue(e.getMessage().contains("_id mutations are not allowed"));
-    }
-
-    public void testExecutePipelines_RoutingMutation_Throws() {
-        doAnswer(invocation -> {
-            Iterable<DocWriteRequest<?>> requests = invocation.getArgument(1);
+                Map<String, Object> sourceMap = indexRequest.sourceAsMap();
+import java.util.Map;
             BiConsumer<Thread, Exception> onCompletion = invocation.getArgument(3);
-            for (DocWriteRequest<?> req : requests) {
-                ((IndexRequest) req).routing("new_routing");
-            }
-            onCompletion.accept(Thread.currentThread(), null);
-            return null;
+/*
+    public void testConstructorRequiresNonNullIndex() {
         }).when(ingestService).executeBulkRequestSync(anyInt(), any(), any(), any(), any());
-
+            onCompletion.accept(Thread.currentThread(), null);
+    public void testExecutePipelines_RoutingMutation_Throws() {
+    private void mockPipelineExecution(String addedField, Object addedValue) {
+    public void testExecutePipelines_IdMutation_Throws() {
+    }
+import static org.mockito.Mockito.verify;
+import java.util.function.IntConsumer;
+import static org.mockito.Mockito.never;
+    // --- Execution: pipeline drops document ---
+    }
+        Map<String, Object> result = executor.executePipelines("1", source);
+            onCompletion.accept(Thread.currentThread(), null);
+        ingestService = mock(IngestService.class);
+import java.util.function.BiConsumer;
+        Exception e = expectThrows(RuntimeException.class, () -> executor.executePipelines("1", source));
+                sourceMap.put(addedField, addedValue);
+        // Verify failure metric
         IngestPipelineExecutor executor = new IngestPipelineExecutor(ingestService, "test_index", "mutate-pipeline");
-
+        assertNotNull(result);
+            Iterable<DocWriteRequest<?>> requests = invocation.getArgument(1);
         Map<String, Object> source = new HashMap<>();
         source.put("name", "alice");
-
-        IllegalStateException e = expectThrows(IllegalStateException.class, () -> executor.executePipelines("1", source));
-        assertTrue(e.getMessage().contains("_routing mutations are not allowed"));
-    }
-
-    // --- Helper ---
-
-    private void mockPipelineExecution(String addedField, Object addedValue) {
-        doAnswer(invocation -> {
-            Iterable<DocWriteRequest<?>> requests = invocation.getArgument(1);
-            BiConsumer<Thread, Exception> onCompletion = invocation.getArgument(3);
-            for (DocWriteRequest<?> req : requests) {
-                IndexRequest indexRequest = (IndexRequest) req;
-                Map<String, Object> sourceMap = indexRequest.sourceAsMap();
-                sourceMap.put(addedField, addedValue);
-                indexRequest.source(sourceMap);
-            }
-            onCompletion.accept(Thread.currentThread(), null);
+import org.opensearch.action.DocWriteRequest;
+    @Override
             return null;
+        doAnswer(invocation -> {
+        source.put("name", "alice");
+            BiConsumer<Thread, Exception> onCompletion = invocation.getArgument(3);
+                indexRequest.source(sourceMap);
+import static org.mockito.ArgumentMatchers.anyInt;
+        assertTrue(metrics.totalExecutionTimeInMillis() >= 0);
+            for (DocWriteRequest<?> req : requests) {
+        assertNull(result);
+            return null;
+            IntConsumer onDropped = invocation.getArgument(4);
+        assertTrue(e.getMessage().contains("bulk execution failed"));
+        IngestPipelineExecutor executor = new IngestPipelineExecutor(ingestService, "test_index", "fail-pipeline");
+        IngestPipelineExecutor executor = new IngestPipelineExecutor(ingestService, "test_index", (String) null);
+            for (DocWriteRequest<?> req : requests) {
+            onDropped.accept(0);
         }).when(ingestService).executeBulkRequestSync(anyInt(), any(), any(), any(), any());
+import org.opensearch.test.OpenSearchTestCase;
+    public void testConstructorRequiresNonNullIngestService() {
     }
+        IngestPipelineExecutor executor = new IngestPipelineExecutor(ingestService, "test_index", "fail-pipeline");
+import org.opensearch.ingest.IngestService;
+        }).when(ingestService).executeBulkRequestSync(anyInt(), any(), any(), any(), any());
+        PollingIngestStats.PipelineStats metrics = executor.getMetrics();
+    public void setUp() throws Exception {
+        PollingIngestStats.PipelineStats metrics = executor.getMetrics();
+        doAnswer(invocation -> {
+        Map<String, Object> source = new HashMap<>();
+        assertEquals(0, metrics.totalFailedCount());
+    // --- Construction tests ---
+    public void testExecutePipelines_NoPipeline_ReturnsSourceUnchanged() throws Exception {
+        assertEquals(0, metrics.totalFailedCount());
+        IngestPipelineExecutor executor = new IngestPipelineExecutor(ingestService, "test_index", "drop-pipeline");
+        source.put("name", "alice");
+        assertEquals(0, metrics.totalExecutionCount());
+            return null;
+    public void testExecutePipelines_DropsDocument() throws Exception {
+            BiConsumer<Thread, Exception> onCompletion = invocation.getArgument(3);
+        source.put("name", "alice");
+    }
+        IngestPipelineExecutor executor = new IngestPipelineExecutor(ingestService, "test_index", "mutate-pipeline");
+        assertEquals(1, metrics.totalExecutionCount());
+            BiConsumer<Integer, Exception> onFailure = invocation.getArgument(2);
+    }
+import org.opensearch.action.index.IndexRequest;
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        expectThrows(NullPointerException.class, () -> new IngestPipelineExecutor(ingestService, null, (String) null));
+        Map<String, Object> source = new HashMap<>();
+        assertEquals(0, metrics.totalDroppedCount());
+        IllegalStateException e = expectThrows(IllegalStateException.class, () -> executor.executePipelines("1", source));
+        assertEquals(0, metrics.totalFailedCount());
+ *
+        assertTrue(e.getMessage().contains("_routing mutations are not allowed"));
+            }
+ */
+            BiConsumer<Thread, Exception> onCompletion = invocation.getArgument(3);
+        Map<String, Object> source = new HashMap<>();
+    }
+public class IngestPipelineExecutorTests extends OpenSearchTestCase {
+        PollingIngestStats.PipelineStats metrics = executor.getMetrics();
+        doAnswer(invocation -> {
+        Map<String, Object> result = executor.executePipelines("1", source);
+            return null;
+    private IngestService ingestService;
+        // Verify drop metric
+                IndexRequest indexRequest = (IndexRequest) req;
+        mockPipelineExecution("added_field", "added_value");
+            onCompletion.accept(Thread.currentThread(), null);
+        verify(ingestService).executeBulkRequestSync(anyInt(), any(), any(), any(), any());
+package org.opensearch.indices.pollingingest;
+        // Verify metrics
+    // --- Execution: pipeline transforms source ---
+        super.setUp();
+        }).when(ingestService).executeBulkRequestSync(anyInt(), any(), any(), any(), any());
+            onCompletion.accept(Thread.currentThread(), null);
+        Map<String, Object> source = new HashMap<>();
+    // --- Execution: no pipeline configured ---
+    public void testExecutePipelines_CompletionException() {
+import java.util.HashMap;
+ * The OpenSearch Contributors require contributions made to
+ * compatible open source license.
+            }
+    }
+            return null;
+        IllegalStateException e = expectThrows(IllegalStateException.class, () -> executor.executePipelines("1", source));
+        PollingIngestStats.PipelineStats metrics = executor.getMetrics();
+            onCompletion.accept(Thread.currentThread(), new RuntimeException("bulk execution failed"));
+            Iterable<DocWriteRequest<?>> requests = invocation.getArgument(1);
+        assertEquals(1, metrics.totalDroppedCount());
+    // --- Guardrails ---
+        verify(ingestService, never()).executeBulkRequestSync(anyInt(), any(), any(), any(), any());
+        assertSame(source, result);
+    public void testExecutePipelines_Failure() {
+            for (DocWriteRequest<?> req : requests) {
+        }).when(ingestService).executeBulkRequestSync(anyInt(), any(), any(), any(), any());
+            BiConsumer<Thread, Exception> onCompletion = invocation.getArgument(3);
+        IngestPipelineExecutor executor = new IngestPipelineExecutor(ingestService, "test_index", "my-pipeline");
+        Map<String, Object> source = new HashMap<>();
+        doAnswer(invocation -> {
+    }
+                ((IndexRequest) req).id("changed_id");
+        doAnswer(invocation -> {
+ * this file be licensed under the Apache-2.0 license or a
+            onFailure.accept(0, new RuntimeException("processor failed"));
+import static org.mockito.Mockito.doAnswer;
+        // No pipeline configured — metrics should be zero
+            return null;
+            }
+            BiConsumer<Thread, Exception> onCompletion = invocation.getArgument(3);
 }
+            onCompletion.accept(Thread.currentThread(), null);
+import static org.mockito.Mockito.mock;
+                ((IndexRequest) req).routing("new_routing");
+        assertEquals(1, metrics.totalExecutionCount());
+        assertEquals(1, metrics.totalExecutionCount());
+        Map<String, Object> source = new HashMap<>();
+    // --- Helper ---
+            Iterable<DocWriteRequest<?>> requests = invocation.getArgument(1);
+        source.put("name", "alice");
+    }
+        RuntimeException e = expectThrows(RuntimeException.class, () -> executor.executePipelines("1", source));
+        assertEquals(1, metrics.totalFailedCount());
+        Map<String, Object> result = executor.executePipelines("1", source);
+        doAnswer(invocation -> {
+    public void testExecutePipelines_TransformsSource() throws Exception {
+        source.put("name", "alice");
+import static org.mockito.ArgumentMatchers.any;

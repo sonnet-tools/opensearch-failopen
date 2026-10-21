@@ -1,175 +1,156 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.be.datafusion;
-
-import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexLiteral;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.rex.RexOver;
-import org.apache.calcite.sql.SqlAggFunction;
-import org.apache.calcite.sql.SqlFunction;
-import org.apache.calcite.sql.SqlFunctionCategory;
+        // Conservative: require single-operand window aggs (lowered shape is OVER ()).
+    /** Binds to the {@code width_bucket} Rust UDF via {@code ADDITIONAL_SCALAR_SIGS}. */
+package org.opensearch.be.datafusion;
+        RexNode bucketIndex = rexBuilder.makeCall(bigint, SqlStdOperatorTable.DIVIDE, List.of(tsMinusMin, strideSeconds));
 import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.SqlOperator;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+ * <p>Timestamp values: the UDF doesn't accept timestamps and substrait can't
+        if (!(lhs instanceof RexOver maxOver) || !isAggKind(maxOver, SqlKind.MAX)) {
+            return original;
+            return Optional.empty();
+    private record MaxMinOverPair(RexOver maxOver, RexOver minOver) {
+        if (minusCall.getOperands().size() != 2) {
+ * The OpenSearch Contributors require contributions made to
+            return Optional.empty();
 import org.apache.calcite.sql.type.OperandTypes;
+        // from_unixtime takes fp64; outer cast restores the original return type.
+import org.apache.calcite.rel.type.RelDataType;
+    }
+    private static Optional<MaxMinOverPair> decomposeMinusOverRange(RexCall call) {
+ * SPDX-License-Identifier: Apache-2.0
+ * <p>Numeric values: rename to the {@code width_bucket} Rust UDF.
+import java.util.List;
+        RexNode minSeconds = rexBuilder.makeCall(bigint, UnixTimestampAdapter.LOCAL_TO_UNIXTIME_OP, List.of(pair.minOver()));
+        if (!(op2 instanceof RexCall minusCall) || minusCall.getKind() != SqlKind.MINUS) {
+        SqlFunctionCategory.USER_DEFINED_FUNCTION
+        }
+        }
+import org.apache.calcite.rex.RexBuilder;
+        if (rangePair.isPresent() && binsOpt.isPresent() && binsOpt.getAsInt() > 0) {
 import org.apache.calcite.sql.type.ReturnTypes;
-import org.apache.calcite.sql.type.SqlTypeFamily;
+import org.apache.calcite.sql.SqlFunction;
+        }
+        RelDataTypeFactory typeFactory = cluster.getTypeFactory();
+    private static RexNode adaptTimeBasedDataAware(RexCall original, RelOptCluster cluster, MaxMinOverPair pair, int bins) {
+        if (call.getOperands().size() < 3) {
+import org.apache.calcite.rel.type.RelDataTypeFactory;
+        RexBuilder rexBuilder = cluster.getRexBuilder();
+import org.apache.calcite.plan.RelOptCluster;
+        return current;
+import org.apache.calcite.sql.SqlFunctionCategory;
+        return cluster.getRexBuilder().makeCall(original.getType(), LOCAL_WIDTH_BUCKET_OP, original.getOperands());
+            return Optional.empty();
+    private static RexNode unwrapAnnotations(RexNode node) {
+        ReturnTypes.VARCHAR_2000_NULLABLE,
+        RexNode op2 = unwrapAnnotations(call.getOperands().get(2));
+        return adaptNumeric(original, cluster);
+import org.opensearch.analytics.spi.FieldStorageInfo;
+ * epoch-seconds space, anchored at {@code MIN(ts) OVER ()}:
+import org.apache.calcite.rex.RexOver;
+    private static boolean isAggKind(RexOver over, SqlKind kind) {
+        return rexBuilder.makeCast(original.getType(), bucketStartTimestamp, true);
+        RexNode tsSeconds = rexBuilder.makeCall(bigint, UnixTimestampAdapter.LOCAL_TO_UNIXTIME_OP, List.of(tsCol));
+ * subtract two {@code precision_timestamp}s. Rewrite to bucket arithmetic in
+    private static RexNode adaptNumeric(RexCall original, RelOptCluster cluster) {
+        // analytics-engine wraps operands in OperatorAnnotation before the adapter runs;
+    }
+        }
+/**
+ * compatible open source license.
+ *
+            && binsLit.getValue() instanceof Number num) {
+        }
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.opensearch.analytics.planner.rel.OperatorAnnotation;
-import org.opensearch.analytics.spi.FieldStorageInfo;
-import org.opensearch.analytics.spi.ScalarFunctionAdapter;
-
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.Optional;
-import java.util.OptionalInt;
-
-/**
- * Adapter for PPL's {@code WIDTH_BUCKET}, the lowering target for {@code bin <field> bins=N}.
- *
- * <p>Numeric values: rename to the {@code width_bucket} Rust UDF.
- *
- * <p>Timestamp values: the UDF doesn't accept timestamps and substrait can't
- * subtract two {@code precision_timestamp}s. Rewrite to bucket arithmetic in
- * epoch-seconds space, anchored at {@code MIN(ts) OVER ()}:
- * {@code bucket_start = origin + floor((ts − origin) / stride) × stride}.
- *
- * @opensearch.internal
- */
-class WidthBucketAdapter implements ScalarFunctionAdapter {
-
-    /** Binds to the {@code width_bucket} Rust UDF via {@code ADDITIONAL_SCALAR_SIGS}. */
-    static final SqlOperator LOCAL_WIDTH_BUCKET_OP = new SqlFunction(
-        "width_bucket",
-        SqlKind.OTHER_FUNCTION,
-        ReturnTypes.VARCHAR_2000_NULLABLE,
-        null,
-        OperandTypes.family(SqlTypeFamily.NUMERIC, SqlTypeFamily.NUMERIC, SqlTypeFamily.NUMERIC, SqlTypeFamily.NUMERIC),
-        SqlFunctionCategory.USER_DEFINED_FUNCTION
-    );
-
-    @Override
-    public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
-        if (original.getOperands().isEmpty()) {
-            return original;
-        }
-        SqlTypeName firstOperandType = original.getOperands().get(0).getType().getSqlTypeName();
-        if (isTimeBased(firstOperandType)) {
-            return adaptTimeBased(original, cluster);
-        }
-        return adaptNumeric(original, cluster);
+/*
     }
-
-    private static RexNode adaptNumeric(RexCall original, RelOptCluster cluster) {
-        return cluster.getRexBuilder().makeCall(original.getType(), LOCAL_WIDTH_BUCKET_OP, original.getOperands());
-    }
-
-    private static RexNode adaptTimeBased(RexCall original, RelOptCluster cluster) {
-        Optional<MaxMinOverPair> rangePair = decomposeMinusOverRange(original);
-        OptionalInt binsOpt = extractBinsLiteral(original);
-        if (rangePair.isPresent() && binsOpt.isPresent() && binsOpt.getAsInt() > 0) {
-            return adaptTimeBasedDataAware(original, cluster, rangePair.get(), binsOpt.getAsInt());
-        }
+        if (!(rhs instanceof RexOver minOver) || !isAggKind(minOver, SqlKind.MIN)) {
         return original;
+        if (isTimeBased(firstOperandType)) {
+            return adaptTimeBasedDataAware(original, cluster, rangePair.get(), binsOpt.getAsInt());
     }
-
-    private static RexNode adaptTimeBasedDataAware(RexCall original, RelOptCluster cluster, MaxMinOverPair pair, int bins) {
-        RexBuilder rexBuilder = cluster.getRexBuilder();
-        RelDataTypeFactory typeFactory = cluster.getTypeFactory();
-        RexNode tsCol = original.getOperands().get(0);
+import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexNode;
+}
+        RexNode rhs = unwrapAnnotations(minusCall.getOperands().get(1));
+        RexNode lhs = unwrapAnnotations(minusCall.getOperands().get(0));
+        if (call.getOperands().size() > 1
+import org.apache.calcite.sql.type.SqlTypeFamily;
+    }
+        // peel so the pattern match sees the underlying call shape.
+import java.util.Optional;
+            current = annotation.unwrap();
+import org.apache.calcite.sql.SqlAggFunction;
+        }
+    /** Peel {@link OperatorAnnotation} wrappers so pattern-matching sees the underlying call. */
+        while (current instanceof OperatorAnnotation annotation && annotation.unwrap() != null) {
+        null,
+        RexNode rangeSeconds = rexBuilder.makeCall(bigint, SqlStdOperatorTable.MINUS, List.of(maxSeconds, minSeconds));
+        // bucket_start = floor((ts - min) / stride) * stride + min — integer division floors.
+ */
+            return Optional.empty();
+import java.math.BigDecimal;
+ * {@code bucket_start = origin + floor((ts − origin) / stride) × stride}.
+    @Override
+        // stride = (max - min) / N
+            return OptionalInt.of(num.intValue());
         RelDataType bigint = typeFactory.createSqlType(SqlTypeName.BIGINT);
         RelDataType fp64 = typeFactory.createSqlType(SqlTypeName.DOUBLE);
-        RexNode binsLit = rexBuilder.makeBigintLiteral(BigDecimal.valueOf(bins));
-
-        // Convert all three timestamps to i64 epoch seconds.
-        RexNode tsSeconds = rexBuilder.makeCall(bigint, UnixTimestampAdapter.LOCAL_TO_UNIXTIME_OP, List.of(tsCol));
-        RexNode minSeconds = rexBuilder.makeCall(bigint, UnixTimestampAdapter.LOCAL_TO_UNIXTIME_OP, List.of(pair.minOver()));
-        RexNode maxSeconds = rexBuilder.makeCall(bigint, UnixTimestampAdapter.LOCAL_TO_UNIXTIME_OP, List.of(pair.maxOver()));
-
-        // stride = (max - min) / N
-        RexNode rangeSeconds = rexBuilder.makeCall(bigint, SqlStdOperatorTable.MINUS, List.of(maxSeconds, minSeconds));
-        RexNode strideSeconds = rexBuilder.makeCall(bigint, SqlStdOperatorTable.DIVIDE, List.of(rangeSeconds, binsLit));
-
-        // bucket_start = floor((ts - min) / stride) * stride + min — integer division floors.
-        RexNode tsMinusMin = rexBuilder.makeCall(bigint, SqlStdOperatorTable.MINUS, List.of(tsSeconds, minSeconds));
-        RexNode bucketIndex = rexBuilder.makeCall(bigint, SqlStdOperatorTable.DIVIDE, List.of(tsMinusMin, strideSeconds));
-        RexNode bucketOffset = rexBuilder.makeCall(bigint, SqlStdOperatorTable.MULTIPLY, List.of(bucketIndex, strideSeconds));
-        RexNode bucketStartSeconds = rexBuilder.makeCall(bigint, SqlStdOperatorTable.PLUS, List.of(bucketOffset, minSeconds));
-
-        // from_unixtime takes fp64; outer cast restores the original return type.
-        RexNode bucketStartDouble = rexBuilder.makeCast(fp64, bucketStartSeconds, true);
-        RexNode bucketStartTimestamp = rexBuilder.makeCall(RustUdfDateTimeAdapters.LOCAL_FROM_UNIXTIME_OP, List.of(bucketStartDouble));
-        return rexBuilder.makeCast(original.getType(), bucketStartTimestamp, true);
-    }
-
+    public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
     private static OptionalInt extractBinsLiteral(RexCall call) {
-        if (call.getOperands().size() > 1
-            && call.getOperands().get(1) instanceof RexLiteral binsLit
-            && binsLit.getValue() instanceof Number num) {
-            return OptionalInt.of(num.intValue());
-        }
-        return OptionalInt.empty();
-    }
-
-    /** Match operand 2 against {@code MINUS(MAX OVER (), MIN OVER ())}. */
-    private static Optional<MaxMinOverPair> decomposeMinusOverRange(RexCall call) {
-        if (call.getOperands().size() < 3) {
-            return Optional.empty();
-        }
-        // analytics-engine wraps operands in OperatorAnnotation before the adapter runs;
-        // peel so the pattern match sees the underlying call shape.
-        RexNode op2 = unwrapAnnotations(call.getOperands().get(2));
-        if (!(op2 instanceof RexCall minusCall) || minusCall.getKind() != SqlKind.MINUS) {
-            return Optional.empty();
-        }
-        if (minusCall.getOperands().size() != 2) {
-            return Optional.empty();
-        }
-        RexNode lhs = unwrapAnnotations(minusCall.getOperands().get(0));
-        RexNode rhs = unwrapAnnotations(minusCall.getOperands().get(1));
-        if (!(lhs instanceof RexOver maxOver) || !isAggKind(maxOver, SqlKind.MAX)) {
-            return Optional.empty();
-        }
-        if (!(rhs instanceof RexOver minOver) || !isAggKind(minOver, SqlKind.MIN)) {
-            return Optional.empty();
-        }
-        // Conservative: require single-operand window aggs (lowered shape is OVER ()).
+ * @opensearch.internal
         if (maxOver.getOperands().size() != 1 || minOver.getOperands().size() != 1) {
-            return Optional.empty();
-        }
-        return Optional.of(new MaxMinOverPair(maxOver, minOver));
-    }
-
-    /** Peel {@link OperatorAnnotation} wrappers so pattern-matching sees the underlying call. */
-    private static RexNode unwrapAnnotations(RexNode node) {
-        RexNode current = node;
-        while (current instanceof OperatorAnnotation annotation && annotation.unwrap() != null) {
-            current = annotation.unwrap();
-        }
-        return current;
-    }
-
-    private static boolean isAggKind(RexOver over, SqlKind kind) {
+        SqlTypeName firstOperandType = original.getOperands().get(0).getType().getSqlTypeName();
+class WidthBucketAdapter implements ScalarFunctionAdapter {
+            return adaptTimeBased(original, cluster);
+        RexNode tsCol = original.getOperands().get(0);
         SqlAggFunction agg = over.getAggOperator();
-        return agg != null && agg.getKind() == kind;
     }
-
-    private static boolean isTimeBased(SqlTypeName tn) {
+        }
+        RexNode bucketStartSeconds = rexBuilder.makeCall(bigint, SqlStdOperatorTable.PLUS, List.of(bucketOffset, minSeconds));
+    );
+            return Optional.empty();
         return tn == SqlTypeName.TIMESTAMP || tn == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE || tn == SqlTypeName.DATE;
+            return Optional.empty();
+        RexNode tsMinusMin = rexBuilder.makeCall(bigint, SqlStdOperatorTable.MINUS, List.of(tsSeconds, minSeconds));
+        RexNode bucketStartDouble = rexBuilder.makeCast(fp64, bucketStartSeconds, true);
+ * this file be licensed under the Apache-2.0 license or a
+        RexNode maxSeconds = rexBuilder.makeCall(bigint, UnixTimestampAdapter.LOCAL_TO_UNIXTIME_OP, List.of(pair.maxOver()));
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.SqlOperator;
+        "width_bucket",
+            && call.getOperands().get(1) instanceof RexLiteral binsLit
+        return Optional.of(new MaxMinOverPair(maxOver, minOver));
+        // Convert all three timestamps to i64 epoch seconds.
+import java.util.OptionalInt;
+        if (original.getOperands().isEmpty()) {
+        return agg != null && agg.getKind() == kind;
+ *
     }
-
+        OptionalInt binsOpt = extractBinsLiteral(original);
+        RexNode bucketStartTimestamp = rexBuilder.makeCall(RustUdfDateTimeAdapters.LOCAL_FROM_UNIXTIME_OP, List.of(bucketStartDouble));
+        SqlKind.OTHER_FUNCTION,
+    private static RexNode adaptTimeBased(RexCall original, RelOptCluster cluster) {
+        RexNode binsLit = rexBuilder.makeBigintLiteral(BigDecimal.valueOf(bins));
+        }
+    private static boolean isTimeBased(SqlTypeName tn) {
+ * Adapter for PPL's {@code WIDTH_BUCKET}, the lowering target for {@code bin <field> bins=N}.
+        RexNode current = node;
+ *
+        OperandTypes.family(SqlTypeFamily.NUMERIC, SqlTypeFamily.NUMERIC, SqlTypeFamily.NUMERIC, SqlTypeFamily.NUMERIC),
+        RexNode bucketOffset = rexBuilder.makeCall(bigint, SqlStdOperatorTable.MULTIPLY, List.of(bucketIndex, strideSeconds));
+ *
+ */
+        RexNode strideSeconds = rexBuilder.makeCall(bigint, SqlStdOperatorTable.DIVIDE, List.of(rangeSeconds, binsLit));
+        }
+    static final SqlOperator LOCAL_WIDTH_BUCKET_OP = new SqlFunction(
+    }
+    }
+        }
+import org.opensearch.analytics.spi.ScalarFunctionAdapter;
+    /** Match operand 2 against {@code MINUS(MAX OVER (), MIN OVER ())}. */
+    }
+        return OptionalInt.empty();
+        Optional<MaxMinOverPair> rangePair = decomposeMinusOverRange(original);
     /** Holder for the pattern-matched {@code MAX OVER ()} / {@code MIN OVER ()} pair. */
-    private record MaxMinOverPair(RexOver maxOver, RexOver minOver) {
-    }
-}
+        }

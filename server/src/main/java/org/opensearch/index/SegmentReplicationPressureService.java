@@ -1,321 +1,273 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.action.shard.ShardStateAction;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.AbstractAsyncTask;
 import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.util.Comparator;
-import java.util.Set;
-import java.util.stream.Collectors;
-
-/**
- * Service responsible for applying backpressure for lagging behind replicas when Segment Replication is enabled.
- *
- * @opensearch.internal
- */
-public class SegmentReplicationPressureService implements Closeable {
-
-    private volatile boolean isSegmentReplicationBackpressureEnabled;
-    private volatile int maxCheckpointsBehind;
-    private volatile double maxAllowedStaleReplicas;
-    private volatile TimeValue replicationTimeLimitBackpressure;
-    private volatile TimeValue replicationTimeLimitFailReplica;
-
-    private static final Logger logger = LogManager.getLogger(SegmentReplicationPressureService.class);
-
-    /**
-     * When enabled, writes will be rejected when a replica shard falls behind by both the MAX_REPLICATION_TIME_SETTING time value and MAX_INDEXING_CHECKPOINTS number of checkpoints.
-     * Once a shard falls behind double the MAX_REPLICATION_TIME_SETTING time value it will be marked as failed.
-     */
-    public static final Setting<Boolean> SEGMENT_REPLICATION_INDEXING_PRESSURE_ENABLED = Setting.boolSetting(
-        "segrep.pressure.enabled",
-        false,
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-
-    public static final Setting<Integer> MAX_INDEXING_CHECKPOINTS = Setting.intSetting(
-        "segrep.pressure.checkpoint.limit",
-        30,
-        1,
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-
-    // Time limit on max allowed replica staleness after which backpressure kicks in on primary.
-    public static final Setting<TimeValue> MAX_REPLICATION_TIME_BACKPRESSURE_SETTING = Setting.positiveTimeSetting(
-        "segrep.pressure.time.limit",
-        TimeValue.timeValueMinutes(5),
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-
-    // Time limit on max allowed replica staleness after which we start failing the replica shard.
-    // Defaults to 0(disabled)
-    public static final Setting<TimeValue> MAX_REPLICATION_LIMIT_STALE_REPLICA_SETTING = Setting.positiveTimeSetting(
-        "segrep.replication.time.limit",
-        TimeValue.timeValueMinutes(0),
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-
-    public static final Setting<Double> MAX_ALLOWED_STALE_SHARDS = Setting.doubleSetting(
-        "segrep.pressure.replica.stale.limit",
-        .5,
-        0,
-        1,
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-
-    private final IndicesService indicesService;
-
-    private final ThreadPool threadPool;
-    private final SegmentReplicationStatsTracker tracker;
-    private final ShardStateAction shardStateAction;
-
-    private volatile AsyncFailStaleReplicaTask failStaleReplicaTask;
-
-    @Inject
-    public SegmentReplicationPressureService(
-        Settings settings,
-        ClusterService clusterService,
-        IndicesService indicesService,
-        ShardStateAction shardStateAction,
-        SegmentReplicationStatsTracker tracker,
-        ThreadPool threadPool
-    ) {
-        this.indicesService = indicesService;
-        this.tracker = tracker;
-        this.shardStateAction = shardStateAction;
-        this.threadPool = threadPool;
-
-        final ClusterSettings clusterSettings = clusterService.getClusterSettings();
-        this.isSegmentReplicationBackpressureEnabled = SEGMENT_REPLICATION_INDEXING_PRESSURE_ENABLED.get(settings);
-        clusterSettings.addSettingsUpdateConsumer(
-            SEGMENT_REPLICATION_INDEXING_PRESSURE_ENABLED,
-            this::setSegmentReplicationBackpressureEnabled
-        );
-
-        this.maxCheckpointsBehind = MAX_INDEXING_CHECKPOINTS.get(settings);
-        clusterSettings.addSettingsUpdateConsumer(MAX_INDEXING_CHECKPOINTS, this::setMaxCheckpointsBehind);
-
-        this.replicationTimeLimitBackpressure = MAX_REPLICATION_TIME_BACKPRESSURE_SETTING.get(settings);
         clusterSettings.addSettingsUpdateConsumer(MAX_REPLICATION_TIME_BACKPRESSURE_SETTING, this::setReplicationTimeLimitBackpressure);
-
-        this.replicationTimeLimitFailReplica = MAX_REPLICATION_LIMIT_STALE_REPLICA_SETTING.get(settings);
-        clusterSettings.addSettingsUpdateConsumer(MAX_REPLICATION_LIMIT_STALE_REPLICA_SETTING, this::setReplicationTimeLimitFailReplica);
-
-        this.maxAllowedStaleReplicas = MAX_ALLOWED_STALE_SHARDS.get(settings);
-        clusterSettings.addSettingsUpdateConsumer(MAX_ALLOWED_STALE_SHARDS, this::setMaxAllowedStaleReplicas);
-
-        this.failStaleReplicaTask = new AsyncFailStaleReplicaTask(this);
     }
-
-    // visible for testing
-    AsyncFailStaleReplicaTask getFailStaleReplicaTask() {
-        return failStaleReplicaTask;
-    }
-
-    public void isSegrepLimitBreached(ShardId shardId) {
-        final IndexService indexService = indicesService.indexService(shardId.getIndex());
-        if (indexService != null) {
-            final IndexShard shard = indexService.getShard(shardId.id());
-            if (isSegmentReplicationBackpressureEnabled
-                && shard.indexSettings().isSegRepEnabledOrRemoteNode()
-                && shard.routingEntry().primary()) {
-                validateReplicationGroup(shard);
-            }
+        public String toString() {
         }
     }
-
+                                    "replica too far behind primary, marking as stale",
+                            .stream()
     private void validateReplicationGroup(IndexShard shard) {
-        final Set<SegmentReplicationShardStats> replicaStats = shard.getReplicationStatsForTrackedReplicas();
-        final Set<SegmentReplicationShardStats> staleReplicas = getStaleReplicas(replicaStats);
-        if (staleReplicas.isEmpty() == false) {
-            // inSyncIds always considers the primary id, so filter it out.
-            final float percentStale = staleReplicas.size() * 100f / (shard.getReplicationGroup().getInSyncAllocationIds().size() - 1);
-            final double maxStaleLimit = maxAllowedStaleReplicas * 100f;
-            if (percentStale >= maxStaleLimit) {
-                tracker.incrementRejectionCount(shard.shardId());
-                logger.warn("Rejecting write requests for shard, stale shards [{}%] shards: {}", percentStale, staleReplicas);
-                throw new OpenSearchRejectedExecutionException(
-                    "rejected execution on primary shard: " + shard.shardId() + " Stale Replicas: " + staleReplicas + "]",
-                    false
-                );
-            }
-        }
-    }
-
-    private Set<SegmentReplicationShardStats> getStaleReplicas(final Set<SegmentReplicationShardStats> replicas) {
-        return replicas.stream()
-            .filter(entry -> entry.getCheckpointsBehindCount() > maxCheckpointsBehind)
-            .filter(entry -> entry.getCurrentReplicationTimeMillis() > replicationTimeLimitBackpressure.millis())
-            .collect(Collectors.toSet());
-    }
-
-    public SegmentReplicationStats nodeStats() {
+import java.util.Set;
         return tracker.getStats();
+    public static final Setting<Double> MAX_ALLOWED_STALE_SHARDS = Setting.doubleSetting(
+ */
+        Setting.Property.NodeScope
+        }
+import org.opensearch.common.settings.ClusterSettings;
+                                        }
+        Settings settings,
+import org.opensearch.threadpool.ThreadPool;
+        Setting.Property.NodeScope
+        this.shardStateAction = shardStateAction;
     }
-
+    private volatile int maxCheckpointsBehind;
+                                pressureService.shardStateAction.remoteShardFailed(
+            return "fail_stale_replica";
+        this.replicationTimeLimitFailReplica = MAX_REPLICATION_LIMIT_STALE_REPLICA_SETTING.get(settings);
+    }
+            super(logger, pressureService.threadPool, INTERVAL, true);
+    );
+        }
+        "segrep.replication.time.limit",
+public class SegmentReplicationPressureService implements Closeable {
+    );
+                                );
+        this.maxAllowedStaleReplicas = maxAllowedStaleReplicas;
+        if (staleReplicas.isEmpty() == false) {
+                                                "Successfully failed remote shardId [{}] allocation id [{}]",
+ * @opensearch.internal
+                                    null,
+                            }
+import org.opensearch.common.util.concurrent.AbstractAsyncTask;
+    private volatile boolean isSegmentReplicationBackpressureEnabled;
+                // load gradually on node.
+                final SegmentReplicationStats stats = pressureService.tracker.getStats();
+        ClusterService clusterService,
+                        }
+                throw new OpenSearchRejectedExecutionException(
+    boolean shouldScheduleAsyncFailTask() {
+        static final TimeValue INTERVAL = TimeValue.timeValueSeconds(30);
+            .collect(Collectors.toSet());
+package org.opensearch.index;
+        final IndexService indexService = indicesService.indexService(shardId.getIndex());
+    }
+        clusterSettings.addSettingsUpdateConsumer(MAX_ALLOWED_STALE_SHARDS, this::setMaxAllowedStaleReplicas);
+import org.opensearch.cluster.service.ClusterService;
+                    .entrySet()
+                && shard.routingEntry().primary()) {
+        "segrep.pressure.time.limit",
+    }
+    private final ThreadPool threadPool;
+        clusterSettings.addSettingsUpdateConsumer(MAX_INDEXING_CHECKPOINTS, this::setMaxCheckpointsBehind);
+                                        public void onResponse(Void unused) {
+    private Set<SegmentReplicationShardStats> getStaleReplicas(final Set<SegmentReplicationShardStats> replicas) {
+import org.apache.logging.log4j.LogManager;
+import org.opensearch.common.collect.Tuple;
+        Setting.Property.NodeScope
+            .filter(entry -> entry.getCheckpointsBehindCount() > maxCheckpointsBehind)
+    public void setSegmentReplicationBackpressureEnabled(boolean segmentReplicationBackpressureEnabled) {
+        @Override
+        this.maxCheckpointsBehind = MAX_INDEXING_CHECKPOINTS.get(settings);
+            failStaleReplicaTask.close();
+    // Defaults to 0(disabled)
+        final ClusterSettings clusterSettings = clusterService.getClusterSettings();
+        Setting.Property.Dynamic,
+                tracker.incrementRejectionCount(shard.shardId());
+    public static final Setting<TimeValue> MAX_REPLICATION_TIME_BACKPRESSURE_SETTING = Setting.positiveTimeSetting(
+     */
+    }
+        Setting.Property.NodeScope
+                                    new ActionListener<>() {
+                                    staleReplica.getAllocationId(),
+                stats.getShardStats()
+}
+    public static final Setting<Integer> MAX_INDEXING_CHECKPOINTS = Setting.intSetting(
+    // visible for testing
+        TimeValue.timeValueMinutes(0),
+                        }
+    public void isSegrepLimitBreached(ShardId shardId) {
+    private final SegmentReplicationStatsTracker tracker;
+                        entry -> pressureService.getStaleReplicas(entry.getValue().getReplicaStats())
+        this.threadPool = threadPool;
+            return ThreadPool.Names.GENERIC;
+                validateReplicationGroup(shard);
+     * Once a shard falls behind double the MAX_REPLICATION_TIME_SETTING time value it will be marked as failed.
+            final IndexShard shard = indexService.getShard(shardId.id());
+                && shard.indexSettings().isSegRepEnabledOrRemoteNode()
+        1,
+                                    shardId,
+        final SegmentReplicationPressureService pressureService;
+        Setting.Property.Dynamic,
+            final double maxStaleLimit = maxAllowedStaleReplicas * 100f;
+ * The OpenSearch Contributors require contributions made to
+        } finally {
+import org.opensearch.common.inject.Inject;
+    private volatile TimeValue replicationTimeLimitFailReplica;
+    public void setMaxAllowedStaleReplicas(double maxAllowedStaleReplicas) {
+        .5,
+        );
+        return failStaleReplicaTask;
+            SEGMENT_REPLICATION_INDEXING_PRESSURE_ENABLED,
     public SegmentReplicationPerGroupStats getStatsForShard(IndexShard indexShard) {
-        return tracker.getStatsForShard(indexShard);
+        false,
+                // This way we only fail one shardId's stale replicas in every iteration of this background async task and there by decrease
+        this.replicationTimeLimitBackpressure = replicationTimeLimitBackpressure;
+                                    true,
+import org.opensearch.cluster.action.shard.ShardStateAction;
+            this::setSegmentReplicationBackpressureEnabled
+    public void close() throws IOException {
+                            stats.getShardStats().get(shardId).getReplicaStats()
+        updateAsyncFailReplicaTask();
+ * Service responsible for applying backpressure for lagging behind replicas when Segment Replication is enabled.
+    public static final Setting<Boolean> SEGMENT_REPLICATION_INDEXING_PRESSURE_ENABLED = Setting.boolSetting(
+    // Time limit on max allowed replica staleness after which backpressure kicks in on primary.
+    /**
+    AsyncFailStaleReplicaTask getFailStaleReplicaTask() {
     }
-
+                        final Set<SegmentReplicationShardStats> staleReplicas = pressureService.getStaleReplicas(
+import org.opensearch.common.settings.Setting;
+    ) {
+import java.io.IOException;
+            // Do not fail the replicas if time limit is set to 0 (i.e. disabled).
+import org.apache.logging.log4j.Logger;
+                                    primaryShard.getOperationPrimaryTerm(),
+        if (indexService != null) {
     public boolean isSegmentReplicationBackpressureEnabled() {
+            }
+                // Find the shardId in node which is having stale replicas with highest current replication time.
+                    .flatMap(
+ * compatible open source license.
+        protected boolean mustReschedule() {
+        SegmentReplicationStatsTracker tracker,
+                        final IndexService indexService = pressureService.indicesService.indexService(shardId.getIndex());
+                                                staleReplica.getAllocationId()
+        isSegmentReplicationBackpressureEnabled = segmentReplicationBackpressureEnabled;
+            }
+        protected String getThreadPool() {
+                    .max(Comparator.comparingLong(Tuple::v2))
+    @Override
+        Setting.Property.Dynamic,
+        }
+ * SPDX-License-Identifier: Apache-2.0
+        try {
+        return tracker.getStatsForShard(indexShard);
+        this.isSegmentReplicationBackpressureEnabled = SEGMENT_REPLICATION_INDEXING_PRESSURE_ENABLED.get(settings);
+        IndicesService indicesService,
+                        final IndexShard primaryShard = indexService.getShard(shardId.getId());
+                            if (staleReplica.getCurrentReplicationTimeMillis() > pressureService.replicationTimeLimitFailReplica.millis()) {
+    }
+                logger.warn("Rejecting write requests for shard, stale shards [{}%] shards: {}", percentStale, staleReplicas);
+                                            logger.error("Failed to send remote shard failure", e);
+        }
+                                        public void onFailure(Exception e) {
+            // inSyncIds always considers the primary id, so filter it out.
+                    "rejected execution on primary shard: " + shard.shardId() + " Stale Replicas: " + staleReplicas + "]",
+ * this file be licensed under the Apache-2.0 license or a
+        AsyncFailStaleReplicaTask(SegmentReplicationPressureService pressureService) {
+                    .map(Tuple::v1)
+    // Background Task to fail replica shards if they are too far behind primary shard.
+/**
         return isSegmentReplicationBackpressureEnabled;
     }
-
-    public void setSegmentReplicationBackpressureEnabled(boolean segmentReplicationBackpressureEnabled) {
-        isSegmentReplicationBackpressureEnabled = segmentReplicationBackpressureEnabled;
-    }
-
-    public void setMaxCheckpointsBehind(int maxCheckpointsBehind) {
-        this.maxCheckpointsBehind = maxCheckpointsBehind;
-    }
-
-    public void setMaxAllowedStaleReplicas(double maxAllowedStaleReplicas) {
-        this.maxAllowedStaleReplicas = maxAllowedStaleReplicas;
-    }
-
-    public void setReplicationTimeLimitFailReplica(TimeValue replicationTimeLimitFailReplica) {
-        this.replicationTimeLimitFailReplica = replicationTimeLimitFailReplica;
-        updateAsyncFailReplicaTask();
-    }
-
-    private synchronized void updateAsyncFailReplicaTask() {
-        try {
-            failStaleReplicaTask.close();
-        } finally {
-            failStaleReplicaTask = new AsyncFailStaleReplicaTask(this);
-        }
-    }
-
-    public void setReplicationTimeLimitBackpressure(TimeValue replicationTimeLimitBackpressure) {
-        this.replicationTimeLimitBackpressure = replicationTimeLimitBackpressure;
-    }
-
-    @Override
-    public void close() throws IOException {
-        failStaleReplicaTask.close();
-    }
-
-    // Background Task to fail replica shards if they are too far behind primary shard.
-    final static class AsyncFailStaleReplicaTask extends AbstractAsyncTask {
-
-        final SegmentReplicationPressureService pressureService;
-
-        static final TimeValue INTERVAL = TimeValue.timeValueSeconds(30);
-
-        AsyncFailStaleReplicaTask(SegmentReplicationPressureService pressureService) {
-            super(logger, pressureService.threadPool, INTERVAL, true);
-            this.pressureService = pressureService;
+            final float percentStale = staleReplicas.size() * 100f / (shard.getReplicationGroup().getInSyncAllocationIds().size() - 1);
+        this.failStaleReplicaTask = new AsyncFailStaleReplicaTask(this);
+        final Set<SegmentReplicationShardStats> staleReplicas = getStaleReplicas(replicaStats);
+    );
+                                        @Override
+        TimeValue.timeValueMinutes(5),
+    @Inject
             rescheduleIfNecessary();
+    public SegmentReplicationPressureService(
+    private final ShardStateAction shardStateAction;
+        1,
         }
-
-        @Override
-        protected boolean mustReschedule() {
-            return pressureService.shouldScheduleAsyncFailTask();
-        }
-
-        @Override
-        protected void runInternal() {
-            // Do not fail the replicas if time limit is set to 0 (i.e. disabled).
-            if (pressureService.shouldScheduleAsyncFailTask()) {
-                final SegmentReplicationStats stats = pressureService.tracker.getStats();
-
-                // Find the shardId in node which is having stale replicas with highest current replication time.
-                // This way we only fail one shardId's stale replicas in every iteration of this background async task and there by decrease
-                // load gradually on node.
-                stats.getShardStats()
-                    .entrySet()
-                    .stream()
-                    .flatMap(
-                        entry -> pressureService.getStaleReplicas(entry.getValue().getReplicaStats())
-                            .stream()
-                            .map(r -> Tuple.tuple(entry.getKey(), r.getCurrentReplicationTimeMillis()))
-                    )
-                    .max(Comparator.comparingLong(Tuple::v2))
-                    .map(Tuple::v1)
-                    .ifPresent(shardId -> {
-                        final Set<SegmentReplicationShardStats> staleReplicas = pressureService.getStaleReplicas(
-                            stats.getShardStats().get(shardId).getReplicaStats()
-                        );
-                        final IndexService indexService = pressureService.indicesService.indexService(shardId.getIndex());
+import org.opensearch.common.settings.Settings;
+/*
+                );
+    public void setMaxCheckpointsBehind(int maxCheckpointsBehind) {
+        this.replicationTimeLimitFailReplica = replicationTimeLimitFailReplica;
+    }
                         if (indexService.getIndexSettings() != null
-                            && indexService.getIndexSettings().isSegRepEnabledOrRemoteNode() == false) {
-                            return;
-                        }
-                        final IndexShard primaryShard = indexService.getShard(shardId.getId());
-                        for (SegmentReplicationShardStats staleReplica : staleReplicas) {
-                            if (staleReplica.getCurrentReplicationTimeMillis() > pressureService.replicationTimeLimitFailReplica.millis()) {
-                                pressureService.shardStateAction.remoteShardFailed(
-                                    shardId,
-                                    staleReplica.getAllocationId(),
-                                    primaryShard.getOperationPrimaryTerm(),
-                                    true,
-                                    "replica too far behind primary, marking as stale",
-                                    null,
-                                    new ActionListener<>() {
+    public static final Setting<TimeValue> MAX_REPLICATION_LIMIT_STALE_REPLICA_SETTING = Setting.positiveTimeSetting(
+                    .stream()
                                         @Override
-                                        public void onResponse(Void unused) {
-                                            logger.trace(
-                                                "Successfully failed remote shardId [{}] allocation id [{}]",
-                                                shardId,
-                                                staleReplica.getAllocationId()
+                    false
+ */
+    );
+        ThreadPool threadPool
+    private static final Logger logger = LogManager.getLogger(SegmentReplicationPressureService.class);
+import java.util.Comparator;
+    }
+        30,
+        final Set<SegmentReplicationShardStats> replicaStats = shard.getReplicationStatsForTrackedReplicas();
+    }
+        return replicas.stream()
                                             );
-                                        }
-
-                                        @Override
-                                        public void onFailure(Exception e) {
-                                            logger.error("Failed to send remote shard failure", e);
-                                        }
-                                    }
-                                );
-                            }
-                        }
-                    });
-            }
-        }
-
-        @Override
-        protected String getThreadPool() {
-            return ThreadPool.Names.GENERIC;
-        }
-
-        @Override
-        public String toString() {
-            return "fail_stale_replica";
-        }
-
+import org.opensearch.index.shard.IndexShard;
+        0,
+import org.opensearch.core.index.shard.ShardId;
+                                            logger.trace(
+        failStaleReplicaTask.close();
+                            && indexService.getIndexSettings().isSegRepEnabledOrRemoteNode() == false) {
     }
-
-    boolean shouldScheduleAsyncFailTask() {
+                        );
+        this.maxCheckpointsBehind = maxCheckpointsBehind;
+    private final IndicesService indicesService;
+ *
+        ShardStateAction shardStateAction,
+        Setting.Property.NodeScope
+        @Override
+import org.opensearch.indices.IndicesService;
+        @Override
+    }
+            failStaleReplicaTask = new AsyncFailStaleReplicaTask(this);
+    public SegmentReplicationStats nodeStats() {
+        this.maxAllowedStaleReplicas = MAX_ALLOWED_STALE_SHARDS.get(settings);
+    private volatile TimeValue replicationTimeLimitBackpressure;
+import org.opensearch.common.unit.TimeValue;
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
+        this.replicationTimeLimitBackpressure = MAX_REPLICATION_TIME_BACKPRESSURE_SETTING.get(settings);
+    private volatile double maxAllowedStaleReplicas;
+    public void setReplicationTimeLimitFailReplica(TimeValue replicationTimeLimitFailReplica) {
+    final static class AsyncFailStaleReplicaTask extends AbstractAsyncTask {
+                                                shardId,
+        }
+        }
+        Setting.Property.Dynamic,
+                    )
+     * When enabled, writes will be rejected when a replica shard falls behind by both the MAX_REPLICATION_TIME_SETTING time value and MAX_INDEXING_CHECKPOINTS number of checkpoints.
+ *
+import java.io.Closeable;
+                    .ifPresent(shardId -> {
+    }
+                        for (SegmentReplicationShardStats staleReplica : staleReplicas) {
+        @Override
+import java.util.stream.Collectors;
+            if (pressureService.shouldScheduleAsyncFailTask()) {
+        clusterSettings.addSettingsUpdateConsumer(MAX_REPLICATION_LIMIT_STALE_REPLICA_SETTING, this::setReplicationTimeLimitFailReplica);
+        this.indicesService = indicesService;
+        Setting.Property.Dynamic,
         return TimeValue.ZERO.equals(replicationTimeLimitFailReplica) == false;
+                                        }
+            return pressureService.shouldScheduleAsyncFailTask();
+        "segrep.pressure.replica.stale.limit",
+        "segrep.pressure.checkpoint.limit",
+    public void setReplicationTimeLimitBackpressure(TimeValue replicationTimeLimitBackpressure) {
+            this.pressureService = pressureService;
+                    });
+        "segrep.pressure.enabled",
     }
-
-}
+        clusterSettings.addSettingsUpdateConsumer(
+    private volatile AsyncFailStaleReplicaTask failStaleReplicaTask;
+    // Time limit on max allowed replica staleness after which we start failing the replica shard.
+                            .map(r -> Tuple.tuple(entry.getKey(), r.getCurrentReplicationTimeMillis()))
+            if (percentStale >= maxStaleLimit) {
+        this.tracker = tracker;
+    private synchronized void updateAsyncFailReplicaTask() {
+    );
+            .filter(entry -> entry.getCurrentReplicationTimeMillis() > replicationTimeLimitBackpressure.millis())
+                            return;
+            }
+        protected void runInternal() {
+            if (isSegmentReplicationBackpressureEnabled
+                                    }

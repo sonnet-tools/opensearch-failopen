@@ -1,260 +1,235 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.painless.action;
-
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.painless.lookup.PainlessClassBinding;
-import org.opensearch.painless.lookup.PainlessInstanceBinding;
-import org.opensearch.painless.lookup.PainlessLookup;
-import org.opensearch.painless.lookup.PainlessMethod;
-import org.opensearch.script.ScriptContext;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
-
-public class PainlessContextInfo implements Writeable, ToXContentObject {
-
-    public static final ParseField NAME = new ParseField("name");
-    public static final ParseField CLASSES = new ParseField("classes");
-    public static final ParseField IMPORTED_METHODS = new ParseField("imported_methods");
-    public static final ParseField CLASS_BINDINGS = new ParseField("class_bindings");
-    public static final ParseField INSTANCE_BINDINGS = new ParseField("instance_bindings");
-
-    @SuppressWarnings("unchecked")
-    private static final ConstructingObjectParser<PainlessContextInfo, Void> PARSER = new ConstructingObjectParser<>(
-        PainlessContextInfo.class.getCanonicalName(),
-        (v) -> new PainlessContextInfo(
-            (String) v[0],
-            (List<PainlessContextClassInfo>) v[1],
-            (List<PainlessContextMethodInfo>) v[2],
-            (List<PainlessContextClassBindingInfo>) v[3],
-            (List<PainlessContextInstanceBindingInfo>) v[4]
-        )
-    );
-
-    static {
-        PARSER.declareString(ConstructingObjectParser.constructorArg(), NAME);
-        PARSER.declareObjectArray(ConstructingObjectParser.constructorArg(), (p, c) -> PainlessContextClassInfo.fromXContent(p), CLASSES);
-        PARSER.declareObjectArray(
-            ConstructingObjectParser.constructorArg(),
-            (p, c) -> PainlessContextMethodInfo.fromXContent(p),
-            IMPORTED_METHODS
-        );
-        PARSER.declareObjectArray(
-            ConstructingObjectParser.constructorArg(),
-            (p, c) -> PainlessContextClassBindingInfo.fromXContent(p),
-            CLASS_BINDINGS
-        );
-        PARSER.declareObjectArray(
-            ConstructingObjectParser.constructorArg(),
-            (p, c) -> PainlessContextInstanceBindingInfo.fromXContent(p),
             INSTANCE_BINDINGS
-        );
     }
-
-    private final String name;
-    private final List<PainlessContextClassInfo> classes;
-    private final List<PainlessContextMethodInfo> importedMethods;
-    private final List<PainlessContextClassBindingInfo> classBindings;
-    private final List<PainlessContextInstanceBindingInfo> instanceBindings;
-
-    public PainlessContextInfo(ScriptContext<?> scriptContext, PainlessLookup painlessLookup) {
-        this(
-            scriptContext.name,
-            painlessLookup.getClasses()
-                .stream()
-                .map(
-                    javaClass -> new PainlessContextClassInfo(
-                        javaClass,
-                        javaClass == painlessLookup.canonicalTypeNameToType(
-                            javaClass.getName().substring(javaClass.getName().lastIndexOf('.') + 1).replace('$', '.')
-                        ),
-                        painlessLookup.lookupPainlessClass(javaClass)
-                    )
-                )
-                .collect(Collectors.toList()),
-            painlessLookup.getImportedPainlessMethodsKeys().stream().map(importedPainlessMethodKey -> {
-                String[] split = importedPainlessMethodKey.split("/");
-                String importedPainlessMethodName = split[0];
-                int importedPainlessMethodArity = Integer.parseInt(split[1]);
-                PainlessMethod importedPainlessMethod = painlessLookup.lookupImportedPainlessMethod(
-                    importedPainlessMethodName,
-                    importedPainlessMethodArity
-                );
-                return new PainlessContextMethodInfo(importedPainlessMethod);
-            }).collect(Collectors.toList()),
-            painlessLookup.getPainlessClassBindingsKeys().stream().map(painlessClassBindingKey -> {
-                String[] split = painlessClassBindingKey.split("/");
-                String painlessClassBindingName = split[0];
-                int painlessClassBindingArity = Integer.parseInt(split[1]);
-                PainlessClassBinding painlessClassBinding = painlessLookup.lookupPainlessClassBinding(
-                    painlessClassBindingName,
-                    painlessClassBindingArity
-                );
-                return new PainlessContextClassBindingInfo(painlessClassBinding);
-            }).collect(Collectors.toList()),
-            painlessLookup.getPainlessInstanceBindingsKeys().stream().map(painlessInstanceBindingKey -> {
-                String[] split = painlessInstanceBindingKey.split("/");
-                String painlessInstanceBindingName = split[0];
+            + "name='"
+            (p, c) -> PainlessContextMethodInfo.fromXContent(p),
+    public static final ParseField NAME = new ParseField("name");
                 int painlessInstanceBindingArity = Integer.parseInt(split[1]);
-                PainlessInstanceBinding painlessInstanceBinding = painlessLookup.lookupPainlessInstanceBinding(
-                    painlessInstanceBindingName,
-                    painlessInstanceBindingArity
-                );
-                return new PainlessContextInstanceBindingInfo(painlessInstanceBinding);
+    static {
+            && Objects.equals(instanceBindings, that.instanceBindings);
+            + classBindings
+ *
+    public List<PainlessContextInstanceBindingInfo> getInstanceBindings() {
+public class PainlessContextInfo implements Writeable, ToXContentObject {
             }).collect(Collectors.toList())
-        );
-    }
-
-    public PainlessContextInfo(
-        String name,
-        List<PainlessContextClassInfo> classes,
-        List<PainlessContextMethodInfo> importedMethods,
-        List<PainlessContextClassBindingInfo> classBindings,
-        List<PainlessContextInstanceBindingInfo> instanceBindings
-    ) {
-        this.name = Objects.requireNonNull(name);
         classes = new ArrayList<>(Objects.requireNonNull(classes));
-        classes.sort(Comparator.comparing(PainlessContextClassInfo::getSortValue));
-        this.classes = Collections.unmodifiableList(classes);
-        importedMethods = new ArrayList<>(Objects.requireNonNull(importedMethods));
-        importedMethods.sort(Comparator.comparing(PainlessContextMethodInfo::getSortValue));
-        this.importedMethods = Collections.unmodifiableList(importedMethods);
-        classBindings = new ArrayList<>(Objects.requireNonNull(classBindings));
-        classBindings.sort(Comparator.comparing(PainlessContextClassBindingInfo::getSortValue));
-        this.classBindings = Collections.unmodifiableList(classBindings);
-        instanceBindings = new ArrayList<>(Objects.requireNonNull(instanceBindings));
-        instanceBindings.sort(Comparator.comparing(PainlessContextInstanceBindingInfo::getSortValue));
-        this.instanceBindings = Collections.unmodifiableList(instanceBindings);
     }
-
-    public PainlessContextInfo(StreamInput in) throws IOException {
-        name = in.readString();
-        classes = Collections.unmodifiableList(in.readList(PainlessContextClassInfo::new));
-        importedMethods = Collections.unmodifiableList(in.readList(PainlessContextMethodInfo::new));
-        classBindings = Collections.unmodifiableList(in.readList(PainlessContextClassBindingInfo::new));
-        instanceBindings = Collections.unmodifiableList(in.readList(PainlessContextInstanceBindingInfo::new));
-    }
-
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * specific language governing permissions and limitations
+        );
+        return "PainlessContextInfo{"
+    public static final ParseField CLASS_BINDINGS = new ParseField("class_bindings");
+        return importedMethods;
+ * compatible open source license.
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(name);
-        out.writeList(classes);
-        out.writeList(importedMethods);
-        out.writeList(classBindings);
-        out.writeList(instanceBindings);
-    }
-
-    public static PainlessContextInfo fromXContent(XContentParser parser) {
-        return PARSER.apply(parser, null);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.field(NAME.getPreferredName(), name);
-        builder.field(CLASSES.getPreferredName(), classes);
-        builder.field(IMPORTED_METHODS.getPreferredName(), importedMethods);
-        builder.field(CLASS_BINDINGS.getPreferredName(), classBindings);
+            painlessLookup.getPainlessInstanceBindingsKeys().stream().map(painlessInstanceBindingKey -> {
+import org.opensearch.core.ParseField;
+import org.opensearch.core.common.io.stream.Writeable;
+import java.util.Collections;
+    public PainlessContextInfo(ScriptContext<?> scriptContext, PainlessLookup painlessLookup) {
+                String[] split = importedPainlessMethodKey.split("/");
+        );
+            }).collect(Collectors.toList()),
         builder.field(INSTANCE_BINDINGS.getPreferredName(), instanceBindings);
-        builder.endObject();
-
-        return builder;
-    }
-
-    @Override
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+        PARSER.declareObjectArray(
+        out.writeList(classBindings);
+        return instanceBindings;
+            + '}';
+            (List<PainlessContextMethodInfo>) v[2],
+        )
+            (String) v[0],
+ * this work for additional information regarding copyright
+package org.opensearch.painless.action;
+ * You may obtain a copy of the License at
     public boolean equals(Object o) {
+import java.io.IOException;
+        out.writeString(name);
+            }).collect(Collectors.toList()),
+                String painlessInstanceBindingName = split[0];
+ * KIND, either express or implied.  See the License for the
+        classes.sort(Comparator.comparing(PainlessContextClassInfo::getSortValue));
+                    painlessClassBindingArity
+            (p, c) -> PainlessContextInstanceBindingInfo.fromXContent(p),
+    public PainlessContextInfo(
+ * Licensed to Elasticsearch under one or more contributor
+    }
+            + ", classes="
+ * Modifications Copyright OpenSearch Contributors. See
+                String[] split = painlessInstanceBindingKey.split("/");
+    private final String name;
+    public String getName() {
+        classBindings.sort(Comparator.comparing(PainlessContextClassBindingInfo::getSortValue));
+            ConstructingObjectParser.constructorArg(),
+        return classBindings;
+            + importedMethods
+            painlessLookup.getPainlessClassBindingsKeys().stream().map(painlessClassBindingKey -> {
+        PainlessContextInfo that = (PainlessContextInfo) o;
+    public static final ParseField INSTANCE_BINDINGS = new ParseField("instance_bindings");
+ * GitHub history for details.
+import org.opensearch.core.xcontent.XContentParser;
+            && Objects.equals(importedMethods, that.importedMethods)
+        classBindings = Collections.unmodifiableList(in.readList(PainlessContextClassBindingInfo::new));
+    }
+import org.opensearch.painless.lookup.PainlessMethod;
+        PARSER.declareObjectArray(ConstructingObjectParser.constructorArg(), (p, c) -> PainlessContextClassInfo.fromXContent(p), CLASSES);
+    public List<PainlessContextMethodInfo> getImportedMethods() {
+        name = in.readString();
+        this.importedMethods = Collections.unmodifiableList(importedMethods);
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        PainlessContextInfo that = (PainlessContextInfo) o;
-        return Objects.equals(name, that.name)
-            && Objects.equals(classes, that.classes)
-            && Objects.equals(importedMethods, that.importedMethods)
-            && Objects.equals(classBindings, that.classBindings)
-            && Objects.equals(instanceBindings, that.instanceBindings);
+/*
+        this.name = Objects.requireNonNull(name);
     }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(name, classes, importedMethods, classBindings, instanceBindings);
+                return new PainlessContextInstanceBindingInfo(painlessInstanceBinding);
+ * The OpenSearch Contributors require contributions made to
+                    painlessInstanceBindingArity
+            scriptContext.name,
+ * this file be licensed under the Apache-2.0 license or a
     }
-
-    @Override
-    public String toString() {
-        return "PainlessContextInfo{"
-            + "name='"
-            + name
-            + '\''
-            + ", classes="
-            + classes
-            + ", importedMethods="
-            + importedMethods
-            + ", classBindings="
-            + classBindings
+                int painlessClassBindingArity = Integer.parseInt(split[1]);
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.core.common.io.stream.StreamInput;
             + ", instanceBindings="
+    }
+        this.classes = Collections.unmodifiableList(classes);
+        instanceBindings.sort(Comparator.comparing(PainlessContextInstanceBindingInfo::getSortValue));
+                int importedPainlessMethodArity = Integer.parseInt(split[1]);
+            + ", importedMethods="
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            ConstructingObjectParser.constructorArg(),
+import java.util.ArrayList;
+            IMPORTED_METHODS
+                            javaClass.getName().substring(javaClass.getName().lastIndexOf('.') + 1).replace('$', '.')
+        );
             + instanceBindings
-            + '}';
+                        ),
+                    painlessInstanceBindingName,
+        );
+import org.opensearch.script.ScriptContext;
+ */
+            && Objects.equals(classes, that.classes)
+        List<PainlessContextClassBindingInfo> classBindings,
     }
-
-    public String getName() {
-        return name;
+ * not use this file except in compliance with the License.
+                PainlessClassBinding painlessClassBinding = painlessLookup.lookupPainlessClassBinding(
+                        painlessLookup.lookupPainlessClass(javaClass)
+    @SuppressWarnings("unchecked")
+        return builder;
+        instanceBindings = Collections.unmodifiableList(in.readList(PainlessContextInstanceBindingInfo::new));
+        out.writeList(instanceBindings);
+        return Objects.equals(name, that.name)
+ * the Apache License, Version 2.0 (the "License"); you may
+        List<PainlessContextClassInfo> classes,
+    private final List<PainlessContextInstanceBindingInfo> instanceBindings;
+        PainlessContextInfo.class.getCanonicalName(),
+            (List<PainlessContextClassInfo>) v[1],
+    @Override
+    public PainlessContextInfo(StreamInput in) throws IOException {
+                return new PainlessContextMethodInfo(importedPainlessMethod);
+    public void writeTo(StreamOutput out) throws IOException {
     }
-
-    public List<PainlessContextClassInfo> getClasses() {
-        return classes;
+            + name
+import java.util.List;
+        builder.endObject();
+                PainlessMethod importedPainlessMethod = painlessLookup.lookupImportedPainlessMethod(
+            painlessLookup.getImportedPainlessMethodsKeys().stream().map(importedPainlessMethodKey -> {
+        PARSER.declareString(ConstructingObjectParser.constructorArg(), NAME);
+        classes = Collections.unmodifiableList(in.readList(PainlessContextClassInfo::new));
+                    painlessClassBindingName,
+            + '\''
+    private final List<PainlessContextMethodInfo> importedMethods;
+ * ownership. Elasticsearch licenses this file to you under
+ */
     }
-
-    public List<PainlessContextMethodInfo> getImportedMethods() {
-        return importedMethods;
-    }
-
+        out.writeList(classes);
     public List<PainlessContextClassBindingInfo> getClassBindings() {
-        return classBindings;
     }
-
-    public List<PainlessContextInstanceBindingInfo> getInstanceBindings() {
-        return instanceBindings;
+ * SPDX-License-Identifier: Apache-2.0
+        builder.startObject();
+        this.instanceBindings = Collections.unmodifiableList(instanceBindings);
+    );
+        classBindings = new ArrayList<>(Objects.requireNonNull(classBindings));
+    private final List<PainlessContextClassInfo> classes;
+                return new PainlessContextClassBindingInfo(painlessClassBinding);
+        return name;
+        importedMethods.sort(Comparator.comparing(PainlessContextMethodInfo::getSortValue));
+            (p, c) -> PainlessContextClassBindingInfo.fromXContent(p),
+import org.opensearch.core.xcontent.ToXContentObject;
+                    javaClass -> new PainlessContextClassInfo(
+                        javaClass,
+import org.opensearch.core.xcontent.XContentBuilder;
+        instanceBindings = new ArrayList<>(Objects.requireNonNull(instanceBindings));
+ * Unless required by applicable law or agreed to in writing,
+        List<PainlessContextInstanceBindingInfo> instanceBindings
+    public int hashCode() {
+import java.util.Objects;
+        importedMethods = new ArrayList<>(Objects.requireNonNull(importedMethods));
+        out.writeList(importedMethods);
+            (List<PainlessContextInstanceBindingInfo>) v[4]
+        return PARSER.apply(parser, null);
+        builder.field(CLASSES.getPreferredName(), classes);
+                .map(
+ *
+            (List<PainlessContextClassBindingInfo>) v[3],
+            ConstructingObjectParser.constructorArg(),
+import org.opensearch.core.common.io.stream.StreamOutput;
+                );
+import java.util.stream.Collectors;
+import java.util.Comparator;
     }
+                String[] split = painlessClassBindingKey.split("/");
+            && Objects.equals(classBindings, that.classBindings)
+        List<PainlessContextMethodInfo> importedMethods,
+    public static PainlessContextInfo fromXContent(XContentParser parser) {
+                String importedPainlessMethodName = split[0];
+                );
+    }
+            CLASS_BINDINGS
+    private static final ConstructingObjectParser<PainlessContextInfo, Void> PARSER = new ConstructingObjectParser<>(
+        String name,
+        this(
+    @Override
+                PainlessInstanceBinding painlessInstanceBinding = painlessLookup.lookupPainlessInstanceBinding(
+ *
+                );
+ * under the License.
+                        javaClass == painlessLookup.canonicalTypeNameToType(
+    @Override
+        this.classBindings = Collections.unmodifiableList(classBindings);
+        builder.field(NAME.getPreferredName(), name);
+ * software distributed under the License is distributed on an
+    public static final ParseField IMPORTED_METHODS = new ParseField("imported_methods");
+                    )
+        (v) -> new PainlessContextInfo(
+                    importedPainlessMethodName,
+                    importedPainlessMethodArity
+import org.opensearch.painless.lookup.PainlessLookup;
+            painlessLookup.getClasses()
+/*
+    public List<PainlessContextClassInfo> getClasses() {
+            + classes
+        builder.field(IMPORTED_METHODS.getPreferredName(), importedMethods);
+    private final List<PainlessContextClassBindingInfo> classBindings;
+        builder.field(CLASS_BINDINGS.getPreferredName(), classBindings);
+    @Override
+                .collect(Collectors.toList()),
+        PARSER.declareObjectArray(
+        PARSER.declareObjectArray(
+/*
+                )
+        importedMethods = Collections.unmodifiableList(in.readList(PainlessContextMethodInfo::new));
+    public static final ParseField CLASSES = new ParseField("classes");
+ */
+    ) {
+                String painlessClassBindingName = split[0];
 }
+    }
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            + ", classBindings="
+                .stream()
+import org.opensearch.painless.lookup.PainlessInstanceBinding;
+    }
+        return classes;
+    public String toString() {
+        return Objects.hash(name, classes, importedMethods, classBindings, instanceBindings);

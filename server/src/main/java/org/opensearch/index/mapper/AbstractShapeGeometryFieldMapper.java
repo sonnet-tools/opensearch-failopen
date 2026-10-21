@@ -1,289 +1,253 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
+     */
+            boolean parsedDeprecatedParameters = false;
+        }
+        public static final Explicit<Orientation> ORIENTATION = new Explicit<>(Orientation.RIGHT, false);
+            Map<String, String> meta
+    public static class Names extends AbstractGeometryFieldMapper.Names {
+                        XContentMapValues.nodeBooleanValue(fieldNode, name + "." + Names.COERCE.getPreferredName())
+                Object fieldNode = entry.getValue();
+        }
+        Explicit<Orientation> orientation,
+            params.put(DEPRECATED_PARAMETERS_KEY, new DeprecatedParameters());
+        this.orientation = orientation;
+    public final boolean parsesArrayValue() {
+     * @opensearch.internal
+        @Override
+        super(simpleName, fieldType, mappedFieldType, ignoreMalformed, ignoreZValue, multiFields, copyTo);
+            }
+        return ((AbstractShapeGeometryFieldType) mappedFieldType).orientation();
+ * You may obtain a copy of the License at
+    @Override
+        ) {
+ *
+     * Base field type for the base shape geometry field mapper
+            if (coerce != null) {
+    }
+        }
+        }
+        protected boolean parseXContentParameters(String name, Map.Entry<String, Object> entry, Map<String, Object> params)
+        }
+    /**
  * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.document.FieldType;
+    protected Explicit<Boolean> coerce;
+        public static final ParseField COERCE = new ParseField("coerce");
+                    params.put(Names.ORIENTATION.getPreferredName(), ShapeBuilder.Orientation.fromString(fieldNode.toString()));
 import org.opensearch.common.Explicit;
-import org.opensearch.common.geo.builders.ShapeBuilder;
-import org.opensearch.common.geo.builders.ShapeBuilder.Orientation;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.common.xcontent.support.XContentMapValues;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.mapper.LegacyGeoShapeFieldMapper.DeprecatedParameters;
-
-import java.io.IOException;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
-/**
+        protected abstract Builder newBuilder(String name, Map<String, Object> params);
+        this.coerce = coerce;
+        }
+            throws MapperParsingException {
+            return this.orientation;
+     */
+            Builder builder = super.parse(name, node, params, parserContext);
+        if (gsfm.coerce.explicit()) {
  * Base class for {@link GeoShapeFieldMapper} and {@link LegacyGeoShapeFieldMapper}
+            builder.field(AbstractShapeGeometryFieldMapper.Names.COERCE.getPreferredName(), coerce.value());
+        if (includeDefaults || coerce.explicit()) {
+            }
+ * the Apache License, Version 2.0 (the "License"); you may
+        mergeGeoOptions(gsfm, conflicts);
+                    parsedDeprecatedParameters = true;
+import java.io.IOException;
+    }
+    }
+        }
+            }
+     *
+/*
+    protected static final String DEPRECATED_PARAMETERS_KEY = "deprecated_parameters";
+        public Builder parse(String name, Map<String, Object> node, Map<String, Object> params, ParserContext parserContext) {
+                    iterator.remove();
+     *
+        super.doXContentBody(builder, includeDefaults, params);
+            boolean hasDocValues,
+public abstract class AbstractShapeGeometryFieldMapper<Parsed, Processed> extends AbstractGeometryFieldMapper<Parsed, Processed> {
+        protected AbstractShapeGeometryFieldType(
+    }
+    protected AbstractShapeGeometryFieldMapper(
+                    iterator.remove();
+ * GitHub history for details.
+                entry.getValue(),
+            this.coerce = coerce;
+        protected Orientation orientation = Defaults.ORIENTATION.value();
+import org.opensearch.core.xcontent.XContentBuilder;
+ *
+    public abstract static class Builder<T extends Builder<T, FT>, FT extends AbstractShapeGeometryFieldType> extends
+        public Builder(String name, FieldType fieldType) {
+ * under the License.
+ * SPDX-License-Identifier: Apache-2.0
+    protected abstract void mergeGeoOptions(AbstractShapeGeometryFieldMapper<?, ?> mergeWith, List<String> conflicts);
+        /** default builder - used for external mapper*/
+    public void doXContentBody(XContentBuilder builder, boolean includeDefaults, Params params) throws IOException {
+        ) {
+import org.opensearch.core.ParseField;
+        protected Explicit<Boolean> coerce() {
+     */
+        }
+import java.util.Iterator;
+        AbstractShapeGeometryFieldType ft = (AbstractShapeGeometryFieldType) fieldType();
+     * Base type parser for the base shape geometry field mapper
+            builder.field(Names.ORIENTATION.getPreferredName(), orientation.value());
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    /**
+        }
+            this.coerce = gsfm.coerce;
+     * @opensearch.internal
+            boolean parsesArrayValue,
+        AbstractGeometryFieldMapper.Builder<T, FT> {
+        protected Explicit<Orientation> orientation() {
+ * ownership. Elasticsearch licenses this file to you under
+            this.orientation = orientation;
+            if (context.indexSettings() != null) {
+ * license agreements. See the NOTICE file distributed with
+                builder.coerce((Boolean) params.get(Names.COERCE.getPreferredName()));
+                }
+            return this;
+import org.opensearch.common.geo.builders.ShapeBuilder.Orientation;
+            }
+ * Licensed to Elasticsearch under one or more contributor
+                String fieldName = entry.getKey();
+                (DeprecatedParameters) params.get(DEPRECATED_PARAMETERS_KEY)
+        }
+        Explicit<Boolean> ignoreMalformed,
+        AbstractShapeGeometryFieldMapper gsfm = (AbstractShapeGeometryFieldMapper) other;
+     */
+ * Modifications Copyright OpenSearch Contributors. See
+            if (coerce != null) {
+ * The OpenSearch Contributors require contributions made to
+        }
+        return false;
+                entry.getKey(),
+        Explicit<Boolean> coerce,
+            this.orientation = orientation;
+        public Builder(
+                return new Explicit<>(COERCE_SETTING.get(context.indexSettings()), false);
+     *
+            return this;
+            boolean ignoreZ
+            if (orientation != null) {
+                params.remove(DEPRECATED_PARAMETERS_KEY);
+     *
+    }
+import java.util.Map;
+            )) {
+        }
+                } else if (Names.COERCE.match(fieldName, LoggingDeprecationHandler.INSTANCE)) {
+        }
+        Explicit<Boolean> ignoreZValue,
+        }
+            this.coerce = coerce;
+ * KIND, either express or implied.  See the License for the
+ *
+ */
+            FieldType fieldType,
+    /**
+    ) {
+                    );
+            return Defaults.ORIENTATION;
+ * not use this file except in compliance with the License.
+            if (params.containsKey(Names.ORIENTATION.getPreferredName())) {
+    public static class Defaults extends AbstractGeometryFieldMapper.Defaults {
+            }
+        }
+                        Names.COERCE.getPreferredName(),
+    protected final void mergeOptions(FieldMapper other, List<String> conflicts) {
+        return coerce;
+        String simpleName,
+    }
+ * this file be licensed under the Apache-2.0 license or a
+     * @opensearch.internal
+    public Orientation orientation() {
+    }
+    public abstract static class TypeParser extends AbstractGeometryFieldMapper.TypeParser<Builder> {
+            boolean ignoreMalformed,
+            this.orientation = gsfm.orientation;
+import org.opensearch.index.mapper.LegacyGeoShapeFieldMapper.DeprecatedParameters;
+        public static final Explicit<Boolean> COERCE = new Explicit<>(false, false);
  *
  * @opensearch.internal
- */
-public abstract class AbstractShapeGeometryFieldMapper<Parsed, Processed> extends AbstractGeometryFieldMapper<Parsed, Processed> {
-
-    /**
-     * Common parameters for the base shape geometry field mapper
-     *
-     * @opensearch.internal
-     */
-    public static class Names extends AbstractGeometryFieldMapper.Names {
-        public static final ParseField ORIENTATION = new ParseField("orientation");
-        public static final ParseField COERCE = new ParseField("coerce");
-    }
-
-    /**
-     * Parameter defaults for the base shape geometry field mapper
-     *
-     * @opensearch.internal
-     */
-    public static class Defaults extends AbstractGeometryFieldMapper.Defaults {
-        public static final Explicit<Orientation> ORIENTATION = new Explicit<>(Orientation.RIGHT, false);
-        public static final Explicit<Boolean> COERCE = new Explicit<>(false, false);
-    }
-
-    /**
-     * Base builder for the base shape geometry field mapper
-     *
-     * @opensearch.internal
-     */
-    public abstract static class Builder<T extends Builder<T, FT>, FT extends AbstractShapeGeometryFieldType> extends
-        AbstractGeometryFieldMapper.Builder<T, FT> {
-        protected Boolean coerce;
-        protected Orientation orientation;
-
-        /** default builder - used for external mapper*/
-        public Builder(String name, FieldType fieldType) {
-            super(name, fieldType);
-        }
-
-        public Builder(
-            String name,
-            FieldType fieldType,
-            boolean coerce,
-            boolean ignoreMalformed,
-            Orientation orientation,
-            boolean ignoreZ
-        ) {
-            super(name, fieldType, ignoreMalformed, ignoreZ);
-            this.coerce = coerce;
-            this.orientation = orientation;
-        }
-
-        public Builder coerce(boolean coerce) {
-            this.coerce = coerce;
-            return this;
-        }
-
-        protected Explicit<Boolean> coerce(BuilderContext context) {
-            if (coerce != null) {
-                return new Explicit<>(coerce, true);
-            }
-            if (context.indexSettings() != null) {
-                return new Explicit<>(COERCE_SETTING.get(context.indexSettings()), false);
-            }
-            return Defaults.COERCE;
-        }
-
-        protected Explicit<Boolean> coerce() {
-            if (coerce != null) {
-                return new Explicit<>(coerce, true);
-            }
-            return Defaults.COERCE;
-        }
-
-        public Builder orientation(Orientation orientation) {
-            this.orientation = orientation;
-            return this;
-        }
-
-        protected Explicit<Orientation> orientation() {
-            if (orientation != null) {
-                return new Explicit<>(orientation, true);
-            }
-            return Defaults.ORIENTATION;
-        }
-
-    }
-
-    protected static final String DEPRECATED_PARAMETERS_KEY = "deprecated_parameters";
-
-    /**
-     * Base type parser for the base shape geometry field mapper
-     *
-     * @opensearch.internal
-     */
-    public abstract static class TypeParser extends AbstractGeometryFieldMapper.TypeParser<Builder> {
-        protected abstract Builder newBuilder(String name, Map<String, Object> params);
-
-        protected boolean parseXContentParameters(String name, Map.Entry<String, Object> entry, Map<String, Object> params)
-            throws MapperParsingException {
-            if (DeprecatedParameters.parse(
-                name,
-                entry.getKey(),
-                entry.getValue(),
-                (DeprecatedParameters) params.get(DEPRECATED_PARAMETERS_KEY)
-            )) {
-                return true;
-            }
-            return false;
-        }
-
-        @Override
-        public Builder parse(String name, Map<String, Object> node, Map<String, Object> params, ParserContext parserContext) {
-            boolean parsedDeprecatedParameters = false;
-            params.put(DEPRECATED_PARAMETERS_KEY, new DeprecatedParameters());
-            for (Iterator<Map.Entry<String, Object>> iterator = node.entrySet().iterator(); iterator.hasNext();) {
-                Map.Entry<String, Object> entry = iterator.next();
-                String fieldName = entry.getKey();
-                Object fieldNode = entry.getValue();
-                if (parseXContentParameters(name, entry, params)) {
-                    parsedDeprecatedParameters = true;
-                    iterator.remove();
-                } else if (Names.ORIENTATION.match(fieldName, LoggingDeprecationHandler.INSTANCE)) {
-                    params.put(Names.ORIENTATION.getPreferredName(), ShapeBuilder.Orientation.fromString(fieldNode.toString()));
-                    iterator.remove();
-                } else if (Names.COERCE.match(fieldName, LoggingDeprecationHandler.INSTANCE)) {
-                    params.put(
-                        Names.COERCE.getPreferredName(),
-                        XContentMapValues.nodeBooleanValue(fieldNode, name + "." + Names.COERCE.getPreferredName())
-                    );
-                    iterator.remove();
-                }
-            }
-            if (parsedDeprecatedParameters == false) {
-                params.remove(DEPRECATED_PARAMETERS_KEY);
-            }
-
-            Builder builder = super.parse(name, node, params, parserContext);
-
-            if (params.containsKey(Names.COERCE.getPreferredName())) {
-                builder.coerce((Boolean) params.get(Names.COERCE.getPreferredName()));
-            }
-
-            if (params.containsKey(Names.ORIENTATION.getPreferredName())) {
-                builder.orientation((Orientation) params.get(Names.ORIENTATION.getPreferredName()));
-            }
-
-            return builder;
-        }
-    }
-
-    /**
-     * Base field type for the base shape geometry field mapper
-     *
-     * @opensearch.internal
-     */
     public abstract static class AbstractShapeGeometryFieldType<Parsed, Processed> extends AbstractGeometryFieldType<Parsed, Processed> {
-        protected Orientation orientation = Defaults.ORIENTATION.value();
-
-        protected AbstractShapeGeometryFieldType(
-            String name,
             boolean isSearchable,
-            boolean isStored,
-            boolean hasDocValues,
-            boolean parsesArrayValue,
-            Map<String, String> meta
-        ) {
-            super(name, isSearchable, isStored, hasDocValues, parsesArrayValue, meta);
-        }
-
-        public Orientation orientation() {
-            return this.orientation;
-        }
-
-        public void setOrientation(Orientation orientation) {
-            this.orientation = orientation;
-        }
-    }
-
-    protected Explicit<Boolean> coerce;
-    protected Explicit<Orientation> orientation;
-
-    protected AbstractShapeGeometryFieldMapper(
-        String simpleName,
-        FieldType fieldType,
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+            if (parsedDeprecatedParameters == false) {
+    @Override
         MappedFieldType mappedFieldType,
-        Explicit<Boolean> ignoreMalformed,
-        Explicit<Boolean> coerce,
-        Explicit<Boolean> ignoreZValue,
-        Explicit<Orientation> orientation,
-        MultiFields multiFields,
-        CopyTo copyTo
-    ) {
-        super(simpleName, fieldType, mappedFieldType, ignoreMalformed, ignoreZValue, multiFields, copyTo);
-        this.coerce = coerce;
-        this.orientation = orientation;
-    }
-
-    @Override
-    public final boolean parsesArrayValue() {
-        return false;
-    }
-
-    @Override
-    protected final void mergeOptions(FieldMapper other, List<String> conflicts) {
-        super.mergeOptions(other, conflicts);
-        AbstractShapeGeometryFieldMapper gsfm = (AbstractShapeGeometryFieldMapper) other;
-        if (gsfm.coerce.explicit()) {
-            this.coerce = gsfm.coerce;
-        }
-        if (gsfm.orientation.explicit()) {
-            this.orientation = gsfm.orientation;
-        }
-        mergeGeoOptions(gsfm, conflicts);
-    }
-
-    protected abstract void mergeGeoOptions(AbstractShapeGeometryFieldMapper<?, ?> mergeWith, List<String> conflicts);
-
-    @Override
-    public void doXContentBody(XContentBuilder builder, boolean includeDefaults, Params params) throws IOException {
-        super.doXContentBody(builder, includeDefaults, params);
-        AbstractShapeGeometryFieldType ft = (AbstractShapeGeometryFieldType) fieldType();
-        if (includeDefaults || coerce.explicit()) {
-            builder.field(AbstractShapeGeometryFieldMapper.Names.COERCE.getPreferredName(), coerce.value());
-        }
-        if (includeDefaults || orientation.explicit()) {
-            builder.field(Names.ORIENTATION.getPreferredName(), orientation.value());
-        }
-    }
-
+    protected Explicit<Orientation> orientation;
+     * @opensearch.internal
+package org.opensearch.index.mapper;
     public Explicit<Boolean> coerce() {
-        return coerce;
+        protected Orientation orientation;
     }
-
-    public Orientation orientation() {
-        return ((AbstractShapeGeometryFieldType) mappedFieldType).orientation();
-    }
+            }
+     * Common parameters for the base shape geometry field mapper
+        public static final ParseField ORIENTATION = new ParseField("orientation");
+            super(name, isSearchable, isStored, hasDocValues, parsesArrayValue, meta);
+        public Orientation orientation() {
+                return new Explicit<>(coerce, true);
+import org.apache.lucene.document.FieldType;
 }
+        protected Boolean coerce;
+     * Base builder for the base shape geometry field mapper
+            String name,
+ * this work for additional information regarding copyright
+import org.opensearch.common.xcontent.support.XContentMapValues;
+            }
+                    params.put(
+            Orientation orientation,
+/*
+ * compatible open source license.
+        public Builder orientation(Orientation orientation) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        if (includeDefaults || orientation.explicit()) {
+/**
+ */
+    }
+ */
+ * software distributed under the License is distributed on an
+                } else if (Names.ORIENTATION.match(fieldName, LoggingDeprecationHandler.INSTANCE)) {
+        MultiFields multiFields,
+     * Parameter defaults for the base shape geometry field mapper
+            return Defaults.COERCE;
+            return Defaults.COERCE;
+                return new Explicit<>(coerce, true);
+                return new Explicit<>(orientation, true);
+                return true;
+    /**
+                builder.orientation((Orientation) params.get(Names.ORIENTATION.getPreferredName()));
+        protected Explicit<Boolean> coerce(BuilderContext context) {
+        if (gsfm.orientation.explicit()) {
+    /**
+        super.mergeOptions(other, conflicts);
+            boolean isStored,
+        }
+                    iterator.remove();
+     * @opensearch.internal
+import org.opensearch.common.geo.builders.ShapeBuilder;
+            super(name, fieldType);
+/*
+            this.orientation = orientation;
+            String name,
+            return false;
+            }
+     *
+    }
+        FieldType fieldType,
+    }
+            for (Iterator<Map.Entry<String, Object>> iterator = node.entrySet().iterator(); iterator.hasNext();) {
+            if (params.containsKey(Names.COERCE.getPreferredName())) {
+    @Override
+                Map.Entry<String, Object> entry = iterator.next();
+                name,
+        public Builder coerce(boolean coerce) {
+        CopyTo copyTo
+     */
+        public void setOrientation(Orientation orientation) {
+            if (DeprecatedParameters.parse(
+import java.util.List;
+            boolean coerce,
+            }
+            return builder;
+            super(name, fieldType, ignoreMalformed, ignoreZ);
+                if (parseXContentParameters(name, entry, params)) {
+ */

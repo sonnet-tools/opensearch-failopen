@@ -1,222 +1,192 @@
----
-"Test that remote indices are subject to shard skipping":
-
-  - do:
-      indices.create:
-        index: skip_shards_index
-        body:
-          settings:
-            index:
-              number_of_shards: 1
-              number_of_replicas: 0
-          mappings:
-            properties:
-              created_at:
-                 type: date
-                 format: "yyyy-MM-dd"
-
-  - do:
-      bulk:
-        refresh: true
-        body:
-            - '{"index": {"_index": "skip_shards_index"}}'
-            - '{"f1": "local_cluster", "sort_field": 0, "created_at" : "2017-01-01"}'
-
-  # check that we skip the remote shard
-  - do:
-     search:
-       rest_total_hits_as_int: true
-       index: "skip_shards_index,my_remote_cluster:single_doc_index"
-       pre_filter_shard_size: 1
-       ccs_minimize_roundtrips: false
-       body: { "size" : 10, "query" : { "range" : { "created_at" : { "gte" : "2016-02-01", "lt": "2018-02-01"} } } }
-
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._index: "skip_shards_index"}
-  - is_false: num_reduce_phases
-  - match: { _shards.total: 2 }
-  - match: { _shards.successful: 2 }
-  - match: { _shards.skipped : 1}
-  - match: { _shards.failed: 0 }
-  - match: { hits.total: 1 }
-
-  # check that we skip the local shard
-  - do:
-     search:
-       rest_total_hits_as_int: true
-       index: "skip_shards_index,my_remote_cluster:single_doc_index"
-       pre_filter_shard_size: 1
-       ccs_minimize_roundtrips: false
-       body: { "size" : 10, "query" : { "range" : { "created_at" : { "gte" : "2015-02-01", "lt": "2016-02-01"} } } }
-
-  - match: { hits.total: 1 }
-  - match: { hits.hits.0._index: "my_remote_cluster:single_doc_index"}
-  - is_false: num_reduce_phases
-  - match: { _shards.total: 2 }
-  - match: { _shards.successful: 2 }
-  - match: { _shards.skipped : 1}
-  - match: { _shards.failed: 0 }
-  - match: { hits.total: 1 }
-
----
-"Test that queries on _index field that don't match alias are skipped":
-
-  - do:
-      indices.create:
-        index: skip_shards_local_index
-        body:
-          settings:
-            index:
-              number_of_shards: 2
-              number_of_replicas: 0
-          mappings:
-            properties:
-              created_at:
-                 type: date
-                 format: "yyyy-MM-dd"
-
-  - do:
-      bulk:
-        refresh: true
-        body:
-            - '{"index": {"_index": "skip_shards_local_index"}}'
-            - '{"f1": "local_cluster", "sort_field": 0, "created_at" : "2017-01-01"}'
-            - '{"index": {"_index": "skip_shards_local_index"}}'
-            - '{"f1": "local_cluster", "sort_field": 1, "created_at" : "2017-01-02"}'
-  - do:
-      indices.put_alias:
-        index: skip_shards_local_index
-        name:  test_skip_alias
-
-  # check that we match the alias with term query
-  - do:
-     search:
        track_total_hits: true
-       index: "skip_shards_local_index"
-       pre_filter_shard_size: 1
-       ccs_minimize_roundtrips: false
-       body: { "size" : 10, "query" : { "term" : { "_index" : "test_skip_alias" } } }
-
-  - match: { hits.total.value: 2 }
-  - match: { hits.hits.0._index: "skip_shards_local_index"}
-  - match: { _shards.total: 2 }
-  - match: { _shards.successful: 2 }
-  - match: { _shards.skipped : 0}
-  - match: { _shards.failed: 0 }
-
-  # check that we match the alias with terms query
-  - do:
-     search:
-       track_total_hits: true
-       index: "skip_shards_local_index"
-       pre_filter_shard_size: 1
-       ccs_minimize_roundtrips: false
+       index: "skip_shards_index,my_remote_cluster:single_doc_index"
+      indices.create:
+---
+  - match: { hits.total.value: 0 }
        body: { "size" : 10, "query" : { "terms" : { "_index" : ["test_skip_alias", "does_not_match"] } } }
-
-  - match: { hits.total.value: 2 }
-  - match: { hits.hits.0._index: "skip_shards_local_index"}
-  - match: { _shards.total: 2 }
-  - match: { _shards.successful: 2 }
-  - match: { _shards.skipped : 0}
-  - match: { _shards.failed: 0 }
-
-  # check that we match the alias with prefix query
-  - do:
-     search:
+    # When all shards are skipped current logic returns 1 to produce a valid search result
        track_total_hits: true
-       index: "skip_shards_local_index"
-       pre_filter_shard_size: 1
-       ccs_minimize_roundtrips: false
-       body: { "size" : 10, "query" : { "prefix" : { "_index" : "test_skip_ali" } } }
-
-  - match: { hits.total.value: 2 }
-  - match: { hits.hits.0._index: "skip_shards_local_index"}
-  - match: { _shards.total: 2 }
   - match: { _shards.successful: 2 }
   - match: { _shards.skipped : 0}
+       ccs_minimize_roundtrips: false
+              number_of_replicas: 0
+       body: { "size" : 10, "query" : { "prefix" : { "_index" : "test_skip_ali" } } }
+       pre_filter_shard_size: 1
+    # When all shards are skipped current logic returns 1 to produce a valid search result
+  - match: { _shards.successful: 2 }
+  - match: { _shards.total: 2 }
+  - match: { hits.total.value: 2 }
+  - match: { hits.total: 1 }
+  - do:
+       track_total_hits: true
+       pre_filter_shard_size: 1
+  - do:
+  - match: { _shards.skipped : 1}
+  - match: { hits.total.value: 2 }
+       index: "skip_shards_local_index"
+  - do:
   - match: { _shards.failed: 0 }
-
+              number_of_shards: 1
+       body: { "size" : 10, "query" : { "terms" : { "_index" : ["does_not_match", "also_does_not_match"] } } }
   # check that we match the alias with wildcard query
   - do:
-     search:
-       track_total_hits: true
-       index: "skip_shards_local_index"
        pre_filter_shard_size: 1
-       ccs_minimize_roundtrips: false
-       body: { "size" : 10, "query" : { "wildcard" : { "_index" : "test_skip_ali*" } } }
-
-  - match: { hits.total.value: 2 }
-  - match: { hits.hits.0._index: "skip_shards_local_index"}
-  - match: { _shards.total: 2 }
-  - match: { _shards.successful: 2 }
-  - match: { _shards.skipped : 0}
-  - match: { _shards.failed: 0 }
-
-
-  # check that skipped when we don't match the alias with a term query
+              number_of_replicas: 0
+                 format: "yyyy-MM-dd"
+       track_total_hits: true
   - do:
-     search:
-       track_total_hits: true
-       index: "skip_shards_local_index"
-       pre_filter_shard_size: 1
-       ccs_minimize_roundtrips: false
-       body: { "size" : 10, "query" : { "term" : { "_index" : "does_not_match" } } }
-
-
-  - match: { hits.total.value: 0 }
-  - match: { _shards.total: 2 }
-  - match: { _shards.successful: 2 }
-    # When all shards are skipped current logic returns 1 to produce a valid search result
-  - match: { _shards.skipped : 1}
-  - match: { _shards.failed: 0 }
-
-  # check that skipped when we don't match the alias with a terms query
   - do:
-     search:
        track_total_hits: true
-       index: "skip_shards_local_index"
-       pre_filter_shard_size: 1
-       ccs_minimize_roundtrips: false
-       body: { "size" : 10, "query" : { "terms" : { "_index" : ["does_not_match", "also_does_not_match"] } } }
-
-
-  - match: { hits.total.value: 0 }
   - match: { _shards.total: 2 }
-  - match: { _shards.successful: 2 }
-    # When all shards are skipped current logic returns 1 to produce a valid search result
-  - match: { _shards.skipped : 1}
+  - match: { _shards.total: 2 }
+       ccs_minimize_roundtrips: false
+  - do:
+  - match: { _shards.total: 2 }
+          mappings:
+     search:
+  - is_false: num_reduce_phases
+  - match: { _shards.total: 2 }
+     search:
+              created_at:
   - match: { _shards.failed: 0 }
-
+       ccs_minimize_roundtrips: false
+  - match: { _shards.successful: 2 }
+  - is_false: num_reduce_phases
+  - match: { _shards.failed: 0 }
+          settings:
+  - match: { _shards.failed: 0 }
+  - match: { hits.total.value: 0 }
+       ccs_minimize_roundtrips: false
+            - '{"f1": "local_cluster", "sort_field": 0, "created_at" : "2017-01-01"}'
+              number_of_shards: 2
+  - do:
+"Test that remote indices are subject to shard skipping":
+       pre_filter_shard_size: 1
+  - match: { _shards.successful: 2 }
+  - match: { _shards.successful: 2 }
   # check that skipped when we don't match the alias with a prefix query
-  - do:
-     search:
-       track_total_hits: true
-       index: "skip_shards_local_index"
-       pre_filter_shard_size: 1
+---
        ccs_minimize_roundtrips: false
-       body: { "size" : 10, "query" : { "prefix" : { "_index" : "does_not_matc" } } }
-
-
-  - match: { hits.total.value: 0 }
-  - match: { _shards.total: 2 }
-  - match: { _shards.successful: 2 }
-    # When all shards are skipped current logic returns 1 to produce a valid search result
   - match: { _shards.skipped : 1}
   - match: { _shards.failed: 0 }
-
-  # check that skipped when we don't match the alias with a wildcard query
-  - do:
-     search:
-       track_total_hits: true
+       pre_filter_shard_size: 1
+  - match: { _shards.skipped : 0}
+    # When all shards are skipped current logic returns 1 to produce a valid search result
+                 format: "yyyy-MM-dd"
+  - match: { _shards.skipped : 0}
        index: "skip_shards_local_index"
        pre_filter_shard_size: 1
+            - '{"index": {"_index": "skip_shards_index"}}'
+  - match: { hits.total.value: 0 }
+  - do:
+       index: "skip_shards_local_index"
+       index: "skip_shards_local_index"
+  - match: { _shards.failed: 0 }
+       index: "skip_shards_index,my_remote_cluster:single_doc_index"
+       pre_filter_shard_size: 1
+     search:
+       track_total_hits: true
+        body:
+              created_at:
+  - match: { _shards.successful: 2 }
+  - do:
+            index:
+            properties:
+            - '{"f1": "local_cluster", "sort_field": 0, "created_at" : "2017-01-01"}'
+  - match: { _shards.skipped : 1}
        ccs_minimize_roundtrips: false
        body: { "size" : 10, "query" : { "wildcard" : { "_index" : "does_not_matc*" } } }
-
-
-  - match: { hits.total.value: 0 }
-  - match: { _shards.total: 2 }
-  - match: { _shards.successful: 2 }
-    # When all shards are skipped current logic returns 1 to produce a valid search result
+  - match: { hits.hits.0._index: "skip_shards_index"}
+          mappings:
+  # check that we match the alias with prefix query
+  - match: { hits.total: 1 }
+       track_total_hits: true
+                 type: date
+     search:
   - match: { _shards.skipped : 1}
+       body: { "size" : 10, "query" : { "range" : { "created_at" : { "gte" : "2016-02-01", "lt": "2018-02-01"} } } }
+  - match: { _shards.total: 2 }
+        index: skip_shards_index
+      bulk:
+  - do:
+  - match: { _shards.successful: 2 }
+       body: { "size" : 10, "query" : { "prefix" : { "_index" : "does_not_matc" } } }
+       pre_filter_shard_size: 1
+  - match: { hits.hits.0._index: "skip_shards_local_index"}
+          settings:
+  - match: { hits.total: 1 }
+  - match: { hits.hits.0._index: "skip_shards_local_index"}
+  - do:
+                 type: date
+  - match: { _shards.total: 2 }
+  - match: { hits.hits.0._index: "skip_shards_local_index"}
+        body:
+  - do:
+       ccs_minimize_roundtrips: false
+  # check that we match the alias with term query
+  - match: { hits.total: 1 }
+       index: "skip_shards_local_index"
+            index:
+  # check that we skip the remote shard
+  - do:
+        body:
+            - '{"f1": "local_cluster", "sort_field": 1, "created_at" : "2017-01-02"}'
+       index: "skip_shards_local_index"
+       ccs_minimize_roundtrips: false
+       pre_filter_shard_size: 1
+        name:  test_skip_alias
+  # check that skipped when we don't match the alias with a term query
+  - match: { _shards.failed: 0 }
+     search:
+  - match: { _shards.failed: 0 }
+  - match: { _shards.skipped : 0}
+      indices.create:
+  - match: { hits.hits.0._index: "skip_shards_local_index"}
+       body: { "size" : 10, "query" : { "term" : { "_index" : "test_skip_alias" } } }
+  - match: { _shards.total: 2 }
+       body: { "size" : 10, "query" : { "term" : { "_index" : "does_not_match" } } }
+  - match: { _shards.failed: 0 }
+"Test that queries on _index field that don't match alias are skipped":
+        index: skip_shards_local_index
+        body:
+      indices.put_alias:
+    # When all shards are skipped current logic returns 1 to produce a valid search result
+     search:
+  - match: { _shards.skipped : 1}
+  - match: { hits.total.value: 2 }
+  - match: { _shards.successful: 2 }
+  # check that skipped when we don't match the alias with a terms query
+       index: "skip_shards_local_index"
+  # check that skipped when we don't match the alias with a wildcard query
+            - '{"index": {"_index": "skip_shards_local_index"}}'
+  - match: { _shards.successful: 2 }
+       ccs_minimize_roundtrips: false
+  # check that we skip the local shard
+        index: skip_shards_local_index
+       pre_filter_shard_size: 1
+  - match: { hits.total.value: 2 }
+            - '{"index": {"_index": "skip_shards_local_index"}}'
+       ccs_minimize_roundtrips: false
+  - do:
+            properties:
+       body: { "size" : 10, "query" : { "range" : { "created_at" : { "gte" : "2015-02-01", "lt": "2016-02-01"} } } }
+     search:
+  - match: { _shards.total: 2 }
+  - match: { hits.hits.0._index: "my_remote_cluster:single_doc_index"}
+  - match: { _shards.skipped : 1}
+        refresh: true
+       rest_total_hits_as_int: true
+      bulk:
+     search:
+       index: "skip_shards_local_index"
+  - match: { hits.total.value: 0 }
+       body: { "size" : 10, "query" : { "wildcard" : { "_index" : "test_skip_ali*" } } }
+       rest_total_hits_as_int: true
+  - match: { _shards.successful: 2 }
+  - match: { _shards.total: 2 }
+        refresh: true
+     search:
+  # check that we match the alias with terms query
+       track_total_hits: true
+     search:
   - match: { _shards.failed: 0 }

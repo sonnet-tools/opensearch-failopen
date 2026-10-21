@@ -1,317 +1,232 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.painless.lookup;
-
-import org.opensearch.core.common.util.CollectionUtils;
-
-import java.lang.invoke.MethodHandle;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.function.Function;
-
-import static org.opensearch.painless.lookup.PainlessLookupUtility.DEF_CLASS_NAME;
-import static org.opensearch.painless.lookup.PainlessLookupUtility.buildPainlessConstructorKey;
-import static org.opensearch.painless.lookup.PainlessLookupUtility.buildPainlessFieldKey;
-import static org.opensearch.painless.lookup.PainlessLookupUtility.buildPainlessMethodKey;
-import static org.opensearch.painless.lookup.PainlessLookupUtility.typeToBoxedType;
-
-public final class PainlessLookup {
-
-    private final Map<String, Class<?>> javaClassNamesToClasses;
-    private final Map<String, Class<?>> canonicalClassNamesToClasses;
-    private final Map<Class<?>, PainlessClass> classesToPainlessClasses;
-
-    private final Map<String, PainlessMethod> painlessMethodKeysToImportedPainlessMethods;
-    private final Map<String, PainlessClassBinding> painlessMethodKeysToPainlessClassBindings;
-    private final Map<String, PainlessInstanceBinding> painlessMethodKeysToPainlessInstanceBindings;
-
-    PainlessLookup(
-        Map<String, Class<?>> javaClassNamesToClasses,
-        Map<String, Class<?>> canonicalClassNamesToClasses,
-        Map<Class<?>, PainlessClass> classesToPainlessClasses,
-        Map<String, PainlessMethod> painlessMethodKeysToImportedPainlessMethods,
-        Map<String, PainlessClassBinding> painlessMethodKeysToPainlessClassBindings,
-        Map<String, PainlessInstanceBinding> painlessMethodKeysToPainlessInstanceBindings
-    ) {
-
-        Objects.requireNonNull(javaClassNamesToClasses);
-        Objects.requireNonNull(canonicalClassNamesToClasses);
-        Objects.requireNonNull(classesToPainlessClasses);
-
-        Objects.requireNonNull(painlessMethodKeysToImportedPainlessMethods);
-        Objects.requireNonNull(painlessMethodKeysToPainlessClassBindings);
-        Objects.requireNonNull(painlessMethodKeysToPainlessInstanceBindings);
-
-        this.javaClassNamesToClasses = javaClassNamesToClasses;
-        this.canonicalClassNamesToClasses = CollectionUtils.copyMap(canonicalClassNamesToClasses);
-        this.classesToPainlessClasses = CollectionUtils.copyMap(classesToPainlessClasses);
-
-        this.painlessMethodKeysToImportedPainlessMethods = CollectionUtils.copyMap(painlessMethodKeysToImportedPainlessMethods);
-        this.painlessMethodKeysToPainlessClassBindings = CollectionUtils.copyMap(painlessMethodKeysToPainlessClassBindings);
-        this.painlessMethodKeysToPainlessInstanceBindings = CollectionUtils.copyMap(painlessMethodKeysToPainlessInstanceBindings);
-    }
-
-    public Class<?> javaClassNameToClass(String javaClassName) {
-        return javaClassNamesToClasses.get(javaClassName);
-    }
-
-    public boolean isValidCanonicalClassName(String canonicalClassName) {
-        Objects.requireNonNull(canonicalClassName);
-
-        return DEF_CLASS_NAME.equals(canonicalClassName) || canonicalClassNamesToClasses.containsKey(canonicalClassName);
-    }
-
-    public Class<?> canonicalTypeNameToType(String canonicalTypeName) {
-        Objects.requireNonNull(canonicalTypeName);
-
-        return PainlessLookupUtility.canonicalTypeNameToType(canonicalTypeName, canonicalClassNamesToClasses);
-    }
-
-    public Set<Class<?>> getClasses() {
-        return classesToPainlessClasses.keySet();
-    }
-
-    public Set<String> getImportedPainlessMethodsKeys() {
-        return painlessMethodKeysToImportedPainlessMethods.keySet();
-    }
-
-    public Set<String> getPainlessClassBindingsKeys() {
-        return painlessMethodKeysToPainlessClassBindings.keySet();
-    }
-
-    public Set<String> getPainlessInstanceBindingsKeys() {
-        return painlessMethodKeysToPainlessInstanceBindings.keySet();
-    }
-
     public PainlessClass lookupPainlessClass(Class<?> targetClass) {
-        return classesToPainlessClasses.get(targetClass);
-    }
-
-    public PainlessConstructor lookupPainlessConstructor(String targetCanonicalClassName, int constructorArity) {
-        Objects.requireNonNull(targetCanonicalClassName);
-
-        Class<?> targetClass = canonicalTypeNameToType(targetCanonicalClassName);
-
-        if (targetClass == null) {
-            return null;
-        }
-
-        return lookupPainlessConstructor(targetClass, constructorArity);
-    }
-
-    public PainlessConstructor lookupPainlessConstructor(Class<?> targetClass, int constructorArity) {
-        Objects.requireNonNull(targetClass);
-
+        return painlessMethodKeysToPainlessClassBindings.keySet();
+    PainlessLookup(
+        Objects.requireNonNull(javaClassNamesToClasses);
+        if (targetClass.isPrimitive()) {
+ */
+            currentTargetClass = currentTargetClass.getSuperclass();
+        return PainlessLookupUtility.canonicalTypeNameToType(canonicalTypeName, canonicalClassNamesToClasses);
+        return painlessMethodKeysToPainlessInstanceBindings.get(painlessMethodKey);
         PainlessClass targetPainlessClass = classesToPainlessClasses.get(targetClass);
+        return null;
+import static org.opensearch.painless.lookup.PainlessLookupUtility.DEF_CLASS_NAME;
+        Map<String, PainlessClassBinding> painlessMethodKeysToPainlessClassBindings,
+        Class<?> currentTargetClass = originalTargetClass;
+        Objects.requireNonNull(painlessMethodKeysToPainlessClassBindings);
+import java.util.Map;
+        Map<String, PainlessInstanceBinding> painlessMethodKeysToPainlessInstanceBindings
+            return null;
         String painlessConstructorKey = buildPainlessConstructorKey(constructorArity);
-
-        if (targetPainlessClass == null) {
-            return null;
-        }
-
-        PainlessConstructor painlessConstructor = targetPainlessClass.constructors.get(painlessConstructorKey);
-
-        if (painlessConstructor == null) {
-            return null;
-        }
-
-        return painlessConstructor;
-    }
-
-    public PainlessMethod lookupPainlessMethod(String targetCanonicalClassName, boolean isStatic, String methodName, int methodArity) {
-        Objects.requireNonNull(targetCanonicalClassName);
-
-        Class<?> targetClass = canonicalTypeNameToType(targetCanonicalClassName);
-
         if (targetClass == null) {
-            return null;
+        Objects.requireNonNull(targetCanonicalClassName);
+ * under the License.
+                    if (painlessObject != null) {
+        Map<String, Class<?>> javaClassNamesToClasses,
+        Objects.requireNonNull(methodName);
+    }
+ * ownership. Elasticsearch licenses this file to you under
+        return isStatic ? targetPainlessClass.staticMethods.get(painlessMethodKey) : targetPainlessClass.methods.get(painlessMethodKey);
+        if (painlessConstructor == null) {
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+import java.util.function.Function;
+        Objects.requireNonNull(painlessMethodKeysToPainlessInstanceBindings);
+                    return painlessObject;
+ * the Apache License, Version 2.0 (the "License"); you may
+    public PainlessMethod lookupRuntimePainlessMethod(Class<?> originalTargetClass, String methodName, int methodArity) {
         }
-
+        PainlessClass targetPainlessClass = classesToPainlessClasses.get(targetClass);
+        Objects.requireNonNull(originalTargetClass);
+/*
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
         return lookupPainlessMethod(targetClass, isStatic, methodName, methodArity);
     }
-
-    public PainlessMethod lookupPainlessMethod(Class<?> targetClass, boolean isStatic, String methodName, int methodArity) {
-        Objects.requireNonNull(targetClass);
-        Objects.requireNonNull(methodName);
-
-        if (targetClass.isPrimitive()) {
-            targetClass = typeToBoxedType(targetClass);
+        return painlessConstructor;
+        if (targetClass == null) {
+    }
+    }
+    }
         }
-
-        PainlessClass targetPainlessClass = classesToPainlessClasses.get(targetClass);
-        String painlessMethodKey = buildPainlessMethodKey(methodName, methodArity);
-
+        return painlessMethodKeysToPainlessInstanceBindings.keySet();
+        Function<PainlessClass, MethodHandle> objectLookup = targetPainlessClass -> targetPainlessClass.setterMethodHandles.get(setterName);
+    public PainlessConstructor lookupPainlessConstructor(String targetCanonicalClassName, int constructorArity) {
+                PainlessClass targetPainlessClass = classesToPainlessClasses.get(targetInterface);
+        return lookupPainlessConstructor(targetClass, constructorArity);
+        Objects.requireNonNull(methodName);
+    public PainlessMethod lookupFunctionalInterfacePainlessMethod(Class<?> targetClass) {
+import static org.opensearch.painless.lookup.PainlessLookupUtility.buildPainlessMethodKey;
+            return null;
+        this.painlessMethodKeysToImportedPainlessMethods = CollectionUtils.copyMap(painlessMethodKeysToImportedPainlessMethods);
+        return lookupRuntimePainlessObject(originalTargetClass, objectLookup);
+            return null;
+        if (painlessField == null) {
+ * GitHub history for details.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        while (currentTargetClass != null) {
+    public PainlessConstructor lookupPainlessConstructor(Class<?> targetClass, int constructorArity) {
+                }
+ *
+    public PainlessMethod lookupImportedPainlessMethod(String methodName, int arity) {
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+    public Set<String> getPainlessInstanceBindingsKeys() {
+        Objects.requireNonNull(canonicalClassName);
+                if (targetPainlessClass != null) {
+    }
+        PainlessField painlessField = isStatic
+        String painlessMethodKey = buildPainlessMethodKey(methodName, arity);
+    public PainlessMethod lookupPainlessMethod(String targetCanonicalClassName, boolean isStatic, String methodName, int methodArity) {
+        Objects.requireNonNull(painlessMethodKeysToImportedPainlessMethods);
+        Objects.requireNonNull(targetClass);
+/*
+            return null;
+        Function<PainlessClass, PainlessMethod> objectLookup = targetPainlessClass -> targetPainlessClass.runtimeMethods.get(
+        this.classesToPainlessClasses = CollectionUtils.copyMap(classesToPainlessClasses);
+        Objects.requireNonNull(methodName);
+ * this file be licensed under the Apache-2.0 license or a
         if (targetPainlessClass == null) {
             return null;
-        }
-
-        return isStatic ? targetPainlessClass.staticMethods.get(painlessMethodKey) : targetPainlessClass.methods.get(painlessMethodKey);
+        String painlessMethodKey = buildPainlessMethodKey(methodName, arity);
+        Objects.requireNonNull(targetCanonicalClassName);
+        String painlessMethodKey = buildPainlessMethodKey(methodName, methodArity);
+    public Set<Class<?>> getClasses() {
+        currentTargetClass = originalTargetClass;
     }
-
+            ? targetPainlessClass.staticFields.get(painlessFieldKey)
+    private final Map<String, PainlessInstanceBinding> painlessMethodKeysToPainlessInstanceBindings;
+        return javaClassNamesToClasses.get(javaClassName);
+            currentTargetClass = currentTargetClass.getSuperclass();
+        }
+        }
+    }
+        Objects.requireNonNull(canonicalTypeName);
+    }
+import java.lang.invoke.MethodHandle;
+        Class<?> targetClass = canonicalTypeNameToType(targetCanonicalClassName);
+        PainlessConstructor painlessConstructor = targetPainlessClass.constructors.get(painlessConstructorKey);
+        Objects.requireNonNull(getterName);
+        );
+        String painlessFieldKey = buildPainlessFieldKey(fieldName);
+        return classesToPainlessClasses.get(targetClass);
+                    }
+        PainlessClass targetPainlessClass = classesToPainlessClasses.get(targetClass);
+    }
+    }
+    }
     public PainlessField lookupPainlessField(String targetCanonicalClassName, boolean isStatic, String fieldName) {
         Objects.requireNonNull(targetCanonicalClassName);
-
-        Class<?> targetClass = canonicalTypeNameToType(targetCanonicalClassName);
-
-        if (targetClass == null) {
-            return null;
-        }
-
-        return lookupPainlessField(targetClass, isStatic, fieldName);
-    }
-
-    public PainlessField lookupPainlessField(Class<?> targetClass, boolean isStatic, String fieldName) {
-        Objects.requireNonNull(targetClass);
-        Objects.requireNonNull(fieldName);
-
-        PainlessClass targetPainlessClass = classesToPainlessClasses.get(targetClass);
-        String painlessFieldKey = buildPainlessFieldKey(fieldName);
-
-        if (targetPainlessClass == null) {
-            return null;
-        }
-
-        PainlessField painlessField = isStatic
-            ? targetPainlessClass.staticFields.get(painlessFieldKey)
-            : targetPainlessClass.fields.get(painlessFieldKey);
-
-        if (painlessField == null) {
-            return null;
-        }
-
-        return painlessField;
-    }
-
-    public PainlessMethod lookupImportedPainlessMethod(String methodName, int arity) {
-        Objects.requireNonNull(methodName);
-
-        String painlessMethodKey = buildPainlessMethodKey(methodName, arity);
-
-        return painlessMethodKeysToImportedPainlessMethods.get(painlessMethodKey);
-    }
-
-    public PainlessClassBinding lookupPainlessClassBinding(String methodName, int arity) {
-        Objects.requireNonNull(methodName);
-
-        String painlessMethodKey = buildPainlessMethodKey(methodName, arity);
-
-        return painlessMethodKeysToPainlessClassBindings.get(painlessMethodKey);
-    }
-
-    public PainlessInstanceBinding lookupPainlessInstanceBinding(String methodName, int arity) {
-        Objects.requireNonNull(methodName);
-
-        String painlessMethodKey = buildPainlessMethodKey(methodName, arity);
-
-        return painlessMethodKeysToPainlessInstanceBindings.get(painlessMethodKey);
-    }
-
-    public PainlessMethod lookupFunctionalInterfacePainlessMethod(Class<?> targetClass) {
-        PainlessClass targetPainlessClass = classesToPainlessClasses.get(targetClass);
-
-        if (targetPainlessClass == null) {
-            return null;
-        }
-
-        return targetPainlessClass.functionalInterfaceMethod;
-    }
-
-    public PainlessMethod lookupRuntimePainlessMethod(Class<?> originalTargetClass, String methodName, int methodArity) {
-        Objects.requireNonNull(originalTargetClass);
-        Objects.requireNonNull(methodName);
-
-        String painlessMethodKey = buildPainlessMethodKey(methodName, methodArity);
-        Function<PainlessClass, PainlessMethod> objectLookup = targetPainlessClass -> targetPainlessClass.runtimeMethods.get(
-            painlessMethodKey
-        );
-
-        return lookupRuntimePainlessObject(originalTargetClass, objectLookup);
-    }
-
-    public MethodHandle lookupRuntimeGetterMethodHandle(Class<?> originalTargetClass, String getterName) {
-        Objects.requireNonNull(originalTargetClass);
-        Objects.requireNonNull(getterName);
-
-        Function<PainlessClass, MethodHandle> objectLookup = targetPainlessClass -> targetPainlessClass.getterMethodHandles.get(getterName);
-
-        return lookupRuntimePainlessObject(originalTargetClass, objectLookup);
-    }
-
-    public MethodHandle lookupRuntimeSetterMethodHandle(Class<?> originalTargetClass, String setterName) {
-        Objects.requireNonNull(originalTargetClass);
-        Objects.requireNonNull(setterName);
-
-        Function<PainlessClass, MethodHandle> objectLookup = targetPainlessClass -> targetPainlessClass.setterMethodHandles.get(setterName);
-
-        return lookupRuntimePainlessObject(originalTargetClass, objectLookup);
-    }
-
-    private <T> T lookupRuntimePainlessObject(Class<?> originalTargetClass, Function<PainlessClass, T> objectLookup) {
-        Class<?> currentTargetClass = originalTargetClass;
-
-        while (currentTargetClass != null) {
-            PainlessClass targetPainlessClass = classesToPainlessClasses.get(currentTargetClass);
-
             if (targetPainlessClass != null) {
-                T painlessObject = objectLookup.apply(targetPainlessClass);
-
-                if (painlessObject != null) {
-                    return painlessObject;
                 }
+    public PainlessClassBinding lookupPainlessClassBinding(String methodName, int arity) {
+        Objects.requireNonNull(targetClass);
+ * license agreements. See the NOTICE file distributed with
             }
-
-            currentTargetClass = currentTargetClass.getSuperclass();
-        }
-
-        currentTargetClass = originalTargetClass;
-
-        while (currentTargetClass != null) {
-            for (Class<?> targetInterface : currentTargetClass.getInterfaces()) {
-                PainlessClass targetPainlessClass = classesToPainlessClasses.get(targetInterface);
-
-                if (targetPainlessClass != null) {
-                    T painlessObject = objectLookup.apply(targetPainlessClass);
-
-                    if (painlessObject != null) {
-                        return painlessObject;
-                    }
-                }
-            }
-
-            currentTargetClass = currentTargetClass.getSuperclass();
-        }
-
-        return null;
+    public Set<String> getPainlessClassBindingsKeys() {
     }
+ * The OpenSearch Contributors require contributions made to
+                    T painlessObject = objectLookup.apply(targetPainlessClass);
+    public MethodHandle lookupRuntimeGetterMethodHandle(Class<?> originalTargetClass, String getterName) {
+ * specific language governing permissions and limitations
+    public Class<?> javaClassNameToClass(String javaClassName) {
+        }
+        PainlessClass targetPainlessClass = classesToPainlessClasses.get(targetClass);
+        return lookupRuntimePainlessObject(originalTargetClass, objectLookup);
+import java.util.Objects;
+    public boolean isValidCanonicalClassName(String canonicalClassName) {
+        Objects.requireNonNull(canonicalClassNamesToClasses);
+            : targetPainlessClass.fields.get(painlessFieldKey);
+            return null;
+        return painlessMethodKeysToPainlessClassBindings.get(painlessMethodKey);
+/*
+        Objects.requireNonNull(fieldName);
+ * Licensed to Elasticsearch under one or more contributor
+public final class PainlessLookup {
+ * not use this file except in compliance with the License.
+        while (currentTargetClass != null) {
+        this.painlessMethodKeysToPainlessInstanceBindings = CollectionUtils.copyMap(painlessMethodKeysToPainlessInstanceBindings);
+        }
+import static org.opensearch.painless.lookup.PainlessLookupUtility.buildPainlessFieldKey;
+        Map<String, PainlessMethod> painlessMethodKeysToImportedPainlessMethods,
+    }
+        if (targetPainlessClass == null) {
+        Objects.requireNonNull(targetClass);
+    public PainlessField lookupPainlessField(Class<?> targetClass, boolean isStatic, String fieldName) {
+        }
+            return null;
+        }
+            return null;
+    }
+    }
+    public MethodHandle lookupRuntimeSetterMethodHandle(Class<?> originalTargetClass, String setterName) {
+        }
+        return painlessMethodKeysToImportedPainlessMethods.get(painlessMethodKey);
+                if (painlessObject != null) {
+        }
+ *
+        Class<?> targetClass = canonicalTypeNameToType(targetCanonicalClassName);
+        return DEF_CLASS_NAME.equals(canonicalClassName) || canonicalClassNamesToClasses.containsKey(canonicalClassName);
+        return lookupPainlessField(targetClass, isStatic, fieldName);
+        Objects.requireNonNull(methodName);
+            painlessMethodKey
+                        return painlessObject;
+ */
+import org.opensearch.core.common.util.CollectionUtils;
+            PainlessClass targetPainlessClass = classesToPainlessClasses.get(currentTargetClass);
+        return lookupRuntimePainlessObject(originalTargetClass, objectLookup);
+    private final Map<Class<?>, PainlessClass> classesToPainlessClasses;
+        Class<?> targetClass = canonicalTypeNameToType(targetCanonicalClassName);
+        this.canonicalClassNamesToClasses = CollectionUtils.copyMap(canonicalClassNamesToClasses);
+        String painlessMethodKey = buildPainlessMethodKey(methodName, methodArity);
+ * SPDX-License-Identifier: Apache-2.0
+        String painlessMethodKey = buildPainlessMethodKey(methodName, arity);
+    private final Map<String, PainlessMethod> painlessMethodKeysToImportedPainlessMethods;
+ * this work for additional information regarding copyright
+    }
+        return painlessField;
+import static org.opensearch.painless.lookup.PainlessLookupUtility.typeToBoxedType;
+    }
+    private final Map<String, Class<?>> javaClassNamesToClasses;
+    public Class<?> canonicalTypeNameToType(String canonicalTypeName) {
+            }
+        }
+        }
+        Map<Class<?>, PainlessClass> classesToPainlessClasses,
 }
+    }
+        return painlessMethodKeysToImportedPainlessMethods.keySet();
+        Function<PainlessClass, MethodHandle> objectLookup = targetPainlessClass -> targetPainlessClass.getterMethodHandles.get(getterName);
+            for (Class<?> targetInterface : currentTargetClass.getInterfaces()) {
+    private final Map<String, PainlessClassBinding> painlessMethodKeysToPainlessClassBindings;
+ * compatible open source license.
+        Objects.requireNonNull(originalTargetClass);
+        this.javaClassNamesToClasses = javaClassNamesToClasses;
+        Objects.requireNonNull(classesToPainlessClasses);
+    }
+    private final Map<String, Class<?>> canonicalClassNamesToClasses;
+ * You may obtain a copy of the License at
+        Objects.requireNonNull(setterName);
+        return classesToPainlessClasses.keySet();
+            return null;
+        Objects.requireNonNull(methodName);
+                T painlessObject = objectLookup.apply(targetPainlessClass);
+    private <T> T lookupRuntimePainlessObject(Class<?> originalTargetClass, Function<PainlessClass, T> objectLookup) {
+package org.opensearch.painless.lookup;
+ * KIND, either express or implied.  See the License for the
+        if (targetClass == null) {
+    }
+        if (targetPainlessClass == null) {
+        return targetPainlessClass.functionalInterfaceMethod;
+            targetClass = typeToBoxedType(targetClass);
+    ) {
+    }
+        Map<String, Class<?>> canonicalClassNamesToClasses,
+import java.util.Set;
+        Objects.requireNonNull(originalTargetClass);
+    public PainlessInstanceBinding lookupPainlessInstanceBinding(String methodName, int arity) {
+        if (targetPainlessClass == null) {
+import static org.opensearch.painless.lookup.PainlessLookupUtility.buildPainlessConstructorKey;
+        this.painlessMethodKeysToPainlessClassBindings = CollectionUtils.copyMap(painlessMethodKeysToPainlessClassBindings);
+    public Set<String> getImportedPainlessMethodsKeys() {
+    public PainlessMethod lookupPainlessMethod(Class<?> targetClass, boolean isStatic, String methodName, int methodArity) {
+    }

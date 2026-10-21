@@ -1,697 +1,630 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-//! Coordinator-reduce local execution.
-//!
-//! A [`LocalSession`] holds a DataFusion [`SessionContext`] configured to share
-//! the caller-supplied [`RuntimeEnv`] (and therefore its memory pool) with the
-//! rest of the node. The session is the Rust-side counterpart of
-//! `DatafusionReduceSink` on the Java side:
-//!
-//! 1. For each declared stage input, [`LocalSession::register_partition`]
-//!    creates a [`PartitionStreamSender`] / [`PartitionStreamReceiver`] pair,
-//!    wraps the receiver in a [`SingleReceiverPartition`], and registers it as
-//!    a [`StreamingTable`] on the session under the input id.
-//! 2. [`LocalSession::execute_substrait`] decodes a Substrait plan against the
-//!    session (its table references resolve to the streaming tables) and hands
-//!    back a [`SendableRecordBatchStream`] the bridge layer can drain.
-//!
-//! The session has no knowledge of the FFM bridge; it is exposed to Java via a
-//! raw `Box::into_raw` pointer managed in `api.rs`, matching the lifecycle
-//! model used by `DataFusionRuntime` / `ShardView` / `QueryStreamHandle`.
-
-use std::sync::Arc;
-
-use arrow_array::RecordBatch;
-use datafusion::arrow::datatypes::SchemaRef;
-use datafusion::catalog::streaming::StreamingTable;
-use datafusion::common::DataFusionError;
-use datafusion::datasource::MemTable;
-use datafusion::execution::memory_pool::MemoryPool;
-use datafusion::execution::runtime_env::RuntimeEnv;
-use datafusion::execution::{SendableRecordBatchStream, SessionStateBuilder};
-use datafusion::physical_plan::displayable;
-use datafusion::physical_plan::streaming::PartitionStream;
-use datafusion::prelude::{SessionConfig, SessionContext};
-use native_bridge_common::log_debug;
-use prost::Message;
-use substrait::proto::Plan;
-
-use crate::partition_stream::{channel, PartitionStreamSender, SingleReceiverPartition};
-
-/// Coordinator-reduce DataFusion session.
-///
-/// Owns a [`SessionContext`] that reuses the caller's [`RuntimeEnv`] so memory
-/// accounting shares the node-wide pool. One session corresponds to one reduce
-/// stage; it holds the streaming inputs registered by
-/// [`Self::register_partition`] and is drained exactly once via
-/// [`Self::execute_substrait`].
-pub struct LocalSession {
-    ctx: SessionContext,
-    /// Pre-prepared physical plan (set by `prepare_final_plan`).
-    pub(crate) prepared_plan: Option<Arc<dyn datafusion::physical_plan::ExecutionPlan>>,
-    /// Phantom reservation held for the lifetime of this session. Accounts for
-    /// untracked memory (intermediate buffers, hash table overhead) in the shared
-    /// pool so concurrent reduces trigger backpressure before OOM.
-    _phantom_reservation: Option<datafusion::execution::memory_pool::MemoryReservation>,
-}
-
-impl LocalSession {
-    /// Builds a session whose `SessionContext` reuses the given [`RuntimeEnv`].
-    ///
-    /// The runtime's memory pool, disk manager, and caches are inherited —
-    /// every batch consumed or produced by this session counts against the
-    /// same limits as the shard-scan path.
-    pub fn new(runtime_env: &RuntimeEnv) -> Self {
-        let runtime_env = Arc::new(runtime_env.clone());
-        let mut config = SessionConfig::new();
-        config.options_mut().execution.target_partitions =
-            crate::api::get_reduce_target_partitions();
-        let state = SessionStateBuilder::new()
-            .with_config(config)
-            .with_runtime_env(runtime_env)
-            .with_default_features()
-            .with_physical_optimizer_rules(
-                crate::agg_mode::physical_optimizer_rules_without_combine(),
-            )
-            .build();
-        let ctx = SessionContext::new_with_state(state);
-        crate::udf::register_all(&ctx);
-        crate::udaf::register_all(&ctx);
-        Self {
-            ctx,
-            prepared_plan: None,
-            _phantom_reservation: None,
-        }
-    }
-
-    /// Returns the configured batch_size for this session.
-    pub fn batch_size(&self) -> usize {
-        self.ctx.copied_config().options().execution.batch_size
-    }
-
-    /// Returns the current target_partitions for this session.
-    pub fn target_partitions(&self) -> usize {
-        self.ctx
-            .copied_config()
-            .options()
-            .execution
-            .target_partitions
-    }
-
-    /// Reduce target_partitions on this session. Only reduces, never increases.
-    /// Called serially from register_partition_stream during session setup,
-    /// before any query execution begins.
-    pub fn reduce_target_partitions(&self, new_partitions: usize) {
-        let state_ref = self.ctx.state_ref();
-        let mut state = state_ref.write();
-        let current = state.config().options().execution.target_partitions;
-        if new_partitions < current {
-            state.config_mut().options_mut().execution.target_partitions = new_partitions;
-        }
-    }
-
-    /// Returns the current phantom reservation size, or 0 if none.
-    pub fn phantom_size(&self) -> usize {
-        self._phantom_reservation.as_ref().map_or(0, |r| r.size())
-    }
-
-    /// Sets the phantom reservation for this session. Caller should check
-    /// phantom_size() first and only acquire a new reservation if the new
-    /// estimate is larger than the current one.
-    pub fn set_phantom(
-        &mut self,
-        reservation: datafusion::execution::memory_pool::MemoryReservation,
-    ) {
-        self._phantom_reservation = Some(reservation);
-    }
-
-    /// Registers a streaming input on the session under `name` and returns the
-    /// producer side of the channel.
-    ///
-    /// The receiver is wrapped in a [`SingleReceiverPartition`] and registered
-    /// as a [`StreamingTable`]; Substrait plans executed through
-    /// [`Self::execute_substrait`] resolve table references named `name` to
-    /// this streaming table. The caller pushes `RecordBatch`es into the
-    /// returned [`PartitionStreamSender`] via
-    /// [`PartitionStreamSender::send_blocking`].
-    pub fn register_partition(
-        &mut self,
-        name: &str,
-        schema: SchemaRef,
-    ) -> Result<PartitionStreamSender, DataFusionError> {
-        let (sender, receiver) = channel(Arc::clone(&schema));
-        let partition: Arc<dyn PartitionStream> = Arc::new(SingleReceiverPartition::new(receiver));
-        let table = StreamingTable::try_new(schema, vec![partition])?;
-        self.ctx
-            .register_table(name, Arc::new(table))
-            .map_err(|e| {
-                DataFusionError::Execution(format!(
-                    "Failed to register streaming table '{}': {}",
-                    name, e
-                ))
-            })?;
-        Ok(sender)
-    }
-
-    /// Registers an in-memory input on the session under `name`, holding all
-    /// `batches` in a single [`MemTable`] partition.
-    ///
-    /// Unlike [`Self::register_partition`], this method does not return a
-    /// channel sender — the batches are fully materialized in the table. Used
-    /// by the memtable variant of the coordinator-reduce sink, which buffers
-    /// shard responses in Java and hands them across in one call.
-    pub fn register_memtable(
-        &mut self,
-        name: &str,
-        schema: SchemaRef,
-        batches: Vec<RecordBatch>,
-    ) -> Result<(), DataFusionError> {
-        let table = MemTable::try_new(schema, vec![batches])?;
-        self.ctx
-            .register_table(name, Arc::new(table))
-            .map_err(|e| {
-                DataFusionError::Execution(format!("Failed to register memtable '{}': {}", name, e))
-            })?;
-        Ok(())
-    }
-
-    /// Decodes a Substrait plan against the session and returns the resulting
-    /// stream.
-    ///
-    /// Table references in the plan resolve through the session's registered
-    /// streaming tables, so input batches pushed into
-    /// [`PartitionStreamSender`]s flow naturally into the DataFusion physical
-    /// plan. The returned stream is hot — polling it drives both the reduce
-    /// computation and the consumption of the streaming inputs.
-    pub async fn execute_substrait(
-        &self,
-        bytes: &[u8],
-    ) -> Result<
-        (
-            SendableRecordBatchStream,
-            Arc<dyn datafusion::physical_plan::ExecutionPlan>,
-        ),
-        DataFusionError,
-    > {
-        let plan = Plan::decode(bytes).map_err(|e| {
-            DataFusionError::Execution(format!("Failed to decode Substrait plan: {}", e))
-        })?;
-        let logical_plan =
-            crate::substrait_consumer::from_substrait_plan(&self.ctx.state(), &plan).await?;
-        log_debug!(
-            "DataFusion logical plan:\n{}",
-            logical_plan.display_indent()
-        );
-        let dataframe = self.ctx.execute_logical_plan(logical_plan).await?;
-        let physical_plan = dataframe.create_physical_plan().await?;
-
-        let target_schema = crate::schema_coerce::coerce_inferred_schema(physical_plan.schema());
-        let physical_plan =
-            crate::relabel_exec::wrap_if_relabel_needed(physical_plan, target_schema)?;
-        log_debug!(
-            "DataFusion coordinator reduce physical plan:\n{}",
-            displayable(physical_plan.as_ref()).indent(true)
-        );
-        let stream =
-            datafusion::physical_plan::execute_stream(physical_plan.clone(), self.ctx.task_ctx())
-                .map_err(|e| DataFusionError::Execution(format!("execute_substrait: {}", e)))?;
-        Ok((stream, physical_plan))
-    }
-
-    /// Returns the memory pool the session's `RuntimeEnv` was built with.
-    ///
-    /// Used by the bridge layer to seed a per-query tracking context so
-    /// reduce-stage allocations count against the same pool as the shard-scan
-    /// path.
-    pub fn memory_pool(&self) -> Arc<dyn MemoryPool> {
-        Arc::clone(&self.ctx.runtime_env().memory_pool)
-    }
-
-    /// Prepares a final-aggregate physical plan on this session.
-    ///
-    /// Decodes Substrait → LogicalPlan → PhysicalPlan, applies final-mode
-    /// stripping, and stores the result for later execution via
-    /// [`Self::execute_prepared`].
-    pub async fn prepare_final_plan(
-        &mut self,
-        substrait_bytes: &[u8],
-    ) -> Result<(), DataFusionError> {
-        let plan = Plan::decode(substrait_bytes).map_err(|e| {
-            DataFusionError::Execution(format!(
-                "prepare_final_plan: failed to decode Substrait: {}",
-                e
-            ))
-        })?;
-        let logical_plan =
-            crate::substrait_consumer::from_substrait_plan(&self.ctx.state(), &plan).await?;
-        let dataframe = self.ctx.execute_logical_plan(logical_plan).await?;
-        let physical_plan = dataframe.create_physical_plan().await?;
-        // Strip first so `force_aggregate_mode(Final)` can find the Final/Partial pair
-        // through the raw plan; then derive `target_schema` and wrap with RelabelExec from
-        // the stripped output (otherwise the relabel target would carry the pre-strip Final
-        // output type tag and fail when wrapping the stripped tree).
-        let stripped = crate::agg_mode::apply_aggregate_mode(
-            physical_plan,
-            crate::agg_mode::Mode::Final,
-            false,
-        )?;
-
-        let target_schema = crate::schema_coerce::coerce_inferred_schema(stripped.schema());
-        let stripped = crate::relabel_exec::wrap_if_relabel_needed(stripped, target_schema)?;
-        self.prepared_plan = Some(stripped);
-        Ok(())
-    }
-
-    /// Executes the previously prepared plan and returns the output stream.
-    ///
-    /// # Panics
-    /// Panics if no plan has been prepared via [`Self::prepare_final_plan`].
-    pub fn execute_prepared(&self) -> Result<SendableRecordBatchStream, DataFusionError> {
-        let plan = self
-            .prepared_plan
-            .as_ref()
-            .expect("execute_prepared called without a prepared plan");
-        datafusion::physical_plan::execute_stream(Arc::clone(plan), self.ctx.task_ctx())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use arrow_array::{Array, Int64Array, RecordBatch, StringArray};
-    use datafusion::arrow::datatypes::{DataType, Field, Schema};
-    use datafusion::execution::runtime_env::RuntimeEnvBuilder;
-    use datafusion_substrait::logical_plan::producer::to_substrait_plan;
-    use futures::StreamExt;
-    use tokio::runtime::Handle;
-
-    fn test_runtime_env() -> RuntimeEnv {
-        RuntimeEnvBuilder::new()
-            .build()
-            .expect("runtime env builds")
-    }
-
-    fn i64_schema(column: &str) -> SchemaRef {
         Arc::new(Schema::new(vec![Field::new(
-            column,
-            DataType::Int64,
-            false,
-        )]))
+        assert_eq!(session.phantom_size(), 1000);
+    /// phantom_size() first and only acquire a new reservation if the new
+            // version; cast to Utf8 so the assertion is independent of the concrete string type.
+    /// [`PartitionStreamSender`]s flow naturally into the DataFusion physical
+            vec![
+    /// every batch consumed or produced by this session counts against the
+    /// [`cancel_query(context_id)`] cascade resolves the racing execute
+/*
+        let env = RuntimeEnvBuilder::new()
+            .await
+    /// [`Self::execute_prepared`].
+            }
+        let mut session = LocalSession::new(&env);
+            reservation.try_grow(5000).unwrap();
+    ) -> Result<(), DataFusionError> {
+            // DataFusion's string functions may return Utf8/LargeUtf8/Utf8View depending on
+        let (mut stream, _plan) = session
+    /// untracked memory (intermediate buffers, hash table overhead) in the shared
+        config.options_mut().execution.target_partitions =
+    /// The runtime's memory pool, disk manager, and caches are inherited —
+        assert!(
+        Arc::clone(&self.ctx.runtime_env().memory_pool)
+            "DataFusion logical plan:\n{}",
+        let mut session = LocalSession::new(&env);
+        }
+        if new_partitions < current {
+        let token = query_tracker::get_cancellation_token(ctx_id);
+        assert_eq!(session.target_partitions(), 2);
+            ))
+        }
+        let env = test_runtime_env();
+        };
+        // through the raw plan; then derive `target_schema` and wrap with RelabelExec from
+//! The session has no knowledge of the FFM bridge; it is exposed to Java via a
     }
-
-    fn i64_batch(schema: &SchemaRef, values: &[i64]) -> RecordBatch {
-        RecordBatch::try_new(
-            Arc::clone(schema),
             vec![Arc::new(Int64Array::from(values.to_vec()))],
-        )
-        .expect("batch builds")
-    }
-
-    fn two_string_schema(a: &str, b: &str) -> SchemaRef {
+            let env2 = test_runtime_env();
+        // Session dropped — phantom must be released
+        let env = test_runtime_env();
+        );
+            Arc::clone(schema),
+        let schema = i64_schema("x");
+        let pool: Arc<dyn datafusion::execution::memory_pool::MemoryPool> =
+        let physical_plan =
+                .register_partition("input-0", Arc::clone(&schema))
+            i64_batch(&schema, &[7, 8, 9]),
+            .register_partition("input-0", Arc::clone(&schema))
+        {
+            &schema,
         Arc::new(Schema::new(vec![
             Field::new(a, DataType::Utf8, false),
-            Field::new(b, DataType::Utf8, false),
-        ]))
-    }
-
-    fn two_string_batch(schema: &SchemaRef, col_a: &[&str], col_b: &[&str]) -> RecordBatch {
-        RecordBatch::try_new(
-            Arc::clone(schema),
-            vec![
-                Arc::new(StringArray::from(col_a.to_vec())),
-                Arc::new(StringArray::from(col_b.to_vec())),
-            ],
-        )
-        .expect("string batch builds")
-    }
-
-    #[tokio::test]
-    async fn register_partition_makes_table_resolvable() {
-        let env = test_runtime_env();
-        let mut session = LocalSession::new(&env);
-        let schema = i64_schema("x");
-        let _sender = session
-            .register_partition("input-0", Arc::clone(&schema))
-            .expect("register succeeds");
-
-        // A trivial `SELECT * FROM "input-0"` proves the table resolves.
-        let df = session
-            .ctx
-            .sql("SELECT x FROM \"input-0\"")
-            .await
-            .expect("sql parses");
-        assert_eq!(df.schema().fields().len(), 1);
-    }
-
-    #[tokio::test]
-    async fn execute_substrait_sums_streaming_input() {
-        let env = test_runtime_env();
-        let mut session = LocalSession::new(&env);
-        let schema = i64_schema("x");
-        let sender = session
-            .register_partition("input-0", Arc::clone(&schema))
-            .expect("register succeeds");
-
-        // Build the Substrait bytes from a SQL-built logical plan against a
-        // matching session — the plan only references `input-0`, so it is
-        // portable onto our real session.
-        let substrait_bytes = {
-            let env = test_runtime_env();
-            let mut producer = LocalSession::new(&env);
-            let _unused = producer
-                .register_partition("input-0", Arc::clone(&schema))
-                .expect("producer register");
-            let df = producer
-                .ctx
-                .sql("SELECT SUM(x) AS total FROM \"input-0\"")
-                .await
-                .expect("sum parses");
+        let current = state.config().options().execution.target_partitions;
             let plan = df.logical_plan().clone();
-            let substrait = to_substrait_plan(&plan, &producer.ctx.state()).expect("to_substrait");
-            let mut buf = Vec::new();
-            substrait.encode(&mut buf).expect("encode");
-            buf
-        };
-
-        // Push three batches totaling 45 = 1+2+3+4+5+6+7+8+9, then close.
-        let producer_schema = Arc::clone(&schema);
-        let handle = Handle::current();
-        let producer = std::thread::spawn(move || {
-            for chunk in &[vec![1i64, 2, 3], vec![4, 5, 6], vec![7, 8, 9]] {
-                let outcome = sender.send_blocking(Ok(i64_batch(&producer_schema, chunk)), &handle);
-                assert!(matches!(
-                    outcome,
-                    crate::partition_stream::SendOutcome::Sent
-                ));
-            }
-            drop(sender); // EOF
-        });
-
-        let (mut stream, _plan) = session
-            .execute_substrait(&substrait_bytes)
-            .await
-            .expect("execute");
-
-        let mut total: i64 = 0;
-        while let Some(batch) = stream.next().await {
-            let batch = batch.expect("batch ok");
-            let col = batch
-                .column(0)
-                .as_any()
-                .downcast_ref::<Int64Array>()
-                .expect("i64 col");
-            for i in 0..col.len() {
-                total += col.value(i);
-            }
-        }
-        producer.join().expect("producer thread");
-        assert_eq!(total, 45);
-    }
-
-    #[tokio::test]
-    async fn execute_substrait_sums_memtable_input() {
-        let env = test_runtime_env();
-        let mut session = LocalSession::new(&env);
-        let schema = i64_schema("x");
-
-        let batches = vec![
-            i64_batch(&schema, &[1, 2, 3]),
-            i64_batch(&schema, &[4, 5, 6]),
-            i64_batch(&schema, &[7, 8, 9]),
-        ];
-        session
-            .register_memtable("input-0", Arc::clone(&schema), batches)
-            .expect("register memtable");
-
-        // Build the Substrait bytes from a SQL-built logical plan against a
-        // matching session — the plan only references `input-0`, so it is
-        // portable onto our real session.
-        let substrait_bytes = {
-            let env = test_runtime_env();
-            let mut producer = LocalSession::new(&env);
-            producer
-                .register_memtable("input-0", Arc::clone(&schema), vec![])
-                .expect("producer register");
-            let df = producer
-                .ctx
-                .sql("SELECT SUM(x) AS total FROM \"input-0\"")
-                .await
-                .expect("sum parses");
-            let plan = df.logical_plan().clone();
-            let substrait = to_substrait_plan(&plan, &producer.ctx.state()).expect("to_substrait");
-            let mut buf = Vec::new();
-            substrait.encode(&mut buf).expect("encode");
-            buf
-        };
-
-        let (mut stream, _plan) = session
-            .execute_substrait(&substrait_bytes)
-            .await
-            .expect("execute");
-
-        let mut total: i64 = 0;
-        while let Some(batch) = stream.next().await {
-            let batch = batch.expect("batch ok");
-            let col = batch
-                .column(0)
-                .as_any()
-                .downcast_ref::<Int64Array>()
-                .expect("i64 col");
-            for i in 0..col.len() {
-                total += col.value(i);
-            }
-        }
-        assert_eq!(total, 45);
-    }
-
-    /// `concat(substring(a, ...), '|', substring(b, ...))` over a WHERE filter —
-    /// the outer operands are scalar-function calls and the middle operand is a
-    /// string literal. Round-trips through SQL → Substrait → `from_substrait_plan`
-    /// and asserts one concatenated row per input.
-    #[tokio::test]
-    async fn execute_substrait_concat_substring_literal_substring() {
-        let env = test_runtime_env();
-        let mut session = LocalSession::new(&env);
-        let schema = two_string_schema("url", "referer");
-
-        // Two rows, both non-empty so they survive the WHERE filter.
-        let batch = two_string_batch(
-            &schema,
-            &["http://alpha", "http://bravo"],
-            &["https://gamma", "https://delta"],
-        );
-        session
-            .register_memtable("input-0", Arc::clone(&schema), vec![batch])
-            .expect("register memtable");
-
-        let sql = "SELECT concat(substring(url, 1, 7), '|', substring(referer, 1, 8)) AS r \
-                   FROM \"input-0\" WHERE url <> '' AND referer <> ''";
-
-        let substrait_bytes = {
-            let env = test_runtime_env();
-            let mut producer = LocalSession::new(&env);
-            producer
-                .register_memtable("input-0", Arc::clone(&schema), vec![])
-                .expect("producer register");
-            let df = producer.ctx.sql(sql).await.expect("concat sql parses");
-            let plan = df.logical_plan().clone();
-            let substrait = to_substrait_plan(&plan, &producer.ctx.state()).expect("to_substrait");
-            let mut buf = Vec::new();
-            substrait.encode(&mut buf).expect("encode");
-            buf
-        };
-
-        let (mut stream, _plan) = session
-            .execute_substrait(&substrait_bytes)
-            .await
-            .expect("execute");
-
-        let mut results: Vec<String> = Vec::new();
-        while let Some(batch) = stream.next().await {
-            let batch = batch.expect("batch ok");
-            // DataFusion's string functions may return Utf8/LargeUtf8/Utf8View depending on
-            // version; cast to Utf8 so the assertion is independent of the concrete string type.
-            let col = datafusion::arrow::compute::cast(batch.column(0), &DataType::Utf8)
-                .expect("cast concat output to Utf8");
-            let col = col
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .expect("utf8 col");
-            for i in 0..col.len() {
-                results.push(col.value(i).to_string());
-            }
-        }
-
-        // Each row joins the two substring results with the middle '|' literal.
-        results.sort();
-        assert_eq!(
-            results,
-            vec![
-                "http://|https://".to_string(),
-                "http://|https://".to_string(),
-            ],
+        let session = LocalSession::new(&env);
             "concat(substring, '|', substring) must yield one '|'-joined row per input"
-        );
-    }
-
-    #[tokio::test]
-    async fn prepare_final_plan_stores_plan() {
-        let env = test_runtime_env();
-        let mut session = LocalSession::new(&env);
-        let schema = i64_schema("s");
-
-        // Register a streaming table so the plan can resolve table refs.
-        let _sender = session
-            .register_partition("input-0", Arc::clone(&schema))
-            .expect("register");
-
-        // Build Substrait bytes for SELECT SUM(s) FROM "input-0"
-        let substrait_bytes = {
-            let env2 = test_runtime_env();
-            let mut producer = LocalSession::new(&env2);
-            let _unused = producer
-                .register_partition("input-0", Arc::clone(&schema))
-                .expect("producer register");
-            let df = producer
-                .ctx
-                .sql("SELECT SUM(s) FROM \"input-0\"")
-                .await
+        let (sender, receiver) = channel(Arc::clone(&schema));
+        let sender = session
+impl LocalSession {
+        let physical_plan = dataframe.create_physical_plan().await?;
+    /// `concat(substring(a, ...), '|', substring(b, ...))` over a WHERE filter —
+            .register_memtable("input-0", Arc::clone(&schema), batches)
+    /// Table references in the plan resolve through the session's registered
+            .execute_substrait(&substrait_bytes)
+            Arc::clone(schema),
+    async fn register_partition_makes_table_resolvable() {
                 .expect("sum parses");
-            let plan = df.logical_plan().clone();
-            let substrait = to_substrait_plan(&plan, &producer.ctx.state()).expect("to_substrait");
+    /// stream.
+}
             let mut buf = Vec::new();
-            substrait.encode(&mut buf).expect("encode");
-            buf
-        };
-
-        assert!(session.prepared_plan.is_none());
-        session
-            .prepare_final_plan(&substrait_bytes)
-            .await
-            .expect("prepare_final_plan succeeds");
-        assert!(session.prepared_plan.is_some());
+    async fn execute_substrait_concat_substring_literal_substring() {
+            ctx,
+        let logical_plan =
+            .expect("execute");
+//! raw `Box::into_raw` pointer managed in `api.rs`, matching the lifecycle
     }
-
-    /// Coordinator-side task cancellation wiring: once Java calls
-    /// `execute_local_plan(session, plan, context_id)` the context is
-    /// registered in [`query_tracker::QUERY_REGISTRY`], and a
-    /// [`cancel_query(context_id)`] cascade resolves the racing execute
-    /// future through the [`cancellation::cancellable`] branch.
-    ///
-    /// Mirrors the `execute_query` cancel path for the coordinator entry so
-    /// a parent `AnalyticsQueryTask.cancel()` interrupts the reduce even
-    /// before the first batch is produced.
-    #[tokio::test]
-    async fn cancel_query_fires_token_registered_from_reduce_path() {
+            let env = test_runtime_env();
+    use futures::StreamExt;
         use crate::cancellation;
-        use crate::query_tracker::{self, QueryTrackingContext};
-        use datafusion::execution::memory_pool::GreedyMemoryPool;
-        use std::sync::Arc;
-        use std::time::Duration;
-
-        let ctx_id = 98_765;
-        let pool: Arc<dyn datafusion::execution::memory_pool::MemoryPool> =
-            Arc::new(GreedyMemoryPool::new(10_000));
-        let _tracking =
-            QueryTrackingContext::new(ctx_id, pool, query_tracker::QueryType::Coordinator);
-
-        // A future that would block indefinitely — `cancel_query` is the
-        // only way out. Mirrors a coord reduce stalled on an input partition
-        // that never receives batches.
-        let blocked = async {
-            tokio::time::sleep(Duration::from_secs(60)).await;
-            Ok::<(), String>(())
-        };
-
-        let token = query_tracker::get_cancellation_token(ctx_id);
-        assert!(
-            token.is_some(),
-            "QueryTrackingContext::new must register a cancellation token"
-        );
-
-        let runner = tokio::spawn(async move {
-            cancellation::cancellable(token.as_ref(), ctx_id, blocked).await
-        });
-
-        // Brief yield so the runner parks on the sleep before we cancel.
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        query_tracker::cancel_query(ctx_id);
-
-        let result = runner.await.expect("spawn");
-        assert!(result.is_err(), "cancel_query must surface as an error");
-        let msg = result.err().unwrap();
-        assert!(
-            msg.contains(&ctx_id.to_string()) && msg.to_lowercase().contains("cancelled"),
-            "error must name the cancelled context: got [{}]",
-            msg
-        );
-    }
-
-    #[test]
     fn reduce_target_partitions_lowers_value() {
         let env = test_runtime_env();
-        let session = LocalSession::new(&env);
-        assert_eq!(session.target_partitions(), 4);
-
-        session.reduce_target_partitions(2);
-        assert_eq!(session.target_partitions(), 2);
-
-        // Never increases
-        session.reduce_target_partitions(8);
-        assert_eq!(session.target_partitions(), 2);
-    }
-
     #[test]
-    fn set_phantom_stores_reservation() {
+        let plan = self
+        let plan = Plan::decode(bytes).map_err(|e| {
+            msg
+        // Build Substrait bytes for SELECT SUM(s) FROM "input-0"
+        let substrait_bytes = {
+                    crate::partition_stream::SendOutcome::Sent
+        );
+    use datafusion::execution::runtime_env::RuntimeEnvBuilder;
+            DataFusionError::Execution(format!(
         use datafusion::execution::memory_pool::{GreedyMemoryPool, MemoryConsumer};
-        use std::num::NonZeroUsize;
-
-        let pool: Arc<dyn datafusion::execution::memory_pool::MemoryPool> =
-            Arc::new(GreedyMemoryPool::new(10_000_000));
-        let env = RuntimeEnvBuilder::new()
-            .with_memory_pool(Arc::clone(&pool))
-            .build()
-            .unwrap();
+                .ctx
+        let mut state = state_ref.write();
+                total += col.value(i);
+                .expect("producer register");
+            .copied_config()
+        let table = StreamingTable::try_new(schema, vec![partition])?;
+    /// Returns the configured batch_size for this session.
+            Arc<dyn datafusion::physical_plan::ExecutionPlan>,
+            let df = producer
+                .as_any()
         let mut session = LocalSession::new(&env);
-
-        assert_eq!(session.phantom_size(), 0);
-
-        let consumer = MemoryConsumer::new("test_phantom").with_can_spill(true);
-        let mut reservation = consumer.register(&pool);
-        reservation.try_grow(1000).unwrap();
-        session.set_phantom(reservation);
-
-        assert_eq!(session.phantom_size(), 1000);
-    }
-
-    #[test]
-    fn phantom_released_on_session_drop() {
-        use datafusion::execution::memory_pool::{GreedyMemoryPool, MemoryConsumer};
-
-        let pool: Arc<dyn datafusion::execution::memory_pool::MemoryPool> =
-            Arc::new(GreedyMemoryPool::new(10_000_000));
-        let env = RuntimeEnvBuilder::new()
-            .with_memory_pool(Arc::clone(&pool))
-            .build()
-            .unwrap();
-
-        let reserved_before = pool.reserved();
-        {
-            let mut session = LocalSession::new(&env);
-            let consumer = MemoryConsumer::new("test_phantom").with_can_spill(true);
-            let mut reservation = consumer.register(&pool);
-            reservation.try_grow(5000).unwrap();
-            session.set_phantom(reservation);
-            assert_eq!(pool.reserved(), reserved_before + 5000);
+            crate::substrait_consumer::from_substrait_plan(&self.ctx.state(), &plan).await?;
+//! A [`LocalSession`] holds a DataFusion [`SessionContext`] configured to share
         }
-        // Session dropped — phantom must be released
-        assert_eq!(pool.reserved(), reserved_before);
+    /// registered in [`query_tracker::QUERY_REGISTRY`], and a
+use datafusion::arrow::datatypes::SchemaRef;
+/// Coordinator-reduce DataFusion session.
     }
+    /// The receiver is wrapped in a [`SingleReceiverPartition`] and registered
+        let mut total: i64 = 0;
+    /// producer side of the channel.
+            msg.contains(&ctx_id.to_string()) && msg.to_lowercase().contains("cancelled"),
+                "http://|https://".to_string(),
+        let ctx_id = 98_765;
+    }
+//! rest of the node. The session is the Rust-side counterpart of
+            for i in 0..col.len() {
+        let stripped = crate::relabel_exec::wrap_if_relabel_needed(stripped, target_schema)?;
+            prepared_plan: None,
+    /// [`Self::execute_substrait`] resolve table references named `name` to
+        let substrait_bytes = {
+                .as_any()
+        session.set_phantom(reservation);
+ */
+            let env = test_runtime_env();
+            .unwrap();
+    ctx: SessionContext,
+                .expect("i64 col");
+        let table = MemTable::try_new(schema, vec![batches])?;
+    > {
+use datafusion::prelude::{SessionConfig, SessionContext};
+            QueryTrackingContext::new(ctx_id, pool, query_tracker::QueryType::Coordinator);
+        // matching session — the plan only references `input-0`, so it is
+        crate::udaf::register_all(&ctx);
+                    name, e
+        let consumer = MemoryConsumer::new("test_phantom").with_can_spill(true);
+            .prepared_plan
+            .sql("SELECT x FROM \"input-0\"")
+                .register_memtable("input-0", Arc::clone(&schema), vec![])
+        let mut total: i64 = 0;
+            i64_batch(&schema, &[4, 5, 6]),
+            i64_batch(&schema, &[1, 2, 3]),
+            .execute_substrait(&substrait_bytes)
+                .await
+        assert_eq!(session.target_partitions(), 2);
+            substrait.encode(&mut buf).expect("encode");
+    pub fn set_phantom(
+    /// shard responses in Java and hands them across in one call.
+        )]))
+    #[tokio::test]
+ *
+        Ok((stream, physical_plan))
+    /// Mirrors the `execute_query` cancel path for the coordinator entry so
 }
+    fn i64_batch(schema: &SchemaRef, values: &[i64]) -> RecordBatch {
+        let mut session = LocalSession::new(&env);
+    /// Decodes a Substrait plan against the session and returns the resulting
+        let result = runner.await.expect("spawn");
+    ///
+    }
+        crate::udf::register_all(&ctx);
+    /// this streaming table. The caller pushes `RecordBatch`es into the
+        assert_eq!(df.schema().fields().len(), 1);
+                ));
+        session.reduce_target_partitions(2);
+            drop(sender); // EOF
+            substrait.encode(&mut buf).expect("encode");
+    }
+            cancellation::cancellable(token.as_ref(), ctx_id, blocked).await
+    /// `execute_local_plan(session, plan, context_id)` the context is
+/// stage; it holds the streaming inputs registered by
+            .execution
+    /// Unlike [`Self::register_partition`], this method does not return a
+        let partition: Arc<dyn PartitionStream> = Arc::new(SingleReceiverPartition::new(receiver));
+        let pool: Arc<dyn datafusion::execution::memory_pool::MemoryPool> =
+            crate::substrait_consumer::from_substrait_plan(&self.ctx.state(), &plan).await?;
+    }
+    use arrow_array::{Array, Int64Array, RecordBatch, StringArray};
+                .expect("sum parses");
+    }
+        &mut self,
+//! 2. [`LocalSession::execute_substrait`] decodes a Substrait plan against the
+        let env = test_runtime_env();
+            .await
+        // that never receives batches.
+            column,
+    /// Returns the current target_partitions for this session.
+                "prepare_final_plan: failed to decode Substrait: {}",
+            .unwrap();
+            .register_table(name, Arc::new(table))
+    /// Called serially from register_partition_stream during session setup,
+            buf
+///
+        let substrait_bytes = {
+use datafusion::physical_plan::streaming::PartitionStream;
+//!
+    #[tokio::test]
+        let sql = "SELECT concat(substring(url, 1, 7), '|', substring(referer, 1, 8)) AS r \
+                ))
+        log_debug!(
+    }
+    /// [`PartitionStreamSender::send_blocking`].
+            .expect("register memtable");
+ * The OpenSearch Contributors require contributions made to
+                .sql("SELECT SUM(x) AS total FROM \"input-0\"")
+            DataFusionError::Execution(format!("Failed to decode Substrait plan: {}", e))
+use arrow_array::RecordBatch;
+        &mut self,
+//!    wraps the receiver in a [`SingleReceiverPartition`], and registers it as
+    ///
+        // A future that would block indefinitely — `cancel_query` is the
+        RecordBatch::try_new(
+            )
+//!    session (its table references resolve to the streaming tables) and hands
+        self.ctx
+    #[tokio::test]
+    /// Phantom reservation held for the lifetime of this session. Accounts for
+    pub fn reduce_target_partitions(&self, new_partitions: usize) {
+        .expect("batch builds")
+                .sql("SELECT SUM(x) AS total FROM \"input-0\"")
+    }
+        let mut reservation = consumer.register(&pool);
+            let mut reservation = consumer.register(&pool);
+    ) -> Result<
+    /// Returns the memory pool the session's `RuntimeEnv` was built with.
+            datafusion::physical_plan::execute_stream(physical_plan.clone(), self.ctx.task_ctx())
+        assert_eq!(
+    }
+                .register_memtable("input-0", Arc::clone(&schema), vec![])
+        // Build the Substrait bytes from a SQL-built logical plan against a
+            let batch = batch.expect("batch ok");
+        // Each row joins the two substring results with the middle '|' literal.
+            }
+    }
+            crate::relabel_exec::wrap_if_relabel_needed(physical_plan, target_schema)?;
+        assert!(
+    }
+        let (mut stream, _plan) = session
+                .expect("producer register");
+            let batch = batch.expect("batch ok");
+                .downcast_ref::<StringArray>()
+    /// by the memtable variant of the coordinator-reduce sink, which buffers
+    ///
+        schema: SchemaRef,
+        datafusion::physical_plan::execute_stream(Arc::clone(plan), self.ctx.task_ctx())
+        session
+        while let Some(batch) = stream.next().await {
+/// [`Self::register_partition`] and is drained exactly once via
+            buf
+            &["https://gamma", "https://delta"],
+use prost::Message;
+            .options()
+        // Two rows, both non-empty so they survive the WHERE filter.
+        // Strip first so `force_aggregate_mode(Final)` can find the Final/Partial pair
+    /// plan. The returned stream is hot — polling it drives both the reduce
+        );
+                crate::agg_mode::physical_optimizer_rules_without_combine(),
+        );
+    ) {
+            let df = producer
+                .ctx
+        let env = RuntimeEnvBuilder::new()
+            .await
+        let df = session
+    ///
+        schema: SchemaRef,
+            physical_plan,
+        );
+    _phantom_reservation: Option<datafusion::execution::memory_pool::MemoryReservation>,
+        let target_schema = crate::schema_coerce::coerce_inferred_schema(stripped.schema());
+                Arc::new(StringArray::from(col_a.to_vec())),
+        self.prepared_plan = Some(stripped);
+    /// future through the [`cancellation::cancellable`] branch.
+                .await
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let ctx = SessionContext::new_with_state(state);
+    pub fn new(runtime_env: &RuntimeEnv) -> Self {
+            .expect("sql parses");
+        self.ctx
+            let mut producer = LocalSession::new(&env);
+                .register_partition("input-0", Arc::clone(&schema))
+        })?;
+        bytes: &[u8],
+            false,
+    #[tokio::test]
+    }
+            let mut session = LocalSession::new(&env);
+        reservation.try_grow(1000).unwrap();
+        };
+    }
+        };
+            logical_plan.display_indent()
+        Ok(())
+            let plan = df.logical_plan().clone();
+/// [`Self::execute_substrait`].
+            .with_config(config)
+        let state = SessionStateBuilder::new()
+    /// Panics if no plan has been prepared via [`Self::prepare_final_plan`].
+                let outcome = sender.send_blocking(Ok(i64_batch(&producer_schema, chunk)), &handle);
+    ///
+            "DataFusion coordinator reduce physical plan:\n{}",
+            .expect("runtime env builds")
+            let col = datafusion::arrow::compute::cast(batch.column(0), &DataType::Utf8)
+        session.reduce_target_partitions(8);
+            .expect("prepare_final_plan succeeds");
+            .ctx
+        // portable onto our real session.
+            })?;
+        let env = test_runtime_env();
+        // only way out. Mirrors a coord reduce stalled on an input partition
+pub struct LocalSession {
+    }
+        let _sender = session
+    async fn cancel_query_fires_token_registered_from_reduce_path() {
+        assert_eq!(session.target_partitions(), 4);
+                .sql("SELECT SUM(s) FROM \"input-0\"")
+            .expect("register succeeds");
+                .map_err(|e| DataFusionError::Execution(format!("execute_substrait: {}", e)))?;
+        Ok(sender)
+use datafusion::execution::{SendableRecordBatchStream, SessionStateBuilder};
+        );
+    /// string literal. Round-trips through SQL → Substrait → `from_substrait_plan`
+            ],
+        // Register a streaming table so the plan can resolve table refs.
+        session
+        )?;
+            Field::new(b, DataType::Utf8, false),
+    /// a parent `AnalyticsQueryTask.cancel()` interrupts the reduce even
+    #[test]
+        let producer = std::thread::spawn(move || {
+                .expect("producer register");
+                .as_any()
+    }
+        // Brief yield so the runner parks on the sleep before we cancel.
+        let mut results: Vec<String> = Vec::new();
+            let consumer = MemoryConsumer::new("test_phantom").with_can_spill(true);
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        while let Some(batch) = stream.next().await {
+        self.ctx.copied_config().options().execution.batch_size
+            .with_memory_pool(Arc::clone(&pool))
+        use std::num::NonZeroUsize;
+        self._phantom_reservation = Some(reservation);
+        use datafusion::execution::memory_pool::{GreedyMemoryPool, MemoryConsumer};
+        let logical_plan =
+            .as_ref()
+        let env = test_runtime_env();
+        // the stripped output (otherwise the relabel target would carry the pre-strip Final
+    /// Builds a session whose `SessionContext` reuses the given [`RuntimeEnv`].
+                DataFusionError::Execution(format!(
+        name: &str,
+            let substrait = to_substrait_plan(&plan, &producer.ctx.state()).expect("to_substrait");
+        )
+            .map_err(|e| {
+                .ctx
+    ///
+            let env = test_runtime_env();
+    /// Prepares a final-aggregate physical plan on this session.
+    pub async fn execute_substrait(
+    /// Used by the bridge layer to seed a per-query tracking context so
+                .await
+            .await
+            .register_memtable("input-0", Arc::clone(&schema), vec![batch])
+            let substrait = to_substrait_plan(&plan, &producer.ctx.state()).expect("to_substrait");
+                .expect("producer register");
+        });
+        producer.join().expect("producer thread");
+        &self,
+//! `DatafusionReduceSink` on the Java side:
+            .build()
+            .expect("register memtable");
+    }
+            Arc::new(GreedyMemoryPool::new(10_000_000));
+        Self {
+            "error must name the cancelled context: got [{}]",
+    ///
+    /// Coordinator-side task cancellation wiring: once Java calls
+/// Owns a [`SessionContext`] that reuses the caller's [`RuntimeEnv`] so memory
+    /// computation and the consumption of the streaming inputs.
+        let schema = i64_schema("s");
+    pub fn batch_size(&self) -> usize {
+    }
+use crate::partition_stream::{channel, PartitionStreamSender, SingleReceiverPartition};
+    }
+    use tokio::runtime::Handle;
+        let blocked = async {
+    }
+            Arc::new(GreedyMemoryPool::new(10_000_000));
+        let producer_schema = Arc::clone(&schema);
+    async fn prepare_final_plan_stores_plan() {
+            let col = col
+        ];
+        let reserved_before = pool.reserved();
+                Arc::new(StringArray::from(col_b.to_vec())),
+    /// same limits as the shard-scan path.
+            buf
+//! model used by `DataFusionRuntime` / `ShardView` / `QueryStreamHandle`.
+        self.ctx
+        use std::time::Duration;
+    /// before the first batch is produced.
+            let mut buf = Vec::new();
+            .target_partitions
+    /// stripping, and stores the result for later execution via
+            Ok::<(), String>(())
+        let target_schema = crate::schema_coerce::coerce_inferred_schema(physical_plan.schema());
+            .expect("execute_prepared called without a prepared plan");
+        assert!(result.is_err(), "cancel_query must surface as an error");
+                assert!(matches!(
+        results.sort();
+            let _unused = producer
+use datafusion::common::DataFusionError;
+}
+    pub fn phantom_size(&self) -> usize {
+    /// `batches` in a single [`MemTable`] partition.
+//!
+        name: &str,
+            let batch = batch.expect("batch ok");
+            state.config_mut().options_mut().execution.target_partitions = new_partitions;
+    pub(crate) prepared_plan: Option<Arc<dyn datafusion::physical_plan::ExecutionPlan>>,
+            let mut buf = Vec::new();
+        let msg = result.err().unwrap();
+            .with_default_features()
+use std::sync::Arc;
+        };
+        let batches = vec![
+    use datafusion_substrait::logical_plan::producer::to_substrait_plan;
+            let col = batch
+                total += col.value(i);
+            crate::api::get_reduce_target_partitions();
+            let mut producer = LocalSession::new(&env2);
+                .downcast_ref::<Int64Array>()
+        DataFusionError,
+        let (mut stream, _plan) = session
+        Ok(())
+        ),
+            _phantom_reservation: None,
+            .expect("execute");
+    }
+        let mut config = SessionConfig::new();
+//!    a [`StreamingTable`] on the session under the input id.
+        });
+            .with_runtime_env(runtime_env)
+                   FROM \"input-0\" WHERE url <> '' AND referer <> ''";
+use datafusion::physical_plan::displayable;
+        self._phantom_reservation.as_ref().map_or(0, |r| r.size())
+            .register_table(name, Arc::new(table))
+                .expect("sum parses");
+            .build()
+            substrait.encode(&mut buf).expect("encode");
+        let plan = Plan::decode(substrait_bytes).map_err(|e| {
+//!
+        }
+            let mut producer = LocalSession::new(&env);
+        // matching session — the plan only references `input-0`, so it is
+    pub fn register_partition(
+    pub async fn prepare_final_plan(
+        let schema = i64_schema("x");
+    pub fn register_memtable(
+        let stripped = crate::agg_mode::apply_aggregate_mode(
+            let substrait = to_substrait_plan(&plan, &producer.ctx.state()).expect("to_substrait");
+            let _unused = producer
+    pub fn target_partitions(&self) -> usize {
+        let mut session = LocalSession::new(&env);
+        ]))
+        })?;
+    #[test]
+    async fn execute_substrait_sums_memtable_input() {
+        assert!(session.prepared_plan.is_none());
+    #[tokio::test]
+            token.is_some(),
+    #[tokio::test]
+    /// channel sender — the batches are fully materialized in the table. Used
+    /// Pre-prepared physical plan (set by `prepare_final_plan`).
+            producer
+    /// streaming tables, so input batches pushed into
+        let dataframe = self.ctx.execute_logical_plan(logical_plan).await?;
+/// accounting shares the node-wide pool. One session corresponds to one reduce
+            .expect("register succeeds");
+    /// Decodes Substrait → LogicalPlan → PhysicalPlan, applies final-mode
+        assert!(session.prepared_plan.is_some());
+            for i in 0..col.len() {
+        assert_eq!(total, 45);
+        reservation: datafusion::execution::memory_pool::MemoryReservation,
+        assert_eq!(pool.reserved(), reserved_before);
+                .expect("i64 col");
+use datafusion::execution::runtime_env::RuntimeEnv;
+                    "Failed to register streaming table '{}': {}",
+        assert_eq!(total, 45);
+        RecordBatch::try_new(
+                "http://|https://".to_string(),
+            DataType::Int64,
+        &mut self,
+        let handle = Handle::current();
+            })?;
+    pub fn memory_pool(&self) -> Arc<dyn MemoryPool> {
+    use super::*;
+        use crate::query_tracker::{self, QueryTrackingContext};
+        &mut self,
+                results.push(col.value(i).to_string());
+        while let Some(batch) = stream.next().await {
+    /// before any query execution begins.
+                .expect("cast concat output to Utf8");
+ * compatible open source license.
+        let substrait_bytes = {
+        let physical_plan = dataframe.create_physical_plan().await?;
+        RuntimeEnvBuilder::new()
+        )
+            ],
+    /// Reduce target_partitions on this session. Only reduces, never increases.
+            session.set_phantom(reservation);
+        let schema = two_string_schema("url", "referer");
+            .expect("register");
+    /// Sets the phantom reservation for this session. Caller should check
+        // Never increases
+        // Build the Substrait bytes from a SQL-built logical plan against a
+            let mut producer = LocalSession::new(&env);
+            assert_eq!(pool.reserved(), reserved_before + 5000);
+                .column(0)
+            crate::agg_mode::Mode::Final,
+    /// the outer operands are scalar-function calls and the middle operand is a
+mod tests {
+            results,
+use native_bridge_common::log_debug;
+            .await
+//! Coordinator-reduce local execution.
+    pub fn execute_prepared(&self) -> Result<SendableRecordBatchStream, DataFusionError> {
+            .map_err(|e| {
+        // A trivial `SELECT * FROM "input-0"` proves the table resolves.
+        .expect("string batch builds")
+    fn two_string_batch(schema: &SchemaRef, col_a: &[&str], col_b: &[&str]) -> RecordBatch {
+    fn i64_schema(column: &str) -> SchemaRef {
+use datafusion::catalog::streaming::StreamingTable;
+            .register_partition("input-0", Arc::clone(&schema))
+            .execute_substrait(&substrait_bytes)
+    async fn execute_substrait_sums_streaming_input() {
+    /// and asserts one concatenated row per input.
+            let mut buf = Vec::new();
+        substrait_bytes: &[u8],
+            .build();
+            &["http://alpha", "http://bravo"],
+    }
+            .build()
+        (
+        let stream =
+        let runtime_env = Arc::new(runtime_env.clone());
+            .expect("execute");
+        // Push three batches totaling 45 = 1+2+3+4+5+6+7+8+9, then close.
+    /// Returns the current phantom reservation size, or 0 if none.
+    /// returned [`PartitionStreamSender`] via
+                .column(0)
+            let df = producer.ctx.sql(sql).await.expect("concat sql parses");
+                    outcome,
+                .expect("utf8 col");
+                .downcast_ref::<Int64Array>()
+        };
+    /// estimate is larger than the current one.
+            .with_memory_pool(Arc::clone(&pool))
+use substrait::proto::Plan;
+    ) -> Result<(), DataFusionError> {
+            vec![
+            for i in 0..col.len() {
+        let schema = i64_schema("x");
+    /// Registers an in-memory input on the session under `name`, holding all
+    fn two_string_schema(a: &str, b: &str) -> SchemaRef {
+        let runner = tokio::spawn(async move {
+        batches: Vec<RecordBatch>,
+//!    creates a [`PartitionStreamSender`] / [`PartitionStreamReceiver`] pair,
+        assert_eq!(session.phantom_size(), 0);
+            false,
+        let state_ref = self.ctx.state_ref();
+            buf
+        use std::sync::Arc;
+            for chunk in &[vec![1i64, 2, 3], vec![4, 5, 6], vec![7, 8, 9]] {
+            let df = producer
+        }
+        }
+        // portable onto our real session.
+ * this file be licensed under the Apache-2.0 license or a
+    /// reduce-stage allocations count against the same pool as the shard-scan
+        query_tracker::cancel_query(ctx_id);
+            producer
+    ///
+        let batch = two_string_batch(
+    use datafusion::arrow::datatypes::{DataType, Field, Schema};
+            Arc::new(GreedyMemoryPool::new(10_000));
+ * SPDX-License-Identifier: Apache-2.0
+            .prepare_final_plan(&substrait_bytes)
+            let col = batch
+    }
+use datafusion::execution::memory_pool::MemoryPool;
+    fn set_phantom_stores_reservation() {
+    ) -> Result<PartitionStreamSender, DataFusionError> {
+    /// Executes the previously prepared plan and returns the output stream.
+            displayable(physical_plan.as_ref()).indent(true)
+    /// Registers a streaming input on the session under `name` and returns the
+        let dataframe = self.ctx.execute_logical_plan(logical_plan).await?;
+        let mut session = LocalSession::new(&env);
+use datafusion::datasource::MemTable;
+        // output type tag and fail when wrapping the stripped tree).
+                e
+    }
+            let plan = df.logical_plan().clone();
+    /// pool so concurrent reduces trigger backpressure before OOM.
+//!    back a [`SendableRecordBatchStream`] the bridge layer can drain.
+            let plan = df.logical_plan().clone();
+    fn phantom_released_on_session_drop() {
+    fn test_runtime_env() -> RuntimeEnv {
+//! the caller-supplied [`RuntimeEnv`] (and therefore its memory pool) with the
+        let _tracking =
+                DataFusionError::Execution(format!("Failed to register memtable '{}': {}", name, e))
+    /// # Panics
+        session
+            .register_partition("input-0", Arc::clone(&schema))
+            "QueryTrackingContext::new must register a cancellation token"
+    /// path.
+            }
+        let pool: Arc<dyn datafusion::execution::memory_pool::MemoryPool> =
+            substrait.encode(&mut buf).expect("encode");
+        log_debug!(
+            .with_physical_optimizer_rules(
+#[cfg(test)]
+            }
+        let _sender = session
+        use datafusion::execution::memory_pool::GreedyMemoryPool;
+    }
+    /// as a [`StreamingTable`]; Substrait plans executed through
+//! 1. For each declared stage input, [`LocalSession::register_partition`]
+            let substrait = to_substrait_plan(&plan, &producer.ctx.state()).expect("to_substrait");
+            SendableRecordBatchStream,

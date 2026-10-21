@@ -1,304 +1,265 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.indexing;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-
-import org.opensearch.action.DocWriteResponse;
-import org.opensearch.action.bulk.BulkResponse;
-import org.opensearch.action.index.IndexRequestBuilder;
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.cluster.metadata.MetadataCreateIndexService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.index.VersionType;
-import org.opensearch.index.mapper.MapperParsingException;
-import org.opensearch.indices.InvalidIndexNameException;
-import org.opensearch.search.SearchHit;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-import org.opensearch.test.hamcrest.OpenSearchAssertions;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Locale;
-import java.util.Random;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicIntegerArray;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-
-public class IndexActionIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
-
-    public IndexActionIT(Settings settings) {
-        super(settings);
     }
-
-    @ParametersFactory
-    public static Collection<Object[]> parameters() {
-        return replicationSettings;
-    }
-
-    /**
-     * This test tries to simulate load while creating an index and indexing documents
-     * while the index is being created.
-     */
-
-    public void testAutoGenerateIdNoDuplicates() throws Exception {
-        int numberOfIterations = scaledRandomIntBetween(10, 50);
-        for (int i = 0; i < numberOfIterations; i++) {
-            String indexName = "test-" + i;
-            Exception firstError = null;
-            createIndex(indexName);
-            int numOfDocs = randomIntBetween(10, 100);
-            logger.info("indexing [{}] docs", numOfDocs);
-            List<IndexRequestBuilder> builders = new ArrayList<>(numOfDocs);
-            for (int j = 0; j < numOfDocs; j++) {
-                builders.add(client().prepareIndex(indexName).setSource("field", "value_" + j));
-            }
-            indexRandom(true, builders);
-            logger.info("verifying indexed content");
-            int numOfChecks = randomIntBetween(8, 12);
-            for (int j = 0; j < numOfChecks; j++) {
-                try {
-                    logger.debug("running search");
-                    SearchResponse response = client().prepareSearch(indexName).get();
-                    if (response.getHits().getTotalHits().value() != numOfDocs) {
-                        // Fetch all docs to identify the unexpected documents
-                        SearchResponse allDocs = client().prepareSearch(indexName)
-                            .setSize((int) response.getHits().getTotalHits().value())
-                            .get();
-                        StringBuilder docDetails = new StringBuilder();
-                        for (SearchHit hit : allDocs.getHits().getHits()) {
-                            docDetails.append("\n  id=").append(hit.getId()).append(" source=").append(hit.getSourceAsString());
-                        }
-                        final String message = "Count is "
-                            + response.getHits().getTotalHits().value()
-                            + " but "
-                            + numOfDocs
-                            + " was expected. "
-                            + OpenSearchAssertions.formatShardStatus(response)
-                            + "\nAll documents:"
-                            + docDetails;
-                        logger.error("{}. search response: \n{}", message, response);
-                        fail(message);
-                    }
-                } catch (Exception e) {
-                    logger.error("search for all docs failed", e);
-                    if (firstError == null) {
-                        firstError = e;
-                    }
-                }
-            }
-            if (firstError != null) {
-                fail(firstError.getMessage());
-            }
-            internalCluster().wipeIndices(indexName);
-        }
-    }
-
-    public void testCreatedFlag() throws Exception {
-        createIndex("test");
-        ensureGreen();
-
-        IndexResponse indexResponse = client().prepareIndex("test").setId("1").setSource("field1", "value1_1").execute().actionGet();
-        assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
-
-        indexResponse = client().prepareIndex("test").setId("1").setSource("field1", "value1_2").execute().actionGet();
-        assertEquals(DocWriteResponse.Result.UPDATED, indexResponse.getResult());
-
         client().prepareDelete("test", "1").execute().actionGet();
-
-        indexResponse = client().prepareIndex("test").setId("1").setSource("field1", "value1_2").execute().actionGet();
-        assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
-
-    }
-
-    public void testCreatedFlagWithFlush() throws Exception {
-        createIndex("test");
-        ensureGreen();
-
-        IndexResponse indexResponse = client().prepareIndex("test").setId("1").setSource("field1", "value1_1").execute().actionGet();
-        assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
-
-        client().prepareDelete("test", "1").execute().actionGet();
-
-        flush();
-
-        indexResponse = client().prepareIndex("test").setId("1").setSource("field1", "value1_2").execute().actionGet();
-        assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
-    }
-
-    public void testCreatedFlagParallelExecution() throws Exception {
-        createIndex("test");
-        ensureGreen();
-
-        int threadCount = 20;
-        final int docCount = 300;
-        int taskCount = docCount * threadCount;
-
-        final AtomicIntegerArray createdCounts = new AtomicIntegerArray(docCount);
-        ExecutorService threadPool = Executors.newFixedThreadPool(threadCount);
+        try {
         List<Callable<Void>> tasks = new ArrayList<>(taskCount);
-        final Random random = random();
-        for (int i = 0; i < taskCount; i++) {
-            tasks.add(new Callable<Void>() {
-                @Override
-                public Void call() throws Exception {
-                    int docId = random.nextInt(docCount);
-                    IndexResponse indexResponse = index("test", "type", Integer.toString(docId), "field1", "value");
-                    if (indexResponse.getResult() == DocWriteResponse.Result.CREATED) {
-                        createdCounts.incrementAndGet(docId);
+                equalTo(true)
+            logger.info("indexing [{}] docs", numOfDocs);
+                            + "\nAll documents:"
+        MapperParsingException e = expectThrows(MapperParsingException.class, () -> {
+        client().prepareDelete("test", "1").execute().actionGet();
+        createIndex("test");
+                        StringBuilder docDetails = new StringBuilder();
+import java.util.Locale;
+ * the Apache License, Version 2.0 (the "License"); you may
+        createIndex("test");
+import static org.hamcrest.Matchers.equalTo;
+                }
+            createIndex(".");
+                "exception contains message about index name too long: " + e.getMessage(),
+            client().prepareIndex(
+import java.util.Random;
+        indexResponse = client().prepareIndex("test").setId("1").setSource("field1", "value1_2").execute().actionGet();
+ *
+import java.util.concurrent.Executors;
+        ensureGreen();
+            .actionGet();
+    }
+        int max = MetadataCreateIndexService.MAX_INDEX_NAME_BYTES * 2;
+ * ownership. Elasticsearch licenses this file to you under
+                "exception contains message about index name too long: " + e.getMessage(),
+            assertThat(
+        final int docCount = 300;
+        try {
+                            + " was expected. "
+            assertThat(
+        threadPool.invokeAll(tasks);
+import org.opensearch.action.bulk.BulkResponse;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import static org.hamcrest.Matchers.containsString;
+            client().prepareIndex(randomAlphaOfLengthBetween(min, max).toLowerCase(Locale.ROOT)).setSource("foo", "bar").get();
+                e.getMessage().contains("index name is too long,"),
+    public void testCreatedFlagWithExternalVersioning() throws Exception {
+        assertThat(e.getRootCause().getMessage(), containsString("field name cannot be an empty string"));
+        }
                     }
                     return null;
-                }
-            });
-        }
-
-        threadPool.invokeAll(tasks);
-
-        for (int i = 0; i < docCount; i++) {
-            assertThat(createdCounts.get(i), lessThanOrEqualTo(1));
-        }
-        terminate(threadPool);
-    }
-
-    public void testCreatedFlagWithExternalVersioning() throws Exception {
-        createIndex("test");
-        ensureGreen();
-
-        IndexResponse indexResponse = client().prepareIndex("test")
-            .setId("1")
-            .setSource("field1", "value1_1")
-            .setVersion(123)
-            .setVersionType(VersionType.EXTERNAL)
-            .execute()
-            .actionGet();
-        assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
-    }
-
-    public void testCreateFlagWithBulk() {
-        createIndex("test");
-        ensureGreen();
-
-        BulkResponse bulkResponse = client().prepareBulk()
-            .add(client().prepareIndex("test").setId("1").setSource("field1", "value1_1"))
-            .execute()
-            .actionGet();
-        assertThat(bulkResponse.hasFailures(), equalTo(false));
-        assertThat(bulkResponse.getItems().length, equalTo(1));
-        IndexResponse indexResponse = bulkResponse.getItems()[0].getResponse();
-        assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
-    }
-
-    public void testCreateIndexWithLongName() {
-        int min = MetadataCreateIndexService.MAX_INDEX_NAME_BYTES + 1;
-        int max = MetadataCreateIndexService.MAX_INDEX_NAME_BYTES * 2;
-        try {
-            createIndex(randomAlphaOfLengthBetween(min, max).toLowerCase(Locale.ROOT));
-            fail("exception should have been thrown on too-long index name");
-        } catch (InvalidIndexNameException e) {
-            assertThat(
-                "exception contains message about index name too long: " + e.getMessage(),
-                e.getMessage().contains("index name is too long,"),
-                equalTo(true)
-            );
-        }
-
-        try {
-            client().prepareIndex(randomAlphaOfLengthBetween(min, max).toLowerCase(Locale.ROOT)).setSource("foo", "bar").get();
-            fail("exception should have been thrown on too-long index name");
-        } catch (InvalidIndexNameException e) {
-            assertThat(
-                "exception contains message about index name too long: " + e.getMessage(),
-                e.getMessage().contains("index name is too long,"),
-                equalTo(true)
-            );
-        }
-
-        try {
-            // Catch chars that are more than a single byte
-            client().prepareIndex(
-                randomAlphaOfLength(MetadataCreateIndexService.MAX_INDEX_NAME_BYTES - 1).toLowerCase(Locale.ROOT) + "Ϟ".toLowerCase(
-                    Locale.ROOT
-                )
-            ).setSource("foo", "bar").get();
-            fail("exception should have been thrown on too-long index name");
-        } catch (InvalidIndexNameException e) {
-            assertThat(
-                "exception contains message about index name too long: " + e.getMessage(),
-                e.getMessage().contains("index name is too long,"),
-                equalTo(true)
-            );
-        }
-
-        // we can create an index of max length
-        createIndex(randomAlphaOfLength(MetadataCreateIndexService.MAX_INDEX_NAME_BYTES).toLowerCase(Locale.ROOT));
-    }
-
-    public void testInvalidIndexName() {
-        try {
-            createIndex(".");
+import org.opensearch.search.SearchHit;
+                        }
+                            .setSize((int) response.getHits().getTotalHits().value())
             fail("exception should have been thrown on dot index name");
-        } catch (InvalidIndexNameException e) {
-            assertThat(
-                "exception contains message about index name is dot " + e.getMessage(),
-                e.getMessage().contains("Invalid index name [.], must not be \'.\' or '..'"),
-                equalTo(true)
-            );
-        }
-
-        try {
-            createIndex("..");
-            fail("exception should have been thrown on dot index name");
-        } catch (InvalidIndexNameException e) {
-            assertThat(
-                "exception contains message about index name is dot " + e.getMessage(),
                 e.getMessage().contains("Invalid index name [..], must not be \'.\' or '..'"),
+        }
+                fail(firstError.getMessage());
+ * software distributed under the License is distributed on an
+            createIndex(indexName);
+import org.opensearch.cluster.metadata.MetadataCreateIndexService;
+    }
+    }
+        ensureGreen();
+            assertThat(
+        IndexResponse indexResponse = client().prepareIndex("test").setId("1").setSource("field1", "value1_1").execute().actionGet();
+    public void testCreateFlagWithBulk() {
+        for (int i = 0; i < numberOfIterations; i++) {
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+ * under the License.
+            for (int j = 0; j < numOfChecks; j++) {
+            Exception firstError = null;
+        int min = MetadataCreateIndexService.MAX_INDEX_NAME_BYTES + 1;
+                try {
+import java.util.Collection;
+                e.getMessage().contains("index name is too long,"),
+        indexResponse = client().prepareIndex("test").setId("1").setSource("field1", "value1_2").execute().actionGet();
+    public void testAutoGenerateIdNoDuplicates() throws Exception {
+        ensureGreen();
+            assertThat(createdCounts.get(i), lessThanOrEqualTo(1));
+        for (int i = 0; i < docCount; i++) {
+            );
+            );
+                equalTo(true)
+                e.getMessage().contains("index name is too long,"),
+                            + numOfDocs
+    }
+            .execute()
+        } catch (InvalidIndexNameException e) {
+                    if (firstError == null) {
+        BulkResponse bulkResponse = client().prepareBulk()
+}
+            }
+        return replicationSettings;
+import org.opensearch.index.VersionType;
+/*
+        }
+package org.opensearch.indexing;
+import java.util.concurrent.ExecutorService;
+    }
+            .setId("1")
+        createIndex("test");
+        createIndex(randomAlphaOfLength(MetadataCreateIndexService.MAX_INDEX_NAME_BYTES).toLowerCase(Locale.ROOT));
+                "exception contains message about index name too long: " + e.getMessage(),
+                    IndexResponse indexResponse = index("test", "type", Integer.toString(docId), "field1", "value");
+                equalTo(true)
+        assertThat(bulkResponse.getItems().length, equalTo(1));
+            .setVersionType(VersionType.EXTERNAL)
+    @ParametersFactory
+    public void testCreatedFlag() throws Exception {
+            tasks.add(new Callable<Void>() {
+        ensureGreen();
+ */
+     */
+                            + docDetails;
+    public void testCreatedFlagParallelExecution() throws Exception {
+                        for (SearchHit hit : allDocs.getHits().getHits()) {
                 equalTo(true)
             );
+            String indexName = "test-" + i;
+        } catch (InvalidIndexNameException e) {
+                        createdCounts.incrementAndGet(docId);
+/*
+import org.opensearch.action.index.IndexRequestBuilder;
+                            docDetails.append("\n  id=").append(hit.getId()).append(" source=").append(hit.getSourceAsString());
+            .execute()
+ * Licensed to Elasticsearch under one or more contributor
+            .setVersion(123)
+ * Unless required by applicable law or agreed to in writing,
+        super(settings);
+                )
+    }
+                e.getMessage().contains("Invalid index name [.], must not be \'.\' or '..'"),
+                "exception contains message about index name is dot " + e.getMessage(),
+            logger.info("verifying indexed content");
+        createIndex("test");
+import java.util.List;
+ * You may obtain a copy of the License at
+        assertEquals(DocWriteResponse.Result.UPDATED, indexResponse.getResult());
+            fail("exception should have been thrown on too-long index name");
+    public IndexActionIT(Settings settings) {
+                }
+            // Catch chars that are more than a single byte
+    }
+            }
+            .add(client().prepareIndex("test").setId("1").setSource("field1", "value1_1"))
+                } catch (Exception e) {
+ * this file be licensed under the Apache-2.0 license or a
+ * license agreements. See the NOTICE file distributed with
+                        firstError = e;
+    }
+            internalCluster().wipeIndices(indexName);
         }
-    }
-
-    public void testDocumentWithBlankFieldName() {
-        MapperParsingException e = expectThrows(MapperParsingException.class, () -> {
-            client().prepareIndex("test").setId("1").setSource("", "value1_2").execute().actionGet();
         });
-        assertThat(e.getMessage(), containsString("failed to parse"));
-        assertThat(e.getRootCause().getMessage(), containsString("field name cannot be an empty string"));
+            .setSource("field1", "value1_1")
+                equalTo(true)
+import org.opensearch.common.settings.Settings;
+    public void testInvalidIndexName() {
+        IndexResponse indexResponse = client().prepareIndex("test")
+ * specific language governing permissions and limitations
+        final AtomicIntegerArray createdCounts = new AtomicIntegerArray(docCount);
     }
-}
+            fail("exception should have been thrown on too-long index name");
+ * KIND, either express or implied.  See the License for the
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+        ExecutorService threadPool = Executors.newFixedThreadPool(threadCount);
+                    Locale.ROOT
+        }
+        }
+ *
+                    logger.debug("running search");
+ * this work for additional information regarding copyright
+ * GitHub history for details.
+            assertThat(
+            int numOfDocs = randomIntBetween(10, 100);
+                    if (indexResponse.getResult() == DocWriteResponse.Result.CREATED) {
+        int numberOfIterations = scaledRandomIntBetween(10, 50);
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.action.DocWriteResponse;
+        try {
+                    logger.error("search for all docs failed", e);
+            createIndex(randomAlphaOfLengthBetween(min, max).toLowerCase(Locale.ROOT));
+import org.opensearch.index.mapper.MapperParsingException;
+            });
+ */
+ * SPDX-License-Identifier: Apache-2.0
+        IndexResponse indexResponse = bulkResponse.getItems()[0].getResponse();
+        }
+                        final String message = "Count is "
+import java.util.concurrent.atomic.AtomicIntegerArray;
+                builders.add(client().prepareIndex(indexName).setSource("field", "value_" + j));
+ *
+public class IndexActionIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
+import org.opensearch.action.index.IndexResponse;
+        assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
+        } catch (InvalidIndexNameException e) {
+        IndexResponse indexResponse = client().prepareIndex("test").setId("1").setSource("field1", "value1_1").execute().actionGet();
+        final Random random = random();
+import java.util.concurrent.Callable;
+                    }
+                        // Fetch all docs to identify the unexpected documents
+import org.opensearch.action.search.SearchResponse;
+            fail("exception should have been thrown on too-long index name");
+                    int docId = random.nextInt(docCount);
+ */
+        }
+            client().prepareIndex("test").setId("1").setSource("", "value1_2").execute().actionGet();
+                        fail(message);
+            List<IndexRequestBuilder> builders = new ArrayList<>(numOfDocs);
+    public static Collection<Object[]> parameters() {
+                @Override
+     * This test tries to simulate load while creating an index and indexing documents
+        } catch (InvalidIndexNameException e) {
+        int taskCount = docCount * threadCount;
+        assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
+import org.opensearch.test.hamcrest.OpenSearchAssertions;
+                        SearchResponse allDocs = client().prepareSearch(indexName)
+import org.opensearch.indices.InvalidIndexNameException;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                            + response.getHits().getTotalHits().value()
+        terminate(threadPool);
+        try {
+ * The OpenSearch Contributors require contributions made to
+        assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
+                    }
+            ).setSource("foo", "bar").get();
+            .actionGet();
+    public void testCreateIndexWithLongName() {
+            indexRandom(true, builders);
+        flush();
+                    if (response.getHits().getTotalHits().value() != numOfDocs) {
+            int numOfChecks = randomIntBetween(8, 12);
+            );
+            );
+                            + " but "
+        createIndex("test");
+            }
+                public Void call() throws Exception {
+            assertThat(
+    public void testDocumentWithBlankFieldName() {
+                            .get();
+            createIndex("..");
+        // we can create an index of max length
+            if (firstError != null) {
+        } catch (InvalidIndexNameException e) {
+        indexResponse = client().prepareIndex("test").setId("1").setSource("field1", "value1_2").execute().actionGet();
+            fail("exception should have been thrown on dot index name");
+                        logger.error("{}. search response: \n{}", message, response);
+                randomAlphaOfLength(MetadataCreateIndexService.MAX_INDEX_NAME_BYTES - 1).toLowerCase(Locale.ROOT) + "Ϟ".toLowerCase(
+            for (int j = 0; j < numOfDocs; j++) {
+ * not use this file except in compliance with the License.
+        ensureGreen();
+ * compatible open source license.
+        assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
+        int threadCount = 20;
+        for (int i = 0; i < taskCount; i++) {
+    }
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+    /**
+                "exception contains message about index name is dot " + e.getMessage(),
+/*
+    public void testCreatedFlagWithFlush() throws Exception {
+        assertThat(e.getMessage(), containsString("failed to parse"));
+     * while the index is being created.
+                            + OpenSearchAssertions.formatShardStatus(response)
+import java.util.ArrayList;
+        assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
+        assertThat(bulkResponse.hasFailures(), equalTo(false));
+        try {
+        assertEquals(DocWriteResponse.Result.CREATED, indexResponse.getResult());
+                    SearchResponse response = client().prepareSearch(indexName).get();

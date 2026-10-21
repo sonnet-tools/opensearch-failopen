@@ -1,204 +1,186 @@
-/*
+                    orig.template(),
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
+    @Override
+}
+                                ot3.mappings(),
+        if (randomBoolean()) {
+        if (randomBoolean()) {
+                    orig.metadata()
+        }
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
+    protected ComponentTemplate doParseInstance(XContentParser parser) throws IOException {
+        Map<String, Object> meta = null;
+    public static ComponentTemplate randomInstance() {
+            logger.error(e);
+    }
+    }
+                        );
+            case 1:
+            case 0:
+ * this file be licensed under the Apache-2.0 license or a
+            meta = randomMeta();
+            .routing(randomBoolean() ? null : randomAlphaOfLength(3))
 package org.opensearch.cluster.metadata;
-
-import org.opensearch.cluster.Diff;
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.AbstractDiffableSerializationTestCase;
-import org.opensearch.test.OpenSearchTestCase;
-
+                                randomValueOtherThan(ot.settings(), ComponentTemplateTests::randomSettings),
+            .isHidden(randomBoolean() ? null : randomBoolean())
+        if (randomBoolean()) {
+            );
+            .filter("{\"term\":{\"year\":" + randomIntBetween(1, 3000) + "}}")
+ * ownership. Elasticsearch licenses this file to you under
+/*
+                        );
+        }
+    private static CompressedXContent randomMappings() {
+    protected ComponentTemplate mutateInstance(ComponentTemplate orig) throws IOException {
+        try {
+            case 2:
 import java.io.IOException;
-import java.util.Collections;
-import java.util.Map;
-
+            return Collections.singletonMap(
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, randomIntBetween(0, 5))
+                            new Template(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        try {
+            .put(IndexMetadata.SETTING_BLOCKS_WRITE, randomBoolean())
+                                randomValueOtherThan(ot2.mappings(), ComponentTemplateTests::randomMappings),
+        }
+            .build();
+ *
+                            orig.version(),
+                            orig.metadata()
+                throw new IllegalStateException("illegal randomization branch");
+                }
+                        Template ot3 = orig.template();
+ */
+                        Template ot = orig.template();
+                        Template ot2 = orig.template();
+    public static ComponentTemplate mutateTemplate(ComponentTemplate orig) {
+ */
+    }
+        if (randomBoolean()) {
 public class ComponentTemplateTests extends AbstractDiffableSerializationTestCase<ComponentTemplate> {
     @Override
-    protected ComponentTemplate makeTestChanges(ComponentTemplate testInstance) {
-        try {
-            return mutateInstance(testInstance);
-        } catch (IOException e) {
-            logger.error(e);
-            fail("mutating should not throw an exception, but got: " + e);
-            return null;
-        }
-    }
-
-    @Override
-    protected Writeable.Reader<Diff<ComponentTemplate>> diffReader() {
-        return ComponentTemplate::readComponentTemplateDiffFrom;
-    }
-
-    @Override
-    protected ComponentTemplate doParseInstance(XContentParser parser) throws IOException {
-        return ComponentTemplate.parse(parser);
-    }
-
-    @Override
-    protected Writeable.Reader<ComponentTemplate> instanceReader() {
-        return ComponentTemplate::new;
-    }
-
-    @Override
-    protected ComponentTemplate createTestInstance() {
+            return new CompressedXContent("{\"properties\":{\"" + randomAlphaOfLength(5) + "\":{\"type\":\"keyword\"}}}");
+        } else {
+ * The OpenSearch Contributors require contributions made to
+                );
+ * GitHub history for details.
+ *
+        switch (randomIntBetween(0, 2)) {
+                                ot.mappings(),
+ */
+                            ),
+        return Collections.singletonMap(aliasName, aliasMeta);
+                    randomValueOtherThan(orig.version(), OpenSearchTestCase::randomNonNegativeLong),
         return randomInstance();
-    }
-
-    public static ComponentTemplate randomInstance() {
-        Settings settings = null;
         CompressedXContent mappings = null;
-        Map<String, AliasMetadata> aliases = null;
-        if (randomBoolean()) {
-            settings = randomSettings();
-        }
-        if (randomBoolean()) {
-            mappings = randomMappings();
-        }
-        if (randomBoolean()) {
             aliases = randomAliases();
+                    orig.version(),
+            .put(IndexMetadata.SETTING_BLOCKS_READ, randomBoolean())
         }
         Template template = new Template(settings, mappings, aliases);
-
-        Map<String, Object> meta = null;
-        if (randomBoolean()) {
-            meta = randomMeta();
-        }
-        return new ComponentTemplate(template, randomBoolean() ? null : randomNonNegativeLong(), meta);
+import org.opensearch.core.xcontent.XContentParser;
+        Settings settings = null;
+    protected ComponentTemplate createTestInstance() {
+ * Licensed to Elasticsearch under one or more contributor
     }
-
-    public static Map<String, AliasMetadata> randomAliases() {
-        String aliasName = randomAlphaOfLength(5);
-        AliasMetadata aliasMeta = AliasMetadata.builder(aliasName)
-            .filter("{\"term\":{\"year\":" + randomIntBetween(1, 3000) + "}}")
-            .routing(randomBoolean() ? null : randomAlphaOfLength(3))
-            .isHidden(randomBoolean() ? null : randomBoolean())
-            .writeIndex(randomBoolean() ? null : randomBoolean())
-            .build();
-        return Collections.singletonMap(aliasName, aliasMeta);
-    }
-
-    private static CompressedXContent randomMappings() {
-        try {
-            return new CompressedXContent("{\"properties\":{\"" + randomAlphaOfLength(5) + "\":{\"type\":\"keyword\"}}}");
-        } catch (IOException e) {
-            fail("got an IO exception creating fake mappings: " + e);
-            return null;
-        }
-    }
-
-    private static Settings randomSettings() {
-        return Settings.builder()
-            .put(IndexMetadata.SETTING_BLOCKS_READ, randomBoolean())
-            .put(IndexMetadata.SETTING_BLOCKS_WRITE, randomBoolean())
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, randomIntBetween(1, 10))
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, randomIntBetween(0, 5))
-            .put(IndexMetadata.SETTING_BLOCKS_WRITE, randomBoolean())
-            .put(IndexMetadata.SETTING_PRIORITY, randomIntBetween(0, 100000))
-            .build();
-    }
-
-    private static Map<String, Object> randomMeta() {
-        if (randomBoolean()) {
-            return Collections.singletonMap(randomAlphaOfLength(4), randomAlphaOfLength(4));
-        } else {
-            return Collections.singletonMap(
-                randomAlphaOfLength(5),
-                Collections.singletonMap(randomAlphaOfLength(4), randomAlphaOfLength(4))
-            );
-        }
-    }
-
     @Override
-    protected ComponentTemplate mutateInstance(ComponentTemplate orig) throws IOException {
-        return mutateTemplate(orig);
-    }
-
-    public static ComponentTemplate mutateTemplate(ComponentTemplate orig) {
-        switch (randomIntBetween(0, 2)) {
-            case 0:
-                switch (randomIntBetween(0, 2)) {
-                    case 0:
-                        Template ot = orig.template();
-                        return new ComponentTemplate(
-                            new Template(
-                                randomValueOtherThan(ot.settings(), ComponentTemplateTests::randomSettings),
-                                ot.mappings(),
-                                ot.aliases()
-                            ),
-                            orig.version(),
-                            orig.metadata()
-                        );
-                    case 1:
-                        Template ot2 = orig.template();
-                        return new ComponentTemplate(
-                            new Template(
-                                ot2.settings(),
-                                randomValueOtherThan(ot2.mappings(), ComponentTemplateTests::randomMappings),
-                                ot2.aliases()
-                            ),
-                            orig.version(),
-                            orig.metadata()
-                        );
-                    case 2:
-                        Template ot3 = orig.template();
-                        return new ComponentTemplate(
-                            new Template(
+ * this work for additional information regarding copyright
                                 ot3.settings(),
-                                ot3.mappings(),
-                                randomValueOtherThan(ot3.aliases(), ComponentTemplateTests::randomAliases)
-                            ),
-                            orig.version(),
-                            orig.metadata()
-                        );
-                    default:
+                                ot2.aliases()
+        if (randomBoolean()) {
+    protected Writeable.Reader<Diff<ComponentTemplate>> diffReader() {
+                            new Template(
                         throw new IllegalStateException("illegal randomization branch");
-                }
-            case 1:
-                return new ComponentTemplate(
-                    orig.template(),
-                    randomValueOtherThan(orig.version(), OpenSearchTestCase::randomNonNegativeLong),
-                    orig.metadata()
-                );
-            case 2:
-                return new ComponentTemplate(
-                    orig.template(),
-                    orig.version(),
-                    randomValueOtherThan(orig.metadata(), ComponentTemplateTests::randomMeta)
-                );
-            default:
-                throw new IllegalStateException("illegal randomization branch");
-        }
     }
-}
+    protected ComponentTemplate makeTestChanges(ComponentTemplate testInstance) {
+                        );
+ * under the License.
+        String aliasName = randomAlphaOfLength(5);
+            return mutateInstance(testInstance);
+ * software distributed under the License is distributed on an
+ * specific language governing permissions and limitations
+                randomAlphaOfLength(5),
+                    randomValueOtherThan(orig.metadata(), ComponentTemplateTests::randomMeta)
+    @Override
+                            orig.metadata()
+                                randomValueOtherThan(ot3.aliases(), ComponentTemplateTests::randomAliases)
+            return null;
+import org.opensearch.core.common.io.stream.Writeable;
+            fail("got an IO exception creating fake mappings: " + e);
+    public static Map<String, AliasMetadata> randomAliases() {
+        AliasMetadata aliasMeta = AliasMetadata.builder(aliasName)
+            fail("mutating should not throw an exception, but got: " + e);
+    }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    @Override
+ * Unless required by applicable law or agreed to in writing,
+ * Modifications Copyright OpenSearch Contributors. See
+import java.util.Collections;
+        return Settings.builder()
+        }
+                            orig.version(),
+    }
+    }
+import java.util.Map;
+ *
+            return Collections.singletonMap(randomAlphaOfLength(4), randomAlphaOfLength(4));
+                    case 1:
+                    orig.template(),
+    }
+                );
+                    case 0:
+    }
+            .put(IndexMetadata.SETTING_PRIORITY, randomIntBetween(0, 100000))
+    protected Writeable.Reader<ComponentTemplate> instanceReader() {
+import org.opensearch.common.compress.CompressedXContent;
+                                ot.aliases()
+            .build();
+ * compatible open source license.
+                        return new ComponentTemplate(
+    private static Settings randomSettings() {
+                                ot2.settings(),
+                return new ComponentTemplate(
+        }
+        } catch (IOException e) {
+                            orig.metadata()
+        return mutateTemplate(orig);
+            .put(IndexMetadata.SETTING_BLOCKS_WRITE, randomBoolean())
+    }
+            default:
+import org.opensearch.test.AbstractDiffableSerializationTestCase;
+ * not use this file except in compliance with the License.
+                    case 2:
+        return new ComponentTemplate(template, randomBoolean() ? null : randomNonNegativeLong(), meta);
+        return ComponentTemplate::readComponentTemplateDiffFrom;
+        }
+                Collections.singletonMap(randomAlphaOfLength(4), randomAlphaOfLength(4))
+        Map<String, AliasMetadata> aliases = null;
+                            new Template(
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.test.OpenSearchTestCase;
+ * You may obtain a copy of the License at
+/*
+    private static Map<String, Object> randomMeta() {
+        return ComponentTemplate::new;
+                return new ComponentTemplate(
+/*
+import org.opensearch.common.settings.Settings;
+                            ),
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+                            orig.version(),
+    @Override
+            settings = randomSettings();
+        } catch (IOException e) {
+        return ComponentTemplate.parse(parser);
+                        return new ComponentTemplate(
+            .writeIndex(randomBoolean() ? null : randomBoolean())
+                            ),
+                        return new ComponentTemplate(
+            mappings = randomMappings();
+import org.opensearch.cluster.Diff;
+    }
+            return null;
+                    default:
+                switch (randomIntBetween(0, 2)) {
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, randomIntBetween(1, 10))

@@ -1,214 +1,196 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.indices.pollingingest.mappers;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.common.util.RequestUtils;
-import org.opensearch.index.IngestionShardPointer;
-import org.opensearch.index.Message;
-import org.opensearch.index.mapper.VersionFieldMapper;
-import org.opensearch.indices.pollingingest.ShardUpdateMessage;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-
-import static org.opensearch.action.index.IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP;
-import static org.opensearch.indices.pollingingest.MessageProcessorRunnable.ID;
-import static org.opensearch.indices.pollingingest.MessageProcessorRunnable.OP_TYPE;
-import static org.opensearch.indices.pollingingest.MessageProcessorRunnable.SOURCE;
-
-/**
- * Mapper implementation that extracts document metadata ({@code _id}, {@code _version}, {@code _op_type})
- * from configurable top-level fields in the raw message payload. The remaining fields become the document
- * {@code _source}.
- *
- * <p>Mapper settings:
- * <ul>
- *   <li>{@code id_field} — source field to use as document {@code _id}. If absent, ID is auto-generated.</li>
- *   <li>{@code version_field} — source field to use as document {@code _version} with external versioning.
- *       If configured, the field must be present in every message.</li>
- *   <li>{@code op_type_field} — source field to determine operation type.</li>
- *   <li>{@code op_type_field.delete_value} — the value of {@code op_type_field} that indicates a delete operation.</li>
- *   <li>{@code op_type_field.create_value} — the value of {@code op_type_field} that indicates a create operation.</li>
- * </ul>
- *
- * <p>Operation type resolution: if the field value matches {@code delete_value} → delete,
- * if it matches {@code create_value} → create, otherwise → index (default).
- */
-public class FieldMappingIngestionMessageMapper implements IngestionMessageMapper {
-
-    /** Mapper setting key: source field to use as document _id */
-    public static final String ID_FIELD = "id_field";
     /** Mapper setting key: source field to use as document _version */
-    public static final String VERSION_FIELD = "version_field";
-    /** Mapper setting key: source field to determine operation type */
-    public static final String OP_TYPE_FIELD = "op_type_field";
-    /** Mapper setting key: the value of op_type_field that indicates a delete operation */
-    public static final String DELETE_VALUE = "op_type_field.delete_value";
-    /** Mapper setting key: the value of op_type_field that indicates a create operation */
-    public static final String CREATE_VALUE = "op_type_field.create_value";
-
-    /** Valid mapper_settings keys for this mapper type */
-    public static final Set<String> VALID_SETTINGS = Set.of(ID_FIELD, VERSION_FIELD, OP_TYPE_FIELD, DELETE_VALUE, CREATE_VALUE);
-
-    @Nullable
-    private final String idField;
-    @Nullable
-    private final String versionField;
-    @Nullable
-    private final String opTypeField;
-    @Nullable
-    private final String deleteValue;
-    @Nullable
-    private final String createValue;
-
-    /**
-     * Creates a FieldMappingIngestionMessageMapper from mapper settings.
-     *
-     * @param mapperSettings the mapper settings map
-     */
-    public FieldMappingIngestionMessageMapper(Map<String, Object> mapperSettings) {
-        validateSettings(mapperSettings);
-        this.idField = mapperSettings != null ? (String) mapperSettings.get(ID_FIELD) : null;
-        this.versionField = mapperSettings != null ? (String) mapperSettings.get(VERSION_FIELD) : null;
-        this.opTypeField = mapperSettings != null ? (String) mapperSettings.get(OP_TYPE_FIELD) : null;
-        this.deleteValue = mapperSettings != null ? (String) mapperSettings.get(DELETE_VALUE) : null;
-        this.createValue = mapperSettings != null ? (String) mapperSettings.get(CREATE_VALUE) : null;
-    }
-
-    /**
-     * Validates mapper settings for the field_mapping mapper type.
-     * Checks that all keys are recognized, delete/create values require op_type_field,
-     * and delete and create values are not the same.
-     *
-     * @param mapperSettings the mapper settings to validate
-     * @throws IllegalArgumentException if validation fails
-     */
-    public static void validateSettings(Map<String, Object> mapperSettings) {
-        if (mapperSettings == null || mapperSettings.isEmpty()) {
-            return;
-        }
-        // Validate keys
-        for (String key : mapperSettings.keySet()) {
-            if (VALID_SETTINGS.contains(key) == false) {
-                throw new IllegalArgumentException(
-                    "unknown mapper_settings key [" + key + "] for mapper_type [field_mapping]. Valid keys are: " + VALID_SETTINGS
-                );
-            }
-        }
-        // Validate cross-key dependencies
-        boolean hasOpTypeField = mapperSettings.containsKey(OP_TYPE_FIELD);
-        String deleteVal = (String) mapperSettings.get(DELETE_VALUE);
-        String createVal = (String) mapperSettings.get(CREATE_VALUE);
         if ((deleteVal != null || createVal != null) && hasOpTypeField == false) {
-            throw new IllegalArgumentException(
-                "op_type_field.delete_value or op_type_field.create_value requires op_type_field to be configured"
-            );
-        }
-        if (deleteVal != null && createVal != null && deleteVal.equals(createVal)) {
-            throw new IllegalArgumentException(
-                "op_type_field.delete_value [" + deleteVal + "] and op_type_field.create_value [" + createVal + "] cannot be the same"
-            );
-        }
-    }
-
-    @Override
-    public ShardUpdateMessage mapAndProcess(IngestionShardPointer pointer, Message message, Map<String, Object> decodedPayload)
-        throws IllegalArgumentException {
-        Map<String, Object> payloadMap = new HashMap<>();
-
-        // Extract _id
-        long autoGeneratedIdTimestamp = UNSET_AUTO_GENERATED_TIMESTAMP;
-        if (idField != null) {
-            if (decodedPayload.containsKey(idField) == false) {
-                throw new IllegalArgumentException("configured id_field [" + idField + "] is missing from the message");
-            }
-            Object idValue = decodedPayload.remove(idField);
-            validateScalar(idField, idValue);
-            String idStr = String.valueOf(idValue).trim();
-            if (idStr.isEmpty()) {
-                throw new IllegalArgumentException("field [" + idField + "] has an empty value");
-            }
-            payloadMap.put(ID, idStr);
-        } else {
-            String id = RequestUtils.generateID();
-            payloadMap.put(ID, id);
-            autoGeneratedIdTimestamp = System.currentTimeMillis();
-        }
-
-        // Extract _version
-        if (versionField != null) {
-            if (decodedPayload.containsKey(versionField) == false) {
-                throw new IllegalArgumentException("configured version_field [" + versionField + "] is missing from the message");
-            }
-            Object versionValue = decodedPayload.remove(versionField);
-            validateScalar(versionField, versionValue);
-            String versionStr = String.valueOf(versionValue).trim();
-            try {
-                Long.parseLong(versionStr);
-            } catch (NumberFormatException e) {
-                throw new IllegalArgumentException(
-                    "version_field [" + versionField + "] must be a numeric value, but found: " + versionStr
-                );
-            }
-            payloadMap.put(VersionFieldMapper.NAME, versionStr);
-        }
-
-        // Extract _op_type
+     * Creates a FieldMappingIngestionMessageMapper from mapper settings.
+        // Validate cross-key dependencies
+package org.opensearch.indices.pollingingest.mappers;
         // The op_type_field value is matched against delete_value and create_value to determine the operation type.
-        // If neither delete_value nor create_value is configured, the field is still removed from _source but
-        // the operation type defaults to index.
-        if (opTypeField != null && decodedPayload.containsKey(opTypeField)) {
+        }
+ *   <li>{@code version_field} — source field to use as document {@code _version} with external versioning.
+/**
             Object val = decodedPayload.remove(opTypeField);
-            validateScalar(opTypeField, val);
-            String stringVal = String.valueOf(val).trim();
-            payloadMap.put(OP_TYPE, resolveOpType(stringVal));
-        } else {
-            payloadMap.put(OP_TYPE, OP_TYPE_INDEX);
-        }
-
-        // Remaining fields become _source
-        payloadMap.put(SOURCE, decodedPayload);
-
-        return new ShardUpdateMessage(pointer, message, payloadMap, autoGeneratedIdTimestamp);
-    }
-
-    /**
-     * Resolves the operation type from the field value.
-     * If the value matches delete_value → delete, if it matches create_value → create, otherwise → index.
-     */
-    private String resolveOpType(String fieldValue) {
-        if (deleteValue != null && deleteValue.equals(fieldValue)) {
-            return OP_TYPE_DELETE;
-        }
-        if (createValue != null && createValue.equals(fieldValue)) {
-            return OP_TYPE_CREATE;
-        }
-        return OP_TYPE_INDEX;
-    }
-
-    /**
-     * Validates that a field value is a non-null scalar type (string, number, or boolean) and not a complex type like
-     * a nested object or array.
-     */
-    private static void validateScalar(String fieldName, Object value) {
-        if (value == null) {
-            throw new IllegalArgumentException("field [" + fieldName + "] has a null value");
-        }
-        if (!(value instanceof String) && !(value instanceof Number) && !(value instanceof Boolean)) {
-            throw new IllegalArgumentException(
-                "field ["
-                    + fieldName
+import org.opensearch.indices.pollingingest.ShardUpdateMessage;
+import static org.opensearch.indices.pollingingest.MessageProcessorRunnable.SOURCE;
+     * Checks that all keys are recognized, delete/create values require op_type_field,
                     + "] must be a scalar value (string, number, or boolean), but found: "
-                    + value.getClass().getSimpleName()
-            );
+ * {@code _source}.
+        return OP_TYPE_INDEX;
+            String idStr = String.valueOf(idValue).trim();
+            throw new IllegalArgumentException("field [" + fieldName + "] has a null value");
+                throw new IllegalArgumentException("configured version_field [" + versionField + "] is missing from the message");
+ *
+import org.opensearch.index.mapper.VersionFieldMapper;
         }
     }
+    public ShardUpdateMessage mapAndProcess(IngestionShardPointer pointer, Message message, Map<String, Object> decodedPayload)
+ */
+            Object versionValue = decodedPayload.remove(versionField);
+            if (decodedPayload.containsKey(idField) == false) {
+        // the operation type defaults to index.
+     * If the value matches delete_value → delete, if it matches create_value → create, otherwise → index.
+        throws IllegalArgumentException {
+        if (deleteVal != null && createVal != null && deleteVal.equals(createVal)) {
+import java.util.Set;
+ * The OpenSearch Contributors require contributions made to
+            return OP_TYPE_DELETE;
+    }
+        if (opTypeField != null && decodedPayload.containsKey(opTypeField)) {
+     *
+        }
+                );
+        // Remaining fields become _source
+    public static final String CREATE_VALUE = "op_type_field.create_value";
+import java.util.Map;
+        if (value == null) {
+ * from configurable top-level fields in the raw message payload. The remaining fields become the document
+        String deleteVal = (String) mapperSettings.get(DELETE_VALUE);
+ *
+        boolean hasOpTypeField = mapperSettings.containsKey(OP_TYPE_FIELD);
+    public static final String ID_FIELD = "id_field";
+     * Resolves the operation type from the field value.
+                "field ["
+        // Extract _op_type
+ * SPDX-License-Identifier: Apache-2.0
+        }
+        validateSettings(mapperSettings);
+            }
+        }
+                throw new IllegalArgumentException(
+            if (VALID_SETTINGS.contains(key) == false) {
+            return;
+            throw new IllegalArgumentException(
+    public static void validateSettings(Map<String, Object> mapperSettings) {
+import static org.opensearch.indices.pollingingest.MessageProcessorRunnable.OP_TYPE;
+            }
+        // If neither delete_value nor create_value is configured, the field is still removed from _source but
+            validateScalar(opTypeField, val);
+        long autoGeneratedIdTimestamp = UNSET_AUTO_GENERATED_TIMESTAMP;
+import org.opensearch.common.Nullable;
+        payloadMap.put(SOURCE, decodedPayload);
+        String createVal = (String) mapperSettings.get(CREATE_VALUE);
+            );
+ *   <li>{@code op_type_field.create_value} — the value of {@code op_type_field} that indicates a create operation.</li>
+import java.util.HashMap;
+                "op_type_field.delete_value or op_type_field.create_value requires op_type_field to be configured"
+        if (deleteValue != null && deleteValue.equals(fieldValue)) {
+    }
+public class FieldMappingIngestionMessageMapper implements IngestionMessageMapper {
+     * @throws IllegalArgumentException if validation fails
+    private String resolveOpType(String fieldValue) {
+        return new ShardUpdateMessage(pointer, message, payloadMap, autoGeneratedIdTimestamp);
+    @Nullable
+                "op_type_field.delete_value [" + deleteVal + "] and op_type_field.create_value [" + createVal + "] cannot be the same"
+    private final String idField;
+        }
+    public static final Set<String> VALID_SETTINGS = Set.of(ID_FIELD, VERSION_FIELD, OP_TYPE_FIELD, DELETE_VALUE, CREATE_VALUE);
+    @Nullable
+ */
+        if (!(value instanceof String) && !(value instanceof Number) && !(value instanceof Boolean)) {
+            validateScalar(idField, idValue);
+ * if it matches {@code create_value} → create, otherwise → index (default).
+ *       If configured, the field must be present in every message.</li>
+        // Extract _id
+                    "version_field [" + versionField + "] must be a numeric value, but found: " + versionStr
+            }
+    public static final String DELETE_VALUE = "op_type_field.delete_value";
+import static org.opensearch.indices.pollingingest.MessageProcessorRunnable.ID;
+ * </ul>
+    private final String opTypeField;
+    public FieldMappingIngestionMessageMapper(Map<String, Object> mapperSettings) {
+            }
+            );
+     * and delete and create values are not the same.
+    @Nullable
+            } catch (NumberFormatException e) {
+import org.opensearch.index.Message;
+        for (String key : mapperSettings.keySet()) {
+        }
+                throw new IllegalArgumentException("field [" + idField + "] has an empty value");
+        }
+            throw new IllegalArgumentException(
+ *   <li>{@code id_field} — source field to use as document {@code _id}. If absent, ID is auto-generated.</li>
+     */
+     *
+     */
+            }
+    private final String versionField;
+        } else {
+        }
+    public static final String VERSION_FIELD = "version_field";
+     */
+    /** Mapper setting key: source field to use as document _id */
+            try {
+    }
+        if (mapperSettings == null || mapperSettings.isEmpty()) {
+    /** Mapper setting key: source field to determine operation type */
+                    + fieldName
+    /** Mapper setting key: the value of op_type_field that indicates a create operation */
+     */
+        }
+ *   <li>{@code op_type_field.delete_value} — the value of {@code op_type_field} that indicates a delete operation.</li>
+    private final String deleteValue;
+            autoGeneratedIdTimestamp = System.currentTimeMillis();
+            String stringVal = String.valueOf(val).trim();
+                );
+        }
+    /** Mapper setting key: the value of op_type_field that indicates a delete operation */
+        this.deleteValue = mapperSettings != null ? (String) mapperSettings.get(DELETE_VALUE) : null;
+    @Override
+            if (decodedPayload.containsKey(versionField) == false) {
+import org.opensearch.common.util.RequestUtils;
+        if (createValue != null && createValue.equals(fieldValue)) {
+        this.createValue = mapperSettings != null ? (String) mapperSettings.get(CREATE_VALUE) : null;
+                    + value.getClass().getSimpleName()
+     * @param mapperSettings the mapper settings to validate
+     * a nested object or array.
+    private final String createValue;
+    public static final String OP_TYPE_FIELD = "op_type_field";
+            payloadMap.put(OP_TYPE, OP_TYPE_INDEX);
+            throw new IllegalArgumentException(
+     * Validates that a field value is a non-null scalar type (string, number, or boolean) and not a complex type like
+            if (idStr.isEmpty()) {
+            Object idValue = decodedPayload.remove(idField);
+    /**
+    @Nullable
+        this.opTypeField = mapperSettings != null ? (String) mapperSettings.get(OP_TYPE_FIELD) : null;
+    /**
+            payloadMap.put(ID, id);
 }
+ * Mapper implementation that extracts document metadata ({@code _id}, {@code _version}, {@code _op_type})
+ * this file be licensed under the Apache-2.0 license or a
+     * @param mapperSettings the mapper settings map
+                Long.parseLong(versionStr);
+    @Nullable
+    /**
+    /**
+        // Validate keys
+        // Extract _version
+    private static void validateScalar(String fieldName, Object value) {
+            String id = RequestUtils.generateID();
+ *   <li>{@code op_type_field} — source field to determine operation type.</li>
+ * compatible open source license.
+        this.idField = mapperSettings != null ? (String) mapperSettings.get(ID_FIELD) : null;
+            payloadMap.put(OP_TYPE, resolveOpType(stringVal));
+            validateScalar(versionField, versionValue);
+        if (versionField != null) {
+import static org.opensearch.action.index.IndexRequest.UNSET_AUTO_GENERATED_TIMESTAMP;
+            return OP_TYPE_CREATE;
+import org.opensearch.index.IngestionShardPointer;
+        } else {
+                    "unknown mapper_settings key [" + key + "] for mapper_type [field_mapping]. Valid keys are: " + VALID_SETTINGS
+                throw new IllegalArgumentException(
+            payloadMap.put(ID, idStr);
+                throw new IllegalArgumentException("configured id_field [" + idField + "] is missing from the message");
+            String versionStr = String.valueOf(versionValue).trim();
+ *
+    /** Valid mapper_settings keys for this mapper type */
+/*
+     * Validates mapper settings for the field_mapping mapper type.
+        if (idField != null) {
+    }
+            payloadMap.put(VersionFieldMapper.NAME, versionStr);
+ * <ul>
+            );
+ * <p>Operation type resolution: if the field value matches {@code delete_value} → delete,
+ * <p>Mapper settings:
+        Map<String, Object> payloadMap = new HashMap<>();
+        this.versionField = mapperSettings != null ? (String) mapperSettings.get(VERSION_FIELD) : null;

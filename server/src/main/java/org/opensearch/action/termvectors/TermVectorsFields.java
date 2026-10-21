@@ -1,541 +1,483 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.termvectors;
-
-import org.apache.lucene.index.BaseTermsEnum;
-import org.apache.lucene.index.Fields;
-import org.apache.lucene.index.ImpactsEnum;
-import org.apache.lucene.index.PostingsEnum;
-import org.apache.lucene.index.SlowImpactsEnum;
-import org.apache.lucene.index.Terms;
-import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.search.BoostAttribute;
-import org.apache.lucene.util.ArrayUtil;
-import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefBuilder;
-import org.apache.lucene.util.RamUsageEstimator;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-
-import static org.apache.lucene.util.ArrayUtil.grow;
-
-/**
- * This class represents the result of a {@link TermVectorsRequest}. It works
- * exactly like the {@link Fields} class except for one thing: It can return
- * offsets and payloads even if positions are not present. You must call
- * nextPosition() anyway to move the counter although this method only returns
- * {@code -1,}, if no positions were returned by the {@link TermVectorsRequest}.
- * <p>
- * The data is stored in two byte arrays ({@code headerRef} and
- * {@code termVectors}, both {@link BytesRef}) that have the following format:
- * <p>
- * {@code headerRef}: Stores offsets per field in the {@code termVectors} array
- * and some header information as {@link BytesRef}. Format is
- * <ul>
- * <li>String : "TV"</li>
- * <li>vint: version (=-1)</li>
  * <li>boolean: hasTermStatistics (are the term statistics stored?)</li>
- * <li>boolean: hasFieldStatitsics (are the field statistics stored?)</li>
- * <li>vint: number of fields</li>
- * <li>
- * <ul>
- * <li>String: field name 1</li>
- * <li>vint: offset in {@code termVectors} for field 1</li>
- * <li>...</li>
- * <li>String: field name last field</li>
- * <li>vint: offset in {@code termVectors} for last field</li>
- * </ul>
- * </li>
- * </ul>
- * <p>
- * termVectors: Stores the actual term vectors as a {@link BytesRef}.
- * <p>
- * Term vectors for each fields are stored in blocks, one for each field. The
- * offsets in {@code headerRef} are used to find where the block for a field
- * starts. Each block begins with a
- * <ul>
- * <li>vint: number of terms</li>
- * <li>boolean: positions (has it positions stored?)</li>
- * <li>boolean: offsets (has it offsets stored?)</li>
- * <li>boolean: payloads (has it payloads stored?)</li>
- * </ul>
- * If the field statistics were requested ({@code hasFieldStatistics} is true,
- * see {@code headerRef}), the following numbers are stored:
- * <ul>
- * <li>vlong: sum of total term frequencies of the field (sumTotalTermFreq)</li>
- * <li>vlong: sum of document frequencies for each term (sumDocFreq)</li>
- * <li>vint: number of documents in the shard that has an entry for this field
- * (docCount)</li>
- * </ul>
- * <p>
- * After that, for each term it stores
- * <ul>
- * <li>vint: term lengths</li>
- * <li>BytesRef: term name</li>
- * </ul>
- * <p>
- * If term statistics are requested ({@code hasTermStatistics} is true, see
- * {@code headerRef}):
- * <ul>
- * <li>vint: document frequency, how often does this term appear in documents?</li>
- * <li>vlong: total term frequency. Sum of terms in this field.</li>
- * </ul>
- * After that
- * <ul>
- * <li>vint: frequency (always returned)</li>
- * <li>
- * <ul>
- * <li>vint: position_1 (if positions)</li>
- * <li>vint: startOffset_1 (if offset)</li>
- * <li>vint: endOffset_1 (if offset)</li>
- * <li>BytesRef: payload_1 (if payloads)</li>
- * <li>...</li>
- * <li>vint: endOffset_freqency (if offset)</li>
- * <li>BytesRef: payload_freqency (if payloads)</li>
- * </ul></li>
- * </ul>
- *
- * @opensearch.internal
- */
-public final class TermVectorsFields extends Fields {
-
-    private final Map<String, Long> fieldMap;
-    private final BytesReference termVectors;
-    final boolean hasTermStatistic;
-    final boolean hasFieldStatistic;
-    public final boolean hasScores;
-
-    /**
-     * @param headerRef   Stores offsets per field in the {@code termVectors} and some
-     *                    header information as {@link BytesRef}.
-     * @param termVectors Stores the actual term vectors as a {@link BytesRef}.
-     */
-    public TermVectorsFields(BytesReference headerRef, BytesReference termVectors) throws IOException {
-        try (StreamInput header = headerRef.streamInput()) {
-            // here we read the header to fill the field offset map
-            String headerString = header.readString();
-            assert headerString.equals("TV");
-            int version = header.readInt();
-            assert version == -1;
-            hasTermStatistic = header.readBoolean();
-            hasFieldStatistic = header.readBoolean();
-            hasScores = header.readBoolean();
-            final int numFields = header.readVInt();
-            final Map<String, Long> fieldMap = new HashMap<>(numFields);
-            for (int i = 0; i < numFields; i++) {
-                fieldMap.put((header.readString()), header.readVLong());
-            }
-            this.fieldMap = Collections.unmodifiableMap(fieldMap);
-        }
-        // reference to the term vector data
-        this.termVectors = termVectors;
-    }
-
-    @Override
-    public Iterator<String> iterator() {
         final Iterator<Map.Entry<String, Long>> iterator = fieldMap.entrySet().iterator();
-        return new Iterator<>() {
-            @Override
-            public boolean hasNext() {
-                return iterator.hasNext();
-            }
-
-            @Override
-            public String next() {
-                return iterator.next().getKey();
-            }
-
-            @Override
-            public void remove() {
-                throw new UnsupportedOperationException();
-            }
-        };
-    }
-
-    @Override
-    public Terms terms(String field) throws IOException {
-        // first, find where in the termVectors bytes the actual term vector for
-        // this field is stored
-        final Long keySlot = fieldMap.get(field);
-        if (keySlot == null) {
-            return null; // we don't have it.
-        }
-        return new TermVector(termVectors, keySlot);
-    }
-
-    @Override
-    public int size() {
-        return fieldMap.size();
-    }
-
-    /**
-     * Internal term vector
-     *
-     * @opensearch.internal
-     */
-    private final class TermVector extends Terms {
-
-        private final StreamInput perFieldTermVectorInput;
-        private final long readOffset;
-
-        private long numTerms;
-        private boolean hasPositions;
-        private boolean hasOffsets;
-        private boolean hasPayloads;
-        private long sumTotalTermFreq;
-        private long sumDocFreq;
-        private int docCount;
-
-        TermVector(BytesReference termVectors, long readOffset) throws IOException {
-            this.perFieldTermVectorInput = termVectors.streamInput();
-            this.readOffset = readOffset;
-            reset();
-        }
-
-        private void reset() throws IOException {
-            this.perFieldTermVectorInput.reset();
-            this.perFieldTermVectorInput.skip(readOffset);
-
-            // read how many terms....
-            this.numTerms = perFieldTermVectorInput.readVLong();
-            // ...if positions etc. were stored....
-            this.hasPositions = perFieldTermVectorInput.readBoolean();
-            this.hasOffsets = perFieldTermVectorInput.readBoolean();
-            this.hasPayloads = perFieldTermVectorInput.readBoolean();
-            // read the field statistics
-            this.sumTotalTermFreq = hasFieldStatistic ? readPotentiallyNegativeVLong(perFieldTermVectorInput) : -1;
-            this.sumDocFreq = hasFieldStatistic ? readPotentiallyNegativeVLong(perFieldTermVectorInput) : -1;
-            this.docCount = hasFieldStatistic ? readPotentiallyNegativeVInt(perFieldTermVectorInput) : -1;
-        }
-
-        @Override
-        public TermsEnum iterator() throws IOException {
-            // reset before asking for an iterator
-            reset();
-            // convert bytes ref for the terms to actual data
-            return new BaseTermsEnum() {
-                int currentTerm = 0;
-                int freq = 0;
-                int docFreq = -1;
-                long totalTermFrequency = -1;
-                int[] positions = new int[1];
-                int[] startOffsets = new int[1];
-                int[] endOffsets = new int[1];
-                BytesRefBuilder[] payloads = new BytesRefBuilder[1];
                 final BytesRefBuilder spare = new BytesRefBuilder();
-                BoostAttribute boostAtt = this.attributes().addAttribute(BoostAttribute.class);
-
-                @Override
-                public BytesRef next() throws IOException {
-                    if (currentTerm++ < numTerms) {
-                        // term string. first the size...
-                        int termVectorSize = perFieldTermVectorInput.readVInt();
-                        spare.grow(termVectorSize);
-                        // ...then the value.
-                        perFieldTermVectorInput.readBytes(spare.bytes(), 0, termVectorSize);
-                        spare.setLength(termVectorSize);
-                        if (hasTermStatistic) {
-                            docFreq = readPotentiallyNegativeVInt(perFieldTermVectorInput);
-                            totalTermFrequency = readPotentiallyNegativeVLong(perFieldTermVectorInput);
-                        }
-
-                        freq = readPotentiallyNegativeVInt(perFieldTermVectorInput);
-                        // grow the arrays to read the values. this is just
+     * @param termVectors Stores the actual term vectors as a {@link BytesRef}.
+                long totalTermFrequency = -1;
+        }
+            hasFieldStatistic = header.readBoolean();
                         // for performance reasons. Re-use memory instead of
-                        // realloc.
-                        growBuffers();
-                        // finally, read the values into the arrays
-                        // currentPosition etc. so that we can just iterate
-                        // later
-                        writeInfos(perFieldTermVectorInput);
-
-                        // read the score if available
-                        if (hasScores) {
-                            boostAtt.setBoost(perFieldTermVectorInput.readFloat());
-                        }
-                        return spare.get();
-
-                    } else {
-                        return null;
-                    }
-                }
-
-                private void writeInfos(final StreamInput input) throws IOException {
-                    for (int i = 0; i < freq; i++) {
-                        if (hasPositions) {
-                            positions[i] = input.readVInt();
-                        }
-                        if (hasOffsets) {
-                            startOffsets[i] = input.readVInt();
-                            endOffsets[i] = input.readVInt();
-                        }
-                        if (hasPayloads) {
-                            int payloadLength = input.readVInt();
-                            if (payloads[i] == null) {
-                                payloads[i] = new BytesRefBuilder();
-                            }
-                            payloads[i].grow(payloadLength);
-                            input.readBytes(payloads[i].bytes(), 0, payloadLength);
-                            payloads[i].setLength(payloadLength);
-                        }
-                    }
-                }
-
-                private void growBuffers() {
-                    if (hasPositions) {
-                        positions = grow(positions, freq);
-                    }
-                    if (hasOffsets) {
-                        startOffsets = grow(startOffsets, freq);
-                        endOffsets = grow(endOffsets, freq);
-                    }
-                    if (hasPayloads) {
-                        if (payloads.length < freq) {
-                            payloads = Arrays.copyOf(payloads, ArrayUtil.oversize(freq, RamUsageEstimator.NUM_BYTES_OBJECT_REF));
-                        }
-                    }
-                }
-
-                @Override
-                public SeekStatus seekCeil(BytesRef text) throws IOException {
-                    throw new UnsupportedOperationException();
-                }
-
-                @Override
-                public void seekExact(long ord) throws IOException {
-                    throw new UnsupportedOperationException("Seek is not supported");
-                }
-
-                @Override
-                public BytesRef term() throws IOException {
-                    return spare.get();
-                }
-
-                @Override
-                public long ord() throws IOException {
-                    throw new UnsupportedOperationException("ordinals are not supported");
-                }
-
-                @Override
-                public int docFreq() throws IOException {
-                    return docFreq;
-                }
-
-                @Override
-                public long totalTermFreq() throws IOException {
-                    return totalTermFrequency;
-                }
-
-                @Override
-                public PostingsEnum postings(PostingsEnum reuse, int flags) throws IOException {
-                    final TermVectorPostingsEnum retVal = (reuse instanceof TermVectorPostingsEnum
-                        ? (TermVectorPostingsEnum) reuse
-                        : new TermVectorPostingsEnum());
-                    return retVal.reset(
-                        hasPositions ? positions : null,
-                        hasOffsets ? startOffsets : null,
-                        hasOffsets ? endOffsets : null,
-                        hasPayloads ? payloads : null,
-                        freq
-                    );
-                }
-
-                @Override
-                public ImpactsEnum impacts(int flags) throws IOException {
-                    return new SlowImpactsEnum(postings(null, flags));
-                }
-
-            };
-        }
-
-        @Override
-        public long size() throws IOException {
-            return numTerms;
-        }
-
-        @Override
-        public long getSumTotalTermFreq() throws IOException {
-            return sumTotalTermFreq;
-        }
-
-        @Override
-        public long getSumDocFreq() throws IOException {
-            return sumDocFreq;
-        }
-
-        @Override
-        public int getDocCount() throws IOException {
-            return docCount;
-        }
-
-        @Override
+        // can return -1 if posistions were not requested or
+                int[] startOffsets = new int[1];
+        private PostingsEnum reset(int[] positions, int[] startOffsets, int[] endOffsets, BytesRefBuilder[] payloads, int freq) {
+        private long sumDocFreq;
+ * Term vectors for each fields are stored in blocks, one for each field. The
+            return doc;
         public boolean hasFreqs() {
-            return true;
-        }
-
-        @Override
-        public boolean hasOffsets() {
-            return hasOffsets;
-        }
-
-        @Override
-        public boolean hasPositions() {
-            return hasPositions;
-        }
-
+        return fieldMap.size();
         @Override
         public boolean hasPayloads() {
-            return hasPayloads;
         }
-    }
-
-    /**
-     * Internal postings enumerator for term vectors
-     *
-     * @opensearch.internal
-     */
-    private final class TermVectorPostingsEnum extends PostingsEnum {
-        private boolean hasPositions;
-        private boolean hasOffsets;
-        private boolean hasPayloads;
-        int curPos = -1;
-        int doc = -1;
-        private int freq;
-        private int[] startOffsets;
-        private int[] positions;
-        private BytesRefBuilder[] payloads;
-        private int[] endOffsets;
-
-        private PostingsEnum reset(int[] positions, int[] startOffsets, int[] endOffsets, BytesRefBuilder[] payloads, int freq) {
-            curPos = -1;
-            doc = -1;
-            this.hasPositions = positions != null;
-            this.hasOffsets = startOffsets != null;
-            this.hasPayloads = payloads != null;
-            this.freq = freq;
+                    return retVal.reset(
+            for (int i = 0; i < numFields; i++) {
+    public Terms terms(String field) throws IOException {
+        @Override
             this.startOffsets = startOffsets;
-            this.endOffsets = endOffsets;
-            this.payloads = payloads;
-            this.positions = positions;
-            return this;
+            this.fieldMap = Collections.unmodifiableMap(fieldMap);
+ * <li>vlong: sum of total term frequencies of the field (sumTotalTermFreq)</li>
+            // ...if positions etc. were stored....
         }
-
-        @Override
-        public int nextDoc() throws IOException {
-            return doc = (doc == -1 ? 0 : NO_MORE_DOCS);
-        }
-
-        @Override
-        public int docID() {
-            return doc;
-        }
-
-        @Override
-        public int advance(int target) throws IOException {
-            while (nextDoc() < target && doc != NO_MORE_DOCS) {
-            }
-            return doc;
-        }
-
-        @Override
-        public int freq() throws IOException {
-            return freq;
-        }
-
-        // call nextPosition once before calling this one
-        // because else counter is not advanced
-        @Override
-        public int startOffset() throws IOException {
-            assert curPos < freq && curPos >= 0;
-            return hasOffsets ? startOffsets[curPos] : -1;
-
-        }
-
-        @Override
-        // can return -1 if posistions were not requested or
-        // stored but offsets were stored and requested
-        public int nextPosition() throws IOException {
-            assert curPos + 1 < freq;
-            ++curPos;
-            // this is kind of cheating but if you don't need positions
-            // we safe lots fo space on the wire
-            return hasPositions ? positions[curPos] : -1;
-        }
-
-        @Override
-        public BytesRef getPayload() throws IOException {
-            assert curPos < freq && curPos >= 0;
-            if (hasPayloads) {
-                final BytesRefBuilder payload = payloads[curPos];
-                if (payload != null) {
-                    return payload.get();
                 }
-            }
-            return null;
+        return new TermVector(termVectors, keySlot);
+ * <ul>
+    @Override
+            hasScores = header.readBoolean();
+ * <li>boolean: payloads (has it payloads stored?)</li>
+     * Internal postings enumerator for term vectors
+        final Long keySlot = fieldMap.get(field);
+ * offsets and payloads even if positions are not present. You must call
+            return freq;
+ * If term statistics are requested ({@code hasTermStatistics} is true, see
+                public long totalTermFreq() throws IOException {
+            return hasPositions;
         }
-
-        @Override
-        public int endOffset() throws IOException {
-            assert curPos < freq && curPos >= 0;
-            return hasOffsets ? endOffsets[curPos] : -1;
-        }
-
-        @Override
-        public long cost() {
-            return 1;
-        }
-    }
-
-    // read a vInt. this is used if the integer might be negative. In this case,
-    // the writer writes a 0 for -1 or value +1 and accordingly we have to
+                if (payload != null) {
+                int currentTerm = 0;
+import org.apache.lucene.index.Terms;
+import org.apache.lucene.index.TermsEnum;
     // subtract 1 again
-    // adds one to mock not existing term freq
+        }
+                        freq = readPotentiallyNegativeVInt(perFieldTermVectorInput);
+        public long getSumTotalTermFreq() throws IOException {
+                @Override
+            ++curPos;
+ * <p>
+                int freq = 0;
+            return numTerms;
+            @Override
+ * <li>vint: number of terms</li>
+    }
+ * <li>
     int readPotentiallyNegativeVInt(StreamInput stream) throws IOException {
-        return stream.readVInt() - 1;
+/*
+        // reference to the term vector data
+ * </li>
+        }
+            this.sumTotalTermFreq = hasFieldStatistic ? readPotentiallyNegativeVLong(perFieldTermVectorInput) : -1;
+                        perFieldTermVectorInput.readBytes(spare.bytes(), 0, termVectorSize);
     }
-
-    // read a vLong. this is used if the integer might be negative. In this
+    private final Map<String, Long> fieldMap;
+        public int nextDoc() throws IOException {
+        @Override
+        }
+                public int docFreq() throws IOException {
+import org.opensearch.core.common.io.stream.StreamInput;
+        public int startOffset() throws IOException {
+            // read the field statistics
+        // because else counter is not advanced
+        TermVector(BytesReference termVectors, long readOffset) throws IOException {
+            return true;
+ * <li>String: field name 1</li>
+ *
+ * <li>vint: endOffset_freqency (if offset)</li>
+            assert headerString.equals("TV");
+            return hasOffsets;
+                    if (currentTerm++ < numTerms) {
+                }
+                    } else {
+            this.perFieldTermVectorInput = termVectors.streamInput();
+    @Override
+                int[] positions = new int[1];
+                    if (hasPositions) {
+    /**
+                }
+                    return totalTermFrequency;
+                        if (hasPayloads) {
+        }
+        this.termVectors = termVectors;
+                @Override
+ * <li>vint: version (=-1)</li>
+        private long sumTotalTermFreq;
+ * The OpenSearch Contributors require contributions made to
+ * <li>vint: term lengths</li>
+        int curPos = -1;
+    private final class TermVectorPostingsEnum extends PostingsEnum {
+            while (nextDoc() < target && doc != NO_MORE_DOCS) {
+        }
+/*
+import org.apache.lucene.search.BoostAttribute;
+            public String next() {
+                        // finally, read the values into the arrays
+                BytesRefBuilder[] payloads = new BytesRefBuilder[1];
+                int docFreq = -1;
+            this.hasPayloads = perFieldTermVectorInput.readBoolean();
+ * <ul>
+                    }
+        @Override
+            this.positions = positions;
+ * Licensed to Elasticsearch under one or more contributor
+        public boolean hasPositions() {
+    public TermVectorsFields(BytesReference headerRef, BytesReference termVectors) throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+                }
+                }
+        }
+        }
     // case, the writer writes a 0 for -1 or value +1 and accordingly we have to
-    // subtract 1 again
-    // adds one to mock not existing term freq
-    long readPotentiallyNegativeVLong(StreamInput stream) throws IOException {
-        return stream.readVLong() - 1;
+                return iterator.hasNext();
+import java.io.IOException;
+                BoostAttribute boostAtt = this.attributes().addAttribute(BoostAttribute.class);
+                            input.readBytes(payloads[i].bytes(), 0, payloadLength);
+ * <li>...</li>
+        @Override
+                        if (hasOffsets) {
+import org.apache.lucene.util.RamUsageEstimator;
+ * </ul>
+                        return null;
+                    throw new UnsupportedOperationException();
+ * <li>BytesRef: payload_freqency (if payloads)</li>
+ * offsets in {@code headerRef} are used to find where the block for a field
+ * <ul>
+            hasTermStatistic = header.readBoolean();
+                        ? (TermVectorPostingsEnum) reuse
+ * <li>BytesRef: term name</li>
     }
+            reset();
+                    }
+        @Override
+import java.util.Collections;
+ */
+            this.hasOffsets = perFieldTermVectorInput.readBoolean();
+import org.apache.lucene.index.SlowImpactsEnum;
+ * <li>vint: position_1 (if positions)</li>
+        private int freq;
+        }
+                    if (hasPayloads) {
+ * <ul>
+                return iterator.next().getKey();
+     *
+    // read a vInt. this is used if the integer might be negative. In this case,
+                            payloads[i].grow(payloadLength);
+            }
+                }
+            final Map<String, Long> fieldMap = new HashMap<>(numFields);
+                @Override
+                        hasPayloads ? payloads : null,
+        public long cost() {
+                            docFreq = readPotentiallyNegativeVInt(perFieldTermVectorInput);
+                        return spare.get();
+                            totalTermFrequency = readPotentiallyNegativeVLong(perFieldTermVectorInput);
+            }
+ * starts. Each block begins with a
+                }
+            return docCount;
+            @Override
+            // convert bytes ref for the terms to actual data
+            this.perFieldTermVectorInput.reset();
+     * @opensearch.internal
+ * Unless required by applicable law or agreed to in writing,
+ *
+     * Internal term vector
+        public long size() throws IOException {
+            final int numFields = header.readVInt();
+ * <li>vlong: sum of document frequencies for each term (sumDocFreq)</li>
+        @Override
+                        // grow the arrays to read the values. this is just
+    }
+        public int freq() throws IOException {
+            this.hasOffsets = startOffsets != null;
+                        }
+ * <li>vint: document frequency, how often does this term appear in documents?</li>
+        }
+        public int advance(int target) throws IOException {
+        }
+            return this;
+        return stream.readVLong() - 1;
+        public int getDocCount() throws IOException {
+            curPos = -1;
+ * <li>...</li>
+ * After that
+        public int docID() {
+        @Override
+        }
+                private void growBuffers() {
+import org.apache.lucene.index.Fields;
+        }
+        }
+                    if (hasOffsets) {
+ *
+    }
+        // call nextPosition once before calling this one
+package org.opensearch.action.termvectors;
+ * </ul>
+ * termVectors: Stores the actual term vectors as a {@link BytesRef}.
+ * <li>vlong: total term frequency. Sum of terms in this field.</li>
+                        }
+     * @param headerRef   Stores offsets per field in the {@code termVectors} and some
+            // reset before asking for an iterator
+            // this is kind of cheating but if you don't need positions
+            // read how many terms....
+    private final class TermVector extends Terms {
+    // read a vLong. this is used if the integer might be negative. In this
+        if (keySlot == null) {
+        private BytesRefBuilder[] payloads;
+            return new BaseTermsEnum() {
+                        int termVectorSize = perFieldTermVectorInput.readVInt();
+ * <li>boolean: positions (has it positions stored?)</li>
+                    );
+ * <li>String : "TV"</li>
+        // this field is stored
+                throw new UnsupportedOperationException();
+        private boolean hasOffsets;
+            return doc = (doc == -1 ? 0 : NO_MORE_DOCS);
+                        if (hasScores) {
+                        if (payloads.length < freq) {
+ * <li>vint: number of fields</li>
+ * </ul>
+            return null; // we don't have it.
+        public TermsEnum iterator() throws IOException {
+ * (docCount)</li>
+            return doc;
+import org.apache.lucene.util.BytesRef;
+            }
+                    throw new UnsupportedOperationException("Seek is not supported");
+                    throw new UnsupportedOperationException("ordinals are not supported");
+ * not use this file except in compliance with the License.
+        private void reset() throws IOException {
+ * <li>boolean: hasFieldStatitsics (are the field statistics stored?)</li>
+public final class TermVectorsFields extends Fields {
+import java.util.Arrays;
+    // adds one to mock not existing term freq
+import java.util.Map;
+                @Override
+ * <ul>
+        @Override
+        try (StreamInput header = headerRef.streamInput()) {
+                    }
+                        : new TermVectorPostingsEnum());
+        @Override
+                        growBuffers();
+import static org.apache.lucene.util.ArrayUtil.grow;
+            public boolean hasNext() {
+        };
+                            payloads = Arrays.copyOf(payloads, ArrayUtil.oversize(freq, RamUsageEstimator.NUM_BYTES_OBJECT_REF));
+                public void seekExact(long ord) throws IOException {
+        @Override
+            return sumTotalTermFreq;
+        public boolean hasOffsets() {
+        private boolean hasPositions;
+                }
+                    return docFreq;
+        }
+        @Override
+ * <li>vint: offset in {@code termVectors} for field 1</li>
+            assert curPos < freq && curPos >= 0;
+                public BytesRef next() throws IOException {
+        int doc = -1;
+        public int nextPosition() throws IOException {
+        private boolean hasOffsets;
+                        spare.setLength(termVectorSize);
+            }
+import org.apache.lucene.index.ImpactsEnum;
+        }
+                        startOffsets = grow(startOffsets, freq);
+                    }
+ * <li>vint: number of documents in the shard that has an entry for this field
+        @Override
+            }
+    public Iterator<String> iterator() {
+                        // later
+            doc = -1;
+ * this work for additional information regarding copyright
+                    }
+                @Override
+        // first, find where in the termVectors bytes the actual term vector for
+ * the Apache License, Version 2.0 (the "License"); you may
+            assert version == -1;
+    }
+ * {@code headerRef}: Stores offsets per field in the {@code termVectors} array
+    @Override
+                            int payloadLength = input.readVInt();
+        public int endOffset() throws IOException {
+ * KIND, either express or implied.  See the License for the
+ * ownership. Elasticsearch licenses this file to you under
+ * You may obtain a copy of the License at
+    public final boolean hasScores;
+            this.sumDocFreq = hasFieldStatistic ? readPotentiallyNegativeVLong(perFieldTermVectorInput) : -1;
+            String headerString = header.readString();
+            return 1;
+                public SeekStatus seekCeil(BytesRef text) throws IOException {
+        }
+ * license agreements. See the NOTICE file distributed with
+                private void writeInfos(final StreamInput input) throws IOException {
+                    for (int i = 0; i < freq; i++) {
+ * exactly like the {@link Fields} class except for one thing: It can return
+    private final BytesReference termVectors;
+     * @opensearch.internal
+        }
+                fieldMap.put((header.readString()), header.readVLong());
+                        // currentPosition etc. so that we can just iterate
+                        hasOffsets ? startOffsets : null,
+ *
+        @Override
+    // subtract 1 again
+ * this file be licensed under the Apache-2.0 license or a
+ * </ul>
+/**
+            int version = header.readInt();
+ * specific language governing permissions and limitations
+                            payloads[i].setLength(payloadLength);
+ * and some header information as {@link BytesRef}. Format is
+    public int size() {
+                        }
+            this.hasPayloads = payloads != null;
+ * SPDX-License-Identifier: Apache-2.0
+ * <li>
+ * <li>vint: offset in {@code termVectors} for last field</li>
+        @Override
+                final BytesRefBuilder payload = payloads[curPos];
+        @Override
+        return new Iterator<>() {
+            assert curPos < freq && curPos >= 0;
+                public PostingsEnum postings(PostingsEnum reuse, int flags) throws IOException {
+                        freq
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            return hasPayloads;
+            this.numTerms = perFieldTermVectorInput.readVLong();
+            this.perFieldTermVectorInput.skip(readOffset);
+                public BytesRef term() throws IOException {
+ * <li>String: field name last field</li>
+import org.apache.lucene.index.BaseTermsEnum;
+ * </ul>
+            }
+ * This class represents the result of a {@link TermVectorsRequest}. It works
+ * </ul>
+ * GitHub history for details.
+            // we safe lots fo space on the wire
+ * software distributed under the License is distributed on an
+                }
+    // adds one to mock not existing term freq
+/*
+                        hasPositions ? positions : null,
+    /**
+ * <li>boolean: offsets (has it offsets stored?)</li>
+                            }
+            this.docCount = hasFieldStatistic ? readPotentiallyNegativeVInt(perFieldTermVectorInput) : -1;
+                        positions = grow(positions, freq);
+                    return spare.get();
+ * The data is stored in two byte arrays ({@code headerRef} and
+                        // ...then the value.
+                        endOffsets = grow(endOffsets, freq);
+                            startOffsets[i] = input.readVInt();
+                        }
+                public ImpactsEnum impacts(int flags) throws IOException {
+     */
+                        // read the score if available
+        // stored but offsets were stored and requested
+                public long ord() throws IOException {
+                    final TermVectorPostingsEnum retVal = (reuse instanceof TermVectorPostingsEnum
+        }
+                            boostAtt.setBoost(perFieldTermVectorInput.readFloat());
+            this.freq = freq;
+ * compatible open source license.
+                    return payload.get();
+        public long getSumDocFreq() throws IOException {
+        private boolean hasPositions;
+            return hasOffsets ? endOffsets[curPos] : -1;
+import org.opensearch.core.common.bytes.BytesReference;
+            return hasPositions ? positions[curPos] : -1;
+        @Override
+        return stream.readVInt() - 1;
+        private boolean hasPayloads;
+    // the writer writes a 0 for -1 or value +1 and accordingly we have to
+                }
+        private int[] endOffsets;
+ * <p>
+                }
+        private final StreamInput perFieldTermVectorInput;
+            assert curPos < freq && curPos >= 0;
+            return null;
+                        hasOffsets ? endOffsets : null,
+        private long numTerms;
+                }
+ * nextPosition() anyway to move the counter although this method only returns
+        private boolean hasPayloads;
+        private final long readOffset;
+        private int[] positions;
+                        writeInfos(perFieldTermVectorInput);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    }
+            return hasOffsets ? startOffsets[curPos] : -1;
+ * <li>vint: startOffset_1 (if offset)</li>
+            this.hasPositions = perFieldTermVectorInput.readBoolean();
+ * {@code -1,}, if no positions were returned by the {@link TermVectorsRequest}.
+                            positions[i] = input.readVInt();
+            public void remove() {
+ * <ul>
+                @Override
+                @Override
+ * <p>
+import java.util.HashMap;
+ * <p>
+ * After that, for each term it stores
+     */
 }
+ * <p>
+ * {@code termVectors}, both {@link BytesRef}) that have the following format:
+ * under the License.
+            reset();
+                                payloads[i] = new BytesRefBuilder();
+                        if (hasTermStatistic) {
+                        if (hasPositions) {
+ * </ul></li>
+                        }
+        private int docCount;
+ */
+import org.apache.lucene.util.ArrayUtil;
+ * If the field statistics were requested ({@code hasFieldStatistics} is true,
+            assert curPos + 1 < freq;
+ * <ul>
+            };
+ * <ul>
+        }
+     *                    header information as {@link BytesRef}.
+        private int[] startOffsets;
+            this.endOffsets = endOffsets;
+ * </ul>
+ * <p>
+     */
+     *
+                int[] endOffsets = new int[1];
+ * @opensearch.internal
+            this.payloads = payloads;
+                    return new SlowImpactsEnum(postings(null, flags));
+                            if (payloads[i] == null) {
+            return sumDocFreq;
+                        // realloc.
+            this.readOffset = readOffset;
+            // here we read the header to fill the field offset map
+ * see {@code headerRef}), the following numbers are stored:
+                        // term string. first the size...
+                            endOffsets[i] = input.readVInt();
+                        }
+ * <li>vint: endOffset_1 (if offset)</li>
+ * {@code headerRef}):
+import java.util.Iterator;
+import org.apache.lucene.index.PostingsEnum;
+            @Override
+                @Override
+        @Override
+ */
+                        spare.grow(termVectorSize);
+    /**
+ * <li>vint: frequency (always returned)</li>
+ * <li>BytesRef: payload_1 (if payloads)</li>
+    final boolean hasFieldStatistic;
+            if (hasPayloads) {
+    long readPotentiallyNegativeVLong(StreamInput stream) throws IOException {
+                @Override
+    final boolean hasTermStatistic;
+ */
+        public BytesRef getPayload() throws IOException {
+            this.hasPositions = positions != null;

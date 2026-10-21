@@ -1,222 +1,203 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.queries.spans.SpanMultiTermQueryWrapper;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BoostQuery;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.MultiTermQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TopTermsRewrite;
-import org.opensearch.common.lucene.search.SpanBooleanQueryRewriteWithMaxClause;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
+                parser.getTokenLocation(),
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.query.support.QueryParsers;
-import org.opensearch.lucene.queries.SpanMatchNoDocsQuery;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * Query that allows wrapping a {@link MultiTermQueryBuilder} (one of wildcard, fuzzy, prefix, term, range or regexp query)
- * as a {@link SpanQueryBuilder} so it can be nested.
- *
- * @opensearch.internal
- */
-public class SpanMultiTermQueryBuilder extends AbstractQueryBuilder<SpanMultiTermQueryBuilder> implements SpanQueryBuilder {
-
-    public static final String NAME = "span_multi";
-    private static final ParseField MATCH_FIELD = new ParseField("match");
-    private final MultiTermQueryBuilder multiTermQueryBuilder;
-
-    public SpanMultiTermQueryBuilder(MultiTermQueryBuilder multiTermQueryBuilder) {
-        if (multiTermQueryBuilder == null) {
-            throw new IllegalArgumentException("inner multi term query cannot be null");
-        }
-        this.multiTermQueryBuilder = multiTermQueryBuilder;
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public SpanMultiTermQueryBuilder(StreamInput in) throws IOException {
-        super(in);
-        multiTermQueryBuilder = (MultiTermQueryBuilder) in.readNamedWriteable(QueryBuilder.class);
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeNamedWriteable(multiTermQueryBuilder);
-    }
-
-    public MultiTermQueryBuilder innerQuery() {
-        return this.multiTermQueryBuilder;
-    }
-
-    @Override
-    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(NAME);
-        builder.field(MATCH_FIELD.getPreferredName());
-        multiTermQueryBuilder.toXContent(builder, params);
-        printBoostAndQueryName(builder);
-        builder.endObject();
-    }
-
-    public static SpanMultiTermQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        String currentFieldName = null;
-        MultiTermQueryBuilder subQuery = null;
-        String queryName = null;
-        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
-        XContentParser.Token token;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                if (MATCH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    QueryBuilder query = parseInnerQueryBuilder(parser);
-                    if (!(query instanceof MultiTermQueryBuilder multiTermQuery)) {
-                        throw new ParsingException(
+                "[span_multi] must have [" + MATCH_FIELD.getPreferredName() + "] multi term query clause"
+ * You may obtain a copy of the License at
+import org.opensearch.common.lucene.search.SpanBooleanQueryRewriteWithMaxClause;
                             parser.getTokenLocation(),
-                            "[span_multi] [" + MATCH_FIELD.getPreferredName() + "] must be of type multi term query"
-                        );
-                    }
-                    subQuery = multiTermQuery;
-                } else {
-                    throw new ParsingException(parser.getTokenLocation(), "[span_multi] query does not support [" + currentFieldName + "]");
-                }
-            } else if (token.isValue()) {
-                if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    queryName = parser.text();
-                } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    boost = parser.floatValue();
-                } else {
-                    throw new ParsingException(parser.getTokenLocation(), "[span_multi] query does not support [" + currentFieldName + "]");
+                    spanRewriteMethod = new SpanBooleanQueryRewriteWithMaxClause();
+        if (multiTermQueryBuilder == null) {
+    public String getWriteableName() {
+        }
+        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
+ * @opensearch.internal
                 }
             }
-        }
-
-        if (subQuery == null) {
-            throw new ParsingException(
-                parser.getTokenLocation(),
-                "[span_multi] must have [" + MATCH_FIELD.getPreferredName() + "] multi term query clause"
-            );
-        }
-
-        return new SpanMultiTermQueryBuilder(subQuery).queryName(queryName).boost(boost);
-    }
-
-    @Override
+import org.opensearch.index.mapper.MappedFieldType;
+    private static final ParseField MATCH_FIELD = new ParseField("match");
+            throw new IllegalArgumentException("inner multi term query cannot be null");
+                wrapper.setRewriteMethod(new SpanBooleanQueryRewriteWithMaxClause());
+                if (rewriteMethod instanceof TopTermsRewrite<?> innerRewrite) {
     protected Query doToQuery(QueryShardContext context) throws IOException {
-        // We do the rewrite in toQuery to not have to deal with the case when a multi-term builder rewrites to a non-multi-term
-        // builder.
-        QueryBuilder multiTermQueryBuilder = Rewriteable.rewrite(this.multiTermQueryBuilder, context);
-        if (multiTermQueryBuilder instanceof MatchNoneQueryBuilder matchNoneQuery) {
-            return new SpanMatchNoDocsQuery(this.multiTermQueryBuilder.fieldName(), "Inner query rewrote to match_none");
-        } else if (multiTermQueryBuilder instanceof PrefixQueryBuilder prefixBuilder) {
-            MappedFieldType fieldType = context.fieldMapper(prefixBuilder.fieldName());
-            if (fieldType == null) {
-                throw new IllegalStateException("Rewrite first");
+                    prefixBuilder.rewrite(),
+ * Licensed to Elasticsearch under one or more contributor
+        return Objects.equals(multiTermQueryBuilder, other.multiTermQueryBuilder);
+                } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                currentFieldName = parser.currentName();
+            return fieldType.spanPrefixQuery(prefixBuilder.value(), spanRewriteMethod, context);
+    }
+        builder.field(MATCH_FIELD.getPreferredName());
+import java.util.Objects;
+                    subQuery = boostQuery.getQuery();
+            SpanMultiTermQueryWrapper<?> wrapper = new SpanMultiTermQueryWrapper<>(multiTermQuery);
+    }
+import org.apache.lucene.search.MatchNoDocsQuery;
+                MultiTermQuery.RewriteMethod rewriteMethod = QueryParsers.parseRewriteMethod(
+                spanRewriteMethod = new SpanBooleanQueryRewriteWithMaxClause();
+        String queryName = null;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }
+    }
+    public static final String NAME = "span_multi";
+                if (MATCH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+/*
+                }
+                    "unsupported inner query, should be " + MultiTermQuery.class.getName() + " but was " + subQuery.getClass().getName()
+            if (multiTermQuery.getRewriteMethod() instanceof TopTermsRewrite == false) {
             }
             final SpanMultiTermQueryWrapper.SpanRewriteMethod spanRewriteMethod;
+            } else if (token.isValue()) {
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+        builder.startObject(NAME);
+                } else {
             if (prefixBuilder.rewrite() != null) {
-                MultiTermQuery.RewriteMethod rewriteMethod = QueryParsers.parseRewriteMethod(
-                    prefixBuilder.rewrite(),
-                    null,
-                    LoggingDeprecationHandler.INSTANCE
-                );
-                if (rewriteMethod instanceof TopTermsRewrite<?> innerRewrite) {
-                    spanRewriteMethod = new SpanMultiTermQueryWrapper.TopTermsSpanBooleanQueryRewrite(innerRewrite.getSize());
-                } else {
-                    spanRewriteMethod = new SpanBooleanQueryRewriteWithMaxClause();
-                }
-            } else {
-                spanRewriteMethod = new SpanBooleanQueryRewriteWithMaxClause();
-            }
-            return fieldType.spanPrefixQuery(prefixBuilder.value(), spanRewriteMethod, context);
-        } else {
+import org.opensearch.index.query.support.QueryParsers;
             Query subQuery = multiTermQueryBuilder.toQuery(context);
-            while (true) {
-                if (subQuery instanceof ConstantScoreQuery constantScoreQuery) {
-                    subQuery = constantScoreQuery.getQuery();
-                } else if (subQuery instanceof BoostQuery boostQuery) {
-                    subQuery = boostQuery.getQuery();
-                } else {
-                    break;
+import org.opensearch.core.common.io.stream.StreamOutput;
+                    QueryBuilder query = parseInnerQueryBuilder(parser);
+            } else if (token == XContentParser.Token.START_OBJECT) {
+    @Override
                 }
-            }
-            if (subQuery instanceof MatchNoDocsQuery) {
-                return new SpanMatchNoDocsQuery(this.multiTermQueryBuilder.fieldName(), subQuery.toString());
-            } else if (subQuery instanceof MultiTermQuery == false) {
-                throw new UnsupportedOperationException(
-                    "unsupported inner query, should be " + MultiTermQuery.class.getName() + " but was " + subQuery.getClass().getName()
-                );
-            }
-            MultiTermQuery multiTermQuery = (MultiTermQuery) subQuery;
-            SpanMultiTermQueryWrapper<?> wrapper = new SpanMultiTermQueryWrapper<>(multiTermQuery);
-            if (multiTermQuery.getRewriteMethod() instanceof TopTermsRewrite == false) {
-                wrapper.setRewriteMethod(new SpanBooleanQueryRewriteWithMaxClause());
-            }
-            return wrapper;
-        }
-    }
-
+ *
+ * Query that allows wrapping a {@link MultiTermQueryBuilder} (one of wildcard, fuzzy, prefix, term, range or regexp query)
     @Override
-    protected int doHashCode() {
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+     * Read from a stream.
+import org.opensearch.core.xcontent.XContentBuilder;
+package org.opensearch.index.query;
         return Objects.hash(multiTermQueryBuilder);
-    }
-
+                } else if (subQuery instanceof BoostQuery boostQuery) {
+    public static SpanMultiTermQueryBuilder fromXContent(XContentParser parser) throws IOException {
+import org.apache.lucene.search.BoostQuery;
+            } else {
     @Override
-    protected boolean doEquals(SpanMultiTermQueryBuilder other) {
-        return Objects.equals(multiTermQueryBuilder, other.multiTermQueryBuilder);
+                        );
+                );
+import org.apache.lucene.search.MultiTermQuery;
+ */
     }
-
-    @Override
-    public String getWriteableName() {
-        return NAME;
-    }
-
-    @Override
-    public void visit(QueryBuilderVisitor visitor) {
-        visitor.accept(this);
-        if (multiTermQueryBuilder != null) {
-            visitor.getChildVisitor(BooleanClause.Occur.MUST).accept(multiTermQueryBuilder);
+            }
+            while (true) {
+public class SpanMultiTermQueryBuilder extends AbstractQueryBuilder<SpanMultiTermQueryBuilder> implements SpanQueryBuilder {
+ * as a {@link SpanQueryBuilder} so it can be nested.
+        // We do the rewrite in toQuery to not have to deal with the case when a multi-term builder rewrites to a non-multi-term
+import org.opensearch.core.ParseField;
+        out.writeNamedWriteable(multiTermQueryBuilder);
+            MultiTermQuery multiTermQuery = (MultiTermQuery) subQuery;
+import org.apache.lucene.search.TopTermsRewrite;
+ * Modifications Copyright OpenSearch Contributors. See
+                }
+                } else {
         }
-    }
+        builder.endObject();
+                    spanRewriteMethod = new SpanMultiTermQueryWrapper.TopTermsSpanBooleanQueryRewrite(innerRewrite.getSize());
+            if (subQuery instanceof MatchNoDocsQuery) {
+            }
+ * license agreements. See the NOTICE file distributed with
+                if (subQuery instanceof ConstantScoreQuery constantScoreQuery) {
+            return wrapper;
+import org.opensearch.core.common.ParsingException;
+                if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+            MappedFieldType fieldType = context.fieldMapper(prefixBuilder.fieldName());
+ *
+            if (token == XContentParser.Token.FIELD_NAME) {
+ */
+                    subQuery = multiTermQuery;
+    public SpanMultiTermQueryBuilder(MultiTermQueryBuilder multiTermQueryBuilder) {
+                    break;
+        }
+    protected void doWriteTo(StreamOutput out) throws IOException {
+        multiTermQueryBuilder.toXContent(builder, params);
 }
+        } else if (multiTermQueryBuilder instanceof PrefixQueryBuilder prefixBuilder) {
+    }
+ * KIND, either express or implied.  See the License for the
+import java.io.IOException;
+    }
+                        throw new ParsingException(
+            visitor.getChildVisitor(BooleanClause.Occur.MUST).accept(multiTermQueryBuilder);
+        QueryBuilder multiTermQueryBuilder = Rewriteable.rewrite(this.multiTermQueryBuilder, context);
+                );
+ *
+    @Override
+        return new SpanMultiTermQueryBuilder(subQuery).queryName(queryName).boost(boost);
+            }
+    /**
+import org.apache.lucene.search.Query;
+ * SPDX-License-Identifier: Apache-2.0
+        if (multiTermQueryBuilder != null) {
+    @Override
+                    subQuery = constantScoreQuery.getQuery();
+    }
+/*
+        if (multiTermQueryBuilder instanceof MatchNoneQueryBuilder matchNoneQuery) {
+    @Override
+                    queryName = parser.text();
+ * compatible open source license.
+    }
+        }
+    protected int doHashCode() {
+            }
+        super(in);
+ *
+        if (subQuery == null) {
+ * ownership. Elasticsearch licenses this file to you under
+        XContentParser.Token token;
+import org.apache.lucene.search.BooleanClause;
+import org.opensearch.core.common.io.stream.StreamInput;
+                    throw new ParsingException(parser.getTokenLocation(), "[span_multi] query does not support [" + currentFieldName + "]");
+ * this file be licensed under the Apache-2.0 license or a
+                } else {
+            if (fieldType == null) {
+            );
+/*
+    private final MultiTermQueryBuilder multiTermQueryBuilder;
+        // builder.
+/**
+        MultiTermQueryBuilder subQuery = null;
+    }
+        String currentFieldName = null;
+            return new SpanMatchNoDocsQuery(this.multiTermQueryBuilder.fieldName(), "Inner query rewrote to match_none");
+     */
+        return this.multiTermQueryBuilder;
+        this.multiTermQueryBuilder = multiTermQueryBuilder;
+import org.apache.lucene.queries.spans.SpanMultiTermQueryWrapper;
+import org.opensearch.lucene.queries.SpanMatchNoDocsQuery;
+ * not use this file except in compliance with the License.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * GitHub history for details.
+            throw new ParsingException(
+                throw new IllegalStateException("Rewrite first");
+    public void visit(QueryBuilderVisitor visitor) {
+    protected boolean doEquals(SpanMultiTermQueryBuilder other) {
+ * software distributed under the License is distributed on an
+        return NAME;
+        visitor.accept(this);
+                    null,
+    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
+                } else {
+ */
+                    if (!(query instanceof MultiTermQueryBuilder multiTermQuery)) {
+                return new SpanMatchNoDocsQuery(this.multiTermQueryBuilder.fieldName(), subQuery.toString());
+ */
+ * this work for additional information regarding copyright
+                    boost = parser.floatValue();
+                throw new UnsupportedOperationException(
+        } else {
+                    LoggingDeprecationHandler.INSTANCE
+                            "[span_multi] [" + MATCH_FIELD.getPreferredName() + "] must be of type multi term query"
+ * Unless required by applicable law or agreed to in writing,
+        multiTermQueryBuilder = (MultiTermQueryBuilder) in.readNamedWriteable(QueryBuilder.class);
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.apache.lucene.search.ConstantScoreQuery;
+        printBoostAndQueryName(builder);
+ * The OpenSearch Contributors require contributions made to
+    }
+                    throw new ParsingException(parser.getTokenLocation(), "[span_multi] query does not support [" + currentFieldName + "]");
+    public MultiTermQueryBuilder innerQuery() {
+            } else if (subQuery instanceof MultiTermQuery == false) {
+ * specific language governing permissions and limitations
+    public SpanMultiTermQueryBuilder(StreamInput in) throws IOException {
+    }
+                    }
+    @Override
+ * under the License.

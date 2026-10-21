@@ -1,852 +1,759 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search;
-
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.util.CharsRefBuilder;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryRewriteContext;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.index.query.functionscore.GaussDecayFunctionBuilder;
-import org.opensearch.plugins.SearchPlugin;
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.AggregatorFactories.Builder;
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.BaseAggregationBuilder;
-import org.opensearch.search.aggregations.ConcurrentAggregationProcessor;
-import org.opensearch.search.aggregations.DefaultAggregationProcessor;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregation.ReduceContext;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
-import org.opensearch.search.aggregations.bucket.terms.heuristic.ChiSquare;
-import org.opensearch.search.aggregations.pipeline.AbstractPipelineAggregationBuilder;
-import org.opensearch.search.aggregations.pipeline.DerivativePipelineAggregationBuilder;
-import org.opensearch.search.aggregations.pipeline.InternalDerivative;
-import org.opensearch.search.aggregations.pipeline.MovAvgModel;
-import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
-import org.opensearch.search.aggregations.pipeline.SimpleModel;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
-import org.opensearch.search.aggregations.support.ValuesSourceType;
-import org.opensearch.search.deciders.ConcurrentSearchRequestDecider;
-import org.opensearch.search.fetch.FetchSubPhase;
-import org.opensearch.search.fetch.subphase.ExplainPhase;
-import org.opensearch.search.fetch.subphase.highlight.CustomHighlighter;
-import org.opensearch.search.fetch.subphase.highlight.FastVectorHighlighter;
-import org.opensearch.search.fetch.subphase.highlight.Highlighter;
-import org.opensearch.search.fetch.subphase.highlight.PlainHighlighter;
-import org.opensearch.search.fetch.subphase.highlight.UnifiedHighlighter;
-import org.opensearch.search.profile.Timer;
-import org.opensearch.search.query.ConcurrentQueryPhaseSearcher;
-import org.opensearch.search.query.QueryPhase;
-import org.opensearch.search.query.QueryPhaseSearcher;
-import org.opensearch.search.query.QueryPhaseSearcherWrapper;
-import org.opensearch.search.rescore.QueryRescorerBuilder;
-import org.opensearch.search.rescore.RescoreContext;
-import org.opensearch.search.rescore.RescorerBuilder;
-import org.opensearch.search.suggest.Suggest.Suggestion;
-import org.opensearch.search.suggest.Suggest.Suggestion.Entry;
-import org.opensearch.search.suggest.Suggest.Suggestion.Entry.Option;
-import org.opensearch.search.suggest.Suggester;
-import org.opensearch.search.suggest.SuggestionBuilder;
-import org.opensearch.search.suggest.SuggestionSearchContext;
-import org.opensearch.search.suggest.SuggestionSearchContext.SuggestionContext;
-import org.opensearch.search.suggest.term.TermSuggestion;
-import org.opensearch.search.suggest.term.TermSuggestionBuilder;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.TestSearchContext;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.singletonList;
-import static java.util.Collections.singletonMap;
-import static java.util.stream.Collectors.toList;
-import static java.util.stream.Collectors.toSet;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.hasSize;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-
-public class SearchModuleTests extends OpenSearchTestCase {
-
-    public void testDoubleRegister() {
-        SearchPlugin registersDupeHighlighter = new SearchPlugin() {
-            @Override
-            public Map<String, Highlighter> getHighlighters() {
-                return singletonMap("plain", new PlainHighlighter());
-            }
-        };
-        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeHighlighter));
-
-        SearchPlugin registersDupeSuggester = new SearchPlugin() {
-            @Override
-            public List<SearchPlugin.SuggesterSpec<?>> getSuggesters() {
-                return singletonList(
-                    new SuggesterSpec<>(
-                        TermSuggestionBuilder.SUGGESTION_NAME,
-                        TermSuggestionBuilder::new,
-                        TermSuggestionBuilder::fromXContent,
-                        TermSuggestion::new
-                    )
-                );
-            }
-        };
-        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeSuggester));
-
-        SearchPlugin registersDupeScoreFunction = new SearchPlugin() {
-            @Override
-            public List<ScoreFunctionSpec<?>> getScoreFunctions() {
-                return singletonList(
-                    new ScoreFunctionSpec<>(
-                        GaussDecayFunctionBuilder.NAME,
-                        GaussDecayFunctionBuilder::new,
-                        GaussDecayFunctionBuilder.PARSER
-                    )
-                );
-            }
-        };
-        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeScoreFunction));
-
-        SearchPlugin registersDupeSignificanceHeuristic = new SearchPlugin() {
-            @Override
-            public List<SignificanceHeuristicSpec<?>> getSignificanceHeuristics() {
-                return singletonList(new SignificanceHeuristicSpec<>(ChiSquare.NAME, ChiSquare::new, ChiSquare.PARSER));
-            }
-        };
-        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeSignificanceHeuristic));
-
-        SearchPlugin registersDupeMovAvgModel = new SearchPlugin() {
-            @Override
-            public List<SearchExtensionSpec<MovAvgModel, MovAvgModel.AbstractModelParser>> getMovingAverageModels() {
-                return singletonList(new SearchExtensionSpec<>(SimpleModel.NAME, SimpleModel::new, SimpleModel.PARSER));
-            }
-        };
-        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeMovAvgModel));
-
-        SearchPlugin registersDupeFetchSubPhase = new SearchPlugin() {
-            @Override
-            public List<FetchSubPhase> getFetchSubPhases(FetchPhaseConstructionContext context) {
-                return singletonList(new ExplainPhase());
-            }
-        };
-        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeFetchSubPhase));
-
-        SearchPlugin registersDupeQuery = new SearchPlugin() {
-            @Override
-            public List<SearchPlugin.QuerySpec<?>> getQueries() {
-                return singletonList(new QuerySpec<>(TermQueryBuilder.NAME, TermQueryBuilder::new, TermQueryBuilder::fromXContent));
-            }
-        };
-        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeQuery));
-
-        SearchPlugin registersDupeAggregation = new SearchPlugin() {
-            @Override
-            public List<AggregationSpec> getAggregations() {
-                return singletonList(
-                    new AggregationSpec(TermsAggregationBuilder.NAME, TermsAggregationBuilder::new, TermsAggregationBuilder.PARSER)
-                );
-            }
-        };
-        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeAggregation));
-
-        SearchPlugin registersDupePipelineAggregation = new SearchPlugin() {
-            @Override
-            public List<PipelineAggregationSpec> getPipelineAggregations() {
-                return singletonList(
-                    new PipelineAggregationSpec(
-                        DerivativePipelineAggregationBuilder.NAME,
-                        DerivativePipelineAggregationBuilder::new,
-                        DerivativePipelineAggregationBuilder::parse
-                    ).addResultReader(InternalDerivative::new)
-                );
-            }
-        };
-        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupePipelineAggregation));
-
-        SearchPlugin registersDupeRescorer = new SearchPlugin() {
-            @Override
-            public List<RescorerSpec<?>> getRescorers() {
-                return singletonList(
-                    new RescorerSpec<>(QueryRescorerBuilder.NAME, QueryRescorerBuilder::new, QueryRescorerBuilder::fromXContent)
-                );
-            }
-        };
-        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeRescorer));
-    }
-
-    private ThrowingRunnable registryForPlugin(SearchPlugin plugin) {
-        return () -> new NamedXContentRegistry(new SearchModule(Settings.EMPTY, singletonList(plugin)).getNamedXContents());
-    }
-
-    public void testRegisterSuggester() {
-        SearchModule module = new SearchModule(Settings.EMPTY, singletonList(new SearchPlugin() {
-            @Override
-            public List<SuggesterSpec<?>> getSuggesters() {
-                return singletonList(
-                    new SuggesterSpec<>(
-                        TestSuggestionBuilder.SUGGESTION_NAME,
-                        TestSuggestionBuilder::new,
-                        TestSuggestionBuilder::fromXContent,
-                        TestSuggestion::new
-                    )
-                );
-            }
-        }));
-
-        assertEquals(
-            1,
-            module.getNamedXContents()
-                .stream()
-                .filter(e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.match("term", LoggingDeprecationHandler.INSTANCE))
-                .count()
-        );
-        assertEquals(
-            1,
-            module.getNamedXContents()
-                .stream()
-                .filter(e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.match("phrase", LoggingDeprecationHandler.INSTANCE))
-                .count()
-        );
-        assertEquals(
-            1,
-            module.getNamedXContents()
-                .stream()
-                .filter(
-                    e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.match("completion", LoggingDeprecationHandler.INSTANCE)
-                )
-                .count()
-        );
-        assertEquals(
-            1,
-            module.getNamedXContents()
-                .stream()
-                .filter(e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.match("test", LoggingDeprecationHandler.INSTANCE))
-                .count()
-        );
-
-        assertEquals(
-            1,
-            module.getNamedWriteables()
-                .stream()
-                .filter(e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.equals("term"))
-                .count()
-        );
-        assertEquals(
-            1,
-            module.getNamedWriteables()
-                .stream()
-                .filter(e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.equals("phrase"))
-                .count()
-        );
-        assertEquals(
-            1,
-            module.getNamedWriteables()
-                .stream()
-                .filter(e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.equals("completion"))
-                .count()
-        );
-        assertEquals(
-            1,
-            module.getNamedWriteables()
-                .stream()
-                .filter(e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.equals("test"))
-                .count()
-        );
-
-        assertEquals(
-            1,
-            module.getNamedWriteables().stream().filter(e -> e.categoryClass.equals(Suggestion.class) && e.name.equals("term")).count()
-        );
-        assertEquals(
-            1,
-            module.getNamedWriteables().stream().filter(e -> e.categoryClass.equals(Suggestion.class) && e.name.equals("phrase")).count()
-        );
-        assertEquals(
-            1,
-            module.getNamedWriteables()
-                .stream()
-                .filter(e -> e.categoryClass.equals(Suggestion.class) && e.name.equals("completion"))
-                .count()
-        );
-        assertEquals(
-            1,
-            module.getNamedWriteables().stream().filter(e -> e.categoryClass.equals(Suggestion.class) && e.name.equals("test")).count()
-        );
-    }
-
-    public void testRegisterHighlighter() {
-        CustomHighlighter customHighlighter = new CustomHighlighter();
-        SearchModule module = new SearchModule(Settings.EMPTY, singletonList(new SearchPlugin() {
-            @Override
-            public Map<String, Highlighter> getHighlighters() {
-                return singletonMap("custom", customHighlighter);
-            }
-        }));
-
         Map<String, Highlighter> highlighters = module.getHighlighters();
-        assertEquals(FastVectorHighlighter.class, highlighters.get("fvh").getClass());
-        assertEquals(PlainHighlighter.class, highlighters.get("plain").getClass());
-        assertEquals(UnifiedHighlighter.class, highlighters.get("unified").getClass());
-        assertSame(highlighters.get("custom"), customHighlighter);
-    }
-
-    public void testRegisteredQueries() {
-        List<String> allSupportedQueries = new ArrayList<>();
-        Collections.addAll(allSupportedQueries, NON_DEPRECATED_QUERIES);
-        Collections.addAll(allSupportedQueries, DEPRECATED_QUERIES);
-        SearchModule module = new SearchModule(Settings.EMPTY, emptyList());
-
-        Set<String> registeredNonDeprecated = module.getNamedXContents()
-            .stream()
-            .filter(e -> e.categoryClass.equals(QueryBuilder.class))
-            .filter(e -> e.name.getAllReplacedWith() == null)
-            .map(e -> e.name.getPreferredName())
-            .collect(toSet());
-        Set<String> registeredAll = module.getNamedXContents()
-            .stream()
-            .filter(e -> e.categoryClass.equals(QueryBuilder.class))
-            .flatMap(e -> Arrays.stream(e.name.getAllNamesIncludedDeprecated()))
-            .collect(toSet());
-
-        assertThat(registeredNonDeprecated, containsInAnyOrder(NON_DEPRECATED_QUERIES));
-        assertThat(registeredAll, containsInAnyOrder(allSupportedQueries.toArray(new String[0])));
-    }
-
-    public void testRegisterAggregation() {
-        SearchModule module = new SearchModule(Settings.EMPTY, singletonList(new SearchPlugin() {
-            @Override
-            public List<AggregationSpec> getAggregations() {
-                return singletonList(new AggregationSpec("test", TestAggregationBuilder::new, TestAggregationBuilder::fromXContent));
-            }
-        }));
-
-        assertThat(
-            module.getNamedXContents()
-                .stream()
-                .filter(
-                    entry -> entry.categoryClass.equals(BaseAggregationBuilder.class)
-                        && entry.name.match("test", LoggingDeprecationHandler.INSTANCE)
-                )
-                .collect(toList()),
-            hasSize(1)
-        );
-    }
-
-    public void testRegisterPipelineAggregation() {
-        SearchModule module = new SearchModule(Settings.EMPTY, singletonList(new SearchPlugin() {
-            @Override
-            public List<PipelineAggregationSpec> getPipelineAggregations() {
-                return singletonList(
-                    new PipelineAggregationSpec("test", TestPipelineAggregationBuilder::new, TestPipelineAggregationBuilder::fromXContent)
-                );
-            }
-        }));
-
-        assertThat(
-            module.getNamedXContents()
-                .stream()
-                .filter(
-                    entry -> entry.categoryClass.equals(BaseAggregationBuilder.class)
-                        && entry.name.match("test", LoggingDeprecationHandler.INSTANCE)
-                )
-                .collect(toList()),
-            hasSize(1)
-        );
-    }
-
-    public void testRegisterRescorer() {
-        SearchModule module = new SearchModule(Settings.EMPTY, singletonList(new SearchPlugin() {
-            @Override
-            public List<RescorerSpec<?>> getRescorers() {
-                return singletonList(new RescorerSpec<>("test", TestRescorerBuilder::new, TestRescorerBuilder::fromXContent));
-            }
-        }));
-        assertThat(
-            module.getNamedXContents()
-                .stream()
-                .filter(
-                    entry -> entry.categoryClass.equals(RescorerBuilder.class)
-                        && entry.name.match("test", LoggingDeprecationHandler.INSTANCE)
-                )
-                .collect(toList()),
-            hasSize(1)
-        );
-    }
-
-    public void testProfileMetricsProvider() {
-        SearchModule module = new SearchModule(Settings.EMPTY, singletonList(new SearchPlugin() {
-            @Override
-            public Optional<ProfileMetricsProvider> getQueryProfileMetricsProvider() {
-                return Optional.of((searchContext, query) -> List.of(() -> new Timer("plugin_timer")));
-            }
-        }));
-
-        List<SearchPlugin.ProfileMetricsProvider> providers = module.getPluginProfileMetricsProviders();
-        assertThat(providers, hasSize(1));
-        assertEquals(providers.getFirst().getQueryProfileMetrics(null, null).size(), 1);
-    }
-
-    public void testDefaultQueryPhaseSearcher() {
-        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.emptyList());
-        TestSearchContext searchContext = new TestSearchContext(null);
-        QueryPhase queryPhase = searchModule.getQueryPhase();
-        assertTrue(queryPhase.getQueryPhaseSearcher() instanceof QueryPhaseSearcherWrapper);
-        assertTrue(queryPhase.getQueryPhaseSearcher().aggregationProcessor(searchContext) instanceof DefaultAggregationProcessor);
-    }
-
-    public void testConcurrentQueryPhaseSearcher() {
-        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.emptyList());
-        TestSearchContext searchContext = new TestSearchContext(null);
-        searchContext.setConcurrentSegmentSearchEnabled(true);
-        QueryPhase queryPhase = searchModule.getQueryPhase();
-        assertTrue(queryPhase.getQueryPhaseSearcher() instanceof QueryPhaseSearcherWrapper);
-        assertTrue(queryPhase.getQueryPhaseSearcher().aggregationProcessor(searchContext) instanceof ConcurrentAggregationProcessor);
-    }
-
-    public void testPluginQueryPhaseSearcher() {
-        QueryPhaseSearcher queryPhaseSearcher = (searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout) -> false;
-        SearchPlugin plugin1 = new SearchPlugin() {
-            @Override
-            public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
-                return Optional.of(queryPhaseSearcher);
-            }
-        };
-        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.singletonList(plugin1));
-        QueryPhase queryPhase = searchModule.getQueryPhase();
-        TestSearchContext searchContext = new TestSearchContext(null);
-        assertEquals(queryPhaseSearcher, queryPhase.getQueryPhaseSearcher());
-        assertTrue(queryPhaseSearcher.aggregationProcessor(searchContext) instanceof DefaultAggregationProcessor);
-    }
-
-    public void testMultiplePluginRegisterQueryPhaseSearcher() {
-        SearchPlugin plugin1 = new SearchPlugin() {
-            @Override
-            public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
-                return Optional.of(mock(QueryPhaseSearcher.class));
-            }
-        };
-        SearchPlugin plugin2 = new SearchPlugin() {
-            @Override
-            public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
-                return Optional.of(new ConcurrentQueryPhaseSearcher());
-            }
-        };
-        List<SearchPlugin> searchPlugins = new ArrayList<>();
-        searchPlugins.add(plugin1);
-        searchPlugins.add(plugin2);
-        expectThrows(IllegalStateException.class, () -> new SearchModule(Settings.EMPTY, searchPlugins));
-    }
-
-    public void testIndexSearcher() {
-        ThreadPool threadPool = mock(ThreadPool.class);
-        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.emptyList());
-        searchModule.getIndexSearcherExecutor(threadPool);
-        verify(threadPool).executor(ThreadPool.Names.INDEX_SEARCHER);
-    }
-
-    public void testMultiplePluginRegisterIndexSearcherProvider() {
-        SearchPlugin plugin1 = new SearchPlugin() {
-            @Override
-            public Optional<ExecutorServiceProvider> getIndexSearcherExecutorProvider() {
-                return Optional.of(mock(ExecutorServiceProvider.class));
-            }
-        };
-        SearchPlugin plugin2 = new SearchPlugin() {
-            @Override
-            public Optional<ExecutorServiceProvider> getIndexSearcherExecutorProvider() {
-                return Optional.of(mock(ExecutorServiceProvider.class));
-            }
-        };
-        List<SearchPlugin> searchPlugins = new ArrayList<>();
-        searchPlugins.add(plugin1);
-        searchPlugins.add(plugin2);
-        expectThrows(IllegalStateException.class, () -> new SearchModule(Settings.EMPTY, searchPlugins));
-    }
-
-    public void testRegisterConcurrentSearchRequestDecidersNoExternalPlugins() {
-        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.emptyList());
-        assertEquals(searchModule.getConcurrentSearchRequestDeciderFactories().size(), 0);
-    }
-
-    public void testRegisterConcurrentSearchRequestDecidersExternalPluginsWithNoDeciders() {
-        SearchPlugin plugin1 = new SearchPlugin() {
-            @Override
-            public Optional<ExecutorServiceProvider> getIndexSearcherExecutorProvider() {
-                return Optional.of(mock(ExecutorServiceProvider.class));
-            }
-        };
-        SearchPlugin plugin2 = new SearchPlugin() {
-        };
-
-        List<SearchPlugin> searchPlugins = new ArrayList<>();
-        searchPlugins.add(plugin1);
-        searchPlugins.add(plugin2);
-        SearchModule searchModule = new SearchModule(Settings.EMPTY, searchPlugins);
-
-        assertEquals(searchModule.getConcurrentSearchRequestDeciderFactories().size(), 0);
-    }
-
-    public void testRegisterConcurrentSearchRequestDecidersExternalPluginsWithDeciders() {
-        SearchPlugin pluginDecider1 = new SearchPlugin() {
-            @Override
-            public Optional<ExecutorServiceProvider> getIndexSearcherExecutorProvider() {
-                return Optional.of(mock(ExecutorServiceProvider.class));
-            }
-
-            @Override
-            public Optional<ConcurrentSearchRequestDecider.Factory> getConcurrentSearchRequestDeciderFactory() {
-                return Optional.of(new ConcurrentSearchRequestDecider.Factory() {
-                    @Override
-                    public Optional<ConcurrentSearchRequestDecider> create(IndexSettings indexSettings) {
-                        return Optional.of(mock(ConcurrentSearchRequestDecider.class));
-                    }
-                });
-            }
-        };
-
-        SearchPlugin pluginDecider2 = new SearchPlugin() {
-            @Override
-            public Optional<ConcurrentSearchRequestDecider.Factory> getConcurrentSearchRequestDeciderFactory() {
-                return Optional.of(new ConcurrentSearchRequestDecider.Factory() {
-                    @Override
-                    public Optional<ConcurrentSearchRequestDecider> create(IndexSettings indexSettings) {
-                        return Optional.of(mock(ConcurrentSearchRequestDecider.class));
-                    }
-                });
-            }
-        };
-
-        List<SearchPlugin> searchPlugins = new ArrayList<>();
-        searchPlugins.add(pluginDecider1);
-        searchPlugins.add(pluginDecider2);
-
-        SearchModule searchModule = new SearchModule(Settings.EMPTY, searchPlugins);
-        assertEquals(searchModule.getConcurrentSearchRequestDeciderFactories().size(), 2);
-    }
-
-    private static final String[] NON_DEPRECATED_QUERIES = new String[] {
-        "bool",
-        "boosting",
-        "constant_score",
-        "combined_fields",
-        "dis_max",
-        "exists",
-        "function_score",
-        "fuzzy",
-        "geo_bounding_box",
-        "geo_distance",
-        "geo_polygon",
-        "geo_shape",
-        "ids",
-        "intervals",
-        "match",
-        "match_all",
-        "match_bool_prefix",
-        "match_none",
-        "match_phrase",
-        "match_phrase_prefix",
-        "more_like_this",
-        "multi_match",
-        "nested",
-        "prefix",
-        "query_string",
-        "range",
-        "regexp",
-        "script",
-        "script_score",
-        "simple_query_string",
-        "span_containing",
-        "span_field_masking",
-        "span_first",
-        "span_gap",
-        "span_multi",
-        "span_near",
-        "span_not",
-        "span_or",
-        "span_term",
-        "span_within",
-        "term",
-        "terms",
-        "terms_set",
-        "wildcard",
-        "wrapper",
-        "distance_feature",
-        "template" };
-
-    // add here deprecated queries to make sure we log a deprecation warnings when they are used
-    private static final String[] DEPRECATED_QUERIES = new String[] { "common", "field_masking_span" };
-
-    /**
-     * Dummy test {@link AggregationBuilder} used to test registering aggregation builders.
-     */
-    private static class TestAggregationBuilder extends ValuesSourceAggregationBuilder<TestAggregationBuilder> {
+/*
+        @Override
         protected TestAggregationBuilder(TestAggregationBuilder clone, Builder factoriesBuilder, Map<String, Object> metadata) {
-            super(clone, factoriesBuilder, metadata);
-        }
-
-        @Override
-        protected ValuesSourceType defaultValueSourceType() {
-            return CoreValuesSourceType.BYTES;
-        }
-
-        @Override
-        protected AggregationBuilder shallowCopy(Builder factoriesBuilder, Map<String, Object> metadata) {
-            return new TestAggregationBuilder(this, factoriesBuilder, metadata);
-        }
-
-        /**
-         * Read from a stream.
-         */
-        protected TestAggregationBuilder(StreamInput in) throws IOException {
-            super(in);
-        }
-
-        @Override
-        public String getType() {
-            return "test";
-        }
-
-        @Override
-        protected ValuesSourceRegistry.RegistryKey<?> getRegistryKey() {
-            return ValuesSourceRegistry.UNREGISTERED_KEY;
-        }
-
-        @Override
-        protected void innerWriteTo(StreamOutput out) throws IOException {}
-
-        @Override
-        public BucketCardinality bucketCardinality() {
-            return BucketCardinality.NONE;
-        }
-
-        @Override
-        protected ValuesSourceAggregatorFactory innerBuild(
-            QueryShardContext queryShardContext,
-            ValuesSourceConfig config,
-            AggregatorFactory parent,
-            Builder subFactoriesBuilder
-        ) throws IOException {
+                });
             return null;
-        }
-
-        @Override
-        protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-            return null;
-        }
-
-        private static TestAggregationBuilder fromXContent(String name, XContentParser p) {
-            return null;
-        }
-    }
-
-    /**
-     * Dummy test {@link PipelineAggregator} used to test registering aggregation builders.
-     */
-    private static class TestPipelineAggregationBuilder extends AbstractPipelineAggregationBuilder<TestPipelineAggregationBuilder> {
-        /**
-         * Read from a stream.
-         */
-        TestPipelineAggregationBuilder(StreamInput in) throws IOException {
-            super(in, "test");
-        }
-
-        @Override
-        public String getWriteableName() {
-            return "test";
-        }
-
-        @Override
+            @Override
+            String name,
+            module.getNamedWriteables()
+        };
         protected void doWriteTo(StreamOutput out) throws IOException {}
-
-        @Override
-        protected PipelineAggregator createInternal(Map<String, Object> metadata) {
-            return null;
-        }
-
-        @Override
+        "combined_fields",
+                .stream()
+import java.util.List;
+        );
+                .stream()
+        SearchPlugin registersDupeAggregation = new SearchPlugin() {
+import org.opensearch.search.aggregations.ConcurrentAggregationProcessor;
+        SearchModule module = new SearchModule(Settings.EMPTY, singletonList(new SearchPlugin() {
+import org.opensearch.search.rescore.QueryRescorerBuilder;
+import org.opensearch.plugins.SearchPlugin;
+        SearchPlugin plugin2 = new SearchPlugin() {
+                    @Override
+        expectThrows(IllegalStateException.class, () -> new SearchModule(Settings.EMPTY, searchPlugins));
         protected XContentBuilder internalXContent(XContentBuilder builder, Params params) throws IOException {
-            return null;
+    public void testRegisterRescorer() {
         }
-
-        private static TestPipelineAggregationBuilder fromXContent(String name, XContentParser p) {
-            return null;
-        }
-
-        @Override
-        protected void validate(ValidationContext context) {}
-    }
-
-    /**
-     * Dummy test {@link PipelineAggregator} used to test registering aggregation builders.
-     */
-    private static class TestPipelineAggregator extends PipelineAggregator {
-        TestPipelineAggregator() {
-            super("test", new String[] {}, null);
-        }
-
-        @Override
-        public InternalAggregation reduce(InternalAggregation aggregation, ReduceContext reduceContext) {
-            return null;
-        }
-    }
-
-    private static class TestRescorerBuilder extends RescorerBuilder<TestRescorerBuilder> {
-        public static TestRescorerBuilder fromXContent(XContentParser parser) {
-            return null;
-        }
-
-        TestRescorerBuilder(StreamInput in) throws IOException {
-            super(in);
-        }
-
-        @Override
-        public String getWriteableName() {
-            return "test";
-        }
-
-        @Override
-        public RescorerBuilder<TestRescorerBuilder> rewrite(QueryRewriteContext ctx) throws IOException {
-            return this;
-        }
-
-        @Override
-        protected void doWriteTo(StreamOutput out) throws IOException {}
-
-        @Override
-        protected void doXContent(XContentBuilder builder, Params params) throws IOException {}
-
-        @Override
-        public RescoreContext innerBuildContext(int windowSize, QueryShardContext context) throws IOException {
-            return null;
-        }
-    }
-
-    private static class TestSuggester extends Suggester<SuggestionSearchContext.SuggestionContext> {
-
-        @Override
-        protected Suggestion<? extends Suggestion.Entry<? extends Suggestion.Entry.Option>> innerExecute(
-            String name,
-            SuggestionSearchContext.SuggestionContext suggestion,
-            IndexSearcher searcher,
-            CharsRefBuilder spare
-        ) throws IOException {
-            return null;
-        }
-
-        @Override
-        protected Suggestion<? extends Entry<? extends Option>> emptySuggestion(
-            String name,
-            SuggestionContext suggestion,
-            CharsRefBuilder spare
-        ) throws IOException {
-            return null;
-        }
-    }
-
-    private static class TestSuggestionBuilder extends SuggestionBuilder<TestSuggestionBuilder> {
-
+                )
+        searchModule.getIndexSearcherExecutor(threadPool);
+        "span_or",
+                );
         public static final String SUGGESTION_NAME = "test";
-
+     * Dummy test {@link PipelineAggregator} used to test registering aggregation builders.
+        public InternalAggregation reduce(InternalAggregation aggregation, ReduceContext reduceContext) {
+        searchPlugins.add(plugin1);
+            @Override
+import org.opensearch.search.suggest.term.TermSuggestion;
+        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeSuggester));
+        );
+    public void testDoubleRegister() {
+ */
+        @Override
+import org.opensearch.search.aggregations.bucket.terms.heuristic.ChiSquare;
+import java.util.Collections;
+import org.opensearch.search.aggregations.support.ValuesSourceType;
+    }
+                );
+                return singletonList(new QuerySpec<>(TermQueryBuilder.NAME, TermQueryBuilder::new, TermQueryBuilder::fromXContent));
         TestSuggestionBuilder(StreamInput in) throws IOException {
-            super(in);
-        }
-
-        @Override
-        protected void doWriteTo(StreamOutput out) throws IOException {}
-
-        public static TestSuggestionBuilder fromXContent(XContentParser parser) {
-            return null;
-        }
-
-        @Override
-        protected XContentBuilder innerToXContent(XContentBuilder builder, Params params) throws IOException {
-            return null;
-        }
-
         @Override
         protected SuggestionSearchContext.SuggestionContext build(QueryShardContext context) throws IOException {
-            return null;
-        }
-
-        @Override
-        protected boolean doEquals(TestSuggestionBuilder other) {
-            return false;
-        }
-
-        @Override
-        protected int doHashCode() {
-            return 0;
-        }
-
-        @Override
-        public String getWriteableName() {
-            return "test";
-        }
+        public RescoreContext innerBuildContext(int windowSize, QueryShardContext context) throws IOException {
+            }
+    private static class TestPipelineAggregator extends PipelineAggregator {
+                return singletonList(
+            public Optional<ProfileMetricsProvider> getQueryProfileMetricsProvider() {
+        public String getType() {
+        assertEquals(
+                        && entry.name.match("test", LoggingDeprecationHandler.INSTANCE)
+                )
+        }));
+    public void testRegisterPipelineAggregation() {
+                return singletonList(new ExplainPhase());
+        protected void doWriteTo(StreamOutput out) throws IOException {}
+            @Override
+        );
+    public void testMultiplePluginRegisterIndexSearcherProvider() {
+        protected Suggestion<? extends Suggestion.Entry<? extends Suggestion.Entry.Option>> innerExecute(
+        "regexp",
+import org.opensearch.search.aggregations.pipeline.InternalDerivative;
+            @Override
     }
-
-    private static class TestSuggestion extends Suggestion {
-        TestSuggestion(StreamInput in) throws IOException {
+            String name,
+        SearchModule module = new SearchModule(Settings.EMPTY, singletonList(new SearchPlugin() {
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.singletonList(plugin1));
+import org.opensearch.index.query.QueryShardContext;
+            public Optional<ExecutorServiceProvider> getIndexSearcherExecutorProvider() {
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
+    }
+            @Override
+                .stream()
+        "match",
+        assertEquals(providers.getFirst().getQueryProfileMetrics(null, null).size(), 1);
+        searchPlugins.add(plugin1);
+            return null;
+        }));
+import static org.hamcrest.Matchers.hasSize;
+                .filter(e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.match("phrase", LoggingDeprecationHandler.INSTANCE))
+            return null;
+        assertEquals(PlainHighlighter.class, highlighters.get("plain").getClass());
+        @Override
+ */
+            @Override
+                .count()
+            public Optional<ExecutorServiceProvider> getIndexSearcherExecutorProvider() {
+                .filter(
+            return null;
+ * license agreements. See the NOTICE file distributed with
+        "constant_score",
+        @Override
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
+        assertThat(providers, hasSize(1));
+import org.opensearch.search.suggest.SuggestionSearchContext.SuggestionContext;
+    }
+        SearchPlugin registersDupeRescorer = new SearchPlugin() {
+import org.opensearch.search.suggest.SuggestionBuilder;
+        assertTrue(queryPhaseSearcher.aggregationProcessor(searchContext) instanceof DefaultAggregationProcessor);
+        "span_field_masking",
+            return CoreValuesSourceType.BYTES;
+    public void testDefaultQueryPhaseSearcher() {
             super(in);
+import org.apache.lucene.search.IndexSearcher;
+                .filter(e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.equals("term"))
+                    new ScoreFunctionSpec<>(
+            @Override
+        assertEquals(searchModule.getConcurrentSearchRequestDeciderFactories().size(), 0);
+            public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
+                );
+import org.opensearch.test.OpenSearchTestCase;
+                return Optional.of((searchContext, query) -> List.of(() -> new Timer("plugin_timer")));
+    /**
+            return BucketCardinality.NONE;
+     */
+        );
+        assertEquals(FastVectorHighlighter.class, highlighters.get("fvh").getClass());
+        searchPlugins.add(pluginDecider2);
+import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.query.functionscore.GaussDecayFunctionBuilder;
+        );
+    }
+ * ownership. Elasticsearch licenses this file to you under
+            1,
+        public static TestRescorerBuilder fromXContent(XContentParser parser) {
+import org.opensearch.search.profile.Timer;
         }
-
+            }
         @Override
-        protected Entry newEntry(StreamInput in) throws IOException {
-            return null;
+        SearchPlugin registersDupeFetchSubPhase = new SearchPlugin() {
+    }
+            .stream()
+            @Override
+    }
+        "intervals",
         }
-
+        };
+        "boosting",
+import org.opensearch.search.suggest.SuggestionSearchContext;
+    /**
+                    )
+import static org.hamcrest.Matchers.containsInAnyOrder;
+            }
+            }
+        SearchPlugin registersDupeHighlighter = new SearchPlugin() {
+        SearchPlugin registersDupeSuggester = new SearchPlugin() {
+            public List<SearchPlugin.QuerySpec<?>> getQueries() {
+        assertEquals(UnifiedHighlighter.class, highlighters.get("unified").getClass());
+ *
+            @Override
+    private static class TestSuggestionBuilder extends SuggestionBuilder<TestSuggestionBuilder> {
+        }
+        "distance_feature",
+                        TestSuggestionBuilder.SUGGESTION_NAME,
+import org.opensearch.search.aggregations.InternalAggregation;
+            AggregatorFactory parent,
+        "span_gap",
+        "script_score",
+                .count()
+            @Override
+    }
+            }
+        TestSearchContext searchContext = new TestSearchContext(null);
+                        TermSuggestionBuilder.SUGGESTION_NAME,
+         */
+            QueryShardContext queryShardContext,
+                .filter(e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.equals("completion"))
+                .filter(
+    private static class TestRescorerBuilder extends RescorerBuilder<TestRescorerBuilder> {
+            return null;
+            .flatMap(e -> Arrays.stream(e.name.getAllNamesIncludedDeprecated()))
+        );
+                return Optional.of(new ConcurrentQueryPhaseSearcher());
+        }));
+            return null;
+         * Read from a stream.
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+            return false;
+                        && entry.name.match("test", LoggingDeprecationHandler.INSTANCE)
+        }
+            }
+        assertThat(
+        return () -> new NamedXContentRegistry(new SearchModule(Settings.EMPTY, singletonList(plugin)).getNamedXContents());
+        assertEquals(
+import java.io.IOException;
+        "match_none",
+            @Override
+import org.opensearch.search.suggest.Suggest.Suggestion;
+            module.getNamedXContents()
+        searchPlugins.add(plugin2);
+        Collections.addAll(allSupportedQueries, NON_DEPRECATED_QUERIES);
+            }
+        SearchPlugin plugin1 = new SearchPlugin() {
+        QueryPhase queryPhase = searchModule.getQueryPhase();
+            }
+            @Override
+                .count()
+import static java.util.Collections.singletonList;
+                return Optional.of(mock(ExecutorServiceProvider.class));
+    }
+    public void testConcurrentQueryPhaseSearcher() {
+        ) throws IOException {
+            }
+import static org.mockito.Mockito.verify;
+        "multi_match",
+        }
+            }
+    }
+        "span_not",
+        SearchPlugin registersDupeQuery = new SearchPlugin() {
+            module.getNamedWriteables()
+        };
+        TestSearchContext searchContext = new TestSearchContext(null);
+        }
+        protected ValuesSourceAggregatorFactory innerBuild(
+        protected Entry newEntry(StreamInput in) throws IOException {
+        };
+import org.opensearch.threadpool.ThreadPool;
+            public List<SearchPlugin.SuggesterSpec<?>> getSuggesters() {
+import org.opensearch.search.aggregations.pipeline.DerivativePipelineAggregationBuilder;
+                .filter(e -> e.categoryClass.equals(Suggestion.class) && e.name.equals("completion"))
+ * the Apache License, Version 2.0 (the "License"); you may
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, searchPlugins);
+    public void testIndexSearcher() {
+        "match_phrase_prefix",
+                .filter(e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.equals("test"))
+            }
+        }
+        SearchPlugin registersDupeMovAvgModel = new SearchPlugin() {
+            super(in);
+ * specific language governing permissions and limitations
+                .filter(e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.match("term", LoggingDeprecationHandler.INSTANCE))
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
+        );
+    }
+            super("test", new String[] {}, null);
+            hasSize(1)
+import org.opensearch.index.query.QueryBuilder;
+        }
+import org.opensearch.search.aggregations.AggregatorFactories.Builder;
+        "geo_bounding_box",
+                );
+        );
+                    ).addResultReader(InternalDerivative::new)
+        "dis_max",
+import org.opensearch.search.fetch.subphase.highlight.Highlighter;
+                        GaussDecayFunctionBuilder::new,
+            public Optional<ConcurrentSearchRequestDecider.Factory> getConcurrentSearchRequestDeciderFactory() {
+            public List<SignificanceHeuristicSpec<?>> getSignificanceHeuristics() {
+/*
+        TestRescorerBuilder(StreamInput in) throws IOException {
+        assertEquals(
+        assertTrue(queryPhase.getQueryPhaseSearcher() instanceof QueryPhaseSearcherWrapper);
+            1,
+                    new SuggesterSpec<>(
+        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeScoreFunction));
+        protected Suggestion<? extends Entry<? extends Option>> emptySuggestion(
+            .filter(e -> e.name.getAllReplacedWith() == null)
+        };
+        "match_all",
+                    entry -> entry.categoryClass.equals(RescorerBuilder.class)
+            .filter(e -> e.categoryClass.equals(QueryBuilder.class))
+    public void testRegisterSuggester() {
+            @Override
+import org.opensearch.search.fetch.subphase.highlight.PlainHighlighter;
+            return null;
+            return null;
+                .collect(toList()),
+        assertThat(registeredNonDeprecated, containsInAnyOrder(NON_DEPRECATED_QUERIES));
+        };
+        List<SearchPlugin> searchPlugins = new ArrayList<>();
+            public Map<String, Highlighter> getHighlighters() {
+        protected int doHashCode() {
+    public void testPluginQueryPhaseSearcher() {
+        "bool",
+    public void testMultiplePluginRegisterQueryPhaseSearcher() {
+                .stream()
+                .count()
+    private static final String[] DEPRECATED_QUERIES = new String[] { "common", "field_masking_span" };
+import static java.util.stream.Collectors.toSet;
+            SuggestionSearchContext.SuggestionContext suggestion,
+        );
+ * Unless required by applicable law or agreed to in writing,
+            module.getNamedWriteables()
+ *
+        assertEquals(
+        );
+import org.opensearch.search.suggest.Suggest.Suggestion.Entry.Option;
+        public static TestSuggestionBuilder fromXContent(XContentParser parser) {
+            return ValuesSourceRegistry.UNREGISTERED_KEY;
+        List<SearchPlugin> searchPlugins = new ArrayList<>();
+        "simple_query_string",
+        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeHighlighter));
+            }
+            return "test";
+        "span_within",
+                return singletonList(new SearchExtensionSpec<>(SimpleModel.NAME, SimpleModel::new, SimpleModel.PARSER));
+            hasSize(1)
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, searchPlugins);
+import org.opensearch.search.aggregations.pipeline.AbstractPipelineAggregationBuilder;
+                .filter(e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.match("test", LoggingDeprecationHandler.INSTANCE))
+        @Override
+                .collect(toList()),
+        @Override
+        protected PipelineAggregator createInternal(Map<String, Object> metadata) {
+        searchPlugins.add(plugin2);
+    }
+        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeQuery));
+            @Override
+    }
+        ThreadPool threadPool = mock(ThreadPool.class);
+        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeFetchSubPhase));
+    private static class TestPipelineAggregationBuilder extends AbstractPipelineAggregationBuilder<TestPipelineAggregationBuilder> {
+                        GaussDecayFunctionBuilder.PARSER
+            1,
+            @Override
+            @Override
+        Set<String> registeredAll = module.getNamedXContents()
+        }
+    /**
+        public String getWriteableName() {
+    public void testRegisterConcurrentSearchRequestDecidersNoExternalPlugins() {
+            module.getNamedWriteables()
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+            CharsRefBuilder spare
+        @Override
+                return Optional.of(mock(ExecutorServiceProvider.class));
+        }
+        QueryPhaseSearcher queryPhaseSearcher = (searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout) -> false;
+        "nested",
+            Builder subFactoriesBuilder
+            }
+        };
+            }
+        };
+            super(in);
+            public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
+import java.util.Optional;
+        public BucketCardinality bucketCardinality() {
+                .stream()
+                return Optional.of(new ConcurrentSearchRequestDecider.Factory() {
+        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupePipelineAggregation));
+import static java.util.stream.Collectors.toList;
+                return Optional.of(mock(ExecutorServiceProvider.class));
+    }
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.emptyList());
+                .count()
+import org.opensearch.search.fetch.subphase.ExplainPhase;
+        }
+import org.opensearch.search.aggregations.AggregatorFactory;
+            public Optional<ExecutorServiceProvider> getIndexSearcherExecutorProvider() {
+    public void testProfileMetricsProvider() {
+        "exists",
+        "wrapper",
+    }
+            1,
+        @Override
+                )
+        "geo_distance",
+        @Override
+        List<SearchPlugin.ProfileMetricsProvider> providers = module.getPluginProfileMetricsProviders();
+        "query_string",
+        SearchModule module = new SearchModule(Settings.EMPTY, emptyList());
+            }
+import static java.util.Collections.singletonMap;
+        };
+     * Dummy test {@link AggregationBuilder} used to test registering aggregation builders.
+            @Override
+        searchContext.setConcurrentSegmentSearchEnabled(true);
+        "range",
+        @Override
+            return "test";
+                        DerivativePipelineAggregationBuilder.NAME,
+        private static TestPipelineAggregationBuilder fromXContent(String name, XContentParser p) {
+import org.opensearch.search.fetch.subphase.highlight.UnifiedHighlighter;
+                    @Override
+ * The OpenSearch Contributors require contributions made to
+                    public Optional<ConcurrentSearchRequestDecider> create(IndexSettings indexSettings) {
+        }
+        };
+            public List<RescorerSpec<?>> getRescorers() {
+            module.getNamedXContents()
+        SearchPlugin plugin1 = new SearchPlugin() {
+        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeAggregation));
+        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeMovAvgModel));
+        protected void doXContent(XContentBuilder builder, Params params) throws IOException {}
+                        TermSuggestionBuilder::new,
+        protected void innerWriteTo(StreamOutput out) throws IOException {}
+        "span_term",
+        };
+ * compatible open source license.
+        }
+        expectThrows(IllegalStateException.class, () -> new SearchModule(Settings.EMPTY, searchPlugins));
+                return singletonList(new AggregationSpec("test", TestAggregationBuilder::new, TestAggregationBuilder::fromXContent));
+        assertEquals(searchModule.getConcurrentSearchRequestDeciderFactories().size(), 0);
+        @Override
+            return this;
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.emptyList());
+import org.opensearch.search.rescore.RescoreContext;
+    }
+            return new TestAggregationBuilder(this, factoriesBuilder, metadata);
+    }
+                        TermSuggestionBuilder::fromXContent,
+        List<String> allSupportedQueries = new ArrayList<>();
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
+        @Override
+import java.util.Arrays;
+            module.getNamedXContents()
+        SearchModule module = new SearchModule(Settings.EMPTY, singletonList(new SearchPlugin() {
+            super(clone, factoriesBuilder, metadata);
+    private static final String[] NON_DEPRECATED_QUERIES = new String[] {
+        "match_bool_prefix",
         @Override
         public String getWriteableName() {
-            return "test";
+        assertEquals(
+        List<SearchPlugin> searchPlugins = new ArrayList<>();
         }
     }
+        };
+        assertThat(
+        @Override
+        SearchModule module = new SearchModule(Settings.EMPTY, singletonList(new SearchPlugin() {
+            return null;
+            1,
+        }));
+                    new AggregationSpec(TermsAggregationBuilder.NAME, TermsAggregationBuilder::new, TermsAggregationBuilder.PARSER)
+        }
+                );
+        SearchPlugin registersDupeScoreFunction = new SearchPlugin() {
+import org.opensearch.search.fetch.subphase.highlight.CustomHighlighter;
+import static java.util.Collections.emptyList;
+            return "test";
+            public List<PipelineAggregationSpec> getPipelineAggregations() {
+            super(in);
+            @Override
+        "prefix",
+            return null;
+            }
+    }
+        @Override
+        protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+import org.opensearch.index.query.QueryRewriteContext;
+            .collect(toSet());
+                return singletonList(
+        assertEquals(searchModule.getConcurrentSearchRequestDeciderFactories().size(), 2);
+ * under the License.
+            return null;
+        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeRescorer));
+        @Override
+            module.getNamedXContents()
+            1,
+        protected TestAggregationBuilder(StreamInput in) throws IOException {
+            }
+ * You may obtain a copy of the License at
+import org.opensearch.search.aggregations.pipeline.SimpleModel;
+        searchPlugins.add(plugin1);
+ * Modifications Copyright OpenSearch Contributors. See
+        public String getWriteableName() {
+        }
+        assertEquals(
+                .stream()
+        SearchPlugin plugin2 = new SearchPlugin() {
+                    new PipelineAggregationSpec("test", TestPipelineAggregationBuilder::new, TestPipelineAggregationBuilder::fromXContent)
+import org.opensearch.search.query.ConcurrentQueryPhaseSearcher;
+                    new SuggesterSpec<>(
+        TestSuggestion(StreamInput in) throws IOException {
+            1,
+            return "test";
+        }
+        @Override
+ * SPDX-License-Identifier: Apache-2.0
+                        TestSuggestion::new
+                .collect(toList()),
+     * Dummy test {@link PipelineAggregator} used to test registering aggregation builders.
+import org.opensearch.search.fetch.subphase.highlight.FastVectorHighlighter;
+        assertSame(highlighters.get("custom"), customHighlighter);
+        @Override
+import org.apache.lucene.util.CharsRefBuilder;
+        assertEquals(
+import org.opensearch.common.settings.Settings;
+                .count()
+                .stream()
+                        return Optional.of(mock(ConcurrentSearchRequestDecider.class));
+        @Override
+        }
+        }
+        protected AggregationBuilder shallowCopy(Builder factoriesBuilder, Map<String, Object> metadata) {
+        ) throws IOException {
+        }
+            module.getNamedXContents()
+                .filter(e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.equals("phrase"))
+                    )
+                        GaussDecayFunctionBuilder.NAME,
+        SearchPlugin registersDupePipelineAggregation = new SearchPlugin() {
+import org.opensearch.search.aggregations.InternalAggregation.ReduceContext;
+        );
+    }
+        QueryPhase queryPhase = searchModule.getQueryPhase();
+        "ids",
+        SearchPlugin plugin2 = new SearchPlugin() {
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;
+        }
+            }
+import java.util.Set;
+            module.getNamedWriteables().stream().filter(e -> e.categoryClass.equals(Suggestion.class) && e.name.equals("phrase")).count()
+                    }
+ * GitHub history for details.
+        assertThat(
+                    entry -> entry.categoryClass.equals(BaseAggregationBuilder.class)
+                return Optional.of(queryPhaseSearcher);
+import org.opensearch.search.query.QueryPhase;
+/*
+        };
+        "span_containing",
+            IndexSearcher searcher,
+            .collect(toSet());
+        };
+                return Optional.of(mock(ExecutorServiceProvider.class));
+            module.getNamedXContents()
+import org.opensearch.core.xcontent.XContentBuilder;
+import java.util.ArrayList;
+        "span_multi",
+        protected ValuesSourceRegistry.RegistryKey<?> getRegistryKey() {
+ * this file be licensed under the Apache-2.0 license or a
+        protected void validate(ValidationContext context) {}
+        SearchModule module = new SearchModule(Settings.EMPTY, singletonList(new SearchPlugin() {
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            public Optional<ExecutorServiceProvider> getIndexSearcherExecutorProvider() {
+        assertEquals(
+import org.opensearch.search.aggregations.DefaultAggregationProcessor;
+                .filter(
+import org.opensearch.search.rescore.RescorerBuilder;
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
+        @Override
+            return null;
+        }
+                });
+        "more_like_this",
+import org.opensearch.index.IndexSettings;
+        protected XContentBuilder innerToXContent(XContentBuilder builder, Params params) throws IOException {
+                    }
+        @Override
+    public void testRegisterHighlighter() {
+    public void testRegisterAggregation() {
+import org.opensearch.search.aggregations.pipeline.MovAvgModel;
+                return singletonMap("plain", new PlainHighlighter());
+    }
+        SearchPlugin plugin1 = new SearchPlugin() {
+            hasSize(1)
+            1,
+        @Override
+                return Optional.of(mock(QueryPhaseSearcher.class));
+        "geo_polygon",
+        );
+                    new PipelineAggregationSpec(
+import org.opensearch.search.suggest.Suggest.Suggestion.Entry;
+        "match_phrase",
+            .map(e -> e.name.getPreferredName())
+        @Override
+        SearchPlugin pluginDecider1 = new SearchPlugin() {
+        @Override
+    }
+ * this work for additional information regarding copyright
+        };
+        assertTrue(queryPhase.getQueryPhaseSearcher().aggregationProcessor(searchContext) instanceof ConcurrentAggregationProcessor);
+        protected ValuesSourceType defaultValueSourceType() {
+import org.opensearch.search.aggregations.AggregationBuilder;
+import org.opensearch.index.query.TermQueryBuilder;
+            }
+                .stream()
+            @Override
+    // add here deprecated queries to make sure we log a deprecation warnings when they are used
+        };
+        protected void doWriteTo(StreamOutput out) throws IOException {}
+                .filter(
+        SearchPlugin pluginDecider2 = new SearchPlugin() {
+        protected boolean doEquals(TestSuggestionBuilder other) {
+        expectThrows(IllegalArgumentException.class, registryForPlugin(registersDupeSignificanceHeuristic));
+         * Read from a stream.
+            SuggestionContext suggestion,
+            public List<SearchExtensionSpec<MovAvgModel, MovAvgModel.AbstractModelParser>> getMovingAverageModels() {
+    private static class TestAggregationBuilder extends ValuesSourceAggregationBuilder<TestAggregationBuilder> {
+        "span_first",
+        );
+                return singletonList(
+        TestSearchContext searchContext = new TestSearchContext(null);
+        }
+            }
+        searchPlugins.add(plugin2);
+                    entry -> entry.categoryClass.equals(BaseAggregationBuilder.class)
+        }));
+                .stream()
+        TestPipelineAggregationBuilder(StreamInput in) throws IOException {
+        @Override
+            public List<FetchSubPhase> getFetchSubPhases(FetchPhaseConstructionContext context) {
+        }));
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            @Override
+            @Override
+                .stream()
+                return singletonList(
+                return singletonList(
+    public void testRegisterConcurrentSearchRequestDecidersExternalPluginsWithNoDeciders() {
+                        DerivativePipelineAggregationBuilder::parse
+import org.opensearch.search.suggest.Suggester;
+        /**
+                        TestSuggestionBuilder::fromXContent,
+            public List<RescorerSpec<?>> getRescorers() {
+                .stream()
+            }
+import org.opensearch.search.fetch.FetchSubPhase;
+            }
+            public List<AggregationSpec> getAggregations() {
+            @Override
+import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
+ * not use this file except in compliance with the License.
+        assertEquals(queryPhaseSearcher, queryPhase.getQueryPhaseSearcher());
+        "term",
+                .count()
+        @Override
+        "geo_shape",
+            1,
+                    public Optional<ConcurrentSearchRequestDecider> create(IndexSettings indexSettings) {
+            1,
+                return Optional.of(new ConcurrentSearchRequestDecider.Factory() {
+            module.getNamedWriteables().stream().filter(e -> e.categoryClass.equals(Suggestion.class) && e.name.equals("term")).count()
+        CustomHighlighter customHighlighter = new CustomHighlighter();
+            1,
 }
+import org.opensearch.search.suggest.term.TermSuggestionBuilder;
+        assertThat(registeredAll, containsInAnyOrder(allSupportedQueries.toArray(new String[0])));
+        }
+        "span_near",
+                .stream()
+        assertTrue(queryPhase.getQueryPhaseSearcher() instanceof QueryPhaseSearcherWrapper);
+ * software distributed under the License is distributed on an
+import org.opensearch.search.aggregations.BaseAggregationBuilder;
+            module.getNamedXContents()
+            return null;
+            module.getNamedWriteables()
+        "terms",
+        }
+            public List<AggregationSpec> getAggregations() {
+        "fuzzy",
+                    )
+        SearchModule module = new SearchModule(Settings.EMPTY, singletonList(new SearchPlugin() {
+        };
+ * Licensed to Elasticsearch under one or more contributor
+                );
+    private static class TestSuggestion extends Suggestion {
+    public void testRegisteredQueries() {
+        assertEquals(
+                        return Optional.of(mock(ConcurrentSearchRequestDecider.class));
+        SearchPlugin registersDupeSignificanceHeuristic = new SearchPlugin() {
+         */
+            return null;
+ *
+import org.opensearch.test.TestSearchContext;
+            super(in, "test");
+    }
+                .count()
+            }
+        TestPipelineAggregator() {
+                return singletonList(
+import static org.mockito.Mockito.mock;
+import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;
+import org.opensearch.search.deciders.ConcurrentSearchRequestDecider;
+            @Override
+        assertEquals(
+    private static class TestSuggester extends Suggester<SuggestionSearchContext.SuggestionContext> {
+import org.opensearch.core.common.io.stream.StreamInput;
+        ) throws IOException {
+        );
+        };
+            }
+        verify(threadPool).executor(ThreadPool.Names.INDEX_SEARCHER);
+ * KIND, either express or implied.  See the License for the
+                        DerivativePipelineAggregationBuilder::new,
+            public List<SuggesterSpec<?>> getSuggesters() {
+        "script",
+        }
+        "wildcard",
+        }
+            return null;
+        Set<String> registeredNonDeprecated = module.getNamedXContents()
+            return 0;
+    }
+        "terms_set",
+            public Optional<ConcurrentSearchRequestDecider.Factory> getConcurrentSearchRequestDeciderFactory() {
+        SearchPlugin plugin1 = new SearchPlugin() {
+            }
+public class SearchModuleTests extends OpenSearchTestCase {
+            .stream()
+        );
+package org.opensearch.search;
+            public Map<String, Highlighter> getHighlighters() {
+            @Override
+        "template" };
+            public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
+        "function_score",
+            CharsRefBuilder spare
+                .count()
+                        TestSuggestionBuilder::new,
+        private static TestAggregationBuilder fromXContent(String name, XContentParser p) {
+        public RescorerBuilder<TestRescorerBuilder> rewrite(QueryRewriteContext ctx) throws IOException {
+        QueryPhase queryPhase = searchModule.getQueryPhase();
+        }
+     */
+            module.getNamedWriteables().stream().filter(e -> e.categoryClass.equals(Suggestion.class) && e.name.equals("test")).count()
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.emptyList());
+                    new RescorerSpec<>(QueryRescorerBuilder.NAME, QueryRescorerBuilder::new, QueryRescorerBuilder::fromXContent)
+        }
+        assertTrue(queryPhase.getQueryPhaseSearcher().aggregationProcessor(searchContext) instanceof DefaultAggregationProcessor);
+            public List<ScoreFunctionSpec<?>> getScoreFunctions() {
+        /**
+                )
+import org.opensearch.search.query.QueryPhaseSearcher;
+                return singletonList(new RescorerSpec<>("test", TestRescorerBuilder::new, TestRescorerBuilder::fromXContent));
+            .filter(e -> e.categoryClass.equals(QueryBuilder.class))
+                        TermSuggestion::new
+        List<SearchPlugin> searchPlugins = new ArrayList<>();
+            public List<PipelineAggregationSpec> getPipelineAggregations() {
+        assertEquals(
+        }
+        assertEquals(
+     */
+                return singletonMap("custom", customHighlighter);
+        public String getWriteableName() {
+    public void testRegisterConcurrentSearchRequestDecidersExternalPluginsWithDeciders() {
+        @Override
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, Collections.emptyList());
+            1,
+        }
+        }
+            ValuesSourceConfig config,
+import java.util.Map;
+        searchPlugins.add(pluginDecider1);
+    private ThrowingRunnable registryForPlugin(SearchPlugin plugin) {
+            return "test";
+                );
+                        && entry.name.match("test", LoggingDeprecationHandler.INSTANCE)
+ */
+                    e -> e.categoryClass.equals(SuggestionBuilder.class) && e.name.match("completion", LoggingDeprecationHandler.INSTANCE)
+import org.opensearch.search.query.QueryPhaseSearcherWrapper;
+        };
+            @Override
+                return singletonList(new SignificanceHeuristicSpec<>(ChiSquare.NAME, ChiSquare::new, ChiSquare.PARSER));
+        Collections.addAll(allSupportedQueries, DEPRECATED_QUERIES);
+                return singletonList(

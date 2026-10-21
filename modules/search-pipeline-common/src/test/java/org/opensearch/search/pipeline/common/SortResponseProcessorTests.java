@@ -1,230 +1,192 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a.java
- * compatible open source license.
- */
-
-package org.opensearch.search.pipeline.common;
-
-import org.apache.lucene.search.TotalHits;
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.search.SearchResponseSections;
-import org.opensearch.common.document.DocumentField;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.ingest.RandomDocumentPicks;
-import org.opensearch.search.SearchHit;
-import org.opensearch.search.SearchHits;
-import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
+            null,
+            null,
 import java.util.Map;
-
-public class SortResponseProcessorTests extends OpenSearchTestCase {
-
-    private static final List<Object> PI = List.of(3, 1, 4, 1, 5, 9, 2, 6);
-    private static final List<Object> E = List.of(2, 7, 1, 8, 2, 8, 1, 8);
-    private static final List<Object> X;
-    static {
-        List<Object> x = new ArrayList<>();
-        x.add(1);
-        x.add(null);
-        x.add(3);
-        X = x;
-    }
-
-    private SearchRequest createDummyRequest() {
-        QueryBuilder query = new TermQueryBuilder("field", "value");
-        SearchSourceBuilder source = new SearchSourceBuilder().query(query);
-        return new SearchRequest().source(source);
-    }
-
-    private SearchResponse createTestResponse() {
-        SearchHit[] hits = new SearchHit[2];
-
-        // one response with source
-        Map<String, DocumentField> piMap = new HashMap<>();
-        piMap.put("digits", new DocumentField("digits", PI));
-        hits[0] = new SearchHit(0, "doc 1", piMap, Collections.emptyMap());
-        hits[0].sourceRef(new BytesArray("{ \"digits\" : " + PI + " }"));
-        hits[0].score((float) Math.PI);
-
-        // one without source
-        Map<String, DocumentField> eMap = new HashMap<>();
-        eMap.put("digits", new DocumentField("digits", E));
-        hits[1] = new SearchHit(1, "doc 2", eMap, Collections.emptyMap());
-        hits[1].score((float) Math.E);
-
-        SearchHits searchHits = new SearchHits(hits, new TotalHits(2, TotalHits.Relation.EQUAL_TO), 2);
-        SearchResponseSections searchResponseSections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
-        return new SearchResponse(searchResponseSections, null, 1, 1, 0, 10, null, null);
-    }
-
-    private SearchResponse createTestResponseNullField() {
-        SearchHit[] hits = new SearchHit[1];
-
-        Map<String, DocumentField> map = new HashMap<>();
-        map.put("digits", null);
-        hits[0] = new SearchHit(0, "doc 1", map, Collections.emptyMap());
-        hits[0].sourceRef(new BytesArray("{ \"digits\" : null }"));
-        hits[0].score((float) Math.PI);
-
-        SearchHits searchHits = new SearchHits(hits, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1);
-        SearchResponseSections searchResponseSections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
-        return new SearchResponse(searchResponseSections, null, 1, 1, 0, 10, null, null);
-    }
-
-    private SearchResponse createTestResponseNullListEntry() {
-        SearchHit[] hits = new SearchHit[1];
-
         Map<String, DocumentField> xMap = new HashMap<>();
-        xMap.put("digits", new DocumentField("digits", X));
-        hits[0] = new SearchHit(0, "doc 1", xMap, Collections.emptyMap());
-        hits[0].sourceRef(new BytesArray("{ \"digits\" : " + X + " }"));
-        hits[0].score((float) Math.PI);
-
-        SearchHits searchHits = new SearchHits(hits, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1);
-        SearchResponseSections searchResponseSections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        // one without source
         return new SearchResponse(searchResponseSections, null, 1, 1, 0, 10, null, null);
-    }
-
-    private SearchResponse createTestResponseNotComparable() {
-        SearchHit[] hits = new SearchHit[1];
-
-        Map<String, DocumentField> piMap = new HashMap<>();
-        piMap.put("maps", new DocumentField("maps", List.of(Map.of("foo", "I'm incomparable!"))));
-        hits[0] = new SearchHit(0, "doc 1", piMap, Collections.emptyMap());
-        hits[0].sourceRef(new BytesArray("{ \"maps\" : [{ \"foo\" : \"I'm incomparable!\"}]] }"));
-        hits[0].score((float) Math.PI);
-
-        SearchHits searchHits = new SearchHits(hits, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1);
-        SearchResponseSections searchResponseSections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
-        return new SearchResponse(searchResponseSections, null, 1, 1, 0, 10, null, null);
-    }
-
-    public void testSortResponse() throws Exception {
-        SearchRequest request = createDummyRequest();
-
-        SortResponseProcessor sortResponseProcessor = new SortResponseProcessor(
-            null,
-            null,
-            false,
-            "digits",
             SortResponseProcessor.SortOrder.ASCENDING,
-            "sorted"
+import java.util.ArrayList;
+        SearchResponseSections searchResponseSections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        hits[1] = new SearchHit(1, "doc 2", eMap, Collections.emptyMap());
+/*
         );
-        SearchResponse response = createTestResponse();
-        SearchResponse sortResponse = sortResponseProcessor.processResponse(request, response);
-
-        assertEquals(response.getHits(), sortResponse.getHits());
-
-        assertEquals(PI, sortResponse.getHits().getHits()[0].field("digits").getValues());
-        assertEquals(List.of(1, 1, 2, 3, 4, 5, 6, 9), sortResponse.getHits().getHits()[0].field("sorted").getValues());
-        Map<String, Object> map = sortResponse.getHits().getHits()[0].getSourceAsMap();
-        assertNotNull(map);
-        assertEquals(List.of(1, 1, 2, 3, 4, 5, 6, 9), map.get("sorted"));
-
-        assertEquals(E, sortResponse.getHits().getHits()[1].field("digits").getValues());
+import org.opensearch.common.document.DocumentField;
+        piMap.put("digits", new DocumentField("digits", PI));
+        SearchHit[] hits = new SearchHit[2];
+        hits[0].score((float) Math.PI);
+            SortResponseProcessor.SortOrder.DESCENDING,
         assertEquals(List.of(1, 1, 2, 2, 7, 8, 8, 8), sortResponse.getHits().getHits()[1].field("sorted").getValues());
-        assertNull(sortResponse.getHits().getHits()[1].getSourceAsMap());
-    }
-
-    public void testSortResponseSameField() throws Exception {
-        SearchRequest request = createDummyRequest();
-
-        SortResponseProcessor sortResponseProcessor = new SortResponseProcessor(
-            null,
-            null,
-            false,
+import org.opensearch.core.common.bytes.BytesArray;
             "digits",
-            SortResponseProcessor.SortOrder.DESCENDING,
-            null
+            false,
+ * compatible open source license.
+        SortResponseProcessor sortResponseProcessor = new SortResponseProcessor(
+        List<Object> x = new ArrayList<>();
+        SortResponseProcessor sortResponseProcessor = new SortResponseProcessor(
+        assertEquals(List.of(1, 1, 2, 3, 4, 5, 6, 9), map.get("sorted"));
+import org.opensearch.action.search.SearchResponse;
+    }
+    }
+    static {
+        X = x;
+ *
+        SearchHits searchHits = new SearchHits(hits, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1);
+import org.opensearch.action.search.SearchResponseSections;
+    private static final List<Object> E = List.of(2, 7, 1, 8, 2, 8, 1, 8);
+ */
+        SearchRequest request = createDummyRequest();
         );
-        SearchResponse response = createTestResponse();
-        SearchResponse sortResponse = sortResponseProcessor.processResponse(request, response);
-
         assertEquals(response.getHits(), sortResponse.getHits());
-        assertEquals(List.of(9, 6, 5, 4, 3, 2, 1, 1), sortResponse.getHits().getHits()[0].field("digits").getValues());
-        assertEquals(List.of(8, 8, 8, 7, 2, 2, 1, 1), sortResponse.getHits().getHits()[1].field("digits").getValues());
-    }
-
-    public void testSortResponseNullListEntry() {
+        xMap.put("digits", new DocumentField("digits", X));
+        Map<String, DocumentField> eMap = new HashMap<>();
+        SearchResponse sortResponse = sortResponseProcessor.processResponse(request, response);
+    private SearchRequest createDummyRequest() {
         SearchRequest request = createDummyRequest();
-
-        SortResponseProcessor sortResponseProcessor = new SortResponseProcessor(
-            null,
-            null,
-            false,
-            "digits",
-            SortResponseProcessor.SortOrder.ASCENDING,
-            null
-        );
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> sortResponseProcessor.processResponse(request, createTestResponseNullListEntry())
-        );
-    }
-
-    public void testNullField() {
         SearchRequest request = createDummyRequest();
-
-        SortResponseProcessor sortResponseProcessor = new SortResponseProcessor(
-            null,
-            null,
-            false,
-            "digits",
-            SortResponseProcessor.SortOrder.DESCENDING,
-            null
-        );
-
-        assertThrows(IllegalArgumentException.class, () -> sortResponseProcessor.processResponse(request, createTestResponseNullField()));
-    }
-
-    public void testNotComparableField() {
-        SearchRequest request = createDummyRequest();
-
-        SortResponseProcessor sortResponseProcessor = new SortResponseProcessor(
-            null,
-            null,
-            false,
-            "maps",
-            SortResponseProcessor.SortOrder.ASCENDING,
-            null
-        );
-
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> sortResponseProcessor.processResponse(request, createTestResponseNotComparable())
-        );
-    }
-
-    public void testFactory() {
-        String sortField = RandomDocumentPicks.randomFieldName(random());
-        String targetField = RandomDocumentPicks.randomFieldName(random());
-        Map<String, Object> config = new HashMap<>();
-        config.put("field", sortField);
-        config.put("order", "desc");
-        config.put("target_field", targetField);
-
-        SortResponseProcessor.Factory factory = new SortResponseProcessor.Factory();
-        SortResponseProcessor processor = factory.create(Collections.emptyMap(), null, null, false, config, null);
-        assertEquals("sort", processor.getType());
-        assertEquals(sortField, processor.getSortField());
         assertEquals(targetField, processor.getTargetField());
-        assertEquals(SortResponseProcessor.SortOrder.DESCENDING, processor.getSortOrder());
-
-        expectThrows(
-            OpenSearchParseException.class,
-            () -> factory.create(Collections.emptyMap(), null, null, false, Collections.emptyMap(), null)
-        );
     }
+        hits[0] = new SearchHit(0, "doc 1", map, Collections.emptyMap());
+        Map<String, DocumentField> piMap = new HashMap<>();
+    public void testFactory() {
+    public void testNotComparableField() {
+import org.opensearch.search.SearchHit;
+        );
+            null,
+    public void testSortResponse() throws Exception {
+            null,
+        SortResponseProcessor sortResponseProcessor = new SortResponseProcessor(
+ * The OpenSearch Contributors require contributions made to
+        assertEquals(response.getHits(), sortResponse.getHits());
+        SearchHit[] hits = new SearchHit[1];
+        hits[0] = new SearchHit(0, "doc 1", piMap, Collections.emptyMap());
+import java.util.HashMap;
+    public void testSortResponseNullListEntry() {
+        hits[0].sourceRef(new BytesArray("{ \"digits\" : " + X + " }"));
+        SearchResponse sortResponse = sortResponseProcessor.processResponse(request, response);
+            SortResponseProcessor.SortOrder.ASCENDING,
+        SearchResponseSections searchResponseSections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+            IllegalArgumentException.class,
+        Map<String, DocumentField> piMap = new HashMap<>();
+        hits[0].score((float) Math.PI);
+ * SPDX-License-Identifier: Apache-2.0
+            "digits",
+        assertEquals(SortResponseProcessor.SortOrder.DESCENDING, processor.getSortOrder());
+        x.add(1);
+    private static final List<Object> X;
+        // one response with source
 }
+        );
+            null
+        assertEquals(List.of(8, 8, 8, 7, 2, 2, 1, 1), sortResponse.getHits().getHits()[1].field("digits").getValues());
+        hits[1].score((float) Math.E);
+        return new SearchResponse(searchResponseSections, null, 1, 1, 0, 10, null, null);
+        SearchHits searchHits = new SearchHits(hits, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1);
+import org.opensearch.OpenSearchParseException;
+        QueryBuilder query = new TermQueryBuilder("field", "value");
+        SearchResponseSections searchResponseSections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+            false,
+            false,
+        return new SearchRequest().source(source);
+        return new SearchResponse(searchResponseSections, null, 1, 1, 0, 10, null, null);
+        hits[0] = new SearchHit(0, "doc 1", piMap, Collections.emptyMap());
+import java.util.Collections;
+            OpenSearchParseException.class,
+        expectThrows(
+        assertThrows(
+    }
+        SearchHit[] hits = new SearchHit[1];
+    private SearchResponse createTestResponse() {
+        assertThrows(IllegalArgumentException.class, () -> sortResponseProcessor.processResponse(request, createTestResponseNullField()));
+        SearchHits searchHits = new SearchHits(hits, new TotalHits(2, TotalHits.Relation.EQUAL_TO), 2);
+        assertNull(sortResponse.getHits().getHits()[1].getSourceAsMap());
+        config.put("target_field", targetField);
+            null,
+        );
+            false,
+        assertEquals(List.of(9, 6, 5, 4, 3, 2, 1, 1), sortResponse.getHits().getHits()[0].field("digits").getValues());
+            () -> factory.create(Collections.emptyMap(), null, null, false, Collections.emptyMap(), null)
+public class SortResponseProcessorTests extends OpenSearchTestCase {
+        assertNotNull(map);
+            "digits",
+        Map<String, Object> map = sortResponse.getHits().getHits()[0].getSourceAsMap();
+            null,
+        );
+import org.opensearch.action.search.SearchRequest;
+    }
+        x.add(3);
+import org.opensearch.search.builder.SearchSourceBuilder;
+    private SearchResponse createTestResponseNullListEntry() {
+        hits[0].sourceRef(new BytesArray("{ \"digits\" : " + PI + " }"));
+        eMap.put("digits", new DocumentField("digits", E));
+import org.opensearch.index.query.TermQueryBuilder;
+            "maps",
+        hits[0] = new SearchHit(0, "doc 1", xMap, Collections.emptyMap());
+        assertEquals(sortField, processor.getSortField());
+            null
+            null
+        SortResponseProcessor sortResponseProcessor = new SortResponseProcessor(
+    }
+    public void testNullField() {
+ * this file be licensed under the Apache-2.0 license or a.java
+    }
+        assertEquals(List.of(1, 1, 2, 3, 4, 5, 6, 9), sortResponse.getHits().getHits()[0].field("sorted").getValues());
+        SearchResponse response = createTestResponse();
+        Map<String, DocumentField> map = new HashMap<>();
+        );
+            () -> sortResponseProcessor.processResponse(request, createTestResponseNullListEntry())
+        config.put("field", sortField);
+        SortResponseProcessor.Factory factory = new SortResponseProcessor.Factory();
+            "digits",
+        SortResponseProcessor sortResponseProcessor = new SortResponseProcessor(
+        SearchSourceBuilder source = new SearchSourceBuilder().query(query);
+        SearchResponseSections searchResponseSections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+    }
+        SearchHit[] hits = new SearchHit[1];
+            null,
+        hits[0].score((float) Math.PI);
+    }
+        String sortField = RandomDocumentPicks.randomFieldName(random());
+            null
+            "sorted"
+        String targetField = RandomDocumentPicks.randomFieldName(random());
+import org.opensearch.ingest.RandomDocumentPicks;
+            false,
+        hits[0].sourceRef(new BytesArray("{ \"digits\" : null }"));
+        );
+import org.apache.lucene.search.TotalHits;
+            null,
+        SearchRequest request = createDummyRequest();
+    }
+            () -> sortResponseProcessor.processResponse(request, createTestResponseNotComparable())
+            SortResponseProcessor.SortOrder.DESCENDING,
+            null,
+        hits[0].sourceRef(new BytesArray("{ \"maps\" : [{ \"foo\" : \"I'm incomparable!\"}]] }"));
+        x.add(null);
+import java.util.List;
+        hits[0].score((float) Math.PI);
+        SortResponseProcessor processor = factory.create(Collections.emptyMap(), null, null, false, config, null);
+package org.opensearch.search.pipeline.common;
+        SearchHits searchHits = new SearchHits(hits, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1);
+        config.put("order", "desc");
+    private static final List<Object> PI = List.of(3, 1, 4, 1, 5, 9, 2, 6);
+        Map<String, Object> config = new HashMap<>();
+        piMap.put("maps", new DocumentField("maps", List.of(Map.of("foo", "I'm incomparable!"))));
+import org.opensearch.index.query.QueryBuilder;
+        assertEquals("sort", processor.getType());
+    }
+            null,
+        SearchRequest request = createDummyRequest();
+        assertThrows(
+        map.put("digits", null);
+            IllegalArgumentException.class,
+        SearchResponse response = createTestResponse();
+    private SearchResponse createTestResponseNullField() {
+import org.opensearch.search.SearchHits;
+        return new SearchResponse(searchResponseSections, null, 1, 1, 0, 10, null, null);
+    }
+        assertEquals(PI, sortResponse.getHits().getHits()[0].field("digits").getValues());
+            SortResponseProcessor.SortOrder.ASCENDING,
+    public void testSortResponseSameField() throws Exception {
+    private SearchResponse createTestResponseNotComparable() {
+        assertEquals(E, sortResponse.getHits().getHits()[1].field("digits").getValues());

@@ -1,201 +1,181 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.FieldExistsQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermQuery;
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.test.AbstractQueryTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.stream.Collectors;
-
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.instanceOf;
-
-public class ExistsQueryBuilderTests extends AbstractQueryTestCase<ExistsQueryBuilder> {
-
-    @Override
-    protected void initializeAdditionalMappings(MapperService mapperService) throws IOException {
-        XContentBuilder mapping = jsonBuilder().startObject()
-            .startObject("_doc")
             .startObject("properties")
-            .startObject("raw.keyword")
-            .field("type", "keyword")
+                context.getObjectMapper(field).forEach(mapper -> childFields.add(mapper.name()));
+        IllegalStateException e = expectThrows(IllegalStateException.class, () -> queryBuilder.toQuery(context));
             .endObject()
+                FieldExistsQuery dvExistsQuery = (FieldExistsQuery) constantScoreQuery.getQuery();
+            } else if (context.getMapperService().fieldType(field).hasDocValues()) {
+    public void testObjectFieldWithDerivedSubField() throws IOException {
+                assertThat(constantScoreQuery.getQuery(), instanceOf(FieldExistsQuery.class));
+                BooleanQuery booleanQuery = (BooleanQuery) constantScoreQuery.getQuery();
+        assertEquals(expected, actual);
+        expectThrows(UnsupportedOperationException.class, () -> queryBuilder1.toQuery(shardContext));
+import static org.hamcrest.CoreMatchers.instanceOf;
+ * license agreements. See the NOTICE file distributed with
+        ExistsQueryBuilder parsed = (ExistsQueryBuilder) parseQuery(json);
+            ConstantScoreQuery constantScoreQuery = (ConstantScoreQuery) query;
+ *
+ * GitHub history for details.
+import org.apache.lucene.search.FieldExistsQuery;
+            .endObject()
+ *
+ * compatible open source license.
+import org.apache.lucene.search.TermQuery;
+/*
+import org.opensearch.common.compress.CompressedXContent;
+        QueryShardContext shardContext = createShardContext();
+        }
             .endObject()
             .startObject("derived")
-            .startObject("raw.derived_keyword")
-            .field("type", "keyword")
-            .startObject("script")
-            .field("source", "emit(doc['raw.keyword'].value)")
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject();
-
-        mapperService.merge("_doc", new CompressedXContent(mapping.toString()), MapperService.MergeReason.MAPPING_UPDATE);
-    }
-
-    @Override
-    protected ExistsQueryBuilder doCreateTestQueryBuilder() {
-        String fieldPattern;
-        if (randomBoolean()) {
             fieldPattern = randomFrom(MAPPED_FIELD_NAMES);
-        } else {
-            fieldPattern = randomAlphaOfLengthBetween(1, 10);
-        }
-
-        // Avoid patterns that would match the derived field "raw.derived_keyword"
-        // which doesn't support exists queries
-        if (fieldPattern.startsWith("raw")) {
-            fieldPattern = TEXT_FIELD_NAME;
-        }
-
-        // also sometimes test wildcard patterns
-        if (randomBoolean()) {
-            if (randomBoolean() && !fieldPattern.equals("r") && !fieldPattern.equals("ra")) {
-                fieldPattern = fieldPattern + "*";
-            }
-        }
-
-        return new ExistsQueryBuilder(fieldPattern);
-    }
-
+        if (fields.size() == 1) {
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
     @Override
-    protected void doAssertLuceneQuery(ExistsQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {
+        String json = """
+        if (mappedFields.size() == 0) {
         String fieldPattern = queryBuilder.fieldName();
-        Collection<String> fields = context.simpleMatchToIndexNames(fieldPattern);
-        Collection<String> mappedFields = fields.stream()
+ * software distributed under the License is distributed on an
+ * KIND, either express or implied.  See the License for the
+            .startObject("script")
+                "boost" : 42.0
+                assertThat(constantScoreQuery.getQuery(), instanceOf(BooleanQuery.class));
+        }
+                "field" : "user",
+import java.util.ArrayList;
+            .startObject("_doc")
+            .field("type", "keyword")
+            if (randomBoolean() && !fieldPattern.equals("r") && !fieldPattern.equals("ra")) {
+                FieldExistsQuery normsExistsQuery = (FieldExistsQuery) constantScoreQuery.getQuery();
+ * Modifications Copyright OpenSearch Contributors. See
+        expectThrows(IllegalArgumentException.class, () -> new ExistsQueryBuilder((String) null));
+/*
+            .endObject()
+        expectThrows(IllegalArgumentException.class, () -> new ExistsQueryBuilder(""));
+            .field("type", "keyword")
+ * SPDX-License-Identifier: Apache-2.0
+ * You may obtain a copy of the License at
+        QueryShardContext context = createShardContext();
+                fieldPattern = fieldPattern + "*";
+            return;
+            .endObject();
+                assertThat(booleanQuery.clauses().size(), equalTo(childFields.size()));
+            .field("source", "emit(doc['raw.keyword'].value)")
+import org.opensearch.index.mapper.MapperService;
+                TermQuery termQuery = (TermQuery) constantScoreQuery.getQuery();
+                BooleanClause booleanClause = booleanQuery.clauses().get(i);
+ * this file be licensed under the Apache-2.0 license or a
+                assertEquals(field, dvExistsQuery.getField());
+    protected void initializeAdditionalMappings(MapperService mapperService) throws IOException {
+                    BooleanClause booleanClause = booleanQuery.clauses().get(i);
+    public void testFromJson() throws IOException {
+            new BooleanQuery.Builder().add(new FieldExistsQuery("raw.keyword"), BooleanClause.Occur.SHOULD).build()
+        // also sometimes test wildcard patterns
+import org.opensearch.core.xcontent.XContentBuilder;
+            assertThat(query, instanceOf(ConstantScoreQuery.class));
+import java.util.stream.Collectors;
+    @Override
+                assertThat(constantScoreQuery.getQuery(), instanceOf(FieldExistsQuery.class));
+                assertEquals(field, normsExistsQuery.getField());
+                List<String> childFields = new ArrayList<>();
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+                assertThat(constantScoreQuery.getQuery(), instanceOf(TermQuery.class));
+        assertEquals(json, 42.0, parsed.boost(), 0.0001);
+    protected ExistsQueryBuilder doCreateTestQueryBuilder() {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            } else if (context.getMapperService().fieldType(field).getTextSearchInfo().hasNorms()) {
+import org.apache.lucene.search.MatchNoDocsQuery;
             .filter((field) -> context.getObjectMapper(field) != null || context.getMapperService().fieldType(field) != null)
             .collect(Collectors.toList());
-        if (mappedFields.size() == 0) {
-            assertThat(query, instanceOf(MatchNoDocsQuery.class));
-            return;
-        }
-        if (fields.size() == 1) {
-            assertThat(query, instanceOf(ConstantScoreQuery.class));
-            ConstantScoreQuery constantScoreQuery = (ConstantScoreQuery) query;
-            String field = expectedFieldName(fields.iterator().next());
-            if (context.getObjectMapper(field) != null) {
-                assertThat(constantScoreQuery.getQuery(), instanceOf(BooleanQuery.class));
-                BooleanQuery booleanQuery = (BooleanQuery) constantScoreQuery.getQuery();
-                List<String> childFields = new ArrayList<>();
-                context.getObjectMapper(field).forEach(mapper -> childFields.add(mapper.name()));
-                assertThat(booleanQuery.clauses().size(), equalTo(childFields.size()));
-                for (int i = 0; i < childFields.size(); i++) {
-                    BooleanClause booleanClause = booleanQuery.clauses().get(i);
-                    assertThat(booleanClause.occur(), equalTo(BooleanClause.Occur.SHOULD));
-                }
-            } else if (context.getMapperService().fieldType(field).hasDocValues()) {
-                assertThat(constantScoreQuery.getQuery(), instanceOf(FieldExistsQuery.class));
-                FieldExistsQuery dvExistsQuery = (FieldExistsQuery) constantScoreQuery.getQuery();
-                assertEquals(field, dvExistsQuery.getField());
-            } else if (context.getMapperService().fieldType(field).getTextSearchInfo().hasNorms()) {
-                assertThat(constantScoreQuery.getQuery(), instanceOf(FieldExistsQuery.class));
-                FieldExistsQuery normsExistsQuery = (FieldExistsQuery) constantScoreQuery.getQuery();
-                assertEquals(field, normsExistsQuery.getField());
-            } else {
-                assertThat(constantScoreQuery.getQuery(), instanceOf(TermQuery.class));
-                TermQuery termQuery = (TermQuery) constantScoreQuery.getQuery();
-                assertEquals(field, termQuery.getTerm().text());
-            }
-        } else {
-            assertThat(query, instanceOf(ConstantScoreQuery.class));
-            ConstantScoreQuery constantScoreQuery = (ConstantScoreQuery) query;
-            assertThat(constantScoreQuery.getQuery(), instanceOf(BooleanQuery.class));
-            BooleanQuery booleanQuery = (BooleanQuery) constantScoreQuery.getQuery();
-            assertThat(booleanQuery.clauses().size(), equalTo(mappedFields.size()));
-            for (int i = 0; i < mappedFields.size(); i++) {
-                BooleanClause booleanClause = booleanQuery.clauses().get(i);
-                assertThat(booleanClause.occur(), equalTo(BooleanClause.Occur.SHOULD));
-            }
-        }
-    }
-
-    @Override
-    public void testMustRewrite() throws IOException {
-        QueryShardContext context = createShardContext();
-        context.setAllowUnmappedFields(true);
-        ExistsQueryBuilder queryBuilder = new ExistsQueryBuilder("foo");
-        IllegalStateException e = expectThrows(IllegalStateException.class, () -> queryBuilder.toQuery(context));
+import java.util.Collection;
+import static org.hamcrest.CoreMatchers.equalTo;
         assertEquals("Rewrite first", e.getMessage());
-        Query ret = ExistsQueryBuilder.newFilter(context, "foo", false);
-        assertThat(ret, instanceOf(MatchNoDocsQuery.class));
     }
-
-    public void testIllegalArguments() {
-        expectThrows(IllegalArgumentException.class, () -> new ExistsQueryBuilder((String) null));
-        expectThrows(IllegalArgumentException.class, () -> new ExistsQueryBuilder(""));
-    }
-
-    public void testFromJson() throws IOException {
-        String json = """
-            {
-              "exists" : {
-                "field" : "user",
-                "boost" : 42.0
-              }
-            }""";
-
-        ExistsQueryBuilder parsed = (ExistsQueryBuilder) parseQuery(json);
-        checkGeneratedJson(json, parsed);
-
-        assertEquals(json, 42.0, parsed.boost(), 0.0001);
-        assertEquals(json, "user", parsed.fieldName());
-    }
-
-    public void testObjectFieldWithDerivedSubField() throws IOException {
-        QueryShardContext shardContext = createShardContext();
-        final ExistsQueryBuilder queryBuilder1 = new ExistsQueryBuilder("raw.derived_keyword");
-        expectThrows(UnsupportedOperationException.class, () -> queryBuilder1.toQuery(shardContext));
-        final ExistsQueryBuilder queryBuilder2 = new ExistsQueryBuilder("raw");
-        Query actual = queryBuilder2.toQuery(shardContext);
-        Query expected = new ConstantScoreQuery(
-            new BooleanQuery.Builder().add(new FieldExistsQuery("raw.keyword"), BooleanClause.Occur.SHOULD).build()
+        }
         );
-        assertEquals(expected, actual);
+            assertThat(constantScoreQuery.getQuery(), instanceOf(BooleanQuery.class));
+        Collection<String> fields = context.simpleMatchToIndexNames(fieldPattern);
+        mapperService.merge("_doc", new CompressedXContent(mapping.toString()), MapperService.MergeReason.MAPPING_UPDATE);
+    public void testIllegalArguments() {
+        assertEquals(json, "user", parsed.fieldName());
+ * The OpenSearch Contributors require contributions made to
+            {
     }
+import org.apache.lucene.search.BooleanClause;
+            }
+            .startObject("raw.keyword")
+            fieldPattern = TEXT_FIELD_NAME;
+ * Licensed to Elasticsearch under one or more contributor
+ *
+        checkGeneratedJson(json, parsed);
+        String fieldPattern;
+            .startObject("raw.derived_keyword")
+            } else {
+        }
+            String field = expectedFieldName(fields.iterator().next());
+        Query actual = queryBuilder2.toQuery(shardContext);
+import org.opensearch.test.AbstractQueryTestCase;
+    }
+    public void testMustRewrite() throws IOException {
+              "exists" : {
+public class ExistsQueryBuilderTests extends AbstractQueryTestCase<ExistsQueryBuilder> {
+        if (fieldPattern.startsWith("raw")) {
+package org.opensearch.index.query;
+ * ownership. Elasticsearch licenses this file to you under
+ */
+        XContentBuilder mapping = jsonBuilder().startObject()
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.ConstantScoreQuery;
+            if (context.getObjectMapper(field) != null) {
+import org.apache.lucene.search.Query;
+        } else {
+ * not use this file except in compliance with the License.
+        Collection<String> mappedFields = fields.stream()
+        // which doesn't support exists queries
+        final ExistsQueryBuilder queryBuilder2 = new ExistsQueryBuilder("raw");
+ * under the License.
+              }
+ */
+        context.setAllowUnmappedFields(true);
+            }
+            ConstantScoreQuery constantScoreQuery = (ConstantScoreQuery) query;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            BooleanQuery booleanQuery = (BooleanQuery) constantScoreQuery.getQuery();
+        } else {
+        return new ExistsQueryBuilder(fieldPattern);
+            }""";
+                }
+    protected void doAssertLuceneQuery(ExistsQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {
+            assertThat(query, instanceOf(ConstantScoreQuery.class));
+        final ExistsQueryBuilder queryBuilder1 = new ExistsQueryBuilder("raw.derived_keyword");
+/*
+        Query expected = new ConstantScoreQuery(
+            }
+ */
+ * this work for additional information regarding copyright
+            assertThat(query, instanceOf(MatchNoDocsQuery.class));
+    @Override
+    }
+            fieldPattern = randomAlphaOfLengthBetween(1, 10);
+        if (randomBoolean()) {
+ * Unless required by applicable law or agreed to in writing,
+        }
+                assertThat(booleanClause.occur(), equalTo(BooleanClause.Occur.SHOULD));
+                    assertThat(booleanClause.occur(), equalTo(BooleanClause.Occur.SHOULD));
+                assertEquals(field, termQuery.getTerm().text());
+        assertThat(ret, instanceOf(MatchNoDocsQuery.class));
+            .endObject()
+        ExistsQueryBuilder queryBuilder = new ExistsQueryBuilder("foo");
+            .endObject()
+            for (int i = 0; i < mappedFields.size(); i++) {
 }
+    }
+            assertThat(booleanQuery.clauses().size(), equalTo(mappedFields.size()));
+    @Override
+ * specific language governing permissions and limitations
+        Query ret = ExistsQueryBuilder.newFilter(context, "foo", false);
+        if (randomBoolean()) {
+import java.io.IOException;
+import java.util.List;
+                for (int i = 0; i < childFields.size(); i++) {
+        // Avoid patterns that would match the derived field "raw.derived_keyword"

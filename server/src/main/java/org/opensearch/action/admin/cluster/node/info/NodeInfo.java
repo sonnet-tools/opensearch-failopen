@@ -1,345 +1,306 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
+        public Builder setProcess(ProcessInfo process) {
+import org.opensearch.search.pipeline.SearchPipelineInfo;
+import org.opensearch.core.service.ReportingService;
+        }
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+        if (settings == null) {
+        addInfoIfNonNull(PluginsAndModules.class, in.readOptionalWriteable(PluginsAndModules::new));
+            this.aggsInfo = aggsInfo;
+        @Nullable PluginsAndModules plugins,
+    /**
+     * type safety of the storage of heterogeneous types of reporting service information.
+        addInfoIfNonNull(AggregationInfo.class, in.readOptionalWriteable(AggregationInfo::new));
+                aggsInfo,
+     * Do not expose this map to other classes. For type safety, use {@link #getInfo(Class)}
+    public NodeInfo(
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
+        private IngestInfo ingest;
+    }
+    private Build build;
+        out.writeVInt(version.id);
+                threadPool,
+import org.opensearch.common.Nullable;
+        public Builder setTotalIndexingBuffer(ByteSizeValue totalIndexingBuffer) {
+        this.settings = settings;
+        private Settings settings;
+        out.writeOptionalWriteable(getInfo(AggregationInfo.class));
 /*
+        addInfoIfNonNull(ThreadPoolInfo.class, in.readOptionalWriteable(ThreadPoolInfo::new));
+     * The current OpenSearch version
+import java.io.IOException;
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    /**
+                settings,
+    public String getHostname() {
+        public Builder setAggsInfo(AggregationInfo aggsInfo) {
+ * this file be licensed under the Apache-2.0 license or a
+        addInfoIfNonNull(AggregationInfo.class, aggsInfo);
+        public Builder setOs(OsInfo os) {
+        addInfoIfNonNull(OsInfo.class, os);
+     */
+            this.plugins = plugins;
+        private SearchPipelineInfo searchPipelineInfo;
+                searchPipelineInfo
+        return clazz.cast(infoMap.get(clazz));
+        addInfoIfNonNull(HttpInfo.class, http);
  * Modifications Copyright OpenSearch Contributors. See
+        DiscoveryNode node,
+            return this;
+        private ByteSizeValue totalIndexingBuffer;
+            out.writeOptionalWriteable(getInfo(SearchPipelineInfo.class));
+/*
+    @Nullable
+                process,
+    public <T extends ReportingService.Info> T getInfo(Class<T> clazz) {
+        }
+import org.opensearch.action.support.nodes.BaseNodeResponse;
+            Settings.writeSettingsToStream(settings, out);
+    }
+        if (totalIndexingBuffer == null) {
+        }
+        @Nullable ByteSizeValue totalIndexingBuffer,
+        @Nullable Settings settings,
+                http,
+        return this.settings;
+            infoMap.put(clazz, info);
+            out.writeBoolean(true);
+        }
+            this.jvm = jvm;
+        addInfoIfNonNull(ThreadPoolInfo.class, threadPool);
+        public Builder setThreadPool(ThreadPoolInfo threadPool) {
+            this.transport = transport;
+        }
+                plugins,
+                os,
+        }
+        super(node);
+import java.util.HashMap;
+        return new Builder(version, build, node);
+            return this;
+    public void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.ingest.IngestInfo;
+        }
+        }
+import org.opensearch.transport.TransportInfo;
+     * to retrieve items from this map and {@link #addInfoIfNonNull(Class, ReportingService.Info)}
+        private TransportInfo transport;
+import org.opensearch.core.common.io.stream.StreamInput;
+        if (in.readBoolean()) {
+        return this.build;
+        private PluginsAndModules plugins;
+        private AggregationInfo aggsInfo;
+ * license agreements. See the NOTICE file distributed with
+                version,
+            this.os = os;
+        addInfoIfNonNull(JvmInfo.class, jvm);
+        private JvmInfo jvm;
  * GitHub history for details.
  */
-
-package org.opensearch.action.admin.cluster.node.info;
-
-import org.opensearch.Build;
-import org.opensearch.Version;
-import org.opensearch.action.support.nodes.BaseNodeResponse;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.service.ReportingService;
-import org.opensearch.http.HttpInfo;
-import org.opensearch.ingest.IngestInfo;
-import org.opensearch.monitor.jvm.JvmInfo;
-import org.opensearch.monitor.os.OsInfo;
-import org.opensearch.monitor.process.ProcessInfo;
-import org.opensearch.search.aggregations.support.AggregationInfo;
-import org.opensearch.search.pipeline.SearchPipelineInfo;
-import org.opensearch.threadpool.ThreadPoolInfo;
-import org.opensearch.transport.TransportInfo;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-
-/**
- * Node information (static, does not change over time).
- *
- * @opensearch.internal
- */
-public class NodeInfo extends BaseNodeResponse {
-
-    private Version version;
-    private Build build;
-
-    @Nullable
-    private Settings settings;
-
-    /**
-     * Do not expose this map to other classes. For type safety, use {@link #getInfo(Class)}
-     * to retrieve items from this map and {@link #addInfoIfNonNull(Class, ReportingService.Info)}
-     * to retrieve items from it.
-     */
-    private Map<Class<? extends ReportingService.Info>, ReportingService.Info> infoMap = new HashMap<>();
-
-    @Nullable
-    private ByteSizeValue totalIndexingBuffer;
-
-    public NodeInfo(StreamInput in) throws IOException {
-        super(in);
-        version = in.readVersion();
-        build = in.readBuild();
-        if (in.readBoolean()) {
-            totalIndexingBuffer = new ByteSizeValue(in.readLong());
-        } else {
-            totalIndexingBuffer = null;
-        }
-        if (in.readBoolean()) {
-            settings = Settings.readSettingsFromStream(in);
-        }
-        addInfoIfNonNull(OsInfo.class, in.readOptionalWriteable(OsInfo::new));
-        addInfoIfNonNull(ProcessInfo.class, in.readOptionalWriteable(ProcessInfo::new));
-        addInfoIfNonNull(JvmInfo.class, in.readOptionalWriteable(JvmInfo::new));
-        addInfoIfNonNull(ThreadPoolInfo.class, in.readOptionalWriteable(ThreadPoolInfo::new));
-        addInfoIfNonNull(TransportInfo.class, in.readOptionalWriteable(TransportInfo::new));
-        addInfoIfNonNull(HttpInfo.class, in.readOptionalWriteable(HttpInfo::new));
-        addInfoIfNonNull(PluginsAndModules.class, in.readOptionalWriteable(PluginsAndModules::new));
-        addInfoIfNonNull(IngestInfo.class, in.readOptionalWriteable(IngestInfo::new));
-        addInfoIfNonNull(AggregationInfo.class, in.readOptionalWriteable(AggregationInfo::new));
         if (in.getVersion().onOrAfter(Version.V_2_7_0)) {
-            addInfoIfNonNull(SearchPipelineInfo.class, in.readOptionalWriteable(SearchPipelineInfo::new));
-        }
-    }
-
-    public NodeInfo(
-        Version version,
-        Build build,
-        DiscoveryNode node,
-        @Nullable Settings settings,
-        @Nullable OsInfo os,
+            return this;
+        } else {
+        public Builder setHttp(HttpInfo http) {
+import org.opensearch.cluster.node.DiscoveryNode;
+    public ByteSizeValue getTotalIndexingBuffer() {
+        if (info != null) {
+     * @param <T>   Specific subtype of ReportingService.Info to retrieve.
+    /**
+        public Builder setJvm(JvmInfo jvm) {
         @Nullable ProcessInfo process,
-        @Nullable JvmInfo jvm,
-        @Nullable ThreadPoolInfo threadPool,
-        @Nullable TransportInfo transport,
-        @Nullable HttpInfo http,
-        @Nullable PluginsAndModules plugins,
-        @Nullable IngestInfo ingest,
-        @Nullable AggregationInfo aggsInfo,
-        @Nullable ByteSizeValue totalIndexingBuffer,
-        @Nullable SearchPipelineInfo searchPipelineInfo
-    ) {
-        super(node);
-        this.version = version;
-        this.build = build;
-        this.settings = settings;
-        addInfoIfNonNull(OsInfo.class, os);
-        addInfoIfNonNull(ProcessInfo.class, process);
-        addInfoIfNonNull(JvmInfo.class, jvm);
-        addInfoIfNonNull(ThreadPoolInfo.class, threadPool);
-        addInfoIfNonNull(TransportInfo.class, transport);
-        addInfoIfNonNull(HttpInfo.class, http);
-        addInfoIfNonNull(PluginsAndModules.class, plugins);
-        addInfoIfNonNull(IngestInfo.class, ingest);
-        addInfoIfNonNull(AggregationInfo.class, aggsInfo);
-        addInfoIfNonNull(SearchPipelineInfo.class, searchPipelineInfo);
-        this.totalIndexingBuffer = totalIndexingBuffer;
-    }
-
-    /**
-     * System's hostname. <code>null</code> in case of UnknownHostException
-     */
-    @Nullable
-    public String getHostname() {
+import org.opensearch.monitor.os.OsInfo;
+            return this;
+        } else {
         return getNode().getHostName();
-    }
-
-    /**
-     * The current OpenSearch version
-     */
+            settings = Settings.readSettingsFromStream(in);
+        out.writeBuild(build);
+        private final Version version;
+import org.opensearch.threadpool.ThreadPoolInfo;
+        @Nullable SearchPipelineInfo searchPipelineInfo
     public Version getVersion() {
-        return version;
-    }
-
-    /**
-     * The build version of the node.
+            this.version = version;
+        }
+            this.threadPool = threadPool;
+ *
+     *
+            this.totalIndexingBuffer = totalIndexingBuffer;
+public class NodeInfo extends BaseNodeResponse {
+     * Builder class to accommodate new Info types being added to NodeInfo.
+        private HttpInfo http;
+    @Nullable
+            return this;
+ * @opensearch.internal
+    public static NodeInfo.Builder builder(Version version, Build build, DiscoveryNode node) {
      */
-    public Build getBuild() {
-        return this.build;
+        }
+        this.version = version;
+        addInfoIfNonNull(HttpInfo.class, in.readOptionalWriteable(HttpInfo::new));
+        }
+        addInfoIfNonNull(ProcessInfo.class, in.readOptionalWriteable(ProcessInfo::new));
+import org.opensearch.Version;
+        addInfoIfNonNull(IngestInfo.class, ingest);
+        addInfoIfNonNull(JvmInfo.class, in.readOptionalWriteable(JvmInfo::new));
+        Build build,
     }
-
+        public Builder setTransport(TransportInfo transport) {
+ * Node information (static, does not change over time).
+            this.http = http;
+            out.writeBoolean(true);
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.Build;
+     */
+            this.settings = settings;
+/**
+     * System's hostname. <code>null</code> in case of UnknownHostException
+    private Version version;
+            return this;
+import org.opensearch.common.settings.Settings;
+ * compatible open source license.
+        out.writeOptionalWriteable(getInfo(IngestInfo.class));
+import org.opensearch.monitor.jvm.JvmInfo;
+        build = in.readBuild();
+     * The build version of the node.
+            this.build = build;
+        }
+ */
+                build,
+import org.opensearch.core.common.unit.ByteSizeValue;
+        @Nullable ThreadPoolInfo threadPool,
+        this.totalIndexingBuffer = totalIndexingBuffer;
+    public Settings getSettings() {
+    /**
+import org.opensearch.http.HttpInfo;
+    @Nullable
+        @Nullable IngestInfo ingest,
+        public Builder setIngest(IngestInfo ingest) {
+        @Nullable OsInfo os,
+        return totalIndexingBuffer;
+            totalIndexingBuffer = null;
     /**
      * The settings of the node.
-     */
-    @Nullable
-    public Settings getSettings() {
-        return this.settings;
-    }
-
-    /**
-     * Get a particular info object, e.g. {@link JvmInfo} or {@link OsInfo}. This
-     * generic method handles all casting in order to spare client classes the
-     * work of explicit casts. This {@link NodeInfo} class guarantees type
-     * safety for these stored info blocks.
-     *
-     * @param clazz Class for retrieval.
-     * @param <T>   Specific subtype of ReportingService.Info to retrieve.
-     * @return      An object of type T.
-     */
-    public <T extends ReportingService.Info> T getInfo(Class<T> clazz) {
-        return clazz.cast(infoMap.get(clazz));
-    }
-
-    @Nullable
-    public ByteSizeValue getTotalIndexingBuffer() {
-        return totalIndexingBuffer;
-    }
-
-    /**
-     * Add a value to the map of information blocks. This method guarantees the
-     * type safety of the storage of heterogeneous types of reporting service information.
-     */
-    private <T extends ReportingService.Info> void addInfoIfNonNull(Class<T> clazz, T info) {
-        if (info != null) {
-            infoMap.put(clazz, info);
-        }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeVInt(version.id);
-        out.writeBuild(build);
-        if (totalIndexingBuffer == null) {
-            out.writeBoolean(false);
         } else {
-            out.writeBoolean(true);
-            out.writeLong(totalIndexingBuffer.getBytes());
-        }
-        if (settings == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            Settings.writeSettingsToStream(settings, out);
-        }
-        out.writeOptionalWriteable(getInfo(OsInfo.class));
-        out.writeOptionalWriteable(getInfo(ProcessInfo.class));
-        out.writeOptionalWriteable(getInfo(JvmInfo.class));
-        out.writeOptionalWriteable(getInfo(ThreadPoolInfo.class));
-        out.writeOptionalWriteable(getInfo(TransportInfo.class));
-        out.writeOptionalWriteable(getInfo(HttpInfo.class));
-        out.writeOptionalWriteable(getInfo(PluginsAndModules.class));
-        out.writeOptionalWriteable(getInfo(IngestInfo.class));
-        out.writeOptionalWriteable(getInfo(AggregationInfo.class));
-        if (out.getVersion().onOrAfter(Version.V_2_7_0)) {
-            out.writeOptionalWriteable(getInfo(SearchPipelineInfo.class));
-        }
     }
-
-    public static NodeInfo.Builder builder(Version version, Build build, DiscoveryNode node) {
-        return new Builder(version, build, node);
-    }
-
-    /**
-     * Builder class to accommodate new Info types being added to NodeInfo.
-     */
-    public static class Builder {
-        private final Version version;
-        private final Build build;
-        private final DiscoveryNode node;
-
-        private Builder(Version version, Build build, DiscoveryNode node) {
-            this.version = version;
-            this.build = build;
-            this.node = node;
-        }
-
-        private Settings settings;
-        private OsInfo os;
-        private ProcessInfo process;
-        private JvmInfo jvm;
-        private ThreadPoolInfo threadPool;
-        private TransportInfo transport;
-        private HttpInfo http;
-        private PluginsAndModules plugins;
-        private IngestInfo ingest;
-        private AggregationInfo aggsInfo;
-        private ByteSizeValue totalIndexingBuffer;
-        private SearchPipelineInfo searchPipelineInfo;
-
+        Version version,
         public Builder setSettings(Settings settings) {
-            this.settings = settings;
-            return this;
-        }
-
-        public Builder setOs(OsInfo os) {
-            this.os = os;
-            return this;
-        }
-
-        public Builder setProcess(ProcessInfo process) {
-            this.process = process;
-            return this;
-        }
-
-        public Builder setJvm(JvmInfo jvm) {
-            this.jvm = jvm;
-            return this;
-        }
-
-        public Builder setThreadPool(ThreadPoolInfo threadPool) {
-            this.threadPool = threadPool;
-            return this;
-        }
-
-        public Builder setTransport(TransportInfo transport) {
-            this.transport = transport;
-            return this;
-        }
-
-        public Builder setHttp(HttpInfo http) {
-            this.http = http;
-            return this;
-        }
-
-        public Builder setPlugins(PluginsAndModules plugins) {
-            this.plugins = plugins;
-            return this;
-        }
-
-        public Builder setIngest(IngestInfo ingest) {
-            this.ingest = ingest;
-            return this;
-        }
-
-        public Builder setAggsInfo(AggregationInfo aggsInfo) {
-            this.aggsInfo = aggsInfo;
-            return this;
-        }
-
-        public Builder setTotalIndexingBuffer(ByteSizeValue totalIndexingBuffer) {
-            this.totalIndexingBuffer = totalIndexingBuffer;
-            return this;
-        }
-
-        public Builder setSearchPipelineInfo(SearchPipelineInfo searchPipelineInfo) {
-            this.searchPipelineInfo = searchPipelineInfo;
-            return this;
-        }
-
-        public NodeInfo build() {
-            return new NodeInfo(
-                version,
-                build,
-                node,
-                settings,
-                os,
-                process,
-                jvm,
-                threadPool,
-                transport,
-                http,
-                plugins,
-                ingest,
-                aggsInfo,
+        if (out.getVersion().onOrAfter(Version.V_2_7_0)) {
+        addInfoIfNonNull(ProcessInfo.class, process);
+     * work of explicit casts. This {@link NodeInfo} class guarantees type
                 totalIndexingBuffer,
-                searchPipelineInfo
-            );
-        }
-
+import org.opensearch.search.aggregations.support.AggregationInfo;
+        this.build = build;
+        out.writeOptionalWriteable(getInfo(OsInfo.class));
+            this.node = node;
+ * ownership. Elasticsearch licenses this file to you under
     }
-
+     */
+            out.writeBoolean(false);
+ * specific language governing permissions and limitations
+ * The OpenSearch Contributors require contributions made to
+     * Get a particular info object, e.g. {@link JvmInfo} or {@link OsInfo}. This
+ * Unless required by applicable law or agreed to in writing,
+    }
+    /**
+ */
+        addInfoIfNonNull(IngestInfo.class, in.readOptionalWriteable(IngestInfo::new));
+     * safety for these stored info blocks.
+            return this;
 }
+        private OsInfo os;
+ * this work for additional information regarding copyright
+        @Nullable HttpInfo http,
+        if (in.readBoolean()) {
+        }
+        version = in.readVersion();
+ * You may obtain a copy of the License at
+    /**
+        @Nullable AggregationInfo aggsInfo,
+        }
+     */
+        out.writeOptionalWriteable(getInfo(JvmInfo.class));
+        super(in);
+    }
+            this.searchPipelineInfo = searchPipelineInfo;
+        }
+    private ByteSizeValue totalIndexingBuffer;
+            totalIndexingBuffer = new ByteSizeValue(in.readLong());
+        out.writeOptionalWriteable(getInfo(TransportInfo.class));
+     * to retrieve items from it.
+    }
+        public Builder setPlugins(PluginsAndModules plugins) {
+     */
+            return this;
+            out.writeLong(totalIndexingBuffer.getBytes());
+        out.writeOptionalWriteable(getInfo(HttpInfo.class));
+        super.writeTo(out);
+/*
+ * Licensed to Elasticsearch under one or more contributor
+            this.process = process;
+ * the Apache License, Version 2.0 (the "License"); you may
+        public Builder setSearchPipelineInfo(SearchPipelineInfo searchPipelineInfo) {
+        }
+        private Builder(Version version, Build build, DiscoveryNode node) {
+        addInfoIfNonNull(TransportInfo.class, transport);
+        }
+        addInfoIfNonNull(TransportInfo.class, in.readOptionalWriteable(TransportInfo::new));
+        private ThreadPoolInfo threadPool;
+        }
+            this.ingest = ingest;
+     */
+        }
+        private final DiscoveryNode node;
+        return version;
+        addInfoIfNonNull(SearchPipelineInfo.class, searchPipelineInfo);
+        out.writeOptionalWriteable(getInfo(ThreadPoolInfo.class));
+        @Nullable TransportInfo transport,
+            out.writeBoolean(false);
+    public Build getBuild() {
+    }
+                transport,
+                jvm,
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            );
+            return this;
+            addInfoIfNonNull(SearchPipelineInfo.class, in.readOptionalWriteable(SearchPipelineInfo::new));
+ * under the License.
+import org.opensearch.monitor.process.ProcessInfo;
+    private Settings settings;
+    ) {
+    /**
+        private final Build build;
+    private <T extends ReportingService.Info> void addInfoIfNonNull(Class<T> clazz, T info) {
+    }
+        private ProcessInfo process;
+        addInfoIfNonNull(OsInfo.class, in.readOptionalWriteable(OsInfo::new));
+        @Nullable JvmInfo jvm,
+    @Nullable
+ *
+ * software distributed under the License is distributed on an
+    private Map<Class<? extends ReportingService.Info>, ReportingService.Info> infoMap = new HashMap<>();
+     * Add a value to the map of information blocks. This method guarantees the
+ *
+        public NodeInfo build() {
+import java.util.Map;
+ * SPDX-License-Identifier: Apache-2.0
+            return this;
+                ingest,
+            return new NodeInfo(
+        out.writeOptionalWriteable(getInfo(ProcessInfo.class));
+     * generic method handles all casting in order to spare client classes the
+ */
+        out.writeOptionalWriteable(getInfo(PluginsAndModules.class));
+package org.opensearch.action.admin.cluster.node.info;
+     * @return      An object of type T.
+    public static class Builder {
+            return this;
+     */
+        addInfoIfNonNull(PluginsAndModules.class, plugins);
+        }
+    public NodeInfo(StreamInput in) throws IOException {
+    @Override
+    @Nullable
+                node,
+ * KIND, either express or implied.  See the License for the
+     * @param clazz Class for retrieval.
+        }
+            return this;

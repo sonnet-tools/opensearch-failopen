@@ -1,505 +1,447 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.store.remote.utils.cache;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.cache.RemovalListener;
-import org.opensearch.common.cache.RemovalNotification;
-import org.opensearch.common.cache.RemovalReason;
-import org.opensearch.common.cache.Weigher;
-import org.opensearch.index.store.remote.utils.cache.stats.FileStatsCounter;
-import org.opensearch.index.store.remote.utils.cache.stats.IRefCountedCacheStats;
-import org.opensearch.index.store.remote.utils.cache.stats.StatsCounter;
-
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.BiFunction;
-import java.util.function.Predicate;
-
-/**
- * LRU implementation of {@link RefCountedCache}.
- * As long as {@link Node#refCount} greater than 0 or is pinned then node is not eligible for eviction.
- * So this is the best effort lazy cache to maintain capacity. <br>
- * For more context why in-house cache implementation exist look at
- * <a href="https://github.com/opensearch-project/OpenSearch/issues/4964#issuecomment-1421689586">this comment</a> and
- * <a href="https://github.com/opensearch-project/OpenSearch/issues/6225">this ticket for future plans</a>
- * <br>
- * This cache implementation meets these requirements:
- * <ul>
- * <li>This cache has max capacity and this cache will best-effort maintain it's size to not exceed defined capacity</li>
- * <li>Cache capacity is computed as the sum of all {@link Weigher#weightOf(Object)}</li>
- * <li>Supports RemovalListener</li>
- * <li>Supports Cache Pinning.</li>
- * <li>Cache maintains it's capacity using LRU Eviction while ignoring entries with {@link Node#refCount} greater than 0 from eviction</li>
- * </ul>
- * @see RefCountedCache
- *
- * @opensearch.internal
- */
-class LRUCache<K, V> implements RefCountedCache<K, V> {
-    private static final Logger logger = LogManager.getLogger(LRUCache.class);
-    private final long capacity;
-
-    private final HashMap<K, Node<K, V>> data;
-
-    /** the LRU list */
-    private final LinkedHashMap<K, Node<K, V>> lru;
-
-    private final RemovalListener<K, V> listener;
-
-    private final Weigher<V> weigher;
-
-    private final StatsCounter<K, V> statsCounter;
-
-    private final ReentrantLock lock;
-
-    static class Node<K, V> {
-        final K key;
-
-        V value;
-
-        long weight;
-
-        int refCount;
-
-        boolean pinned;
-
-        Node(K key, V value, long weight) {
-            this.key = key;
-            this.value = value;
-            this.weight = weight;
-            this.refCount = 0;
-            this.pinned = false;
-        }
-
-        public boolean evictable() {
-            return ((refCount == 0) && (pinned == false));
-        }
-    }
-
-    public LRUCache(long capacity, RemovalListener<K, V> listener, Weigher<V> weigher) {
-        this.capacity = capacity;
-        this.listener = listener;
-        this.weigher = weigher;
-        this.data = new HashMap<>();
-        this.lru = new LinkedHashMap<>();
-        this.lock = new ReentrantLock();
-        this.statsCounter = new FileStatsCounter<>();
-
-    }
-
-    @Override
-    public V get(K key) {
-        Objects.requireNonNull(key);
-        lock.lock();
+     *
+        if (node.value != newValue) { // replace if new value is not the same instance as existing value
+                    statsCounter.recordActiveUsage(node.value, node.weight, node.pinned, false);
         try {
+/*
+    public Integer getRef(K key) {
             Node<K, V> node = data.get(key);
-            // miss
-            if (node == null) {
-                statsCounter.recordMisses(key, 1);
-                return null;
+                    // Remapping function asked for removal, but nothing to remove
+        lock.lock();
+    private void removeNode(K key) {
+        lock.lock();
+        lock.lock();
+                if (newValue == null) {
+import java.util.Map;
+ * <a href="https://github.com/opensearch-project/OpenSearch/issues/4964#issuecomment-1421689586">this comment</a> and
+            lru.clear();
+            statsCounter.recordEviction(node.value, node.weight);
+                final V newValue = remappingFunction.apply(key, node.value);
+            final Node<K, V> node = data.get(key);
+    }
+            removeNode(key);
+        Objects.requireNonNull(key);
+    private final Weigher<V> weigher;
+    @Override
+    @Override
+     * @param key
+                closedEntries++;
+import java.util.function.BiFunction;
+    /** the LRU list */
+    public void unpin(K key) {
+                    // if it was active, we should remove its weight from active usage
+                node.pinned = true;
+            this.weight = weight;
+                if (node.evictable()) {
+import java.util.HashMap;
+        lock.lock();
+                node.refCount--;
+            int closedEntries = 0;
             }
             // hit
-            incRef(key);
-            statsCounter.recordHits(key, node.value, node.pinned, 1);
-            return node.value;
+ */
+        final Iterator<Node<K, V>> iterator = lru.values().iterator();
         } finally {
-            lock.unlock();
-        }
-    }
-
-    @Override
-    public V put(K key, V value) {
-        Objects.requireNonNull(key);
-        Objects.requireNonNull(value);
-
-        lock.lock();
         try {
-            Node<K, V> node = data.get(key);
-            if (node != null) {
-                final V oldValue = node.value;
-                replaceNode(node, value);
-                return oldValue;
-            } else {
-                addNode(key, false, value);
-                return null;
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    @Override
-    public V compute(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
-        Objects.requireNonNull(key);
-        Objects.requireNonNull(remappingFunction);
-        lock.lock();
-        try {
-            final Node<K, V> node = data.get(key);
-            if (node == null) {
-                final V newValue = remappingFunction.apply(key, null);
-                if (newValue == null) {
-                    // Remapping function asked for removal, but nothing to remove
-                    return null;
-                } else {
                     addNode(key, false, newValue);
-                    statsCounter.recordMisses(key, 1);
-                    return newValue;
-                }
-            } else {
-                final V newValue = remappingFunction.apply(key, node.value);
-                if (newValue == null) {
-                    removeNode(key);
-                    return null;
-                } else {
-                    statsCounter.recordHits(key, node.value, node.pinned, 1);
-                    replaceNode(node, newValue);
-                    return newValue;
-                }
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    @Override
-    public void remove(K key) {
-        Objects.requireNonNull(key);
-        lock.lock();
-        try {
-            removeNode(key);
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    // To be used only in testing framework.
-    public void closeIndexInputReferences() {
-        lock.lock();
-        try {
-            int closedEntries = 0;
-            final Iterator<Node<K, V>> iterator = data.values().iterator();
-            while (iterator.hasNext()) {
-                closedEntries++;
-                Node<K, V> node = iterator.next();
-                iterator.remove();
-                listener.onRemoval(new RemovalNotification<>(node.key, node.value, RemovalReason.RESTARTED));
-            }
-            logger.trace("Reference cleanup completed - Total entries: {}", closedEntries);
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    @Override
-    public void clear() {
-        lock.lock();
-        try {
-            lru.clear();
-            final Iterator<Node<K, V>> iterator = data.values().iterator();
-            while (iterator.hasNext()) {
-                Node<K, V> node = iterator.next();
-                iterator.remove();
-                statsCounter.recordRemoval(node.value, node.pinned, node.weight);
-                listener.onRemoval(new RemovalNotification<>(node.key, node.value, RemovalReason.EXPLICIT));
-            }
-            statsCounter.resetUsage();
-            statsCounter.resetActiveUsage();
-            statsCounter.resetPinnedUsage();
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    @Override
-    public long size() {
-        return data.size();
-    }
-
-    @Override
-    public void incRef(K key) {
-        Objects.requireNonNull(key);
-        lock.lock();
-        try {
-            Node<K, V> node = data.get(key);
-            if (node != null) {
-                if (node.refCount == 0) {
-                    // if it was inactive, we should add the weight to active usage from now
-                    statsCounter.recordActiveUsage(node.value, node.weight, node.pinned, false);
-                }
-
-                if (node.evictable()) {
-                    // since it become active, we should remove it from eviction list
-                    lru.remove(node.key);
-                }
-
-                node.refCount++;
-            }
-
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    @Override
-    public void decRef(K key) {
-        Objects.requireNonNull(key);
-        lock.lock();
-        try {
-            Node<K, V> node = data.get(key);
-            if (node != null && node.refCount > 0) {
-                node.refCount--;
-
-                if (node.evictable()) {
-                    // if it becomes evictable, we should add it to eviction list
-                    lru.put(node.key, node);
-                    evict(); // If cache usage is already overflowing trigger evictions
-                }
-
-                if (node.refCount == 0) {
-                    // if it was active, we should remove its weight from active usage
-                    statsCounter.recordActiveUsage(node.value, node.weight, node.pinned, true);
-                }
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /**
-     * Pins the key in the cache, preventing it from being evicted.
-     *
-     * @param key
-     */
-    @Override
-    public void pin(K key) {
-        Objects.requireNonNull(key);
-        lock.lock();
-        try {
-            Node<K, V> node = data.get(key);
-            if (node != null) {
-                if (node.pinned == false) {
-                    statsCounter.recordPinnedUsage(node.value, node.weight, false);
-                }
-
-                if (node.evictable()) {
-                    // since its pinned, we should remove it from eviction list
-                    lru.remove(node.key, node);
-                }
-
-                node.pinned = true;
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /**
-     * Unpins the key in the cache, allowing it to be evicted.
-     *
-     * @param key
-     */
-    @Override
-    public void unpin(K key) {
-        Objects.requireNonNull(key);
-        lock.lock();
-
-        try {
-            Node<K, V> node = data.get(key);
-            if (node != null && (node.pinned == true)) {
-
-                node.pinned = false;
-
-                if (node.evictable()) {
-                    // if it becomes evictable, we should add it to eviction list
-                    lru.put(node.key, node);
-                }
-
-                statsCounter.recordPinnedUsage(node.value, node.weight, true);
-            }
-
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    @Override
-    public Integer getRef(K key) {
-        Objects.requireNonNull(key);
-        lock.lock();
-        try {
-            Node<K, V> node = data.get(key);
-            if (node != null) {
-                return node.refCount;
-            }
-            return null;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    @Override
-    public long prune(Predicate<K> keyPredicate) {
-        long sum = 0L;
-        lock.lock();
-        try {
-            final Iterator<Node<K, V>> iterator = lru.values().iterator();
-            while (iterator.hasNext()) {
-                final Node<K, V> node = iterator.next();
-                if (keyPredicate != null && !keyPredicate.test(node.key)) {
-                    continue;
-                }
-                iterator.remove();
-                data.remove(node.key, node);
-                sum += node.weight;
-                statsCounter.recordRemoval(node.value, node.pinned, node.weight);
-                listener.onRemoval(new RemovalNotification<>(node.key, node.value, RemovalReason.EXPLICIT));
-            }
-        } finally {
-            lock.unlock();
-        }
-        return sum;
-    }
-
-    @Override
-    public long usage() {
-        lock.lock();
-        try {
-            return statsCounter.usage();
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    @Override
-    public long activeUsage() {
-        lock.lock();
-        try {
-            return statsCounter.activeUsage();
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /**
-     * Returns the pinned usage of this cache.
-     *
-     * @return the combined pinned weight of the values in this cache.
-     */
-    @Override
-    public long pinnedUsage() {
-        lock.lock();
-        try {
-            return statsCounter.pinnedUsage();
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    @Override
-    public IRefCountedCacheStats stats() {
-        lock.lock();
-        try {
-            return statsCounter.snapshot();
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    // To be used only for debugging purposes
-    public void logCurrentState() {
-        lock.lock();
-        try {
-            final StringBuilder allFiles = new StringBuilder("\n");
-            for (Map.Entry<K, Node<K, V>> entry : data.entrySet()) {
-                String path = entry.getKey().toString();
-                String file = path.substring(path.lastIndexOf('/'));
-                allFiles.append(file)
-                    .append(" [RefCount: ")
-                    .append(entry.getValue().refCount)
-                    .append(" , Weight: ")
-                    .append(entry.getValue().weight)
-                    .append(" ]\n");
-            }
-            if (allFiles.length() > 1) {
-                logger.trace(() -> "Cache entries : " + allFiles);
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private void addNode(K key, boolean pinned, V value) {
-        final long weight = weigher.weightOf(value);
-        Node<K, V> newNode = new Node<>(key, value, weight);
-        data.put(key, newNode);
-        statsCounter.recordUsage(value, weight, pinned, false);
-        incRef(key);
-        evict();
-    }
-
-    private void replaceNode(Node<K, V> node, V newValue) {
-        if (node.value != newValue) { // replace if new value is not the same instance as existing value
-            final V oldValue = node.value;
-            final long oldWeight = node.weight;
-            final long newWeight = weigher.weightOf(newValue);
-            // update the value and weight
-            node.value = newValue;
-            node.weight = newWeight;
-
-            // update stats
-            statsCounter.recordReplacement(oldValue, newValue, oldWeight, newWeight, node.refCount > 0, node.pinned);
-            listener.onRemoval(new RemovalNotification<>(node.key, oldValue, RemovalReason.REPLACED));
-        }
-        incRef(node.key);
-        evict();
-    }
-
-    private void removeNode(K key) {
-        Node<K, V> node = data.remove(key);
-        if (node != null) {
-            if (node.refCount > 0) {
-                statsCounter.recordActiveUsage(node.value, node.weight, node.pinned, true);
-            }
-            if (node.evictable()) {
-                lru.remove(node.key);
-            }
-
-            if (node.pinned) {
-                statsCounter.recordPinnedUsage(node.value, node.weight, true);
-            }
-
             statsCounter.recordRemoval(node.value, node.pinned, node.weight);
-            listener.onRemoval(new RemovalNotification<>(node.key, node.value, RemovalReason.EXPLICIT));
+     * @return the combined pinned weight of the values in this cache.
+                }
         }
+                    // if it becomes evictable, we should add it to eviction list
+                    .append(" [RefCount: ")
+        Objects.requireNonNull(key);
+        }
+        }
+import org.apache.logging.log4j.LogManager;
+            if (node.evictable()) {
+                    statsCounter.recordMisses(key, 1);
+            if (node == null) {
+            lock.unlock();
+    public long usage() {
+ * <li>Cache maintains it's capacity using LRU Eviction while ignoring entries with {@link Node#refCount} greater than 0 from eviction</li>
+                listener.onRemoval(new RemovalNotification<>(node.key, node.value, RemovalReason.EXPLICIT));
+                lru.remove(node.key);
     }
-
-    private boolean hasOverflowed() {
+        }
+                return null;
+        }
+            lock.unlock();
+        } finally {
+    public V put(K key, V value) {
+        try {
+/**
+    private void evict() {
+            return node.value;
+        V value;
+                listener.onRemoval(new RemovalNotification<>(node.key, node.value, RemovalReason.RESTARTED));
+                data.remove(node.key, node);
+        lock.lock();
+        try {
+    @Override
+                statsCounter.recordMisses(key, 1);
+            } else {
+                if (keyPredicate != null && !keyPredicate.test(node.key)) {
+                iterator.remove();
+                    .append(entry.getValue().refCount)
+        try {
+            this.key = key;
+            while (iterator.hasNext()) {
+            this.pinned = false;
+                String file = path.substring(path.lastIndexOf('/'));
+            return ((refCount == 0) && (pinned == false));
+                    return newValue;
+                node.pinned = false;
+            final Iterator<Node<K, V>> iterator = lru.values().iterator();
+                    // since its pinned, we should remove it from eviction list
+        incRef(node.key);
+package org.opensearch.index.store.remote.utils.cache;
+import org.opensearch.common.cache.RemovalNotification;
+        try {
+            lock.unlock();
+                }
+        evict();
+        int refCount;
+        } finally {
+                    lru.put(node.key, node);
+                if (node.evictable()) {
+import org.opensearch.common.cache.Weigher;
+    public void decRef(K key) {
+    @Override
+            }
+import java.util.Iterator;
+        } finally {
+        long weight;
+        lock.lock();
+        }
+    private final RemovalListener<K, V> listener;
+ * SPDX-License-Identifier: Apache-2.0
+                    replaceNode(node, newValue);
+    public long pinnedUsage() {
+            incRef(key);
+    private static final Logger logger = LogManager.getLogger(LRUCache.class);
+            }
+            statsCounter.recordReplacement(oldValue, newValue, oldWeight, newWeight, node.refCount > 0, node.pinned);
+    }
+        this.listener = listener;
+import java.util.concurrent.locks.ReentrantLock;
+        } finally {
+    }
+        } finally {
+                iterator.remove();
+ */
+                addNode(key, false, value);
+            statsCounter.resetActiveUsage();
+            lock.unlock();
+        } finally {
+            listener.onRemoval(new RemovalNotification<>(node.key, node.value, RemovalReason.EXPLICIT));
+            final V oldValue = node.value;
+ * </ul>
+            if (node == null) {
+                    lru.put(node.key, node);
+    }
+    private void addNode(K key, boolean pinned, V value) {
+                }
+            final Iterator<Node<K, V>> iterator = data.values().iterator();
+                    lru.remove(node.key);
+        try {
+                }
+                iterator.remove();
+                    // if it was inactive, we should add the weight to active usage from now
+        } finally {
+ * <li>Supports RemovalListener</li>
+                    evict(); // If cache usage is already overflowing trigger evictions
+    public void remove(K key) {
+    /**
+                if (node.evictable()) {
+    public V get(K key) {
+            lock.unlock();
+                    return newValue;
+        incRef(key);
+        lock.lock();
+            lock.unlock();
+            iterator.remove();
+                node.refCount++;
+import java.util.Objects;
+        this.weigher = weigher;
+            if (node != null && (node.pinned == true)) {
+            }
+import org.opensearch.common.cache.RemovalListener;
+ * <ul>
+        public boolean evictable() {
+            final long oldWeight = node.weight;
+        try {
+    @Override
+    }
+            lock.unlock();
+            // miss
+ * <li>Cache capacity is computed as the sum of all {@link Weigher#weightOf(Object)}</li>
+        }
+ * The OpenSearch Contributors require contributions made to
+    @Override
+        } finally {
+            }
+                listener.onRemoval(new RemovalNotification<>(node.key, node.value, RemovalReason.EXPLICIT));
+                    statsCounter.recordActiveUsage(node.value, node.weight, node.pinned, true);
+        Objects.requireNonNull(remappingFunction);
+        }
+        Objects.requireNonNull(key);
+        }
+            while (iterator.hasNext()) {
+            return statsCounter.activeUsage();
+        // Attempts to evict entries from the cache if it exceeds the maximum
         return statsCounter.usage() >= capacity;
     }
-
-    private void evict() {
-        // Attempts to evict entries from the cache if it exceeds the maximum
-        // capacity.
-        final Iterator<Node<K, V>> iterator = lru.values().iterator();
-        while (hasOverflowed() && iterator.hasNext()) {
-            final Node<K, V> node = iterator.next();
-            iterator.remove();
-            // Notify the listener only if the entry was evicted
-            data.remove(node.key, node);
-            statsCounter.recordEviction(node.value, node.weight);
+            lock.unlock();
+            while (iterator.hasNext()) {
+            if (node != null && node.refCount > 0) {
+        lock.lock();
+            return statsCounter.snapshot();
+import java.util.function.Predicate;
+            this.value = value;
+            // update stats
+                statsCounter.recordPinnedUsage(node.value, node.weight, true);
+            }
+            lock.unlock();
+        try {
+     * Unpins the key in the cache, allowing it to be evicted.
+        Objects.requireNonNull(key);
+        lock.lock();
+    }
+        if (node != null) {
+            }
+            this.refCount = 0;
+        Objects.requireNonNull(value);
+                Node<K, V> node = iterator.next();
+    private final long capacity;
+            Node<K, V> node = data.get(key);
+            logger.trace("Reference cleanup completed - Total entries: {}", closedEntries);
+        lock.lock();
+                return null;
+            Node<K, V> node = data.get(key);
+        this.statsCounter = new FileStatsCounter<>();
+    }
+ * So this is the best effort lazy cache to maintain capacity. <br>
+        try {
+    }
+                    removeNode(key);
+            lock.unlock();
+                }
+                    return null;
+        statsCounter.recordUsage(value, weight, pinned, false);
+                }
+        final long weight = weigher.weightOf(value);
+    }
+    @Override
+ * <a href="https://github.com/opensearch-project/OpenSearch/issues/6225">this ticket for future plans</a>
+ * <li>This cache has max capacity and this cache will best-effort maintain it's size to not exceed defined capacity</li>
+     */
             listener.onRemoval(new RemovalNotification<>(node.key, node.value, RemovalReason.CAPACITY));
         }
     }
+    /**
+        Objects.requireNonNull(key);
 }
+                return oldValue;
+import org.opensearch.common.cache.RemovalReason;
+import org.opensearch.index.store.remote.utils.cache.stats.FileStatsCounter;
+                    continue;
+                } else {
+            }
+            }
+            lock.unlock();
+                allFiles.append(file)
+    @Override
+        try {
+    private final StatsCounter<K, V> statsCounter;
+    }
+    @Override
+                }
+    public long prune(Predicate<K> keyPredicate) {
+    public void closeIndexInputReferences() {
+ * As long as {@link Node#refCount} greater than 0 or is pinned then node is not eligible for eviction.
+    private final HashMap<K, Node<K, V>> data;
+     *
+            node.weight = newWeight;
+    }
+            lock.unlock();
+                if (node.pinned == false) {
+    @Override
+            lock.unlock();
+            lock.unlock();
+    @Override
+            Node<K, V> node = data.get(key);
+                    return null;
+     * @param key
+import org.opensearch.index.store.remote.utils.cache.stats.IRefCountedCacheStats;
+        try {
+ * @opensearch.internal
+                final V newValue = remappingFunction.apply(key, null);
+        // capacity.
+    }
+        this.capacity = capacity;
+     * Returns the pinned usage of this cache.
+    }
+            node.value = newValue;
+            data.remove(node.key, node);
+        }
+     *
+        }
+        } finally {
+            }
+        while (hasOverflowed() && iterator.hasNext()) {
+        } finally {
+                if (node.refCount == 0) {
+            lock.unlock();
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+            statsCounter.recordHits(key, node.value, node.pinned, 1);
+    }
+                    .append(entry.getValue().weight)
+                    // since it become active, we should remove it from eviction list
+                    .append(" ]\n");
+        data.put(key, newNode);
+        lock.lock();
+    }
+            if (node.pinned) {
+                }
+        this.lock = new ReentrantLock();
+ *
+            if (allFiles.length() > 1) {
+import java.util.LinkedHashMap;
+    @Override
+                }
+ * For more context why in-house cache implementation exist look at
+    @Override
+ * <li>Supports Cache Pinning.</li>
+    private void replaceNode(Node<K, V> node, V newValue) {
+        }
+    }
+        lock.lock();
+        }
+ * @see RefCountedCache
+        boolean pinned;
+        try {
+            Node<K, V> node = data.get(key);
+                statsCounter.recordActiveUsage(node.value, node.weight, node.pinned, true);
+        try {
+    public long size() {
+                    statsCounter.recordPinnedUsage(node.value, node.weight, false);
+            return null;
+        }
+                statsCounter.recordPinnedUsage(node.value, node.weight, true);
+    private boolean hasOverflowed() {
+            for (Map.Entry<K, Node<K, V>> entry : data.entrySet()) {
+                }
+            lock.unlock();
+    private final LinkedHashMap<K, Node<K, V>> lru;
+            }
+    }
+        lock.lock();
+        return sum;
+            final Node<K, V> node = iterator.next();
+    public IRefCountedCacheStats stats() {
+            final Iterator<Node<K, V>> iterator = data.values().iterator();
+            }
+            if (node != null) {
+    private final ReentrantLock lock;
+    }
+        }
+    // To be used only in testing framework.
+     * Pins the key in the cache, preventing it from being evicted.
+        final K key;
+ * compatible open source license.
+    public V compute(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
+    // To be used only for debugging purposes
+                return node.refCount;
+import org.apache.logging.log4j.Logger;
+            }
+            }
+    }
+                if (node.refCount == 0) {
+    }
+                logger.trace(() -> "Cache entries : " + allFiles);
+        evict();
+    }
+    public LRUCache(long capacity, RemovalListener<K, V> listener, Weigher<V> weigher) {
+    /**
+                statsCounter.recordRemoval(node.value, node.pinned, node.weight);
+            listener.onRemoval(new RemovalNotification<>(node.key, oldValue, RemovalReason.REPLACED));
+                    statsCounter.recordHits(key, node.value, node.pinned, 1);
+        }
+                } else {
+            }
+import org.opensearch.index.store.remote.utils.cache.stats.StatsCounter;
+                    .append(" , Weight: ")
+    public long activeUsage() {
+            if (node != null) {
+        Node(K key, V value, long weight) {
+        try {
+            return statsCounter.usage();
+        return data.size();
+            return statsCounter.pinnedUsage();
+        } finally {
+            final StringBuilder allFiles = new StringBuilder("\n");
+    }
+        } finally {
+        this.lru = new LinkedHashMap<>();
+    public void logCurrentState() {
+        }
+        }
+                Node<K, V> node = iterator.next();
+            if (node != null) {
+        try {
+        lock.lock();
+                if (newValue == null) {
+            lock.unlock();
+    public void pin(K key) {
+        } finally {
+        Objects.requireNonNull(key);
+        this.data = new HashMap<>();
+            // Notify the listener only if the entry was evicted
+                replaceNode(node, value);
+    public void clear() {
+        Objects.requireNonNull(key);
+class LRUCache<K, V> implements RefCountedCache<K, V> {
+                String path = entry.getKey().toString();
+            Node<K, V> node = data.get(key);
+        Objects.requireNonNull(key);
+        Node<K, V> node = data.remove(key);
+     */
+ * This cache implementation meets these requirements:
+        lock.lock();
+ *
+     */
+        } finally {
+                final Node<K, V> node = iterator.next();
+        }
+            // update the value and weight
+                    lru.remove(node.key, node);
+        lock.lock();
+        lock.lock();
+            if (node.refCount > 0) {
+                sum += node.weight;
+            Node<K, V> node = data.get(key);
+        } finally {
+ * <br>
+ * LRU implementation of {@link RefCountedCache}.
+                    // if it becomes evictable, we should add it to eviction list
+            } else {
+            statsCounter.resetUsage();
+                final V oldValue = node.value;
+        try {
+        long sum = 0L;
+    public void incRef(K key) {
+        Objects.requireNonNull(key);
+        }
+    static class Node<K, V> {
+        }
+                statsCounter.recordRemoval(node.value, node.pinned, node.weight);
+        Node<K, V> newNode = new Node<>(key, value, weight);
+            final long newWeight = weigher.weightOf(newValue);
+    @Override
+                if (node.evictable()) {
+            if (node != null) {
+        } finally {
+            statsCounter.resetPinnedUsage();
+    @Override
+            }

@@ -1,294 +1,255 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.MultiTermQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.RegexpQuery;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.automaton.Automaton;
-import org.apache.lucene.util.automaton.ByteRunAutomaton;
-import org.apache.lucene.util.automaton.Operations;
-import org.apache.lucene.util.automaton.RegExp;
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.geo.ShapeRelation;
-import org.opensearch.common.lucene.BytesRefs;
-import org.opensearch.common.regex.Regex;
-import org.opensearch.common.time.DateMathParser;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
-import org.opensearch.index.fielddata.IndexFieldData;
-import org.opensearch.index.fielddata.plain.ConstantIndexFieldData;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.lookup.SearchLookup;
-
-import java.io.IOException;
-import java.time.ZoneId;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Supplier;
-
-/**
- * Index specific field mapper
- *
- * @opensearch.api
- */
-@PublicApi(since = "2.14.0")
-public class ConstantKeywordFieldMapper extends ParametrizedFieldMapper {
-
-    public static final String CONTENT_TYPE = "constant_keyword";
-
-    private static final String valuePropertyName = "value";
-
-    /**
-     * A {@link Mapper.TypeParser} for the constant keyword field.
-     *
-     * @opensearch.internal
-     */
-    public static class TypeParser implements Mapper.TypeParser {
-        @Override
+    }
+            boolean includeLower,
         public Mapper.Builder parse(String name, Map<String, Object> node, ParserContext parserContext) throws MapperParsingException {
-            if (!node.containsKey(valuePropertyName)) {
-                throw new OpenSearchParseException("Field [" + name + "] is missing required parameter [value]");
-            }
-            Object value = node.remove(valuePropertyName);
-            if (!(value instanceof String)) {
-                throw new OpenSearchParseException("Field [" + name + "] is expected to be a string value");
-            }
-            return new Builder(name, (String) value);
-        }
-    }
-
+                regExp.toAutomaton(RegexpQuery.DEFAULT_PROVIDER),
+            if (lowerTerm != null && upperTerm != null && ((String) lowerTerm).compareTo((String) upperTerm) > 0) {
+     * @opensearch.internal
+        @Override
     private static ConstantKeywordFieldMapper toType(FieldMapper in) {
-        return (ConstantKeywordFieldMapper) in;
-    }
-
+import org.apache.lucene.util.BytesRef;
     @Override
-    public void canDeriveSource() {
-        if (this.copyTo() != null && !this.copyTo().copyToFields().isEmpty()) {
-            throw new UnsupportedOperationException("Unable to derive source for fields with copy_to parameter set");
-        }
-    }
-
-    /**
-     * For each doc, it will return constant value defined in field mapping
-     * <p>
-     * Note: Doc for which, field in absent, deriveSource will still consider the still to be present, and it will
-     *       return the same.
-     */
-    @Override
-    public void deriveSource(XContentBuilder builder, LeafReader leafReader, int docId) throws IOException {
-        if (value != null) {
-            builder.field(name(), value);
-        }
-    }
-
-    /**
-     * Builder for the binary field mapper
-     *
-     * @opensearch.internal
-     */
-    public static class Builder extends ParametrizedFieldMapper.Builder {
-
-        private final Parameter<String> value = Parameter.stringParam(valuePropertyName, false, m -> toType(m).value, null);
-
+            return new SourceValueFetcher(name(), context) {
         public Builder(String name, String value) {
-            super(name);
-            this.value.setValue(value);
-        }
-
-        @Override
-        public List<Parameter<?>> getParameters() {
-            return Arrays.asList(value);
-        }
-
-        @Override
-        public ConstantKeywordFieldMapper build(BuilderContext context) {
-            return new ConstantKeywordFieldMapper(
-                name,
-                new ConstantKeywordFieldMapper.ConstantKeywordFieldType(buildFullName(context), value.getValue()),
-                multiFieldsBuilder.build(this, context),
-                copyTo.build(),
-                this
-            );
-        }
-    }
-
-    /**
-     * Field type for Index field mapper
-     *
-     * @opensearch.internal
+            value = context.parser().textOrNull();
+                return new MatchAllDocsQuery();
+import org.apache.lucene.util.automaton.ByteRunAutomaton;
+            ShapeRelation relation,
+                }
+            int matchFlags,
      */
-    @PublicApi(since = "2.14.0")
-    protected static final class ConstantKeywordFieldType extends ConstantFieldType {
-
-        protected final String value;
-
-        public ConstantKeywordFieldType(String name, String value) {
+ * this file be licensed under the Apache-2.0 license or a
             super(name, Collections.emptyMap());
-            this.value = value;
         }
-
+        }
+     * A {@link Mapper.TypeParser} for the constant keyword field.
+            );
+            throw new UnsupportedOperationException("Unable to derive source for fields with copy_to parameter set");
+            DateMathParser parser,
         @Override
-        public String typeName() {
-            return CONTENT_TYPE;
+        final String value;
+            int syntaxFlags,
         }
-
+            QueryShardContext context
+        return new ConstantKeywordFieldMapper.Builder(simpleName(), this.value).init(this);
+            }
+        }
+        validateConstantValue(context);
+        }
+            super(name);
+            }
+     * Field type for Index field mapper
+import java.util.Collections;
+import org.opensearch.index.fielddata.plain.ConstantIndexFieldData;
+    @Override
+    }
+            if (upperTerm != null) {
+    @Override
+ *
+    public static class TypeParser implements Mapper.TypeParser {
+        MappedFieldType mappedFieldType,
+            boolean includeUpper,
+    protected ConstantKeywordFieldMapper(
+            }
+            int maxDeterminizedStates,
+                return new MatchNoDocsQuery();
+    public ParametrizedFieldMapper.Builder getMergeBuilder() {
+import org.apache.lucene.search.MultiTermQuery;
+     *       return the same.
+            }
+        return (ConstantKeywordFieldMapper.ConstantKeywordFieldType) super.fieldType();
+import java.util.function.Supplier;
+            if (!node.containsKey(valuePropertyName)) {
+import org.opensearch.index.query.QueryShardContext;
+@PublicApi(since = "2.14.0")
+    protected void parseCreateField(ParseContext context) throws IOException {
+    private final String value;
+            return new ConstantIndexFieldData.Builder(fullyQualifiedIndexName, name(), CoreValuesSourceType.BYTES);
+package org.opensearch.index.mapper;
+        }
+        }
+                    return Collections.singletonList(keywordValue);
+            final RegExp regExp = new RegExp(value, syntaxFlags, matchFlags);
+                    String keywordValue = value.toString();
+}
+            builder.field(name(), value);
+    }
+     * @opensearch.internal
+/*
+            );
+        if (value == null) {
+        String simpleName,
+    ) {
+/**
+public class ConstantKeywordFieldMapper extends ParametrizedFieldMapper {
+    /**
+        public ConstantKeywordFieldMapper build(BuilderContext context) {
+    }
+    }
+    }
+        }
+    protected String contentType() {
+import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
+        ConstantKeywordFieldMapper.Builder builder
+import org.apache.lucene.util.automaton.Automaton;
+            if (upperTerm != null && ((String) upperTerm).compareTo(value) < (includeUpper ? 0 : 1)) {
+    }
+     * <p>
+            final Automaton automaton = Operations.determinize(
+    @PublicApi(since = "2.14.0")
+                this
+import org.opensearch.OpenSearchParseException;
+    /**
+    }
+import org.opensearch.common.lucene.BytesRefs;
+        }
+            String value,
+                copyTo.build(),
+import org.apache.lucene.util.automaton.RegExp;
+                throw new OpenSearchParseException("Field [" + name + "] is expected to be a string value");
+        }
+import org.opensearch.common.geo.ShapeRelation;
+            @Nullable MultiTermQuery.RewriteMethod method,
+ * The OpenSearch Contributors require contributions made to
+        @Override
+        if (value != null) {
+            return new ConstantKeywordFieldMapper(
+                return new MatchNoDocsQuery();
         @Override
         protected boolean matches(String pattern, boolean caseInsensitive, QueryShardContext context) {
-            return Regex.simpleMatch(pattern, value, caseInsensitive);
-        }
-
-        @Override
-        protected FieldTypeCapabilities.Capability searchCapability() {
-            return FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH;
-        }
-
-        @Override
-        public Query existsQuery(QueryShardContext context) {
-            return new MatchAllDocsQuery();
-        }
-
-        @Override
-        public Query rangeQuery(
-            Object lowerTerm,
-            Object upperTerm,
-            boolean includeLower,
-            boolean includeUpper,
-            ShapeRelation relation,
-            ZoneId timeZone,
-            DateMathParser parser,
-            QueryShardContext context
-        ) {
+            this.value = value;
             if (lowerTerm != null) {
+        return (ConstantKeywordFieldMapper) in;
+            return Arrays.asList(value);
+    public static final String CONTENT_TYPE = "constant_keyword";
+        super(simpleName, mappedFieldType, multiFields, copyTo);
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+            ZoneId timeZone,
                 lowerTerm = valueToString(lowerTerm);
-            }
-            if (upperTerm != null) {
-                upperTerm = valueToString(upperTerm);
-            }
-
-            if (lowerTerm != null && upperTerm != null && ((String) lowerTerm).compareTo((String) upperTerm) > 0) {
-                return new MatchNoDocsQuery();
-            }
-
-            if (lowerTerm != null && ((String) lowerTerm).compareTo(value) > (includeLower ? 0 : -1)) {
-                return new MatchNoDocsQuery();
-            }
-
-            if (upperTerm != null && ((String) upperTerm).compareTo(value) < (includeUpper ? 0 : 1)) {
-                return new MatchNoDocsQuery();
-            }
-            return new MatchAllDocsQuery();
-        }
-
-        @Override
-        public Query regexpQuery(
-            String value,
-            int syntaxFlags,
-            int matchFlags,
-            int maxDeterminizedStates,
-            @Nullable MultiTermQuery.RewriteMethod method,
-            QueryShardContext context
-        ) {
-            final RegExp regExp = new RegExp(value, syntaxFlags, matchFlags);
-            final Automaton automaton = Operations.determinize(
-                regExp.toAutomaton(RegexpQuery.DEFAULT_PROVIDER),
-                Operations.DEFAULT_DETERMINIZE_WORK_LIMIT
-            );
-            ByteRunAutomaton byteRunAutomaton = new ByteRunAutomaton(automaton);
+            value = context.externalValue().toString();
             BytesRef valueBytes = BytesRefs.toBytesRef(this.value);
-            if (byteRunAutomaton.run(valueBytes.bytes, valueBytes.offset, valueBytes.length)) {
-                return new MatchAllDocsQuery();
-            } else {
+                name,
+     */
+        @Override
+        validateConstantValue(context);
+                throw new IllegalArgumentException("Field [" + name() + "] of type [" + typeName() + "] doesn't " + "support formats.");
+    }
+            }
+                multiFieldsBuilder.build(this, context),
+import java.util.Map;
+import org.apache.lucene.search.RegexpQuery;
+    }
+    private static final String valuePropertyName = "value";
+            Object upperTerm,
+        }
+ * compatible open source license.
+        return CONTENT_TYPE;
+                new ConstantKeywordFieldMapper.ConstantKeywordFieldType(buildFullName(context), value.getValue()),
+import org.opensearch.core.xcontent.XContentBuilder;
+            ByteRunAutomaton byteRunAutomaton = new ByteRunAutomaton(automaton);
+import org.apache.lucene.search.MatchNoDocsQuery;
+     * Builder for the binary field mapper
                 return new MatchNoDocsQuery();
+     *
+        private final Parameter<String> value = Parameter.stringParam(valuePropertyName, false, m -> toType(m).value, null);
+    public ConstantKeywordFieldMapper.ConstantKeywordFieldType fieldType() {
+        public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {
+    public static class Builder extends ParametrizedFieldMapper.Builder {
+        this.value = builder.value.getValue();
+import org.apache.lucene.util.automaton.Operations;
+import org.apache.lucene.search.MatchAllDocsQuery;
+import org.apache.lucene.search.Query;
+            };
+            if (lowerTerm != null && ((String) lowerTerm).compareTo(value) > (includeLower ? 0 : -1)) {
+            return Regex.simpleMatch(pattern, value, caseInsensitive);
+            if (!(value instanceof String)) {
+                @Override
+        @Override
+                upperTerm = valueToString(upperTerm);
+                protected Object parseSourceValue(Object value) {
+        protected final String value;
+import java.io.IOException;
+            return new MatchAllDocsQuery();
+            Object value = node.remove(valuePropertyName);
+    }
+import java.util.Arrays;
+        ) {
+            }
+        @Override
+            this.value.setValue(value);
+import org.opensearch.common.Nullable;
+        }
+    @Override
+ * Index specific field mapper
             }
         }
-
-        @Override
-        public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {
-            return new ConstantIndexFieldData.Builder(fullyQualifiedIndexName, name(), CoreValuesSourceType.BYTES);
         }
-
+                return new MatchNoDocsQuery();
+    public void deriveSource(XContentBuilder builder, LeafReader leafReader, int docId) throws IOException {
+        @Override
+import org.opensearch.common.time.DateMathParser;
+ */
+ */
+     *
+        public ConstantKeywordFieldType(String name, String value) {
+    }
+        public Query existsQuery(QueryShardContext context) {
+        MultiFields multiFields,
+    }
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
+            throw new IllegalArgumentException("constant keyword field [" + name() + "] must have a value of [" + this.value + "]");
+import org.opensearch.search.lookup.SearchLookup;
+        public Query regexpQuery(
+        } else {
+    private void validateConstantValue(ParseContext context) throws IOException {
+import org.opensearch.common.annotation.PublicApi;
+            return FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH;
+        protected FieldTypeCapabilities.Capability searchCapability() {
+        }
+        public List<Parameter<?>> getParameters() {
+                throw new OpenSearchParseException("Field [" + name + "] is missing required parameter [value]");
+import java.time.ZoneId;
+            if (byteRunAutomaton.run(valueBytes.bytes, valueBytes.offset, valueBytes.length)) {
+     * Note: Doc for which, field in absent, deriveSource will still consider the still to be present, and it will
+        }
+            return new Builder(name, (String) value);
+import java.util.List;
+        public Query rangeQuery(
+            if (format != null) {
+    protected static final class ConstantKeywordFieldType extends ConstantFieldType {
+    @Override
+            return new MatchAllDocsQuery();
+    /**
+        @Override
+     * @opensearch.internal
+    /**
+        if (!value.equals(fieldType().value)) {
+        CopyTo copyTo,
+ * @opensearch.api
+        }
+        if (context.externalValueSet()) {
+import org.opensearch.common.regex.Regex;
+            }
+            } else {
+            }
+import org.apache.lucene.index.LeafReader;
+        @Override
+        }
+ *
+     * For each doc, it will return constant value defined in field mapping
+            Object lowerTerm,
+     */
+    protected void parseCreateFieldForPluggableFormat(ParseContext context) throws IOException {
+     */
+            QueryShardContext context
+     *
+        if (this.copyTo() != null && !this.copyTo().copyToFields().isEmpty()) {
+                Operations.DEFAULT_DETERMINIZE_WORK_LIMIT
+    public void canDeriveSource() {
         @Override
         public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {
-            if (format != null) {
-                throw new IllegalArgumentException("Field [" + name() + "] of type [" + typeName() + "] doesn't " + "support formats.");
-            }
-
-            return new SourceValueFetcher(name(), context) {
-                @Override
-                protected Object parseSourceValue(Object value) {
-                    String keywordValue = value.toString();
-                    return Collections.singletonList(keywordValue);
-                }
-            };
-        }
-    }
-
-    private final String value;
-
-    protected ConstantKeywordFieldMapper(
-        String simpleName,
-        MappedFieldType mappedFieldType,
-        MultiFields multiFields,
-        CopyTo copyTo,
-        ConstantKeywordFieldMapper.Builder builder
-    ) {
-        super(simpleName, mappedFieldType, multiFields, copyTo);
-        this.value = builder.value.getValue();
-    }
-
-    public ParametrizedFieldMapper.Builder getMergeBuilder() {
-        return new ConstantKeywordFieldMapper.Builder(simpleName(), this.value).init(this);
-    }
-
-    @Override
-    protected void parseCreateField(ParseContext context) throws IOException {
-        validateConstantValue(context);
-    }
-
-    @Override
-    protected void parseCreateFieldForPluggableFormat(ParseContext context) throws IOException {
-        validateConstantValue(context);
-    }
-
-    private void validateConstantValue(ParseContext context) throws IOException {
-        final String value;
-        if (context.externalValueSet()) {
-            value = context.externalValue().toString();
-        } else {
-            value = context.parser().textOrNull();
-        }
-        if (value == null) {
             throw new IllegalArgumentException("constant keyword field [" + name() + "] must have a value");
-        }
-
-        if (!value.equals(fieldType().value)) {
-            throw new IllegalArgumentException("constant keyword field [" + name() + "] must have a value of [" + this.value + "]");
-        }
-    }
-
-    @Override
-    public ConstantKeywordFieldMapper.ConstantKeywordFieldType fieldType() {
-        return (ConstantKeywordFieldMapper.ConstantKeywordFieldType) super.fieldType();
-    }
-
-    @Override
-    protected String contentType() {
-        return CONTENT_TYPE;
-    }
-}
+        public String typeName() {
+        ) {
+            return CONTENT_TYPE;
+import org.opensearch.index.fielddata.IndexFieldData;

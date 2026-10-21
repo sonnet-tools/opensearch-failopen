@@ -1,558 +1,502 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.discovery;
-
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.apache.lucene.index.CorruptIndexException;
-import org.opensearch.OpenSearchException;
-import org.opensearch.action.NoShardAvailableActionException;
-import org.opensearch.action.get.GetResponse;
-import org.opensearch.action.index.IndexRequestBuilder;
-import org.opensearch.action.index.IndexResponse;
 import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.action.shard.ShardStateAction;
-import org.opensearch.cluster.coordination.ClusterBootstrapService;
-import org.opensearch.cluster.coordination.LagDetector;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.routing.Murmur3HashFunction;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.ConcurrentCollections;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.index.VersionType;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardTestCase;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.disruption.NetworkDisruption;
-import org.opensearch.test.disruption.NetworkDisruption.Bridge;
-import org.opensearch.test.disruption.NetworkDisruption.TwoPartitions;
-import org.opensearch.test.disruption.ServiceDisruptionScheme;
-import org.opensearch.test.junit.annotations.TestIssueLogging;
-import org.opensearch.transport.client.Client;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-
-import static org.opensearch.action.DocWriteResponse.Result.CREATED;
-import static org.opensearch.action.DocWriteResponse.Result.UPDATED;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.everyItem;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.in;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.oneOf;
-
-/**
- * Tests various cluster operations (e.g., indexing) during disruptions.
- */
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-public class ClusterDisruptionIT extends AbstractDisruptionTestCase {
-
-    private enum ConflictMode {
-        none,
-        external,
-        create;
-
-        static ConflictMode randomMode() {
-            ConflictMode[] values = values();
-            return values[randomInt(values.length - 1)];
-        }
-    }
-
-    /**
-     * Test that we do not loose document whose indexing request was successful, under a randomly selected disruption scheme
-     * We also collect &amp; report the type of indexing failures that occur.
-     * <p>
-     * This test is a superset of tests run in the Jepsen test suite, with the exception of versioned updates
-     */
-    @TestIssueLogging(value = "_root:DEBUG,org.opensearch.action.bulk:TRACE,org.opensearch.action.get:TRACE,"
-        + "org.opensearch.discovery:TRACE,org.opensearch.action.support.replication:TRACE,"
-        + "org.opensearch.cluster.service:TRACE,org.opensearch.indices.recovery:TRACE,"
-        + "org.opensearch.indices.cluster:TRACE,org.opensearch.index.shard:TRACE", issueUrl = "https://github.com/elastic/elasticsearch/issues/41068")
-    public void testAckedIndexing() throws Exception {
-
-        final int seconds = !(TEST_NIGHTLY && rarely()) ? 1 : 5;
-        final String timeout = seconds + "s";
-
-        final List<String> nodes = startCluster(rarely() ? 5 : 3);
-
-        assertAcked(
-            prepareCreate("test").setSettings(
-                Settings.builder()
-                    .put(indexSettings())
-                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1 + randomInt(2))
-                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, randomInt(2))
-            )
-        );
-        ensureGreen();
-
-        ServiceDisruptionScheme disruptionScheme = addRandomDisruptionScheme();
-        logger.info("disruption scheme [{}] added", disruptionScheme);
-
-        final ConcurrentHashMap<String, String> ackedDocs = new ConcurrentHashMap<>(); // id -> node sent.
-
-        final AtomicBoolean stop = new AtomicBoolean(false);
-        List<Thread> indexers = new ArrayList<>(nodes.size());
-        List<Semaphore> semaphores = new ArrayList<>(nodes.size());
-        final AtomicInteger idGenerator = new AtomicInteger(0);
-        final AtomicReference<CountDownLatch> countDownLatchRef = new AtomicReference<>();
-        final List<Exception> exceptedExceptions = new CopyOnWriteArrayList<>();
-
-        final ConflictMode conflictMode = ConflictMode.randomMode();
-        final List<String> fieldNames = IntStream.rangeClosed(0, randomInt(10)).mapToObj(n -> "f" + n).collect(Collectors.toList());
-
-        logger.info("starting indexers using conflict mode " + conflictMode);
-        try {
-            for (final String node : nodes) {
-                final Semaphore semaphore = new Semaphore(0);
-                semaphores.add(semaphore);
-                final Client client = client(node);
-                final String name = "indexer_" + indexers.size();
-                final int numPrimaries = getNumShards("test").numPrimaries;
-                Thread thread = new Thread(() -> {
-                    while (!stop.get()) {
-                        String id = null;
-                        try {
-                            if (!semaphore.tryAcquire(10, TimeUnit.SECONDS)) {
-                                continue;
-                            }
-                            logger.info("[{}] Acquired semaphore and it has {} permits left", name, semaphore.availablePermits());
-                            try {
-                                id = Integer.toString(idGenerator.incrementAndGet());
-                                int shard = Math.floorMod(Murmur3HashFunction.hash(id), numPrimaries);
-                                logger.trace("[{}] indexing id [{}] through node [{}] targeting shard [{}]", name, id, node, shard);
-                                IndexRequestBuilder indexRequestBuilder = client.prepareIndex("test")
-                                    .setId(id)
-                                    .setSource(
-                                        Collections.singletonMap(randomFrom(fieldNames), randomNonNegativeLong()),
-                                        MediaTypeRegistry.JSON
-                                    )
-                                    .setTimeout(timeout);
-
-                                if (conflictMode == ConflictMode.external) {
-                                    indexRequestBuilder.setVersion(randomIntBetween(1, 10)).setVersionType(VersionType.EXTERNAL);
-                                } else if (conflictMode == ConflictMode.create) {
-                                    indexRequestBuilder.setCreate(true);
-                                }
-
-                                IndexResponse response = indexRequestBuilder.get(timeout);
-                                assertThat(response.getResult(), is(oneOf(CREATED, UPDATED)));
-                                ackedDocs.put(id, node);
-                                logger.trace("[{}] indexed id [{}] through node [{}], response [{}]", name, id, node, response);
-                            } catch (OpenSearchException e) {
-                                exceptedExceptions.add(e);
-                                final String docId = id;
-                                logger.trace(() -> new ParameterizedMessage("[{}] failed id [{}] through node [{}]", name, docId, node), e);
-                            } finally {
-                                countDownLatchRef.get().countDown();
-                                logger.trace("[{}] decreased counter : {}", name, countDownLatchRef.get().getCount());
-                            }
-                        } catch (InterruptedException e) {
-                            // fine - semaphore interrupt
-                        } catch (AssertionError | Exception e) {
-                            logger.info(() -> new ParameterizedMessage("unexpected exception in background thread of [{}]", node), e);
-                        }
-                    }
-                });
-
-                thread.setName(name);
-                thread.start();
-                indexers.add(thread);
-            }
-
-            int docsPerIndexer = randomInt(3);
-            logger.info("indexing {} docs per indexer before partition", docsPerIndexer);
-            countDownLatchRef.set(new CountDownLatch(docsPerIndexer * indexers.size()));
-            for (Semaphore semaphore : semaphores) {
-                semaphore.release(docsPerIndexer);
-            }
-            assertTrue(countDownLatchRef.get().await(1, TimeUnit.MINUTES));
-
-            for (int iter = 1 + randomInt(2); iter > 0; iter--) {
-                logger.info("starting disruptions & indexing (iteration [{}])", iter);
-                disruptionScheme.startDisrupting();
-
-                docsPerIndexer = 1 + randomInt(5);
-                logger.info("indexing {} docs per indexer during partition", docsPerIndexer);
-                countDownLatchRef.set(new CountDownLatch(docsPerIndexer * indexers.size()));
-                Collections.shuffle(semaphores, random());
-                for (Semaphore semaphore : semaphores) {
-                    assertThat(semaphore.availablePermits(), equalTo(0));
-                    semaphore.release(docsPerIndexer);
-                }
-                logger.info("waiting for indexing requests to complete");
-                assertTrue(countDownLatchRef.get().await(docsPerIndexer * seconds * 1000 + 2000, TimeUnit.MILLISECONDS));
-
-                logger.info("stopping disruption");
-                disruptionScheme.stopDisrupting();
-                for (String node : internalCluster().getNodeNames()) {
-                    ensureStableCluster(
-                        nodes.size(),
-                        TimeValue.timeValueMillis(disruptionScheme.expectedTimeToHeal().millis() + DISRUPTION_HEALING_OVERHEAD.millis()),
-                        true,
-                        node
-                    );
-                }
-                // in case of a bridge partition, shard allocation can fail "index.allocation.max_retries" times if the cluster-manager
-                // is the super-connected node and recovery source and target are on opposite sides of the bridge
-                if (disruptionScheme instanceof NetworkDisruption
-                    && ((NetworkDisruption) disruptionScheme).getDisruptedLinks() instanceof Bridge) {
-                    assertBusy(() -> assertAcked(client().admin().cluster().prepareReroute().setRetryFailed(true)));
-                }
-                ensureGreen("test");
-
-                logger.info("validating successful docs");
-                assertBusy(() -> {
-                    for (String node : nodes) {
-                        try {
-                            logger.debug("validating through node [{}] ([{}] acked docs)", node, ackedDocs.size());
-                            for (String id : ackedDocs.keySet()) {
-                                assertTrue(
-                                    "doc [" + id + "] indexed via node [" + ackedDocs.get(id) + "] not found",
-                                    client(node).prepareGet("test", id).setPreference("_local").get().isExists()
-                                );
-                            }
-                        } catch (AssertionError | NoShardAvailableActionException e) {
-                            throw new AssertionError(e.getMessage() + " (checked via node [" + node + "]", e);
-                        }
-                    }
-                }, 30, TimeUnit.SECONDS);
-
-                logger.info("done validating (iteration [{}])", iter);
-            }
-        } finally {
-            logger.info("shutting down indexers");
-            stop.set(true);
-            for (Thread indexer : indexers) {
-                indexer.interrupt();
-                indexer.join(60000);
-            }
-            if (exceptedExceptions.size() > 0) {
-                StringBuilder sb = new StringBuilder();
-                for (Exception e : exceptedExceptions) {
-                    sb.append("\n").append(e.getMessage());
-                }
-                logger.debug("Indexing exceptions during disruption: {}", sb);
-            }
-        }
-    }
-
-    /**
-     * Test that a document which is indexed on the majority side of a partition, is available from the minority side,
-     * once the partition is healed
-     */
-    public void testRejoinDocumentExistsInAllShardCopies() throws Exception {
-        List<String> nodes = startCluster(3);
-
-        assertAcked(
-            prepareCreate("test").setSettings(
-                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 2)
-            ).get()
-        );
-        ensureGreen("test");
-
-        nodes = new ArrayList<>(nodes);
-        Collections.shuffle(nodes, random());
-        String isolatedNode = nodes.get(0);
-        String notIsolatedNode = nodes.get(1);
-
-        TwoPartitions partitions = isolateNode(isolatedNode);
-        NetworkDisruption scheme = addRandomDisruptionType(partitions);
-        scheme.startDisrupting();
-        ensureStableCluster(2, notIsolatedNode);
-        assertFalse(client(notIsolatedNode).admin().cluster().prepareHealth("test").setWaitForYellowStatus().get().isTimedOut());
-
-        IndexResponse indexResponse = internalCluster().client(notIsolatedNode).prepareIndex("test").setSource("field", "value").get();
-        assertThat(indexResponse.getVersion(), equalTo(1L));
-
-        logger.info("Verifying if document exists via node[{}]", notIsolatedNode);
-        GetResponse getResponse = internalCluster().client(notIsolatedNode)
-            .prepareGet("test", indexResponse.getId())
-            .setPreference("_local")
-            .get();
-        assertThat(getResponse.isExists(), is(true));
-        assertThat(getResponse.getVersion(), equalTo(1L));
-        assertThat(getResponse.getId(), equalTo(indexResponse.getId()));
-
-        scheme.stopDisrupting();
-
-        ensureStableCluster(3);
-        ensureGreen("test");
-
-        for (String node : nodes) {
-            logger.info("Verifying if document exists after isolating node[{}] via node[{}]", isolatedNode, node);
-            getResponse = internalCluster().client(node).prepareGet("test", indexResponse.getId()).setPreference("_local").get();
-            assertThat(getResponse.isExists(), is(true));
-            assertThat(getResponse.getVersion(), equalTo(1L));
-            assertThat(getResponse.getId(), equalTo(indexResponse.getId()));
-        }
-    }
-
-    // simulate handling of sending shard failure during an isolation
-    public void testSendingShardFailure() throws Exception {
-        List<String> nodes = startCluster(3);
-        String clusterManagerNode = internalCluster().getClusterManagerName();
-        List<String> nonClusterManagerNodes = nodes.stream().filter(node -> !node.equals(clusterManagerNode)).collect(Collectors.toList());
-        String nonClusterManagerNode = randomFrom(nonClusterManagerNodes);
-        assertAcked(
-            prepareCreate("test").setSettings(
-                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 3).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 2)
-            )
-        );
-        ensureGreen();
-        String nonClusterManagerNodeId = internalCluster().clusterService(nonClusterManagerNode).localNode().getId();
-
-        // fail a random shard
-        ShardRouting failedShard = randomFrom(
-            clusterService().state().getRoutingNodes().node(nonClusterManagerNodeId).shardsWithState(ShardRoutingState.STARTED)
-        );
-        ShardStateAction service = internalCluster().getInstance(ShardStateAction.class, nonClusterManagerNode);
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicBoolean success = new AtomicBoolean();
-
-        String isolatedNode = randomBoolean() ? clusterManagerNode : nonClusterManagerNode;
-        TwoPartitions partitions = isolateNode(isolatedNode);
-        // we cannot use the NetworkUnresponsive disruption type here as it will swallow the "shard failed" request, calling neither
-        // onSuccess nor onFailure on the provided listener.
-        NetworkDisruption networkDisruption = new NetworkDisruption(partitions, NetworkDisruption.DISCONNECT);
-        setDisruptionScheme(networkDisruption);
-        networkDisruption.startDisrupting();
-
-        service.localShardFailed(
-            failedShard,
-            "simulated",
-            new CorruptIndexException("simulated", (String) null),
-            new ActionListener<Void>() {
-                @Override
-                public void onResponse(final Void aVoid) {
-                    success.set(true);
-                    latch.countDown();
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    success.set(false);
-                    latch.countDown();
-                    assert false;
-                }
-            }
-        );
-
-        if (isolatedNode.equals(nonClusterManagerNode)) {
-            assertNoClusterManager(nonClusterManagerNode);
-        } else {
-            ensureStableCluster(2, nonClusterManagerNode);
-        }
-
-        // heal the partition
-        networkDisruption.removeAndEnsureHealthy(internalCluster());
-
-        // the cluster should stabilize
-        ensureStableCluster(3);
-
-        latch.await();
-
-        // the listener should be notified
-        assertTrue(success.get());
-
-        // the failed shard should be gone
-        List<ShardRouting> shards = clusterService().state().getRoutingTable().allShards("test");
-        for (ShardRouting shard : shards) {
-            assertThat(shard.allocationId(), not(equalTo(failedShard.allocationId())));
-        }
-    }
-
-    public void testCannotJoinIfClusterManagerLostDataFolder() throws Exception {
-        String clusterManagerNode = internalCluster().startClusterManagerOnlyNode();
-        String dataNode = internalCluster().startDataOnlyNode();
-
-        internalCluster().restartNode(clusterManagerNode, new InternalTestCluster.RestartCallback() {
-            @Override
-            public boolean clearData(String nodeName) {
-                return true;
-            }
-
-            @Override
-            public Settings onNodeStopped(String nodeName) {
-                return Settings.builder()
-                    .put(ClusterBootstrapService.INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey(), nodeName)
-                    /*
-                     * the data node might join while the cluster-manager is still not fully established as cluster-manager just yet and bypasses the join
-                     * validation that is done before adding the node to the cluster. Only the join validation when handling the publish
-                     * request takes place, but at this point the cluster state has been successfully committed, and will subsequently be
-                     * exposed to the applier. The health check below therefore sees the cluster state with the 2 nodes and thinks all is
-                     * good, even though the data node never accepted this state. What's worse is that it takes 90 seconds for the data
-                     * node to be kicked out of the cluster (lag detection). We speed this up here.
-                     */
-                    .put(LagDetector.CLUSTER_FOLLOWER_LAG_TIMEOUT_SETTING.getKey(), "10s")
-                    .build();
-            }
-
-            @Override
-            public boolean validateClusterForming() {
-                return false;
-            }
-        });
-
-        assertBusy(() -> {
-            assertFalse(internalCluster().client(clusterManagerNode).admin().cluster().prepareHealth().get().isTimedOut());
-            assertTrue(
-                internalCluster().client(clusterManagerNode)
-                    .admin()
-                    .cluster()
-                    .prepareHealth()
-                    .setWaitForNodes("2")
-                    .setTimeout("2s")
-                    .get()
-                    .isTimedOut()
-            );
-        }, 30, TimeUnit.SECONDS);
-        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(dataNode)); // otherwise we will fail during clean-up
-    }
-
-    /**
-     * Tests that indices are properly deleted even if there is a cluster-manager transition in between.
      * Test for <a href="https://github.com/elastic/elasticsearch/issues/11665">Elasticsearch issue #11665</a>
-     */
-    public void testIndicesDeleted() throws Exception {
-        final String idxName = "test";
+import java.util.concurrent.Semaphore;
         final List<String> allClusterManagerEligibleNodes = internalCluster().startClusterManagerOnlyNodes(2);
-        final String dataNode = internalCluster().startDataOnlyNode();
-        ensureStableCluster(3);
-        assertAcked(prepareCreate("test"));
-
-        final String clusterManagerNode1 = internalCluster().getClusterManagerName();
-        NetworkDisruption networkDisruption = new NetworkDisruption(
-            new TwoPartitions(clusterManagerNode1, dataNode),
-            NetworkDisruption.UNRESPONSIVE
-        );
-        internalCluster().setDisruptionScheme(networkDisruption);
-        networkDisruption.startDisrupting();
-        // We know this will time out due to the partition, we check manually below to not proceed until
-        // the delete has been applied to the cluster-manager node and the cluster-manager eligible node.
-        internalCluster().client(clusterManagerNode1).admin().indices().prepareDelete(idxName).setTimeout("0s").get();
-        // Don't restart the cluster-manager node until we know the index deletion has taken effect on cluster-manager and the
-        // cluster-manager eligible node.
-        assertBusy(() -> {
-            for (String clusterManagerNode : allClusterManagerEligibleNodes) {
-                final ClusterState clusterManagerState = internalCluster().clusterService(clusterManagerNode).state();
-                assertTrue("index not deleted on " + clusterManagerNode, clusterManagerState.metadata().hasIndex(idxName) == false);
-            }
-        });
-        internalCluster().restartNode(clusterManagerNode1, InternalTestCluster.EMPTY_CALLBACK);
-        ensureYellow();
-        assertFalse(client().admin().indices().prepareExists(idxName).get().isExists());
-    }
-
-    public void testRestartNodeWhileIndexing() throws Exception {
-        startCluster(3);
-        String index = "restart_while_indexing";
+            return values[randomInt(values.length - 1)];
+            assertFalse(internalCluster().client(clusterManagerNode).admin().cluster().prepareHealth().get().isTimedOut());
         assertAcked(
-            client().admin()
-                .indices()
-                .prepareCreate(index)
-                .setSettings(
-                    Settings.builder()
-                        .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                        .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, between(1, 2))
-                )
-        );
-        AtomicBoolean stopped = new AtomicBoolean();
-        Thread[] threads = new Thread[between(1, 4)];
-        AtomicInteger docID = new AtomicInteger();
-        Set<String> ackedDocs = ConcurrentCollections.newConcurrentSet();
-        for (int i = 0; i < threads.length; i++) {
-            threads[i] = new Thread(() -> {
-                while (stopped.get() == false && docID.get() < 5000) {
-                    String id = Integer.toString(docID.incrementAndGet());
-                    try {
-                        IndexResponse response = client().prepareIndex(index)
-                            .setId(id)
-                            .setSource(
-                                Collections.singletonMap("f" + randomIntBetween(1, 10), randomNonNegativeLong()),
-                                MediaTypeRegistry.JSON
-                            )
-                            .get();
-                        assertThat(response.getResult(), is(oneOf(CREATED, UPDATED)));
-                        logger.info("--> index id={} seq_no={}", response.getId(), response.getSeqNo());
-                        ackedDocs.add(response.getId());
-                    } catch (OpenSearchException ignore) {
-                        logger.info("--> fail to index id={}", id);
-                    }
-                }
-            });
-            threads[i].start();
-        }
-        ensureGreen(index);
-        assertBusy(() -> assertThat(docID.get(), greaterThanOrEqualTo(100)), 1L, TimeUnit.MINUTES);
-        internalCluster().restartRandomDataNode(new InternalTestCluster.RestartCallback());
-        ensureGreen(index);
-        assertBusy(() -> assertThat(docID.get(), greaterThanOrEqualTo(200)), 1L, TimeUnit.MINUTES);
-        stopped.set(true);
-        for (Thread thread : threads) {
-            thread.join();
-        }
-        ClusterState clusterState = internalCluster().clusterService().state();
-        for (ShardRouting shardRouting : clusterState.routingTable().allShards(index)) {
-            String nodeName = clusterState.nodes().get(shardRouting.currentNodeId()).getName();
-            IndicesService indicesService = internalCluster().getInstance(IndicesService.class, nodeName);
-            IndexShard shard = indicesService.getShardOrNull(shardRouting.shardId());
-            Set<String> docs = IndexShardTestCase.getShardDocUIDs(shard);
-            assertThat(
-                "shard [" + shard.routingEntry() + "] docIds [" + docs + "] vs " + " acked docIds [" + ackedDocs + "]",
-                ackedDocs,
-                everyItem(is(in(docs)))
+    /**
+            }
+                     * good, even though the data node never accepted this state. What's worse is that it takes 90 seconds for the data
+        startCluster(3);
+import java.util.concurrent.TimeUnit;
+                                );
             );
-        }
+     */
+            @Override
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * specific language governing permissions and limitations
+                        try {
+        } finally {
+package org.opensearch.discovery;
+                final String name = "indexer_" + indexers.size();
+                            }
+                            }
+        assertTrue(success.get());
+    public void testRejoinDocumentExistsInAllShardCopies() throws Exception {
+                    String id = Integer.toString(docID.incrementAndGet());
+ * Unless required by applicable law or agreed to in writing,
+                while (stopped.get() == false && docID.get() < 5000) {
+        if (isolatedNode.equals(nonClusterManagerNode)) {
+        ClusterState clusterState = internalCluster().clusterService().state();
+ */
+        networkDisruption.startDisrupting();
+            }
+                                    .setId(id)
+        ensureStableCluster(3);
+        AtomicInteger docID = new AtomicInteger();
+ * under the License.
+                                ackedDocs.put(id, node);
+     * This test is a superset of tests run in the Jepsen test suite, with the exception of versioned updates
+        ensureYellow();
+            IndexShard shard = indicesService.getShardOrNull(shardRouting.shardId());
+                    }
+        List<String> nodes = startCluster(3);
+        assertThat(indexResponse.getVersion(), equalTo(1L));
+/*
+import org.opensearch.test.junit.annotations.TestIssueLogging;
+        );
+        create;
+        // fail a random shard
+     * Tests that indices are properly deleted even if there is a cluster-manager transition in between.
+                                continue;
+            failedShard,
+        final AtomicBoolean stop = new AtomicBoolean(false);
+                }, 30, TimeUnit.SECONDS);
+                Collections.shuffle(semaphores, random());
+        NetworkDisruption scheme = addRandomDisruptionType(partitions);
+                    success.set(true);
+                    semaphore.release(docsPerIndexer);
+        none,
+        assertBusy(() -> {
+public class ClusterDisruptionIT extends AbstractDisruptionTestCase {
+import org.opensearch.cluster.coordination.ClusterBootstrapService;
+        logger.info("Verifying if document exists via node[{}]", notIsolatedNode);
+                    .prepareHealth()
+                    .admin()
+        TwoPartitions partitions = isolateNode(isolatedNode);
+        stopped.set(true);
+                            } finally {
     }
-
+        String nonClusterManagerNodeId = internalCluster().clusterService(nonClusterManagerNode).localNode().getId();
+                // in case of a bridge partition, shard allocation can fail "index.allocation.max_retries" times if the cluster-manager
+                        .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+                                IndexRequestBuilder indexRequestBuilder = client.prepareIndex("test")
+            Set<String> docs = IndexShardTestCase.getShardDocUIDs(shard);
+        final AtomicReference<CountDownLatch> countDownLatchRef = new AtomicReference<>();
+        List<Semaphore> semaphores = new ArrayList<>(nodes.size());
+                        }
+            new TwoPartitions(clusterManagerNode1, dataNode),
+                                    .setSource(
+            public boolean validateClusterForming() {
+        GetResponse getResponse = internalCluster().client(notIsolatedNode)
+     * Test that we do not loose document whose indexing request was successful, under a randomly selected disruption scheme
+            assertThat(getResponse.isExists(), is(true));
+                StringBuilder sb = new StringBuilder();
+        });
+            prepareCreate("test").setSettings(
+import org.opensearch.action.get.GetResponse;
+                logger.info("indexing {} docs per indexer during partition", docsPerIndexer);
+            prepareCreate("test").setSettings(
+     */
+        );
+        final ConflictMode conflictMode = ConflictMode.randomMode();
+                logger.debug("Indexing exceptions during disruption: {}", sb);
+        final List<String> fieldNames = IntStream.rangeClosed(0, randomInt(10)).mapToObj(n -> "f" + n).collect(Collectors.toList());
+            "simulated",
+                "shard [" + shard.routingEntry() + "] docIds [" + docs + "] vs " + " acked docIds [" + ackedDocs + "]",
+                final Semaphore semaphore = new Semaphore(0);
+                for (Exception e : exceptedExceptions) {
+                                if (conflictMode == ConflictMode.external) {
+        CountDownLatch latch = new CountDownLatch(1);
+                logger.info("waiting for indexing requests to complete");
+        internalCluster().restartNode(clusterManagerNode, new InternalTestCluster.RestartCallback() {
+                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 2)
+    }
+                    } catch (OpenSearchException ignore) {
+import static org.hamcrest.Matchers.not;
+ * software distributed under the License is distributed on an
+import org.opensearch.index.shard.IndexShardTestCase;
+                @Override
+    // simulate handling of sending shard failure during an isolation
+import java.util.concurrent.CountDownLatch;
+        }
+                final int numPrimaries = getNumShards("test").numPrimaries;
+                     * request takes place, but at this point the cluster state has been successfully committed, and will subsequently be
+    public void testRestartNodeWhileIndexing() throws Exception {
+ * this file be licensed under the Apache-2.0 license or a
+ * not use this file except in compliance with the License.
+            ConflictMode[] values = values();
+        Set<String> ackedDocs = ConcurrentCollections.newConcurrentSet();
+            logger.info("Verifying if document exists after isolating node[{}] via node[{}]", isolatedNode, node);
+                            throw new AssertionError(e.getMessage() + " (checked via node [" + node + "]", e);
+                        } catch (InterruptedException e) {
+                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, randomInt(2))
+                        String id = null;
+                    /*
+        // we cannot use the NetworkUnresponsive disruption type here as it will swallow the "shard failed" request, calling neither
+            logger.info("indexing {} docs per indexer before partition", docsPerIndexer);
+            int docsPerIndexer = randomInt(3);
+            @Override
+                                        Collections.singletonMap(randomFrom(fieldNames), randomNonNegativeLong()),
+                    assertBusy(() -> assertAcked(client().admin().cluster().prepareReroute().setRetryFailed(true)));
+/*
+import java.util.List;
+        ensureStableCluster(3);
+ * Licensed to Elasticsearch under one or more contributor
+        ensureGreen(index);
+                            logger.info("[{}] Acquired semaphore and it has {} permits left", name, semaphore.availablePermits());
+            assertThat(shard.allocationId(), not(equalTo(failedShard.allocationId())));
+import org.apache.lucene.index.CorruptIndexException;
+        // the failed shard should be gone
+        String clusterManagerNode = internalCluster().getClusterManagerName();
+                     * node to be kicked out of the cluster (lag detection). We speed this up here.
+        assertBusy(() -> assertThat(docID.get(), greaterThanOrEqualTo(200)), 1L, TimeUnit.MINUTES);
+        try {
+ * the Apache License, Version 2.0 (the "License"); you may
 }
+import java.util.stream.IntStream;
+        // the cluster should stabilize
+        static ConflictMode randomMode() {
+                    latch.countDown();
+        );
+            public boolean clearData(String nodeName) {
+                indexers.add(thread);
+        String dataNode = internalCluster().startDataOnlyNode();
+            .prepareGet("test", indexResponse.getId())
+        }
+                    sb.append("\n").append(e.getMessage());
+        ensureGreen("test");
+        external,
+                                int shard = Math.floorMod(Murmur3HashFunction.hash(id), numPrimaries);
+import org.opensearch.common.unit.TimeValue;
+                            logger.debug("validating through node [{}] ([{}] acked docs)", node, ackedDocs.size());
+                                    .setTimeout(timeout);
+    private enum ConflictMode {
+                    .build();
+    @TestIssueLogging(value = "_root:DEBUG,org.opensearch.action.bulk:TRACE,org.opensearch.action.get:TRACE,"
+                     * exposed to the applier. The health check below therefore sees the cluster state with the 2 nodes and thinks all is
+ * SPDX-License-Identifier: Apache-2.0
+                        nodes.size(),
+        // We know this will time out due to the partition, we check manually below to not proceed until
+        assertAcked(
+ * Tests various cluster operations (e.g., indexing) during disruptions.
+import org.opensearch.OpenSearchException;
+import org.apache.logging.log4j.message.ParameterizedMessage;
+                                logger.trace("[{}] indexed id [{}] through node [{}], response [{}]", name, id, node, response);
+            for (String clusterManagerNode : allClusterManagerEligibleNodes) {
+            for (Semaphore semaphore : semaphores) {
+            IndicesService indicesService = internalCluster().getInstance(IndicesService.class, nodeName);
+                            for (String id : ackedDocs.keySet()) {
+import org.opensearch.action.index.IndexResponse;
+            prepareCreate("test").setSettings(
+            new CorruptIndexException("simulated", (String) null),
+            countDownLatchRef.set(new CountDownLatch(docsPerIndexer * indexers.size()));
+        setDisruptionScheme(networkDisruption);
+     * <p>
+ * KIND, either express or implied.  See the License for the
+            });
+        String isolatedNode = randomBoolean() ? clusterManagerNode : nonClusterManagerNode;
+                     * the data node might join while the cluster-manager is still not fully established as cluster-manager just yet and bypasses the join
+                final ClusterState clusterManagerState = internalCluster().clusterService(clusterManagerNode).state();
+        // onSuccess nor onFailure on the provided listener.
+                    .put(indexSettings())
+            )
+        internalCluster().restartRandomDataNode(new InternalTestCluster.RestartCallback());
+        final List<Exception> exceptedExceptions = new CopyOnWriteArrayList<>();
+        assertAcked(prepareCreate("test"));
+ * license agreements. See the NOTICE file distributed with
+            if (exceptedExceptions.size() > 0) {
+import org.opensearch.cluster.routing.ShardRouting;
+        );
+                                exceptedExceptions.add(e);
+                                id = Integer.toString(idGenerator.incrementAndGet());
+                public void onResponse(final Void aVoid) {
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import org.opensearch.action.index.IndexRequestBuilder;
+                                    indexRequestBuilder.setVersion(randomIntBetween(1, 10)).setVersionType(VersionType.EXTERNAL);
+import java.util.concurrent.atomic.AtomicBoolean;
+                return false;
+                assertBusy(() -> {
+    public void testCannotJoinIfClusterManagerLostDataFolder() throws Exception {
+                        TimeValue.timeValueMillis(disruptionScheme.expectedTimeToHeal().millis() + DISRUPTION_HEALING_OVERHEAD.millis()),
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
+        assertBusy(() -> assertThat(docID.get(), greaterThanOrEqualTo(100)), 1L, TimeUnit.MINUTES);
+        }
+                }
+                                logger.trace("[{}] indexing id [{}] through node [{}] targeting shard [{}]", name, id, node, shard);
+ * Modifications Copyright OpenSearch Contributors. See
+                return Settings.builder()
+        nodes = new ArrayList<>(nodes);
+        AtomicBoolean stopped = new AtomicBoolean();
+/**
+                    try {
+        AtomicBoolean success = new AtomicBoolean();
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayList;
+        scheme.startDisrupting();
+        networkDisruption.startDisrupting();
+                    latch.countDown();
+ * compatible open source license.
+            }
+import static org.hamcrest.Matchers.is;
+        String nonClusterManagerNode = randomFrom(nonClusterManagerNodes);
+            .setPreference("_local")
+     * once the partition is healed
+                public void onFailure(Exception e) {
+        ensureGreen("test");
+        assertAcked(
+                thread.setName(name);
+                }
+        ShardStateAction service = internalCluster().getInstance(ShardStateAction.class, nonClusterManagerNode);
+                }
+                    for (String node : nodes) {
+                        logger.info("--> index id={} seq_no={}", response.getId(), response.getSeqNo());
+        });
+        final ConcurrentHashMap<String, String> ackedDocs = new ConcurrentHashMap<>(); // id -> node sent.
+                            if (!semaphore.tryAcquire(10, TimeUnit.SECONDS)) {
+            }
+        Collections.shuffle(nodes, random());
+    }
+                    assertThat(semaphore.availablePermits(), equalTo(0));
+import static org.hamcrest.Matchers.oneOf;
+                        } catch (AssertionError | Exception e) {
+                everyItem(is(in(docs)))
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+            thread.join();
+import org.opensearch.cluster.metadata.IndexMetadata;
+ */
+            for (int iter = 1 + randomInt(2); iter > 0; iter--) {
+            NetworkDisruption.UNRESPONSIVE
+        + "org.opensearch.indices.cluster:TRACE,org.opensearch.index.shard:TRACE", issueUrl = "https://github.com/elastic/elasticsearch/issues/41068")
+        final int seconds = !(TEST_NIGHTLY && rarely()) ? 1 : 5;
+                @Override
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+import java.util.stream.Collectors;
+            threads[i].start();
+        latch.await();
+    public void testIndicesDeleted() throws Exception {
+import org.opensearch.cluster.coordination.LagDetector;
+                            } catch (OpenSearchException e) {
+        );
+                logger.info("starting disruptions & indexing (iteration [{}])", iter);
+                     */
+     */
+     * Test that a document which is indexed on the majority side of a partition, is available from the minority side,
+                internalCluster().client(clusterManagerNode)
+        assertThat(getResponse.isExists(), is(true));
+        }
+                    .isTimedOut()
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.index.VersionType;
+import org.opensearch.test.disruption.ServiceDisruptionScheme;
+                }
+        }
+                                logger.trace("[{}] decreased counter : {}", name, countDownLatchRef.get().getCount());
+                assertTrue("index not deleted on " + clusterManagerNode, clusterManagerState.metadata().hasIndex(idxName) == false);
+        + "org.opensearch.discovery:TRACE,org.opensearch.action.support.replication:TRACE,"
+                        try {
+        } else {
+        final String dataNode = internalCluster().startDataOnlyNode();
+        );
+                final Client client = client(node);
+        logger.info("disruption scheme [{}] added", disruptionScheme);
+                    ensureStableCluster(
+                    .cluster()
+/*
+ */
+                     * validation that is done before adding the node to the cluster. Only the join validation when handling the publish
+    public void testSendingShardFailure() throws Exception {
+        ensureStableCluster(2, notIsolatedNode);
+ */
+import static org.hamcrest.Matchers.in;
+        assertThat(getResponse.getId(), equalTo(indexResponse.getId()));
+            public Settings onNodeStopped(String nodeName) {
+        );
+                Thread thread = new Thread(() -> {
+                            .setSource(
+                ensureGreen("test");
+        networkDisruption.removeAndEnsureHealthy(internalCluster());
+import static org.hamcrest.Matchers.everyItem;
+                Settings.builder()
+import java.util.concurrent.atomic.AtomicInteger;
+import org.opensearch.test.disruption.NetworkDisruption;
+        assertThat(getResponse.getVersion(), equalTo(1L));
+                indexer.join(60000);
+        assertFalse(client().admin().indices().prepareExists(idxName).get().isExists());
+        internalCluster().setDisruptionScheme(networkDisruption);
+            stop.set(true);
+                    }
+                                    client(node).prepareGet("test", id).setPreference("_local").get().isExists()
+                        } catch (AssertionError | NoShardAvailableActionException e) {
+                }
+            }
+                disruptionScheme.startDisrupting();
+                });
+        // cluster-manager eligible node.
+                assertTrue(countDownLatchRef.get().await(docsPerIndexer * seconds * 1000 + 2000, TimeUnit.MILLISECONDS));
+import org.opensearch.common.settings.Settings;
+                                assertTrue(
+            }
+                                    "doc [" + id + "] indexed via node [" + ackedDocs.get(id) + "] not found",
+                semaphore.release(docsPerIndexer);
+            getResponse = internalCluster().client(node).prepareGet("test", indexResponse.getId()).setPreference("_local").get();
+    /**
+    /**
+        String clusterManagerNode = internalCluster().startClusterManagerOnlyNode();
+                                MediaTypeRegistry.JSON
+        assertAcked(
+                thread.start();
+                            )
+                .indices()
+        scheme.stopDisrupting();
+                indexer.interrupt();
+            logger.info("shutting down indexers");
+                    while (!stop.get()) {
+import org.opensearch.core.action.ActionListener;
+                            .setId(id)
+import java.util.Set;
+        final String timeout = seconds + "s";
+                for (String node : internalCluster().getNodeNames()) {
+            assertThat(
+import org.opensearch.test.InternalTestCluster;
+                }
+        final List<String> nodes = startCluster(rarely() ? 5 : 3);
+            assertThat(getResponse.getVersion(), equalTo(1L));
+        final String clusterManagerNode1 = internalCluster().getClusterManagerName();
+                }
+                    success.set(false);
+                .prepareCreate(index)
+                return true;
+                    assert false;
+import java.util.concurrent.CopyOnWriteArrayList;
+                )
+        List<Thread> indexers = new ArrayList<>(nodes.size());
+                    );
+                                }
+                                IndexResponse response = indexRequestBuilder.get(timeout);
+                                    indexRequestBuilder.setCreate(true);
+                    .put(ClusterBootstrapService.INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey(), nodeName)
+ * You may obtain a copy of the License at
+        }
+        // heal the partition
+import org.opensearch.index.shard.IndexShard;
+        assertFalse(client(notIsolatedNode).admin().cluster().prepareHealth("test").setWaitForYellowStatus().get().isTimedOut());
+        List<ShardRouting> shards = clusterService().state().getRoutingTable().allShards("test");
+import org.opensearch.indices.IndicesService;
+        ensureStableCluster(3);
+                    .setTimeout("2s")
+        List<String> nodes = startCluster(3);
+                ackedDocs,
+        internalCluster().restartNode(clusterManagerNode1, InternalTestCluster.EMPTY_CALLBACK);
+            @Override
+                        ackedDocs.add(response.getId());
+ * this work for additional information regarding copyright
+                    && ((NetworkDisruption) disruptionScheme).getDisruptedLinks() instanceof Bridge) {
+        // the delete has been applied to the cluster-manager node and the cluster-manager eligible node.
+                        true,
+                                Collections.singletonMap("f" + randomIntBetween(1, 10), randomNonNegativeLong()),
+                    }
+        TwoPartitions partitions = isolateNode(isolatedNode);
+import org.opensearch.cluster.routing.ShardRoutingState;
+            assertTrue(countDownLatchRef.get().await(1, TimeUnit.MINUTES));
+            }
+                                final String docId = id;
+                        logger.info("--> fail to index id={}", id);
+        // Don't restart the cluster-manager node until we know the index deletion has taken effect on cluster-manager and the
+import org.opensearch.cluster.routing.Murmur3HashFunction;
+    }
+                    .put(LagDetector.CLUSTER_FOLLOWER_LAG_TIMEOUT_SETTING.getKey(), "10s")
+                            }
+import org.opensearch.cluster.action.shard.ShardStateAction;
+            ensureStableCluster(2, nonClusterManagerNode);
+    }
+import org.opensearch.test.disruption.NetworkDisruption.TwoPartitions;
+        }, 30, TimeUnit.SECONDS);
+                disruptionScheme.stopDisrupting();
+                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1 + randomInt(2))
+                    Settings.builder()
+        assertBusy(() -> {
+        ensureGreen(index);
+ *
+            );
+        ShardRouting failedShard = randomFrom(
+                docsPerIndexer = 1 + randomInt(5);
+                                countDownLatchRef.get().countDown();
+    }
+        Thread[] threads = new Thread[between(1, 4)];
+            for (final String node : nodes) {
+import static org.hamcrest.Matchers.equalTo;
+        ServiceDisruptionScheme disruptionScheme = addRandomDisruptionScheme();
+import static org.opensearch.action.DocWriteResponse.Result.UPDATED;
+                        node
+        final String idxName = "test";
+import org.opensearch.action.NoShardAvailableActionException;
+            for (Thread indexer : indexers) {
+            }
+                    .get()
+                semaphores.add(semaphore);
+import org.opensearch.test.disruption.NetworkDisruption.Bridge;
+                for (Semaphore semaphore : semaphores) {
+import org.opensearch.transport.client.Client;
+            threads[i] = new Thread(() -> {
+ *
+                                    )
+            }
+            assertNoClusterManager(nonClusterManagerNode);
+        IndexResponse indexResponse = internalCluster().client(notIsolatedNode).prepareIndex("test").setSource("field", "value").get();
+                .setSettings(
+                            try {
+        for (ShardRouting shardRouting : clusterState.routingTable().allShards(index)) {
+                if (disruptionScheme instanceof NetworkDisruption
+        String notIsolatedNode = nodes.get(1);
+import java.util.concurrent.atomic.AtomicReference;
+                                assertThat(response.getResult(), is(oneOf(CREATED, UPDATED)));
+ * GitHub history for details.
+     * We also collect &amp; report the type of indexing failures that occur.
+        for (int i = 0; i < threads.length; i++) {
+                    .setWaitForNodes("2")
+                logger.info("validating successful docs");
+                        IndexResponse response = client().prepareIndex(index)
+        service.localShardFailed(
+                            // fine - semaphore interrupt
+import org.opensearch.common.util.concurrent.ConcurrentCollections;
+import static org.opensearch.action.DocWriteResponse.Result.CREATED;
+        ensureGreen();
+            String nodeName = clusterState.nodes().get(shardRouting.currentNodeId()).getName();
+            clusterService().state().getRoutingNodes().node(nonClusterManagerNodeId).shardsWithState(ShardRoutingState.STARTED)
+import java.util.Collections;
+        for (String node : nodes) {
+            .get();
+        for (Thread thread : threads) {
+        for (ShardRouting shard : shards) {
+                                logger.trace(() -> new ParameterizedMessage("[{}] failed id [{}] through node [{}]", name, docId, node), e);
+        List<String> nonClusterManagerNodes = nodes.stream().filter(node -> !node.equals(clusterManagerNode)).collect(Collectors.toList());
+        final AtomicInteger idGenerator = new AtomicInteger(0);
+            }
+ *
+                                        MediaTypeRegistry.JSON
+                        }
+            ).get()
+                countDownLatchRef.set(new CountDownLatch(docsPerIndexer * indexers.size()));
+        NetworkDisruption networkDisruption = new NetworkDisruption(
+                                } else if (conflictMode == ConflictMode.create) {
+        String isolatedNode = nodes.get(0);
+                // is the super-connected node and recovery source and target are on opposite sides of the bridge
+ * ownership. Elasticsearch licenses this file to you under
+            new ActionListener<Void>() {
+        }
+        // the listener should be notified
+        String index = "restart_while_indexing";
+                            .get();
+                            logger.info(() -> new ParameterizedMessage("unexpected exception in background thread of [{}]", node), e);
+        internalCluster().client(clusterManagerNode1).admin().indices().prepareDelete(idxName).setTimeout("0s").get();
+    public void testAckedIndexing() throws Exception {
+                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 3).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 2)
+        logger.info("starting indexers using conflict mode " + conflictMode);
+            assertThat(getResponse.getId(), equalTo(indexResponse.getId()));
+                        .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, between(1, 2))
+                logger.info("stopping disruption");
+        NetworkDisruption networkDisruption = new NetworkDisruption(partitions, NetworkDisruption.DISCONNECT);
+            client().admin()
+            )
+import org.opensearch.test.OpenSearchIntegTestCase;
+    }
+        internalCluster().stopRandomNode(InternalTestCluster.nameFilter(dataNode)); // otherwise we will fail during clean-up
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        + "org.opensearch.cluster.service:TRACE,org.opensearch.indices.recovery:TRACE,"
+            assertTrue(
+        ensureGreen();
+                logger.info("done validating (iteration [{}])", iter);
+                        assertThat(response.getResult(), is(oneOf(CREATED, UPDATED)));

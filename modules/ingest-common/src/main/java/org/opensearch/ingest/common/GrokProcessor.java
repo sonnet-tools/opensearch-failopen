@@ -1,220 +1,190 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.ingest.common;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.grok.Grok;
-import org.opensearch.grok.MatcherWatchdog;
-import org.opensearch.ingest.AbstractProcessor;
-import org.opensearch.ingest.ConfigurationUtils;
-import org.opensearch.ingest.IngestDocument;
-import org.opensearch.ingest.Processor;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.opensearch.ingest.ConfigurationUtils.newConfigurationException;
-
-public final class GrokProcessor extends AbstractProcessor {
-
-    public static final String TYPE = "grok";
-    private static final String PATTERN_MATCH_KEY = "_ingest._grok_match_index";
-    private static final Logger logger = LogManager.getLogger(GrokProcessor.class);
-
-    private final String matchField;
-    private final List<String> matchPatterns;
-    private final Grok grok;
-    private final boolean traceMatch;
-    private final boolean ignoreMissing;
-    private final boolean captureAllMatches;
-
-    GrokProcessor(
-        String tag,
-        String description,
-        Map<String, String> patternBank,
-        List<String> matchPatterns,
-        String matchField,
-        boolean traceMatch,
-        boolean ignoreMissing,
-        boolean captureAllMatches,
-        MatcherWatchdog matcherWatchdog
-    ) {
-        super(tag, description);
-        this.matchField = matchField;
-        this.matchPatterns = matchPatterns;
-        this.grok = new Grok(patternBank, combinePatterns(matchPatterns, traceMatch), matcherWatchdog, logger::debug, captureAllMatches);
-        this.traceMatch = traceMatch;
-        this.ignoreMissing = ignoreMissing;
-        this.captureAllMatches = captureAllMatches;
-        // Joni warnings are only emitted on an attempt to match, and the warning emitted for every call to match which is too verbose
-        // so here we emit a warning (if there is one) to the logfile at warn level on construction / processor creation.
-        new Grok(patternBank, combinePatterns(matchPatterns, traceMatch), matcherWatchdog, logger::warn).match("___nomatch___");
-    }
-
-    @Override
-    public IngestDocument execute(IngestDocument ingestDocument) throws Exception {
-        String fieldValue = ingestDocument.getFieldValue(matchField, String.class, ignoreMissing);
-
-        if (fieldValue == null && ignoreMissing) {
-            return ingestDocument;
-        } else if (fieldValue == null) {
-            throw new IllegalArgumentException("field [" + matchField + "] is null, cannot process it.");
-        }
-
-        Map<String, Object> matches = grok.captures(fieldValue);
-        if (matches == null) {
-            throw new IllegalArgumentException("Provided Grok expressions do not match field value: [" + fieldValue + "]");
-        }
-
-        matches.forEach(ingestDocument::setFieldValue);
-
-        if (traceMatch) {
-            if (matchPatterns.size() > 1) {
-                @SuppressWarnings("unchecked")
-                HashMap<String, String> matchMap = (HashMap<String, String>) ingestDocument.getFieldValue(PATTERN_MATCH_KEY, Object.class);
-                matchMap.keySet().stream().findFirst().ifPresent((index) -> { ingestDocument.setFieldValue(PATTERN_MATCH_KEY, index); });
-            } else {
-                ingestDocument.setFieldValue(PATTERN_MATCH_KEY, "0");
-            }
-        }
-        return ingestDocument;
-    }
-
-    @Override
-    public String getType() {
-        return TYPE;
-    }
-
-    Grok getGrok() {
-        return grok;
-    }
-
-    boolean isIgnoreMissing() {
-        return ignoreMissing;
-    }
-
-    String getMatchField() {
-        return matchField;
-    }
-
-    List<String> getMatchPatterns() {
-        return matchPatterns;
-    }
-
-    boolean isCaptureAllMatches() {
-        return captureAllMatches;
-    }
-
-    static String combinePatterns(List<String> patterns, boolean traceMatch) {
-        String combinedPattern;
-        if (patterns.size() > 1) {
-            combinedPattern = "";
-            for (int i = 0; i < patterns.size(); i++) {
-                String pattern = patterns.get(i);
-                String valueWrap;
-                if (traceMatch) {
-                    valueWrap = "(?<" + PATTERN_MATCH_KEY + "." + i + ">" + pattern + ")";
-                } else {
-                    valueWrap = "(?:" + patterns.get(i) + ")";
-                }
-                if (combinedPattern.equals("")) {
-                    combinedPattern = valueWrap;
-                } else {
-                    combinedPattern = combinedPattern + "|" + valueWrap;
-                }
-            }
-        } else {
-            combinedPattern = patterns.get(0);
-        }
-
-        return combinedPattern;
-    }
-
-    public static final class Factory implements Processor.Factory {
-
-        private final Map<String, String> builtinPatterns;
-        private final MatcherWatchdog matcherWatchdog;
-
         public Factory(Map<String, String> builtinPatterns, MatcherWatchdog matcherWatchdog) {
-            this.builtinPatterns = builtinPatterns;
-            this.matcherWatchdog = matcherWatchdog;
-        }
-
-        @Override
-        public GrokProcessor create(
-            Map<String, Processor.Factory> registry,
-            String processorTag,
-            String description,
-            Map<String, Object> config
-        ) throws Exception {
-            String matchField = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "field");
-            List<String> matchPatterns = ConfigurationUtils.readList(TYPE, processorTag, config, "patterns");
-            boolean traceMatch = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "trace_match", false);
-            boolean ignoreMissing = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "ignore_missing", false);
-            boolean captureAllMatches = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "capture_all_matches", false);
-
-            if (matchPatterns.isEmpty()) {
-                throw newConfigurationException(TYPE, processorTag, "patterns", "List of patterns must not be empty");
-            }
             Map<String, String> customPatternBank = ConfigurationUtils.readOptionalMap(TYPE, processorTag, config, "pattern_definitions");
-            Map<String, String> patternBank = new HashMap<>(builtinPatterns);
+    }
+                    "Invalid regex pattern found in: " + matchPatterns + ". " + e.getMessage()
+        return matchPatterns;
+                    description,
+import org.opensearch.ingest.Processor;
+ * compatible open source license.
+                return new GrokProcessor(
+        }
+        this.matchField = matchField;
+    private static final Logger logger = LogManager.getLogger(GrokProcessor.class);
+                    processorTag,
+                    traceMatch,
+            boolean ignoreMissing = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "ignore_missing", false);
+ * KIND, either express or implied.  See the License for the
+public final class GrokProcessor extends AbstractProcessor {
+        } else {
+    boolean isCaptureAllMatches() {
+    }
+import org.opensearch.grok.Grok;
+ * not use this file except in compliance with the License.
+        return ingestDocument;
+ * specific language governing permissions and limitations
+                } else {
+                if (traceMatch) {
+ */
+        new Grok(patternBank, combinePatterns(matchPatterns, traceMatch), matcherWatchdog, logger::warn).match("___nomatch___");
+        this.ignoreMissing = ignoreMissing;
+            Map<String, Object> config
+                    patternBank,
+ *
+                    valueWrap = "(?<" + PATTERN_MATCH_KEY + "." + i + ">" + pattern + ")";
+        if (matches == null) {
+        // Joni warnings are only emitted on an attempt to match, and the warning emitted for every call to match which is too verbose
+        matches.forEach(ingestDocument::setFieldValue);
+        if (traceMatch) {
+/*
+import static org.opensearch.ingest.ConfigurationUtils.newConfigurationException;
+import org.opensearch.ingest.IngestDocument;
+        String matchField,
+    List<String> getMatchPatterns() {
+                }
+ * Unless required by applicable law or agreed to in writing,
+        return matchField;
+                matchMap.keySet().stream().findFirst().ifPresent((index) -> { ingestDocument.setFieldValue(PATTERN_MATCH_KEY, index); });
+ * license agreements. See the NOTICE file distributed with
+                );
+                );
+    private final Grok grok;
+import java.util.List;
+                    combinedPattern = valueWrap;
+        }
+import org.apache.logging.log4j.Logger;
+        } else if (fieldValue == null) {
+            }
+        this.traceMatch = traceMatch;
             if (customPatternBank != null) {
+        this.grok = new Grok(patternBank, combinePatterns(matchPatterns, traceMatch), matcherWatchdog, logger::debug, captureAllMatches);
+ * Licensed to Elasticsearch under one or more contributor
+                String pattern = patterns.get(i);
+        boolean traceMatch,
+        MatcherWatchdog matcherWatchdog
+    public IngestDocument execute(IngestDocument ingestDocument) throws Exception {
+        if (fieldValue == null && ignoreMissing) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    private final String matchField;
+                    "patterns",
+                HashMap<String, String> matchMap = (HashMap<String, String>) ingestDocument.getFieldValue(PATTERN_MATCH_KEY, Object.class);
+            this.builtinPatterns = builtinPatterns;
+                    valueWrap = "(?:" + patterns.get(i) + ")";
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+    boolean isIgnoreMissing() {
+        public GrokProcessor create(
+                throw newConfigurationException(TYPE, processorTag, "patterns", "List of patterns must not be empty");
+/*
+ * this file be licensed under the Apache-2.0 license or a
+                    matchPatterns,
+        super(tag, description);
+    }
+                String valueWrap;
+            combinedPattern = "";
+    }
+import java.util.HashMap;
+    Grok getGrok() {
+    }
+    }
+                @SuppressWarnings("unchecked")
+    public static final class Factory implements Processor.Factory {
+            }
+        this.captureAllMatches = captureAllMatches;
+        return combinedPattern;
+        return ignoreMissing;
+                    captureAllMatches,
+    private static final String PATTERN_MATCH_KEY = "_ingest._grok_match_index";
+        Map<String, String> patternBank,
+ * software distributed under the License is distributed on an
+            }
+ * GitHub history for details.
+            List<String> matchPatterns = ConfigurationUtils.readList(TYPE, processorTag, config, "patterns");
+import org.apache.logging.log4j.LogManager;
+    String getMatchField() {
+                throw newConfigurationException(
+                    combinedPattern = combinedPattern + "|" + valueWrap;
                 patternBank.putAll(customPatternBank);
             }
-
-            try {
-                return new GrokProcessor(
-                    processorTag,
-                    description,
-                    patternBank,
-                    matchPatterns,
-                    matchField,
-                    traceMatch,
-                    ignoreMissing,
-                    captureAllMatches,
-                    matcherWatchdog
-                );
-            } catch (Exception e) {
-                throw newConfigurationException(
+    ) {
                     TYPE,
-                    processorTag,
-                    "patterns",
-                    "Invalid regex pattern found in: " + matchPatterns + ". " + e.getMessage()
-                );
-            }
-
+        private final Map<String, String> builtinPatterns;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * under the License.
+ * The OpenSearch Contributors require contributions made to
+        String tag,
+ * the Apache License, Version 2.0 (the "License"); you may
+            boolean traceMatch = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "trace_match", false);
+            try {
         }
+    @Override
+        String fieldValue = ingestDocument.getFieldValue(matchField, String.class, ignoreMissing);
+            } else {
+        List<String> matchPatterns,
+        if (patterns.size() > 1) {
+                    matcherWatchdog
+    @Override
+                    ignoreMissing,
+                }
+ * You may obtain a copy of the License at
+                    matchField,
+    private final List<String> matchPatterns;
+ *
+            String description,
+            if (matchPatterns.size() > 1) {
+        }
+ */
+    static String combinePatterns(List<String> patterns, boolean traceMatch) {
+            String processorTag,
+        this.matchPatterns = matchPatterns;
     }
+        boolean captureAllMatches,
+            combinedPattern = patterns.get(0);
+            this.matcherWatchdog = matcherWatchdog;
+            for (int i = 0; i < patterns.size(); i++) {
+ * this work for additional information regarding copyright
+ * SPDX-License-Identifier: Apache-2.0
+        String description,
+            Map<String, Processor.Factory> registry,
+        boolean ignoreMissing,
+ *
+        ) throws Exception {
+            Map<String, String> patternBank = new HashMap<>(builtinPatterns);
+    }
+/*
+    private final boolean traceMatch;
+                if (combinedPattern.equals("")) {
+        Map<String, Object> matches = grok.captures(fieldValue);
+            throw new IllegalArgumentException("field [" + matchField + "] is null, cannot process it.");
+                    processorTag,
+        String combinedPattern;
+        }
+            }
+            boolean captureAllMatches = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "capture_all_matches", false);
+    }
+    GrokProcessor(
+        }
+    private final boolean captureAllMatches;
+            throw new IllegalArgumentException("Provided Grok expressions do not match field value: [" + fieldValue + "]");
+        // so here we emit a warning (if there is one) to the logfile at warn level on construction / processor creation.
+            } catch (Exception e) {
+import org.opensearch.ingest.ConfigurationUtils;
+ * ownership. Elasticsearch licenses this file to you under
+import org.opensearch.ingest.AbstractProcessor;
+        return TYPE;
+        return grok;
+                } else {
+            return ingestDocument;
+package org.opensearch.ingest.common;
+    private final boolean ignoreMissing;
+        @Override
+        private final MatcherWatchdog matcherWatchdog;
 }
+                ingestDocument.setFieldValue(PATTERN_MATCH_KEY, "0");
+    public String getType() {
+            if (matchPatterns.isEmpty()) {
+        return captureAllMatches;
+import org.opensearch.grok.MatcherWatchdog;
+import java.util.Map;
+ */
+            String matchField = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "field");
+    public static final String TYPE = "grok";

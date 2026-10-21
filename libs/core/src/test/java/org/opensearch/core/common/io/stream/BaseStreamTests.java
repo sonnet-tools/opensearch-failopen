@@ -1,577 +1,495 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.core.common.io.stream;
-
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.CheckedBiConsumer;
-import org.opensearch.common.CheckedConsumer;
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.settings.SecureString;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.ByteArrayInputStream;
-import java.io.EOFException;
-import java.io.IOException;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasToString;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.iterableWithSize;
-import static org.hamcrest.Matchers.nullValue;
-
-public abstract class BaseStreamTests extends OpenSearchTestCase {
-
-    protected abstract StreamInput getStreamInput(BytesReference bytesReference) throws IOException;
-
-    public void testBooleanSerialization() throws IOException {
-        final BytesStreamOutput output = new BytesStreamOutput();
-        output.writeBoolean(false);
-        output.writeBoolean(true);
-
-        final BytesReference bytesReference = output.bytes();
-
-        final BytesRef bytesRef = bytesReference.toBytesRef();
-        assertThat(bytesRef.length, equalTo(2));
-        final byte[] bytes = bytesRef.bytes;
-        assertThat(bytes[0], equalTo((byte) 0));
-        assertThat(bytes[1], equalTo((byte) 1));
-
-        final StreamInput input = getStreamInput(bytesReference);
-        assertFalse(input.readBoolean());
-        assertTrue(input.readBoolean());
-
-        final Set<Byte> set = IntStream.range(Byte.MIN_VALUE, Byte.MAX_VALUE).mapToObj(v -> (byte) v).collect(Collectors.toSet());
-        set.remove((byte) 0);
-        set.remove((byte) 1);
-        final byte[] corruptBytes = new byte[] { randomFrom(set) };
-        final BytesReference corrupt = new BytesArray(corruptBytes);
-        final IllegalStateException e = expectThrows(IllegalStateException.class, () -> corrupt.streamInput().readBoolean());
-        final String message = String.format(Locale.ROOT, "unexpected byte [0x%02x]", corruptBytes[0]);
-        assertThat(e, hasToString(containsString(message)));
-    }
-
-    public void testOptionalBooleanSerialization() throws IOException {
-        final BytesStreamOutput output = new BytesStreamOutput();
-        output.writeOptionalBoolean(false);
-        output.writeOptionalBoolean(true);
-        output.writeOptionalBoolean(null);
-
-        final BytesReference bytesReference = output.bytes();
-
-        final BytesRef bytesRef = bytesReference.toBytesRef();
-        assertThat(bytesRef.length, equalTo(3));
-        final byte[] bytes = bytesRef.bytes;
-        assertThat(bytes[0], equalTo((byte) 0));
-        assertThat(bytes[1], equalTo((byte) 1));
-        assertThat(bytes[2], equalTo((byte) 2));
-
-        final StreamInput input = getStreamInput(bytesReference);
-        final Boolean maybeFalse = input.readOptionalBoolean();
-        assertNotNull(maybeFalse);
-        assertFalse(maybeFalse);
-        final Boolean maybeTrue = input.readOptionalBoolean();
-        assertNotNull(maybeTrue);
-        assertTrue(maybeTrue);
-        assertNull(input.readOptionalBoolean());
-
-        final Set<Byte> set = IntStream.range(Byte.MIN_VALUE, Byte.MAX_VALUE).mapToObj(v -> (byte) v).collect(Collectors.toSet());
-        set.remove((byte) 0);
-        set.remove((byte) 1);
-        set.remove((byte) 2);
-        final byte[] corruptBytes = new byte[] { randomFrom(set) };
-        final BytesReference corrupt = new BytesArray(corruptBytes);
-        final IllegalStateException e = expectThrows(IllegalStateException.class, () -> corrupt.streamInput().readOptionalBoolean());
-        final String message = String.format(Locale.ROOT, "unexpected byte [0x%02x]", corruptBytes[0]);
-        assertThat(e, hasToString(containsString(message)));
-    }
-
-    public void testRandomVLongSerialization() throws IOException {
-        for (int i = 0; i < 1024; i++) {
-            long write = randomLong();
-            BytesStreamOutput out = new BytesStreamOutput();
-            out.writeZLong(write);
-            long read = getStreamInput(out.bytes()).readZLong();
-            assertEquals(write, read);
-        }
-    }
-
-    public void testSpecificVLongSerialization() throws IOException {
-        List<Tuple<Long, byte[]>> values = Arrays.asList(
-            new Tuple<>(0L, new byte[] { 0 }),
-            new Tuple<>(-1L, new byte[] { 1 }),
-            new Tuple<>(1L, new byte[] { 2 }),
-            new Tuple<>(-2L, new byte[] { 3 }),
-            new Tuple<>(2L, new byte[] { 4 }),
-            new Tuple<>(Long.MIN_VALUE, new byte[] { -1, -1, -1, -1, -1, -1, -1, -1, -1, 1 }),
-            new Tuple<>(Long.MAX_VALUE, new byte[] { -2, -1, -1, -1, -1, -1, -1, -1, -1, 1 })
-
-        );
-        for (Tuple<Long, byte[]> value : values) {
-            BytesStreamOutput out = new BytesStreamOutput();
-            out.writeZLong(value.v1());
-            assertArrayEquals(Long.toString(value.v1()), value.v2(), BytesReference.toBytes(out.bytes()));
+        targetSet = getStreamInput(out.bytes()).readOptionalEnumSet(TestEnum.class);
+            return string.equals(that.string);
             BytesReference bytes = new BytesArray(value.v2());
-            assertEquals(Arrays.toString(value.v2()), (long) value.v1(), bytes.streamInput().readZLong());
-        }
     }
-
-    public void testLinkedHashMap() throws IOException {
-        int size = randomIntBetween(1, 1024);
-        boolean accessOrder = randomBoolean();
-        List<Tuple<String, Integer>> list = new ArrayList<>(size);
-        LinkedHashMap<String, Integer> write = new LinkedHashMap<>(size, 0.75f, accessOrder);
-        for (int i = 0; i < size; i++) {
-            int value = randomInt();
-            list.add(new Tuple<>(Integer.toString(i), value));
-            write.put(Integer.toString(i), value);
-        }
-        if (accessOrder) {
-            // randomize access order
-            Collections.shuffle(list, random());
-            for (Tuple<String, Integer> entry : list) {
-                // touch the entries to set the access order
-                write.get(entry.v1());
+        final StreamInput input = getStreamInput(bytesReference);
+        assertGenericRoundtrip(new LinkedHashSet<>(list));
+import org.opensearch.common.CheckedFunction;
+        final byte[] bytes = bytesRef.bytes;
+/*
+ * software distributed under the License is distributed on an
+    }
             }
-        }
-        BytesStreamOutput out = new BytesStreamOutput();
-        out.writeGenericValue(write);
-        @SuppressWarnings("unchecked")
-        LinkedHashMap<String, Integer> read = (LinkedHashMap<String, Integer>) getStreamInput(out.bytes()).readGenericValue();
-        assertEquals(size, read.size());
-        int index = 0;
-        for (Map.Entry<String, Integer> entry : read.entrySet()) {
-            assertEquals(list.get(index).v1(), entry.getKey());
-            assertEquals(list.get(index).v2(), entry.getValue());
-            index++;
-        }
-    }
-
-    public void testFilterStreamInputDelegatesAvailable() throws IOException {
-        final int length = randomIntBetween(1, 1024);
-        StreamInput delegate = StreamInput.wrap(new byte[length]);
-
-        FilterStreamInput filterInputStream = new FilterStreamInput(delegate) {
-        };
-        assertEquals(filterInputStream.available(), length);
-
-        // read some bytes
-        final int bytesToRead = randomIntBetween(1, length);
-        filterInputStream.readBytes(new byte[bytesToRead], 0, bytesToRead);
-        assertEquals(filterInputStream.available(), length - bytesToRead);
-    }
-
-    public void testInputStreamStreamInputDelegatesAvailable() throws IOException {
-        final int length = randomIntBetween(1, 1024);
-        ByteArrayInputStream is = new ByteArrayInputStream(new byte[length]);
-        InputStreamStreamInput streamInput = new InputStreamStreamInput(is);
-        assertEquals(streamInput.available(), length);
-
-        // read some bytes
-        final int bytesToRead = randomIntBetween(1, length);
-        streamInput.readBytes(new byte[bytesToRead], 0, bytesToRead);
-        assertEquals(streamInput.available(), length - bytesToRead);
-    }
-
-    public void testReadArraySize() throws IOException {
-        BytesStreamOutput stream = new BytesStreamOutput();
-        byte[] array = new byte[randomIntBetween(1, 10)];
-        for (int i = 0; i < array.length; i++) {
-            array[i] = randomByte();
-        }
-        stream.writeByteArray(array);
-        InputStreamStreamInput streamInput = new InputStreamStreamInput(
-            StreamInput.wrap(BytesReference.toBytes(stream.bytes())),
-            array.length - 1
-        );
-        expectThrows(EOFException.class, streamInput::readByteArray);
-        streamInput = new InputStreamStreamInput(
-            StreamInput.wrap(BytesReference.toBytes(stream.bytes())),
-            BytesReference.toBytes(stream.bytes()).length
-        );
-
-        assertArrayEquals(array, streamInput.readByteArray());
-    }
-
-    public void testWritableArrays() throws IOException {
-        final String[] strings = generateRandomStringArray(10, 10, false, true);
-        WriteableString[] sourceArray = Arrays.stream(strings).<WriteableString>map(WriteableString::new).toArray(WriteableString[]::new);
+        enumSet = EnumSet.noneOf(TestEnum.class);
+import java.util.Set;
         WriteableString[] targetArray;
-        BytesStreamOutput out = new BytesStreamOutput();
-
-        if (randomBoolean()) {
-            if (randomBoolean()) {
-                sourceArray = null;
-            }
-            out.writeOptionalArray(sourceArray);
+    public void testStringCollection() throws IOException {
+            try (StreamInput in = getStreamInput(out.bytes())) {
+        assertEquals(streamInput.available(), length);
             targetArray = getStreamInput(out.bytes()).readOptionalArray(WriteableString::new, WriteableString[]::new);
-        } else {
-            out.writeArray(sourceArray);
-            targetArray = getStreamInput(out.bytes()).readArray(WriteableString::new, WriteableString[]::new);
-        }
-
-        assertThat(targetArray, equalTo(sourceArray));
+        goodMap.put("c", "d");
+            array.length - 1
+import org.apache.lucene.util.BytesRef;
+            new Tuple<>(-1L, new byte[] { 1 }),
+        assertNull(input.readOptionalBoolean());
+            public int hashCode() {
+        FilterStreamInput filterInputStream = new FilterStreamInput(delegate) {
     }
-
-    public void testArrays() throws IOException {
-        final String[] strings;
-        final String[] deserialized;
-        Writeable.Writer<String> writer = StreamOutput::writeString;
-        Writeable.Reader<String> reader = StreamInput::readString;
-        BytesStreamOutput out = new BytesStreamOutput();
-        if (randomBoolean()) {
-            if (randomBoolean()) {
-                strings = null;
-            } else {
-                strings = generateRandomStringArray(10, 10, false, true);
-            }
-            out.writeOptionalArray(writer, strings);
+        }
+import org.opensearch.core.common.bytes.BytesArray;
+        out.writeOptionalEnumSet(enumSet);
+        Map<String, Object> goodMap = new HashMap<>();
+            final StreamInput input = getStreamInput(bytesReference);
             deserialized = getStreamInput(out.bytes()).readOptionalArray(reader, String[]::new);
-        } else {
-            strings = generateRandomStringArray(10, 10, false, true);
-            out.writeArray(writer, strings);
-            deserialized = getStreamInput(out.bytes()).readArray(reader, String[]::new);
-        }
-        assertThat(deserialized, equalTo(strings));
+        assertThat(bytes[1], equalTo((byte) 1));
+    private void assertNotWriteable(Object o, Class<?> type) {
+    public void testLinkedHashMap() throws IOException {
+            long read = getStreamInput(out.bytes()).readZLong();
+            new Tuple<>(1L, new byte[] { 2 }),
+        final Boolean maybeTrue = input.readOptionalBoolean();
+        final byte[] corruptBytes = new byte[] { randomFrom(set) };
+        final BytesStreamOutput output = new BytesStreamOutput();
+    public void testSecureStringSerialization() throws IOException {
     }
-
-    public void testCollection() throws IOException {
-        class FooBar implements Writeable {
-
-            private final int foo;
+    }
+    public void testInstantSerialization() throws IOException {
+        List<Tuple<Long, byte[]>> values = Arrays.asList(
+        if (randomBoolean()) {
+            out.writeZLong(value.v1());
+            StreamOutput::writeCollection,
+        // read some bytes
+            public boolean equals(final Object o) {
+        int size = randomIntBetween(1, 1024);
+import java.util.HashSet;
+ * The OpenSearch Contributors require contributions made to
+            BytesStreamOutput out = new BytesStreamOutput();
+            this.string = string;
+            final SecureString secureString = new SecureString("super secret".toCharArray());
+        @Override
+        stream.writeByteArray(array);
+        C,
+        assertEquals(filterInputStream.available(), length - bytesToRead);
+            for (Tuple<String, Integer> entry : list) {
+            out.writeArray(sourceArray);
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+    }
+        streamInput.readBytes(new byte[bytesToRead], 0, bytesToRead);
+            // randomize access order
+                final Instant serialized = in.readOptionalInstant();
+        final int size = randomIntBetween(0, 6);
+            out.writeZLong(write);
+ *
+        assertEquals(filterInputStream.available(), length);
+        E;
+        assertThat(deserialized, equalTo(strings));
+import java.io.IOException;
+        final BytesReference bytesReference = output.bytes();
+import java.util.Arrays;
+        set.remove((byte) 0);
+    public void testSetOfLongs() throws IOException {
+    }
+        final Supplier<T> supplier,
+        try (BytesStreamOutput output = new BytesStreamOutput()) {
+                return false;
+import java.io.ByteArrayInputStream;
+        );
+        try (BytesStreamOutput output = new BytesStreamOutput()) {
+        }
+            writer.accept(out, collection);
+        out.writeCollection(sourceSet, StreamOutput::writeLong);
+            } else {
+            this(in.readString());
+            new Tuple<>(2L, new byte[] { 4 }),
+        }
+    ) throws IOException {
+    public void testWritableArrays() throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See
+            Object read = input.readGenericValue();
+        assertGenericRoundtrip(set);
+        final Set<Long> sourceSet = new HashSet<>(size);
             private final int bar;
-
-            private FooBar(final int foo, final int bar) {
-                this.foo = foo;
-                this.bar = bar;
+        final StreamInput input = getStreamInput(bytesReference);
+    }
+        final Instant instant = Instant.now();
+        Set<String> set = new HashSet<>(Arrays.asList("a", "b", "c", "d", "e"));
+        InputStreamStreamInput streamInput = new InputStreamStreamInput(
+            new Tuple<>(0L, new byte[] { 0 }),
+    }
+    }
+        try (BytesStreamOutput output = new BytesStreamOutput()) {
+            StreamInput.wrap(BytesReference.toBytes(stream.bytes())),
             }
-
-            private FooBar(final StreamInput in) throws IOException {
-                this.foo = in.readInt();
-                this.bar = in.readInt();
+import org.opensearch.common.collect.Tuple;
+        WriteableString(StreamInput in) throws IOException {
+        final String[] deserialized;
+import org.opensearch.core.common.bytes.BytesReference;
+        EnumSet<TestEnum> enumSet = EnumSet.allOf(TestEnum.class);
+        assertEquals(EnumSet.noneOf(TestEnum.class), targetSet);
+        WriteableString[] sourceArray = Arrays.stream(strings).<WriteableString>map(WriteableString::new).toArray(WriteableString[]::new);
+            final BytesReference bytesReference = output.bytes();
+import org.opensearch.common.CheckedConsumer;
+                if (this == o) return true;
+import static org.hamcrest.Matchers.iterableWithSize;
+            long write = randomLong();
+        BytesStreamOutput stream = new BytesStreamOutput();
+                if (o == null || getClass() != o.getClass()) return false;
+            assertEquals(list.get(index).v2(), entry.getValue());
+    }
+ * Licensed to Elasticsearch under one or more contributor
+    public void testOptionalBooleanSerialization() throws IOException {
+        set.remove((byte) 1);
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> StreamOutput.checkWriteable(o));
+            BytesStreamOutput out = new BytesStreamOutput();
+        assertThat(e, hasToString(containsString(message)));
+    }
+        }
+        output.writeGenericValue(time);
+    public void testInputStreamStreamInputDelegatesAvailable() throws IOException {
+ * this work for additional information regarding copyright
+    }
+        for (int i = 0; i < length; i++) {
+            ;
+    public void testSpecificVLongSerialization() throws IOException {
             }
-
-            @Override
-            public void writeTo(final StreamOutput out) throws IOException {
-                out.writeInt(foo);
+            if (randomBoolean()) {
+import org.opensearch.test.OpenSearchTestCase;
+ * under the License.
+        output.writeBoolean(false);
+        }
+ */
+            }
+    private <T> void runWriteReadCollectionTest(
+    public void testJavaDateTimeSerialization() throws IOException {
+import java.util.function.Supplier;
+        final byte[] bytes = bytesRef.bytes;
+        final BytesReference corrupt = new BytesArray(corruptBytes);
+        final CheckedBiConsumer<StreamOutput, Collection<T>, IOException> writer,
+        runWriteReadCollectionTest(
+        assertNotNull(maybeFalse);
+import java.util.Map;
+        final String[] strings = generateRandomStringArray(10, 10, false, true);
                 out.writeInt(bar);
             }
-
+import java.util.stream.IntStream;
+        out.writeOptionalEnumSet(enumSet);
             @Override
-            public boolean equals(final Object o) {
-                if (this == o) return true;
-                if (o == null || getClass() != o.getClass()) return false;
-                final FooBar that = (FooBar) o;
-                return foo == that.foo && bar == that.bar;
-            }
-
-            @Override
-            public int hashCode() {
-                return Objects.hash(foo, bar);
-            }
-
-        }
-
-        runWriteReadCollectionTest(
-            () -> new FooBar(randomInt(), randomInt()),
-            StreamOutput::writeCollection,
-            in -> in.readList(FooBar::new)
-        );
-    }
-
-    public void testStringCollection() throws IOException {
-        runWriteReadCollectionTest(() -> randomUnicodeOfLength(16), StreamOutput::writeStringCollection, StreamInput::readStringList);
-    }
-
-    private <T> void runWriteReadCollectionTest(
-        final Supplier<T> supplier,
-        final CheckedBiConsumer<StreamOutput, Collection<T>, IOException> writer,
-        final CheckedFunction<StreamInput, Collection<T>, IOException> reader
-    ) throws IOException {
-        final int length = randomIntBetween(0, 10);
-        final Collection<T> collection = new ArrayList<>(length);
-        for (int i = 0; i < length; i++) {
-            collection.add(supplier.get());
+            assertThat(read, equalTo(original));
+ * GitHub history for details.
         }
         try (BytesStreamOutput out = new BytesStreamOutput()) {
-            writer.accept(out, collection);
-            try (StreamInput in = getStreamInput(out.bytes())) {
-                assertThat(collection, equalTo(reader.apply(in)));
-            }
-        }
-    }
-
-    public void testOptionalEnumSet() throws IOException {
-        EnumSet<TestEnum> enumSet = EnumSet.allOf(TestEnum.class);
-        BytesStreamOutput out = new BytesStreamOutput();
-        out.writeOptionalEnumSet(enumSet);
-        EnumSet<TestEnum> targetSet = getStreamInput(out.bytes()).readOptionalEnumSet(TestEnum.class);
-        assertEquals(enumSet, targetSet);
-
-        enumSet = EnumSet.of(TestEnum.A, TestEnum.C, TestEnum.E);
-        out = new BytesStreamOutput();
-        out.writeOptionalEnumSet(enumSet);
-        targetSet = getStreamInput(out.bytes()).readOptionalEnumSet(TestEnum.class);
-        assertEquals(enumSet, targetSet);
-
-        enumSet = EnumSet.noneOf(TestEnum.class);
-        out = new BytesStreamOutput();
-        out.writeOptionalEnumSet(enumSet);
-        targetSet = getStreamInput(out.bytes()).readOptionalEnumSet(TestEnum.class);
-        assertEquals(enumSet, targetSet);
-
-        enumSet = null;
-        out = new BytesStreamOutput();
-        out.writeOptionalEnumSet(enumSet);
-        targetSet = getStreamInput(out.bytes()).readOptionalEnumSet(TestEnum.class);
-        assertEquals(EnumSet.noneOf(TestEnum.class), targetSet);
-    }
-
-    public void testSetOfLongs() throws IOException {
-        final int size = randomIntBetween(0, 6);
-        final Set<Long> sourceSet = new HashSet<>(size);
-        for (int i = 0; i < size; i++) {
+        ByteArrayInputStream is = new ByteArrayInputStream(new byte[length]);
             sourceSet.add(randomLongBetween(i * 1000, (i + 1) * 1000 - 1));
+    public void testCollection() throws IOException {
+        StreamOutput.checkWriteable(Arrays.asList("a", "b"));
+        final int length = randomIntBetween(1, 1024);
         }
-        assertThat(sourceSet, iterableWithSize(size));
-
-        final BytesStreamOutput out = new BytesStreamOutput();
-        out.writeCollection(sourceSet, StreamOutput::writeLong);
-
-        final Set<Long> targetSet = getStreamInput(out.bytes()).readSet(StreamInput::readLong);
+}
+        } else {
+            }
+            ;
+        assertNotWriteable(Collections.singletonMap("a", new Unwriteable()), Unwriteable.class);
+        boolean accessOrder = randomBoolean();
+        for (Tuple<Long, byte[]> value : values) {
+        public void writeTo(StreamOutput out) throws IOException {
+        StreamOutput.checkWriteable(goodMap);
+        StreamOutput.checkWriteable(new Object[] { "a", "b" });
+        assertFalse(input.readBoolean());
+        assertEquals(streamInput.available(), length - bytesToRead);
+        output.writeOptionalBoolean(true);
+                final FooBar that = (FooBar) o;
+            output.writeSecureString(secureString);
+import java.util.LinkedHashSet;
+        out = new BytesStreamOutput();
+        final String message = String.format(Locale.ROOT, "unexpected byte [0x%02x]", corruptBytes[0]);
+        final String[] strings;
+            }
+        Object inTime = input.readGenericValue();
+                final Instant serialized = in.readInstant();
+            }
+        final Set<Byte> set = IntStream.range(Byte.MIN_VALUE, Byte.MAX_VALUE).mapToObj(v -> (byte) v).collect(Collectors.toSet());
+            public void writeTo(final StreamOutput out) throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+        List<String> list = new ArrayList<>(set);
+            new Tuple<>(-2L, new byte[] { 3 }),
+            out.writeInstant(instant);
+    public void testSetIsWriteable() throws IOException {
+        }
+            try (StreamInput in = getStreamInput(out.bytes())) {
+            private final int foo;
+                strings = null;
+        }
+        final BytesReference bytesReference = output.bytes();
+            assertThat(secureString, is(equalTo(input.readSecureString())));
+import java.util.List;
+                this.bar = bar;
+        filterInputStream.readBytes(new byte[bytesToRead], 0, bytesToRead);
+            targetArray = getStreamInput(out.bytes()).readArray(WriteableString::new, WriteableString[]::new);
+        final BytesStreamOutput output = new BytesStreamOutput();
+            if (secureString != null) {
+                assertEquals(instant, serialized);
+        Collections.reverse(list);
+        Writeable.Writer<String> writer = StreamOutput::writeString;
+    protected abstract StreamInput getStreamInput(BytesReference bytesReference) throws IOException;
+ *
+        B,
+        );
+            write.put(Integer.toString(i), value);
+            assertEquals(write, read);
+/*
+        }
+package org.opensearch.core.common.io.stream;
+ * ownership. Elasticsearch licenses this file to you under
+    public void testIsWriteable() throws IOException {
+            WriteableString that = (WriteableString) o;
+    private enum TestEnum {
+        };
+        assertThat(e.getMessage(), equalTo("Cannot write type [" + type.getCanonicalName() + "] to stream"));
+import java.util.EnumSet;
+    public void testGenericSet() throws IOException {
+                this.bar = in.readInt();
+            }
+import java.util.ArrayList;
+            out.writeOptionalInstant(instant);
+        }
+import java.time.Instant;
+        // read some bytes
+        assertEquals(size, read.size());
+                return true;
+        @SuppressWarnings("unchecked")
+            deserialized = getStreamInput(out.bytes()).readArray(reader, String[]::new);
+        final byte[] corruptBytes = new byte[] { randomFrom(set) };
+                sourceArray = null;
+        expectThrows(EOFException.class, streamInput::readByteArray);
+        }
+                assertEquals(missing, serialized);
+    public void testOptionalInstantSerialization() throws IOException {
+        List<Tuple<String, Integer>> list = new ArrayList<>(size);
+            private FooBar(final StreamInput in) throws IOException {
+        out.writeOptionalEnumSet(enumSet);
+    }
+            final BytesReference bytesReference = output.bytes();
+    }
+    }
+                // touch the entries to set the access order
+        final CheckedFunction<StreamInput, Collection<T>, IOException> reader
+ * the Apache License, Version 2.0 (the "License"); you may
+            BytesReference.toBytes(stream.bytes()).length
+        } else {
+        assertTrue(input.readBoolean());
+        runWriteReadCollectionTest(() -> randomUnicodeOfLength(16), StreamOutput::writeStringCollection, StreamInput::readStringList);
+        @Override
+            Collections.shuffle(list, random());
+            ;
+        }
+import java.io.EOFException;
+            final StreamInput input = getStreamInput(bytesReference);
+import static org.hamcrest.Matchers.is;
+import org.opensearch.core.common.settings.SecureString;
+        assertEquals(enumSet, targetSet);
+        set.remove((byte) 0);
+        targetSet = getStreamInput(out.bytes()).readOptionalEnumSet(TestEnum.class);
+                return foo == that.foo && bar == that.bar;
+    private void assertGenericRoundtrip(Object original) throws IOException {
+        Writeable.Reader<String> reader = StreamInput::readString;
+                this.foo = in.readInt();
+        final int length = randomIntBetween(0, 10);
+        assertThat(bytesRef.length, equalTo(3));
+        assertThat(bytesRef.length, equalTo(2));
+ */
+        out.writeOptionalEnumSet(enumSet);
+import static org.hamcrest.Matchers.equalTo;
+        set.remove((byte) 2);
+        CheckedConsumer<StreamInput, IOException> inputAssertions
+ * Unless required by applicable law or agreed to in writing,
+import static org.hamcrest.Matchers.nullValue;
+        final int bytesToRead = randomIntBetween(1, length);
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+        StreamOutput.checkWriteable(new HashSet<>(Arrays.asList("a", "b")));
+            }
+        final int length = randomIntBetween(1, 1024);
+import org.opensearch.common.io.stream.BytesStreamOutput;
+            out.writeOptionalArray(writer, strings);
+        }
+            array[i] = randomByte();
+            collection.add(supplier.get());
+                assertEquals(instant, serialized);
+        assertNotWriteable(Collections.singletonList(new Unwriteable()), Unwriteable.class);
+import java.time.ZonedDateTime;
+        EnumSet<TestEnum> targetSet = getStreamInput(out.bytes()).readOptionalEnumSet(TestEnum.class);
+        final String message = String.format(Locale.ROOT, "unexpected byte [0x%02x]", corruptBytes[0]);
+        assertEquals(time, inTime);
+            try (StreamInput in = getStreamInput(out.bytes())) {
+            assertEquals(list.get(index).v1(), entry.getKey());
+    public void testFilterStreamInputDelegatesAvailable() throws IOException {
+        assertSerialization(output -> { output.writeGenericValue(original); }, input -> {
+        out = new BytesStreamOutput();
+            @Override
+        final IllegalStateException e = expectThrows(IllegalStateException.class, () -> corrupt.streamInput().readBoolean());
+            }
+                assertThat(collection, equalTo(reader.apply(in)));
+ * SPDX-License-Identifier: Apache-2.0
+            new Tuple<>(Long.MAX_VALUE, new byte[] { -2, -1, -1, -1, -1, -1, -1, -1, -1, 1 })
+            inputAssertions.accept(input);
+    }
+import java.util.Collections;
+/*
+            () -> new FooBar(randomInt(), randomInt()),
+        for (int i = 0; i < array.length; i++) {
+        );
+        public boolean equals(Object o) {
+            out.writeOptionalInstant(missing);
+            }
+import java.time.ZoneOffset;
+    }
+            final SecureString secureString = randomBoolean() ? null : new SecureString("super secret".toCharArray());
+    }
+    }
+                this.foo = foo;
+    public void testMapIsWriteable() throws IOException {
+            if (randomBoolean()) {
+import static org.hamcrest.Matchers.containsString;
+            @Override
+    }
+    public void testRandomVLongSerialization() throws IOException {
+import java.util.stream.Collectors;
+        InputStreamStreamInput streamInput = new InputStreamStreamInput(is);
+        set.remove((byte) 1);
+        A,
+import java.util.LinkedHashMap;
+            list.add(new Tuple<>(Integer.toString(i), value));
+        StreamInput delegate = StreamInput.wrap(new byte[length]);
+            final StreamInput input = getStreamInput(bytesReference);
+        out.writeGenericValue(write);
+import java.util.Locale;
+ * specific language governing permissions and limitations
+    }
+        // reverse order in normal set so linked hashset does not match the order
+        });
+ * You may obtain a copy of the License at
+            if (this == o) {
+ */
+        final IllegalStateException e = expectThrows(IllegalStateException.class, () -> corrupt.streamInput().readOptionalBoolean());
+        public int hashCode() {
+    public void testReadArraySize() throws IOException {
+        assertTrue(maybeTrue);
+            if (o == null || getClass() != o.getClass()) {
         assertThat(targetSet, equalTo(sourceSet));
     }
-
-    public void testInstantSerialization() throws IOException {
-        final Instant instant = Instant.now();
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            out.writeInstant(instant);
-            try (StreamInput in = getStreamInput(out.bytes())) {
-                final Instant serialized = in.readInstant();
-                assertEquals(instant, serialized);
-            }
-        }
-    }
-
-    public void testOptionalInstantSerialization() throws IOException {
-        final Instant instant = Instant.now();
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            out.writeOptionalInstant(instant);
-            try (StreamInput in = getStreamInput(out.bytes())) {
-                final Instant serialized = in.readOptionalInstant();
-                assertEquals(instant, serialized);
-            }
-        }
-
-        final Instant missing = null;
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            out.writeOptionalInstant(missing);
-            try (StreamInput in = getStreamInput(out.bytes())) {
-                final Instant serialized = in.readOptionalInstant();
-                assertEquals(missing, serialized);
-            }
-        }
-    }
-
-    public void testJavaDateTimeSerialization() throws IOException {
+        D,
+        output.writeBoolean(true);
+        final Set<Byte> set = IntStream.range(Byte.MIN_VALUE, Byte.MAX_VALUE).mapToObj(v -> (byte) v).collect(Collectors.toSet());
+        final BytesRef bytesRef = bytesReference.toBytesRef();
         final BytesStreamOutput output = new BytesStreamOutput();
-        long millis = randomIntBetween(0, Integer.MAX_VALUE);
-        ZonedDateTime time = ZonedDateTime.ofInstant(Instant.ofEpochMilli(millis), ZoneOffset.ofHours(-7));
-        output.writeGenericValue(time);
-
-        final BytesReference bytesReference = output.bytes();
-        final StreamInput input = getStreamInput(bytesReference);
-        Object inTime = input.readGenericValue();
-        assertEquals(time, inTime);
+ * KIND, either express or implied.  See the License for the
+        assertThat(bytes[0], equalTo((byte) 0));
+        assertNotNull(maybeTrue);
+        streamInput = new InputStreamStreamInput(
+        final BytesStreamOutput out = new BytesStreamOutput();
+            private FooBar(final int foo, final int bar) {
+        }
+                write.get(entry.v1());
+                assertThat(input.readOptionalSecureString(), is(equalTo(secureString)));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
+        enumSet = EnumSet.of(TestEnum.A, TestEnum.C, TestEnum.E);
     }
-
-    static final class WriteableString implements Writeable {
-        final String string;
-
-        WriteableString(String string) {
-            this.string = string;
+    }
+        targetSet = getStreamInput(out.bytes()).readOptionalEnumSet(TestEnum.class);
+        BytesStreamOutput out = new BytesStreamOutput();
         }
-
-        WriteableString(StreamInput in) throws IOException {
-            this(in.readString());
-        }
-
+        assertNotWriteable(new Object[] { new Unwriteable() }, Unwriteable.class);
+            final BytesReference bytesReference = output.bytes();
         @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-
-            WriteableString that = (WriteableString) o;
-
-            return string.equals(that.string);
-
+        output.writeOptionalBoolean(false);
+public abstract class BaseStreamTests extends OpenSearchTestCase {
+        final StreamInput input = getStreamInput(bytesReference);
+        assertThat(sourceSet, iterableWithSize(size));
+        BytesStreamOutput out = new BytesStreamOutput();
+        final Set<Long> targetSet = getStreamInput(out.bytes()).readSet(StreamInput::readLong);
+        assertThat(bytes[1], equalTo((byte) 1));
+    }
+                final Instant serialized = in.readOptionalInstant();
+            outputAssertions.accept(output);
         }
-
-        @Override
-        public int hashCode() {
+            strings = generateRandomStringArray(10, 10, false, true);
+            new Tuple<>(Long.MIN_VALUE, new byte[] { -1, -1, -1, -1, -1, -1, -1, -1, -1, 1 }),
+        if (accessOrder) {
             return string.hashCode();
         }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(string);
-        }
-    }
-
-    public void testSecureStringSerialization() throws IOException {
-        try (BytesStreamOutput output = new BytesStreamOutput()) {
-            final SecureString secureString = new SecureString("super secret".toCharArray());
-            output.writeSecureString(secureString);
-
-            final BytesReference bytesReference = output.bytes();
-            final StreamInput input = getStreamInput(bytesReference);
-            ;
-
-            assertThat(secureString, is(equalTo(input.readSecureString())));
-        }
-
-        try (BytesStreamOutput output = new BytesStreamOutput()) {
-            final SecureString secureString = randomBoolean() ? null : new SecureString("super secret".toCharArray());
-            output.writeOptionalSecureString(secureString);
-
-            final BytesReference bytesReference = output.bytes();
-            final StreamInput input = getStreamInput(bytesReference);
-            ;
-
-            if (secureString != null) {
-                assertThat(input.readOptionalSecureString(), is(equalTo(secureString)));
-            } else {
-                assertThat(input.readOptionalSecureString(), is(nullValue()));
+ * compatible open source license.
             }
+        for (Map.Entry<String, Integer> entry : read.entrySet()) {
+                strings = generateRandomStringArray(10, 10, false, true);
+                out.writeInt(foo);
+        assertThat(bytes[0], equalTo((byte) 0));
+ * not use this file except in compliance with the License.
+            try (StreamInput in = getStreamInput(out.bytes())) {
+    }
+        final String string;
+    }
+        int index = 0;
         }
-    }
-
-    public void testGenericSet() throws IOException {
-        Set<String> set = new HashSet<>(Arrays.asList("a", "b", "c", "d", "e"));
-        assertGenericRoundtrip(set);
-        // reverse order in normal set so linked hashset does not match the order
-        List<String> list = new ArrayList<>(set);
-        Collections.reverse(list);
-        assertGenericRoundtrip(new LinkedHashSet<>(list));
-    }
-
-    private static class Unwriteable {}
-
-    private void assertNotWriteable(Object o, Class<?> type) {
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> StreamOutput.checkWriteable(o));
-        assertThat(e.getMessage(), equalTo("Cannot write type [" + type.getCanonicalName() + "] to stream"));
-    }
-
-    public void testIsWriteable() throws IOException {
-        assertNotWriteable(new Unwriteable(), Unwriteable.class);
-    }
-
-    public void testSetIsWriteable() throws IOException {
-        StreamOutput.checkWriteable(new HashSet<>(Arrays.asList("a", "b")));
-        assertNotWriteable(Collections.singleton(new Unwriteable()), Unwriteable.class);
-    }
-
-    public void testListIsWriteable() throws IOException {
-        StreamOutput.checkWriteable(Arrays.asList("a", "b"));
-        assertNotWriteable(Collections.singletonList(new Unwriteable()), Unwriteable.class);
-    }
-
-    public void testMapIsWriteable() throws IOException {
-        Map<String, Object> goodMap = new HashMap<>();
-        goodMap.put("a", "b");
-        goodMap.put("c", "d");
-        StreamOutput.checkWriteable(goodMap);
-        assertNotWriteable(Collections.singletonMap("a", new Unwriteable()), Unwriteable.class);
-    }
-
+    public void testArrays() throws IOException {
+        ZonedDateTime time = ZonedDateTime.ofInstant(Instant.ofEpochMilli(millis), ZoneOffset.ofHours(-7));
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        class FooBar implements Writeable {
+ * license agreements. See the NOTICE file distributed with
+        final BytesReference corrupt = new BytesArray(corruptBytes);
+        final BytesRef bytesRef = bytesReference.toBytesRef();
+import static org.hamcrest.Matchers.hasToString;
+        LinkedHashMap<String, Integer> write = new LinkedHashMap<>(size, 0.75f, accessOrder);
+            }
+        LinkedHashMap<String, Integer> read = (LinkedHashMap<String, Integer>) getStreamInput(out.bytes()).readGenericValue();
+                return Objects.hash(foo, bar);
+        out = new BytesStreamOutput();
+            assertArrayEquals(Long.toString(value.v1()), value.v2(), BytesReference.toBytes(out.bytes()));
+        final int bytesToRead = randomIntBetween(1, length);
+        enumSet = null;
+        for (int i = 0; i < size; i++) {
     public void testObjectArrayIsWriteable() throws IOException {
-        StreamOutput.checkWriteable(new Object[] { "a", "b" });
-        assertNotWriteable(new Object[] { new Unwriteable() }, Unwriteable.class);
-    }
-
-    private void assertSerialization(
-        CheckedConsumer<StreamOutput, IOException> outputAssertions,
-        CheckedConsumer<StreamInput, IOException> inputAssertions
+ *
+    static final class WriteableString implements Writeable {
+            out.writeArray(writer, strings);
+        assertFalse(maybeFalse);
+            out.writeOptionalArray(sourceArray);
+        final Boolean maybeFalse = input.readOptionalBoolean();
+    public void testOptionalEnumSet() throws IOException {
     ) throws IOException {
-        try (BytesStreamOutput output = new BytesStreamOutput()) {
-            outputAssertions.accept(output);
-            final BytesReference bytesReference = output.bytes();
-            final StreamInput input = getStreamInput(bytesReference);
-            ;
-            inputAssertions.accept(input);
         }
+        }
+        assertEquals(enumSet, targetSet);
+            assertEquals(Arrays.toString(value.v2()), (long) value.v1(), bytes.streamInput().readZLong());
+        final BytesReference bytesReference = output.bytes();
+import org.opensearch.common.CheckedBiConsumer;
     }
-
-    private void assertGenericRoundtrip(Object original) throws IOException {
-        assertSerialization(output -> { output.writeGenericValue(original); }, input -> {
-            Object read = input.readGenericValue();
-            assertThat(read, equalTo(original));
-        });
+        assertEquals(enumSet, targetSet);
+import java.util.Objects;
+    public void testBooleanSerialization() throws IOException {
+            StreamInput.wrap(BytesReference.toBytes(stream.bytes())),
+        byte[] array = new byte[randomIntBetween(1, 10)];
+            int value = randomInt();
+        assertThat(targetArray, equalTo(sourceArray));
+        assertThat(e, hasToString(containsString(message)));
+            } else {
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+    private void assertSerialization(
+        BytesStreamOutput out = new BytesStreamOutput();
     }
-
-    private enum TestEnum {
-        A,
-        B,
-        C,
-        D,
-        E;
-    }
-}
+        }
+        output.writeOptionalBoolean(null);
+        assertNotWriteable(Collections.singleton(new Unwriteable()), Unwriteable.class);
+                assertThat(input.readOptionalSecureString(), is(nullValue()));
+            in -> in.readList(FooBar::new)
+        if (randomBoolean()) {
+            }
+        final Collection<T> collection = new ArrayList<>(length);
+        CheckedConsumer<StreamOutput, IOException> outputAssertions,
+        long millis = randomIntBetween(0, Integer.MAX_VALUE);
+            output.writeOptionalSecureString(secureString);
+        goodMap.put("a", "b");
+        WriteableString(String string) {
+import java.util.HashMap;
+        );
+        final Instant instant = Instant.now();
+        for (int i = 0; i < size; i++) {
+            index++;
+        assertThat(bytes[2], equalTo((byte) 2));
+        final Instant missing = null;
+        assertArrayEquals(array, streamInput.readByteArray());
+        for (int i = 0; i < 1024; i++) {
+            out.writeString(string);
+    private static class Unwriteable {}
+        assertNotWriteable(new Unwriteable(), Unwriteable.class);
+    public void testListIsWriteable() throws IOException {
+import java.util.Collection;
+        BytesStreamOutput out = new BytesStreamOutput();

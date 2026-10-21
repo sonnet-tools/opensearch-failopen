@@ -1,259 +1,226 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.fieldvisitor;
-
-import org.apache.lucene.index.FieldInfo;
-import org.apache.lucene.index.StoredFieldVisitor;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.IgnoredFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.RoutingFieldMapper;
-import org.opensearch.index.mapper.SourceFieldMapper;
-import org.opensearch.index.mapper.Uid;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Function;
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.unmodifiableSet;
-import static org.opensearch.common.util.set.Sets.newHashSet;
-
-/**
- * Base {@link StoredFieldVisitor} that retrieves all non-redundant metadata.
- *
- * @opensearch.internal
- */
-public class FieldsVisitor extends StoredFieldVisitor {
-    private static final Set<String> BASE_REQUIRED_FIELDS = unmodifiableSet(newHashSet(IdFieldMapper.NAME, RoutingFieldMapper.NAME));
-
-    private final boolean loadSource;
-    private final String sourceFieldName;
-    private final Set<String> requiredFields;
-    private final String[] sourceIncludes;
-    private final String[] sourceExcludes;
-    /**
-     * Decouples the request-level {@link #sourceExcludes} (what the client wants filtered from the returned
-     * {@code _source}) from what a source-aware codec may actually prune while reading. A field can be
-     * excluded from the response yet still be needed by inner hits, which read the same root {@code _source};
-     * such fields are dropped from {@link #sourceExcludes} here so the codec keeps them available. Only the
-     * remaining fields are safe to prune at read time; see {@code FetchPhase#codecSourceExcludes}.
-     */
-    private final String[] codecSourceExcludes;
-    protected BytesReference source;
-    protected String id;
-    protected Map<String, List<Object>> fieldsValues;
-
-    public FieldsVisitor(boolean loadSource) {
-        this(loadSource, SourceFieldMapper.NAME, null, null);
-    }
-
-    public FieldsVisitor(boolean loadSource, String[] includes, String[] excludes, String[] codecSourceExcludes) {
-        this(loadSource, SourceFieldMapper.NAME, includes, excludes, codecSourceExcludes);
-    }
-
-    public FieldsVisitor(boolean loadSource, String sourceFieldName) {
-        this(loadSource, sourceFieldName, null, null);
-    }
-
-    public FieldsVisitor(boolean loadSource, String sourceFieldName, String[] includes, String[] excludes) {
-        this(loadSource, sourceFieldName, includes, excludes, null);
-    }
-
-    public FieldsVisitor(boolean loadSource, String sourceFieldName, String[] includes, String[] excludes, String[] codecSourceExcludes) {
-        this.loadSource = loadSource;
-        this.sourceFieldName = sourceFieldName;
-        this.sourceIncludes = includes != null ? includes : Strings.EMPTY_ARRAY;
-        this.sourceExcludes = excludes != null ? excludes : Strings.EMPTY_ARRAY;
-        this.codecSourceExcludes = codecSourceExcludes != null ? codecSourceExcludes : Strings.EMPTY_ARRAY;
-        requiredFields = new HashSet<>();
-        reset();
-    }
-
-    @Override
-    public Status needsField(FieldInfo fieldInfo) {
-        if (requiredFields.remove(fieldInfo.name)) {
-            return Status.YES;
-        }
-        // Always load _ignored to be explicit about ignored fields
-        // This works because _ignored is added as the first metadata mapper,
-        // so its stored fields always appear first in the list.
-        if (IgnoredFieldMapper.NAME.equals(fieldInfo.name)) {
-            return Status.YES;
-        }
-        // All these fields are single-valued so we can stop when the set is
-        // empty
-        return requiredFields.isEmpty() ? Status.STOP : Status.NO;
-    }
-
-    public final void postProcess(Function<String, MappedFieldType> fieldTypeLookup) {
-        for (Map.Entry<String, List<Object>> entry : fields().entrySet()) {
-            MappedFieldType fieldType = fieldTypeLookup.apply(entry.getKey());
-            if (fieldType == null) {
-                throw new IllegalStateException("Field [" + entry.getKey() + "] exists in the index but not in mappings");
-            }
-            List<Object> fieldValues = entry.getValue();
-            for (int i = 0; i < fieldValues.size(); i++) {
-                fieldValues.set(i, fieldType.valueForDisplay(fieldValues.get(i)));
-            }
-        }
-    }
-
-    @Override
-    public void binaryField(FieldInfo fieldInfo, byte[] value) {
-        binaryField(fieldInfo, new BytesRef(value));
-    }
-
-    public void binaryField(FieldInfo fieldInfo, BytesRef value) {
-        if (sourceFieldName.equals(fieldInfo.name)) {
-            source = new BytesArray(value);
-        } else if (IdFieldMapper.NAME.equals(fieldInfo.name)) {
-            id = Uid.decodeId(value.bytes, value.offset, value.length);
-        } else {
-            addValue(fieldInfo.name, value);
-        }
-    }
-
-    @Override
-    public void stringField(FieldInfo fieldInfo, String value) {
-        assert IdFieldMapper.NAME.equals(fieldInfo.name) == false : "_id field must go through binaryField";
-        assert sourceFieldName.equals(fieldInfo.name) == false : "source field must go through binaryField";
-        addValue(fieldInfo.name, value);
-    }
-
-    @Override
-    public void intField(FieldInfo fieldInfo, int value) {
-        addValue(fieldInfo.name, value);
-    }
-
-    @Override
-    public void longField(FieldInfo fieldInfo, long value) {
-        addValue(fieldInfo.name, value);
-    }
-
-    @Override
     public void floatField(FieldInfo fieldInfo, float value) {
-        addValue(fieldInfo.name, value);
-    }
-
-    @Override
-    public void doubleField(FieldInfo fieldInfo, double value) {
-        addValue(fieldInfo.name, value);
-    }
-
-    public void objectField(FieldInfo fieldInfo, Object object) {
-        assert IdFieldMapper.NAME.equals(fieldInfo.name) == false : "_id field must go through binaryField";
-        assert sourceFieldName.equals(fieldInfo.name) == false : "source field must go through binaryField";
+            return Status.YES;
+        List<Object> values = fieldsValues.get(RoutingFieldMapper.NAME);
+ * this file be licensed under the Apache-2.0 license or a
+        if (fieldsValues == null) {
+     */
+    private final String sourceFieldName;
+ * compatible open source license.
+        // empty
+     * @return String[] sourceIncludes
+     * @return String[] sourceExcludes
+    private static final Set<String> BASE_REQUIRED_FIELDS = unmodifiableSet(newHashSet(IdFieldMapper.NAME, RoutingFieldMapper.NAME));
         addValue(fieldInfo.name, object);
     }
-
-    public BytesReference source() {
-        return source;
+        this(loadSource, sourceFieldName, includes, excludes, null);
+ * license agreements. See the NOTICE file distributed with
+        // All these fields are single-valued so we can stop when the set is
+        for (Map.Entry<String, List<Object>> entry : fields().entrySet()) {
+        addValue(fieldInfo.name, value);
+/*
+        assert sourceFieldName.equals(fieldInfo.name) == false : "source field must go through binaryField";
     }
-
+import org.opensearch.core.common.Strings;
     /**
-     * Returns the array containing the source fields to include
-     * @return String[] sourceIncludes
-     */
+    public FieldsVisitor(boolean loadSource, String[] includes, String[] excludes, String[] codecSourceExcludes) {
+import org.apache.lucene.index.FieldInfo;
+    }
+        return codecSourceExcludes;
+    public FieldsVisitor(boolean loadSource, String sourceFieldName, String[] includes, String[] excludes) {
+ * Base {@link StoredFieldVisitor} that retrieves all non-redundant metadata.
+ * software distributed under the License is distributed on an
+        this.codecSourceExcludes = codecSourceExcludes != null ? codecSourceExcludes : Strings.EMPTY_ARRAY;
+    @Override
+        assert IdFieldMapper.NAME.equals(fieldInfo.name) == false : "_id field must go through binaryField";
+        this.sourceExcludes = excludes != null ? excludes : Strings.EMPTY_ARRAY;
+    private final boolean loadSource;
+        if (values == null || values.isEmpty()) {
+        if (fieldsValues == null) {
+     * Returns the array containing the source fields to exclude
+    public void longField(FieldInfo fieldInfo, long value) {
+        assert values.size() == 1;
+import static java.util.Collections.unmodifiableSet;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    public Status needsField(FieldInfo fieldInfo) {
+    }
     public String[] includes() {
+    /**
+}
+    public void objectField(FieldInfo fieldInfo, Object object) {
+/*
+    public void reset() {
+            addValue(fieldInfo.name, value);
+            MappedFieldType fieldType = fieldTypeLookup.apply(entry.getKey());
+    /**
+public class FieldsVisitor extends StoredFieldVisitor {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        addValue(fieldInfo.name, value);
+        // This works because _ignored is added as the first metadata mapper,
+            source = new BytesArray(value);
+     * such fields are dropped from {@link #sourceExcludes} here so the codec keeps them available. Only the
+    private final Set<String> requiredFields;
+    protected BytesReference source;
+ * Licensed to Elasticsearch under one or more contributor
+        }
+import org.opensearch.core.common.bytes.BytesReference;
+     * @return String[] codecSourceExcludes
+    private final String[] sourceIncludes;
+        }
+ * You may obtain a copy of the License at
+        assert IdFieldMapper.NAME.equals(fieldInfo.name) == false : "_id field must go through binaryField";
+import org.apache.lucene.index.StoredFieldVisitor;
+import java.util.HashMap;
+        id = null;
+    public final void postProcess(Function<String, MappedFieldType> fieldTypeLookup) {
+        addValue(fieldInfo.name, value);
+            fieldsValues = new HashMap<>();
+    }
+import org.apache.lucene.util.BytesRef;
+ * specific language governing permissions and limitations
+    }
+import org.opensearch.index.mapper.RoutingFieldMapper;
+        this.loadSource = loadSource;
+ * this work for additional information regarding copyright
+    public String routing() {
+    @Override
+     * {@link #excludes()}, which is filtered from the response after {@code _source} is loaded.
+        if (fieldsValues != null) fieldsValues.clear();
+    public void stringField(FieldInfo fieldInfo, String value) {
+        }
+    private final String[] sourceExcludes;
+        if (requiredFields.remove(fieldInfo.name)) {
+    }
+        // so its stored fields always appear first in the list.
+    @Override
+        }
+        } else if (IdFieldMapper.NAME.equals(fieldInfo.name)) {
+            }
+    public String id() {
+            requiredFields.add(sourceFieldName);
+    public BytesReference source() {
+            id = Uid.decodeId(value.bytes, value.offset, value.length);
+/*
+    }
+    }
+    @Override
+        return source;
+    /**
+import org.opensearch.index.mapper.IdFieldMapper;
+    }
+ * KIND, either express or implied.  See the License for the
+            return Status.YES;
+ */
+        addValue(fieldInfo.name, value);
+        requiredFields.addAll(BASE_REQUIRED_FIELDS);
+            fieldsValues.put(name, values);
+ * ownership. Elasticsearch licenses this file to you under
+import org.opensearch.index.mapper.MappedFieldType;
+    public String[] excludes() {
+     */
+            List<Object> fieldValues = entry.getValue();
+    void addValue(String name, Object value) {
+     * remaining fields are safe to prune at read time; see {@code FetchPhase#codecSourceExcludes}.
+ *
+        requiredFields = new HashSet<>();
+     * Returns the array containing the source fields to include
+ * the Apache License, Version 2.0 (the "License"); you may
+        this.sourceFieldName = sourceFieldName;
+    public FieldsVisitor(boolean loadSource, String sourceFieldName) {
+    }
+    public FieldsVisitor(boolean loadSource, String sourceFieldName, String[] includes, String[] excludes, String[] codecSourceExcludes) {
+import java.util.ArrayList;
+        List<Object> values = fieldsValues.get(name);
+            if (fieldType == null) {
+        } else {
+        this.sourceIncludes = includes != null ? includes : Strings.EMPTY_ARRAY;
+/**
+import org.opensearch.index.mapper.IgnoredFieldMapper;
+    }
         return sourceIncludes;
     }
-
-    /**
-     * Returns the array containing the source fields to exclude
-     * @return String[] sourceExcludes
-     */
-    public String[] excludes() {
+    }
         return sourceExcludes;
+        if (IgnoredFieldMapper.NAME.equals(fieldInfo.name)) {
     }
-
-    /**
-     * Returns the source excludes a source-aware codec may prune while reading, as opposed to
-     * {@link #excludes()}, which is filtered from the response after {@code _source} is loaded.
-     * @return String[] codecSourceExcludes
-     */
+import static java.util.Collections.emptyMap;
+    }
+    @Override
+        this(loadSource, SourceFieldMapper.NAME, includes, excludes, codecSourceExcludes);
+package org.opensearch.index.fieldvisitor;
+        if (sourceFieldName.equals(fieldInfo.name)) {
+    public void intField(FieldInfo fieldInfo, int value) {
+    }
+                throw new IllegalStateException("Field [" + entry.getKey() + "] exists in the index but not in mappings");
+    }
+    }
+    public void binaryField(FieldInfo fieldInfo, byte[] value) {
+    private final String[] codecSourceExcludes;
+            for (int i = 0; i < fieldValues.size(); i++) {
+            return null;
+        // Always load _ignored to be explicit about ignored fields
+import org.opensearch.index.mapper.Uid;
+     * excluded from the response yet still be needed by inner hits, which read the same root {@code _source};
+ */
     public String[] codecExcludes() {
-        return codecSourceExcludes;
-    }
-
-    public String id() {
-        return id;
-    }
-
-    public String routing() {
-        if (fieldsValues == null) {
-            return null;
-        }
-        List<Object> values = fieldsValues.get(RoutingFieldMapper.NAME);
-        if (values == null || values.isEmpty()) {
-            return null;
-        }
-        assert values.size() == 1;
-        return values.get(0).toString();
-    }
-
-    public Map<String, List<Object>> fields() {
-        return fieldsValues != null ? fieldsValues : emptyMap();
-    }
-
-    public void reset() {
-        if (fieldsValues != null) fieldsValues.clear();
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.Set;
         source = null;
-        id = null;
-
-        requiredFields.addAll(BASE_REQUIRED_FIELDS);
-        if (loadSource) {
-            requiredFields.add(sourceFieldName);
+        return id;
+     */
+                fieldValues.set(i, fieldType.valueForDisplay(fieldValues.get(i)));
+    protected Map<String, List<Object>> fieldsValues;
+        reset();
+import java.util.List;
+        this(loadSource, sourceFieldName, null, null);
+        }
+import java.util.HashSet;
+            return null;
         }
     }
-
-    void addValue(String name, Object value) {
-        if (fieldsValues == null) {
-            fieldsValues = new HashMap<>();
-        }
-
-        List<Object> values = fieldsValues.get(name);
-        if (values == null) {
-            values = new ArrayList<>(2);
-            fieldsValues.put(name, values);
-        }
+        this(loadSource, SourceFieldMapper.NAME, null, null);
+     * {@code _source}) from what a source-aware codec may actually prune while reading. A field can be
+ *
+    }
+        addValue(fieldInfo.name, value);
+    }
         values.add(value);
+        if (loadSource) {
+import org.opensearch.index.mapper.SourceFieldMapper;
+     * Decouples the request-level {@link #sourceExcludes} (what the client wants filtered from the returned
+            }
+import org.opensearch.core.common.bytes.BytesArray;
+import static org.opensearch.common.util.set.Sets.newHashSet;
+ */
+    public FieldsVisitor(boolean loadSource) {
+ * The OpenSearch Contributors require contributions made to
+        assert sourceFieldName.equals(fieldInfo.name) == false : "source field must go through binaryField";
+ * @opensearch.internal
+            values = new ArrayList<>(2);
+        return requiredFields.isEmpty() ? Status.STOP : Status.NO;
+    public void binaryField(FieldInfo fieldInfo, BytesRef value) {
+        }
+    protected String id;
+        }
+ */
+ *
+        return values.get(0).toString();
+        if (values == null) {
+        return fieldsValues != null ? fieldsValues : emptyMap();
+        }
+import java.util.function.Function;
+    public Map<String, List<Object>> fields() {
     }
-}
+ * Modifications Copyright OpenSearch Contributors. See
+ * under the License.
+        binaryField(fieldInfo, new BytesRef(value));
+    @Override
+ * Unless required by applicable law or agreed to in writing,
+    @Override
+ *
+    public void doubleField(FieldInfo fieldInfo, double value) {
+ * not use this file except in compliance with the License.
+    }
+     */
+import java.util.Map;
+     * Returns the source excludes a source-aware codec may prune while reading, as opposed to
+ * GitHub history for details.

@@ -1,284 +1,248 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.search.startree;
-
-import org.apache.lucene.util.FixedBitSet;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.index.codec.composite.CompositeIndexFieldInfo;
-import org.opensearch.index.compositeindex.datacube.DateDimension;
-import org.opensearch.index.compositeindex.datacube.Dimension;
-import org.opensearch.index.compositeindex.datacube.Metric;
-import org.opensearch.index.compositeindex.datacube.MetricStat;
-import org.opensearch.index.compositeindex.datacube.NumericDimension;
-import org.opensearch.index.compositeindex.datacube.startree.utils.date.DateTimeUnitAdapter;
-import org.opensearch.index.compositeindex.datacube.startree.utils.date.DateTimeUnitRounding;
-import org.opensearch.index.mapper.CompositeDataCubeFieldType;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.bucket.histogram.DateHistogramAggregatorFactory;
-import org.opensearch.search.aggregations.bucket.range.RangeAggregatorFactory;
-import org.opensearch.search.aggregations.bucket.terms.MultiTermsAggregationFactory;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregatorFactory;
-import org.opensearch.search.aggregations.metrics.MetricAggregatorFactory;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.startree.filter.StarTreeFilter;
-import org.opensearch.search.startree.filter.provider.StarTreeFilterProvider;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-
-/**
- * Stores the star tree related context of a search request.
- */
-@ExperimentalApi
-public class StarTreeQueryContext {
-
-    private final CompositeDataCubeFieldType compositeMappedFieldType;
-
-    /**
-     * Cache for leaf results
-     * This is used to cache the results for each leaf reader context
-     * to avoid reading the filtered values from the leaf reader context multiple times
-     */
-    // TODO : Change caching to be based on aggregation specific filters.
-    private final FixedBitSet[] perSegmentNodeIdsCache;
-
-    private final QueryBuilder baseQueryBuilder;
-    private StarTreeFilter baseStarTreeFilter;
-
-    // TODO : Implement storing and aggregating aggregation specific filters.
-
-    public StarTreeQueryContext(SearchContext context, QueryBuilder baseQueryBuilder) {
-        this.baseQueryBuilder = baseQueryBuilder;
-        // TODO : We need to select the most appropriate one from multiple star tree field types.
-        compositeMappedFieldType = (CompositeDataCubeFieldType) context.mapperService().getCompositeFieldTypes().iterator().next();
-        // need to cache star tree values only for multiple aggregations
-        boolean cacheStarTreeValues = context.aggregations().factories().getFactories().length > 1;
-        int cacheSize = cacheStarTreeValues ? context.indexShard().segments(false).size() : -1;
-        if (cacheSize > -1) {
-            perSegmentNodeIdsCache = new FixedBitSet[cacheSize];
-        } else {
-            perSegmentNodeIdsCache = null;
-        }
-    }
-
-    // TODO : Make changes to change visibility into package private. Handle the same in @org.opensearch.search.SearchServiceStarTreeTests
-    public StarTreeQueryContext(CompositeDataCubeFieldType compositeMappedFieldType, QueryBuilder baseQueryBuilder, int cacheSize) {
-        this.compositeMappedFieldType = compositeMappedFieldType;
-        this.baseQueryBuilder = baseQueryBuilder;
-        if (cacheSize > -1) {
-            perSegmentNodeIdsCache = new FixedBitSet[cacheSize];
-        } else {
-            perSegmentNodeIdsCache = null;
-        }
-    }
-
-    public CompositeIndexFieldInfo getStarTree() {
-        return new CompositeIndexFieldInfo(compositeMappedFieldType.name(), compositeMappedFieldType.getCompositeIndexType());
-    }
-
-    public FixedBitSet maybeGetCachedNodeIdsForSegment(int ordinal) {
-        return perSegmentNodeIdsCache != null ? perSegmentNodeIdsCache[ordinal] : null;
-    }
-
-    public FixedBitSet[] getAllCachedValues() {
-        return perSegmentNodeIdsCache;
-    }
-
-    public void maybeSetCachedNodeIdsForSegment(int key, FixedBitSet values) {
-        if (perSegmentNodeIdsCache != null) {
-            perSegmentNodeIdsCache[key] = values;
-        }
-    }
-
-    /**
-     * Generates the Base StarTreeFilter and then recursively merges
-     * any aggregation specific STF.
-     * @return true if recursively all filters were consolidated, else false.
-     */
-    public boolean consolidateAllFilters(SearchContext context) {
-        // Validate the fields and metrics required by aggregations are supported in star tree
-        for (AggregatorFactory aggregatorFactory : context.aggregations().factories().getFactories()) {
-            if (validateNestedAggregationStructure(compositeMappedFieldType, aggregatorFactory)) {
-                continue;
-            }
-            // invalid query shape
-            return false;
-        }
-
-        // Generate the base Star Tree Filter
-        if (baseQueryBuilder != null) {
-            baseStarTreeFilter = getStarTreeFilter(context, baseQueryBuilder, compositeMappedFieldType);
-            return baseStarTreeFilter != null; // Base Query is not supported by star tree filter.
-        }
-        // TODO : Generate StarTreeFilter specific to aggregations by merging base and their parents.
-        return true;
-    }
-
-    public StarTreeFilter getBaseQueryStarTreeFilter() {
-        if (baseStarTreeFilter == null) {
-            return new StarTreeFilter(Collections.emptyMap());
-        }
-        return baseStarTreeFilter;
-    }
-
-    // TODO : Push this validation down to a common method in AggregatorFactory or an equivalent place.
-    private static boolean validateStarTreeMetricSupport(
-        CompositeDataCubeFieldType compositeIndexFieldInfo,
-        MetricAggregatorFactory metricAggregatorFactory
-    ) {
-        if (metricAggregatorFactory.getSubFactories().getFactories().length == 0) {
-            String field;
-            Map<String, List<MetricStat>> supportedMetrics = compositeIndexFieldInfo.getMetrics()
-                .stream()
-                .collect(Collectors.toMap(Metric::getField, Metric::getMetrics));
-
-            MetricStat metricStat = metricAggregatorFactory.getMetricStat();
-            field = metricAggregatorFactory.getField();
-
-            return field != null && supportedMetrics.containsKey(field) && supportedMetrics.get(field).contains(metricStat);
-        }
-        return false;
-    }
-
-    private static boolean validateKeywordTermsAggregationSupport(
-        CompositeDataCubeFieldType compositeIndexFieldInfo,
-        TermsAggregatorFactory termsAggregatorFactory
-    ) {
         // Validate request field is part of dimensions
-        return compositeIndexFieldInfo.getDimensions()
-            .stream()
-            .map(Dimension::getField)
-            .anyMatch(termsAggregatorFactory.getField()::equals);
-    }
-
-    private static boolean validateRangeAggregationSupport(
-        CompositeDataCubeFieldType compositeIndexFieldInfo,
-        RangeAggregatorFactory rangeAggregatorFactory
-    ) {
-        // Validate request field is part of dimensions & is a numeric field
-        // TODO: Add support for date type ranges
-        return compositeIndexFieldInfo.getDimensions()
-            .stream()
-            .anyMatch(dimension -> rangeAggregatorFactory.getField().equals(dimension.getField()) && dimension instanceof NumericDimension);
-    }
-
+    private static boolean validateStarTreeMetricSupport(
+            perSegmentNodeIdsCache = new FixedBitSet[cacheSize];
+        for (AggregatorFactory subFactory : aggregatorFactory.getSubFactories().getFactories()) {
     private StarTreeFilter getStarTreeFilter(
-        SearchContext context,
-        QueryBuilder queryBuilder,
-        CompositeDataCubeFieldType compositeMappedFieldType
+            case DateHistogramAggregatorFactory dateHistogramAggregatorFactory -> isValid = validateDateHistogramSupport(
+            return starTreeFilterProvider.getFilter(context, queryBuilder, compositeMappedFieldType);
+            // invalid query shape
+            case MultiTermsAggregationFactory multiTermsAggregationFactory -> isValid = validateMultiTermsAggregationSupport(
+     * to avoid reading the filtered values from the leaf reader context multiple times
+     * @return true if recursively all filters were consolidated, else false.
     ) {
-        StarTreeFilterProvider starTreeFilterProvider = StarTreeFilterProvider.SingletonFactory.getProvider(queryBuilder);
+    public void maybeSetCachedNodeIdsForSegment(int key, FixedBitSet values) {
+        }
+    public FixedBitSet maybeGetCachedNodeIdsForSegment(int ordinal) {
+        }
+        for (AggregatorFactory aggregatorFactory : context.aggregations().factories().getFactories()) {
+    public StarTreeQueryContext(CompositeDataCubeFieldType compositeMappedFieldType, QueryBuilder baseQueryBuilder, int cacheSize) {
+        return compositeIndexFieldInfo.getDimensions()
+            throw new RuntimeException(e);
+        // Validate the fields and metrics required by aggregations are supported in star tree
+        compositeMappedFieldType = (CompositeDataCubeFieldType) context.mapperService().getCompositeFieldTypes().iterator().next();
+    /**
+ * The OpenSearch Contributors require contributions made to
+        TermsAggregatorFactory termsAggregatorFactory
+        boolean cacheStarTreeValues = context.aggregations().factories().getFactories().length > 1;
+        this.compositeMappedFieldType = compositeMappedFieldType;
+    private static boolean validateKeywordTermsAggregationSupport(
+        // If no DateDimension is found, validation fails
+        DateTimeUnitRounding rounding = starTreeDateDimension.findClosestValidInterval(
+        }
         // The query builder's support is not implemented.
+                continue;
+    private static boolean validateRangeAggregationSupport(
         if (starTreeFilterProvider == null) {
-            return null;
+        // Find the closest valid interval in the DateTimeUnitRounding class associated with star tree
+        if (cacheSize > -1) {
+        return true;
+            .anyMatch(termsAggregatorFactory.getField()::equals);
+    ) {
+        CompositeDataCubeFieldType compositeMappedFieldType
+            }
+                return isValid && metricAggregatorFactory.getSubFactories().getFactories().length == 0;
+        if (dateHistogramAggregatorFactory.getSubFactories().getFactories().length < 1) {
+}
+        return true;
+        // Find the DateDimension in the dimensions list
+        return true;
+            .anyMatch(dimension -> rangeAggregatorFactory.getField().equals(dimension.getField()) && dimension instanceof NumericDimension);
+     */
+ *
+                compositeIndexFieldInfo,
+        }
+    public StarTreeQueryContext(SearchContext context, QueryBuilder baseQueryBuilder) {
+                compositeIndexFieldInfo,
+            }
+    private final QueryBuilder baseQueryBuilder;
+        this.baseQueryBuilder = baseQueryBuilder;
+            .map(Dimension::getField)
+import org.opensearch.index.query.QueryBuilder;
+            if (!validateNestedAggregationStructure(compositeIndexFieldInfo, subFactory)) {
+            }
+        return perSegmentNodeIdsCache != null ? perSegmentNodeIdsCache[ordinal] : null;
+            return false;
+            perSegmentNodeIdsCache[key] = values;
+            return false;
+        SearchContext context,
+    public CompositeIndexFieldInfo getStarTree() {
+    private final CompositeDataCubeFieldType compositeMappedFieldType;
+                return false;
+        } else {
+        if (starTreeDateDimension == null) {
+        // TODO : Generate StarTreeFilter specific to aggregations by merging base and their parents.
+        return perSegmentNodeIdsCache;
+        if (baseQueryBuilder != null) {
+import org.apache.lucene.util.FixedBitSet;
+    ) {
+import java.util.Collections;
+            new DateTimeUnitAdapter(dateHistogramAggregatorFactory.getRounding())
+            case MetricAggregatorFactory metricAggregatorFactory -> {
+        StarTreeFilterProvider starTreeFilterProvider = StarTreeFilterProvider.SingletonFactory.getProvider(queryBuilder);
+        // TODO : We need to select the most appropriate one from multiple star tree field types.
+                break;
+     * Generates the Base StarTreeFilter and then recursively merges
+        for (Dimension dimension : compositeIndexFieldInfo.getDimensions()) {
+        DateHistogramAggregatorFactory dateHistogramAggregatorFactory
+                termsAggregatorFactory
+    }
+        // Generate the base Star Tree Filter
+            String field;
+            );
+    }
+            .stream()
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregatorFactory;
+    }
+import org.opensearch.search.aggregations.bucket.histogram.DateHistogramAggregatorFactory;
+            if (dimension instanceof DateDimension dateDimension) {
+        }
+        this.baseQueryBuilder = baseQueryBuilder;
+        }
+            perSegmentNodeIdsCache = new FixedBitSet[cacheSize];
+    }
+        DateDimension starTreeDateDimension = null;
+/*
+import org.opensearch.common.annotation.ExperimentalApi;
+import org.opensearch.index.mapper.CompositeDataCubeFieldType;
+        switch (aggregatorFactory) {
+            );
+        CompositeDataCubeFieldType compositeIndexFieldInfo,
+            }
+import org.opensearch.search.startree.filter.StarTreeFilter;
+ * SPDX-License-Identifier: Apache-2.0
+        }
+        if (perSegmentNodeIdsCache != null) {
+    private StarTreeFilter baseStarTreeFilter;
+        }
+    private static boolean validateDateHistogramSupport(
+        return false;
+            }
+            return false;
+package org.opensearch.search.startree;
+    public FixedBitSet[] getAllCachedValues() {
+    /**
+    }
+import org.opensearch.search.startree.filter.provider.StarTreeFilterProvider;
+    }
+            return false;
+        CompositeDataCubeFieldType compositeIndexFieldInfo,
+import java.util.stream.Collectors;
+        }
+import org.opensearch.index.compositeindex.datacube.startree.utils.date.DateTimeUnitAdapter;
+            .stream()
+import java.util.List;
+        // Validate request field is part of dimensions & is a numeric field
+    }
+import org.opensearch.index.compositeindex.datacube.NumericDimension;
+            case TermsAggregatorFactory termsAggregatorFactory -> isValid = validateKeywordTermsAggregationSupport(
+import org.opensearch.search.aggregations.bucket.terms.MultiTermsAggregationFactory;
+            if (validateNestedAggregationStructure(compositeMappedFieldType, aggregatorFactory)) {
+    public boolean consolidateAllFilters(SearchContext context) {
+            .stream()
+    ) {
+        return compositeIndexFieldInfo.getDimensions()
+        if (metricAggregatorFactory.getSubFactories().getFactories().length == 0) {
+            case RangeAggregatorFactory rangeAggregatorFactory -> isValid = validateRangeAggregationSupport(
+        if (cacheSize > -1) {
+import org.opensearch.index.compositeindex.datacube.startree.utils.date.DateTimeUnitRounding;
+                compositeIndexFieldInfo,
+        CompositeDataCubeFieldType compositeIndexFieldInfo,
+            perSegmentNodeIdsCache = null;
+            .containsAll(multiTermsAggregationFactory.getRequestFields());
+import java.io.IOException;
+        CompositeDataCubeFieldType compositeIndexFieldInfo,
         }
         try {
-            return starTreeFilterProvider.getFilter(context, queryBuilder, compositeMappedFieldType);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private static boolean validateDateHistogramSupport(
-        CompositeDataCubeFieldType compositeIndexFieldInfo,
-        DateHistogramAggregatorFactory dateHistogramAggregatorFactory
-    ) {
-        if (dateHistogramAggregatorFactory.getSubFactories().getFactories().length < 1) {
-            return false;
-        }
-
-        // Find the DateDimension in the dimensions list
-        DateDimension starTreeDateDimension = null;
-        for (Dimension dimension : compositeIndexFieldInfo.getDimensions()) {
-            if (dimension instanceof DateDimension dateDimension) {
-                starTreeDateDimension = dateDimension;
-                break;
-            }
-        }
-
-        // If no DateDimension is found, validation fails
-        if (starTreeDateDimension == null) {
-            return false;
-        }
-
-        // Ensure the rounding is not null
-        if (dateHistogramAggregatorFactory.getRounding() == null) {
-            return false;
-        }
-
-        // Find the closest valid interval in the DateTimeUnitRounding class associated with star tree
-        DateTimeUnitRounding rounding = starTreeDateDimension.findClosestValidInterval(
-            new DateTimeUnitAdapter(dateHistogramAggregatorFactory.getRounding())
-        );
-        if (rounding == null) {
-            return false;
-        }
-
-        return true;
-    }
-
-    private static boolean validateMultiTermsAggregationSupport(
-        CompositeDataCubeFieldType compositeIndexFieldInfo,
-        MultiTermsAggregationFactory multiTermsAggregationFactory
-    ) {
-        return compositeIndexFieldInfo.getDimensions()
-            .stream()
+        // need to cache star tree values only for multiple aggregations
+ * compatible open source license.
             .map(Dimension::getField)
-            .collect(Collectors.toSet())
-            .containsAll(multiTermsAggregationFactory.getRequestFields());
+                return false;
     }
-
-    private static boolean validateNestedAggregationStructure(
+import java.util.Map;
         CompositeDataCubeFieldType compositeIndexFieldInfo,
-        AggregatorFactory aggregatorFactory
-    ) {
-        boolean isValid;
-
-        switch (aggregatorFactory) {
-            case TermsAggregatorFactory termsAggregatorFactory -> isValid = validateKeywordTermsAggregationSupport(
-                compositeIndexFieldInfo,
-                termsAggregatorFactory
-            );
-            case DateHistogramAggregatorFactory dateHistogramAggregatorFactory -> isValid = validateDateHistogramSupport(
-                compositeIndexFieldInfo,
-                dateHistogramAggregatorFactory
-            );
-            case RangeAggregatorFactory rangeAggregatorFactory -> isValid = validateRangeAggregationSupport(
-                compositeIndexFieldInfo,
-                rangeAggregatorFactory
-            );
-            case MetricAggregatorFactory metricAggregatorFactory -> {
-                isValid = validateStarTreeMetricSupport(compositeIndexFieldInfo, metricAggregatorFactory);
-                return isValid && metricAggregatorFactory.getSubFactories().getFactories().length == 0;
-            }
-            case MultiTermsAggregationFactory multiTermsAggregationFactory -> isValid = validateMultiTermsAggregationSupport(
-                compositeIndexFieldInfo,
-                multiTermsAggregationFactory
-            );
-            case null, default -> {
-                return false;
-            }
-        }
-
+            return new StarTreeFilter(Collections.emptyMap());
+        if (baseStarTreeFilter == null) {
         if (isValid == false) return false;
-
-        for (AggregatorFactory subFactory : aggregatorFactory.getSubFactories().getFactories()) {
-            if (!validateNestedAggregationStructure(compositeIndexFieldInfo, subFactory)) {
-                return false;
-            }
-        }
-
-        return true;
+     * This is used to cache the results for each leaf reader context
+    private static boolean validateNestedAggregationStructure(
+        MetricAggregatorFactory metricAggregatorFactory
+ */
+    private static boolean validateMultiTermsAggregationSupport(
+        AggregatorFactory aggregatorFactory
+        // Ensure the rounding is not null
+        QueryBuilder queryBuilder,
+            perSegmentNodeIdsCache = null;
     }
-
-}
+                dateHistogramAggregatorFactory
+            baseStarTreeFilter = getStarTreeFilter(context, baseQueryBuilder, compositeMappedFieldType);
+        }
+public class StarTreeQueryContext {
+import org.opensearch.index.compositeindex.datacube.MetricStat;
+import org.opensearch.search.aggregations.bucket.range.RangeAggregatorFactory;
+    }
+     * any aggregation specific STF.
+    }
+     */
+import org.opensearch.index.codec.composite.CompositeIndexFieldInfo;
+        } catch (IOException e) {
+    private final FixedBitSet[] perSegmentNodeIdsCache;
+import org.opensearch.index.compositeindex.datacube.DateDimension;
+ */
+        if (dateHistogramAggregatorFactory.getRounding() == null) {
+            );
+            .collect(Collectors.toSet())
+        }
+                compositeIndexFieldInfo,
+        MultiTermsAggregationFactory multiTermsAggregationFactory
+@ExperimentalApi
+        RangeAggregatorFactory rangeAggregatorFactory
+            return null;
+        return baseStarTreeFilter;
+    }
+        if (rounding == null) {
+    }
+        }
+        );
+                .stream()
+    }
+        }
+            return false;
+        int cacheSize = cacheStarTreeValues ? context.indexShard().segments(false).size() : -1;
+        CompositeDataCubeFieldType compositeIndexFieldInfo,
+                rangeAggregatorFactory
+    ) {
+        }
+import org.opensearch.index.compositeindex.datacube.Metric;
+            field = metricAggregatorFactory.getField();
+                multiTermsAggregationFactory
+                starTreeDateDimension = dateDimension;
+/**
+            MetricStat metricStat = metricAggregatorFactory.getMetricStat();
+            return baseStarTreeFilter != null; // Base Query is not supported by star tree filter.
+ * Stores the star tree related context of a search request.
+import org.opensearch.search.aggregations.AggregatorFactory;
+            return field != null && supportedMetrics.containsKey(field) && supportedMetrics.get(field).contains(metricStat);
+    public StarTreeFilter getBaseQueryStarTreeFilter() {
+            case null, default -> {
+    }
+        return compositeIndexFieldInfo.getDimensions()
+        // TODO: Add support for date type ranges
+    // TODO : Change caching to be based on aggregation specific filters.
+                .collect(Collectors.toMap(Metric::getField, Metric::getMetrics));
+ * this file be licensed under the Apache-2.0 license or a
+    // TODO : Implement storing and aggregating aggregation specific filters.
+import org.opensearch.index.compositeindex.datacube.Dimension;
+        }
+    // TODO : Make changes to change visibility into package private. Handle the same in @org.opensearch.search.SearchServiceStarTreeTests
+            Map<String, List<MetricStat>> supportedMetrics = compositeIndexFieldInfo.getMetrics()
+        return new CompositeIndexFieldInfo(compositeMappedFieldType.name(), compositeMappedFieldType.getCompositeIndexType());
+        boolean isValid;
+        } else {
+            );
+import org.opensearch.search.internal.SearchContext;
+     * Cache for leaf results
+                isValid = validateStarTreeMetricSupport(compositeIndexFieldInfo, metricAggregatorFactory);
+    ) {
+    ) {
+    // TODO : Push this validation down to a common method in AggregatorFactory or an equivalent place.
+import org.opensearch.search.aggregations.metrics.MetricAggregatorFactory;

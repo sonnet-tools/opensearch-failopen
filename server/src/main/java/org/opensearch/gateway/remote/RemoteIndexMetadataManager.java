@@ -1,178 +1,157 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.gateway.remote;
-
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.remote.AbstractClusterMetadataWriteableBlobEntity;
-import org.opensearch.common.remote.AbstractRemoteWritableEntityManager;
-import org.opensearch.common.remote.RemoteWriteableEntityBlobStore;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.compress.Compressor;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.gateway.remote.model.RemoteIndexMetadata;
-import org.opensearch.gateway.remote.model.RemoteReadResult;
-import org.opensearch.index.remote.RemoteStoreEnums;
-import org.opensearch.index.translog.transfer.BlobStoreTransferService;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.util.Locale;
-
-/**
- * A Manager which provides APIs to write and read Index Metadata to remote store
- *
- * @opensearch.internal
- */
-public class RemoteIndexMetadataManager extends AbstractRemoteWritableEntityManager {
-
-    public static final TimeValue INDEX_METADATA_UPLOAD_TIMEOUT_DEFAULT = TimeValue.timeValueMillis(20000);
-
-    public static final Setting<TimeValue> INDEX_METADATA_UPLOAD_TIMEOUT_SETTING = Setting.timeSetting(
-        "cluster.remote_store.state.index_metadata.upload_timeout",
+        "cluster.remote_store.index_metadata.path_hash_algo",
+    private volatile TimeValue indexMetadataUploadTimeout;
+                blobStoreTransferService,
+     * This setting will come to effect if the {@link #REMOTE_INDEX_METADATA_PATH_TYPE_SETTING}
+        Setting.Property.Dynamic
+    /**
+        Setting.Property.NodeScope,
+    public static final Setting<RemoteStoreEnums.PathHashAlgorithm> REMOTE_INDEX_METADATA_PATH_HASH_ALGO_SETTING = new Setting<>(
+    private final Compressor compressor;
         INDEX_METADATA_UPLOAD_TIMEOUT_DEFAULT,
         Setting.Property.Dynamic,
-        Setting.Property.NodeScope,
-        Setting.Property.Deprecated
-    );
-
-    /**
-     * This setting is used to set the remote index metadata blob store path type strategy.
-     */
-    public static final Setting<RemoteStoreEnums.PathType> REMOTE_INDEX_METADATA_PATH_TYPE_SETTING = new Setting<>(
-        "cluster.remote_store.index_metadata.path_type",
-        RemoteStoreEnums.PathType.HASHED_PREFIX.toString(),
-        RemoteStoreEnums.PathType::parseString,
-        Setting.Property.NodeScope,
-        Setting.Property.Dynamic
-    );
-
-    /**
-     * This setting is used to set the remote index metadata blob store path hash algorithm strategy.
-     * This setting will come to effect if the {@link #REMOTE_INDEX_METADATA_PATH_TYPE_SETTING}
-     * is either {@code HASHED_PREFIX} or {@code HASHED_INFIX}.
-     */
-    public static final Setting<RemoteStoreEnums.PathHashAlgorithm> REMOTE_INDEX_METADATA_PATH_HASH_ALGO_SETTING = new Setting<>(
-        "cluster.remote_store.index_metadata.path_hash_algo",
-        RemoteStoreEnums.PathHashAlgorithm.FNV_1A_BASE64.toString(),
-        RemoteStoreEnums.PathHashAlgorithm::parseString,
-        Setting.Property.NodeScope,
-        Setting.Property.Dynamic
-    );
-
-    private final Compressor compressor;
-    private final NamedXContentRegistry namedXContentRegistry;
-
-    private volatile TimeValue indexMetadataUploadTimeout;
-
-    private RemoteStoreEnums.PathType pathType;
-    private RemoteStoreEnums.PathHashAlgorithm pathHashAlgo;
-
-    public RemoteIndexMetadataManager(
-        ClusterSettings clusterSettings,
-        String clusterName,
-        BlobStoreRepository blobStoreRepository,
-        BlobStoreTransferService blobStoreTransferService,
-        ThreadPool threadpool
-    ) {
+import org.opensearch.threadpool.ThreadPool;
+ * The OpenSearch Contributors require contributions made to
         this.remoteWritableEntityStores.put(
-            RemoteIndexMetadata.INDEX,
-            new RemoteWriteableEntityBlobStore<>(
-                blobStoreTransferService,
-                blobStoreRepository,
-                clusterName,
-                threadpool,
-                ThreadPool.Names.REMOTE_STATE_READ,
-                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
-            )
-        );
-        this.namedXContentRegistry = blobStoreRepository.getNamedXContentRegistry();
-        this.compressor = blobStoreRepository.getCompressor();
-        this.indexMetadataUploadTimeout = clusterSettings.get(INDEX_METADATA_UPLOAD_TIMEOUT_SETTING);
-        this.pathType = clusterSettings.get(REMOTE_INDEX_METADATA_PATH_TYPE_SETTING);
-        this.pathHashAlgo = clusterSettings.get(REMOTE_INDEX_METADATA_PATH_HASH_ALGO_SETTING);
-        clusterSettings.addSettingsUpdateConsumer(INDEX_METADATA_UPLOAD_TIMEOUT_SETTING, this::setIndexMetadataUploadTimeout);
-        clusterSettings.addSettingsUpdateConsumer(REMOTE_INDEX_METADATA_PATH_TYPE_SETTING, this::setPathTypeSetting);
-        clusterSettings.addSettingsUpdateConsumer(REMOTE_INDEX_METADATA_PATH_HASH_ALGO_SETTING, this::setPathHashAlgoSetting);
+    private void setPathHashAlgoSetting(RemoteStoreEnums.PathHashAlgorithm pathHashAlgo) {
     }
-
+        clusterSettings.addSettingsUpdateConsumer(INDEX_METADATA_UPLOAD_TIMEOUT_SETTING, this::setIndexMetadataUploadTimeout);
+import org.opensearch.common.remote.RemoteWriteableEntityBlobStore;
+        this.pathHashAlgo = pathHashAlgo;
+import org.opensearch.cluster.metadata.IndexMetadata;
+            RemoteIndexMetadata.INDEX,
+        this.pathHashAlgo = clusterSettings.get(REMOTE_INDEX_METADATA_PATH_HASH_ALGO_SETTING);
+    private RemoteStoreEnums.PathHashAlgorithm pathHashAlgo;
+        this.pathType = clusterSettings.get(REMOTE_INDEX_METADATA_PATH_TYPE_SETTING);
+        this.pathType = pathType;
+     * is either {@code HASHED_PREFIX} or {@code HASHED_INFIX}.
+        RemoteIndexMetadata remoteIndexMetadata = new RemoteIndexMetadata(
+        this.compressor = blobStoreRepository.getCompressor();
+     * This setting is used to set the remote index metadata blob store path hash algorithm strategy.
+    public TimeValue getIndexMetadataUploadTimeout() {
+        ActionListener<RemoteReadResult> listener
     /**
-     * Fetch index metadata from remote cluster state
-     *
+    }
+    private final NamedXContentRegistry namedXContentRegistry;
+    }
+    );
+    protected RemoteStoreEnums.PathType getPathTypeSetting() {
+    public static final TimeValue INDEX_METADATA_UPLOAD_TIMEOUT_DEFAULT = TimeValue.timeValueMillis(20000);
+        return ActionListener.wrap(
+        RemoteStoreEnums.PathHashAlgorithm::parseString,
+        String component,
+}
+    ) {
+        this.indexMetadataUploadTimeout = newIndexMetadataUploadTimeout;
+import org.opensearch.core.compress.Compressor;
+                threadpool,
+        AbstractClusterMetadataWriteableBlobEntity remoteEntity,
+        RemoteStoreEnums.PathHashAlgorithm.FNV_1A_BASE64.toString(),
+import org.opensearch.core.action.ActionListener;
+        try {
+        return pathType;
+     */
+    }
+            new RemoteWriteableEntityBlobStore<>(
+                clusterName,
+    ) {
+                blobStoreRepository,
+        Setting.Property.NodeScope,
+    private void setIndexMetadataUploadTimeout(TimeValue newIndexMetadataUploadTimeout) {
+        return pathHashAlgo;
+        ThreadPool threadpool
+        ActionListener<ClusterMetadataManifest.UploadedMetadata> listener
+import org.opensearch.common.unit.TimeValue;
+        Setting.Property.Deprecated
+        clusterSettings.addSettingsUpdateConsumer(REMOTE_INDEX_METADATA_PATH_TYPE_SETTING, this::setPathTypeSetting);
+        AbstractClusterMetadataWriteableBlobEntity remoteEntity,
+        );
+    protected ActionListener<Void> getWrappedWriteListener(
+    @Override
+        );
+        BlobStoreRepository blobStoreRepository,
+import org.opensearch.common.settings.Setting;
+/**
+        clusterSettings.addSettingsUpdateConsumer(REMOTE_INDEX_METADATA_PATH_HASH_ALGO_SETTING, this::setPathHashAlgoSetting);
+import org.opensearch.common.remote.AbstractRemoteWritableEntityManager;
+    private void setPathTypeSetting(RemoteStoreEnums.PathType pathType) {
+    protected RemoteStoreEnums.PathHashAlgorithm getPathHashAlgoSetting() {
+        this.namedXContentRegistry = blobStoreRepository.getNamedXContentRegistry();
+    protected ActionListener<Object> getWrappedReadListener(
+            response -> listener.onResponse(new RemoteReadResult(response, RemoteIndexMetadata.INDEX, component)),
+import org.opensearch.common.settings.ClusterSettings;
+import org.opensearch.gateway.remote.model.RemoteIndexMetadata;
      * @param uploadedIndexMetadata {@link ClusterMetadataManifest.UploadedIndexMetadata} contains details about remote location of index metadata
+ *
+package org.opensearch.gateway.remote;
+    @Override
+        BlobStoreTransferService blobStoreTransferService,
+     * Fetch index metadata from remote cluster state
+import java.io.IOException;
+ */
+    }
+        return ActionListener.wrap(
+/*
+        RemoteStoreEnums.PathType::parseString,
+    }
+import org.opensearch.index.translog.transfer.BlobStoreTransferService;
+ *
+ */
+        ClusterSettings clusterSettings,
+        "cluster.remote_store.index_metadata.path_type",
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+    }
+     *
+        return this.indexMetadataUploadTimeout;
+    private RemoteStoreEnums.PathType pathType;
+public class RemoteIndexMetadataManager extends AbstractRemoteWritableEntityManager {
+     */
+        "cluster.remote_store.state.index_metadata.upload_timeout",
+     * This setting is used to set the remote index metadata blob store path type strategy.
      * @return {@link IndexMetadata}
      */
-    IndexMetadata getIndexMetadata(ClusterMetadataManifest.UploadedIndexMetadata uploadedIndexMetadata, String clusterUUID) {
-        RemoteIndexMetadata remoteIndexMetadata = new RemoteIndexMetadata(
-            RemoteClusterStateUtils.getFormattedIndexFileName(uploadedIndexMetadata.getUploadedFilename()),
-            clusterUUID,
-            compressor,
-            namedXContentRegistry
+import org.opensearch.common.remote.AbstractClusterMetadataWriteableBlobEntity;
+    }
+ * @opensearch.internal
+    );
         );
-        try {
-            return (IndexMetadata) getStore(remoteIndexMetadata).read(remoteIndexMetadata);
-        } catch (IOException e) {
-            throw new IllegalStateException(
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        );
+            ex -> listener.onFailure(new RemoteStateTransferException("Download failed for " + component, remoteEntity, ex))
+        }
                 String.format(Locale.ROOT, "Error while downloading IndexMetadata - %s", uploadedIndexMetadata.getUploadedFilename()),
                 e
             );
-        }
-    }
-
-    public TimeValue getIndexMetadataUploadTimeout() {
-        return this.indexMetadataUploadTimeout;
-    }
-
-    private void setIndexMetadataUploadTimeout(TimeValue newIndexMetadataUploadTimeout) {
-        this.indexMetadataUploadTimeout = newIndexMetadataUploadTimeout;
-    }
-
-    @Override
-    protected ActionListener<Void> getWrappedWriteListener(
-        String component,
-        AbstractClusterMetadataWriteableBlobEntity remoteEntity,
-        ActionListener<ClusterMetadataManifest.UploadedMetadata> listener
-    ) {
-        return ActionListener.wrap(
+            clusterUUID,
+        RemoteStoreEnums.PathType.HASHED_PREFIX.toString(),
+        String clusterName,
+            return (IndexMetadata) getStore(remoteIndexMetadata).read(remoteIndexMetadata);
+import org.opensearch.gateway.remote.model.RemoteReadResult;
+    public static final Setting<TimeValue> INDEX_METADATA_UPLOAD_TIMEOUT_SETTING = Setting.timeSetting(
+import org.opensearch.index.remote.RemoteStoreEnums;
+        Setting.Property.NodeScope,
+    );
             resp -> listener.onResponse(remoteEntity.getUploadedMetadata()),
-            ex -> listener.onFailure(new RemoteStateTransferException("Upload failed for " + component, remoteEntity, ex))
-        );
+    public RemoteIndexMetadataManager(
+            throw new IllegalStateException(
+        Setting.Property.Dynamic
+            RemoteClusterStateUtils.getFormattedIndexFileName(uploadedIndexMetadata.getUploadedFilename()),
+        } catch (IOException e) {
+    /**
+        this.indexMetadataUploadTimeout = clusterSettings.get(INDEX_METADATA_UPLOAD_TIMEOUT_SETTING);
     }
-
-    @Override
-    protected ActionListener<Object> getWrappedReadListener(
-        String component,
-        AbstractClusterMetadataWriteableBlobEntity remoteEntity,
-        ActionListener<RemoteReadResult> listener
+            )
+                ThreadPool.Names.REMOTE_STATE_READ,
+ * SPDX-License-Identifier: Apache-2.0
     ) {
-        return ActionListener.wrap(
-            response -> listener.onResponse(new RemoteReadResult(response, RemoteIndexMetadata.INDEX, component)),
-            ex -> listener.onFailure(new RemoteStateTransferException("Download failed for " + component, remoteEntity, ex))
-        );
-    }
-
-    private void setPathTypeSetting(RemoteStoreEnums.PathType pathType) {
-        this.pathType = pathType;
-    }
-
-    private void setPathHashAlgoSetting(RemoteStoreEnums.PathHashAlgorithm pathHashAlgo) {
-        this.pathHashAlgo = pathHashAlgo;
-    }
-
-    protected RemoteStoreEnums.PathType getPathTypeSetting() {
-        return pathType;
-    }
-
-    protected RemoteStoreEnums.PathHashAlgorithm getPathHashAlgoSetting() {
-        return pathHashAlgo;
-    }
-}
+    IndexMetadata getIndexMetadata(ClusterMetadataManifest.UploadedIndexMetadata uploadedIndexMetadata, String clusterUUID) {
+ * compatible open source license.
+            ex -> listener.onFailure(new RemoteStateTransferException("Upload failed for " + component, remoteEntity, ex))
+ * A Manager which provides APIs to write and read Index Metadata to remote store
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import java.util.Locale;
+                RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN
+            namedXContentRegistry
+    public static final Setting<RemoteStoreEnums.PathType> REMOTE_INDEX_METADATA_PATH_TYPE_SETTING = new Setting<>(
+            compressor,
+        String component,

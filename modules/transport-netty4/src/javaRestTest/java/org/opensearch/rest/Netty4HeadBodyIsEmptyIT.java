@@ -1,204 +1,181 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
 package org.opensearch.rest;
-
-import org.opensearch.client.Request;
-import org.opensearch.client.Response;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.test.rest.OpenSearchRestTestCase;
-import org.hamcrest.Matcher;
-
-import java.io.IOException;
-import java.util.Map;
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.singletonMap;
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.opensearch.core.rest.RestStatus.NOT_FOUND;
-import static org.opensearch.core.rest.RestStatus.OK;
-import static org.hamcrest.Matchers.greaterThan;
-
-public class Netty4HeadBodyIsEmptyIT extends OpenSearchRestTestCase {
-    public void testHeadRoot() throws IOException {
-        headTestCase("/", emptyMap(), greaterThan(0));
-        headTestCase("/", singletonMap("pretty", ""), greaterThan(0));
-        headTestCase("/", singletonMap("pretty", "true"), greaterThan(0));
-    }
-
-    private void createTestDoc() throws IOException {
-        createTestDoc("test");
-    }
-
-    private void createTestDoc(final String indexName) throws IOException {
-        try (XContentBuilder builder = jsonBuilder()) {
-            builder.startObject();
-            {
-                builder.field("test", "test");
-            }
-            builder.endObject();
-            Request request = new Request("PUT", "/" + indexName + "/_doc/" + "1");
+ * Licensed to Elasticsearch under one or more contributor
             request.setJsonEntity(builder.toString());
-            client().performRequest(request);
-        }
-    }
-
-    public void testDocumentExists() throws IOException {
-        createTestDoc();
-        headTestCase("/test/_doc/1", emptyMap(), greaterThan(0));
-        headTestCase("/test/_doc/1", singletonMap("pretty", "true"), greaterThan(0));
-        headTestCase("/test/_doc/2", emptyMap(), NOT_FOUND.getStatus(), greaterThan(0));
-    }
-
-    public void testIndexExists() throws IOException {
-        createTestDoc();
-        headTestCase("/test", emptyMap(), greaterThan(0));
-        headTestCase("/test", singletonMap("pretty", "true"), greaterThan(0));
-    }
-
-    public void testAliasExists() throws IOException {
-        createTestDoc();
-        try (XContentBuilder builder = jsonBuilder()) {
-            builder.startObject();
-            {
-                builder.startArray("actions");
-                {
-                    builder.startObject();
-                    {
-                        builder.startObject("add");
-                        {
-                            builder.field("index", "test");
-                            builder.field("alias", "test_alias");
-                        }
-                        builder.endObject();
-                    }
-                    builder.endObject();
-                }
-                builder.endArray();
-            }
-            builder.endObject();
-
-            Request request = new Request("POST", "/_aliases");
-            request.setJsonEntity(builder.toString());
-            client().performRequest(request);
-            headTestCase("/_alias/test_alias", emptyMap(), greaterThan(0));
-            headTestCase("/test/_alias/test_alias", emptyMap(), greaterThan(0));
-        }
-    }
-
-    public void testAliasDoesNotExist() throws IOException {
-        createTestDoc();
-        headTestCase("/_alias/test_alias", emptyMap(), NOT_FOUND.getStatus(), greaterThan(0));
-        headTestCase("/test/_alias/test_alias", emptyMap(), NOT_FOUND.getStatus(), greaterThan(0));
-    }
-
-    public void testTemplateExists() throws IOException {
-        try (XContentBuilder builder = jsonBuilder()) {
-            builder.startObject();
-            {
-                builder.array("index_patterns", "*");
-                builder.startObject("settings");
-                {
                     builder.field("number_of_replicas", 0);
-                }
-                builder.endObject();
-            }
-            builder.endObject();
-
-            Request request = new Request("PUT", "/_template/template");
-            request.setJsonEntity(builder.toString());
-            client().performRequest(request);
-            headTestCase("/_template/template", emptyMap(), greaterThan(0));
-        }
-    }
-
-    public void testGetSourceAction() throws IOException {
+            Request request = new Request("POST", "/_aliases");
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import java.util.Map;
+        final String... expectedWarnings
         createTestDoc();
-        headTestCase("/test/_source/1", emptyMap(), greaterThan(0));
-        headTestCase("/test/_source/2", emptyMap(), NOT_FOUND.getStatus(), greaterThan(0));
-
-        try (XContentBuilder builder = jsonBuilder()) {
-            builder.startObject();
+                builder.startObject("settings");
             {
-                builder.startObject("mappings");
-                {
-                    builder.startObject("_source");
-                    {
+            {
                         builder.field("enabled", false);
                     }
-                    builder.endObject();
-                }
-                builder.endObject();
-            }
-            builder.endObject();
-
-            Request request = new Request("PUT", "/test-no-source");
-            request.setJsonEntity(builder.toString());
-            client().performRequest(request);
-            createTestDoc("test-no-source");
-            headTestCase("/test-no-source/_source/1", emptyMap(), NOT_FOUND.getStatus(), greaterThan(0));
-        }
-    }
-
+ * Unless required by applicable law or agreed to in writing,
+                            builder.field("index", "test");
+        headTestCase("/test", singletonMap("pretty", "true"), greaterThan(0));
+        try (XContentBuilder builder = jsonBuilder()) {
     public void testException() throws IOException {
-        /*
-         * This will throw an index not found exception which will be sent on the channel; previously when handling HEAD requests that would
-         * throw an exception, the content was swallowed and a content length header of zero was returned. Instead of swallowing the content
-         * we now let it rise up to the upstream channel so that it can compute the content length that would be returned. This test case is
+    }
+            builder.endObject();
+ */
+ * You may obtain a copy of the License at
+                        builder.startObject("add");
+public class Netty4HeadBodyIsEmptyIT extends OpenSearchRestTestCase {
+ * SPDX-License-Identifier: Apache-2.0
+                    builder.endObject();
+        try (XContentBuilder builder = jsonBuilder()) {
+        headTestCase("/test/_source/1", emptyMap(), greaterThan(0));
+        assertEquals(expectedStatusCode, response.getStatusLine().getStatusCode());
+        createTestDoc();
          * a test for this situation.
-         */
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+                {
         headTestCase("/index-not-found-exception", emptyMap(), NOT_FOUND.getStatus(), greaterThan(0));
     }
-
-    private void headTestCase(final String url, final Map<String, String> params, final Matcher<Integer> matcher) throws IOException {
-        headTestCase(url, params, OK.getStatus(), matcher);
+ * software distributed under the License is distributed on an
+            builder.startObject();
+                    {
+            Request request = new Request("PUT", "/_template/template");
+            }
+ * under the License.
+    public void testAliasDoesNotExist() throws IOException {
     }
-
-    private void headTestCase(
-        final String url,
-        final Map<String, String> params,
+ * Modifications Copyright OpenSearch Contributors. See
+    }
         final int expectedStatusCode,
-        final Matcher<Integer> matcher,
-        final String... expectedWarnings
-    ) throws IOException {
-        Request request = new Request("HEAD", url);
-        for (Map.Entry<String, String> param : params.entrySet()) {
-            request.addParameter(param.getKey(), param.getValue());
-        }
-        request.setOptions(expectWarnings(expectedWarnings));
-        Response response = client().performRequest(request);
-        assertEquals(expectedStatusCode, response.getStatusLine().getStatusCode());
-        assertThat(Integer.valueOf(response.getHeader("Content-Length")), matcher);
-        assertNull("HEAD requests shouldn't have a response body but " + url + " did", response.getEntity());
+import org.opensearch.test.rest.OpenSearchRestTestCase;
     }
-
+                }
+        /*
+        headTestCase("/test/_doc/1", emptyMap(), greaterThan(0));
+ * KIND, either express or implied.  See the License for the
+ */
+         * throw an exception, the content was swallowed and a content length header of zero was returned. Instead of swallowing the content
+ * not use this file except in compliance with the License.
+            }
+    private void createTestDoc() throws IOException {
+        final Map<String, String> params,
+        headTestCase("/_alias/test_alias", emptyMap(), NOT_FOUND.getStatus(), greaterThan(0));
+            builder.endObject();
+                builder.endObject();
+                        }
+ * this file be licensed under the Apache-2.0 license or a
+        createTestDoc();
+    public void testHeadRoot() throws IOException {
 }
+import org.opensearch.client.Request;
+                {
+        createTestDoc();
+                builder.startArray("actions");
+ * license agreements. See the NOTICE file distributed with
+    public void testAliasExists() throws IOException {
+import org.hamcrest.Matcher;
+ * specific language governing permissions and limitations
+    public void testGetSourceAction() throws IOException {
+import org.opensearch.client.Response;
+        headTestCase("/test", emptyMap(), greaterThan(0));
+            }
+                }
+ * The OpenSearch Contributors require contributions made to
+ * compatible open source license.
+import org.opensearch.core.xcontent.XContentBuilder;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                builder.endArray();
+    }
+        headTestCase("/test/_doc/2", emptyMap(), NOT_FOUND.getStatus(), greaterThan(0));
+        assertThat(Integer.valueOf(response.getHeader("Content-Length")), matcher);
+                    {
+    }
+import static org.hamcrest.Matchers.greaterThan;
+        headTestCase("/test/_doc/1", singletonMap("pretty", "true"), greaterThan(0));
+            builder.startObject();
+            request.setJsonEntity(builder.toString());
+/*
+import static org.opensearch.core.rest.RestStatus.NOT_FOUND;
+            headTestCase("/_alias/test_alias", emptyMap(), greaterThan(0));
+ */
+                builder.endObject();
+            request.setJsonEntity(builder.toString());
+    public void testIndexExists() throws IOException {
+            builder.startObject();
+        headTestCase(url, params, OK.getStatus(), matcher);
+ * GitHub history for details.
+    public void testTemplateExists() throws IOException {
+        final Matcher<Integer> matcher,
+        headTestCase("/test/_alias/test_alias", emptyMap(), NOT_FOUND.getStatus(), greaterThan(0));
+    }
+            builder.startObject();
+    }
+                    }
+            }
+    }
+                builder.array("index_patterns", "*");
+import static java.util.Collections.emptyMap;
+                            builder.field("alias", "test_alias");
+        final String url,
+    private void headTestCase(final String url, final Map<String, String> params, final Matcher<Integer> matcher) throws IOException {
+        try (XContentBuilder builder = jsonBuilder()) {
+            headTestCase("/test/_alias/test_alias", emptyMap(), greaterThan(0));
+ *
+                        builder.endObject();
+        Request request = new Request("HEAD", url);
+/*
+        Response response = client().performRequest(request);
+         * This will throw an index not found exception which will be sent on the channel; previously when handling HEAD requests that would
+        }
+                {
+        createTestDoc("test");
+                    builder.startObject();
+    private void headTestCase(
+         * we now let it rise up to the upstream channel so that it can compute the content length that would be returned. This test case is
+            client().performRequest(request);
+        try (XContentBuilder builder = jsonBuilder()) {
+                        {
+        }
+import static org.opensearch.core.rest.RestStatus.OK;
+        }
+        headTestCase("/test/_source/2", emptyMap(), NOT_FOUND.getStatus(), greaterThan(0));
+                    builder.endObject();
+        createTestDoc();
+        for (Map.Entry<String, String> param : params.entrySet()) {
+         */
+            {
+    }
+ *
+            builder.endObject();
+ * the Apache License, Version 2.0 (the "License"); you may
+ * ownership. Elasticsearch licenses this file to you under
+            headTestCase("/test-no-source/_source/1", emptyMap(), NOT_FOUND.getStatus(), greaterThan(0));
+            Request request = new Request("PUT", "/" + indexName + "/_doc/" + "1");
+        assertNull("HEAD requests shouldn't have a response body but " + url + " did", response.getEntity());
+                    builder.startObject("_source");
+    }
+        headTestCase("/", emptyMap(), greaterThan(0));
+            client().performRequest(request);
+        headTestCase("/", singletonMap("pretty", ""), greaterThan(0));
+ *
+                }
+            request.addParameter(param.getKey(), param.getValue());
+            request.setJsonEntity(builder.toString());
+        }
+            {
+            createTestDoc("test-no-source");
+/*
+ * this work for additional information regarding copyright
+        headTestCase("/", singletonMap("pretty", "true"), greaterThan(0));
+    ) throws IOException {
+            headTestCase("/_template/template", emptyMap(), greaterThan(0));
+            client().performRequest(request);
+                builder.startObject("mappings");
+import java.io.IOException;
+import static java.util.Collections.singletonMap;
+            Request request = new Request("PUT", "/test-no-source");
+    private void createTestDoc(final String indexName) throws IOException {
+            builder.endObject();
+    public void testDocumentExists() throws IOException {
+                builder.field("test", "test");
+        request.setOptions(expectWarnings(expectedWarnings));
+            client().performRequest(request);
+        }

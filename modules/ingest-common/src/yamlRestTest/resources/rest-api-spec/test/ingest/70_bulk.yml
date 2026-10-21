@@ -1,266 +1,233 @@
-setup:
-  - do:
-      ingest.put_pipeline:
-        id: "pipeline1"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "set" : {
-                  "field" : "field1",
-                  "value": "value1"
-                }
-              }
-            ]
-          }
-
-  - do:
-      ingest.put_pipeline:
-        id: "pipeline2"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "set" : {
-                  "field" : "field2",
-                  "value": "value2"
-                }
-              }
-            ]
-          }
-
----
-teardown:
-  - do:
-      ingest.delete_pipeline:
-        id: "pipeline1"
-        ignore: 404
-  - do:
-      ingest.delete_pipeline:
-        id: "pipeline2"
-        ignore: 404
-  - do:
-      indices.delete_index_template:
-        name: test_index_template_for_bulk
-        ignore: 404
-
----
-"Test bulk request without default pipeline":
-
-  - do:
-      bulk:
-        body:
-          - index:
-              _index: test_index
-              _id:    test_id1
-              pipeline: pipeline1
-          - f1: v1
-          - index:
-              _index: test_index
-              _id:    test_id2
-          - f1: v2
-  - gte: { ingest_took: 0 }
-
-  - do:
-      get:
-        index: test_index
-        id: test_id1
-
-  - match: {_source.field1: value1}
-  - is_false: _source.field2
-
-  - do:
-      get:
-        index: test_index
-        id: test_id2
-
-  - is_false: _source.field1
-  - is_false: _source.field2
-
-  - do:
-      cluster.state: {}
-    # Get cluster-manager node id
-  - set: { cluster_manager_node: cluster_manager }
-
-  - do:
-      nodes.stats:
-        metric: [ ingest ]
-  #we can't assert anything here since we might have more than one node in the cluster
-  - gte: {nodes.$cluster_manager.ingest.total.count: 0}
-  - gte: {nodes.$cluster_manager.ingest.total.failed: 0}
-  - gte: {nodes.$cluster_manager.ingest.total.time_in_millis: 0}
-  - match: {nodes.$cluster_manager.ingest.total.current: 0}
-  - gte: {nodes.$cluster_manager.ingest.pipelines.pipeline1.count: 0}
-  - match: {nodes.$cluster_manager.ingest.pipelines.pipeline1.failed: 0}
-  - gte: {nodes.$cluster_manager.ingest.pipelines.pipeline1.time_in_millis: 0}
-  - match: {nodes.$cluster_manager.ingest.pipelines.pipeline1.current: 0}
-
----
-"Test bulk request with default pipeline":
-
-  - do:
-      bulk:
-        pipeline: pipeline1
-        body:
-          - index:
-              _index: test_index
-              _id:    test_id1
-          - f1: v1
-          - index:
-              _index: test_index
-              _id:    test_id2
-              pipeline: pipeline2
-          - f1: v2
-  - gte: { ingest_took: 0 }
-
-  - do:
-      cluster.state: {}
-  # Get cluster-manager node id
-  - set: { cluster_manager_node: cluster_manager }
-
-  - do:
-      nodes.stats:
-        metric: [ ingest ]
-  #we can't assert anything here since we might have more than one node in the cluster
-  - gte: {nodes.$cluster_manager.ingest.total.count: 0}
-  - gte: {nodes.$cluster_manager.ingest.total.failed: 0}
-  - gte: {nodes.$cluster_manager.ingest.total.time_in_millis: 0}
-  - match: {nodes.$cluster_manager.ingest.total.current: 0}
-  - gte: {nodes.$cluster_manager.ingest.pipelines.pipeline2.count: 0}
-  - match: {nodes.$cluster_manager.ingest.pipelines.pipeline2.failed: 0}
-  - gte: {nodes.$cluster_manager.ingest.pipelines.pipeline2.time_in_millis: 0}
-  - match: {nodes.$cluster_manager.ingest.pipelines.pipeline2.current: 0}
-
-  - do:
-      get:
-        index: test_index
-        id: test_id1
-
-  - match: {_source.field1: value1}
-  - is_false: _source.field2
-
-  - do:
-      get:
-        index: test_index
-        id: test_id2
-
-  - is_false: _source.field1
-  - match: {_source.field2: value2}
-
-# related issue: https://github.com/opensearch-project/OpenSearch/issues/12854
----
-"Test bulk honors pipeline in update action with upsert":
-  - skip:
-      version: " - 2.13.99"
-      reason: "fixed in 2.14.0"
-
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - '{"update": {"_index": "test_index", "_id": "test_id3", "pipeline": "pipeline1"}}'
-          - '{"upsert": {"f1": "v2", "f2": 47}, "doc": {"x": 1}}'
-
-  - match: { errors: false }
-  - match: { items.0.update.result: created }
-
-  - do:
-      get:
-        index: test_index
-        id: test_id3
   - match: { _source: {"f1": "v2", "f2": 47, "field1": "value1"}}
-
-# related issue: https://github.com/opensearch-project/OpenSearch/issues/12888
----
-"Test bulk upsert honors default_pipeline and final_pipeline when the auto-created index matches with the index template":
-  - skip:
-      version: " - 2.15.99"
-      reason: "fixed in 2.16.0"
-      features: allowed_warnings
-  - do:
-      allowed_warnings:
-        - "index template [test_for_bulk_upsert_index_template] has index patterns [test_bulk_upsert_*] matching patterns from existing older templates [global] with patterns (global => [*]); this template [test_for_bulk_upsert_index_template] will take precedence during new index creation"
-      indices.put_index_template:
-        name: test_for_bulk_upsert_index_template
-        body:
-          index_patterns: test_bulk_upsert_*
-          template:
-            settings:
-              number_of_shards:   1
-              number_of_replicas: 0
-              default_pipeline: pipeline1
-              final_pipeline: pipeline2
-
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - '{"update": {"_index": "test_bulk_upsert_index", "_id": "test_id3"}}'
-          - '{"upsert": {"f1": "v2", "f2": 47}, "doc": {"x": 1}}'
-
-  - match: { errors: false }
-  - match: { items.0.update.result: created }
-
-  - do:
+  - gte: {nodes.$cluster_manager.ingest.total.count: 0}
       get:
-        index: test_bulk_upsert_index
-        id: test_id3
-  - match: { _source: {"f1": "v2", "f2": 47, "field1": "value1", "field2": "value2"}}
-
----
-"Test bulk API with default batch size":
-  - skip:
-      version: " - 2.13.99"
-      reason: "Added in 2.14.0"
-
-  - do:
-      bulk:
-        refresh: true
-        pipeline: "pipeline1"
-        body:
-          - '{"index": {"_index": "test_index", "_id": "test_id1"}}'
-          - '{"text": "text1"}'
-          - '{"index": {"_index": "test_index", "_id": "test_id2"}}'
-          - '{"text": "text2"}'
-          - '{"index": {"_index": "test_index", "_id": "test_id3"}}'
-          - '{"text": "text3"}'
-          - '{"index": {"_index": "test_index", "_id": "test_id4"}}'
-          - '{"text": "text4"}'
-          - '{"index": {"_index": "test_index", "_id": "test_id5", "pipeline": "pipeline2"}}'
-          - '{"text": "text5"}'
-          - '{"index": {"_index": "test_index", "_id": "test_id6", "pipeline": "pipeline2"}}'
           - '{"text": "text6"}'
-
-  - match: { errors: false }
-
-  - do:
-      get:
-        index: test_index
-        id: test_id5
-  - match: { _source: {"text": "text5", "field2": "value2"}}
-
-  - do:
-      get:
-        index: test_index
-        id: test_id3
-  - match: { _source: { "text": "text3", "field1": "value1" } }
-
----
-"Test bulk API with invalid batch_size":
-  - skip:
-      version: " - 2.13.99"
-      reason: "Added in 2.14.0"
-
+            "processors": [
+  - gte: {nodes.$cluster_manager.ingest.total.time_in_millis: 0}
+        batch_size: -1
+  - gte: { ingest_took: 0 }
+"Test bulk API with default batch size":
+          - '{"index": {"_index": "test_index", "_id": "test_id2"}}'
+        body:  >
   - do:
       catch: bad_request
+      get:
+  - gte: { ingest_took: 0 }
+  - gte: {nodes.$cluster_manager.ingest.total.count: 0}
+          - f1: v2
+        id: test_id3
+          - index:
+        id: test_id2
+          }
+        body:
+        metric: [ ingest ]
+          index_patterns: test_bulk_upsert_*
+      indices.put_index_template:
+  - do:
+          - '{"text": "text2"}'
+      get:
+          }
+        id: test_id2
       bulk:
+  - do:
+---
+---
+        ignore: 404
+  - set: { cluster_manager_node: cluster_manager }
+      bulk:
+              number_of_replicas: 0
+  - do:
+      get:
+      version: " - 2.13.99"
+      version: " - 2.13.99"
+          - f1: v1
+# related issue: https://github.com/opensearch-project/OpenSearch/issues/12888
+      bulk:
+      reason: "Added in 2.14.0"
+                "set" : {
+              _index: test_index
+  - match: {nodes.$cluster_manager.ingest.pipelines.pipeline1.failed: 0}
+      cluster.state: {}
+      bulk:
+        index: test_index
+  - match: { _source: {"text": "text5", "field2": "value2"}}
         refresh: true
-        batch_size: -1
+        index: test_index
+          template:
+        body:
+---
+                  "field" : "field2",
         pipeline: "pipeline1"
         body:
-          - '{"index": {"_index": "test_index", "_id": "test_id1"}}'
-          - '{"text": "text1"}'
-          - '{"index": {"_index": "test_index", "_id": "test_id2"}}'
+      reason: "Added in 2.14.0"
+                  "value": "value2"
+          - '{"upsert": {"f1": "v2", "f2": 47}, "doc": {"x": 1}}'
+        pipeline: "pipeline1"
+              default_pipeline: pipeline1
+          {
+                }
+    # Get cluster-manager node id
+              _id:    test_id2
+  - do:
+          {
+              final_pipeline: pipeline2
+        index: test_index
+                }
+setup:
+        id: test_id5
+  - do:
+      features: allowed_warnings
+        id: "pipeline1"
+---
           - '{"text": "text2"}'
+      version: " - 2.15.99"
+        id: "pipeline1"
+          - f1: v1
+              _index: test_index
+          - '{"text": "text1"}'
+      ingest.delete_pipeline:
+      allowed_warnings:
+  - match: { errors: false }
+  - is_false: _source.field1
+              }
+      ingest.delete_pipeline:
+  - do:
+  - is_false: _source.field2
+  - skip:
+---
+  - do:
+---
+      nodes.stats:
+                  "field" : "field1",
+          - '{"index": {"_index": "test_index", "_id": "test_id1"}}'
+          - '{"text": "text4"}'
+  - do:
+      bulk:
+      indices.delete_index_template:
+  #we can't assert anything here since we might have more than one node in the cluster
+      ingest.put_pipeline:
+        index: test_index
+              _id:    test_id2
+        body:
+  - is_false: _source.field1
+      get:
+  - gte: {nodes.$cluster_manager.ingest.total.time_in_millis: 0}
+              _index: test_index
+  - gte: {nodes.$cluster_manager.ingest.pipelines.pipeline2.time_in_millis: 0}
+---
+  - match: {nodes.$cluster_manager.ingest.total.current: 0}
+  - do:
+  - do:
+          - '{"upsert": {"f1": "v2", "f2": 47}, "doc": {"x": 1}}'
+  - skip:
+"Test bulk honors pipeline in update action with upsert":
+  - do:
+  - skip:
+        id: test_id3
+                  "value": "value1"
+          - '{"index": {"_index": "test_index", "_id": "test_id5", "pipeline": "pipeline2"}}'
+  - match: { items.0.update.result: created }
+          - index:
+  - match: {nodes.$cluster_manager.ingest.total.current: 0}
+"Test bulk upsert honors default_pipeline and final_pipeline when the auto-created index matches with the index template":
+"Test bulk request without default pipeline":
+        name: test_for_bulk_upsert_index_template
+        - "index template [test_for_bulk_upsert_index_template] has index patterns [test_bulk_upsert_*] matching patterns from existing older templates [global] with patterns (global => [*]); this template [test_for_bulk_upsert_index_template] will take precedence during new index creation"
+  - match: { errors: false }
+  - match: {nodes.$cluster_manager.ingest.pipelines.pipeline2.current: 0}
+      reason: "fixed in 2.16.0"
+          - '{"text": "text3"}'
+  - do:
+  - skip:
+              pipeline: pipeline2
+            settings:
+  - gte: {nodes.$cluster_manager.ingest.total.failed: 0}
+          - '{"index": {"_index": "test_index", "_id": "test_id2"}}'
+  # Get cluster-manager node id
+  - match: { _source: {"f1": "v2", "f2": 47, "field1": "value1", "field2": "value2"}}
+# related issue: https://github.com/opensearch-project/OpenSearch/issues/12854
+          - '{"update": {"_index": "test_index", "_id": "test_id3", "pipeline": "pipeline1"}}'
+        ignore: 404
+              _index: test_index
+      bulk:
+              {
+      get:
+  - match: {nodes.$cluster_manager.ingest.pipelines.pipeline2.failed: 0}
+  - gte: {nodes.$cluster_manager.ingest.pipelines.pipeline1.time_in_millis: 0}
+        body:
+          - f1: v2
+            ]
+          - '{"index": {"_index": "test_index", "_id": "test_id1"}}'
+        ignore: 404
+        refresh: true
+      version: " - 2.13.99"
+        body:
+  - do:
+            ]
+  #we can't assert anything here since we might have more than one node in the cluster
+          - '{"text": "text1"}'
+              _id:    test_id1
+        metric: [ ingest ]
+              }
+          - index:
+      get:
+        body:  >
+  - gte: {nodes.$cluster_manager.ingest.pipelines.pipeline1.count: 0}
+  - match: {_source.field1: value1}
+            "description": "_description",
+        index: test_bulk_upsert_index
+          - '{"index": {"_index": "test_index", "_id": "test_id6", "pipeline": "pipeline2"}}'
+  - do:
+          - '{"update": {"_index": "test_bulk_upsert_index", "_id": "test_id3"}}'
+  - match: {_source.field2: value2}
+  - do:
+      ingest.put_pipeline:
+            "description": "_description",
+          - '{"index": {"_index": "test_index", "_id": "test_id3"}}'
+            "processors": [
+        id: "pipeline2"
+  - do:
+"Test bulk API with invalid batch_size":
+        index: test_index
+teardown:
+              _id:    test_id1
+  - match: {_source.field1: value1}
+      get:
+  - do:
+  - is_false: _source.field2
+        index: test_index
+  - do:
+  - do:
+  - match: { _source: { "text": "text3", "field1": "value1" } }
+      reason: "fixed in 2.14.0"
+        refresh: true
+                "set" : {
+  - is_false: _source.field2
+  - match: { items.0.update.result: created }
+        id: "pipeline2"
+              {
+  - match: { errors: false }
+        id: test_id1
+  - do:
+  - do:
+        body:
+  - do:
+        pipeline: pipeline1
+          - index:
+  - gte: {nodes.$cluster_manager.ingest.pipelines.pipeline2.count: 0}
+  - match: {nodes.$cluster_manager.ingest.pipelines.pipeline1.current: 0}
+  - gte: {nodes.$cluster_manager.ingest.total.failed: 0}
+  - do:
+        index: test_index
+              pipeline: pipeline1
+        name: test_index_template_for_bulk
+        id: test_id1
+  - set: { cluster_manager_node: cluster_manager }
+        refresh: true
+      cluster.state: {}
+        id: test_id3
+          - '{"index": {"_index": "test_index", "_id": "test_id4"}}'
+"Test bulk request with default pipeline":
+      nodes.stats:
+              number_of_shards:   1
+          - '{"text": "text5"}'

@@ -1,758 +1,687 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.http.reactor.netty4;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.Randomness;
-import org.opensearch.common.concurrent.CompletableContext;
-import org.opensearch.common.network.CloseableChannel;
-import org.opensearch.common.network.NetworkService;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.common.util.net.NetUtils;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.http.AbstractHttpServerTransport;
-import org.opensearch.http.HttpChannel;
-import org.opensearch.http.HttpReadTimeoutException;
-import org.opensearch.http.HttpServerChannel;
-import org.opensearch.http.netty4.http3.Http3Utils;
-import org.opensearch.http.netty4.http3.SecureQuicTokenHandler;
-import org.opensearch.http.reactor.netty4.ssl.SslUtils;
-import org.opensearch.plugins.SecureHttpTransportSettingsProvider;
-import org.opensearch.plugins.SecureHttpTransportSettingsProvider.SecureHttpTransportParameters;
-import org.opensearch.rest.RestHandler;
-import org.opensearch.rest.RestRequest.Method;
-import org.opensearch.telemetry.tracing.Tracer;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.netty4.Netty4Utils;
-import org.opensearch.transport.reactor.SharedGroupFactory;
-
-import javax.net.ssl.KeyManagerFactory;
-
-import java.net.InetSocketAddress;
-import java.net.SocketOption;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.socket.nio.NioChannelOption;
-import io.netty.handler.codec.http.DefaultLastHttpContent;
-import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpContent;
-import io.netty.handler.codec.http.HttpContentDecompressor;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.quic.QuicSslContextBuilder;
-import io.netty.handler.ssl.ApplicationProtocolConfig;
-import io.netty.handler.ssl.ApplicationProtocolNames;
-import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.SupportedCipherSuiteFilter;
-import io.netty.handler.timeout.ReadTimeoutException;
-import org.reactivestreams.Publisher;
-import reactor.core.publisher.FluxSink;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Scheduler;
-import reactor.core.scheduler.Schedulers;
-import reactor.netty.Connection;
-import reactor.netty.DisposableChannel;
-import reactor.netty.DisposableServer;
-import reactor.netty.NettyPipeline;
-import reactor.netty.http.HttpProtocol;
-import reactor.netty.http.server.HttpServer;
-import reactor.netty.http.server.HttpServerRequest;
-import reactor.netty.http.server.HttpServerResponse;
-
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_CONNECT_TIMEOUT;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_HTTP3_ENABLED;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_CHUNK_SIZE;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_CONTENT_LENGTH;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_HEADER_SIZE;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_INITIAL_LINE_LENGTH;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_READ_TIMEOUT;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_KEEP_ALIVE;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_KEEP_COUNT;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_KEEP_IDLE;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_KEEP_INTERVAL;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_NO_DELAY;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_RECEIVE_BUFFER_SIZE;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_REUSE_ADDRESS;
-import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_SEND_BUFFER_SIZE;
-
-/**
- * The HTTP transport implementations based on Reactor Netty (see please {@link HttpServer}).
- */
-public class ReactorNetty4HttpServerTransport extends AbstractHttpServerTransport {
-    private static final Logger logger = LogManager.getLogger(ReactorNetty4HttpServerTransport.class);
-
-    private static final String SETTING_KEY_HTTP_NETTY_MAX_COMPOSITE_BUFFER_COMPONENTS = "http.netty.max_composite_buffer_components";
-    private static final ByteSizeValue MTU = new ByteSizeValue(Long.parseLong(System.getProperty("opensearch.net.mtu", "1500")));
-
-    /**
-     * The size of the http content decompressor buffer that is going to be used for request body decompression.
-     */
-    private static final int UNLIMITED_DECOMPRESSOR_BUFFER = 0;
-
-    /**
-     * Configure the maximum length of the content of the HTTP/2.0 clear-text upgrade request.
-     * By default the server will reject an upgrade request with non-empty content,
-     * because the upgrade request is most likely a GET request. If the client sends
-     * a non-GET upgrade request, {@link #h2cMaxContentLength} specifies the maximum
-     * length of the content of the upgrade request.
-     */
-    public static final Setting<ByteSizeValue> SETTING_H2C_MAX_CONTENT_LENGTH = Setting.byteSizeSetting(
-        "h2c.max_content_length",
-        new ByteSizeValue(65536, ByteSizeUnit.KB),
-        Property.NodeScope
-    );
-
-    /**
-     * Set the initial maximum data limit for local bidirectional streams (in bytes).
-     */
-    public static final Setting<ByteSizeValue> SETTING_H3_MAX_STREAM_LOCAL_LENGTH = Setting.byteSizeSetting(
-        "h3.max_stream_local_length",
-        new ByteSizeValue(1000000, ByteSizeUnit.BYTES),
-        Property.NodeScope
-    );
-
-    /**
-     * Set the initial maximum data limit for remote bidirectional streams (in bytes).
-     */
-    public static final Setting<ByteSizeValue> SETTING_H3_MAX_STREAM_REMOTE_LENGTH = Setting.byteSizeSetting(
-        "h3.max_stream_remote_length",
-        new ByteSizeValue(1000000, ByteSizeUnit.BYTES),
-        Property.NodeScope
-    );
-
-    /**
-     * Set the initial maximum stream limit for bidirectional streams.
+        NetworkService networkService,
+        /**
      *
-     * The HTTP/3 standard expects that each end configures at least 100
-     * concurrent bidirectional streams at a time, to avoid reducing performance
-     * by reducing parallelism.
      */
-    public static final Setting<Long> SETTING_H3_MAX_STREAMS = Setting.longSetting("h3.max_streams", 100L, Property.NodeScope);
-
-    /**
-     * The number of Reactor Netty HTTP workers
-     */
-    public static final Setting<Integer> SETTING_HTTP_WORKER_COUNT = Setting.intSetting("http.netty.worker_count", 0, Property.NodeScope);
-
-    /**
-     * Set the maximum number of HTTP/2 concurrent streams
-     */
-    public static final Setting<Long> SETTING_H2_MAX_CONCURRENT_STREAMS = Setting.longSetting(
-        "h2.max_concurrent_streams",
-        100L,
-        Property.NodeScope
-    );
-
-    /**
-     * The maximum number of composite components for request accumulation
-     */
-    public static Setting<Integer> SETTING_HTTP_NETTY_MAX_COMPOSITE_BUFFER_COMPONENTS = new Setting<>(
-        SETTING_KEY_HTTP_NETTY_MAX_COMPOSITE_BUFFER_COMPONENTS,
-        (s) -> {
-            ByteSizeValue maxContentLength = SETTING_HTTP_MAX_CONTENT_LENGTH.get(s);
-            /*
-             * Netty accumulates buffers containing data from all incoming network packets that make up one HTTP request in an instance of
-             * io.netty.buffer.CompositeByteBuf (think of it as a buffer of buffers). Once its capacity is reached, the buffer will iterate
-             * over its individual entries and put them into larger buffers (see io.netty.buffer.CompositeByteBuf#consolidateIfNeeded()
-             * for implementation details). We want to to resize that buffer because this leads to additional garbage on the heap and also
-             * increases the application's native memory footprint (as direct byte buffers hold their contents off-heap).
-             *
-             * With this setting we control the CompositeByteBuf's capacity (which is by default 1024, see
-             * io.netty.handler.codec.MessageAggregator#DEFAULT_MAX_COMPOSITEBUFFER_COMPONENTS). To determine a proper default capacity for
-             * that buffer, we need to consider that the upper bound for the size of HTTP requests is determined by `maxContentLength`. The
-             * number of buffers that are needed depend on how often Netty reads network packets which depends on the network type (MTU).
-             * We assume here that OpenSearch receives HTTP requests via an Ethernet connection which has a MTU of 1500 bytes.
-             *
-             * Note that we are *not* pre-allocating any memory based on this setting but rather determine the CompositeByteBuf's capacity.
-             * The tradeoff is between less (but larger) buffers that are contained in the CompositeByteBuf and more (but smaller) buffers.
-             * With the default max content length of 100MB and a MTU of 1500 bytes we would allow 69905 entries.
-             */
-            long maxBufferComponentsEstimate = Math.round((double) (maxContentLength.getBytes() / MTU.getBytes()));
-            // clamp value to the allowed range
-            long maxBufferComponents = Math.max(2, Math.min(maxBufferComponentsEstimate, Integer.MAX_VALUE));
-            return String.valueOf(maxBufferComponents);
-            // Netty's CompositeByteBuf implementation does not allow less than two components.
-        },
-        s -> Setting.parseInt(s, 2, Integer.MAX_VALUE, SETTING_KEY_HTTP_NETTY_MAX_COMPOSITE_BUFFER_COMPONENTS),
-        Property.NodeScope
-    );
-
-    private final SharedGroupFactory sharedGroupFactory;
-    private final int readTimeoutMillis;
-    private final int connectTimeoutMillis;
-    private final int maxCompositeBufferComponents;
-    private final ByteSizeValue maxInitialLineLength;
-    private final ByteSizeValue maxHeaderSize;
-    private final ByteSizeValue maxChunkSize;
+     * To mitigate that, the {@link HostChannel} abstraction binds {@link HttpChannel} instance to a single Netty channel and
     private final ByteSizeValue h2cMaxContentLength;
-    private final SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider;
-    private volatile SharedGroupFactory.SharedGroup sharedGroup;
-    private volatile DisposableServer disposableServer;
-    private volatile Scheduler scheduler;
-    private final Map<Channel, HostChannel> hostChannels = new ConcurrentHashMap<>();
-    private final long h2MaxConcurrentStreams;
-
-    /**
-     * Creates new HTTP transport implementations based on Reactor Netty (see please {@link HttpServer}).
-     *
-     * @param settings settings
-     * @param networkService network service
-     * @param bigArrays big array allocator
-     * @param threadPool thread pool instance
-     * @param xContentRegistry XContent registry instance
-     * @param dispatcher dispatcher instance
-     * @param clusterSettings cluster settings
-     * @param sharedGroupFactory shared group factory
-     * @param tracer tracer instance
-     */
-    public ReactorNetty4HttpServerTransport(
-        Settings settings,
-        NetworkService networkService,
-        BigArrays bigArrays,
-        ThreadPool threadPool,
-        NamedXContentRegistry xContentRegistry,
-        Dispatcher dispatcher,
-        ClusterSettings clusterSettings,
-        SharedGroupFactory sharedGroupFactory,
-        Tracer tracer
-    ) {
-        this(
-            settings,
-            networkService,
-            bigArrays,
-            threadPool,
-            xContentRegistry,
-            dispatcher,
-            clusterSettings,
-            sharedGroupFactory,
-            null,
-            tracer
-        );
+import org.opensearch.common.settings.Setting;
     }
-
-    /**
-     * Creates new HTTP transport implementations based on Reactor Netty (see please {@link HttpServer}).
-     *
-     * @param settings settings
-     * @param networkService network service
-     * @param bigArrays big array allocator
-     * @param threadPool thread pool instance
-     * @param xContentRegistry XContent registry instance
-     * @param dispatcher dispatcher instance
-     * @param clusterSettings cluster settings
-     * @param sharedGroupFactory shared group factory
-     * @param secureHttpTransportSettingsProvider secure HTTP transport settings provider
-     * @param tracer tracer instance
-     */
-    public ReactorNetty4HttpServerTransport(
-        Settings settings,
-        NetworkService networkService,
-        BigArrays bigArrays,
-        ThreadPool threadPool,
-        NamedXContentRegistry xContentRegistry,
-        Dispatcher dispatcher,
-        ClusterSettings clusterSettings,
-        SharedGroupFactory sharedGroupFactory,
-        @Nullable SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider,
-        Tracer tracer
-    ) {
-        super(settings, networkService, bigArrays, threadPool, xContentRegistry, dispatcher, clusterSettings, tracer);
-        Netty4Utils.setAvailableProcessors(OpenSearchExecutors.NODE_PROCESSORS_SETTING.get(settings));
-        this.readTimeoutMillis = Math.toIntExact(SETTING_HTTP_READ_TIMEOUT.get(settings).getMillis());
-        this.connectTimeoutMillis = Math.toIntExact(SETTING_HTTP_CONNECT_TIMEOUT.get(settings).getMillis());
-        this.sharedGroupFactory = sharedGroupFactory;
+            if (closeContext.isDone() == false) {
+                .concatWith(Mono.just(DefaultLastHttpContent.EMPTY_LAST_CONTENT))
+     * The HTTP/3 standard expects that each end configures at least 100
+                        ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
         this.maxCompositeBufferComponents = SETTING_HTTP_NETTY_MAX_COMPOSITE_BUFFER_COMPONENTS.get(settings);
-        this.maxChunkSize = SETTING_HTTP_MAX_CHUNK_SIZE.get(settings);
-        this.maxHeaderSize = SETTING_HTTP_MAX_HEADER_SIZE.get(settings);
-        this.h2cMaxContentLength = SETTING_H2C_MAX_CONTENT_LENGTH.get(settings);
-        this.h2MaxConcurrentStreams = SETTING_H2_MAX_CONCURRENT_STREAMS.get(settings);
-        this.maxInitialLineLength = SETTING_HTTP_MAX_INITIAL_LINE_LENGTH.get(settings);
-        this.secureHttpTransportSettingsProvider = secureHttpTransportSettingsProvider;
-    }
-
+import org.opensearch.threadpool.ThreadPool;
+                parameters.flatMap(SecureHttpTransportParameters::trustManagerFactory).ifPresent(sslContextBuilder::trustManager);
+     *
+            httpChannels.add(httpChannel);
+            sharedGroup.shutdown();
+                        ApplicationProtocolNames.HTTP_2,
+import io.netty.channel.ChannelOption;
+    private static final Logger logger = LogManager.getLogger(ReactorNetty4HttpServerTransport.class);
+     * The size of the http content decompressor buffer that is going to be used for request body decompression.
+import io.netty.channel.Channel;
+            final DisposableServer http3Server = http3Opt.get();
+     * Creates a new non-streaming {@link HttpChannel} instance. The Project Reactor creates an ephemeral connection
+                    final SocketOption<Integer> keepCountOption = NetUtils.getTcpKeepCountSocketOptionOrNull();
     /**
+            logger.warn("unexpected exception while closing http channels", e);
+import reactor.netty.http.server.HttpServerRequest;
+        @Override
+     * @param settings settings
+            final KeyManagerFactory keyManagerFactory = parameters.flatMap(SecureHttpTransportParameters::keyManagerFactory)
+        this.sharedGroupFactory = sharedGroupFactory;
+            networkService,
+import io.netty.handler.ssl.SupportedCipherSuiteFilter;
+        }
+import java.util.concurrent.ConcurrentHashMap;
+                responseHeadersFactory,
+import io.netty.channel.socket.nio.NioChannelOption;
+                .httpFormDecoder(builder -> builder.scheduler(scheduler))
+        HttpServer configured = server.childOption(ChannelOption.TCP_NODELAY, SETTING_HTTP_TCP_NO_DELAY.get(settings))
+                .build();
+            long maxBufferComponents = Math.max(2, Math.min(maxBufferComponentsEstimate, Integer.MAX_VALUE));
+        s -> Setting.parseInt(s, 2, Integer.MAX_VALUE, SETTING_KEY_HTTP_NETTY_MAX_COMPOSITE_BUFFER_COMPONENTS),
+     */
+import org.opensearch.http.reactor.netty4.ssl.SslUtils;
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_READ_TIMEOUT;
+     * The {@link HostChannel} abstraction binds {@link HttpChannel} instance to a single Netty channel and
+     * @param httpChannel the accepted channel
+                response.chunkedTransfer(false);
+    private volatile SharedGroupFactory.SharedGroup sharedGroup;
+                    throw new UnsupportedOperationException("The channel() operation is not supported");
+import reactor.netty.NettyPipeline;
+        Settings settings,
+/*
+                return Mono.from(response.sendObject(content));
+                                .allowPartialChunks(false)
+            final KeyManagerFactory keyManagerFactory = parameters.flatMap(SecureHttpTransportParameters::keyManagerFactory)
+             * that buffer, we need to consider that the upper bound for the size of HTTP requests is determined by `maxContentLength`. The
+                emitter
+            scheduler.dispose();
+        Tracer tracer
+     * Starts the transport
+            } else {
+            request.params()
+        private final Set<HttpChannel> httpChannels = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        final Optional<DisposableServer> http3Opt = configureHttp3(socketAddress).map(HttpServer::bindNow);
+            sharedGroupFactory,
+import org.opensearch.http.netty4.http3.Http3Utils;
+     * @param response response instances
+     */
+    /**
+    public static final Setting<ByteSizeValue> SETTING_H2C_MAX_CONTENT_LENGTH = Setting.byteSizeSetting(
+    protected HttpServerChannel bind(InetSocketAddress socketAddress) throws Exception {
+import org.opensearch.core.common.unit.ByteSizeUnit;
+     * Set the initial maximum data limit for local bidirectional streams (in bytes).
+        }
+            this.channel = channel;
+import org.opensearch.common.util.net.NetUtils;
+        Settings settings,
+                        );
+     * @param networkService network service
+         * Closes this channel group
+    }
+     * length of the content of the upgrade request.
+     * and supply a custom decompressor.
+     * Set the initial maximum stream limit for bidirectional streams.
+            request.receiveContent()
+            threadPool,
+        public void addCloseListener(ActionListener<Void> listener) {
+            final Optional<SecureHttpTransportParameters> parameters = secureHttpTransportSettingsProvider.parameters(settings);
+                }
+     * @param networkService network service
+ * The OpenSearch Contributors require contributions made to
+     * @param threadPool thread pool instance
+        super.serverAcceptedChannel(httpChannel);
+    public static final Setting<ByteSizeValue> SETTING_H3_MAX_STREAM_REMOTE_LENGTH = Setting.byteSizeSetting(
+            settings,
+                }
+     * because the upgrade request is most likely a GET request. If the client sends
+    /**
+        }
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_CONNECT_TIMEOUT;
+                                .maxHeaderSize(maxHeaderSize.bytesAsInt())
+                        // NO_ADVERTISE is currently the only mode supported by both OpenSsl and JDK providers.
+            return Mono.from(consumer).flatMap(hc -> {
+     * @param emitter {@link HttpContent} emitter
+     */
+                final SslContext sslContext = sslContextBuilder.applicationProtocols(
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_KEEP_ALIVE;
+    /**
+    ) {
+                                .idleTimeout(Duration.ofMillis(connectTimeoutMillis))
+     * @param dispatcher dispatcher instance
+            success = true;
+         * @return "true" if underlying Netty channel is open, "false" otherwise
+                    if (keepIntervalOption != null) {
+     */
+        Property.NodeScope
+     * Set the maximum number of HTTP/2 concurrent streams
+        }
+    }
+            final DisposableServer http11or2Server = http11or2.bindNow();
+        final Connection[] connection = new Connection[1];
+                response.compression(true);
+     * {@link ReactorNetty4NonStreamingRequestConsumer} and {@link ReactorNetty4StreamingRequestConsumer}
+     * An override to be able to keep track of accepted channels by the
+import org.opensearch.transport.reactor.SharedGroupFactory;
+import org.opensearch.common.util.concurrent.OpenSearchExecutors;
+                                .maxData(SETTING_HTTP_MAX_CONTENT_LENGTH.get(settings).getBytes())
+    private final int maxCompositeBufferComponents;
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_KEEP_COUNT;
+import org.opensearch.plugins.SecureHttpTransportSettingsProvider;
+     * Creates new HTTP transport implementations based on Reactor Netty (see please {@link HttpServer}).
+     * The number of Reactor Netty HTTP workers
+                        .compress(true)
+                            NioChannelOption.of(keepIntervalOption),
+     */
+                .switchIfEmpty(Mono.just(DefaultLastHttpContent.EMPTY_LAST_CONTENT))
+        @Nullable SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider,
+     * @param tracer tracer instance
+            return channel.isOpen();
+                    spec -> spec.maxChunkSize(maxChunkSize.bytesAsInt())
+            null,
+                        .maxInitialLineLength(maxInitialLineLength.bytesAsInt())
+             * With the default max content length of 100MB and a MTU of 1500 bytes we would allow 69905 entries.
+            scheduler = Schedulers.newBoundedElastic(
+        if (sharedGroup != null) {
+                .bindAddress(() -> socketAddress)
+     * @param clusterSettings cluster settings
+     * separate the lifecycle of those: {@link HttpChannel} is closed upon every response delivered whereas {@link HostChannel}
+}
+                }
+            }
+    /**
+     */
+import io.netty.handler.ssl.ClientAuth;
+    private volatile Scheduler scheduler;
+        return configured;
+        if (dispatchHandlerOpt.map(RestHandler::supportsStreaming).orElse(false)) {
+     * Set the initial maximum data limit for remote bidirectional streams (in bytes).
+    );
+import org.opensearch.core.common.unit.ByteSizeValue;
+        }
+     * Handles incoming Reactor Netty request
+                public Channel channel() {
+     * @param cause exception occurred
+         */
+    protected void doStart() {
+ * SPDX-License-Identifier: Apache-2.0
+            super.onException(channel, cause);
+import reactor.netty.DisposableChannel;
+             * increases the application's native memory footprint (as direct byte buffers hold their contents off-heap).
+         */
+                .httpRequestDecoder(
+import org.opensearch.rest.RestRequest.Method;
+        } catch (final RuntimeException ex) {
+    public ReactorNetty4HttpServerTransport(
+        this.maxInitialLineLength = SETTING_HTTP_MAX_INITIAL_LINE_LENGTH.get(settings);
+                                .maxFieldSectionSize(maxHeaderSize.bytesAsInt())
+import org.reactivestreams.Publisher;
+                public void disposeNow() {
+        100L,
+                this,
+                        configured = configured.childOption(
+    public ReactorNetty4HttpServerTransport(
+import org.opensearch.common.settings.ClusterSettings;
+import reactor.netty.http.server.HttpServer;
+        final HttpServer http11or2 = configureHttp11orHttp2(
+        HttpChannel newHttpChannel(HttpServerRequest request, HttpServerResponse response, FluxSink<HttpContent> emitter) {
+public class ReactorNetty4HttpServerTransport extends AbstractHttpServerTransport {
+        this.connectTimeoutMillis = Math.toIntExact(SETTING_HTTP_CONNECT_TIMEOUT.get(settings).getMillis());
+                                .maxStreamsBidirectional(SETTING_H3_MAX_STREAMS.get(settings).longValue())
+                        .handle((req, res) -> incomingRequest(req, res))
+        final Optional<RestHandler> dispatchHandlerOpt = dispatcher.dispatchHandler(
+import io.netty.channel.ChannelInboundHandlerAdapter;
+        this.readTimeoutMillis = Math.toIntExact(SETTING_HTTP_READ_TIMEOUT.get(settings).getMillis());
+        void close(HttpChannel httpChannel) {
+     * @param request request instance
+        ThreadPool threadPool,
+        // does respect it for H2C and HTTP/1.1)
+     */
+import org.opensearch.common.network.NetworkService;
+     * @param xContentRegistry XContent registry instance
+                ).build();
+            return new ReactorNetty4CompositeHttpServerChannel(http11or2Server.channel(), http3Server.channel());
+                        .bindAddress(() -> socketAddress)
+import org.apache.logging.log4j.Logger;
+                response
+    HttpChannel newNonStreamingHttpChannel(HttpServerRequest request, HttpServerResponse response, FluxSink<HttpContent> emitter) {
+        /**
+        },
+    }
+    /**
+        if (http3Opt.isEmpty()) {
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_KEEP_IDLE;
+            parameters.flatMap(SecureHttpTransportParameters::clientAuth)
+         */
+import org.opensearch.common.settings.Settings;
+        this.h2cMaxContentLength = SETTING_H2C_MAX_CONTENT_LENGTH.get(settings);
+     * @param tracer tracer instance
+            .childOption(ChannelOption.SO_KEEPALIVE, SETTING_HTTP_TCP_KEEP_ALIVE.get(settings));
+import io.netty.handler.timeout.ReadTimeoutException;
+        );
+                .switchIfEmpty(Mono.just(DefaultLastHttpContent.EMPTY_LAST_CONTENT))
+                            SETTING_HTTP_TCP_KEEP_INTERVAL.get(settings)
+     *
+            configured = configured.childOption(ChannelOption.SO_SNDBUF, Math.toIntExact(tcpSendBufferSize.getBytes()));
+    /**
+    @Override
+    private final int connectTimeoutMillis;
+import java.util.Set;
+     * and eventually could cause out of memory.
+        final ByteSizeValue tcpSendBufferSize = SETTING_HTTP_TCP_SEND_BUFFER_SIZE.get(settings);
+    private static void disposeQuietly(final DisposableChannel disposable) {
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_CHUNK_SIZE;
+                        )
+    @Override
+        }
+            }
+                .ifPresent(clientAuth -> sslContextBuilder.clientAuth(ClientAuth.valueOf(clientAuth)));
+     * is closed only when the Netty channel it is attached to is closed.
+        }
+             * We assume here that OpenSearch receives HTTP requests via an Ethernet connection which has a MTU of 1500 bytes.
+        hostChannels.clear();
+            Netty4Utils.addListener(channel.closeFuture(), closeContext);
+        private final Channel channel;
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_HEADER_SIZE;
+             * Netty accumulates buffers containing data from all incoming network packets that make up one HTTP request in an instance of
+            bigArrays,
+        final ByteSizeValue tcpReceiveBufferSize = SETTING_HTTP_TCP_RECEIVE_BUFFER_SIZE.get(settings);
+    public void serverAcceptedChannel(HttpChannel httpChannel) {
+        }
+     * connections as it leads to explosion of {@link HttpChannel} instances that are tracked by {@link AbstractHttpServerTransport}
+import org.opensearch.transport.netty4.Netty4Utils;
+     * Extension point that allows a NetworkPlugin to override the default netty HttpContentDecompressor
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_INITIAL_LINE_LENGTH;
+     * @param channel HTTP channel
+        * @return new {@link HttpChannel} instance
+        this(
+    private static final ByteSizeValue MTU = new ByteSizeValue(Long.parseLong(System.getProperty("opensearch.net.mtu", "1500")));
+        final boolean reuseAddress = SETTING_HTTP_TCP_REUSE_ADDRESS.get(settings);
+            disposableServer = null;
+            // Netty's CompositeByteBuf implementation does not allow less than two components.
+                                .maxInitialLineLength(maxInitialLineLength.bytesAsInt())
+    ) {
+                final FullHttpResponse r = (FullHttpResponse) hc;
+             * io.netty.buffer.CompositeByteBuf (think of it as a buffer of buffers). Once its capacity is reached, the buffer will iterate
+                request,
+    );
+    private final ByteSizeValue maxHeaderSize;
+import reactor.core.scheduler.Schedulers;
+            ByteSizeValue maxContentLength = SETTING_HTTP_MAX_CONTENT_LENGTH.get(s);
+import reactor.netty.Connection;
+import reactor.core.publisher.Mono;
+                        // ACCEPT is currently the only mode supported by both OpenSsl and JDK providers.
+            disposableServer = new DisposableServer() {
+        public void close() {
+                .orElseThrow(() -> new OpenSearchException("The KeyManagerFactory instance is not provided"));
+            // clamp value to the allowed range
+                }
+        configured = configured.option(ChannelOption.SO_REUSEADDR, reuseAddress);
+                request,
+                r.headers().forEach(h -> response.addHeader(h.getKey(), h.getValue()));
+import org.opensearch.plugins.SecureHttpTransportSettingsProvider.SecureHttpTransportParameters;
+        return new HttpContentDecompressor(UNLIMITED_DECOMPRESSOR_BUFFER);
+                        ApplicationProtocolConfig.Protocol.ALPN,
+     */
+    );
+        Dispatcher dispatcher,
+     */
+import io.netty.handler.ssl.SslContextBuilder;
+                .orElseThrow(() -> new OpenSearchException("The KeyManagerFactory instance is not provided"));
+        if (request.uri().length() > maxInitialLineLength.bytesAsInt()) {
+     * Used in instances to conditionally decompress depending on the outcome from header verification.
+                                .h2cMaxContentLength(h2cMaxContentLength.bytesAsInt())
+                "http-form-decoder"
+        Property.NodeScope
+             *
+    /**
+        this.maxChunkSize = SETTING_HTTP_MAX_CHUNK_SIZE.get(settings);
+     * By default the server will reject an upgrade request with non-empty content,
+     * Configure the maximum length of the content of the HTTP/2.0 clear-text upgrade request.
+     * @param xContentRegistry XContent registry instance
+        "h2c.max_content_length",
+         * Creates and binds new {@link HttpChannel} instance to this channel group
+     * @param bigArrays big array allocator
+import java.util.Arrays;
+            if (disposable != null) {
+            httpChannels.remove(httpChannel);
+        "h3.max_stream_local_length",
+        this.maxHeaderSize = SETTING_HTTP_MAX_HEADER_SIZE.get(settings);
+import java.net.SocketOption;
+        try {
+        }
+import io.netty.handler.codec.quic.QuicSslContextBuilder;
+             * for implementation details). We want to to resize that buffer because this leads to additional garbage on the heap and also
+                    io.netty.handler.codec.http3.Http3.supportedApplicationProtocols()
+        "h2.max_concurrent_streams",
+            tracer
+    }
+    }
+         * Unbinds {@link HttpChannel} instance
+         */
+        }
+        request.withConnection(c -> connection[0] = c);
+                @Override
+        new ByteSizeValue(65536, ByteSizeUnit.KB),
+             * over its individual entries and put them into larger buffers (see io.netty.buffer.CompositeByteBuf#consolidateIfNeeded()
      * Binds the transport engine to the socket address
      *
-     * @param socketAddress socket address to bind to
-     */
-    @Override
-    protected HttpServerChannel bind(InetSocketAddress socketAddress) throws Exception {
-        final HttpServer http11or2 = configureHttp11orHttp2(
-            HttpServer.create()
-                .httpFormDecoder(builder -> builder.scheduler(scheduler))
-                .idleTimeout(Duration.ofMillis(connectTimeoutMillis))
-                .readTimeout(Duration.ofMillis(readTimeoutMillis))
-                .runOn(sharedGroup.getLowLevelGroup())
-                .bindAddress(() -> socketAddress)
-                .compress(true)
-                .doOnConnection(conn -> conn.addHandlerFirst(NettyPipeline.HttpDecompressor, createDecompressor()))
-                .http2Settings(spec -> spec.maxHeaderListSize(maxHeaderSize.bytesAsInt()).maxConcurrentStreams(h2MaxConcurrentStreams))
-                .httpRequestDecoder(
-                    spec -> spec.maxChunkSize(maxChunkSize.bytesAsInt())
-                        .h2cMaxContentLength(h2cMaxContentLength.bytesAsInt())
-                        .maxHeaderSize(maxHeaderSize.bytesAsInt())
-                        .maxInitialLineLength(maxInitialLineLength.bytesAsInt())
-                        .allowPartialChunks(false)
-                )
-                .handle((req, res) -> incomingRequest(req, res))
-        );
-
-        // The HTTP/3 server binds to the same port as HTTP/2 or HTTP/1.1 since those are
-        // different protocols (UDP, TCP)
-        final Optional<DisposableServer> http3Opt = configureHttp3(socketAddress).map(HttpServer::bindNow);
-        if (http3Opt.isEmpty()) {
-            disposableServer = http11or2.bindNow();
-            return new ReactorNetty4HttpServerChannel(disposableServer.channel());
-        } else {
-            final DisposableServer http3Server = http3Opt.get();
-            final DisposableServer http11or2Server = http11or2.bindNow();
-
-            disposableServer = new DisposableServer() {
-                @Override
-                public Channel channel() {
-                    throw new UnsupportedOperationException("The channel() operation is not supported");
-                }
-
-                @Override
-                public void disposeNow() {
-                    disposeQuietly(http3Server);
-                    disposeQuietly(http11or2Server);
-                }
-            };
-
-            return new ReactorNetty4CompositeHttpServerChannel(http11or2Server.channel(), http3Server.channel());
-        }
-    }
-
-    private Optional<HttpServer> configureHttp3(InetSocketAddress socketAddress) throws Exception {
-        // Configure SSL context if available
-        if (secureHttpTransportSettingsProvider != null) {
-            final Optional<SecureHttpTransportParameters> parameters = secureHttpTransportSettingsProvider.parameters(settings);
-
-            final KeyManagerFactory keyManagerFactory = parameters.flatMap(SecureHttpTransportParameters::keyManagerFactory)
-                .orElseThrow(() -> new OpenSearchException("The KeyManagerFactory instance is not provided"));
-
-            if (Http3Utils.isHttp3Available() && SETTING_HTTP_HTTP3_ENABLED.get(settings).booleanValue() == true) {
-                final QuicSslContextBuilder sslContextBuilder = QuicSslContextBuilder.forServer(keyManagerFactory, null);
-
-                parameters.flatMap(SecureHttpTransportParameters::trustManagerFactory).ifPresent(sslContextBuilder::trustManager);
-                parameters.flatMap(SecureHttpTransportParameters::clientAuth)
-                    .ifPresent(clientAuth -> sslContextBuilder.clientAuth(ClientAuth.valueOf(clientAuth)));
-
-                final SslContext sslContext = sslContextBuilder.applicationProtocols(
-                    io.netty.handler.codec.http3.Http3.supportedApplicationProtocols()
-                ).build();
-
-                return Optional.of(
-                    HttpServer.create()
-                        .httpFormDecoder(builder -> builder.scheduler(scheduler))
-                        .idleTimeout(Duration.ofMillis(connectTimeoutMillis))
-                        .readTimeout(Duration.ofMillis(readTimeoutMillis))
-                        .runOn(sharedGroup.getLowLevelGroup())
-                        .bindAddress(() -> socketAddress)
-                        .compress(true)
-                        .doOnConnection(conn -> conn.addHandlerFirst(NettyPipeline.HttpDecompressor, createDecompressor()))
-                        .httpRequestDecoder(
-                            spec -> spec.maxChunkSize(maxChunkSize.bytesAsInt())
-                                .h2cMaxContentLength(h2cMaxContentLength.bytesAsInt())
-                                .maxHeaderSize(maxHeaderSize.bytesAsInt())
-                                .maxInitialLineLength(maxInitialLineLength.bytesAsInt())
-                                .allowPartialChunks(false)
-                        )
-                        .handle((req, res) -> incomingRequest(req, res))
-                        .http3Settings(
-                            spec -> spec.tokenHandler(new SecureQuicTokenHandler(Randomness.createSecure()))
-                                .idleTimeout(Duration.ofMillis(connectTimeoutMillis))
-                                .maxFieldSectionSize(maxHeaderSize.bytesAsInt())
-                                .maxData(SETTING_HTTP_MAX_CONTENT_LENGTH.get(settings).getBytes())
-                                .maxStreamDataBidirectionalLocal(SETTING_H3_MAX_STREAM_LOCAL_LENGTH.get(settings).getBytes())
-                                .maxStreamDataBidirectionalRemote(SETTING_H3_MAX_STREAM_REMOTE_LENGTH.get(settings).getBytes())
-                                .maxStreamsBidirectional(SETTING_H3_MAX_STREAMS.get(settings).longValue())
-                        )
-                        .secure(spec -> spec.sslContext(sslContext))
-                        .protocol(HttpProtocol.HTTP3)
-                );
-            }
-        }
-
-        return Optional.empty();
-    }
-
-    private HttpServer configureHttp11orHttp2(final HttpServer server) throws Exception {
-        HttpServer configured = server.childOption(ChannelOption.TCP_NODELAY, SETTING_HTTP_TCP_NO_DELAY.get(settings))
-            .childOption(ChannelOption.SO_KEEPALIVE, SETTING_HTTP_TCP_KEEP_ALIVE.get(settings));
-
-        if (SETTING_HTTP_TCP_KEEP_ALIVE.get(settings)) {
+import org.opensearch.http.HttpChannel;
+        ClusterSettings clusterSettings,
             // Netty logs a warning if it can't set the option, so try this only on supported platforms
-            if (IOUtils.LINUX || IOUtils.MAC_OS_X) {
-                if (SETTING_HTTP_TCP_KEEP_IDLE.get(settings) >= 0) {
-                    final SocketOption<Integer> keepIdleOption = NetUtils.getTcpKeepIdleSocketOptionOrNull();
-                    if (keepIdleOption != null) {
-                        configured = configured.childOption(NioChannelOption.of(keepIdleOption), SETTING_HTTP_TCP_KEEP_IDLE.get(settings));
-                    }
-                }
-                if (SETTING_HTTP_TCP_KEEP_INTERVAL.get(settings) >= 0) {
-                    final SocketOption<Integer> keepIntervalOption = NetUtils.getTcpKeepIntervalSocketOptionOrNull();
-                    if (keepIntervalOption != null) {
-                        configured = configured.childOption(
-                            NioChannelOption.of(keepIntervalOption),
-                            SETTING_HTTP_TCP_KEEP_INTERVAL.get(settings)
-                        );
-                    }
-                }
+    private final SecureHttpTransportSettingsProvider secureHttpTransportSettingsProvider;
+            final SslContext sslContext = sslContextBuilder.protocols(
+     */
+        * @param request HTTP request
+        /**
+            final ReactorNetty4StreamingRequestConsumer<HttpContent> consumer = new ReactorNetty4StreamingRequestConsumer<>(
+import io.netty.handler.codec.http.FullHttpResponse;
+    /**
+        } else {
+                this,
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_MAX_CONTENT_LENGTH;
+    @Override
+            request.receiveContent()
+    /**
+        } else {
+import java.util.Map;
+                maxCompositeBufferComponents
+        "h3.max_stream_remote_length",
+            });
                 if (SETTING_HTTP_TCP_KEEP_COUNT.get(settings) >= 0) {
-                    final SocketOption<Integer> keepCountOption = NetUtils.getTcpKeepCountSocketOptionOrNull();
-                    if (keepCountOption != null) {
-                        configured = configured.childOption(
-                            NioChannelOption.of(keepCountOption),
-                            SETTING_HTTP_TCP_KEEP_COUNT.get(settings)
-                        );
-                    }
-                }
-            }
+                response,
+    public void onException(HttpChannel channel, Exception cause) {
+     * @param threadPool thread pool instance
+         * Checks if underlying Netty channel is open
+                                .maxStreamDataBidirectionalRemote(SETTING_H3_MAX_STREAM_REMOTE_LENGTH.get(settings).getBytes())
         }
-
-        final ByteSizeValue tcpSendBufferSize = SETTING_HTTP_TCP_SEND_BUFFER_SIZE.get(settings);
-        if (tcpSendBufferSize.getBytes() > 0) {
-            configured = configured.childOption(ChannelOption.SO_SNDBUF, Math.toIntExact(tcpSendBufferSize.getBytes()));
-        }
-
-        final ByteSizeValue tcpReceiveBufferSize = SETTING_HTTP_TCP_RECEIVE_BUFFER_SIZE.get(settings);
-        if (tcpReceiveBufferSize.getBytes() > 0) {
+    }
+        // At least now, Reactor Netty does not respect maxInitialLineLength setting for HTTP/2 (but
+import org.opensearch.common.util.BigArrays;
             configured = configured.childOption(ChannelOption.SO_RCVBUF, Math.toIntExact(tcpReceiveBufferSize.getBytes()));
         }
-
-        final boolean reuseAddress = SETTING_HTTP_TCP_REUSE_ADDRESS.get(settings);
-        configured = configured.option(ChannelOption.SO_REUSEADDR, reuseAddress);
-        configured = configured.childOption(ChannelOption.SO_REUSEADDR, reuseAddress);
-
-        // Configure SSL context if available
-        if (secureHttpTransportSettingsProvider != null) {
-            final Optional<SecureHttpTransportParameters> parameters = secureHttpTransportSettingsProvider.parameters(settings);
-
-            final KeyManagerFactory keyManagerFactory = parameters.flatMap(SecureHttpTransportParameters::keyManagerFactory)
-                .orElseThrow(() -> new OpenSearchException("The KeyManagerFactory instance is not provided"));
-
-            final SslContextBuilder sslContextBuilder = SslContextBuilder.forServer(keyManagerFactory);
-            parameters.flatMap(SecureHttpTransportParameters::trustManagerFactory).ifPresent(sslContextBuilder::trustManager);
-            parameters.map(SecureHttpTransportParameters::cipherSuites)
-                .ifPresent(ciphers -> sslContextBuilder.ciphers(ciphers, SupportedCipherSuiteFilter.INSTANCE));
-            parameters.flatMap(SecureHttpTransportParameters::clientAuth)
-                .ifPresent(clientAuth -> sslContextBuilder.clientAuth(ClientAuth.valueOf(clientAuth)));
-
-            final SslContext sslContext = sslContextBuilder.protocols(
-                parameters.map(SecureHttpTransportParameters::protocols).orElseGet(() -> Arrays.asList(SslUtils.DEFAULT_SSL_PROTOCOLS))
-            )
-                .applicationProtocolConfig(
-                    new ApplicationProtocolConfig(
-                        ApplicationProtocolConfig.Protocol.ALPN,
-                        // NO_ADVERTISE is currently the only mode supported by both OpenSsl and JDK providers.
-                        ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
-                        // ACCEPT is currently the only mode supported by both OpenSsl and JDK providers.
-                        ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,
-                        ApplicationProtocolNames.HTTP_2,
-                        ApplicationProtocolNames.HTTP_1_1
-                    )
-                )
-                .build();
-
-            configured = configured.secure(spec -> spec.sslContext(sslContext)).protocol(HttpProtocol.HTTP11, HttpProtocol.H2);
-        } else {
-            configured = configured.protocol(HttpProtocol.HTTP11, HttpProtocol.H2C);
-        }
-
-        return configured;
-    }
-
-    /**
-     * An override to be able to keep track of accepted channels by the
-     * {@link ReactorNetty4NonStreamingRequestConsumer} and {@link ReactorNetty4StreamingRequestConsumer}
-     *
-     * @param httpChannel the accepted channel
-     */
-    @Override
-    public void serverAcceptedChannel(HttpChannel httpChannel) {
-        super.serverAcceptedChannel(httpChannel);
-    }
-
-    /**
-     * Extension point that allows a NetworkPlugin to override the default netty HttpContentDecompressor
-     * and supply a custom decompressor.
-     *
-     * Used in instances to conditionally decompress depending on the outcome from header verification.
-     */
-    protected ChannelInboundHandlerAdapter createDecompressor() {
-        return new HttpContentDecompressor(UNLIMITED_DECOMPRESSOR_BUFFER);
-    }
-
-    /**
-     * Handles incoming Reactor Netty request
-     *
-     * @param request request instance
-     * @param response response instances
-     * @return response publisher
-     */
-    protected Publisher<Void> incomingRequest(HttpServerRequest request, HttpServerResponse response) {
-        // At least now, Reactor Netty does not respect maxInitialLineLength setting for HTTP/2 (but
-        // does respect it for H2C and HTTP/1.1)
-        if (request.uri().length() > maxInitialLineLength.bytesAsInt()) {
-            return response.status(HttpResponseStatus.REQUEST_URI_TOO_LONG).send();
-        }
-
-        final Method method = HttpConversionUtil.convertMethod(request.method());
-        final Optional<RestHandler> dispatchHandlerOpt = dispatcher.dispatchHandler(
-            request.uri(),
-            request.fullPath(),
-            method,
-            request.params()
-        );
-
-        final HttpResponseHeadersFactory responseHeadersFactory = HttpResponseHeadersFactories.newDefault(settings, this);
-        if (dispatchHandlerOpt.map(RestHandler::supportsStreaming).orElse(false)) {
-            final ReactorNetty4StreamingRequestConsumer<HttpContent> consumer = new ReactorNetty4StreamingRequestConsumer<>(
-                this,
-                request,
-                response
-            );
-
-            request.receiveContent()
-                .switchIfEmpty(Mono.just(DefaultLastHttpContent.EMPTY_LAST_CONTENT))
-                .subscribe(consumer, error -> {}, () -> consumer.accept(DefaultLastHttpContent.EMPTY_LAST_CONTENT));
-
-            incomingStream(new ReactorNetty4HttpRequest(request, responseHeadersFactory), consumer.httpChannel());
-            return response.sendObject(consumer);
-        } else {
-            final ReactorNetty4NonStreamingRequestConsumer<HttpContent> consumer = new ReactorNetty4NonStreamingRequestConsumer<>(
-                this,
-                responseHeadersFactory,
-                request,
-                response,
-                maxCompositeBufferComponents
-            );
-
-            request.receiveContent()
-                .concatWith(Mono.just(DefaultLastHttpContent.EMPTY_LAST_CONTENT))
-                .switchIfEmpty(Mono.just(DefaultLastHttpContent.EMPTY_LAST_CONTENT))
-                .subscribe(consumer);
-
-            return Mono.from(consumer).flatMap(hc -> {
-                final FullHttpResponse r = (FullHttpResponse) hc;
-                response.status(r.status());
-                response.trailerHeaders(c -> r.trailingHeaders().forEach(h -> c.add(h.getKey(), h.getValue())));
-                response.chunkedTransfer(false);
-                response.compression(true);
-                r.headers().forEach(h -> response.addHeader(h.getKey(), h.getValue()));
-
-                final ByteBuf content = r.content().copy();
-                return Mono.from(response.sendObject(content));
-            });
-        }
-    }
-
-    /**
-     * Called to tear down internal resources
-     */
-    @Override
-    protected void stopInternal() {
-        try {
-            CloseableChannel.closeChannels(new ArrayList<>(hostChannels.values()), true);
-        } catch (Exception e) {
-            logger.warn("unexpected exception while closing http channels", e);
-        }
-        hostChannels.clear();
-
-        if (sharedGroup != null) {
-            sharedGroup.shutdown();
-            sharedGroup = null;
-        }
-
-        if (scheduler != null) {
-            scheduler.dispose();
-            scheduler = null;
-        }
-
-        if (disposableServer != null) {
-            disposeQuietly(disposableServer);
-            disposableServer = null;
-        }
-    }
-
-    /**
-     * Starts the transport
-     */
-    @Override
-    protected void doStart() {
-        boolean success = false;
-        try {
-            scheduler = Schedulers.newBoundedElastic(
-                Schedulers.DEFAULT_BOUNDED_ELASTIC_SIZE,
-                Schedulers.DEFAULT_BOUNDED_ELASTIC_QUEUESIZE,
-                "http-form-decoder"
-            );
-            sharedGroup = sharedGroupFactory.getHttpGroup();
-            bindServer();
-            success = true;
-        } finally {
-            if (success == false) {
-                doStop(); // otherwise we leak threads since we never moved to started
-            }
-        }
-    }
-
-    /**
-     * Exception handler
-     * @param channel HTTP channel
-     * @param cause exception occurred
-     */
-    @Override
-    public void onException(HttpChannel channel, Exception cause) {
-        if (cause instanceof ReadTimeoutException) {
-            super.onException(channel, new HttpReadTimeoutException(readTimeoutMillis, cause));
-        } else {
-            super.onException(channel, cause);
-        }
-    }
-
-    /**
-     * Quietly disposes the channel.
-     */
-    private static void disposeQuietly(final DisposableChannel disposable) {
-        try {
-            if (disposable != null) {
-                disposable.disposeNow();
-            }
-        } catch (final RuntimeException ex) {
-            // Do nothing
-        }
-    }
-
-    /**
-     * The {@link HostChannel} abstraction binds {@link HttpChannel} instance to a single Netty channel and
-     * separate the lifecycle of those: {@link HttpChannel} is closed upon every response delivered whereas {@link HostChannel}
-     * is closed only when the Netty channel it is attached to is closed.
-     */
+                .http2Settings(spec -> spec.maxHeaderListSize(maxHeaderSize.bytesAsInt()).maxConcurrentStreams(h2MaxConcurrentStreams))
     static final class HostChannel implements CloseableChannel {
-        private final Channel channel;
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_SEND_BUFFER_SIZE;
+            configured = configured.secure(spec -> spec.sslContext(sslContext)).protocol(HttpProtocol.HTTP11, HttpProtocol.H2);
+    public static final Setting<Long> SETTING_H3_MAX_STREAMS = Setting.longSetting("h3.max_streams", 100L, Property.NodeScope);
+import java.util.Optional;
         private final CompletableContext<Void> closeContext = new CompletableContext<>();
-        private final Set<HttpChannel> httpChannels = Collections.newSetFromMap(new ConcurrentHashMap<>());
-
-        HostChannel(Channel channel) {
-            this.channel = channel;
-            Netty4Utils.addListener(channel.closeFuture(), closeContext);
-            closeContext.addListener((v, ex) -> { httpChannels.forEach(HttpChannel::close); });
         }
-
-        @Override
-        public void addCloseListener(ActionListener<Void> listener) {
-            closeContext.addListener(ActionListener.toBiConsumer(listener));
-        }
-
-        /**
-         * Checks if underlying Netty channel is open
-         * @return "true" if underlying Netty channel is open, "false" otherwise
-         */
-        @Override
-        public boolean isOpen() {
-            return channel.isOpen();
-        }
-
-        /**
-         * Unbinds {@link HttpChannel} instance
-         * @param httpChannel {@link HttpChannel} instance
-         */
-        void close(HttpChannel httpChannel) {
-            httpChannels.remove(httpChannel);
-        }
-
-        /**
-         * Closes this channel group
-         */
-        @Override
-        public void close() {
-            if (closeContext.isDone() == false) {
-                Netty4Utils.addListener(channel.close(), closeContext);
-            } else {
-                channel.close();
-            }
-        }
-
-        /**
-         * Creates and binds new {@link HttpChannel} instance to this channel group
-        * @param request HTTP request
-        * @param response HTTP response
-        * @param emitter {@link HttpContent} emitter
-        * @return new {@link HttpChannel} instance
-         */
-        HttpChannel newHttpChannel(HttpServerRequest request, HttpServerResponse response, FluxSink<HttpContent> emitter) {
-            final ReactorNetty4NonStreamingHttpChannel httpChannel = new ReactorNetty4NonStreamingHttpChannel(
-                this,
-                request,
-                response,
-                emitter
-            );
-            httpChannels.add(httpChannel);
-            return httpChannel;
-        }
-
-    }
-
     /**
-     * Creates a new non-streaming {@link HttpChannel} instance. The Project Reactor creates an ephemeral connection
-     * over Netty channel all the time and runs request / response conversation over it. It does not work well with persistent
-     * connections as it leads to explosion of {@link HttpChannel} instances that are tracked by {@link AbstractHttpServerTransport}
-     * and eventually could cause out of memory.
-     *
-     * To mitigate that, the {@link HostChannel} abstraction binds {@link HttpChannel} instance to a single Netty channel and
-     * separate the lifecycle of those: {@link HttpChannel} is closed upon every response delivered whereas {@link HostChannel}
-     * is closed only when the Netty channel it is attached to is closed.
-     *
-     * @param request HTTP request
-     * @param response HTTP response
-     * @param emitter {@link HttpContent} emitter
-     * @return new {@link HttpChannel} instance
-     */
-    HttpChannel newNonStreamingHttpChannel(HttpServerRequest request, HttpServerResponse response, FluxSink<HttpContent> emitter) {
-        final Connection[] connection = new Connection[1];
-        request.withConnection(c -> connection[0] = c);
-
-        if (connection[0] == null) {
-            throw new IllegalStateException("Failed to obtain connection from HttpServerRequest");
-        }
-
-        final Channel channel = connection[0].channel();
-        final HostChannel hostChannel = hostChannels.computeIfAbsent(channel, key -> new HostChannel(key));
-        hostChannel.addCloseListener(ActionListener.wrap(() -> hostChannels.remove(channel)));
-
-        return hostChannel.newHttpChannel(request, response, emitter);
+        SharedGroupFactory sharedGroupFactory,
+                    if (keepIdleOption != null) {
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+    public static final Setting<Long> SETTING_H2_MAX_CONCURRENT_STREAMS = Setting.longSetting(
+                        configured = configured.childOption(NioChannelOption.of(keepIdleOption), SETTING_HTTP_TCP_KEEP_IDLE.get(settings));
+                        .http3Settings(
     }
-}
+    private HttpServer configureHttp11orHttp2(final HttpServer server) throws Exception {
+    /**
+             * number of buffers that are needed depend on how often Netty reads network packets which depends on the network type (MTU).
+            sharedGroup = sharedGroupFactory.getHttpGroup();
+    /**
+     */
+     * @param sharedGroupFactory shared group factory
+    }
+import reactor.core.publisher.FluxSink;
+                        .h2cMaxContentLength(h2cMaxContentLength.bytesAsInt())
+                        .maxHeaderSize(maxHeaderSize.bytesAsInt())
+                        .runOn(sharedGroup.getLowLevelGroup())
+            clusterSettings,
+import java.time.Duration;
+     *
+    }
+                .handle((req, res) -> incomingRequest(req, res))
+     */
+     * @param settings settings
+                if (SETTING_HTTP_TCP_KEEP_IDLE.get(settings) >= 0) {
+                        ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,
+            final SslContextBuilder sslContextBuilder = SslContextBuilder.forServer(keyManagerFactory);
+        }
+    /**
+import reactor.netty.http.server.HttpServerResponse;
+                    )
+        NetworkService networkService,
+     * separate the lifecycle of those: {@link HttpChannel} is closed upon every response delivered whereas {@link HostChannel}
+                .subscribe(consumer, error -> {}, () -> consumer.accept(DefaultLastHttpContent.EMPTY_LAST_CONTENT));
+     * @param bigArrays big array allocator
+        }
+        if (scheduler != null) {
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_RECEIVE_BUFFER_SIZE;
+                parameters.map(SecureHttpTransportParameters::protocols).orElseGet(() -> Arrays.asList(SslUtils.DEFAULT_SSL_PROTOCOLS))
+            final Optional<SecureHttpTransportParameters> parameters = secureHttpTransportSettingsProvider.parameters(settings);
+        } else {
+            }
+        final Method method = HttpConversionUtil.convertMethod(request.method());
+import org.opensearch.common.util.io.IOUtils;
+    protected ChannelInboundHandlerAdapter createDecompressor() {
+     * @param response HTTP response
+            final ReactorNetty4NonStreamingHttpChannel httpChannel = new ReactorNetty4NonStreamingHttpChannel(
+     */
+    private final Map<Channel, HostChannel> hostChannels = new ConcurrentHashMap<>();
+     * @param clusterSettings cluster settings
+        Property.NodeScope
+        Netty4Utils.setAvailableProcessors(OpenSearchExecutors.NODE_PROCESSORS_SETTING.get(settings));
+                        .doOnConnection(conn -> conn.addHandlerFirst(NettyPipeline.HttpDecompressor, createDecompressor()))
+    /**
+    @Override
+             * With this setting we control the CompositeByteBuf's capacity (which is by default 1024, see
+        try {
+     */
+                .ifPresent(ciphers -> sslContextBuilder.ciphers(ciphers, SupportedCipherSuiteFilter.INSTANCE));
+            );
+    public static final Setting<ByteSizeValue> SETTING_H3_MAX_STREAM_LOCAL_LENGTH = Setting.byteSizeSetting(
+import org.opensearch.common.Randomness;
+import org.opensearch.telemetry.tracing.Tracer;
+import io.netty.handler.ssl.ApplicationProtocolConfig;
+            dispatcher,
+        NamedXContentRegistry xContentRegistry,
+                    disposeQuietly(http3Server);
+                    }
+        final HostChannel hostChannel = hostChannels.computeIfAbsent(channel, key -> new HostChannel(key));
+    private final ByteSizeValue maxChunkSize;
+ *
+             */
+        } catch (Exception e) {
+                    disposeQuietly(http11or2Server);
+                        ApplicationProtocolNames.HTTP_1_1
+import org.opensearch.rest.RestHandler;
+            method,
+        return Optional.empty();
+            if (success == false) {
+            xContentRegistry,
+            return response.sendObject(consumer);
+        new ByteSizeValue(1000000, ByteSizeUnit.BYTES),
+                response.trailerHeaders(c -> r.trailingHeaders().forEach(h -> c.add(h.getKey(), h.getValue())));
+     * @param sharedGroupFactory shared group factory
+                @Override
+            sharedGroup = null;
+import org.opensearch.common.settings.Setting.Property;
+     */
+                        .allowPartialChunks(false)
+            disposableServer = http11or2.bindNow();
+        try {
+    }
+            configured = configured.protocol(HttpProtocol.HTTP11, HttpProtocol.H2C);
+/**
+        NamedXContentRegistry xContentRegistry,
+            HttpServer.create()
+import org.opensearch.common.Nullable;
+             * The tradeoff is between less (but larger) buffers that are contained in the CompositeByteBuf and more (but smaller) buffers.
+import org.opensearch.http.HttpServerChannel;
+                            spec -> spec.maxChunkSize(maxChunkSize.bytesAsInt())
+     * The maximum number of composite components for request accumulation
+    private static final int UNLIMITED_DECOMPRESSOR_BUFFER = 0;
+                        .protocol(HttpProtocol.HTTP3)
+    private Optional<HttpServer> configureHttp3(InetSocketAddress socketAddress) throws Exception {
+            super.onException(channel, new HttpReadTimeoutException(readTimeoutMillis, cause));
+import org.opensearch.http.netty4.http3.SecureQuicTokenHandler;
+        ThreadPool threadPool,
+import org.opensearch.OpenSearchException;
+                        );
+import io.netty.buffer.ByteBuf;
+     * Creates new HTTP transport implementations based on Reactor Netty (see please {@link HttpServer}).
+             * Note that we are *not* pre-allocating any memory based on this setting but rather determine the CompositeByteBuf's capacity.
+        );
+         * @param httpChannel {@link HttpChannel} instance
+                this,
+    );
+import java.net.InetSocketAddress;
+            if (IOUtils.LINUX || IOUtils.MAC_OS_X) {
+                .readTimeout(Duration.ofMillis(readTimeoutMillis))
+    public static final Setting<Integer> SETTING_HTTP_WORKER_COUNT = Setting.intSetting("http.netty.worker_count", 0, Property.NodeScope);
+        }
+        if (secureHttpTransportSettingsProvider != null) {
+        @Override
+ */
+                .idleTimeout(Duration.ofMillis(connectTimeoutMillis))
+ * this file be licensed under the Apache-2.0 license or a
+        return hostChannel.newHttpChannel(request, response, emitter);
+                    new ApplicationProtocolConfig(
+    private final SharedGroupFactory sharedGroupFactory;
+        if (tcpReceiveBufferSize.getBytes() > 0) {
+        @Override
+ */
+import org.opensearch.http.AbstractHttpServerTransport;
+        final Channel channel = connection[0].channel();
+import io.netty.handler.codec.http.DefaultLastHttpContent;
+     * Exception handler
+                final ByteBuf content = r.content().copy();
+     */
+        if (cause instanceof ReadTimeoutException) {
+    /**
+import org.opensearch.common.network.CloseableChannel;
+            )
+                )
+            return response.status(HttpResponseStatus.REQUEST_URI_TOO_LONG).send();
+     *
+import org.opensearch.core.action.ActionListener;
+import javax.net.ssl.KeyManagerFactory;
+            final ReactorNetty4NonStreamingRequestConsumer<HttpContent> consumer = new ReactorNetty4NonStreamingRequestConsumer<>(
+    private static final String SETTING_KEY_HTTP_NETTY_MAX_COMPOSITE_BUFFER_COMPONENTS = "http.netty.max_composite_buffer_components";
+        // different protocols (UDP, TCP)
+            }
+import reactor.netty.http.HttpProtocol;
+import java.util.Collections;
+            );
+            );
+    private final long h2MaxConcurrentStreams;
+                )
+                parameters.flatMap(SecureHttpTransportParameters::clientAuth)
+        Dispatcher dispatcher,
+             * io.netty.handler.codec.MessageAggregator#DEFAULT_MAX_COMPOSITEBUFFER_COMPONENTS). To determine a proper default capacity for
+            closeContext.addListener(ActionListener.toBiConsumer(listener));
+    }
+        if (disposableServer != null) {
+        BigArrays bigArrays,
+                        )
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_KEEP_INTERVAL;
+                        configured = configured.childOption(
+import reactor.core.scheduler.Scheduler;
+                .doOnConnection(conn -> conn.addHandlerFirst(NettyPipeline.HttpDecompressor, createDecompressor()))
+        }
+                    if (keepCountOption != null) {
+     * @param secureHttpTransportSettingsProvider secure HTTP transport settings provider
+     */
+     * Called to tear down internal resources
+        * @param emitter {@link HttpContent} emitter
+                .applicationProtocolConfig(
+     * @param dispatcher dispatcher instance
+                disposable.disposeNow();
+                        .readTimeout(Duration.ofMillis(readTimeoutMillis))
+    /**
+            throw new IllegalStateException("Failed to obtain connection from HttpServerRequest");
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_HTTP3_ENABLED;
+     * @return response publisher
+        Property.NodeScope
+import org.opensearch.common.concurrent.CompletableContext;
+        (s) -> {
+                response.status(r.status());
+        hostChannel.addCloseListener(ActionListener.wrap(() -> hostChannels.remove(channel)));
+    }
+        } finally {
+ * The HTTP transport implementations based on Reactor Netty (see please {@link HttpServer}).
+     * a non-GET upgrade request, {@link #h2cMaxContentLength} specifies the maximum
+            return new ReactorNetty4HttpServerChannel(disposableServer.channel());
+            );
+            };
+                    }
+                    }
+     * @param request HTTP request
+            parameters.flatMap(SecureHttpTransportParameters::trustManagerFactory).ifPresent(sslContextBuilder::trustManager);
+        this.secureHttpTransportSettingsProvider = secureHttpTransportSettingsProvider;
+     * concurrent bidirectional streams at a time, to avoid reducing performance
+        * @param response HTTP response
+    public static Setting<Integer> SETTING_HTTP_NETTY_MAX_COMPOSITE_BUFFER_COMPONENTS = new Setting<>(
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_REUSE_ADDRESS;
+import io.netty.handler.ssl.ApplicationProtocolNames;
+                response,
+     */
+    private volatile DisposableServer disposableServer;
+                    HttpServer.create()
+        new ByteSizeValue(1000000, ByteSizeUnit.BYTES),
+            request.uri(),
+                );
+    /**
+import static org.opensearch.http.HttpTransportSettings.SETTING_HTTP_TCP_NO_DELAY;
+            bindServer();
+                            spec -> spec.tokenHandler(new SecureQuicTokenHandler(Randomness.createSecure()))
+                        .secure(spec -> spec.sslContext(sslContext))
+     *
+        BigArrays bigArrays,
+import org.opensearch.http.HttpReadTimeoutException;
+        }
+    /**
+import io.netty.handler.codec.http.HttpResponseStatus;
+    private final ByteSizeValue maxInitialLineLength;
+     * Quietly disposes the channel.
+    protected void stopInternal() {
+    /**
+                    .ifPresent(clientAuth -> sslContextBuilder.clientAuth(ClientAuth.valueOf(clientAuth)));
+    protected Publisher<Void> incomingRequest(HttpServerRequest request, HttpServerResponse response) {
+                Schedulers.DEFAULT_BOUNDED_ELASTIC_QUEUESIZE,
+    );
+                    final SocketOption<Integer> keepIntervalOption = NetUtils.getTcpKeepIntervalSocketOptionOrNull();
+                                .maxStreamDataBidirectionalLocal(SETTING_H3_MAX_STREAM_LOCAL_LENGTH.get(settings).getBytes())
+        if (connection[0] == null) {
+                .compress(true)
+    @Override
+        SETTING_KEY_HTTP_NETTY_MAX_COMPOSITE_BUFFER_COMPONENTS,
+            // Do nothing
+     * by reducing parallelism.
+package org.opensearch.http.reactor.netty4;
+                            SETTING_HTTP_TCP_KEEP_COUNT.get(settings)
+    private final int readTimeoutMillis;
+     * @return new {@link HttpChannel} instance
+        // Configure SSL context if available
+        boolean success = false;
+                if (SETTING_HTTP_TCP_KEEP_INTERVAL.get(settings) >= 0) {
+        Property.NodeScope
+        this.h2MaxConcurrentStreams = SETTING_H2_MAX_CONCURRENT_STREAMS.get(settings);
+                channel.close();
+                Schedulers.DEFAULT_BOUNDED_ELASTIC_SIZE,
+        ClusterSettings clusterSettings,
+        // Configure SSL context if available
+        Tracer tracer
+        }
+                .runOn(sharedGroup.getLowLevelGroup())
+                        .httpRequestDecoder(
+                    final SocketOption<Integer> keepIdleOption = NetUtils.getTcpKeepIdleSocketOptionOrNull();
+                final QuicSslContextBuilder sslContextBuilder = QuicSslContextBuilder.forServer(keyManagerFactory, null);
+        }
+     * @param socketAddress socket address to bind to
+        HostChannel(Channel channel) {
+import org.apache.logging.log4j.LogManager;
+        final HttpResponseHeadersFactory responseHeadersFactory = HttpResponseHeadersFactories.newDefault(settings, this);
+                        .idleTimeout(Duration.ofMillis(connectTimeoutMillis))
+        if (tcpSendBufferSize.getBytes() > 0) {
+                        .httpFormDecoder(builder -> builder.scheduler(scheduler))
+     *
+            parameters.map(SecureHttpTransportParameters::cipherSuites)
+     *
+            if (Http3Utils.isHttp3Available() && SETTING_HTTP_HTTP3_ENABLED.get(settings).booleanValue() == true) {
+import io.netty.handler.ssl.SslContext;
+     * over Netty channel all the time and runs request / response conversation over it. It does not work well with persistent
+             *
+                            NioChannelOption.of(keepCountOption),
+            return httpChannel;
+import reactor.netty.DisposableServer;
+                .subscribe(consumer);
+            /*
+            incomingStream(new ReactorNetty4HttpRequest(request, responseHeadersFactory), consumer.httpChannel());
+            }
+ * compatible open source license.
+            CloseableChannel.closeChannels(new ArrayList<>(hostChannels.values()), true);
+        public boolean isOpen() {
+import io.netty.handler.codec.http.HttpContentDecompressor;
+import java.util.ArrayList;
+            scheduler = null;
+     * is closed only when the Netty channel it is attached to is closed.
+        if (secureHttpTransportSettingsProvider != null) {
+                return Optional.of(
+        }
+        /**
+import io.netty.handler.codec.http.HttpContent;
+                }
+        super(settings, networkService, bigArrays, threadPool, xContentRegistry, dispatcher, clusterSettings, tracer);
+            return String.valueOf(maxBufferComponents);
+        }
+                request,
+            long maxBufferComponentsEstimate = Math.round((double) (maxContentLength.getBytes() / MTU.getBytes()));
+                Netty4Utils.addListener(channel.close(), closeContext);
+        );
+        SharedGroupFactory sharedGroupFactory,
+                doStop(); // otherwise we leak threads since we never moved to started
+     */
+        if (SETTING_HTTP_TCP_KEEP_ALIVE.get(settings)) {
+        } else {
+        configured = configured.childOption(ChannelOption.SO_REUSEADDR, reuseAddress);
+            closeContext.addListener((v, ex) -> { httpChannels.forEach(HttpChannel::close); });
+    }
+            request.fullPath(),
+        // The HTTP/3 server binds to the same port as HTTP/2 or HTTP/1.1 since those are
+            disposeQuietly(disposableServer);

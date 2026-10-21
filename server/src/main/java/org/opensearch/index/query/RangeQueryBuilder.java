@@ -1,603 +1,548 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.geo.ShapeRelation;
+            if (relation == MappedFieldType.Relation.DISJOINT && shardContext.validate()) {
+    public Object from() {
+        return timeZone;
 import org.opensearch.common.time.DateFormatter;
-import org.opensearch.common.time.DateMathParser;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.mapper.FieldNamesFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;
-
-import java.io.IOException;
-import java.time.DateTimeException;
-import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-
-/**
- * A Query that matches documents within a range of terms.
- *
- * @opensearch.internal
- */
-public class RangeQueryBuilder extends AbstractQueryBuilder<RangeQueryBuilder>
-    implements
-        MultiTermQueryBuilder,
-        ComplementAwareQueryBuilder {
-    public static final String NAME = "range";
-
-    public static final boolean DEFAULT_INCLUDE_UPPER = true;
-    public static final boolean DEFAULT_INCLUDE_LOWER = true;
-
-    public static final ParseField LTE_FIELD = new ParseField("lte");
+                return MappedFieldType.Relation.INTERSECTS;
+                throw new AssertionError();
     public static final ParseField GTE_FIELD = new ParseField("gte");
-    public static final ParseField FROM_FIELD = new ParseField("from");
-    public static final ParseField TO_FIELD = new ParseField("to");
-    private static final ParseField INCLUDE_LOWER_FIELD = new ParseField("include_lower");
-    private static final ParseField INCLUDE_UPPER_FIELD = new ParseField("include_upper");
-    public static final ParseField GT_FIELD = new ParseField("gt");
-    public static final ParseField LT_FIELD = new ParseField("lt");
-    private static final ParseField TIME_ZONE_FIELD = new ParseField("time_zone");
-    private static final ParseField FORMAT_FIELD = new ParseField("format");
-    private static final ParseField RELATION_FIELD = new ParseField("relation");
-
-    private static final String INVALID_LOWER_BOUND_MESSAGE = "invalid lower bound for [range] query";
-    private static final String INVALID_UPPER_BOUND_MESSAGE = "invalid upper bound for [range] query";
-
-    private final String fieldName;
-    private Object from;
-    private Object to;
-    private ZoneId timeZone;
-    private boolean includeLower = DEFAULT_INCLUDE_LOWER;
+        builder.field(TO_FIELD.getPreferredName(), maybeConvertToString(this.to));
+     * Gets the format field to parse the from/to fields
+        }
     private boolean includeUpper = DEFAULT_INCLUDE_UPPER;
-    private String format;
-    private ShapeRelation relation;
-
+        if (Strings.hasText(format)) {
+        if (relation != null) {
+     * Should the lower bound be included or not. Defaults to {@code true}.
+        return this;
     /**
-     * A Query that matches documents within an range of terms.
-     *
-     * @param fieldName The field name
-     */
-    public RangeQueryBuilder(String fieldName) {
-        if (Strings.isEmpty(fieldName)) {
-            throw new IllegalArgumentException("field name is null or empty");
-        }
-        this.fieldName = fieldName;
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public RangeQueryBuilder(StreamInput in) throws IOException {
-        super(in);
-        fieldName = in.readString();
-        from = in.readGenericValue();
-        to = in.readGenericValue();
-        includeLower = in.readBoolean();
-        includeUpper = in.readBoolean();
+    public static final String NAME = "range";
+            if (fieldNamesFieldType == null) {
+                    } else if (TIME_ZONE_FIELD.match(currentFieldName, depHandler)) {
         timeZone = in.readOptionalZoneId();
-        format = in.readOptionalString();
-        String relationString = in.readOptionalString();
-        if (relationString != null) {
-            relation = ShapeRelation.getRelationByName(relationString);
-            if (relation != null && !isRelationAllowed(relation)) {
-                throw new IllegalArgumentException("[range] query does not support relation [" + relationString + "]");
-            }
+ * compatible open source license.
+        final MappedFieldType.Relation relation = getRelation(queryRewriteContext);
+            if (fieldType == null) {
+import java.time.ZoneId;
+     */
+                return new MatchNoDocsQuery("No mappings yet");
+                        currentFieldName = parser.currentName();
+    }
+            && Objects.equals(from, other.from)
+ * specific language governing permissions and limitations
+                    newRangeQuery.to(null);
         }
     }
-
-    private boolean isRelationAllowed(ShapeRelation relation) {
-        return relation == ShapeRelation.INTERSECTS || relation == ShapeRelation.CONTAINS || relation == ShapeRelation.WITHIN;
-    }
-
+        this.relation = ShapeRelation.getRelationByName(relation);
+            && Objects.equals(to, other.to)
+import org.opensearch.core.xcontent.DeprecationHandler;
+            throw new IllegalArgumentException("relation cannot be null");
+                        queryName = parser.text();
+            belowRange.to(from);
+                        relation = parser.text();
+        builder.field(INCLUDE_UPPER_FIELD.getPreferredName(), includeUpper);
+ * Modifications Copyright OpenSearch Contributors. See
+        String relation = null;
+                        if (to != null) {
+ *
     @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeString(this.fieldName);
-        out.writeGenericValue(this.from);
-        out.writeGenericValue(this.to);
-        out.writeBoolean(this.includeLower);
-        out.writeBoolean(this.includeUpper);
-        out.writeOptionalZoneId(timeZone);
-        out.writeOptionalString(format);
-        String relationString = null;
-        if (this.relation != null) {
-            relationString = this.relation.getRelationName();
-        }
+            RangeQueryBuilder aboveRange = new RangeQueryBuilder(fieldName);
+    protected boolean doEquals(RangeQueryBuilder other) {
         out.writeOptionalString(relationString);
     }
-
-    /**
-     * Get the field name for this query.
-     */
-    @Override
-    public String fieldName() {
-        return this.fieldName;
-    }
-
-    /**
-     * The from part of the range query. Null indicates unbounded.
-     * In case lower bound is assigned to a string, we internally convert it to a {@link BytesRef} because
-     * in {@link RangeQueryBuilder} field are later parsed as {@link BytesRef} and we need internal representation
-     * of query to be equal regardless of whether it was created from XContent or via Java API.
-     */
-    public RangeQueryBuilder from(Object from, boolean includeLower) {
-        this.from = maybeConvertToBytesRef(from);
-        this.includeLower = includeLower;
-        return this;
-    }
-
-    /**
-     * The from part of the range query. Null indicates unbounded.
-     */
-    public RangeQueryBuilder from(Object from) {
-        return from(from, this.includeLower);
-    }
-
-    /**
-     * Gets the lower range value for this query.
-     */
-    public Object from() {
+            }
+        return complement;
+        Boolean includeUpper = null;
         return maybeConvertToString(this.from);
+            && Objects.equals(includeUpper, other.includeUpper)
+        }
     }
-
     /**
-     * The from part of the range query. Null indicates unbounded.
-     */
-    public RangeQueryBuilder gt(Object from) {
-        return from(from, false);
-    }
-
-    /**
-     * The from part of the range query. Null indicates unbounded.
-     */
-    public RangeQueryBuilder gte(Object from) {
-        return from(from, true);
-    }
-
-    /**
-     * The to part of the range query. Null indicates unbounded.
-     */
-    public RangeQueryBuilder to(Object to, boolean includeUpper) {
-        this.to = maybeConvertToBytesRef(to);
-        this.includeUpper = includeUpper;
-        return this;
-    }
-
-    /**
-     * The to part of the range query. Null indicates unbounded.
-     */
-    public RangeQueryBuilder to(Object to) {
-        return to(to, this.includeUpper);
-    }
-
-    /**
-     * Gets the upper range value for this query.
-     * In case upper bound is assigned to a string, we internally convert it to a {@link BytesRef} because
-     * in {@link RangeQueryBuilder} field are later parsed as {@link BytesRef} and we need internal representation
-     * of query to be equal regardless of whether it was created from XContent or via Java API.
-     */
-    public Object to() {
-        return maybeConvertToString(this.to);
-    }
-
-    /**
-     * The to part of the range query. Null indicates unbounded.
-     */
-    public RangeQueryBuilder lt(Object to) {
-        return to(to, false);
-    }
-
-    /**
-     * The to part of the range query. Null indicates unbounded.
-     */
-    public RangeQueryBuilder lte(Object to) {
+        }
         return to(to, true);
-    }
-
-    /**
-     * Should the lower bound be included or not. Defaults to {@code true}.
-     */
-    public RangeQueryBuilder includeLower(boolean includeLower) {
-        this.includeLower = includeLower;
-        return this;
-    }
-
-    /**
-     * Gets the includeLower flag for this query.
-     */
+            builder.field(TIME_ZONE_FIELD.getPreferredName(), timeZone.getId());
+        Object from = null;
+/*
+                        to = maybeConvertToBytesRef(parser.objectBytes());
+import org.opensearch.common.time.DateMathParser;
+ * Unless required by applicable law or agreed to in writing,
     public boolean includeLower() {
-        return this.includeLower;
-    }
-
-    /**
-     * Should the upper bound be included or not. Defaults to {@code true}.
+    @Override
      */
-    public RangeQueryBuilder includeUpper(boolean includeUpper) {
-        this.includeUpper = includeUpper;
-        return this;
-    }
-
-    /**
-     * Gets the includeUpper flag for this query.
-     */
+        this.format = format;
+    public String getWriteableName() {
+ * A Query that matches documents within a range of terms.
+        }
+        this.includeLower = includeLower;
     public boolean includeUpper() {
-        return this.includeUpper;
-    }
-
-    /**
-     * In case of date field, we can adjust the from/to fields using a timezone
-     */
-    public RangeQueryBuilder timeZone(String timeZone) {
-        if (timeZone == null) {
-            throw new IllegalArgumentException("timezone cannot be null");
-        }
-        try {
-            this.timeZone = ZoneId.of(timeZone);
-        } catch (DateTimeException e) {
-            throw new IllegalArgumentException(e);
-        }
-        return this;
-    }
-
-    /**
-     * In case of date field, gets the from/to fields timezone adjustment
-     */
-    public String timeZone() {
-        return this.timeZone == null ? null : this.timeZone.getId();
-    }
-
-    ZoneId getDateTimeZone() { // for testing
-        return timeZone;
-    }
-
-    /**
-     * In case of format field, we can parse the from/to fields using this time format
-     */
-    public RangeQueryBuilder format(String format) {
-        if (format == null) {
+        if (relation != null) {
+    private ShapeRelation relation;
             throw new IllegalArgumentException("format cannot be null");
         }
-        // this just ensure that the pattern is actually valid, no need to keep it here
-        DateFormatter.forPattern(format);
-        this.format = format;
-        return this;
-    }
-
-    /**
-     * Gets the format field to parse the from/to fields
+                        }
+                    }
+        }
      */
-    public String format() {
-        return format;
+    private boolean isRelationAllowed(ShapeRelation relation) {
+        return this;
+    public String fieldName() {
+import java.time.DateTimeException;
+        if (Strings.isEmpty(fieldName)) {
+        }
+                    } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, depHandler)) {
     }
-
-    DateMathParser getForceDateParser() { // pkg private for testing
-        if (Strings.hasText(format)) {
-            return DateFormatter.forPattern(this.format).toDateMathParser();
-        }
-        return null;
+        if (timeZone != null) {
+import org.opensearch.core.xcontent.XContentParser;
+    /**
+                includeUpper,
+        String queryName = null;
     }
-
-    public ShapeRelation relation() {
-        return this.relation;
+                        from = maybeConvertToBytesRef(parser.objectBytes());
+        builder.startObject(NAME);
+        return rangeQuery;
+                    return this;
+ * this work for additional information regarding copyright
+            final FieldNamesFieldMapper.FieldNamesFieldType fieldNamesFieldType = (FieldNamesFieldMapper.FieldNamesFieldType) context
+        from = in.readGenericValue();
+    /**
+    public RangeQueryBuilder format(String format) {
+        if (relation != null && relation != ShapeRelation.INTERSECTS) {
+                return MappedFieldType.Relation.INTERSECTS;
     }
-
-    public RangeQueryBuilder relation(String relation) {
-        if (relation == null) {
-            throw new IllegalArgumentException("relation cannot be null");
+    }
+     * The from part of the range query. Null indicates unbounded.
+import java.io.IOException;
+    public RangeQueryBuilder timeZone(String timeZone) {
+        DateMathParser forcedDateParser = getForceDateParser();
+        String currentFieldName = null;
+    }
+                dateMathParser,
+    public String timeZone() {
+                } else {
+    /**
+        return to(to, false);
+                            throw new ParsingException(parser.getTokenLocation(), INVALID_UPPER_BOUND_MESSAGE);
         }
-        this.relation = ShapeRelation.getRelationByName(relation);
-        if (this.relation == null) {
-            throw new IllegalArgumentException(relation + " is not a valid relation");
+            return relation;
+    private static final String INVALID_LOWER_BOUND_MESSAGE = "invalid lower bound for [range] query";
+     */
+ *
+     * Gets the lower range value for this query.
+    public static RangeQueryBuilder fromXContent(XContentParser parser) throws IOException {
+        return mapper.rangeQuery(from, to, includeLower, includeUpper, relation, timeZone, forcedDateParser, context);
+        this.includeUpper = includeUpper;
+                        if (to != null || includeUpper != null) {
+     * A Query that matches documents within an range of terms.
+            }
+        return Objects.equals(fieldName, other.fieldName)
+                return this;
+        return this.includeUpper;
+        rangeQuery.from(from);
+                throw new ParsingException(parser.getTokenLocation(), "[range] query does not support [" + currentFieldName + "]");
+            aboveRange.includeLower(!includeUpper);
+     * of query to be equal regardless of whether it was created from XContent or via Java API.
+    public RangeQueryBuilder from(Object from) {
+    }
+    /**
+                    newRangeQuery.timeZone = null;
+        to = in.readGenericValue();
         }
-        if (!isRelationAllowed(this.relation)) {
-            throw new IllegalArgumentException("[range] query does not support relation [" + relation + "]");
+            default:
+        Boolean includeLower = null;
+    }
+    public RangeQueryBuilder from(Object from, boolean includeLower) {
+     */
         }
+                currentFieldName = parser.currentName();
+ * not use this file except in compliance with the License.
+    /**
+    }
+        }
+        }
+                    return newRangeQuery;
+     */
+        }
+    public RangeQueryBuilder includeUpper(boolean includeUpper) {
+            complement.add(aboveRange);
+            }
+        Object to = null;
+            if (fieldNamesFieldType.isEnabled()) {
+    public RangeQueryBuilder to(Object to, boolean includeUpper) {
+    }
+    public static final ParseField GT_FIELD = new ParseField("gt");
+    /**
+        }
+ * @opensearch.internal
+     * Read from a stream.
+        }
+    public RangeQueryBuilder lt(Object to) {
+        this.includeLower = includeLower;
+        String relationString = in.readOptionalString();
+                        includeLower = parser.booleanValue();
+    /**
+                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+        try {
+        String timeZone = null;
+                if (from != null || to != null || format != null || timeZone != null) {
+    public RangeQueryBuilder(String fieldName) {
+            RangeQueryBuilder belowRange = new RangeQueryBuilder(fieldName);
+    private static final String INVALID_UPPER_BOUND_MESSAGE = "invalid upper bound for [range] query";
+    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
+ *
+    }
+        String relationString = null;
+        printBoostAndQueryName(builder);
+    ZoneId getDateTimeZone() { // for testing
+import org.opensearch.core.common.ParsingException;
+        if (format != null) {
+        builder.endObject();
+     * in {@link RangeQueryBuilder} field are later parsed as {@link BytesRef} and we need internal representation
+     * In case of format field, we can parse the from/to fields using this time format
+     */
+        if (includeLower != null) {
+            throw new IllegalStateException("Rewrite first");
+                queryRewriteContext
+     * The to part of the range query. Null indicates unbounded.
+            rangeQuery.includeLower(includeLower);
+    }
+            for (RangeQueryBuilder rq : complement) {
+    public static final ParseField LTE_FIELD = new ParseField("lte");
+    public static final ParseField LT_FIELD = new ParseField("lt");
+import org.opensearch.common.geo.ShapeRelation;
+    public static final boolean DEFAULT_INCLUDE_UPPER = true;
+        builder.field(INCLUDE_LOWER_FIELD.getPreferredName(), includeLower);
+        out.writeBoolean(this.includeUpper);
+        return this.fieldName;
+                        boost = parser.floatValue();
+                    RangeQueryBuilder newRangeQuery = new RangeQueryBuilder(fieldName);
+        if (timeZone != null) {
+                rq.timeZone = timeZone;
+            throw new IllegalArgumentException(e);
+                    newRangeQuery.format = null;
+/**
+            case WITHIN:
+     * Gets the upper range value for this query.
+        if (from == null && to == null) {
+                        if (includeUpper != null) {
+ * software distributed under the License is distributed on an
+            && Objects.equals(format, other.format);
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+    @Override
+     * Gets the includeUpper flag for this query.
+            && Objects.equals(includeLower, other.includeLower)
+     * In case upper bound is assigned to a string, we internally convert it to a {@link BytesRef} because
+ */
+import org.opensearch.core.common.io.stream.StreamInput;
+    public RangeQueryBuilder(StreamInput in) throws IOException {
+    }
+        ComplementAwareQueryBuilder {
+        String format = null;
+            relation = ShapeRelation.getRelationByName(relationString);
+ * license agreements. See the NOTICE file distributed with
+     */
+    protected Query doToQuery(QueryShardContext context) throws IOException {
+    /**
+import org.opensearch.core.common.io.stream.StreamOutput;
+    }
+                    } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, depHandler)) {
+            // Exists query would fail if the fieldNames field is disabled.
+        builder.endObject();
+            aboveRange.from(to);
+        includeLower = in.readBoolean();
         return this;
     }
-
-    @Override
-    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(NAME);
-        builder.startObject(fieldName);
-        builder.field(FROM_FIELD.getPreferredName(), maybeConvertToString(this.from));
-        builder.field(TO_FIELD.getPreferredName(), maybeConvertToString(this.to));
-        builder.field(INCLUDE_LOWER_FIELD.getPreferredName(), includeLower);
-        builder.field(INCLUDE_UPPER_FIELD.getPreferredName(), includeUpper);
-        if (timeZone != null) {
-            builder.field(TIME_ZONE_FIELD.getPreferredName(), timeZone.getId());
-        }
-        if (Strings.hasText(format)) {
-            builder.field(FORMAT_FIELD.getPreferredName(), format);
-        }
-        if (relation != null) {
-            builder.field(RELATION_FIELD.getPreferredName(), relation.getRelationName());
-        }
-        printBoostAndQueryName(builder);
-        builder.endObject();
-        builder.endObject();
-    }
-
-    public static RangeQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        String fieldName = null;
-        Object from = null;
-        Object to = null;
-        Boolean includeLower = null;
-        Boolean includeUpper = null;
-        String timeZone = null;
-        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
-        String queryName = null;
-        String format = null;
-        String relation = null;
-
-        String currentFieldName = null;
-        XContentParser.Token token;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, currentFieldName);
-                fieldName = currentFieldName;
-                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                    if (token == XContentParser.Token.FIELD_NAME) {
-                        currentFieldName = parser.currentName();
-                        continue; // only field name is required in this iteration
-                    }
-                    DeprecationHandler depHandler = parser.getDeprecationHandler();
-                    if (FROM_FIELD.match(currentFieldName, depHandler)) {
-                        if (from != null) {
-                            throw new ParsingException(parser.getTokenLocation(), INVALID_LOWER_BOUND_MESSAGE);
-                        }
-                        from = maybeConvertToBytesRef(parser.objectBytes());
-                    } else if (TO_FIELD.match(currentFieldName, depHandler)) {
-                        if (to != null) {
-                            throw new ParsingException(parser.getTokenLocation(), INVALID_UPPER_BOUND_MESSAGE);
-                        }
-                        to = maybeConvertToBytesRef(parser.objectBytes());
-                    } else if (INCLUDE_LOWER_FIELD.match(currentFieldName, depHandler)) {
-                        if (includeLower != null) {
-                            throw new ParsingException(parser.getTokenLocation(), INVALID_LOWER_BOUND_MESSAGE);
-                        }
-                        includeLower = parser.booleanValue();
-                    } else if (INCLUDE_UPPER_FIELD.match(currentFieldName, depHandler)) {
-                        if (includeUpper != null) {
-                            throw new ParsingException(parser.getTokenLocation(), INVALID_UPPER_BOUND_MESSAGE);
-                        }
-                        includeUpper = parser.booleanValue();
-                    } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, depHandler)) {
-                        boost = parser.floatValue();
-                    } else if (GT_FIELD.match(currentFieldName, depHandler) || GTE_FIELD.match(currentFieldName, depHandler)) {
-                        if (from != null || includeLower != null) {
-                            throw new ParsingException(parser.getTokenLocation(), INVALID_LOWER_BOUND_MESSAGE);
-                        }
-                        from = maybeConvertToBytesRef(parser.objectBytes());
+        super(in);
+        return this;
+    public RangeQueryBuilder relation(String relation) {
                         includeLower = GTE_FIELD.match(currentFieldName, depHandler);
-                    } else if (LT_FIELD.match(currentFieldName, depHandler) || LTE_FIELD.match(currentFieldName, depHandler)) {
-                        if (to != null || includeUpper != null) {
-                            throw new ParsingException(parser.getTokenLocation(), INVALID_UPPER_BOUND_MESSAGE);
-                        }
-                        to = maybeConvertToBytesRef(parser.objectBytes());
-                        includeUpper = LTE_FIELD.match(currentFieldName, depHandler);
-                    } else if (TIME_ZONE_FIELD.match(currentFieldName, depHandler)) {
-                        timeZone = parser.text();
-                    } else if (FORMAT_FIELD.match(currentFieldName, depHandler)) {
-                        format = parser.text();
-                    } else if (RELATION_FIELD.match(currentFieldName, depHandler)) {
-                        relation = parser.text();
-                    } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, depHandler)) {
-                        queryName = parser.text();
-                    } else {
-                        throw new ParsingException(parser.getTokenLocation(), "[range] query does not support [" + currentFieldName + "]");
-                    }
-                }
-            } else if (token.isValue()) {
-                throw new ParsingException(parser.getTokenLocation(), "[range] query does not support [" + currentFieldName + "]");
-            }
-        }
-
-        RangeQueryBuilder rangeQuery = new RangeQueryBuilder(fieldName);
-        rangeQuery.from(from);
-        rangeQuery.to(to);
-        if (includeLower != null) {
-            rangeQuery.includeLower(includeLower);
-        }
-        if (includeUpper != null) {
-            rangeQuery.includeUpper(includeUpper);
-        }
-        if (timeZone != null) {
-            rangeQuery.timeZone(timeZone);
-        }
-        rangeQuery.boost(boost);
-        rangeQuery.queryName(queryName);
-        if (format != null) {
-            rangeQuery.format(format);
-        }
-        if (relation != null) {
-            rangeQuery.relation(relation);
-        }
-        return rangeQuery;
-    }
-
-    @Override
-    public String getWriteableName() {
-        return NAME;
-    }
-
-    // Overridable for testing only
-    protected MappedFieldType.Relation getRelation(QueryRewriteContext queryRewriteContext) throws IOException {
-        QueryShardContext shardContext = queryRewriteContext.convertToShardContext();
-        if (shardContext != null) {
-            final MappedFieldType fieldType = shardContext.fieldMapper(fieldName);
-            if (fieldType == null) {
-                return MappedFieldType.Relation.DISJOINT;
-            }
-            if (shardContext.getIndexReader() == null) {
-                // No reader, this may happen e.g. for percolator queries.
-                return MappedFieldType.Relation.INTERSECTS;
-            }
-
-            DateMathParser dateMathParser = getForceDateParser();
-            final MappedFieldType.Relation relation = fieldType.isFieldWithinQuery(
-                shardContext.getIndexReader(),
-                from,
-                to,
-                includeLower,
-                includeUpper,
-                timeZone,
-                dateMathParser,
-                queryRewriteContext
-            );
-
-            // For validation, always assume that there is an intersection
-            if (relation == MappedFieldType.Relation.DISJOINT && shardContext.validate()) {
-                return MappedFieldType.Relation.INTERSECTS;
-            }
-
-            return relation;
-        }
-
-        // Not on the shard, we have no way to know what the relation is.
-        return MappedFieldType.Relation.INTERSECTS;
-    }
-
-    @Override
-    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
-        final MappedFieldType.Relation relation = getRelation(queryRewriteContext);
-        switch (relation) {
-            case DISJOINT:
-                return new MatchNoneQueryBuilder();
-            case WITHIN:
-                if (from != null || to != null || format != null || timeZone != null) {
-                    RangeQueryBuilder newRangeQuery = new RangeQueryBuilder(fieldName);
-                    newRangeQuery.from(null);
-                    newRangeQuery.to(null);
-                    newRangeQuery.format = null;
-                    newRangeQuery.timeZone = null;
-                    return newRangeQuery;
-                } else {
-                    return this;
-                }
-            case INTERSECTS:
-                return this;
-            default:
-                throw new AssertionError();
-        }
-    }
-
-    @Override
-    protected Query doToQuery(QueryShardContext context) throws IOException {
-        if (from == null && to == null) {
-            /*
-              Open bounds on both side, we can rewrite to an exists query
-              if the {@link FieldNamesFieldMapper} is enabled.
-             */
-            final FieldNamesFieldMapper.FieldNamesFieldType fieldNamesFieldType = (FieldNamesFieldMapper.FieldNamesFieldType) context
-                .getMapperService()
-                .fieldType(FieldNamesFieldMapper.NAME);
-            if (fieldNamesFieldType == null) {
-                return new MatchNoDocsQuery("No mappings yet");
-            }
-            // Exists query would fail if the fieldNames field is disabled.
-            if (fieldNamesFieldType.isEnabled()) {
-                return ExistsQueryBuilder.newFilter(context, fieldName, false);
-            }
-        }
-        MappedFieldType mapper = context.fieldMapper(this.fieldName);
-        if (mapper == null) {
-            throw new IllegalStateException("Rewrite first");
-        }
-        DateMathParser forcedDateParser = getForceDateParser();
-        return mapper.rangeQuery(from, to, includeLower, includeUpper, relation, timeZone, forcedDateParser, context);
-    }
-
-    @Override
-    protected int doHashCode() {
-        return Objects.hash(fieldName, from, to, timeZone, includeLower, includeUpper, format);
-    }
-
-    @Override
-    protected boolean doEquals(RangeQueryBuilder other) {
-        return Objects.equals(fieldName, other.fieldName)
-            && Objects.equals(from, other.from)
-            && Objects.equals(to, other.to)
-            && Objects.equals(timeZone, other.timeZone)
-            && Objects.equals(includeLower, other.includeLower)
-            && Objects.equals(includeUpper, other.includeUpper)
-            && Objects.equals(format, other.format);
-    }
-
-    @Override
-    public List<? extends QueryBuilder> getComplement(QueryShardContext context) {
-        // This implementation doesn't need info from QueryShardContext
-        if (relation != null && relation != ShapeRelation.INTERSECTS) {
-            return null;
-        }
-        List<RangeQueryBuilder> complement = new ArrayList<>();
-        if (from != null) {
-            RangeQueryBuilder belowRange = new RangeQueryBuilder(fieldName);
-            belowRange.to(from);
-            belowRange.includeUpper(!includeLower);
-            complement.add(belowRange);
-        }
-
-        if (to != null) {
-            RangeQueryBuilder aboveRange = new RangeQueryBuilder(fieldName);
-            aboveRange.from(to);
-            aboveRange.includeLower(!includeUpper);
-            complement.add(aboveRange);
-        }
-
-        if (format != null) {
-            for (RangeQueryBuilder rq : complement) {
                 rq.format(format);
-            }
+public class RangeQueryBuilder extends AbstractQueryBuilder<RangeQueryBuilder>
+import org.opensearch.core.xcontent.XContentBuilder;
+ */
+                        }
+    private String format;
+ * GitHub history for details.
+    /**
         }
-        if (timeZone != null) {
-            for (RangeQueryBuilder rq : complement) {
-                rq.timeZone = timeZone;
-            }
-        }
-
-        return complement;
+            complement.add(belowRange);
+            throw new IllegalArgumentException("timezone cannot be null");
+        return this.relation;
+              Open bounds on both side, we can rewrite to an exists query
+    public List<? extends QueryBuilder> getComplement(QueryShardContext context) {
+                return new MatchNoneQueryBuilder();
+            final MappedFieldType.Relation relation = fieldType.isFieldWithinQuery(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    private static final ParseField FORMAT_FIELD = new ParseField("format");
+        this.includeUpper = includeUpper;
     }
+package org.opensearch.index.query;
+            this.timeZone = ZoneId.of(timeZone);
+              if the {@link FieldNamesFieldMapper} is enabled.
+    }
+        out.writeBoolean(this.includeLower);
+    @Override
+        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
+    implements
+    }
+import org.apache.lucene.util.BytesRef;
+    }
+        if (!isRelationAllowed(this.relation)) {
+        rangeQuery.to(to);
+    }
+    }
+     * The from part of the range query. Null indicates unbounded.
+    @Override
+     */
+                    newRangeQuery.from(null);
+     */
+        }
+     */
+    private static final ParseField INCLUDE_LOWER_FIELD = new ParseField("include_lower");
+        }
+                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, currentFieldName);
+    }
+     * The to part of the range query. Null indicates unbounded.
+     */
+            if (shardContext.getIndexReader() == null) {
+     * In case of date field, gets the from/to fields timezone adjustment
+                        }
+                    } else {
+    }
+        }
+import java.util.Objects;
+        String fieldName = null;
+        if (shardContext != null) {
+        includeUpper = in.readBoolean();
+    public RangeQueryBuilder includeLower(boolean includeLower) {
+        return MappedFieldType.Relation.INTERSECTS;
+     */
+            throw new IllegalArgumentException("[range] query does not support relation [" + relation + "]");
+        this.fieldName = fieldName;
+        // Not on the shard, we have no way to know what the relation is.
+        RangeQueryBuilder rangeQuery = new RangeQueryBuilder(fieldName);
+        if (mapper == null) {
+                shardContext.getIndexReader(),
+ * this file be licensed under the Apache-2.0 license or a
+    public ShapeRelation relation() {
+                        if (includeLower != null) {
+     * The to part of the range query. Null indicates unbounded.
+                            throw new ParsingException(parser.getTokenLocation(), INVALID_UPPER_BOUND_MESSAGE);
+     * @param fieldName The field name
+/*
+    private boolean includeLower = DEFAULT_INCLUDE_LOWER;
+            rangeQuery.timeZone(timeZone);
+import org.opensearch.index.mapper.MappedFieldType;
+        out.writeGenericValue(this.from);
+            rangeQuery.includeUpper(includeUpper);
+    }
+                return MappedFieldType.Relation.DISJOINT;
+        }
+        return Objects.hash(fieldName, from, to, timeZone, includeLower, includeUpper, format);
+                        throw new ParsingException(parser.getTokenLocation(), "[range] query does not support [" + currentFieldName + "]");
+     * In case lower bound is assigned to a string, we internally convert it to a {@link BytesRef} because
+        }
+            case DISJOINT:
+                // No reader, this may happen e.g. for percolator queries.
+                            throw new ParsingException(parser.getTokenLocation(), INVALID_UPPER_BOUND_MESSAGE);
+            final MappedFieldType fieldType = shardContext.fieldMapper(fieldName);
+     */
+        if (timeZone != null) {
+        QueryShardContext shardContext = queryRewriteContext.convertToShardContext();
+        MappedFieldType mapper = context.fieldMapper(this.fieldName);
+            if (relation != null && !isRelationAllowed(relation)) {
+            builder.field(RELATION_FIELD.getPreferredName(), relation.getRelationName());
+            throw new IllegalArgumentException(relation + " is not a valid relation");
+            rangeQuery.format(format);
+    private Object to;
+import org.opensearch.index.mapper.FieldNamesFieldMapper;
+                    } else if (LT_FIELD.match(currentFieldName, depHandler) || LTE_FIELD.match(currentFieldName, depHandler)) {
+    /**
+                        }
+    /**
+ * You may obtain a copy of the License at
+                    } else if (TO_FIELD.match(currentFieldName, depHandler)) {
+                includeLower,
+        }
+import org.opensearch.core.ParseField;
+        if (to != null) {
+                    DeprecationHandler depHandler = parser.getDeprecationHandler();
+    /**
+    @Override
+                        to = maybeConvertToBytesRef(parser.objectBytes());
+        return maybeConvertToString(this.to);
+import org.apache.lucene.search.MatchNoDocsQuery;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+ */
+    /**
+                        timeZone = parser.text();
+        DateFormatter.forPattern(format);
+    public RangeQueryBuilder gt(Object from) {
+     * The from part of the range query. Null indicates unbounded.
+                    } else if (INCLUDE_UPPER_FIELD.match(currentFieldName, depHandler)) {
+     */
+            builder.field(FORMAT_FIELD.getPreferredName(), format);
+    }
+                    if (token == XContentParser.Token.FIELD_NAME) {
+                }
+        }
+        return this;
+                        if (from != null || includeLower != null) {
+            if (token == XContentParser.Token.FIELD_NAME) {
+        List<RangeQueryBuilder> complement = new ArrayList<>();
+    protected void doWriteTo(StreamOutput out) throws IOException {
+        return this.includeLower;
+        return format;
+    private static final ParseField TIME_ZONE_FIELD = new ParseField("time_zone");
+                from,
+                .fieldType(FieldNamesFieldMapper.NAME);
+    protected MappedFieldType.Relation getRelation(QueryRewriteContext queryRewriteContext) throws IOException {
+                to,
+import java.util.List;
+            } else if (token == XContentParser.Token.START_OBJECT) {
+                .getMapperService()
+import java.util.ArrayList;
+    }
+                            throw new ParsingException(parser.getTokenLocation(), INVALID_LOWER_BOUND_MESSAGE);
+            return null;
+                        }
+                    } else if (RELATION_FIELD.match(currentFieldName, depHandler)) {
+    }
+     * The from part of the range query. Null indicates unbounded.
+            }
+    public RangeQueryBuilder lte(Object to) {
+            case INTERSECTS:
+                    }
+    public String format() {
+    }
+        out.writeString(this.fieldName);
+            relationString = this.relation.getRelationName();
+    }
+            }
+    }
+    private static final ParseField RELATION_FIELD = new ParseField("relation");
+     */
+     */
+import org.apache.lucene.search.Query;
+ * ownership. Elasticsearch licenses this file to you under
+        this.to = maybeConvertToBytesRef(to);
+        out.writeOptionalZoneId(timeZone);
+            throw new IllegalArgumentException("field name is null or empty");
+        rangeQuery.boost(boost);
+        if (relationString != null) {
+ * The OpenSearch Contributors require contributions made to
+                        }
+        if (format != null) {
+     * Get the field name for this query.
+    @Override
+    // Overridable for testing only
+        if (relation == null) {
+            // For validation, always assume that there is an intersection
+    private static final ParseField INCLUDE_UPPER_FIELD = new ParseField("include_upper");
+        out.writeGenericValue(this.to);
+        // This implementation doesn't need info from QueryShardContext
+    private Object from;
+                    } else if (GT_FIELD.match(currentFieldName, depHandler) || GTE_FIELD.match(currentFieldName, depHandler)) {
+        if (includeUpper != null) {
+/*
+        }
+                            throw new ParsingException(parser.getTokenLocation(), INVALID_LOWER_BOUND_MESSAGE);
+            belowRange.includeUpper(!includeLower);
+            /*
+                        format = parser.text();
+        format = in.readOptionalString();
+        return relation == ShapeRelation.INTERSECTS || relation == ShapeRelation.CONTAINS || relation == ShapeRelation.WITHIN;
 }
+            );
+                        continue; // only field name is required in this iteration
+                        from = maybeConvertToBytesRef(parser.objectBytes());
+        XContentParser.Token token;
+        builder.startObject(fieldName);
+        fieldName = in.readString();
+                        if (from != null) {
+    /**
+                        includeUpper = LTE_FIELD.match(currentFieldName, depHandler);
+     */
+    /**
+        }
+        if (this.relation == null) {
+            return DateFormatter.forPattern(this.format).toDateMathParser();
+    /**
+    public RangeQueryBuilder gte(Object from) {
+     * Gets the includeLower flag for this query.
+                    if (FROM_FIELD.match(currentFieldName, depHandler)) {
+        if (from != null) {
+                return ExistsQueryBuilder.newFilter(context, fieldName, false);
+    public static final boolean DEFAULT_INCLUDE_LOWER = true;
+        return this;
+        }
+    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
+     * In case of date field, we can adjust the from/to fields using a timezone
+        builder.field(FROM_FIELD.getPreferredName(), maybeConvertToString(this.from));
+    }
+ * KIND, either express or implied.  See the License for the
+            }
+    public static final ParseField FROM_FIELD = new ParseField("from");
+        out.writeOptionalString(format);
+    @Override
+    /**
+        return NAME;
+        return this.timeZone == null ? null : this.timeZone.getId();
+        // this just ensure that the pattern is actually valid, no need to keep it here
+     */
+ *
+            }
+                    } else if (FORMAT_FIELD.match(currentFieldName, depHandler)) {
+    /**
+    private final String fieldName;
+ * SPDX-License-Identifier: Apache-2.0
+        return from(from, true);
+        return from(from, false);
+        if (this.relation != null) {
+ * under the License.
+        if (Strings.hasText(format)) {
+    private ZoneId timeZone;
+            for (RangeQueryBuilder rq : complement) {
+                fieldName = currentFieldName;
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+     * The to part of the range query. Null indicates unbounded.
+            DateMathParser dateMathParser = getForceDateParser();
+            } else if (token.isValue()) {
+        this.from = maybeConvertToBytesRef(from);
+    @Override
+        return from(from, this.includeLower);
+    public Object to() {
+    /**
+            }
+    DateMathParser getForceDateParser() { // pkg private for testing
+             */
+import org.opensearch.core.common.Strings;
+                        includeUpper = parser.booleanValue();
+     */
+     * of query to be equal regardless of whether it was created from XContent or via Java API.
+    public RangeQueryBuilder to(Object to) {
+                }
+ * Licensed to Elasticsearch under one or more contributor
+    }
+        rangeQuery.queryName(queryName);
+        return to(to, this.includeUpper);
+        return null;
+    protected int doHashCode() {
+ */
+            rangeQuery.relation(relation);
+     * Should the upper bound be included or not. Defaults to {@code true}.
+        } catch (DateTimeException e) {
+                timeZone,
+            }
+        return this;
+                            throw new ParsingException(parser.getTokenLocation(), INVALID_LOWER_BOUND_MESSAGE);
+     *
+                    } else if (INCLUDE_LOWER_FIELD.match(currentFieldName, depHandler)) {
+    public static final ParseField TO_FIELD = new ParseField("to");
+        MultiTermQueryBuilder,
+                throw new IllegalArgumentException("[range] query does not support relation [" + relationString + "]");
+     */
+        if (format == null) {
+            && Objects.equals(timeZone, other.timeZone)
+        switch (relation) {
+        if (timeZone == null) {
+     * in {@link RangeQueryBuilder} field are later parsed as {@link BytesRef} and we need internal representation

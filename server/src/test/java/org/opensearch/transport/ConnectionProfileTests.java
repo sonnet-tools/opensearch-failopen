@@ -1,291 +1,263 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.transport;
-
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.test.OpenSearchTestCase;
-import org.hamcrest.Matchers;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.List;
-
-import static org.opensearch.test.NodeRoles.nonClusterManagerNode;
-import static org.opensearch.test.NodeRoles.nonDataNode;
-import static org.opensearch.test.NodeRoles.removeRoles;
-import static org.hamcrest.Matchers.equalTo;
-
-public class ConnectionProfileTests extends OpenSearchTestCase {
-
-    public void testBuildConnectionProfile() {
-        ConnectionProfile.Builder builder = new ConnectionProfile.Builder();
-        TimeValue connectTimeout = TimeValue.timeValueMillis(randomIntBetween(1, 10));
+        assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STREAM));
         TimeValue handshakeTimeout = TimeValue.timeValueMillis(randomIntBetween(1, 10));
-        TimeValue pingInterval = TimeValue.timeValueMillis(randomIntBetween(1, 10));
-        boolean compressionEnabled = randomBoolean();
-        final boolean setConnectTimeout = randomBoolean();
-        if (setConnectTimeout) {
-            builder.setConnectTimeout(connectTimeout);
-        }
-        final boolean setHandshakeTimeout = randomBoolean();
-        if (setHandshakeTimeout) {
-            builder.setHandshakeTimeout(handshakeTimeout);
-        }
-        final boolean setCompress = randomBoolean();
-        if (setCompress) {
-            builder.setCompressionEnabled(compressionEnabled);
-        }
-        final boolean setPingInterval = randomBoolean();
-        if (setPingInterval) {
-            builder.setPingInterval(pingInterval);
-        }
-        builder.addConnections(1, TransportRequestOptions.Type.BULK);
-        builder.addConnections(2, TransportRequestOptions.Type.STATE, TransportRequestOptions.Type.RECOVERY);
-        builder.addConnections(3, TransportRequestOptions.Type.PING);
-
-        IllegalStateException illegalStateException = expectThrows(IllegalStateException.class, builder::build);
-        assertEquals(
-            "not all types are added for this connection profile - missing types: [REG, STREAM]",
-            illegalStateException.getMessage()
-        );
-
-        IllegalArgumentException illegalArgumentException = expectThrows(
-            IllegalArgumentException.class,
-            () -> builder.addConnections(4, TransportRequestOptions.Type.REG, TransportRequestOptions.Type.PING)
-        );
-        assertEquals("type [PING] is already registered", illegalArgumentException.getMessage());
-        builder.addConnections(4, TransportRequestOptions.Type.REG);
-        builder.addConnections(1, TransportRequestOptions.Type.STREAM);
-        ConnectionProfile build = builder.build();
-        if (randomBoolean()) {
-            build = new ConnectionProfile.Builder(build).build();
-        }
-        assertEquals(11, build.getNumConnections());
-        if (setConnectTimeout) {
-            assertEquals(connectTimeout, build.getConnectTimeout());
-        } else {
-            assertNull(build.getConnectTimeout());
-        }
-
-        if (setHandshakeTimeout) {
-            assertEquals(handshakeTimeout, build.getHandshakeTimeout());
-        } else {
-            assertNull(build.getHandshakeTimeout());
-        }
-
-        if (setCompress) {
-            assertEquals(compressionEnabled, build.getCompressionEnabled());
-        } else {
+        assertEquals(1, build.getNumConnectionsPerType(TransportRequestOptions.Type.STREAM));
             assertNull(build.getCompressionEnabled());
-        }
-
-        if (setPingInterval) {
-            assertEquals(pingInterval, build.getPingInterval());
-        } else {
-            assertNull(build.getPingInterval());
-        }
-
-        List<Integer> list = new ArrayList<>(11);
-        for (int i = 0; i < 11; i++) {
-            list.add(i);
-        }
-        final int numIters = randomIntBetween(5, 10);
-        assertEquals(5, build.getHandles().size());
-        assertEquals(0, build.getHandles().get(0).offset);
-        assertEquals(1, build.getHandles().get(0).length);
-        assertEquals(EnumSet.of(TransportRequestOptions.Type.BULK), build.getHandles().get(0).getTypes());
-        Integer channel = build.getHandles().get(0).getChannel(list);
-        for (int i = 0; i < numIters; i++) {
-            assertEquals(0, channel.intValue());
-        }
-
-        assertEquals(1, build.getHandles().get(1).offset);
-        assertEquals(2, build.getHandles().get(1).length);
-        assertEquals(
-            EnumSet.of(TransportRequestOptions.Type.STATE, TransportRequestOptions.Type.RECOVERY),
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals(6, profile.getNumConnectionsPerType(TransportRequestOptions.Type.REG));
+import static org.opensearch.test.NodeRoles.removeRoles;
+        final boolean pingIntervalSet = randomBoolean();
+        assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.RECOVERY));
+        assertEquals(1, profile.getNumConnectionsPerType(TransportRequestOptions.Type.PING));
             build.getHandles().get(1).getTypes()
         );
-        channel = build.getHandles().get(1).getChannel(list);
-        for (int i = 0; i < numIters; i++) {
-            assertThat(channel, Matchers.anyOf(Matchers.is(1), Matchers.is(2)));
-        }
-
-        assertEquals(3, build.getHandles().get(2).offset);
-        assertEquals(3, build.getHandles().get(2).length);
-        assertEquals(EnumSet.of(TransportRequestOptions.Type.PING), build.getHandles().get(2).getTypes());
-        channel = build.getHandles().get(2).getChannel(list);
-        for (int i = 0; i < numIters; i++) {
-            assertThat(channel, Matchers.anyOf(Matchers.is(3), Matchers.is(4), Matchers.is(5)));
-        }
-
-        assertEquals(6, build.getHandles().get(3).offset);
-        assertEquals(4, build.getHandles().get(3).length);
-        assertEquals(EnumSet.of(TransportRequestOptions.Type.REG), build.getHandles().get(3).getTypes());
-        channel = build.getHandles().get(3).getChannel(list);
-        for (int i = 0; i < numIters; i++) {
-            assertThat(channel, Matchers.anyOf(Matchers.is(6), Matchers.is(7), Matchers.is(8), Matchers.is(9)));
-        }
-
-        assertEquals(10, build.getHandles().get(4).offset);
-        assertEquals(1, build.getHandles().get(4).length);
-        assertEquals(EnumSet.of(TransportRequestOptions.Type.STREAM), build.getHandles().get(4).getTypes());
-        channel = build.getHandles().get(4).getChannel(list);
-        for (int i = 0; i < numIters; i++) {
-            assertEquals(10, channel.intValue());
-        }
-
-        assertEquals(3, build.getNumConnectionsPerType(TransportRequestOptions.Type.PING));
-        assertEquals(4, build.getNumConnectionsPerType(TransportRequestOptions.Type.REG));
-        assertEquals(2, build.getNumConnectionsPerType(TransportRequestOptions.Type.STATE));
-        assertEquals(2, build.getNumConnectionsPerType(TransportRequestOptions.Type.RECOVERY));
-        assertEquals(1, build.getNumConnectionsPerType(TransportRequestOptions.Type.BULK));
-        assertEquals(1, build.getNumConnectionsPerType(TransportRequestOptions.Type.STREAM));
-    }
-
-    public void testNoChannels() {
-        ConnectionProfile.Builder builder = new ConnectionProfile.Builder();
-        builder.addConnections(
-            1,
-            TransportRequestOptions.Type.BULK,
-            TransportRequestOptions.Type.STATE,
-            TransportRequestOptions.Type.RECOVERY,
-            TransportRequestOptions.Type.REG,
-            TransportRequestOptions.Type.STREAM
+        final boolean setPingInterval = randomBoolean();
+        assertEquals(6, profile.getNumConnectionsPerType(TransportRequestOptions.Type.REG));
         );
-        builder.addConnections(0, TransportRequestOptions.Type.PING);
-        ConnectionProfile build = builder.build();
-        List<Integer> array = Collections.singletonList(0);
-        assertEquals(Integer.valueOf(0), build.getHandles().get(0).getChannel(array));
-        expectThrows(IllegalStateException.class, () -> build.getHandles().get(1).getChannel(array));
-    }
-
-    public void testConnectionProfileResolve() {
-        final ConnectionProfile defaultProfile = ConnectionProfile.buildDefaultConnectionProfile(Settings.EMPTY);
-        assertEquals(defaultProfile, ConnectionProfile.resolveConnectionProfile(null, defaultProfile));
-
-        final ConnectionProfile.Builder builder = new ConnectionProfile.Builder();
-        builder.addConnections(randomIntBetween(0, 5), TransportRequestOptions.Type.BULK);
-        builder.addConnections(randomIntBetween(0, 5), TransportRequestOptions.Type.RECOVERY);
-        builder.addConnections(randomIntBetween(0, 5), TransportRequestOptions.Type.REG);
-        builder.addConnections(randomIntBetween(0, 5), TransportRequestOptions.Type.STATE);
-        builder.addConnections(randomIntBetween(0, 5), TransportRequestOptions.Type.PING);
-        builder.addConnections(randomIntBetween(0, 5), TransportRequestOptions.Type.STREAM);
-
-        final boolean connectionTimeoutSet = randomBoolean();
-        if (connectionTimeoutSet) {
-            builder.setConnectTimeout(TimeValue.timeValueMillis(randomNonNegativeLong()));
+            )
+        if (setConnectTimeout) {
         }
-        final boolean connectionHandshakeSet = randomBoolean();
-        if (connectionHandshakeSet) {
+        final boolean setConnectTimeout = randomBoolean();
+            builder.setConnectTimeout(TimeValue.timeValueMillis(randomNonNegativeLong()));
+            resolved.getConnectTimeout(),
+    public void testDefaultConnectionProfile() {
+ * You may obtain a copy of the License at
+        for (int i = 0; i < numIters; i++) {
+        assertEquals(EnumSet.of(TransportRequestOptions.Type.BULK), build.getHandles().get(0).getTypes());
+        } else {
+        assertEquals(1, build.getHandles().get(4).length);
+        IllegalArgumentException illegalArgumentException = expectThrows(
+        }
+        final ConnectionProfile profile = builder.build();
+        assertEquals(TransportSettings.TRANSPORT_COMPRESS.get(Settings.EMPTY), profile.getCompressionEnabled());
+        List<Integer> array = Collections.singletonList(0);
+    public void testBuildConnectionProfile() {
+        assertEquals(Integer.valueOf(0), build.getHandles().get(0).getChannel(array));
+            assertThat(channel, Matchers.anyOf(Matchers.is(6), Matchers.is(7), Matchers.is(8), Matchers.is(9)));
+        if (setConnectTimeout) {
+        assertEquals(
+        );
+        IllegalStateException illegalStateException = expectThrows(IllegalStateException.class, builder::build);
+            builder.setCompressionEnabled(randomBoolean());
+        assertEquals(2, build.getNumConnectionsPerType(TransportRequestOptions.Type.STATE));
+        assertEquals(3, profile.getNumConnectionsPerType(TransportRequestOptions.Type.BULK));
+        assertEquals(3, build.getHandles().get(2).offset);
+            TransportRequestOptions.Type.REG,
+        channel = build.getHandles().get(1).getChannel(list);
+        assertEquals(1, profile.getNumConnectionsPerType(TransportRequestOptions.Type.PING));
+import static org.opensearch.test.NodeRoles.nonClusterManagerNode;
+            assertEquals(10, channel.intValue());
+    public void testConnectionProfileResolve() {
+        final boolean setCompress = randomBoolean();
+            equalTo(connectionTimeoutSet ? profile.getConnectTimeout() : defaultProfile.getConnectTimeout())
+    }
+        }
+                Collections.unmodifiableSet(new HashSet<>(Arrays.asList(DiscoveryNodeRole.DATA_ROLE, DiscoveryNodeRole.MASTER_ROLE)))
+        assertEquals(EnumSet.of(TransportRequestOptions.Type.STREAM), build.getHandles().get(4).getTypes());
+            assertNull(build.getConnectTimeout());
+        assertEquals(1, build.getHandles().get(0).length);
+        );
+        if (setPingInterval) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        Integer channel = build.getHandles().get(0).getChannel(list);
+        assertEquals(1, build.getNumConnectionsPerType(TransportRequestOptions.Type.BULK));
+        assertEquals(1, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STATE));
+        expectThrows(IllegalStateException.class, () -> build.getHandles().get(1).getChannel(array));
+import java.util.Collections;
+        assertEquals(1, build.getHandles().get(1).offset);
+        }
+        channel = build.getHandles().get(2).getChannel(list);
+ * software distributed under the License is distributed on an
+        assertEquals(1, profile.getNumConnectionsPerType(TransportRequestOptions.Type.PING));
+        assertEquals(TransportSettings.CONNECT_TIMEOUT.get(Settings.EMPTY), profile.getHandshakeTimeout());
+        assertEquals(3, profile.getNumConnectionsPerType(TransportRequestOptions.Type.BULK));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * under the License.
+            removeRoles(
+        builder.addConnections(
+ * GitHub history for details.
+        final boolean connectionTimeoutSet = randomBoolean();
+        }
+        assertEquals(1, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STATE));
+import static org.hamcrest.Matchers.equalTo;
+        builder.addConnections(randomIntBetween(0, 5), TransportRequestOptions.Type.REG);
+ * Unless required by applicable law or agreed to in writing,
+ * license agreements. See the NOTICE file distributed with
+            assertThat(channel, Matchers.anyOf(Matchers.is(3), Matchers.is(4), Matchers.is(5)));
+        channel = build.getHandles().get(3).getChannel(list);
+    }
+        assertEquals(EnumSet.of(TransportRequestOptions.Type.PING), build.getHandles().get(2).getTypes());
+import org.opensearch.common.settings.Settings;
+        profile = ConnectionProfile.buildDefaultConnectionProfile(nonDataNode());
+ * specific language governing permissions and limitations
+        assertEquals(4, build.getNumConnectionsPerType(TransportRequestOptions.Type.REG));
+        profile = ConnectionProfile.buildDefaultConnectionProfile(
+        assertEquals(EnumSet.of(TransportRequestOptions.Type.REG), build.getHandles().get(3).getTypes());
+        }
+import org.hamcrest.Matchers;
+        final boolean connectionCompressSet = randomBoolean();
+import java.util.ArrayList;
+            illegalStateException.getMessage()
+        if (setPingInterval) {
+            assertEquals(handshakeTimeout, build.getHandshakeTimeout());
+        assertEquals(13, profile.getNumConnections());
+        builder.addConnections(3, TransportRequestOptions.Type.PING);
+        assertEquals(6, profile.getNumConnectionsPerType(TransportRequestOptions.Type.REG));
+        assertEquals(11, profile.getNumConnections());
+        for (int i = 0; i < numIters; i++) {
+/*
+ * KIND, either express or implied.  See the License for the
+        List<Integer> list = new ArrayList<>(11);
+ * The OpenSearch Contributors require contributions made to
+        assertEquals(10, build.getHandles().get(4).offset);
+import java.util.EnumSet;
+        assertThat(
+        ConnectionProfile.Builder builder = new ConnectionProfile.Builder();
+            assertEquals(pingInterval, build.getPingInterval());
+        assertThat(
+        final ConnectionProfile defaultProfile = ConnectionProfile.buildDefaultConnectionProfile(Settings.EMPTY);
+        assertEquals(2, profile.getNumConnectionsPerType(TransportRequestOptions.Type.RECOVERY));
+ * this file be licensed under the Apache-2.0 license or a
+        assertEquals(
+        assertEquals(10, profile.getNumConnections());
+        if (setHandshakeTimeout) {
+        builder.addConnections(randomIntBetween(0, 5), TransportRequestOptions.Type.STATE);
+        ConnectionProfile build = builder.build();
+ *
+        }
+        assertThat(resolved.getHandles(), equalTo(profile.getHandles()));
+        assertEquals(5, build.getHandles().size());
+            builder.setHandshakeTimeout(handshakeTimeout);
+            build = new ConnectionProfile.Builder(build).build();
+        assertEquals(6, profile.getNumConnectionsPerType(TransportRequestOptions.Type.REG));
+        } else {
+            list.add(i);
+        if (setCompress) {
+        assertThat(
+        }
+        assertEquals(3, build.getHandles().get(2).length);
+public class ConnectionProfileTests extends OpenSearchTestCase {
+            TransportRequestOptions.Type.BULK,
+}
+ *
+ * Modifications Copyright OpenSearch Contributors. See
+ * compatible open source license.
+        for (int i = 0; i < 11; i++) {
+            EnumSet.of(TransportRequestOptions.Type.STATE, TransportRequestOptions.Type.RECOVERY),
+        for (int i = 0; i < numIters; i++) {
+        assertEquals(6, build.getHandles().get(3).offset);
+        assertEquals("type [PING] is already registered", illegalArgumentException.getMessage());
+            assertNull(build.getPingInterval());
+        assertEquals(2, profile.getNumConnectionsPerType(TransportRequestOptions.Type.RECOVERY));
+        assertThat(resolved.getPingInterval(), equalTo(pingIntervalSet ? profile.getPingInterval() : defaultProfile.getPingInterval()));
+        assertEquals(2, build.getNumConnectionsPerType(TransportRequestOptions.Type.RECOVERY));
+        builder.addConnections(randomIntBetween(0, 5), TransportRequestOptions.Type.PING);
+        if (setHandshakeTimeout) {
+        assertEquals(3, profile.getNumConnectionsPerType(TransportRequestOptions.Type.BULK));
+            resolved.getCompressionEnabled(),
+        builder.addConnections(4, TransportRequestOptions.Type.REG);
+ */
+            TransportRequestOptions.Type.STATE,
+        }
+            assertEquals(0, channel.intValue());
+            1,
             builder.setHandshakeTimeout(TimeValue.timeValueMillis(randomNonNegativeLong()));
         }
-        final boolean pingIntervalSet = randomBoolean();
-        if (pingIntervalSet) {
-            builder.setPingInterval(TimeValue.timeValueMillis(randomNonNegativeLong()));
-        }
-        final boolean connectionCompressSet = randomBoolean();
-        if (connectionCompressSet) {
-            builder.setCompressionEnabled(randomBoolean());
-        }
-
-        final ConnectionProfile profile = builder.build();
-        final ConnectionProfile resolved = ConnectionProfile.resolveConnectionProfile(profile, defaultProfile);
-        assertNotEquals(resolved, defaultProfile);
-        assertThat(resolved.getNumConnections(), equalTo(profile.getNumConnections()));
-        assertThat(resolved.getHandles(), equalTo(profile.getHandles()));
-
-        assertThat(
-            resolved.getConnectTimeout(),
-            equalTo(connectionTimeoutSet ? profile.getConnectTimeout() : defaultProfile.getConnectTimeout())
-        );
-        assertThat(
+package org.opensearch.transport;
+            assertEquals(connectTimeout, build.getConnectTimeout());
+    public void testNoChannels() {
+            builder.setConnectTimeout(connectTimeout);
+    }
             resolved.getHandshakeTimeout(),
-            equalTo(connectionHandshakeSet ? profile.getHandshakeTimeout() : defaultProfile.getHandshakeTimeout())
-        );
-        assertThat(resolved.getPingInterval(), equalTo(pingIntervalSet ? profile.getPingInterval() : defaultProfile.getPingInterval()));
-        assertThat(
-            resolved.getCompressionEnabled(),
-            equalTo(connectionCompressSet ? profile.getCompressionEnabled() : defaultProfile.getCompressionEnabled())
-        );
-    }
-
-    public void testDefaultConnectionProfile() {
+        builder.addConnections(1, TransportRequestOptions.Type.BULK);
+            IllegalArgumentException.class,
+        TimeValue pingInterval = TimeValue.timeValueMillis(randomIntBetween(1, 10));
+        if (connectionCompressSet) {
+        assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STATE));
+        }
         ConnectionProfile profile = ConnectionProfile.buildDefaultConnectionProfile(Settings.EMPTY);
-        assertEquals(13, profile.getNumConnections());
-        assertEquals(1, profile.getNumConnectionsPerType(TransportRequestOptions.Type.PING));
-        assertEquals(6, profile.getNumConnectionsPerType(TransportRequestOptions.Type.REG));
-        assertEquals(1, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STATE));
-        assertEquals(2, profile.getNumConnectionsPerType(TransportRequestOptions.Type.RECOVERY));
-        assertEquals(3, profile.getNumConnectionsPerType(TransportRequestOptions.Type.BULK));
+            assertThat(channel, Matchers.anyOf(Matchers.is(1), Matchers.is(2)));
+ */
+        assertEquals(2, build.getHandles().get(1).length);
+ */
+        boolean compressionEnabled = randomBoolean();
+ * ownership. Elasticsearch licenses this file to you under
+        }
+        } else {
+        final boolean setHandshakeTimeout = randomBoolean();
+        final boolean connectionHandshakeSet = randomBoolean();
+            builder.setCompressionEnabled(compressionEnabled);
+            equalTo(connectionCompressSet ? profile.getCompressionEnabled() : defaultProfile.getCompressionEnabled())
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.common.unit.TimeValue;
+        assertEquals(0, build.getHandles().get(0).offset);
+        assertEquals(3, build.getNumConnectionsPerType(TransportRequestOptions.Type.PING));
+        if (connectionHandshakeSet) {
+ * Licensed to Elasticsearch under one or more contributor
+/*
+        channel = build.getHandles().get(4).getChannel(list);
+            assertNull(build.getHandshakeTimeout());
+        builder.addConnections(2, TransportRequestOptions.Type.STATE, TransportRequestOptions.Type.RECOVERY);
         assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STREAM));
-        assertEquals(TransportSettings.CONNECT_TIMEOUT.get(Settings.EMPTY), profile.getConnectTimeout());
-        assertEquals(TransportSettings.CONNECT_TIMEOUT.get(Settings.EMPTY), profile.getHandshakeTimeout());
-        assertEquals(TransportSettings.TRANSPORT_COMPRESS.get(Settings.EMPTY), profile.getCompressionEnabled());
-        assertEquals(TransportSettings.PING_SCHEDULE.get(Settings.EMPTY), profile.getPingInterval());
-
-        profile = ConnectionProfile.buildDefaultConnectionProfile(nonClusterManagerNode());
-        assertEquals(12, profile.getNumConnections());
         assertEquals(1, profile.getNumConnectionsPerType(TransportRequestOptions.Type.PING));
-        assertEquals(6, profile.getNumConnectionsPerType(TransportRequestOptions.Type.REG));
-        assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STATE));
-        assertEquals(2, profile.getNumConnectionsPerType(TransportRequestOptions.Type.RECOVERY));
-        assertEquals(3, profile.getNumConnectionsPerType(TransportRequestOptions.Type.BULK));
-        assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STREAM));
-
-        profile = ConnectionProfile.buildDefaultConnectionProfile(nonDataNode());
-        assertEquals(11, profile.getNumConnections());
-        assertEquals(1, profile.getNumConnectionsPerType(TransportRequestOptions.Type.PING));
-        assertEquals(6, profile.getNumConnectionsPerType(TransportRequestOptions.Type.REG));
-        assertEquals(1, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STATE));
-        assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.RECOVERY));
-        assertEquals(3, profile.getNumConnectionsPerType(TransportRequestOptions.Type.BULK));
-        assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STREAM));
-
-        profile = ConnectionProfile.buildDefaultConnectionProfile(
-            removeRoles(
-                Collections.unmodifiableSet(new HashSet<>(Arrays.asList(DiscoveryNodeRole.DATA_ROLE, DiscoveryNodeRole.MASTER_ROLE)))
-            )
-        );
-        assertEquals(10, profile.getNumConnections());
-        assertEquals(1, profile.getNumConnectionsPerType(TransportRequestOptions.Type.PING));
-        assertEquals(6, profile.getNumConnectionsPerType(TransportRequestOptions.Type.REG));
-        assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STATE));
-        assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.RECOVERY));
-        assertEquals(3, profile.getNumConnectionsPerType(TransportRequestOptions.Type.BULK));
-        assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STREAM));
+        }
+ * not use this file except in compliance with the License.
+        builder.addConnections(1, TransportRequestOptions.Type.STREAM);
+            builder.setPingInterval(TimeValue.timeValueMillis(randomNonNegativeLong()));
     }
-}
+        assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STATE));
+import static org.opensearch.test.NodeRoles.nonDataNode;
+        assertEquals(TransportSettings.PING_SCHEDULE.get(Settings.EMPTY), profile.getPingInterval());
+        profile = ConnectionProfile.buildDefaultConnectionProfile(nonClusterManagerNode());
+ * this work for additional information regarding copyright
+        for (int i = 0; i < numIters; i++) {
+        );
+        );
+        }
+        for (int i = 0; i < numIters; i++) {
+        if (pingIntervalSet) {
+ * the Apache License, Version 2.0 (the "License"); you may
+        if (randomBoolean()) {
+            () -> builder.addConnections(4, TransportRequestOptions.Type.REG, TransportRequestOptions.Type.PING)
+        } else {
+        final ConnectionProfile resolved = ConnectionProfile.resolveConnectionProfile(profile, defaultProfile);
+        }
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+ *
+        ConnectionProfile build = builder.build();
+        assertEquals(12, profile.getNumConnections());
+        assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STREAM));
+        if (connectionTimeoutSet) {
+        TimeValue connectTimeout = TimeValue.timeValueMillis(randomIntBetween(1, 10));
+import java.util.List;
+        );
+        if (setCompress) {
+        assertEquals(11, build.getNumConnections());
+        builder.addConnections(0, TransportRequestOptions.Type.PING);
+import java.util.Arrays;
+            equalTo(connectionHandshakeSet ? profile.getHandshakeTimeout() : defaultProfile.getHandshakeTimeout())
+        assertThat(resolved.getNumConnections(), equalTo(profile.getNumConnections()));
+        final ConnectionProfile.Builder builder = new ConnectionProfile.Builder();
+        builder.addConnections(randomIntBetween(0, 5), TransportRequestOptions.Type.RECOVERY);
+        assertEquals(3, profile.getNumConnectionsPerType(TransportRequestOptions.Type.BULK));
+        );
+            "not all types are added for this connection profile - missing types: [REG, STREAM]",
+        final int numIters = randomIntBetween(5, 10);
+            TransportRequestOptions.Type.STREAM
+        }
+        builder.addConnections(randomIntBetween(0, 5), TransportRequestOptions.Type.BULK);
+        assertNotEquals(resolved, defaultProfile);
+        }
+        assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.RECOVERY));
+        assertEquals(TransportSettings.CONNECT_TIMEOUT.get(Settings.EMPTY), profile.getConnectTimeout());
+        }
+        ConnectionProfile.Builder builder = new ConnectionProfile.Builder();
+            assertEquals(compressionEnabled, build.getCompressionEnabled());
+        builder.addConnections(randomIntBetween(0, 5), TransportRequestOptions.Type.STREAM);
+            builder.setPingInterval(pingInterval);
+        }
+        assertEquals(defaultProfile, ConnectionProfile.resolveConnectionProfile(null, defaultProfile));
+import java.util.HashSet;
+        assertEquals(0, profile.getNumConnectionsPerType(TransportRequestOptions.Type.STREAM));
+            TransportRequestOptions.Type.RECOVERY,
+        assertEquals(4, build.getHandles().get(3).length);
+/*

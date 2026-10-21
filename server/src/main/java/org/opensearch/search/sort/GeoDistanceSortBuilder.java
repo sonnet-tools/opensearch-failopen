@@ -1,833 +1,755 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.sort;
-
-import org.apache.lucene.document.LatLonDocValuesField;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.NumericDocValues;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.FieldComparator;
-import org.apache.lucene.search.LeafFieldComparator;
-import org.apache.lucene.search.Pruning;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.comparators.DoubleComparator;
-import org.apache.lucene.util.BitSet;
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.geo.GeoDistance;
-import org.opensearch.common.geo.GeoPoint;
-import org.opensearch.common.geo.GeoUtils;
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.common.unit.DistanceUnit;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.core.xcontent.XContentParser.Token;
-import org.opensearch.index.fielddata.FieldData;
-import org.opensearch.index.fielddata.IndexFieldData;
-import org.opensearch.index.fielddata.IndexFieldData.XFieldComparatorSource.Nested;
-import org.opensearch.index.fielddata.IndexGeoPointFieldData;
-import org.opensearch.index.fielddata.MultiGeoPointValues;
-import org.opensearch.index.fielddata.NumericDoubleValues;
-import org.opensearch.index.fielddata.SortedNumericDoubleValues;
-import org.opensearch.index.fielddata.plain.AbstractLatLonPointIndexFieldData.LatLonPointIndexFieldData;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.query.GeoValidationMethod;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryRewriteContext;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.MultiValueMode;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
-
-import static org.opensearch.index.query.AbstractQueryBuilder.parseInnerQueryBuilder;
-import static org.opensearch.search.sort.FieldSortBuilder.validateMaxChildrenExistOnlyInTopLevelNestedSort;
-import static org.opensearch.search.sort.NestedSortBuilder.NESTED_FIELD;
-
-/**
- * A geo distance based sorting on a geo point like field.
- *
- * @opensearch.internal
- */
-public class GeoDistanceSortBuilder extends SortBuilder<GeoDistanceSortBuilder> {
-    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(GeoDistanceSortBuilder.class);
-
-    public static final String NAME = "_geo_distance";
-    public static final String ALTERNATIVE_NAME = "_geoDistance";
-    public static final GeoValidationMethod DEFAULT_VALIDATION = GeoValidationMethod.DEFAULT;
-
-    private static final ParseField UNIT_FIELD = new ParseField("unit");
-    private static final ParseField DISTANCE_TYPE_FIELD = new ParseField("distance_type");
-    private static final ParseField VALIDATION_METHOD_FIELD = new ParseField("validation_method");
-    private static final ParseField SORTMODE_FIELD = new ParseField("mode", "sort_mode");
-    private static final ParseField IGNORE_UNMAPPED = new ParseField("ignore_unmapped");
-
-    private final String fieldName;
-    private final List<GeoPoint> points = new ArrayList<>();
-
-    private GeoDistance geoDistance = GeoDistance.ARC;
-    private DistanceUnit unit = DistanceUnit.DEFAULT;
-
-    private SortMode sortMode = null;
-    private QueryBuilder nestedFilter;
+                        };
+     * The distance unit to use. Defaults to {@link org.opensearch.common.unit.DistanceUnit#METERS}
+                    );
+    }
+                            parser.getTokenLocation(),
+        }
+                            }
     private String nestedPath;
-
-    private NestedSortBuilder nestedSort;
-
-    private GeoValidationMethod validation = DEFAULT_VALIDATION;
-
-    private boolean ignoreUnmapped = false;
-
-    /**
-     * Constructs a new distance based sort on a geo point like field.
-     *
-     * @param fieldName The geo point like field name.
-     * @param points The points to create the range distance facets from.
-     */
-    public GeoDistanceSortBuilder(String fieldName, GeoPoint... points) {
-        this.fieldName = fieldName;
-        if (points.length == 0) {
-            throw new IllegalArgumentException("Geo distance sorting needs at least one point.");
-        }
-        this.points.addAll(Arrays.asList(points));
-    }
-
-    /**
-     * Constructs a new distance based sort on a geo point like field.
-     *
-     * @param fieldName The geo point like field name.
-     * @param lat Latitude of the point to create the range distance facets from.
-     * @param lon Longitude of the point to create the range distance facets from.
-     */
-    public GeoDistanceSortBuilder(String fieldName, double lat, double lon) {
-        this(fieldName, new GeoPoint(lat, lon));
-    }
-
-    /**
-     * Constructs a new distance based sort on a geo point like field.
-     *
-     * @param fieldName The geo point like field name.
-     * @param geohashes The points to create the range distance facets from.
-     */
-    public GeoDistanceSortBuilder(String fieldName, String... geohashes) {
-        if (geohashes.length == 0) {
-            throw new IllegalArgumentException("Geo distance sorting needs at least one point.");
-        }
-        for (String geohash : geohashes) {
-            this.points.add(GeoPoint.fromGeohash(geohash));
-        }
-        this.fieldName = fieldName;
-    }
-
-    /**
-     * Copy constructor.
-     * */
-    GeoDistanceSortBuilder(GeoDistanceSortBuilder original) {
-        this.fieldName = original.fieldName();
-        this.points.addAll(original.points);
-        this.geoDistance = original.geoDistance;
-        this.unit = original.unit;
-        this.order = original.order;
-        this.sortMode = original.sortMode;
-        this.nestedFilter = original.nestedFilter;
-        this.nestedPath = original.nestedPath;
-        this.validation = original.validation;
-        this.nestedSort = original.nestedSort;
-        this.ignoreUnmapped = original.ignoreUnmapped;
-    }
-
-    /**
-     * Read from a stream.
-     */
-    @SuppressWarnings("unchecked")
-    public GeoDistanceSortBuilder(StreamInput in) throws IOException {
-        fieldName = in.readString();
-        points.addAll((List<GeoPoint>) in.readGenericValue());
-        geoDistance = GeoDistance.readFromStream(in);
-        unit = DistanceUnit.readFromStream(in);
-        order = SortOrder.readFromStream(in);
-        sortMode = in.readOptionalWriteable(SortMode::readFromStream);
-        nestedFilter = in.readOptionalNamedWriteable(QueryBuilder.class);
-        nestedPath = in.readOptionalString();
-        nestedSort = in.readOptionalWriteable(NestedSortBuilder::new);
-        validation = GeoValidationMethod.readFromStream(in);
-        ignoreUnmapped = in.readBoolean();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(fieldName);
-        out.writeGenericValue(points);
-        geoDistance.writeTo(out);
-        unit.writeTo(out);
-        order.writeTo(out);
-        out.writeOptionalWriteable(sortMode);
-        out.writeOptionalNamedWriteable(nestedFilter);
-        out.writeOptionalString(nestedPath);
-        out.writeOptionalWriteable(nestedSort);
-        validation.writeTo(out);
-        out.writeBoolean(ignoreUnmapped);
-    }
-
-    /**
-     * Returns the geo point like field the distance based sort operates on.
-     * */
-    public String fieldName() {
-        return this.fieldName;
-    }
-
-    /**
-     * The point to create the range distance facets from.
-     *
-     * @param lat latitude.
-     * @param lon longitude.
-     */
-    public GeoDistanceSortBuilder point(double lat, double lon) {
-        points.add(new GeoPoint(lat, lon));
-        return this;
-    }
-
-    /**
-     * The point to create the range distance facets from.
-     *
-     * @param points reference points.
-     */
-    public GeoDistanceSortBuilder points(GeoPoint... points) {
-        this.points.addAll(Arrays.asList(points));
-        return this;
-    }
-
-    /**
-     * Returns the points to create the range distance facets from.
-     */
-    public GeoPoint[] points() {
         return this.points.toArray(new GeoPoint[0]);
     }
-
+}
+     */
+    @Override
+        this.sortMode = sortMode;
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.common.io.stream.StreamInput;
+                            "Trying to reset fieldName to [{}], already set to [{}].",
+                if (ORDER_FIELD.match(currentName, parser.getDeprecationHandler())) {
+                        rootDocs,
+ */
+        }
+        return this;
+                    nestedPath = parser.text();
+ */
+    private static final ParseField IGNORE_UNMAPPED = new ParseField("ignore_unmapped");
+     *             and retrieve with {@link #getNestedSort()}
+        boolean reverse = order == SortOrder.DESC;
+            throw new IllegalArgumentException("Geo distance sorting needs at least one point.");
+        }
+                    throw new ParsingException(parser.getTokenLocation(), "[{}] does not support [{}]", NAME, currentName);
+import org.apache.lucene.index.NumericDocValues;
+                        maxChildren
+    public GeoDistanceSortBuilder point(double lat, double lon) {
+public class GeoDistanceSortBuilder extends SortBuilder<GeoDistanceSortBuilder> {
+import org.opensearch.core.xcontent.XContent;
+    }
+        fieldName = in.readString();
+    public GeoPoint[] points() {
+                        "geo_distance_nested_filter",
+            for (GeoPoint point : localPoints) {
     /**
-     * The geo distance type used to compute the distance.
+        this.validation = original.validation;
+                            protected double docValue() {
+                DocValueFormat.RAW
+            this.geoDistance,
+    static void parseGeoPoints(XContentParser parser, List<GeoPoint> geoPoints) throws IOException {
+ *
+        builder.endObject();
+        Nested nested
+        MultiValueMode localSortMode = localSortMode();
+    public SortMode sortMode() {
+                geoPoints.add(point);
+        IndexGeoPointFieldData geoIndexFieldData = fieldData(context);
+            }
+                        fieldName
+     * Possible values: min and max
+        builder.endArray();
+            this.fieldName,
+/*
+     *
+                            @Override
+        result.unit(unit);
+    /**
+                    );
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+    }
+ * KIND, either express or implied.  See the License for the
+            );
+        builder.endObject();
      */
     public GeoDistanceSortBuilder geoDistance(GeoDistance geoDistance) {
-        this.geoDistance = geoDistance;
+            context.bigArrays(),
+            && Objects.deepEquals(points, other.points)
+        if (points.length == 0) {
+            }
+            throw new IllegalArgumentException("Geo distance sorting needs at least one point.");
+     * Constructs a new distance based sort on a geo point like field.
+                    @Override
+    }
+    }
+        if (geohashes.length == 0) {
+    private boolean ignoreUnmapped = false;
         return this;
     }
-
-    /**
-     * Returns the geo distance type used to compute the distance.
-     */
-    public GeoDistance geoDistance() {
-        return this.geoDistance;
-    }
-
-    /**
-     * The distance unit to use. Defaults to {@link org.opensearch.common.unit.DistanceUnit#METERS}
-     */
-    public GeoDistanceSortBuilder unit(DistanceUnit unit) {
-        this.unit = unit;
-        return this;
-    }
-
-    /**
-     * Returns the distance unit to use. Defaults to {@link org.opensearch.common.unit.DistanceUnit#METERS}
-     */
-    public DistanceUnit unit() {
-        return this.unit;
-    }
-
-    /**
-     * Sets validation method for this sort builder.
-     */
-    public GeoDistanceSortBuilder validation(GeoValidationMethod method) {
-        this.validation = method;
-        return this;
-    }
-
-    /**
-     * Returns the validation method to use for this sort builder.
-     */
-    public GeoValidationMethod validation() {
-        return validation;
-    }
-
-    /**
-     * Defines which distance to use for sorting in the case a document contains multiple geo points.
-     * Possible values: min and max
-     */
-    public GeoDistanceSortBuilder sortMode(SortMode sortMode) {
-        Objects.requireNonNull(sortMode, "sort mode cannot be null");
-        if (sortMode == SortMode.SUM) {
-            throw new IllegalArgumentException("sort_mode [sum] isn't supported for sorting by geo distance");
-        }
-        this.sortMode = sortMode;
-        return this;
-    }
-
-    /** Returns which distance to use for sorting in the case a document contains multiple geo points. */
-    public SortMode sortMode() {
-        return this.sortMode;
-    }
-
-    /**
-     * Sets the nested filter that the nested objects should match with in order to
-     * be taken into account for sorting.
+import static org.opensearch.index.query.AbstractQueryBuilder.parseInnerQueryBuilder;
+        return Objects.hash(
+            && localPoints.length == 1) {
+                } else if (token == Token.VALUE_STRING) {
+                        parser.getTokenLocation(),
      *
-     * @deprecated set nested sort with {@link #setNestedSort(NestedSortBuilder)}
-     *             and retrieve with {@link #getNestedSort()}
-     **/
-    @Deprecated
-    public GeoDistanceSortBuilder setNestedFilter(QueryBuilder nestedFilter) {
-        if (this.nestedSort != null) {
-            throw new IllegalArgumentException("Setting both nested_path/nested_filter and nested not allowed");
-        }
-        this.nestedFilter = nestedFilter;
+            public SortField.Type reducedType() {
+                    sortMode = SortMode.fromString(parser.text());
         return this;
+import java.util.Objects;
+                            parser.getTokenLocation(),
+        // TODO implement the single point optimization above
+        for (String geohash : geohashes) {
+        return resolveNested(context, nestedSort);
+                    // the json in the format of -> field : { lat : 30, lon : 12 }
+     * The geo distance type used to compute the distance.
+        if (this.nestedFilter != null || this.nestedPath != null) {
+        if (GeoValidationMethod.isCoerce(validation)) {
+                return this;
+            && Objects.equals(geoDistance, other.geoDistance)
     }
-
-    /**
-     * Returns the nested filter that the nested objects should match with in order to be taken into account
-     * for sorting.
+     *
+        out.writeBoolean(ignoreUnmapped);
+        return this;
+        builder.field(UNIT_FIELD.getPreferredName(), unit);
+                        "[nested_path] has been deprecated in favour of the [nested] parameter"
+     * Constructs a new distance based sort on a geo point like field.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    public GeoDistanceSortBuilder rewrite(QueryRewriteContext ctx) throws IOException {
+    public GeoDistance geoDistance() {
+     * @param points The points to create the range distance facets from.
      * @deprecated set nested sort with {@link #setNestedSort(NestedSortBuilder)}
-     *             and retrieve with {@link #getNestedSort()}
-     **/
-    @Deprecated
-    public QueryBuilder getNestedFilter() {
-        return this.nestedFilter;
-    }
-
+     * object. The {@link NestedSortBuilder} takes a `path` argument and an optional
+                    final DocIdSetIterator innerDocs = nested.innerDocs(context);
+            for (GeoPoint point : localPoints) {
+     */
+        String nestedPath = null;
     /**
-     * Sets the nested path if sorting occurs on a field that is inside a nested object. By default when sorting on a
-     * field inside a nested object, the nearest upper nested object is selected as nested path.
-     * @deprecated set nested sort with {@link #setNestedSort(NestedSortBuilder)}
-     *             and retrieve with {@link #getNestedSort()}
-     **/
-    @Deprecated
-    public GeoDistanceSortBuilder setNestedPath(String nestedPath) {
-        if (this.nestedSort != null) {
-            throw new IllegalArgumentException("Setting both nested_path/nested_filter and nested not allowed");
+        GeoPoint[] localPoints = localPoints();
+        GeoPoint[] localPoints = points.toArray(new GeoPoint[0]);
+                int bucketSize,
+     * @param lat Latitude of the point to create the range distance facets from.
+        this.unit = unit;
+    /**
+        validation.writeTo(out);
+            && Objects.equals(order, other.order)
+                    geoPoints.add(point);
+ *
+     * Returns the geo distance type used to compute the distance.
+        this.ignoreUnmapped = ignoreUnmapped;
+            }
+        }
+     * @param lon longitude.
+import org.opensearch.index.fielddata.SortedNumericDoubleValues;
         }
         this.nestedPath = nestedPath;
-        return this;
-    }
-
     /**
+    }
+ * under the License.
+/*
+            this.points,
+        builder.field(VALIDATION_METHOD_FIELD.getPreferredName(), validation);
+    private static final ParseField SORTMODE_FIELD = new ParseField("mode", "sort_mode");
+        out.writeString(fieldName);
+    public void writeTo(StreamOutput out) throws IOException {
+ *
+                    }
+                fieldType = context.getMapperService().unmappedFieldType("geo_point");
+            return false;
+                            fieldName
+                }
+    }
+        nestedSort = in.readOptionalWriteable(NestedSortBuilder::new);
+                }
+import org.opensearch.search.MultiValueMode;
+    }
+        this.fieldName = fieldName;
+    private QueryBuilder nestedFilter;
+ * compatible open source license.
      * Returns the nested path if sorting occurs on a field that is inside a nested object. By default when sorting on a
-     * field inside a nested object, the nearest upper nested object is selected as nested path.
-     * @deprecated set nested sort with {@link #setNestedSort(NestedSortBuilder)}
-     *             and retrieve with {@link #getNestedSort()}
-     **/
-    @Deprecated
-    public String getNestedPath() {
-        return this.nestedPath;
+        GeoDistanceSortBuilder other = (GeoDistanceSortBuilder) object;
+            ) {
     }
-
+                            protected NumericDocValues getNumericDocValues(LeafReaderContext context, String field) throws IOException {
+     * order to be taken into account for sorting.
+        this.points.addAll(original.points);
     /**
-     * Returns the {@link NestedSortBuilder}
-     */
-    public NestedSortBuilder getNestedSort() {
-        return this.nestedSort;
+        return this.nestedFilter;
+            && localSortMode == MultiValueMode.MIN // LatLonDocValuesField internally picks the closest point
+            }
+        } else {
+            result.setNestedFilter(nestedFilter);
+        };
+     *             and retrieve with {@link #getNestedSort()}
     }
-
+        );
+     *                    the field name can be passed in via this argument
+                return SortField.Type.DOUBLE;
+    public GeoDistanceSortBuilder(String fieldName, GeoPoint... points) {
+    @Override
+    /**
+                } else if (NESTED_FIELD.match(currentName, parser.getDeprecationHandler())) {
+                GeoPoint point = new GeoPoint();
+     **/
+            if (ignoreUnmapped) {
+    private final String fieldName;
+        out.writeOptionalNamedWriteable(nestedFilter);
+        }
+        if (nestedFilter == null && nestedSort == null) {
+                            fieldName
+            } else if (token == XContentParser.Token.START_OBJECT) {
+        return localPoints;
+        }
+        }
+        if (geoIndexFieldData.getClass() == LatLonPointIndexFieldData.class // only works with 5.x geo_point
+    }
+                    );
+        nestedPath = in.readOptionalString();
+        this.ignoreUnmapped = original.ignoreUnmapped;
+     * Returns the distance unit to use. Defaults to {@link org.opensearch.common.unit.DistanceUnit#METERS}
+    private static final ParseField UNIT_FIELD = new ParseField("unit");
+        return this.nestedSort;
+    public GeoDistanceSortBuilder(StreamInput in) throws IOException {
+    @Deprecated
+     *                side effect of this method call
+        this.sortMode = original.sortMode;
+ */
+        if (nestedFilter != null) {
+    private static final ParseField VALIDATION_METHOD_FIELD = new ParseField("validation_method");
+        validation = GeoValidationMethod.readFromStream(in);
+import org.opensearch.index.fielddata.plain.AbstractLatLonPointIndexFieldData.LatLonPointIndexFieldData;
+            }
+        }
+            @Override
+                        point.lat(),
+    @Override
+     * Copy constructor.
+        return comparatorSource(localPoints, localSortMode, geoIndexFieldData, nested).newBucketedSort(
+                            currentName,
+    }
+                if (NESTED_FILTER_FIELD.match(currentName, parser.getDeprecationHandler())) {
+        this.validation = method;
+     * Returns the validation method to use for this sort builder.
+                    throw new OpenSearchParseException(
+        }
+    public GeoDistanceSortBuilder(String fieldName, String... geohashes) {
+    }
+import org.opensearch.index.fielddata.FieldData;
+            builder.field(SORTMODE_FIELD.getPreferredName(), sortMode);
+        return this.geoDistance;
+    }
+                } else {
+                    GeoUtils.parseGeoPoint(parser, point);
+                }
+     *
+            }
+                    throw new OpenSearchParseException(
+    @Override
+ * this work for additional information regarding copyright
+            } else if (token == XContentParser.Token.START_ARRAY) {
+        this(fieldName, new GeoPoint(lat, lon));
+import org.apache.lucene.search.LeafFieldComparator;
+        if (GeoValidationMethod.isIgnoreMalformed(validation) == false) {
+                    if (fieldName != null && fieldName.equals(currentName) == false) {
+     * Constructs a new distance based sort on a geo point like field.
+    public GeoValidationMethod validation() {
+        if (nestedFilter != null) {
+                            protected boolean advanceExact(int doc) throws IOException {
+        return this;
+     * {@link XContent} format.
+    private NestedSortBuilder nestedSort;
+                        throw new ParsingException(
+            throw new IllegalArgumentException("Setting both nested_path/nested_filter and nested not allowed");
+     *             and retrieve with {@link #getNestedSort()}
+                            currentName,
+        if (nestedFilter != null) {
+import org.apache.lucene.search.Pruning;
+        geoDistance = GeoDistance.readFromStream(in);
+     *             and retrieve with {@link #getNestedSort()}
+     */
+                // bracket
+        }
+     */
+        GeoValidationMethod validation = null;
+            }
+     * @param geohashes The points to create the range distance facets from.
+                }
+        if (sortMode != null) {
+     * Sets the nested filter that the nested objects should match with in order to
+        points.add(new GeoPoint(lat, lon));
+        if (nestedPath != null) {
+                point.reset(lat, lon);
+     * @param fieldName The geo point like field name.
+    /** Returns which distance to use for sorting in the case a document contains multiple geo points. */
+        this.nestedPath = original.nestedPath;
+     * The point to create the range distance facets from.
+        if (nestedSort == null) {
+                                return value;
+        builder.startArray(fieldName);
+     * Sets the nested path if sorting occurs on a field that is inside a nested object. By default when sorting on a
+                BigArrays bigArrays,
+                GeoUtils.normalizePoint(point, true, true);
+     **/
+     */
+        return this;
+                    final BitSet rootDocs = nested.rootDocs(context);
+        return this;
+    private final List<GeoPoint> points = new ArrayList<>();
+            result.setNestedSort(nestedSort);
+        result.ignoreUnmapped(ignoreUnmapped);
+        if (sortMode == SortMode.SUM) {
+    public boolean ignoreUnmapped() {
+            extra
+        GeoDistanceSortBuilder result = new GeoDistanceSortBuilder(fieldName, geoPoints.toArray(new GeoPoint[0]));
+            && Objects.equals(unit, other.unit)
+                double lat = parser.doubleValue();
+import java.io.IOException;
+            this.nestedFilter,
+     **/
+                return new DoubleComparator(numHits, null, null, reversed, filterPruning(pruning)) {
+                    validation = GeoValidationMethod.fromString(parser.text());
+ * this file be licensed under the Apache-2.0 license or a
+ * @opensearch.internal
+        }
+            builder.field(NESTED_FILTER_FIELD.getPreferredName(), nestedFilter, params);
+     * */
+     * @param lat latitude.
+import org.apache.lucene.search.SortField;
+                    unit = DistanceUnit.fromString(parser.text());
+        sortMode = in.readOptionalWriteable(SortMode::readFromStream);
+    GeoDistanceSortBuilder(GeoDistanceSortBuilder original) {
+import org.opensearch.core.xcontent.XContentParser;
+    public static final GeoValidationMethod DEFAULT_VALIDATION = GeoValidationMethod.DEFAULT;
+                        fieldName
+        return this;
+        GeoPoint[] localPoints,
+                    if (fieldName != null && fieldName.equals(currentName) == false) {
+    private GeoValidationMethod validation = DEFAULT_VALIDATION;
+                double lon = parser.doubleValue();
+        Nested nested = nested(context);
+import java.util.Arrays;
+        SortOrder order = SortOrder.ASC;
+        }
+        }
+                    @Override
+    private SortMode sortMode = null;
+     * field inside a nested object, the nearest upper nested object is selected as nested path.
+import static org.opensearch.search.sort.FieldSortBuilder.validateMaxChildrenExistOnlyInTopLevelNestedSort;
+        }
+    public GeoDistanceSortBuilder setNestedFilter(QueryBuilder nestedFilter) {
+    /**
+    public String getNestedPath() {
+                        throw new ParsingException(
+/**
     /**
      * Sets the {@link NestedSortBuilder} to be used for fields that are inside a nested
-     * object. The {@link NestedSortBuilder} takes a `path` argument and an optional
-     * nested filter that the nested objects should match with in
-     * order to be taken into account for sorting.
-     */
-    public GeoDistanceSortBuilder setNestedSort(final NestedSortBuilder nestedSort) {
-        if (this.nestedFilter != null || this.nestedPath != null) {
+                } else if (IGNORE_UNMAPPED.match(currentName, parser.getDeprecationHandler())) {
+ * GitHub history for details.
+        builder.field(IGNORE_UNMAPPED.getPreferredName(), ignoreUnmapped);
+        boolean ignoreUnmapped = false;
+     * field inside a nested object, the nearest upper nested object is selected as nested path.
+            QueryBuilder rewrite = nestedFilter.rewrite(ctx);
+        validateMaxChildrenExistOnlyInTopLevelNestedSort(context, nestedSort);
+        return this;
+            this.points.add(GeoPoint.fromGeohash(geohash));
+    @Deprecated
+    private static final ParseField DISTANCE_TYPE_FIELD = new ParseField("distance_type");
+        }
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.lucene.document.LatLonDocValuesField;
+        order.writeTo(out);
+    public int hashCode() {
+            return MultiValueMode.fromString(sortMode.toString());
+    @Deprecated
+    }
+    /**
+            DocValueFormat.RAW,
+        // validation was not available prior to 2.x, so to support bwc percolation queries we only ignore_malformed
+                if (!parser.currentToken().equals(XContentParser.Token.VALUE_NUMBER)) {
+            return resolveNested(context, nestedPath, nestedFilter);
+                currentName = parser.currentName();
+    }
             throw new IllegalArgumentException("Setting both nested_path/nested_filter and nested not allowed");
+    public GeoDistanceSortBuilder sortMode(SortMode sortMode) {
+/*
+                    public LeafFieldComparator getLeafComparator(LeafReaderContext context) throws IOException {
+                } else if (NESTED_PATH_FIELD.match(currentName, parser.getDeprecationHandler())) {
+        unit = DistanceUnit.readFromStream(in);
+            return this;
+     * Defines which distance to use for sorting in the case a document contains multiple geo points.
+        this.fieldName = fieldName;
+        out.writeOptionalString(nestedPath);
+    }
+        this.unit = original.unit;
+     */
+    @Deprecated
+    /**
+        }
+     * @deprecated set nested sort with {@link #setNestedSort(NestedSortBuilder)}
+                        "illegal longitude value [{}] for [GeoDistanceSort] for field [{}].",
+        builder.field(ORDER_FIELD.getPreferredName(), order);
+    @Override
+                    );
+    private GeoPoint[] localPoints() {
+     * @deprecated set nested sort with {@link #setNestedSort(NestedSortBuilder)}
+        out.writeGenericValue(points);
+        builder.startObject(NAME);
+                } else if (VALIDATION_METHOD_FIELD.match(currentName, parser.getDeprecationHandler())) {
+        this.points.addAll(Arrays.asList(points));
+    private DistanceUnit unit = DistanceUnit.DEFAULT;
+ * Modifications Copyright OpenSearch Contributors. See
+     * Read from a stream.
+        points.addAll((List<GeoPoint>) in.readGenericValue());
+        return context.getForField(fieldType);
+                }
+            this.nestedSort,
+                        Double.POSITIVE_INFINITY,
+            return new GeoDistanceSortBuilder(this).setNestedSort(rewrite);
+        NestedSortBuilder nestedSort = null;
+            order,
+     * be taken into account for sorting.
+                } else if (UNIT_FIELD.match(currentName, parser.getDeprecationHandler())) {
+                                return false;
+            this.unit,
+    /**
+                    throw new ParsingException(
+    }
+    private IndexFieldData.XFieldComparatorSource comparatorSource(
+    /**
+                if (GeoUtils.isValidLatitude(point.lat()) == false) {
+                    }
+                            @Override
+        List<GeoPoint> geoPoints = new ArrayList<>();
+        GeoDistance geoDistance = GeoDistance.ARC;
+                final MultiGeoPointValues geoPointValues = geoIndexFieldData.load(context).getGeoPointValues();
+    }
+        result.order(order);
+    }
+            private NumericDoubleValues getNumericDoubleValues(LeafReaderContext context) throws IOException {
+    public GeoDistanceSortBuilder setNestedSort(final NestedSortBuilder nestedSort) {
+    private Nested nested(QueryShardContext context) throws IOException {
+import java.util.ArrayList;
+                        "[nested_filter] has been deprecated in favour of the [nested] parameter"
+import org.opensearch.index.fielddata.MultiGeoPointValues;
+    @Override
+            }
+import org.opensearch.core.ParseField;
+    ) {
+     *                    further parameters, e.g. in '{ "foo": { "order" : "asc"} }'. When parsing the inner object,
+        return this.sortMode;
+                            }
+                    GeoPoint point = new GeoPoint();
+                        "geo point parsing: expected second number but got [{}] instead",
+                throw new IllegalArgumentException("failed to find mapper for [" + fieldName + "] for geo distance based sort");
+     */
+                } else {
+    }
+        GeoPoint[] localPoints = localPoints();
+        for (GeoPoint point : points) {
+        builder.field(DISTANCE_TYPE_FIELD.getPreferredName(), geoDistance.name().toLowerCase(Locale.ROOT));
+    /**
+            return new SortFieldAndFormat(
+                        point.lon(),
+                        parser.currentToken()
+    public GeoDistanceSortBuilder(String fieldName, double lat, double lon) {
+                            @Override
+                        return new Leaf(ctx) {
+    public GeoDistanceSortBuilder ignoreUnmapped(boolean ignoreUnmapped) {
+                    deprecationLogger.deprecate(
+            this.nestedPath,
+     *
+    }
+    @Override
+ * Unless required by applicable law or agreed to in writing,
+     * Creates a new {@link GeoDistanceSortBuilder} from the query held by the {@link XContentParser} in
+        this.nestedSort = original.nestedSort;
+        unit.writeTo(out);
+                };
+            public FieldComparator<?> newComparator(String fieldname, int numHits, Pruning pruning, boolean reversed) {
+        return builder;
+                    fieldName = currentName;
+            && Objects.equals(nestedFilter, other.nestedFilter)
+     * @param elementName in some sort syntax variations the field name precedes the xContent object that specifies
+                }
+                                return getNumericDoubleValues(context).getRawDoubleValues();
+import org.opensearch.index.query.GeoValidationMethod;
+        IndexGeoPointFieldData geoIndexFieldData = fieldData(context);
         }
         this.nestedSort = nestedSort;
-        return this;
-    }
-
+    @SuppressWarnings("unchecked")
+                    point.resetFromString(parser.text());
+        QueryBuilder nestedFilter = null;
+     * Returns the geo point like field the distance based sort operates on.
+                        innerDocs,
     /**
-     * Returns true if unmapped geo fields should be treated as located at an infinite distance
+    public GeoDistanceSortBuilder setNestedPath(String nestedPath) {
      */
-    public boolean ignoreUnmapped() {
+        geoDistance.writeTo(out);
+            return true;
+        if (sortMode != null) {
+     */
+                return this;
+    }
+ * specific language governing permissions and limitations
+        nestedFilter = in.readOptionalNamedWriteable(QueryBuilder.class);
+import org.opensearch.common.logging.DeprecationLogger;
+     * Returns the nested filter that the nested objects should match with in order to be taken into account
+                // opening bracket in this case we cannot use GeoUtils.parseGeoPoint(..) because this expects an opening
+        }
+        if (nestedSort != null) {
+            NestedSortBuilder rewrite = nestedSort.rewrite(ctx);
+        if (this.nestedSort != null) {
+            } else {
+                } else {
+                        );
+                            }
+    public QueryBuilder getNestedFilter() {
+import org.opensearch.common.unit.DistanceUnit;
+ * You may obtain a copy of the License at
+    private MultiValueMode localSortMode() {
+import org.opensearch.index.fielddata.IndexGeoPointFieldData;
+        }
+            this.ignoreUnmapped
+                if (GeoUtils.isValidLongitude(point.lon()) == false) {
+                SortOrder sortOrder,
+    private GeoDistance geoDistance = GeoDistance.ARC;
+     * Sets validation method for this sort builder.
+                    public Leaf forLeaf(LeafReaderContext ctx) throws IOException {
+            new SortField(fieldName, comparatorSource(localPoints, localSortMode, geoIndexFieldData, nested), reverse),
+     * @param lon Longitude of the point to create the range distance facets from.
+     */
+            && reverse == false
+     * for sorting.
+                LatLonDocValuesField.newDistanceSort(fieldName, localPoints[0].lat(), localPoints[0].lon()),
+        );
+    }
+                        distanceValues,
+            if (nestedFilter == rewrite) {
+        }
+import org.opensearch.OpenSearchParseException;
+            @Override
+     * @param parser the input parser. The state on the parser contained in this context will be changed as a
+package org.opensearch.search.sort;
+        builder.startObject();
+                } else if (fieldName.equals(currentName)) {
+     */
+     */
+            && Objects.equals(validation, other.validation)
+import org.opensearch.index.query.QueryRewriteContext;
+            result.validation(validation);
+                        currentName
+     */
+import org.opensearch.common.util.BigArrays;
+        return Objects.equals(fieldName, other.fieldName)
+import org.apache.lucene.search.comparators.DoubleComparator;
+        this.points.addAll(Arrays.asList(points));
+            if (parser.currentToken() == XContentParser.Token.VALUE_NUMBER) {
+        MappedFieldType fieldType = context.fieldMapper(fieldName);
+        if (object == null || getClass() != object.getClass()) {
+    public DistanceUnit unit() {
+    public GeoDistanceSortBuilder points(GeoPoint... points) {
+        this.nestedFilter = nestedFilter;
+ * license agreements. See the NOTICE file distributed with
+        String currentName = parser.currentName();
+     */
+                DocValueFormat format,
+import org.apache.lucene.util.BitSet;
+ */
+    public NestedSortBuilder getNestedSort() {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.apache.lucene.search.DocIdSetIterator;
+import org.opensearch.search.DocValueFormat;
+        out.writeOptionalWriteable(nestedSort);
+        return new SortFieldAndFormat(
+        if (this == object) {
+    /**
+    }
+    }
+            builder.field(NESTED_PATH_FIELD.getPreferredName(), nestedPath);
+    public static GeoDistanceSortBuilder fromXContent(XContentParser parser, String elementName) throws IOException {
+            throw new IllegalArgumentException("sort_mode [sum] isn't supported for sorting by geo distance");
+                // we might get here if the geo point is " number, number] " and the parser already moved over the
+import org.opensearch.index.query.QueryBuilder;
+ * The OpenSearch Contributors require contributions made to
+            && Objects.equals(nestedPath, other.nestedPath)
+        if (nestedSort != null) {
+     *
+import java.util.List;
+     * Returns the {@link NestedSortBuilder}
+                    GeoPoint point = new GeoPoint();
+        return result;
+                            "Trying to reset fieldName to [{}], already set to [{}].",
+        return new IndexFieldData.XFieldComparatorSource(null, localSortMode, nested) {
+    }
+                    throw new OpenSearchParseException(
+                parseGeoPoints(parser, geoPoints);
+        }
+                final SortedNumericDoubleValues distanceValues = GeoUtils.distanceValues(geoDistance, unit, geoPointValues, localPoints);
+    /**
+     * @param fieldName The geo point like field name.
+    }
+                    nestedSort = NestedSortBuilder.fromXContent(parser);
+                            private final NumericDoubleValues values = getNumericDoubleValues(ctx);
+        this.geoDistance = geoDistance;
+        this.geoDistance = original.geoDistance;
+     * @param points reference points.
+            && Objects.equals(nestedSort, other.nestedSort)
+            bucketSize,
+        return NAME;
+import org.apache.lucene.search.FieldComparator;
+                                if (values.advanceExact(doc)) {
+        // on 2.x created indexes
+     *
+                        "geo_distance_nested_path",
+                                    value = values.doubleValue();
+        SortMode sortMode = null;
+        if (this.nestedSort != null) {
+        IndexGeoPointFieldData geoIndexFieldData,
+                        "Only geohashes of type string supported for field [{}]",
+                    );
+        this.fieldName = original.fieldName();
+        }
+import org.opensearch.core.xcontent.XContentParser.Token;
+ *
+        result.setNestedPath(nestedPath);
+        return order == SortOrder.DESC ? MultiValueMode.MAX : MultiValueMode.MIN;
+import org.opensearch.common.geo.GeoDistance;
+    }
+        Nested nested = nested(context);
+     * nested filter that the nested objects should match with in
+            result.sortMode(sortMode);
+        Objects.requireNonNull(sortMode, "sort mode cannot be null");
+     **/
+import static org.opensearch.search.sort.NestedSortBuilder.NESTED_FIELD;
+    public SortFieldAndFormat build(QueryShardContext context) throws IOException {
+                    );
+        DistanceUnit unit = DistanceUnit.DEFAULT;
+     */
+    public String getWriteableName() {
+                geoPoints.add(point);
+                    deprecationLogger.deprecate(
+        MultiValueMode localSortMode,
+ * software distributed under the License is distributed on an
+        // TODO this lines up with FieldSortBuilder. Share?
+            this.order,
+ * not use this file except in compliance with the License.
+            if (token == XContentParser.Token.FIELD_NAME) {
+     */
+    /**
+    }
+     * Returns the points to create the range distance facets from.
+            && unit == DistanceUnit.METERS
+ * Licensed to Elasticsearch under one or more contributor
+        return this.fieldName;
+    }
+        ignoreUnmapped = in.readBoolean();
+    public boolean equals(Object object) {
+import org.opensearch.core.common.ParsingException;
+                    }
+        XContentParser.Token token;
+        out.writeOptionalWriteable(sortMode);
+        }
+            builder.value(point);
+    /**
+ * ownership. Elasticsearch licenses this file to you under
+    }
+     * Returns true if unmapped geo fields should be treated as located at an infinite distance
+    public static final String NAME = "_geo_distance";
+     * @deprecated set nested sort with {@link #setNestedSort(NestedSortBuilder)}
+        );
+                        };
+import org.opensearch.common.geo.GeoPoint;
+    public BucketedSort buildBucketedSort(QueryShardContext context, int bucketSize, BucketedSort.ExtraData extra) throws IOException {
+                        "illegal latitude value [{}] for [GeoDistanceSort] for field [{}].",
+                } else if (DISTANCE_TYPE_FIELD.match(currentName, parser.getDeprecationHandler())) {
+                };
+            && nested == null
+                    geoDistance = GeoDistance.fromString(parser.text());
+            this.sortMode,
+    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(GeoDistanceSortBuilder.class);
+            }
+ * A geo distance based sorting on a geo point like field.
+    }
+                    geoPoints.add(point);
+                        );
+            @Override
+                                    return true;
+            builder.field(NESTED_FIELD.getPreferredName(), nestedSort);
+        return this;
+        result.geoDistance(geoDistance);
+    /**
+                BucketedSort.ExtraData extra
+    }
+                        return new DoubleLeafComparator(context) {
+    /**
+        }
+                    fieldName = currentName;
+    private IndexGeoPointFieldData fieldData(QueryShardContext context) {
+import org.opensearch.index.fielddata.IndexFieldData;
+import org.opensearch.index.fielddata.IndexFieldData.XFieldComparatorSource.Nested;
+            throw new IllegalArgumentException("Setting both nested_path/nested_filter and nested not allowed");
+            public BucketedSort newBucketedSort(
+                parser.nextToken();
+            }
+        this.order = original.order;
+                    nestedFilter = parseInnerQueryBuilder(parser);
+    /**
+                                }
+                    ignoreUnmapped = parser.booleanValue();
+            if (nestedSort == rewrite) {
+        String fieldName = null;
+    public static final String ALTERNATIVE_NAME = "_geoDistance";
+            && Objects.equals(sortMode, other.sortMode)
+            } else if (token.isValue()) {
+                fieldName = currentName;
+import org.opensearch.index.query.QueryShardContext;
+            return new GeoDistanceSortBuilder(this).setNestedFilter(rewrite);
+        if (sortMode != null) {
+                if (nested == null) {
+                } else if (SORTMODE_FIELD.match(currentName, parser.getDeprecationHandler())) {
+import org.opensearch.index.fielddata.NumericDoubleValues;
+        if (validation != null) {
+     * The point to create the range distance facets from.
+    /**
+    /**
+    public String fieldName() {
+     */
+                            private double value;
+     * */
+    }
+        return this.unit;
+    public GeoDistanceSortBuilder validation(GeoValidationMethod method) {
+        this.nestedFilter = original.nestedFilter;
+        return this.nestedPath;
+import java.util.Locale;
+                    final int maxChildren = nested.getNestedSort() != null ? nested.getNestedSort().getMaxChildren() : Integer.MAX_VALUE;
         return ignoreUnmapped;
     }
-
-    public GeoDistanceSortBuilder ignoreUnmapped(boolean ignoreUnmapped) {
-        this.ignoreUnmapped = ignoreUnmapped;
-        return this;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.startObject(NAME);
-
-        builder.startArray(fieldName);
-        for (GeoPoint point : points) {
-            builder.value(point);
-        }
-        builder.endArray();
-
-        builder.field(UNIT_FIELD.getPreferredName(), unit);
-        builder.field(DISTANCE_TYPE_FIELD.getPreferredName(), geoDistance.name().toLowerCase(Locale.ROOT));
-        builder.field(ORDER_FIELD.getPreferredName(), order);
-
-        if (sortMode != null) {
-            builder.field(SORTMODE_FIELD.getPreferredName(), sortMode);
-        }
-
-        if (nestedPath != null) {
-            builder.field(NESTED_PATH_FIELD.getPreferredName(), nestedPath);
-        }
-        if (nestedFilter != null) {
-            builder.field(NESTED_FILTER_FIELD.getPreferredName(), nestedFilter, params);
-        }
-        if (nestedSort != null) {
-            builder.field(NESTED_FIELD.getPreferredName(), nestedSort);
-        }
-        builder.field(VALIDATION_METHOD_FIELD.getPreferredName(), validation);
-        builder.field(IGNORE_UNMAPPED.getPreferredName(), ignoreUnmapped);
-
-        builder.endObject();
-        builder.endObject();
-        return builder;
-    }
-
-    @Override
-    public String getWriteableName() {
-        return NAME;
-    }
-
-    @Override
-    public boolean equals(Object object) {
-        if (this == object) {
-            return true;
-        }
-
-        if (object == null || getClass() != object.getClass()) {
-            return false;
-        }
-
-        GeoDistanceSortBuilder other = (GeoDistanceSortBuilder) object;
-        return Objects.equals(fieldName, other.fieldName)
-            && Objects.deepEquals(points, other.points)
-            && Objects.equals(geoDistance, other.geoDistance)
-            && Objects.equals(unit, other.unit)
-            && Objects.equals(sortMode, other.sortMode)
-            && Objects.equals(order, other.order)
-            && Objects.equals(nestedFilter, other.nestedFilter)
-            && Objects.equals(nestedPath, other.nestedPath)
-            && Objects.equals(validation, other.validation)
-            && Objects.equals(nestedSort, other.nestedSort)
+                    );
+     * @param fieldName The geo point like field name.
             && ignoreUnmapped == other.ignoreUnmapped;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(
-            this.fieldName,
-            this.points,
-            this.geoDistance,
-            this.unit,
-            this.sortMode,
-            this.order,
-            this.nestedFilter,
-            this.nestedPath,
-            this.validation,
-            this.nestedSort,
-            this.ignoreUnmapped
-        );
-    }
-
-    /**
-     * Creates a new {@link GeoDistanceSortBuilder} from the query held by the {@link XContentParser} in
-     * {@link XContent} format.
-     *
-     * @param parser the input parser. The state on the parser contained in this context will be changed as a
-     *                side effect of this method call
-     * @param elementName in some sort syntax variations the field name precedes the xContent object that specifies
-     *                    further parameters, e.g. in '{ "foo": { "order" : "asc"} }'. When parsing the inner object,
-     *                    the field name can be passed in via this argument
-     */
-    public static GeoDistanceSortBuilder fromXContent(XContentParser parser, String elementName) throws IOException {
-        String fieldName = null;
-        List<GeoPoint> geoPoints = new ArrayList<>();
-        DistanceUnit unit = DistanceUnit.DEFAULT;
-        GeoDistance geoDistance = GeoDistance.ARC;
-        SortOrder order = SortOrder.ASC;
-        SortMode sortMode = null;
-        QueryBuilder nestedFilter = null;
-        String nestedPath = null;
-        NestedSortBuilder nestedSort = null;
-        GeoValidationMethod validation = null;
-        boolean ignoreUnmapped = false;
-
-        XContentParser.Token token;
-        String currentName = parser.currentName();
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentName = parser.currentName();
-            } else if (token == XContentParser.Token.START_ARRAY) {
-                parseGeoPoints(parser, geoPoints);
-
-                fieldName = currentName;
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                if (NESTED_FILTER_FIELD.match(currentName, parser.getDeprecationHandler())) {
-                    deprecationLogger.deprecate(
-                        "geo_distance_nested_filter",
-                        "[nested_filter] has been deprecated in favour of the [nested] parameter"
-                    );
-                    nestedFilter = parseInnerQueryBuilder(parser);
-                } else if (NESTED_FIELD.match(currentName, parser.getDeprecationHandler())) {
-                    nestedSort = NestedSortBuilder.fromXContent(parser);
-                } else {
-                    // the json in the format of -> field : { lat : 30, lon : 12 }
-                    if (fieldName != null && fieldName.equals(currentName) == false) {
-                        throw new ParsingException(
-                            parser.getTokenLocation(),
-                            "Trying to reset fieldName to [{}], already set to [{}].",
-                            currentName,
-                            fieldName
-                        );
-                    }
-                    fieldName = currentName;
-                    GeoPoint point = new GeoPoint();
-                    GeoUtils.parseGeoPoint(parser, point);
-                    geoPoints.add(point);
-                }
-            } else if (token.isValue()) {
-                if (ORDER_FIELD.match(currentName, parser.getDeprecationHandler())) {
-                    order = SortOrder.fromString(parser.text());
-                } else if (UNIT_FIELD.match(currentName, parser.getDeprecationHandler())) {
-                    unit = DistanceUnit.fromString(parser.text());
-                } else if (DISTANCE_TYPE_FIELD.match(currentName, parser.getDeprecationHandler())) {
-                    geoDistance = GeoDistance.fromString(parser.text());
-                } else if (VALIDATION_METHOD_FIELD.match(currentName, parser.getDeprecationHandler())) {
-                    validation = GeoValidationMethod.fromString(parser.text());
-                } else if (SORTMODE_FIELD.match(currentName, parser.getDeprecationHandler())) {
-                    sortMode = SortMode.fromString(parser.text());
-                } else if (NESTED_PATH_FIELD.match(currentName, parser.getDeprecationHandler())) {
-                    deprecationLogger.deprecate(
-                        "geo_distance_nested_path",
-                        "[nested_path] has been deprecated in favour of the [nested] parameter"
-                    );
-                    nestedPath = parser.text();
-                } else if (IGNORE_UNMAPPED.match(currentName, parser.getDeprecationHandler())) {
-                    ignoreUnmapped = parser.booleanValue();
-                } else if (token == Token.VALUE_STRING) {
-                    if (fieldName != null && fieldName.equals(currentName) == false) {
-                        throw new ParsingException(
-                            parser.getTokenLocation(),
-                            "Trying to reset fieldName to [{}], already set to [{}].",
-                            currentName,
-                            fieldName
-                        );
-                    }
-
-                    GeoPoint point = new GeoPoint();
-                    point.resetFromString(parser.text());
-                    geoPoints.add(point);
-                    fieldName = currentName;
-                } else if (fieldName.equals(currentName)) {
-                    throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "Only geohashes of type string supported for field [{}]",
-                        currentName
-                    );
-                } else {
-                    throw new ParsingException(parser.getTokenLocation(), "[{}] does not support [{}]", NAME, currentName);
-                }
-            }
+        order = SortOrder.readFromStream(in);
+import org.apache.lucene.index.LeafReaderContext;
         }
-
-        GeoDistanceSortBuilder result = new GeoDistanceSortBuilder(fieldName, geoPoints.toArray(new GeoPoint[0]));
-        result.geoDistance(geoDistance);
-        result.unit(unit);
-        result.order(order);
-        if (sortMode != null) {
-            result.sortMode(sortMode);
-        }
-        if (nestedFilter != null) {
-            result.setNestedFilter(nestedFilter);
-        }
-        result.setNestedPath(nestedPath);
-        if (nestedSort != null) {
-            result.setNestedSort(nestedSort);
-        }
-        if (validation != null) {
-            result.validation(validation);
-        }
-        result.ignoreUnmapped(ignoreUnmapped);
-        return result;
-    }
-
-    @Override
-    public SortFieldAndFormat build(QueryShardContext context) throws IOException {
-        GeoPoint[] localPoints = localPoints();
-        boolean reverse = order == SortOrder.DESC;
-        MultiValueMode localSortMode = localSortMode();
-        IndexGeoPointFieldData geoIndexFieldData = fieldData(context);
-        Nested nested = nested(context);
-
-        if (geoIndexFieldData.getClass() == LatLonPointIndexFieldData.class // only works with 5.x geo_point
-            && nested == null
-            && localSortMode == MultiValueMode.MIN // LatLonDocValuesField internally picks the closest point
-            && unit == DistanceUnit.METERS
-            && reverse == false
-            && localPoints.length == 1) {
-            return new SortFieldAndFormat(
-                LatLonDocValuesField.newDistanceSort(fieldName, localPoints[0].lat(), localPoints[0].lon()),
-                DocValueFormat.RAW
-            );
-        }
-
-        return new SortFieldAndFormat(
-            new SortField(fieldName, comparatorSource(localPoints, localSortMode, geoIndexFieldData, nested), reverse),
-            DocValueFormat.RAW
-        );
-    }
-
-    @Override
-    public BucketedSort buildBucketedSort(QueryShardContext context, int bucketSize, BucketedSort.ExtraData extra) throws IOException {
-        GeoPoint[] localPoints = localPoints();
-        MultiValueMode localSortMode = localSortMode();
-        IndexGeoPointFieldData geoIndexFieldData = fieldData(context);
-        Nested nested = nested(context);
-
-        // TODO implement the single point optimization above
-
-        return comparatorSource(localPoints, localSortMode, geoIndexFieldData, nested).newBucketedSort(
-            context.bigArrays(),
-            order,
-            DocValueFormat.RAW,
-            bucketSize,
-            extra
-        );
-    }
-
-    private GeoPoint[] localPoints() {
-        // validation was not available prior to 2.x, so to support bwc percolation queries we only ignore_malformed
-        // on 2.x created indexes
-        GeoPoint[] localPoints = points.toArray(new GeoPoint[0]);
-        if (GeoValidationMethod.isIgnoreMalformed(validation) == false) {
-            for (GeoPoint point : localPoints) {
-                if (GeoUtils.isValidLatitude(point.lat()) == false) {
-                    throw new OpenSearchParseException(
-                        "illegal latitude value [{}] for [GeoDistanceSort] for field [{}].",
-                        point.lat(),
-                        fieldName
-                    );
-                }
-                if (GeoUtils.isValidLongitude(point.lon()) == false) {
-                    throw new OpenSearchParseException(
-                        "illegal longitude value [{}] for [GeoDistanceSort] for field [{}].",
-                        point.lon(),
-                        fieldName
-                    );
-                }
-            }
-        }
-
-        if (GeoValidationMethod.isCoerce(validation)) {
-            for (GeoPoint point : localPoints) {
-                GeoUtils.normalizePoint(point, true, true);
-            }
-        }
-        return localPoints;
-    }
-
-    private MultiValueMode localSortMode() {
-        // TODO this lines up with FieldSortBuilder. Share?
-        if (sortMode != null) {
-            return MultiValueMode.fromString(sortMode.toString());
-        }
-
-        return order == SortOrder.DESC ? MultiValueMode.MAX : MultiValueMode.MIN;
-    }
-
-    private IndexGeoPointFieldData fieldData(QueryShardContext context) {
-        MappedFieldType fieldType = context.fieldMapper(fieldName);
-        if (fieldType == null) {
-            if (ignoreUnmapped) {
-                fieldType = context.getMapperService().unmappedFieldType("geo_point");
-            } else {
-                throw new IllegalArgumentException("failed to find mapper for [" + fieldName + "] for geo distance based sort");
-            }
-        }
-        return context.getForField(fieldType);
-    }
-
-    private Nested nested(QueryShardContext context) throws IOException {
-        // If we have a nestedSort we'll use that. Otherwise, use old style.
-        if (nestedSort == null) {
-            return resolveNested(context, nestedPath, nestedFilter);
-        }
-        validateMaxChildrenExistOnlyInTopLevelNestedSort(context, nestedSort);
-        return resolveNested(context, nestedSort);
-    }
-
-    private IndexFieldData.XFieldComparatorSource comparatorSource(
-        GeoPoint[] localPoints,
-        MultiValueMode localSortMode,
-        IndexGeoPointFieldData geoIndexFieldData,
-        Nested nested
-    ) {
-        return new IndexFieldData.XFieldComparatorSource(null, localSortMode, nested) {
-            @Override
-            public SortField.Type reducedType() {
-                return SortField.Type.DOUBLE;
-            }
-
-            private NumericDoubleValues getNumericDoubleValues(LeafReaderContext context) throws IOException {
-                final MultiGeoPointValues geoPointValues = geoIndexFieldData.load(context).getGeoPointValues();
-                final SortedNumericDoubleValues distanceValues = GeoUtils.distanceValues(geoDistance, unit, geoPointValues, localPoints);
-                if (nested == null) {
-                    return FieldData.replaceMissing(sortMode.select(distanceValues), Double.POSITIVE_INFINITY);
-                } else {
-                    final BitSet rootDocs = nested.rootDocs(context);
-                    final DocIdSetIterator innerDocs = nested.innerDocs(context);
-                    final int maxChildren = nested.getNestedSort() != null ? nested.getNestedSort().getMaxChildren() : Integer.MAX_VALUE;
-                    return localSortMode.select(
-                        distanceValues,
-                        Double.POSITIVE_INFINITY,
-                        rootDocs,
-                        innerDocs,
                         context.reader().maxDoc(),
-                        maxChildren
-                    );
-                }
+                    return FieldData.replaceMissing(sortMode.select(distanceValues), Double.POSITIVE_INFINITY);
+ * the Apache License, Version 2.0 (the "License"); you may
+            DocValueFormat.RAW
+            this.validation,
             }
-
-            @Override
-            public FieldComparator<?> newComparator(String fieldname, int numHits, Pruning pruning, boolean reversed) {
-                return new DoubleComparator(numHits, null, null, reversed, filterPruning(pruning)) {
-                    @Override
-                    public LeafFieldComparator getLeafComparator(LeafReaderContext context) throws IOException {
-                        return new DoubleLeafComparator(context) {
-                            @Override
-                            protected NumericDocValues getNumericDocValues(LeafReaderContext context, String field) throws IOException {
-                                return getNumericDoubleValues(context).getRawDoubleValues();
-                            }
-                        };
-                    }
-                };
-            }
-
-            @Override
-            public BucketedSort newBucketedSort(
-                BigArrays bigArrays,
-                SortOrder sortOrder,
-                DocValueFormat format,
-                int bucketSize,
-                BucketedSort.ExtraData extra
-            ) {
-                return new BucketedSort.ForDoubles(bigArrays, sortOrder, format, bucketSize, extra) {
-                    @Override
-                    public Leaf forLeaf(LeafReaderContext ctx) throws IOException {
-                        return new Leaf(ctx) {
-                            private final NumericDoubleValues values = getNumericDoubleValues(ctx);
-                            private double value;
-
-                            @Override
-                            protected boolean advanceExact(int doc) throws IOException {
-                                if (values.advanceExact(doc)) {
-                                    value = values.doubleValue();
-                                    return true;
-                                }
-                                return false;
-                            }
-
-                            @Override
-                            protected double docValue() {
-                                return value;
-                            }
-                        };
-                    }
-                };
-            }
-        };
-    }
-
-    static void parseGeoPoints(XContentParser parser, List<GeoPoint> geoPoints) throws IOException {
-        while (!parser.nextToken().equals(XContentParser.Token.END_ARRAY)) {
-            if (parser.currentToken() == XContentParser.Token.VALUE_NUMBER) {
-                // we might get here if the geo point is " number, number] " and the parser already moved over the
-                // opening bracket in this case we cannot use GeoUtils.parseGeoPoint(..) because this expects an opening
-                // bracket
-                double lon = parser.doubleValue();
-                parser.nextToken();
-                if (!parser.currentToken().equals(XContentParser.Token.VALUE_NUMBER)) {
-                    throw new OpenSearchParseException(
-                        "geo point parsing: expected second number but got [{}] instead",
-                        parser.currentToken()
-                    );
-                }
-                double lat = parser.doubleValue();
                 GeoPoint point = new GeoPoint();
-                point.reset(lat, lon);
-                geoPoints.add(point);
+        if (fieldType == null) {
             } else {
-                GeoPoint point = new GeoPoint();
+        }
+import org.opensearch.core.common.io.stream.StreamOutput;
                 GeoUtils.parseGeoPoint(parser, point);
-                geoPoints.add(point);
-            }
-
+import org.opensearch.index.mapper.MappedFieldType;
+        while (!parser.nextToken().equals(XContentParser.Token.END_ARRAY)) {
+    public GeoDistanceSortBuilder unit(DistanceUnit unit) {
+        // If we have a nestedSort we'll use that. Otherwise, use old style.
+        return validation;
+        MultiValueMode localSortMode = localSortMode();
+                return new BucketedSort.ForDoubles(bigArrays, sortOrder, format, bucketSize, extra) {
+import org.opensearch.common.geo.GeoUtils;
         }
-    }
-
     @Override
-    public GeoDistanceSortBuilder rewrite(QueryRewriteContext ctx) throws IOException {
-        if (nestedFilter == null && nestedSort == null) {
-            return this;
-        }
-        if (nestedFilter != null) {
-            QueryBuilder rewrite = nestedFilter.rewrite(ctx);
-            if (nestedFilter == rewrite) {
-                return this;
-            }
-            return new GeoDistanceSortBuilder(this).setNestedFilter(rewrite);
-        } else {
-            NestedSortBuilder rewrite = nestedSort.rewrite(ctx);
-            if (nestedSort == rewrite) {
-                return this;
-            }
-            return new GeoDistanceSortBuilder(this).setNestedSort(rewrite);
-        }
+                    return localSortMode.select(
+                    }
+                    order = SortOrder.fromString(parser.text());
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
     }
-}

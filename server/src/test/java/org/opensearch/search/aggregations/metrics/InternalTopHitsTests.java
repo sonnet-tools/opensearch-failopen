@@ -1,430 +1,401 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.search.FieldComparator;
-import org.apache.lucene.search.FieldDoc;
-import org.apache.lucene.search.Pruning;
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TopFieldDocs;
-import org.apache.lucene.search.TotalHits;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.document.DocumentField;
-import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.SearchHit;
-import org.opensearch.search.SearchHits;
-import org.opensearch.search.aggregations.ParsedAggregation;
-import org.opensearch.test.InternalAggregationTestCase;
-import org.opensearch.test.NotEqualMessageBuilder;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.function.Supplier;
-import java.util.stream.Stream;
-
-import static java.lang.Math.max;
-import static java.lang.Math.min;
-import static java.util.Comparator.comparing;
-import static java.util.stream.Collectors.toList;
-
-public class InternalTopHitsTests extends InternalAggregationTestCase<InternalTopHits> {
-    @Override
-    protected InternalTopHits createTestInstance(String name, Map<String, Object> metadata) {
-        if (randomBoolean()) {
-            return createTestInstanceSortedByFields(
-                name,
-                between(1, 40),
-                metadata,
-                OpenSearchTestCase::randomFloat,
-                randomSortFields(),
-                InternalTopHitsTests::randomOfType
-            );
-        }
-        return createTestInstanceSortedScore(name, between(1, 40), metadata, OpenSearchTestCase::randomFloat);
-    }
-
-    @Override
-    protected List<InternalTopHits> randomResultsToReduce(String name, int size) {
-        /*
-         * Make sure all scores are unique so we can get
-         * deterministic test results.
-         */
-        Set<Float> usedScores = new HashSet<>();
-        Supplier<Float> scoreSupplier = () -> {
-            float score = randomValueOtherThanMany(usedScores::contains, OpenSearchTestCase::randomFloat);
-            usedScores.add(score);
-            return score;
-        };
-        int requestedSize = between(1, 40);
-        Supplier<InternalTopHits> supplier;
-        if (randomBoolean()) {
-            SortField[] sortFields = randomSortFields();
-            Set<Object> usedSortFieldValues = new HashSet<>();
-            Function<SortField.Type, Object> sortFieldValueSuppier = t -> {
-                Object value = randomValueOtherThanMany(usedSortFieldValues::contains, () -> randomOfType(t));
-                usedSortFieldValues.add(value);
-                return value;
-            };
-            supplier = () -> createTestInstanceSortedByFields(name, requestedSize, null, scoreSupplier, sortFields, sortFieldValueSuppier);
-        } else {
-            supplier = () -> createTestInstanceSortedScore(name, requestedSize, null, scoreSupplier);
-        }
-        return Stream.generate(supplier).limit(size).collect(toList());
-    }
-
-    private InternalTopHits createTestInstanceSortedByFields(
-        String name,
-        int requestedSize,
-        Map<String, Object> metadata,
-        Supplier<Float> scoreSupplier,
-        SortField[] sortFields,
-        Function<SortField.Type, Object> sortFieldValueSupplier
-    ) {
-        return createTestInstance(name, metadata, scoreSupplier, requestedSize, (docId, score) -> {
-            Object[] fields = new Object[sortFields.length];
-            for (int f = 0; f < sortFields.length; f++) {
-                final int ff = f;
-                fields[f] = sortFieldValueSupplier.apply(sortFields[ff].getType());
-            }
-            return new FieldDoc(docId, score, fields);
-        }, (totalHits, scoreDocs) -> new TopFieldDocs(totalHits, scoreDocs, sortFields), sortFieldsComparator(sortFields));
-    }
-
-    private InternalTopHits createTestInstanceSortedScore(
-        String name,
-        int requestedSize,
-        Map<String, Object> metadata,
-        Supplier<Float> scoreSupplier
-    ) {
-        return createTestInstance(name, metadata, scoreSupplier, requestedSize, ScoreDoc::new, TopDocs::new, scoreComparator());
-    }
-
-    private InternalTopHits createTestInstance(
-        String name,
-        Map<String, Object> metadata,
-        Supplier<Float> scoreSupplier,
-        int requestedSize,
-        BiFunction<Integer, Float, ScoreDoc> docBuilder,
-        BiFunction<TotalHits, ScoreDoc[], TopDocs> topDocsBuilder,
-        Comparator<ScoreDoc> comparator
-    ) {
-        int from = 0;
-        int actualSize = between(0, requestedSize);
-
-        float maxScore = Float.NEGATIVE_INFINITY;
-        ScoreDoc[] scoreDocs = new ScoreDoc[actualSize];
-        SearchHit[] hits = new SearchHit[actualSize];
-        Set<Integer> usedDocIds = new HashSet<>();
-        for (int i = 0; i < actualSize; i++) {
-            float score = scoreSupplier.get();
-            maxScore = max(maxScore, score);
-            int docId = randomValueOtherThanMany(usedDocIds::contains, () -> between(0, IndexWriter.MAX_DOCS));
-            usedDocIds.add(docId);
-
-            Map<String, DocumentField> searchHitFields = new HashMap<>();
-            scoreDocs[i] = docBuilder.apply(docId, score);
-            hits[i] = new SearchHit(docId, Integer.toString(i), searchHitFields, Collections.emptyMap());
-            hits[i].score(score);
-        }
-        int totalHits = between(actualSize, 500000);
-        sort(hits, scoreDocs, comparator);
-        SearchHits searchHits = new SearchHits(hits, new TotalHits(totalHits, TotalHits.Relation.EQUAL_TO), maxScore);
-
-        TopDocs topDocs = topDocsBuilder.apply(new TotalHits(totalHits, TotalHits.Relation.EQUAL_TO), scoreDocs);
-        // Lucene's TopDocs initializes the maxScore to Float.NaN, if there is no maxScore
-        TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(topDocs, maxScore == Float.NEGATIVE_INFINITY ? Float.NaN : maxScore);
-
-        return new InternalTopHits(name, from, requestedSize, topDocsAndMaxScore, searchHits, metadata);
-    }
-
-    /**
-     * Sorts both searchHits and scoreDocs together based on scoreDocComparator()
-     */
-    private void sort(SearchHit[] searchHits, ScoreDoc[] scoreDocs, Comparator<ScoreDoc> comparator) {
-        List<Tuple<SearchHit, ScoreDoc>> hitScores = new ArrayList<>();
-        for (int i = 0; i < searchHits.length; i++) {
-            hitScores.add(new Tuple<>(searchHits[i], scoreDocs[i]));
-        }
-        hitScores.sort((t1, t2) -> comparator.compare(t1.v2(), t2.v2()));
-        for (int i = 0; i < searchHits.length; i++) {
-            searchHits[i] = hitScores.get(i).v1();
-            scoreDocs[i] = hitScores.get(i).v2();
-        }
-    }
-
-    @Override
-    protected void assertFromXContent(InternalTopHits aggregation, ParsedAggregation parsedAggregation) throws IOException {
-        final SearchHits expectedSearchHits = aggregation.getHits();
-
-        assertTrue(parsedAggregation instanceof ParsedTopHits);
-        ParsedTopHits parsed = (ParsedTopHits) parsedAggregation;
-        final SearchHits actualSearchHits = parsed.getHits();
-
-        assertEquals(expectedSearchHits.getTotalHits().value(), actualSearchHits.getTotalHits().value());
-        assertEquals(expectedSearchHits.getTotalHits().relation(), actualSearchHits.getTotalHits().relation());
-        assertEquals(expectedSearchHits.getMaxScore(), actualSearchHits.getMaxScore(), 0.0f);
-
-        List<SearchHit> expectedHits = Arrays.asList(expectedSearchHits.getHits());
-        List<SearchHit> actualHits = Arrays.asList(actualSearchHits.getHits());
-
-        assertEquals(expectedHits.size(), actualHits.size());
-        for (int i = 0; i < expectedHits.size(); i++) {
-            SearchHit expected = expectedHits.get(i);
-            SearchHit actual = actualHits.get(i);
-
-            assertEquals(expected.getIndex(), actual.getIndex());
-            assertEquals(expected.getId(), actual.getId());
-            assertEquals(expected.getVersion(), actual.getVersion());
-            assertEquals(expected.getScore(), actual.getScore(), 0.0f);
-            assertEquals(expected.getFields(), actual.getFields());
-            assertEquals(expected.getSourceAsMap(), actual.getSourceAsMap());
-        }
-    }
-
-    private static Object randomOfType(SortField.Type type) {
-        switch (type) {
-            case CUSTOM:
-                throw new UnsupportedOperationException();
-            case DOC:
-                return between(0, IndexWriter.MAX_DOCS);
-            case DOUBLE:
-                return randomDouble();
-            case FLOAT:
-                return randomFloat();
-            case INT:
-                return randomInt();
-            case LONG:
-                return randomLong();
-            case REWRITEABLE:
-                throw new UnsupportedOperationException();
-            case SCORE:
-                return randomFloat();
-            case STRING:
-                return new BytesRef(randomAlphaOfLength(5));
-            case STRING_VAL:
-                return new BytesRef(randomAlphaOfLength(5));
             default:
-                throw new UnsupportedOperationException("Unknown SortField.Type: " + type);
-        }
-    }
-
-    @Override
-    protected void assertReduced(InternalTopHits reduced, List<InternalTopHits> inputs) {
-        boolean sortedByFields = inputs.get(0).getTopDocs().topDocs instanceof TopFieldDocs;
-        Comparator<ScoreDoc> dataNodeComparator;
-        if (sortedByFields) {
-            dataNodeComparator = sortFieldsComparator(((TopFieldDocs) inputs.get(0).getTopDocs().topDocs).fields);
-        } else {
-            dataNodeComparator = scoreComparator();
-        }
-        Comparator<ScoreDoc> reducedComparator = dataNodeComparator.thenComparing(s -> s.shardIndex);
-        SearchHits actualHits = reduced.getHits();
-        List<Tuple<ScoreDoc, SearchHit>> allHits = new ArrayList<>();
-        float maxScore = Float.NEGATIVE_INFINITY;
-        long totalHits = 0;
-        TotalHits.Relation relation = TotalHits.Relation.EQUAL_TO;
-        for (int input = 0; input < inputs.size(); input++) {
-            SearchHits internalHits = inputs.get(input).getHits();
-            totalHits += internalHits.getTotalHits().value();
-            if (internalHits.getTotalHits().relation() == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO) {
-                relation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
-            }
-            maxScore = max(maxScore, internalHits.getMaxScore());
-            for (int i = 0; i < internalHits.getHits().length; i++) {
-                ScoreDoc doc = inputs.get(input).getTopDocs().topDocs.scoreDocs[i];
-                if (sortedByFields) {
-                    doc = new FieldDoc(doc.doc, doc.score, ((FieldDoc) doc).fields, input);
-                } else {
-                    doc = new ScoreDoc(doc.doc, doc.score, input);
-                }
-                allHits.add(new Tuple<>(doc, internalHits.getHits()[i]));
-            }
-        }
-        allHits.sort(comparing(Tuple::v1, reducedComparator));
-        SearchHit[] expectedHitsHits = new SearchHit[min(inputs.get(0).getSize(), allHits.size())];
-        for (int i = 0; i < expectedHitsHits.length; i++) {
-            expectedHitsHits[i] = allHits.get(i).v2();
-        }
-        // Lucene's TopDocs initializes the maxScore to Float.NaN, if there is no maxScore
-        SearchHits expectedHits = new SearchHits(
-            expectedHitsHits,
-            new TotalHits(totalHits, relation),
-            maxScore == Float.NEGATIVE_INFINITY ? Float.NaN : maxScore
-        );
-        assertEqualsWithErrorMessageFromXContent(expectedHits, actualHits);
-    }
-
-    /**
-     * Assert that two objects are equals, calling {@link ToXContent#toXContent(XContentBuilder, ToXContent.Params)} to print out their
-     * differences if they aren't equal.
-     */
-    private static <T extends ToXContent> void assertEqualsWithErrorMessageFromXContent(T expected, T actual) {
-        if (Objects.equals(expected, actual)) {
-            return;
-        }
-        if (expected == null) {
-            throw new AssertionError("Expected null be actual was [" + actual.toString() + "]");
-        }
-        if (actual == null) {
-            throw new AssertionError("Didn't expect null but actual was [null]");
-        }
-        try (XContentBuilder actualJson = JsonXContent.contentBuilder(); XContentBuilder expectedJson = JsonXContent.contentBuilder()) {
-            actualJson.startObject();
-            actual.toXContent(actualJson, ToXContent.EMPTY_PARAMS);
-            actualJson.endObject();
-            expectedJson.startObject();
-            expected.toXContent(expectedJson, ToXContent.EMPTY_PARAMS);
-            expectedJson.endObject();
-            NotEqualMessageBuilder message = new NotEqualMessageBuilder();
-            message.compareMaps(
-                XContentHelper.convertToMap(BytesReference.bytes(actualJson), false).v2(),
-                XContentHelper.convertToMap(BytesReference.bytes(expectedJson), false).v2()
-            );
-            throw new AssertionError("Didn't match expected value:\n" + message);
-        } catch (IOException e) {
-            throw new AssertionError("IOException while building failure message", e);
-        }
-    }
-
-    private SortField[] randomSortFields() {
-        SortField[] sortFields = new SortField[between(1, 5)];
-        Set<String> usedSortFields = new HashSet<>();
-        for (int i = 0; i < sortFields.length; i++) {
-            String sortField = randomValueOtherThanMany(usedSortFields::contains, () -> randomAlphaOfLength(5));
-            usedSortFields.add(sortField);
-            SortField.Type type = randomValueOtherThanMany(
+import org.opensearch.common.document.DocumentField;
                 t -> t == SortField.Type.CUSTOM || t == SortField.Type.REWRITEABLE,
-                () -> randomFrom(SortField.Type.values())
-            );
-            sortFields[i] = new SortField(sortField, type);
+import org.apache.lucene.search.FieldDoc;
+import org.opensearch.test.OpenSearchTestCase;
+    }
+import org.opensearch.test.InternalAggregationTestCase;
+import java.util.Comparator;
+            }
+                } else {
+        Comparator<ScoreDoc> dataNodeComparator;
+    }
+        for (int i = 0; i < actualSize; i++) {
+        for (int i = 0; i < sortFields.length; i++) {
+        Comparator<ScoreDoc> reducedComparator = dataNodeComparator.thenComparing(s -> s.shardIndex);
+        allHits.sort(comparing(Tuple::v1, reducedComparator));
+        return comparator.reversed();
+        Set<Float> usedScores = new HashSet<>();
+    }
+            String sortField = randomValueOtherThanMany(usedSortFields::contains, () -> randomAlphaOfLength(5));
+                return randomLong();
+ * ownership. Elasticsearch licenses this file to you under
+    protected void assertReduced(InternalTopHits reduced, List<InternalTopHits> inputs) {
+                return new BytesRef(randomAlphaOfLength(5));
+            case INT:
+                    metadata = new HashMap<>(instance.getMetadata());
+            for (int f = 0; f < sortFields.length; f++) {
+            Object[] fields = new Object[sortFields.length];
+                topDocs = new TopDocsAndMaxScore(
+            actual.toXContent(actualJson, ToXContent.EMPTY_PARAMS);
+            assertEquals(expected.getScore(), actual.getScore(), 0.0f);
+import java.util.HashSet;
+import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+    private Comparator<ScoreDoc> scoreComparator() {
+     */
+        TopDocs topDocs = topDocsBuilder.apply(new TotalHits(totalHits, TotalHits.Relation.EQUAL_TO), scoreDocs);
+ * under the License.
+        Map<String, Object> metadata,
+                    doc = new FieldDoc(doc.doc, doc.score, ((FieldDoc) doc).fields, input);
+            dataNodeComparator = scoreComparator();
+        long totalHits = 0;
+ * not use this file except in compliance with the License.
+import static java.util.Comparator.comparing;
+    protected InternalTopHits createTestInstance(String name, Map<String, Object> metadata) {
+            case STRING:
         }
+                    doc = new ScoreDoc(doc.doc, doc.score, input);
+            totalHits += internalHits.getTotalHits().value();
+        Map<String, Object> metadata,
+        }
+                name += randomAlphaOfLength(5);
+            expectedJson.endObject();
+            for (int i = 0; i < internalHits.getHits().length; i++) {
+        Supplier<Float> scoreSupplier
+        List<SearchHit> actualHits = Arrays.asList(actualSearchHits.getHits());
+import java.util.function.BiFunction;
+        List<Tuple<SearchHit, ScoreDoc>> hitScores = new ArrayList<>();
+            case REWRITEABLE:
+                if (metadata == null) {
+        Supplier<Float> scoreSupplier,
+import org.opensearch.common.xcontent.json.JsonXContent;
+        for (int i = 0; i < expectedHits.size(); i++) {
+        assertEquals(expectedSearchHits.getMaxScore(), actualSearchHits.getMaxScore(), 0.0f);
+    @Override
+        ParsedTopHits parsed = (ParsedTopHits) parsedAggregation;
+        float maxScore = Float.NEGATIVE_INFINITY;
+            Function<SortField.Type, Object> sortFieldValueSuppier = t -> {
+import java.util.Collections;
+                ScoreDoc doc = inputs.get(input).getTopDocs().topDocs.scoreDocs[i];
+            scoreDocs[i] = docBuilder.apply(docId, score);
+            return 0;
+    protected InternalTopHits mutateInstance(InternalTopHits instance) {
+                usedSortFieldValues.add(value);
+        }
+import java.io.IOException;
+    private static <T extends ToXContent> void assertEqualsWithErrorMessageFromXContent(T expected, T actual) {
+        ScoreDoc[] scoreDocs = new ScoreDoc[actualSize];
+ * GitHub history for details.
+        TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(topDocs, maxScore == Float.NEGATIVE_INFINITY ? Float.NaN : maxScore);
+    ) {
+        }
+        TopDocsAndMaxScore topDocs = instance.getTopDocs();
+                size += between(1, 100);
+ * the Apache License, Version 2.0 (the "License"); you may
+package org.opensearch.search.aggregations.metrics;
+ * Modifications Copyright OpenSearch Contributors. See
+                metadata.put(randomAlphaOfLength(15), randomInt());
+            hitScores.add(new Tuple<>(searchHits[i], scoreDocs[i]));
+        SortField[] sortFields,
+ * KIND, either express or implied.  See the License for the
+        SearchHits actualHits = reduced.getHits();
+    }
+        int requestedSize,
+import org.opensearch.test.NotEqualMessageBuilder;
+        } catch (IOException e) {
+        }
+        String name,
+import java.util.stream.Stream;
+import org.opensearch.common.xcontent.XContentHelper;
+                break;
+            scoreDocs[i] = hitScores.get(i).v2();
+ * You may obtain a copy of the License at
+        }
+            new TotalHits(totalHits, relation),
+            );
+                return randomFloat();
+import org.apache.lucene.search.Pruning;
+        return (lhs, rhs) -> {
+                name,
+            SortField[] sortFields = randomSortFields();
+                XContentHelper.convertToMap(BytesReference.bytes(actualJson), false).v2(),
+        for (int i = 0; i < expectedHitsHits.length; i++) {
+        FieldComparator[] comparators = new FieldComparator[sortFields.length];
+import org.opensearch.core.xcontent.XContentBuilder;
+        switch (between(0, 5)) {
+        int requestedSize,
+            return;
+public class InternalTopHitsTests extends InternalAggregationTestCase<InternalTopHits> {
+                    searchHits.getTotalHits().value() + between(1, 100),
+            case 5:
+    }
+                    ),
+            FieldDoc r = (FieldDoc) rhs;
+        if (Objects.equals(expected, actual)) {
+                throw new UnsupportedOperationException();
+        assertEquals(expectedHits.size(), actualHits.size());
+            if (internalHits.getTotalHits().relation() == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO) {
+import org.apache.lucene.search.TopDocs;
+        Comparator<ScoreDoc> comparator = comparing(d -> d.score);
+import org.apache.lucene.search.TotalHits;
+            Set<Object> usedSortFieldValues = new HashSet<>();
+import org.opensearch.common.collect.Tuple;
+                        topDocs.topDocs.scoreDocs
+     * Sorts both searchHits and scoreDocs together based on scoreDocComparator()
+            );
+    private SortField[] randomSortFields() {
+    }
+                return new BytesRef(randomAlphaOfLength(5));
+            float score = randomValueOtherThanMany(usedScores::contains, OpenSearchTestCase::randomFloat);
+            maxScore == Float.NEGATIVE_INFINITY ? Float.NaN : maxScore
+            assertEquals(expected.getVersion(), actual.getVersion());
+        // Lucene's TopDocs initializes the maxScore to Float.NaN, if there is no maxScore
+    ) {
+        String name,
+                return value;
+        int totalHits = between(actualSize, 500000);
+            expectedHitsHits,
+                Object value = randomValueOtherThanMany(usedSortFieldValues::contains, () -> randomOfType(t));
+        }
+            maxScore = max(maxScore, internalHits.getMaxScore());
+            comparators[i] = sortFields[i].getComparator(0, Pruning.NONE);
+        if (expected == null) {
+            maxScore = max(maxScore, score);
+ *
+    }
+        @SuppressWarnings("rawtypes")
+                relation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
+import static java.lang.Math.max;
+        };
+ */
+import static java.lang.Math.min;
+                return randomInt();
+        assertEquals(expectedSearchHits.getTotalHits().value(), actualSearchHits.getTotalHits().value());
+        List<Tuple<ScoreDoc, SearchHit>> allHits = new ArrayList<>();
+        }
+ *
+                return between(0, IndexWriter.MAX_DOCS);
+                from += between(1, 100);
+     * differences if they aren't equal.
+                int c = comparators[i].compareValues(l.fields[i], r.fields[i]);
+            actualJson.startObject();
+        }
+                    topDocs.maxScore + randomFloat()
+        return createTestInstance(name, metadata, scoreSupplier, requestedSize, ScoreDoc::new, TopDocs::new, scoreComparator());
+import org.apache.lucene.util.BytesRef;
+     */
+            expected.toXContent(expectedJson, ToXContent.EMPTY_PARAMS);
+            throw new AssertionError("IOException while building failure message", e);
+            assertEquals(expected.getId(), actual.getId());
+            case FLOAT:
+            int i = 0;
+        }
+    private static Object randomOfType(SortField.Type type) {
+ * The OpenSearch Contributors require contributions made to
+            return new FieldDoc(docId, score, fields);
+import java.util.ArrayList;
+        for (int i = 0; i < sortFields.length; i++) {
+            default:
+     * Assert that two objects are equals, calling {@link ToXContent#toXContent(XContentBuilder, ToXContent.Params)} to print out their
+    private InternalTopHits createTestInstanceSortedScore(
+        hitScores.sort((t1, t2) -> comparator.compare(t1.v2(), t2.v2()));
+        int size = instance.getSize();
+            Map<String, DocumentField> searchHitFields = new HashMap<>();
+        }
+        }, (totalHits, scoreDocs) -> new TopFieldDocs(totalHits, scoreDocs, sortFields), sortFieldsComparator(sortFields));
+        sort(hits, scoreDocs, comparator);
+import org.opensearch.search.SearchHit;
+/*
+import org.apache.lucene.search.FieldComparator;
+        SearchHits expectedHits = new SearchHits(
+    /**
+                return randomFloat();
+            FieldDoc l = (FieldDoc) lhs;
+ *
+/*
+        Supplier<InternalTopHits> supplier;
+import java.util.List;
+            hits[i] = new SearchHit(docId, Integer.toString(i), searchHitFields, Collections.emptyMap());
+                TotalHits totalHits = new TotalHits(
+        final SearchHits expectedSearchHits = aggregation.getHits();
+        float maxScore = Float.NEGATIVE_INFINITY;
+                () -> randomFrom(SortField.Type.values())
+    }
+            throw new AssertionError("Didn't expect null but actual was [null]");
+            usedDocIds.add(docId);
+            supplier = () -> createTestInstanceSortedByFields(name, requestedSize, null, scoreSupplier, sortFields, sortFieldValueSuppier);
+            }
+            case 0:
+            dataNodeComparator = sortFieldsComparator(((TopFieldDocs) inputs.get(0).getTopDocs().topDocs).fields);
+                break;
+            actualJson.endObject();
+        }
+                break;
+import org.opensearch.core.xcontent.ToXContent;
+        List<SearchHit> expectedHits = Arrays.asList(expectedSearchHits.getHits());
+                fields[f] = sortFieldValueSupplier.apply(sortFields[ff].getType());
+        Map<String, Object> metadata = instance.getMetadata();
+import static java.util.stream.Collectors.toList;
+        );
+ * this work for additional information regarding copyright
+                    metadata = new HashMap<>(1);
+        assertTrue(parsedAggregation instanceof ParsedTopHits);
+            case LONG:
+            NotEqualMessageBuilder message = new NotEqualMessageBuilder();
+            supplier = () -> createTestInstanceSortedScore(name, requestedSize, null, scoreSupplier);
+    @Override
+        Supplier<Float> scoreSupplier = () -> {
+         * deterministic test results.
+            );
+                );
+        assertEquals(expectedSearchHits.getTotalHits().relation(), actualSearchHits.getTotalHits().relation());
+                OpenSearchTestCase::randomFloat,
+            float score = scoreSupplier.get();
+ * this file be licensed under the Apache-2.0 license or a
+                between(1, 40),
+            SearchHits internalHits = inputs.get(input).getHits();
+        };
+        SearchHits searchHits = instance.getHits();
+            searchHits[i] = hitScores.get(i).v1();
+            case 3:
+                XContentHelper.convertToMap(BytesReference.bytes(expectedJson), false).v2()
+                throw new UnsupportedOperationException();
         return sortFields;
     }
-
-    private Comparator<ScoreDoc> sortFieldsComparator(SortField[] sortFields) {
-        @SuppressWarnings("rawtypes")
-        FieldComparator[] comparators = new FieldComparator[sortFields.length];
-        for (int i = 0; i < sortFields.length; i++) {
-            // Values passed to getComparator shouldn't matter
-            comparators[i] = sortFields[i].getComparator(0, Pruning.NONE);
-        }
-        return (lhs, rhs) -> {
-            FieldDoc l = (FieldDoc) lhs;
-            FieldDoc r = (FieldDoc) rhs;
-            int i = 0;
-            while (i < l.fields.length) {
-                @SuppressWarnings("unchecked")
-                int c = comparators[i].compareValues(l.fields[i], r.fields[i]);
-                if (c != 0) {
-                    return c;
-                }
-                i++;
-            }
-            return 0;
-        };
+            hits[i].score(score);
+        } else {
+        switch (type) {
+            return createTestInstanceSortedByFields(
+ */
     }
-
-    private Comparator<ScoreDoc> scoreComparator() {
-        Comparator<ScoreDoc> comparator = comparing(d -> d.score);
-        return comparator.reversed();
-    }
-
-    @Override
-    protected InternalTopHits mutateInstance(InternalTopHits instance) {
-        String name = instance.getName();
-        int from = instance.getFrom();
-        int size = instance.getSize();
-        TopDocsAndMaxScore topDocs = instance.getTopDocs();
-        SearchHits searchHits = instance.getHits();
-        Map<String, Object> metadata = instance.getMetadata();
-        switch (between(0, 5)) {
-            case 0:
-                name += randomAlphaOfLength(5);
+    protected void assertFromXContent(InternalTopHits aggregation, ParsedAggregation parsedAggregation) throws IOException {
+        SearchHit[] hits = new SearchHit[actualSize];
+    protected List<InternalTopHits> randomResultsToReduce(String name, int size) {
+        TotalHits.Relation relation = TotalHits.Relation.EQUAL_TO;
                 break;
-            case 1:
-                from += between(1, 100);
+        SearchHit[] expectedHitsHits = new SearchHit[min(inputs.get(0).getSize(), allHits.size())];
+                throw new AssertionError("Illegal randomisation branch");
+    @Override
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            throw new AssertionError("Expected null be actual was [" + actual.toString() + "]");
+            throw new AssertionError("Didn't match expected value:\n" + message);
+import java.util.function.Function;
+                @SuppressWarnings("unchecked")
+                searchHits = new SearchHits(searchHits.getHits(), totalHits, searchHits.getMaxScore() + randomFloat());
+        if (sortedByFields) {
+            SearchHit expected = expectedHits.get(i);
+import org.apache.lucene.index.IndexWriter;
+import org.opensearch.core.common.bytes.BytesReference;
+            case SCORE:
+import org.opensearch.search.aggregations.ParsedAggregation;
+import org.apache.lucene.search.SortField;
+            expectedJson.startObject();
+            assertEquals(expected.getFields(), actual.getFields());
+        if (randomBoolean()) {
+        return new InternalTopHits(name, from, size, topDocs, searchHits, metadata);
+        BiFunction<TotalHits, ScoreDoc[], TopDocs> topDocsBuilder,
+            assertEquals(expected.getIndex(), actual.getIndex());
+    private Comparator<ScoreDoc> sortFieldsComparator(SortField[] sortFields) {
+import java.util.Arrays;
+ * compatible open source license.
+                    return c;
+        BiFunction<Integer, Float, ScoreDoc> docBuilder,
+        Comparator<ScoreDoc> comparator
+            case STRING_VAL:
+        }
+            case DOC:
+                }
+                }
+            message.compareMaps(
+                break;
+    /**
+        String name = instance.getName();
+        }
+        if (randomBoolean()) {
+        } else {
+        int actualSize = between(0, requestedSize);
+import java.util.function.Supplier;
+        boolean sortedByFields = inputs.get(0).getTopDocs().topDocs instanceof TopFieldDocs;
+        return createTestInstanceSortedScore(name, between(1, 40), metadata, OpenSearchTestCase::randomFloat);
+import java.util.Set;
+        for (int i = 0; i < searchHits.length; i++) {
+        Function<SortField.Type, Object> sortFieldValueSupplier
+                InternalTopHitsTests::randomOfType
+        if (actual == null) {
+    }
+            SortField.Type type = randomValueOtherThanMany(
+        Set<String> usedSortFields = new HashSet<>();
+    }
+    private InternalTopHits createTestInstanceSortedByFields(
+        }
+         * Make sure all scores are unique so we can get
+        assertEqualsWithErrorMessageFromXContent(expectedHits, actualHits);
+        SearchHits searchHits = new SearchHits(hits, new TotalHits(totalHits, TotalHits.Relation.EQUAL_TO), maxScore);
+import java.util.Objects;
+                }
+        String name,
+                final int ff = f;
                 break;
             case 2:
-                size += between(1, 100);
-                break;
-            case 3:
-                topDocs = new TopDocsAndMaxScore(
-                    new TopDocs(
+    private InternalTopHits createTestInstance(
+            }
+                return randomDouble();
                         new TotalHits(topDocs.topDocs.totalHits.value() + between(1, 100), topDocs.topDocs.totalHits.relation()),
-                        topDocs.topDocs.scoreDocs
-                    ),
-                    topDocs.maxScore + randomFloat()
-                );
-                break;
-            case 4:
-                TotalHits totalHits = new TotalHits(
-                    searchHits.getTotalHits().value() + between(1, 100),
-                    randomFrom(TotalHits.Relation.values())
-                );
-                searchHits = new SearchHits(searchHits.getHits(), totalHits, searchHits.getMaxScore() + randomFloat());
-                break;
-            case 5:
-                if (metadata == null) {
-                    metadata = new HashMap<>(1);
-                } else {
-                    metadata = new HashMap<>(instance.getMetadata());
-                }
-                metadata.put(randomAlphaOfLength(15), randomInt());
-                break;
-            default:
-                throw new AssertionError("Illegal randomisation branch");
-        }
-        return new InternalTopHits(name, from, size, topDocs, searchHits, metadata);
+            SearchHit actual = actualHits.get(i);
+            };
+        return createTestInstance(name, metadata, scoreSupplier, requestedSize, (docId, score) -> {
+                if (sortedByFields) {
+import java.util.HashMap;
     }
+            usedSortFields.add(sortField);
+            int docId = randomValueOtherThanMany(usedDocIds::contains, () -> between(0, IndexWriter.MAX_DOCS));
+        int requestedSize = between(1, 40);
+                    randomFrom(TotalHits.Relation.values())
+            }
 }
+            case DOUBLE:
+    @Override
+            while (i < l.fields.length) {
+        for (int i = 0; i < searchHits.length; i++) {
+                    new TopDocs(
+            case 4:
+        try (XContentBuilder actualJson = JsonXContent.contentBuilder(); XContentBuilder expectedJson = JsonXContent.contentBuilder()) {
+            return score;
+        // Lucene's TopDocs initializes the maxScore to Float.NaN, if there is no maxScore
+        SortField[] sortFields = new SortField[between(1, 5)];
+import org.opensearch.search.SearchHits;
+         */
+        Map<String, Object> metadata,
+ * Licensed to Elasticsearch under one or more contributor
+ */
+        Supplier<Float> scoreSupplier,
+            assertEquals(expected.getSourceAsMap(), actual.getSourceAsMap());
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * software distributed under the License is distributed on an
+                allHits.add(new Tuple<>(doc, internalHits.getHits()[i]));
+ * Unless required by applicable law or agreed to in writing,
+        return new InternalTopHits(name, from, requestedSize, topDocsAndMaxScore, searchHits, metadata);
+            usedScores.add(score);
+/*
+            // Values passed to getComparator shouldn't matter
+            sortFields[i] = new SortField(sortField, type);
+                metadata,
+                );
+        int from = 0;
+            expectedHitsHits[i] = allHits.get(i).v2();
+        final SearchHits actualSearchHits = parsed.getHits();
+    ) {
+    private void sort(SearchHit[] searchHits, ScoreDoc[] scoreDocs, Comparator<ScoreDoc> comparator) {
+        int from = instance.getFrom();
+        }
+        /*
+                throw new UnsupportedOperationException("Unknown SortField.Type: " + type);
+        Set<Integer> usedDocIds = new HashSet<>();
+                i++;
+            case 1:
+import org.apache.lucene.search.ScoreDoc;
+                randomSortFields(),
+            case CUSTOM:
+import java.util.Map;
+                if (c != 0) {
+        for (int input = 0; input < inputs.size(); input++) {
+    }
+ * specific language governing permissions and limitations
+                } else {
+        return Stream.generate(supplier).limit(size).collect(toList());
+        int requestedSize,
+ * license agreements. See the NOTICE file distributed with

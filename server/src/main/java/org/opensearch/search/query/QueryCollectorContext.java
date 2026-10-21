@@ -1,311 +1,276 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
+        return new QueryCollectorContext(REASON_SEARCH_MULTI) {
  *
- * The OpenSearch Contributors require contributions made to
+            @Override
+    }
+                return collector;
+    void postProcess(QuerySearchResult result) throws IOException {}
+            }
+        InternalProfileCollector collector = null;
+             * Creates a {@link MultiCollector} to ensure that the {@link EarlyTerminatingCollector}
+                    final InternalProfileCollectorManager subCollectorManager;
+                assert collector == null;
+                List<Collector> subCollectors = new ArrayList<>();
+            }
+            /**
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.query;
-
-import org.apache.lucene.search.Collector;
-import org.apache.lucene.search.CollectorManager;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MultiCollector;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.SimpleCollector;
-import org.apache.lucene.search.Weight;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.lucene.MinimumScoreCollector;
-import org.opensearch.common.lucene.search.FilteredCollector;
-import org.opensearch.search.aggregations.AggregationCollectorManager;
-import org.opensearch.search.aggregations.BucketCollector;
-import org.opensearch.search.profile.query.CollectorResult;
-import org.opensearch.search.profile.query.InternalProfileCollector;
-import org.opensearch.search.profile.query.InternalProfileCollectorManager;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-
-import static org.opensearch.search.profile.query.CollectorResult.REASON_SEARCH_MIN_SCORE;
-import static org.opensearch.search.profile.query.CollectorResult.REASON_SEARCH_MULTI;
-import static org.opensearch.search.profile.query.CollectorResult.REASON_SEARCH_POST_FILTER;
-import static org.opensearch.search.profile.query.CollectorResult.REASON_SEARCH_TERMINATE_AFTER_COUNT;
-
-/**
- * The context used during query collection
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public abstract class QueryCollectorContext {
-    private static final Collector EMPTY_COLLECTOR = new SimpleCollector() {
-        @Override
-        public void collect(int doc) {}
-
-        @Override
-        public ScoreMode scoreMode() {
-            return ScoreMode.COMPLETE_NO_SCORES;
-        }
-    };
-
-    public static final QueryCollectorContext EMPTY_CONTEXT = new QueryCollectorContext("empty") {
-
-        @Override
-        Collector create(Collector in) throws IOException {
-            return EMPTY_COLLECTOR;
-        }
-
-        @Override
-        CollectorManager<?, ReduceableSearchResult> createManager(CollectorManager<?, ReduceableSearchResult> in) throws IOException {
-            return new CollectorManager<Collector, ReduceableSearchResult>() {
-                @Override
-                public Collector newCollector() throws IOException {
-                    return EMPTY_COLLECTOR;
-                }
-
-                @Override
-                public ReduceableSearchResult reduce(Collection<Collector> collectors) throws IOException {
+    }
                     return result -> {};
-                }
-            };
+                subCollectors.add(in);
+     */
+ *
+    /**
+     * @param collectors Ordered list of collector context
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            }
         }
-    };
-
-    private String profilerName;
-
-    QueryCollectorContext(String profilerName) {
-        this.profilerName = profilerName;
-    }
-
-    /**
-     * Creates a collector that delegates documents to the provided <code>in</code> collector.
-     * @param in The delegate collector
-     */
-    abstract Collector create(Collector in) throws IOException;
-
+                managers.add(in);
+import org.opensearch.search.aggregations.BucketCollector;
+                }
     abstract CollectorManager<?, ReduceableSearchResult> createManager(CollectorManager<?, ReduceableSearchResult> in) throws IOException;
-
     /**
-     * Wraps this collector with a profiler
-     */
-    protected InternalProfileCollector createWithProfiler(InternalProfileCollector in) throws IOException {
-        final Collector collector = create(in);
-        return new InternalProfileCollector(collector, profilerName, in != null ? Collections.singletonList(in) : Collections.emptyList());
-    }
-
-    /**
-     * Wraps this collector manager with a profiler
-     */
-    protected InternalProfileCollectorManager createWithProfiler(InternalProfileCollectorManager in) throws IOException {
-        final CollectorManager<? extends Collector, ReduceableSearchResult> manager = createManager(in);
-        return new InternalProfileCollectorManager(
+        public ScoreMode scoreMode() {
+                        subCollectorManager = new InternalProfileCollectorManager(manager, REASON_SEARCH_MULTI, Collections.emptyList());
+import org.apache.lucene.search.IndexSearcher;
             manager,
             profilerName,
-            in != null ? Collections.singletonList(in) : Collections.emptyList()
-        );
-    }
-
-    /**
-     * Post-process <code>result</code> after search execution.
-     *
-     * @param result The query search result to populate
-     */
-    void postProcess(QuerySearchResult result) throws IOException {}
-
-    /**
-     * Creates the collector tree from the provided <code>collectors</code>
-     * @param collectors Ordered list of collector context
-     */
-    static Collector createQueryCollector(List<QueryCollectorContext> collectors) throws IOException {
-        Collector collector = null;
-        for (QueryCollectorContext ctx : collectors) {
-            collector = ctx.create(collector);
-        }
-        return collector;
-    }
-
-    /**
-     * Creates the collector tree from the provided <code>collectors</code> and wraps each collector with a profiler
-     * @param collectors Ordered list of collector context
-     */
-    static InternalProfileCollector createQueryCollectorWithProfiler(List<QueryCollectorContext> collectors) throws IOException {
-        InternalProfileCollector collector = null;
-        for (QueryCollectorContext ctx : collectors) {
-            collector = ctx.createWithProfiler(collector);
-        }
-        return collector;
-    }
-
-    /**
-     * Filters documents with a query score greater than <code>minScore</code>
-     * @param minScore The minimum score filter
-     */
-    static QueryCollectorContext createMinScoreCollectorContext(float minScore) {
-        return new QueryCollectorContext(REASON_SEARCH_MIN_SCORE) {
-            @Override
-            Collector create(Collector in) {
-                return new MinimumScoreCollector(in, minScore);
-            }
-
-            @Override
-            CollectorManager<?, ReduceableSearchResult> createManager(CollectorManager<?, ReduceableSearchResult> in) throws IOException {
-                return new MinimumCollectorManager(in, minScore);
-            }
-        };
-    }
-
-    /**
-     * Filters documents based on the provided <code>query</code>
-     */
-    static QueryCollectorContext createFilteredCollectorContext(IndexSearcher searcher, Query query) {
-        return new QueryCollectorContext(REASON_SEARCH_POST_FILTER) {
-            @Override
-            Collector create(Collector in) throws IOException {
-                final Weight filterWeight = searcher.createWeight(searcher.rewrite(query), ScoreMode.COMPLETE_NO_SCORES, 1f);
-                return new FilteredCollector(in, filterWeight);
-            }
-
-            @Override
-            CollectorManager<?, ReduceableSearchResult> createManager(CollectorManager<?, ReduceableSearchResult> in) throws IOException {
-                final Weight filterWeight = searcher.createWeight(searcher.rewrite(query), ScoreMode.COMPLETE_NO_SCORES, 1f);
-                return new FilteredCollectorManager(in, filterWeight);
-            }
-        };
-    }
-
-    /**
-     * Creates a multi collector manager from the provided <code>subs</code>
-     */
-    static QueryCollectorContext createMultiCollectorContext(
-        Collection<CollectorManager<? extends Collector, ReduceableSearchResult>> subs
-    ) {
-        return new QueryCollectorContext(REASON_SEARCH_MULTI) {
-            @Override
-            Collector create(Collector in) throws IOException {
-                List<Collector> subCollectors = new ArrayList<>();
-                subCollectors.add(in);
-                for (CollectorManager<? extends Collector, ReduceableSearchResult> manager : subs) {
-                    subCollectors.add(manager.newCollector());
-                }
-                return MultiCollector.wrap(subCollectors);
-            }
-
-            @Override
-            protected InternalProfileCollector createWithProfiler(InternalProfileCollector in) throws IOException {
-                final List<InternalProfileCollector> subCollectors = new ArrayList<>();
-                subCollectors.add(in);
-
-                for (CollectorManager<? extends Collector, ReduceableSearchResult> manager : subs) {
-                    final Collector collector = manager.newCollector();
-                    if (collector instanceof BucketCollector) {
-                        subCollectors.add(
-                            new InternalProfileCollector(collector, CollectorResult.REASON_AGGREGATION, Collections.emptyList())
-                        );
-                    } else {
-                        subCollectors.add(
-                            new InternalProfileCollector(collector, CollectorResult.REASON_SEARCH_MULTI, Collections.emptyList())
-                        );
-                    }
-                }
-
-                final Collector collector = MultiCollector.wrap(subCollectors);
-                return new InternalProfileCollector(collector, REASON_SEARCH_MULTI, subCollectors);
-            }
-
-            @Override
-            protected InternalProfileCollectorManager createWithProfiler(InternalProfileCollectorManager in) {
-                final List<CollectorManager<?, ReduceableSearchResult>> managers = new ArrayList<>();
-                final List<InternalProfileCollectorManager> children = new ArrayList<>();
-                managers.add(in);
-                children.add(in);
-                for (CollectorManager<? extends Collector, ReduceableSearchResult> manager : subs) {
-                    final InternalProfileCollectorManager subCollectorManager;
-                    if (manager instanceof AggregationCollectorManager aggregationCollectorManager) {
-                        subCollectorManager = new InternalProfileCollectorManager(
-                            manager,
-                            aggregationCollectorManager.getCollectorReason(),
-                            Collections.emptyList()
-                        );
-                    } else {
-                        subCollectorManager = new InternalProfileCollectorManager(manager, REASON_SEARCH_MULTI, Collections.emptyList());
-                    }
-                    managers.add(subCollectorManager);
-                    children.add(subCollectorManager);
-                }
-                CollectorManager<? extends Collector, ReduceableSearchResult> multiCollectorManager = QueryCollectorManagerContext
-                    .createMultiCollectorManager(managers);
-                return new InternalProfileCollectorManager(multiCollectorManager, REASON_SEARCH_MULTI, children);
-            }
-
-            @Override
-            CollectorManager<? extends Collector, ReduceableSearchResult> createManager(
-                CollectorManager<? extends Collector, ReduceableSearchResult> in
-            ) throws IOException {
-                final List<CollectorManager<?, ReduceableSearchResult>> managers = new ArrayList<>();
-                managers.add(in);
-                managers.addAll(subs);
-                return QueryCollectorManagerContext.createMultiCollectorManager(managers);
-            }
-        };
-    }
-
-    /**
-     * Creates collector limiting the collection to the first <code>numHits</code> documents
-     */
-    static QueryCollectorContext createEarlyTerminationCollectorContext(int numHits) {
-        return new QueryCollectorContext(REASON_SEARCH_TERMINATE_AFTER_COUNT) {
+ * GitHub history for details.
             private Collector collector;
-
-            /**
-             * Creates a {@link MultiCollector} to ensure that the {@link EarlyTerminatingCollector}
-             * can terminate the collection independently of the provided <code>in</code> {@link Collector}.
+        Collector collector = null;
+import java.util.Collections;
+        );
+/*
              */
-            @Override
-            Collector create(Collector in) {
-                assert collector == null;
-
-                List<Collector> subCollectors = new ArrayList<>();
-                subCollectors.add(new EarlyTerminatingCollector(EMPTY_COLLECTOR, numHits, true));
+            in != null ? Collections.singletonList(in) : Collections.emptyList()
+                    .createMultiCollectorManager(managers);
+     * Wraps this collector manager with a profiler
+            protected InternalProfileCollector createWithProfiler(InternalProfileCollector in) throws IOException {
+ *
+    /**
+        Collector create(Collector in) throws IOException {
+        return collector;
+        @Override
+                final Collector collector = MultiCollector.wrap(subCollectors);
+     * Wraps this collector with a profiler
+                final Weight filterWeight = searcher.createWeight(searcher.rewrite(query), ScoreMode.COMPLETE_NO_SCORES, 1f);
+        }
+                    final Collector collector = manager.newCollector();
+    };
+ */
+                            manager,
+        Collection<CollectorManager<? extends Collector, ReduceableSearchResult>> subs
+import java.io.IOException;
+                        );
+        return new QueryCollectorContext(REASON_SEARCH_MIN_SCORE) {
+    ) {
+import java.util.ArrayList;
+            return ScoreMode.COMPLETE_NO_SCORES;
+                return new FilteredCollectorManager(in, filterWeight);
+    protected InternalProfileCollectorManager createWithProfiler(InternalProfileCollectorManager in) throws IOException {
+        }
                 subCollectors.add(in);
+ * @opensearch.api
+            }
+ * Licensed to Elasticsearch under one or more contributor
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                final Weight filterWeight = searcher.createWeight(searcher.rewrite(query), ScoreMode.COMPLETE_NO_SCORES, 1f);
+                            new InternalProfileCollector(collector, CollectorResult.REASON_AGGREGATION, Collections.emptyList())
+     */
                 this.collector = MultiCollector.wrap(subCollectors);
-                return collector;
-            }
-
-            @Override
-            CollectorManager<? extends Collector, ReduceableSearchResult> createManager(
-                CollectorManager<? extends Collector, ReduceableSearchResult> in
-            ) throws IOException {
-                return new EarlyTerminatingCollectorManager<>(in, numHits, true);
-            }
+ * license agreements. See the NOTICE file distributed with
+                final List<InternalProfileCollectorManager> children = new ArrayList<>();
+                children.add(in);
+import org.opensearch.search.profile.query.InternalProfileCollectorManager;
+ * compatible open source license.
+        }
+                return new InternalProfileCollectorManager(multiCollectorManager, REASON_SEARCH_MULTI, children);
+ * this work for additional information regarding copyright
+     */
         };
+                    }
+ * SPDX-License-Identifier: Apache-2.0
+        return new QueryCollectorContext(REASON_SEARCH_TERMINATE_AFTER_COUNT) {
+ * You may obtain a copy of the License at
+            }
+                CollectorManager<? extends Collector, ReduceableSearchResult> in
+        @Override
+        };
+        }
+            @Override
+                @Override
+import java.util.Collection;
+import org.apache.lucene.search.CollectorManager;
+                        subCollectors.add(
+                CollectorManager<? extends Collector, ReduceableSearchResult> multiCollectorManager = QueryCollectorManagerContext
+import static org.opensearch.search.profile.query.CollectorResult.REASON_SEARCH_POST_FILTER;
     }
+            Collector create(Collector in) {
+            ) throws IOException {
+import org.opensearch.common.annotation.PublicApi;
+        return new QueryCollectorContext(REASON_SEARCH_POST_FILTER) {
+                final List<InternalProfileCollector> subCollectors = new ArrayList<>();
 }
+ * The OpenSearch Contributors require contributions made to
+package org.opensearch.search.query;
+                        );
+ * not use this file except in compliance with the License.
+                }
+     * Creates a collector that delegates documents to the provided <code>in</code> collector.
+                    if (collector instanceof BucketCollector) {
+ */
+            ) throws IOException {
+    static QueryCollectorContext createMinScoreCollectorContext(float minScore) {
+                        );
+import org.apache.lucene.search.Query;
+ * the Apache License, Version 2.0 (the "License"); you may
+    public static final QueryCollectorContext EMPTY_CONTEXT = new QueryCollectorContext("empty") {
+                return new EarlyTerminatingCollectorManager<>(in, numHits, true);
+import static org.opensearch.search.profile.query.CollectorResult.REASON_SEARCH_MULTI;
+            @Override
+import org.opensearch.common.lucene.search.FilteredCollector;
+        final Collector collector = create(in);
+                List<Collector> subCollectors = new ArrayList<>();
+            };
+    }
+     *
+                return MultiCollector.wrap(subCollectors);
+@PublicApi(since = "1.0.0")
+            @Override
+            }
+ */
+        this.profilerName = profilerName;
+     * @param minScore The minimum score filter
+        for (QueryCollectorContext ctx : collectors) {
+             * can terminate the collection independently of the provided <code>in</code> {@link Collector}.
+                }
+     * Post-process <code>result</code> after search execution.
+     * @param collectors Ordered list of collector context
+                managers.addAll(subs);
+                        subCollectors.add(
+    }
+     */
+        return new InternalProfileCollectorManager(
+/**
+import static org.opensearch.search.profile.query.CollectorResult.REASON_SEARCH_MIN_SCORE;
+            @Override
+            @Override
+    static QueryCollectorContext createMultiCollectorContext(
+ */
+                            new InternalProfileCollector(collector, CollectorResult.REASON_SEARCH_MULTI, Collections.emptyList())
+            CollectorManager<?, ReduceableSearchResult> createManager(CollectorManager<?, ReduceableSearchResult> in) throws IOException {
+                }
+    private String profilerName;
+    /**
+    };
+     * @param result The query search result to populate
+import org.apache.lucene.search.Weight;
+                final List<CollectorManager<?, ReduceableSearchResult>> managers = new ArrayList<>();
+ * The context used during query collection
+                return new MinimumCollectorManager(in, minScore);
+            return new CollectorManager<Collector, ReduceableSearchResult>() {
+ * specific language governing permissions and limitations
+    }
+                            aggregationCollectorManager.getCollectorReason(),
+     * Creates a multi collector manager from the provided <code>subs</code>
+import static org.opensearch.search.profile.query.CollectorResult.REASON_SEARCH_TERMINATE_AFTER_COUNT;
+import org.opensearch.search.profile.query.CollectorResult;
+import org.apache.lucene.search.Collector;
+                    managers.add(subCollectorManager);
+     * Filters documents based on the provided <code>query</code>
+        return new InternalProfileCollector(collector, profilerName, in != null ? Collections.singletonList(in) : Collections.emptyList());
+        @Override
+     * Filters documents with a query score greater than <code>minScore</code>
+                final List<CollectorManager<?, ReduceableSearchResult>> managers = new ArrayList<>();
+                public Collector newCollector() throws IOException {
+    protected InternalProfileCollector createWithProfiler(InternalProfileCollector in) throws IOException {
+     */
+            protected InternalProfileCollectorManager createWithProfiler(InternalProfileCollectorManager in) {
+                    if (manager instanceof AggregationCollectorManager aggregationCollectorManager) {
+import org.apache.lucene.search.ScoreMode;
+            Collector create(Collector in) throws IOException {
+public abstract class QueryCollectorContext {
+    static InternalProfileCollector createQueryCollectorWithProfiler(List<QueryCollectorContext> collectors) throws IOException {
+ * ownership. Elasticsearch licenses this file to you under
+            Collector create(Collector in) {
+    }
+                managers.add(in);
+        final CollectorManager<? extends Collector, ReduceableSearchResult> manager = createManager(in);
+        for (QueryCollectorContext ctx : collectors) {
+import org.apache.lucene.search.MultiCollector;
+        public void collect(int doc) {}
+ * software distributed under the License is distributed on an
+                for (CollectorManager<? extends Collector, ReduceableSearchResult> manager : subs) {
+            collector = ctx.createWithProfiler(collector);
+                    return EMPTY_COLLECTOR;
+ * under the License.
+                @Override
+                            Collections.emptyList()
+                return new InternalProfileCollector(collector, REASON_SEARCH_MULTI, subCollectors);
+import org.opensearch.search.profile.query.InternalProfileCollector;
+            @Override
+            }
+            @Override
+     */
+                for (CollectorManager<? extends Collector, ReduceableSearchResult> manager : subs) {
+            CollectorManager<? extends Collector, ReduceableSearchResult> createManager(
+        };
+    static QueryCollectorContext createFilteredCollectorContext(IndexSearcher searcher, Query query) {
+    /**
+                    subCollectors.add(manager.newCollector());
+     * Creates collector limiting the collection to the first <code>numHits</code> documents
+                }
+    /**
+import java.util.List;
+                return QueryCollectorManagerContext.createMultiCollectorManager(managers);
+    /**
+/*
+    /**
+ * KIND, either express or implied.  See the License for the
+            }
+                subCollectors.add(new EarlyTerminatingCollector(EMPTY_COLLECTOR, numHits, true));
+ * Unless required by applicable law or agreed to in writing,
+import org.apache.lucene.search.SimpleCollector;
+     */
+     * Creates the collector tree from the provided <code>collectors</code>
+                    children.add(subCollectorManager);
+                return new FilteredCollector(in, filterWeight);
+                CollectorManager<? extends Collector, ReduceableSearchResult> in
+ * Modifications Copyright OpenSearch Contributors. See
+        };
+            }
+            CollectorManager<?, ReduceableSearchResult> createManager(CollectorManager<?, ReduceableSearchResult> in) throws IOException {
+            collector = ctx.create(collector);
+    abstract Collector create(Collector in) throws IOException;
+                    }
+    static Collector createQueryCollector(List<QueryCollectorContext> collectors) throws IOException {
+            Collector create(Collector in) throws IOException {
+     */
+     * @param in The delegate collector
+            }
+        @Override
+                subCollectors.add(in);
+                for (CollectorManager<? extends Collector, ReduceableSearchResult> manager : subs) {
+        CollectorManager<?, ReduceableSearchResult> createManager(CollectorManager<?, ReduceableSearchResult> in) throws IOException {
+     */
+/*
+    /**
+                return new MinimumScoreCollector(in, minScore);
+import org.opensearch.common.lucene.MinimumScoreCollector;
+        return collector;
+            @Override
+    /**
+    }
+                        subCollectorManager = new InternalProfileCollectorManager(
+                    } else {
+            CollectorManager<? extends Collector, ReduceableSearchResult> createManager(
+    static QueryCollectorContext createEarlyTerminationCollectorContext(int numHits) {
+                    } else {
+     */
+ *
+     * Creates the collector tree from the provided <code>collectors</code> and wraps each collector with a profiler
+                public ReduceableSearchResult reduce(Collection<Collector> collectors) throws IOException {
+    private static final Collector EMPTY_COLLECTOR = new SimpleCollector() {
+import org.opensearch.search.aggregations.AggregationCollectorManager;
+    QueryCollectorContext(String profilerName) {
+            @Override
+            return EMPTY_COLLECTOR;
+    }
