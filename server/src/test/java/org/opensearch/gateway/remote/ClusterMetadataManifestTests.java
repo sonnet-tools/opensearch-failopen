@@ -1,894 +1,861 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
 package org.opensearch.gateway.remote;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.coordination.CoordinationMetadata;
-import org.opensearch.cluster.metadata.IndexGraveyard;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexTemplateMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.metadata.RepositoriesMetadata;
-import org.opensearch.cluster.metadata.TemplatesMetadata;
-import org.opensearch.cluster.metadata.WeightedRoutingMetadata;
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.StringKeyDiffProvider;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
+ * The OpenSearch Contributors require contributions made to
+            // Mutate custom metadata
+            .put(IndexMetadata.SETTING_INDEX_UUID, index.getUUID())
+        final Settings settings = Settings.builder().put("mock-settings", true).build();
+        }
+                    orig,
+            .clusterUUIDCommitted(true)
+        builder.startObject();
+                    builder.coordinationMetadata(randomUploadedMetadataAttribute());
+                    new NamedWriteableRegistry(Collections.emptyList()),
+            assertEquals(originalManifest, fromXContentManifest);
+        builder.endObject();
+            .opensearchVersion(Version.CURRENT)
+    }
+        threadPool.shutdown();
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+            .indices(Collections.singletonList(uploadedIndexMetadata))
+        assertEquals(CODEC_V1, ClusterMetadataManifest.getCodecForVersion(Version.V_2_13_0));
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedIndexMetadata;
-import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadataAttribute;
-import org.opensearch.test.EqualsHashCodeTestUtils;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.After;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-import org.mockito.Mockito;
-
-import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V0;
-import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V1;
-import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V2;
-import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V3;
-import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V4;
-import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.CLUSTER_BLOCKS;
-import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.DISCOVERY_NODES;
-import static org.opensearch.gateway.remote.model.RemoteCoordinationMetadata.COORDINATION_METADATA;
-import static org.opensearch.gateway.remote.model.RemoteCustomMetadata.CUSTOM_DELIMITER;
-import static org.opensearch.gateway.remote.model.RemoteCustomMetadata.CUSTOM_METADATA;
-import static org.opensearch.gateway.remote.model.RemoteHashesOfConsistentSettings.HASHES_OF_CONSISTENT_SETTINGS;
-import static org.opensearch.gateway.remote.model.RemotePersistentSettingsMetadata.SETTING_METADATA;
-import static org.opensearch.gateway.remote.model.RemoteTemplatesMetadata.TEMPLATES_METADATA;
+                    builder.diffManifest(null);
+import org.opensearch.cluster.routing.RoutingTable;
+                manifest -> {
+    public void testClusterMetadataManifestXContentV0() throws IOException {
+                    )
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+                    return builder.build();
+import org.opensearch.cluster.coordination.CoordinationMetadata;
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + IndexGraveyard.TYPE,
+        }
+                ),
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + IndexGraveyard.TYPE,
+                        )
+                manifest -> {
+    public void testClusterMetadataManifestXContentV4() throws IOException {
+                        new UploadedMetadataAttribute(
+                    .put(indexMetadata, true)
+                    orig,
+import org.opensearch.core.index.Index;
+                initialManifest,
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+                    return builder.build();
+            .nodeId("test-node-id")
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+                    builder.settingMetadata(randomUploadedMetadataAttribute());
+    }
+                    null
+                        ),
+            )
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+                    return builder.build();
+        }
+            );
+                }
+            // Mutate template metadata
+                        new UploadedMetadataAttribute(
+            .discoveryNodesMetadata(uploadedMetadataAttribute)
+                    orig,
+            );
+                }
+            .templatesMetadata(uploadedMetadataAttribute)
+            .customMetadataMap(
+            .indicesRouting(Collections.singletonList(uploadedIndexRoutingMetadata))
+                    ClusterMetadataManifest::new
+import org.opensearch.core.xcontent.XContentBuilder;
+                orig -> OpenSearchTestCase.copyWriteable(
+                    return builder.build();
+                return new UploadedIndexMetadata(
+                manifest -> {
+            .codecVersion(ClusterMetadataManifest.CODEC_V4)
 import static org.opensearch.gateway.remote.model.RemoteTransientSettingsMetadata.TRANSIENT_SETTING_METADATA;
 import static org.opensearch.gateway.remote.routingtable.RemoteIndexRoutingTable.INDEX_ROUTING_METADATA_PREFIX;
-
-public class ClusterMetadataManifestTests extends OpenSearchTestCase {
-
-    private final ThreadPool threadPool = new TestThreadPool(getClass().getName());
-
-    @After
-    public void teardown() throws Exception {
-        super.tearDown();
-        threadPool.shutdown();
-    }
-
-    public void testClusterMetadataManifestXContentV0() throws IOException {
-        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path", CODEC_V0);
-        ClusterMetadataManifest originalManifest = ClusterMetadataManifest.builder()
-            .clusterTerm(1L)
-            .stateVersion(1L)
-            .clusterUUID("test-cluster-uuid")
-            .stateUUID("test-state-uuid")
-            .opensearchVersion(Version.CURRENT)
-            .nodeId("test-node-id")
-            .committed(false)
-            .codecVersion(CODEC_V0)
-            .indices(Collections.singletonList(uploadedIndexMetadata))
-            .previousClusterUUID("prev-cluster-uuid")
-            .clusterUUIDCommitted(true)
-            .build();
-        final XContentBuilder builder = JsonXContent.contentBuilder();
-        builder.startObject();
-        originalManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final ClusterMetadataManifest fromXContentManifest = ClusterMetadataManifest.fromXContentV0(parser);
-            assertEquals(originalManifest, fromXContentManifest);
         }
+            );
+import static org.opensearch.gateway.remote.model.RemoteHashesOfConsistentSettings.HASHES_OF_CONSISTENT_SETTINGS;
     }
-
-    public void testClusterMetadataManifestXContentV1() throws IOException {
-        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path", CODEC_V1);
-        ClusterMetadataManifest originalManifest = ClusterMetadataManifest.builder()
-            .clusterTerm(1L)
-            .stateVersion(1L)
-            .clusterUUID("test-cluster-uuid")
-            .stateUUID("test-state-uuid")
-            .opensearchVersion(Version.CURRENT)
-            .nodeId("test-node-id")
-            .committed(false)
-            .codecVersion(CODEC_V1)
-            .globalMetadataFileName("test-global-metadata-file")
-            .indices(Collections.singletonList(uploadedIndexMetadata))
-            .previousClusterUUID("prev-cluster-uuid")
-            .clusterUUIDCommitted(true)
-            .build();
-        final XContentBuilder builder = JsonXContent.contentBuilder();
-        builder.startObject();
-        originalManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final ClusterMetadataManifest fromXContentManifest = ClusterMetadataManifest.fromXContentV1(parser);
-            assertEquals(originalManifest, fromXContentManifest);
-        }
-    }
-
-    public void testClusterMetadataManifestXContent() throws IOException {
-        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path");
-        ClusterMetadataManifest originalManifest = ClusterMetadataManifest.builder()
-            .clusterTerm(1L)
-            .stateVersion(1L)
-            .clusterUUID("test-cluster-uuid")
-            .stateUUID("test-state-uuid")
-            .opensearchVersion(Version.CURRENT)
-            .nodeId("test-node-id")
-            .committed(false)
-            .codecVersion(CODEC_V2)
-            .indices(Collections.singletonList(uploadedIndexMetadata))
-            .previousClusterUUID("prev-cluster-uuid")
-            .clusterUUIDCommitted(true)
-            .coordinationMetadata(new UploadedMetadataAttribute(COORDINATION_METADATA, "coordination-file"))
-            .settingMetadata(new UploadedMetadataAttribute(SETTING_METADATA, "setting-file"))
-            .templatesMetadata(new UploadedMetadataAttribute(TEMPLATES_METADATA, "templates-file"))
-            .customMetadataMap(
-                Collections.unmodifiableList(
-                    Arrays.asList(
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + RepositoriesMetadata.TYPE,
-                            "custom--repositories-file"
-                        ),
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + IndexGraveyard.TYPE,
-                            "custom--index_graveyard-file"
-                        ),
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + WeightedRoutingMetadata.TYPE,
-                            "custom--weighted_routing_netadata-file"
-                        )
-                    )
-                ).stream().collect(Collectors.toMap(UploadedMetadataAttribute::getAttributeName, Function.identity()))
             )
-            .routingTableVersion(1L)
-            .build();
-        final XContentBuilder builder = JsonXContent.contentBuilder();
-        builder.startObject();
-        originalManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final ClusterMetadataManifest fromXContentManifest = ClusterMetadataManifest.fromXContent(parser);
-            assertEquals(originalManifest, fromXContentManifest);
         }
-    }
-
-    public void testClusterMetadataManifestSerializationEqualsHashCode() {
-        ClusterMetadataManifest initialManifest = ClusterMetadataManifest.builder()
             .clusterTerm(1337L)
-            .stateVersion(7L)
-            .clusterUUID("HrYF3kP5SmSPWtKlWhnNSA")
-            .stateUUID("6By9p9G0Rv2MmFYJcPAOgA")
-            .opensearchVersion(Version.CURRENT)
-            .nodeId("B10RX1f5RJenMQvYccCgSQ")
-            .committed(true)
-            .codecVersion(ClusterMetadataManifest.CODEC_V4)
-            .indices(randomUploadedIndexMetadataList())
-            .previousClusterUUID("yfObdx8KSMKKrXf8UyHhM")
-            .clusterUUIDCommitted(true)
-            .coordinationMetadata(new UploadedMetadataAttribute(COORDINATION_METADATA, "coordination-file"))
-            .settingMetadata(new UploadedMetadataAttribute(SETTING_METADATA, "setting-file"))
-            .templatesMetadata(new UploadedMetadataAttribute(TEMPLATES_METADATA, "templates-file"))
-            .customMetadataMap(
-                Collections.unmodifiableList(
-                    Arrays.asList(
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+            case 1:
+import org.opensearch.threadpool.ThreadPool;
+                ),
+            assertEquals(originalManifest, fromXContentManifest);
+                );
+        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path");
                         new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + RepositoriesMetadata.TYPE,
-                            "custom--repositories-file"
-                        ),
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + IndexGraveyard.TYPE,
                             "custom--index_graveyard-file"
+            .clusterBlocksMetadata(uploadedMetadataAttribute)
+            .clusterUUIDCommitted(true)
+            .clusterUUID("test-cluster-uuid")
+                            "custom--repositories-file"
+import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V1;
                         ),
-                        new UploadedMetadataAttribute(
+                    RemoteClusterStateServiceTests.generateClusterStateWithOneIndex().build(),
+            .templatesMetadata(new UploadedMetadataAttribute(TEMPLATES_METADATA, "templates-file"))
+        {
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+        assertEquals(CODEC_V2, ClusterMetadataManifest.getCodecForVersion(Version.V_2_15_0));
+        {
                             CUSTOM_METADATA + CUSTOM_DELIMITER + WeightedRoutingMetadata.TYPE,
-                            "custom--weighted_routing_netadata-file"
+            .hashesOfConsistentSettings(uploadedMetadataAttribute)
+            .settingMetadata(new UploadedMetadataAttribute(SETTING_METADATA, "setting-file"))
+            .nodeId("test-node-id")
+            .clusterUUIDCommitted(true)
+                        new UploadedMetadataAttribute(
+                    new NamedWriteableRegistry(Collections.emptyList()),
+import org.opensearch.core.xcontent.ToXContent;
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+                ),
+                initialManifest,
+            .clusterTerm(1L)
+import org.junit.After;
+            );
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + WeightedRoutingMetadata.TYPE,
+                    builder.clusterUUIDCommitted(false);
+                    )
                         )
                     )
-                ).stream().collect(Collectors.toMap(UploadedMetadataAttribute::getAttributeName, Function.identity()))
-            )
-            .routingTableVersion(1L)
-            .discoveryNodesMetadata(new UploadedMetadataAttribute(DISCOVERY_NODES, "discovery-nodes-file"))
-            .clusterBlocksMetadata(new UploadedMetadataAttribute(CLUSTER_BLOCKS, "cluster-block-file"))
-            .transientSettingsMetadata(new UploadedMetadataAttribute(TRANSIENT_SETTING_METADATA, "transient-settings-file"))
-            .hashesOfConsistentSettings(new UploadedMetadataAttribute(HASHES_OF_CONSISTENT_SETTINGS, "hashes-of-consistent-settings-file"))
-            .clusterStateCustomMetadataMap(Collections.emptyMap())
+                        ),
+            .stateUUID("test-state-uuid")
+                    new NamedWriteableRegistry(Collections.emptyList()),
+                ),
+                ),
+import org.opensearch.Version;
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+import org.opensearch.cluster.routing.IndexRoutingTable;
+        );
             .diffManifest(
-                new ClusterStateDiffManifest(
-                    RemoteClusterStateServiceTests.generateClusterStateWithOneIndex().build(),
-                    ClusterState.EMPTY_STATE,
-                    ClusterMetadataManifest.CODEC_V3,
                     null,
-                    "indicesRoutingDiffPath"
-                )
             )
-            .checksum(new ClusterStateChecksum(createClusterState(), threadPool))
-            .build();
-        {  // Mutate Cluster Term
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+                        new UploadedMetadataAttribute(
+            .committed(false)
+        return uploadedIndexMetadataList;
                 initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.clusterTerm(1338L);
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+                    routingTableIncrementalDiff,
+            )
                     return builder.build();
-                }
-            );
-        }
-        {  // Mutate State Version
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
+        builder.endObject();
                 orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.stateVersion(8L);
-                    return builder.build();
-                }
-            );
-        }
-        {  // Mutate Cluster UUID
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.clusterUUID("efOkMiPbQZCUQQgtFWdbPw");
-                    return builder.build();
-                }
-            );
-        }
-        {  // Mutate State UUID
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
                     builder.stateUUID("efOkMiPbQZCUQQgtFWdbPw");
-                    return builder.build();
-                }
-            );
-        }
-        {  // Mutate OpenSearch Version
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
                 initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.opensearchVersion(Version.V_EMPTY);
-                    return builder.build();
-                }
-            );
-        }
-        {  // Mutate Committed State
+        UploadedMetadataAttribute uploadedMetadataAttribute = new UploadedMetadataAttribute("attribute_name", "testing_attribute");
+            .globalMetadataFileName("test-global-metadata-file")
             EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
                     orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
+            .clusterUUID("test-cluster-uuid")
                     ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.committed(false);
+                initialManifest,
+                    orig,
+                    .version(randomNonNegativeLong())
                     return builder.build();
-                }
-            );
         }
-        {  // Mutate Indices
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.indices(randomUploadedIndexMetadataList());
-                    return builder.build();
                 }
-            );
-        }
-        { // Mutate Previous cluster UUID
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
+    }
+            .coordinationMetadata(new UploadedMetadataAttribute(COORDINATION_METADATA, "coordination-file"))
+        switch (randomInt(2)) {
+            .clusterTerm(1L)
                 orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
                     ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.previousClusterUUID("vZX62DCQEOzGXlxXCrEu");
-                    return builder.build();
-                }
-            );
-
-        }
-        { // Mutate cluster uuid committed
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+            .build();
+            .previousClusterUUID("prev-cluster-uuid")
                 initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.clusterUUIDCommitted(false);
-                    return builder.build();
-                }
-            );
-        }
-        {
-            // Mutate Coordination metadata
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+ *
                 initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.coordinationMetadata(randomUploadedMetadataAttribute());
-                    return builder.build();
-                }
-            );
         }
-        {
-            // Mutate setting metadata
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.settingMetadata(randomUploadedMetadataAttribute());
-                    return builder.build();
-                }
-            );
-        }
-        {
-            // Mutate template metadata
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.templatesMetadata(randomUploadedMetadataAttribute());
-                    return builder.build();
-                }
-            );
-        }
-        {
-            // Mutate custom metadata
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.customMetadataMap(Collections.emptyMap());
-                    return builder.build();
-                }
-            );
-        }
-        {
-            // Mutate discovery nodes
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
                     builder.discoveryNodesMetadata(randomUploadedMetadataAttribute());
-                    return builder.build();
+            .build();
+        originalManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
+                        ),
+        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path");
+import org.opensearch.cluster.metadata.IndexGraveyard;
                 }
-            );
+            .build();
+                manifest -> {
+                Collections.unmodifiableList(
+                orig -> OpenSearchTestCase.copyWriteable(
+import org.opensearch.cluster.metadata.IndexTemplateMetadata;
+            .diffManifest(
+            INDEX_ROUTING_METADATA_PREFIX
+ * this file be licensed under the Apache-2.0 license or a
+import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.DISCOVERY_NODES;
+        final Settings idxSettings = Settings.builder()
+                new ClusterStateDiffManifest(
+import static org.opensearch.gateway.remote.model.RemotePersistentSettingsMetadata.SETTING_METADATA;
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+            "test-index",
+import org.opensearch.cluster.ClusterState;
+            .stateVersion(1L)
+                        new UploadedMetadataAttribute(
+                        new UploadedMetadataAttribute(
+            .stateUUID("test-state-uuid")
+            .customMetadataMap(
         }
-        {
-            // Mutate cluster blocks
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
+        }
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+            final ClusterMetadataManifest fromXContentManifest = ClusterMetadataManifest.fromXContent(parser);
+                    .coordinationMetadata(coordinationMetadata)
+            .routingTableVersion(1L)
+        final XContentBuilder builder = JsonXContent.contentBuilder();
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + RepositoriesMetadata.TYPE,
+                            "custom--weighted_routing_netadata-file"
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
                 orig -> OpenSearchTestCase.copyWriteable(
                     orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
+            .hashesOfConsistentSettings(uploadedMetadataAttribute)
+    }
+                orig -> OpenSearchTestCase.copyWriteable(
+            .customMetadataMap(
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + RepositoriesMetadata.TYPE,
+            .stateUUID("state-uuid")
+            .indices(Collections.singletonList(uploadedIndexMetadata))
+        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path");
                 manifest -> {
+                    uploadedIndexMetadata.getIndexName(),
+                    ClusterMetadataManifest::new
+            .customMetadataMap(
+                    builder.stateVersion(8L);
+            .clusterBlocksMetadata(new UploadedMetadataAttribute(CLUSTER_BLOCKS, "cluster-block-file"))
+                ),
+            .nodeId("B10RX1f5RJenMQvYccCgSQ")
+            .opensearchVersion(Version.CURRENT)
+                    new NamedWriteableRegistry(Collections.emptyList()),
+                Collections.unmodifiableList(
+            )
+                orig -> OpenSearchTestCase.copyWriteable(
+            );
+        UploadedIndexMetadata uploadedIndexRoutingMetadata = new UploadedIndexMetadata(
+            .clusterStateCustomMetadataMap(Collections.emptyMap())
+                            "custom--index_graveyard-file"
+        }
+    }
+                        ),
+                            "custom--repositories-file"
+                }
+            .previousClusterUUID("prev-cluster-uuid")
+            assertEquals(originalManifest, fromXContentManifest);
+                manifest -> {
+            final ClusterMetadataManifest fromXContentManifest = ClusterMetadataManifest.fromXContent(parser);
+                initialManifest,
+                }
+                new ClusterStateDiffManifest(
+        {  // Mutate Cluster Term
+                        new UploadedMetadataAttribute(
+                            "custom--weighted_routing_netadata-file"
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + WeightedRoutingMetadata.TYPE,
+                orig -> OpenSearchTestCase.copyWriteable(
+                        ),
+                    CODEC_V3,
+        ClusterMetadataManifest originalManifest = ClusterMetadataManifest.builder()
+                orig -> OpenSearchTestCase.copyWriteable(
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
                     ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+                        new UploadedMetadataAttribute(
+        }
+    public void testClusterMetadataManifestXContentV2WithoutEphemeral() throws IOException {
+            .coordinationMetadata(new UploadedMetadataAttribute(COORDINATION_METADATA, "coordination-file"))
                     builder.clusterBlocksMetadata(randomUploadedMetadataAttribute());
-                    return builder.build();
-                }
+            .build();
+            .opensearchVersion(Version.CURRENT)
+                    new NamedWriteableRegistry(Collections.emptyList()),
+import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V3;
+            .stateUUID("test-state-uuid")
+                );
+            .codecVersion(CODEC_V2)
+            .codecVersion(CODEC_V0)
+        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path", CODEC_V0);
+                    new NamedWriteableRegistry(Collections.emptyList()),
+                            "custom--index_graveyard-file"
+            .committed(false)
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + IndexGraveyard.TYPE,
+                    Arrays.asList(
+import org.opensearch.core.common.bytes.BytesReference;
+                initialManifest,
+            .indices(Collections.singletonList(uploadedIndexMetadata))
+                    .build()
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+            // Mutate setting metadata
             );
+                initialManifest,
+                ).stream().collect(Collectors.toMap(UploadedMetadataAttribute::getAttributeName, Function.identity()))
+            .codecVersion(CODEC_V1)
+        originalManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
+        builder.endObject();
+            .clusterTerm(1L)
+                    ClusterMetadataManifest.CODEC_V3,
+        final XContentBuilder builder = JsonXContent.contentBuilder();
+            .clusterUUID("test-cluster-uuid")
+            );
+                    orig,
+            );
+                    ClusterMetadataManifest::new
+    }
+import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadataAttribute;
+                    orig,
         }
-        {
+            final ClusterMetadataManifest fromXContentManifest = ClusterMetadataManifest.fromXContentV1(parser);
+                ),
+import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.CLUSTER_BLOCKS;
+                initialManifest,
+            "test-index-uuid",
+        final XContentBuilder builder = JsonXContent.contentBuilder();
             // Mutate transient settings metadata
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.transientSettingsMetadata(randomUploadedMetadataAttribute());
-                    return builder.build();
+            .settingMetadata(new UploadedMetadataAttribute(SETTING_METADATA, "setting-file"))
+        originalManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
                 }
-            );
-        }
-        {
-            // Mutate diff manifest
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
                     new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+                orig -> OpenSearchTestCase.copyWriteable(
+ * SPDX-License-Identifier: Apache-2.0
+            .customMetadataMap(
+import static org.opensearch.gateway.remote.model.RemoteCoordinationMetadata.COORDINATION_METADATA;
+            .settingMetadata(uploadedMetadataAttribute)
+        }
+            .stateVersion(1L)
+            assertTrue(uploadedIndexMetadataList.add(randomUploadedIndexMetadata()));
+                    ClusterState.EMPTY_STATE,
+        {
+                    randomAlphaOfLength(10),
+        builder.endObject();
                     ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.diffManifest(null);
+        UploadedMetadataAttribute uploadedMetadataAttribute = new UploadedMetadataAttribute("attribute_name", "testing_attribute");
+                    Arrays.asList(
+            .indicesRouting(Collections.singletonList(uploadedIndexMetadata))
+            .build();
+            .stateUUID("test-state-uuid")
+                return new UploadedIndexMetadata(
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+    @After
+        final XContentBuilder builder = JsonXContent.contentBuilder();
+                            "custom--weighted_routing_netadata-file"
+    private static UploadedIndexMetadata randomUploadedIndexMetadata() {
+                    )
                     return builder.build();
-                }
-            );
-        }
-        {
-            // Mutate hashes of consistent settings
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
                 orig -> OpenSearchTestCase.copyWriteable(
+                    builder.committed(false);
+                ),
+            assertEquals(originalManifest, fromXContentManifest);
+                    orig,
+                )
+                ),
+            .coordinationMetadata(uploadedMetadataAttribute)
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+            .nodeId("test-node-id")
+                    "indicesRoutingDiffPath"
+                    return builder.build();
+            .previousClusterUUID("prev-cluster-uuid")
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+            .indices(Collections.singletonList(uploadedIndexMetadata))
+                }
+            .clusterUUID("test-cluster-uuid")
+                manifest -> {
+                ),
+        }
+            .codecVersion(CODEC_V2)
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+            );
+        builder.endObject();
+        return ClusterState.builder(ClusterName.DEFAULT)
+        assertEquals(CODEC_V0, ClusterMetadataManifest.getCodecForVersion(Version.V_2_10_0));
+                    ClusterMetadataManifest::new
+            .committed(false)
+                    new NamedWriteableRegistry(Collections.emptyList()),
+            .transientSettingsMetadata(new UploadedMetadataAttribute(TRANSIENT_SETTING_METADATA, "transient-settings-file"))
+                ),
+                    orig,
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+                        )
+import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V2;
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+            .nodeId("test-node-id")
+                    CODEC_V4,
+                Metadata.builder()
+        return uploadedIndexMetadata;
+            "custom-metadata-1"
+        final CoordinationMetadata coordinationMetadata = CoordinationMetadata.builder().term(1L).build();
+    public void testClusterMetadataManifestXContentV2() throws IOException {
+import org.mockito.Mockito;
+                            "custom--repositories-file"
                     orig,
                     new NamedWriteableRegistry(Collections.emptyList()),
+                        ),
+            .previousClusterUUID("yfObdx8KSMKKrXf8UyHhM")
+            .hashesOfConsistentSettings(uploadedMetadataAttribute)
+import org.opensearch.common.xcontent.json.JsonXContent;
+                    return builder.build();
+            .codecVersion(ClusterMetadataManifest.CODEC_V4)
+            .transientSettingsMetadata(uploadedMetadataAttribute)
+                    RemoteClusterStateServiceTests.generateClusterStateWithOneIndex().build(),
+                }
+                    new NamedWriteableRegistry(Collections.emptyList()),
                     ClusterMetadataManifest::new
-                ),
+    }
+        ClusterMetadataManifest originalManifest = ClusterMetadataManifest.builder()
+    }
+                }
+                    randomAlphaOfLength(10)
+                initialManifest,
+                    ClusterMetadataManifest::new
+                Collections.unmodifiableList(
+            assertEquals(originalManifest, fromXContentManifest);
+                    return builder.build();
+        assertEquals(-1, ClusterMetadataManifest.getCodecForVersion(Version.fromString("1.3.0")));
+            .codecVersion(CODEC_V3)
+            .committed(false)
+                orig -> OpenSearchTestCase.copyWriteable(
+            .clusterBlocksMetadata(uploadedMetadataAttribute)
+        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path", CODEC_V1);
+            .templatesMetadata(new UploadedMetadataAttribute(TEMPLATES_METADATA, "templates-file"))
+                orig -> OpenSearchTestCase.copyWriteable(
                 manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+            .clusterTerm(1L)
+        final int size = randomIntBetween(1, 10);
+            .previousClusterUUID("prev-cluster-uuid")
+                return new UploadedIndexMetadata(
+        {  // Mutate OpenSearch Version
+public class ClusterMetadataManifestTests extends OpenSearchTestCase {
+        {  // Mutate State Version
+            );
+                    uploadedIndexMetadata.getIndexUUID(),
+                manifest -> {
+        }
+                )
+            .coordinationMetadata(uploadedMetadataAttribute)
                     builder.hashesOfConsistentSettings(randomUploadedMetadataAttribute());
                     return builder.build();
-                }
-            );
-        }
-        {
-            // Mutate checksum
-            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-                initialManifest,
-                orig -> OpenSearchTestCase.copyWriteable(
-                    orig,
-                    new NamedWriteableRegistry(Collections.emptyList()),
-                    ClusterMetadataManifest::new
-                ),
-                manifest -> {
-                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
-                    builder.checksum(null);
+            .opensearchVersion(Version.CURRENT)
                     return builder.build();
-                }
-            );
-        }
-    }
-
-    public void testClusterMetadataManifestXContentV2() throws IOException {
-        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path");
-        UploadedMetadataAttribute uploadedMetadataAttribute = new UploadedMetadataAttribute("attribute_name", "testing_attribute");
-        ClusterMetadataManifest originalManifest = ClusterMetadataManifest.builder()
-            .clusterTerm(1L)
-            .stateVersion(1L)
-            .clusterUUID("test-cluster-uuid")
-            .stateUUID("test-state-uuid")
-            .opensearchVersion(Version.CURRENT)
-            .nodeId("test-node-id")
-            .committed(false)
-            .codecVersion(CODEC_V2)
-            .indices(Collections.singletonList(uploadedIndexMetadata))
-            .previousClusterUUID("prev-cluster-uuid")
-            .clusterUUIDCommitted(true)
-            .coordinationMetadata(uploadedMetadataAttribute)
-            .settingMetadata(uploadedMetadataAttribute)
-            .templatesMetadata(uploadedMetadataAttribute)
-            .customMetadataMap(
                 Collections.unmodifiableList(
-                    Arrays.asList(
+            .stateVersion(7L)
                         new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + RepositoriesMetadata.TYPE,
-                            "custom--repositories-file"
-                        ),
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + IndexGraveyard.TYPE,
-                            "custom--index_graveyard-file"
-                        ),
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + WeightedRoutingMetadata.TYPE,
-                            "custom--weighted_routing_netadata-file"
-                        )
-                    )
-                ).stream().collect(Collectors.toMap(UploadedMetadataAttribute::getAttributeName, Function.identity()))
-            )
-            .routingTableVersion(1L)
-            .indicesRouting(Collections.singletonList(uploadedIndexMetadata))
-            .discoveryNodesMetadata(uploadedMetadataAttribute)
-            .clusterBlocksMetadata(uploadedMetadataAttribute)
-            .transientSettingsMetadata(uploadedMetadataAttribute)
-            .hashesOfConsistentSettings(uploadedMetadataAttribute)
-            .clusterStateCustomMetadataMap(Collections.emptyMap())
-            .diffManifest(
-                new ClusterStateDiffManifest(
-                    RemoteClusterStateServiceTests.generateClusterStateWithOneIndex().build(),
-                    ClusterState.EMPTY_STATE,
-                    CODEC_V2,
-                    null,
-                    null
-                )
-            )
-            .build();
-        final XContentBuilder builder = JsonXContent.contentBuilder();
-        builder.startObject();
-        originalManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final ClusterMetadataManifest fromXContentManifest = ClusterMetadataManifest.fromXContent(parser);
-            assertEquals(originalManifest, fromXContentManifest);
-        }
-    }
-
+                manifest -> {
     public void testClusterMetadataManifestXContentV3() throws IOException {
-        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path");
-        UploadedMetadataAttribute uploadedMetadataAttribute = new UploadedMetadataAttribute("attribute_name", "testing_attribute");
-        final StringKeyDiffProvider<IndexRoutingTable> routingTableIncrementalDiff = Mockito.mock(StringKeyDiffProvider.class);
-        ClusterMetadataManifest originalManifest = ClusterMetadataManifest.builder()
-            .clusterTerm(1L)
-            .stateVersion(1L)
-            .clusterUUID("test-cluster-uuid")
-            .stateUUID("test-state-uuid")
-            .opensearchVersion(Version.CURRENT)
-            .nodeId("test-node-id")
-            .committed(false)
-            .codecVersion(CODEC_V3)
-            .indices(Collections.singletonList(uploadedIndexMetadata))
-            .previousClusterUUID("prev-cluster-uuid")
-            .clusterUUIDCommitted(true)
-            .coordinationMetadata(uploadedMetadataAttribute)
-            .settingMetadata(uploadedMetadataAttribute)
-            .templatesMetadata(uploadedMetadataAttribute)
-            .customMetadataMap(
-                Collections.unmodifiableList(
-                    Arrays.asList(
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + RepositoriesMetadata.TYPE,
-                            "custom--repositories-file"
-                        ),
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + IndexGraveyard.TYPE,
-                            "custom--index_graveyard-file"
-                        ),
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + WeightedRoutingMetadata.TYPE,
-                            "custom--weighted_routing_netadata-file"
-                        )
-                    )
-                ).stream().collect(Collectors.toMap(UploadedMetadataAttribute::getAttributeName, Function.identity()))
-            )
-            .routingTableVersion(1L)
-            .indicesRouting(Collections.singletonList(uploadedIndexMetadata))
-            .discoveryNodesMetadata(uploadedMetadataAttribute)
-            .clusterBlocksMetadata(uploadedMetadataAttribute)
-            .transientSettingsMetadata(uploadedMetadataAttribute)
-            .hashesOfConsistentSettings(uploadedMetadataAttribute)
-            .clusterStateCustomMetadataMap(Collections.emptyMap())
-            .diffManifest(
-                new ClusterStateDiffManifest(
-                    RemoteClusterStateServiceTests.generateClusterStateWithOneIndex().build(),
-                    ClusterState.EMPTY_STATE,
-                    CODEC_V3,
-                    routingTableIncrementalDiff,
                     uploadedMetadataAttribute.getUploadedFilename()
-                )
+            .stateUUID("6By9p9G0Rv2MmFYJcPAOgA")
+        {
+import org.opensearch.common.settings.Settings;
+import static org.opensearch.gateway.remote.model.RemoteCustomMetadata.CUSTOM_DELIMITER;
+                }
             )
-            .build();
-        final XContentBuilder builder = JsonXContent.contentBuilder();
-        builder.startObject();
-        originalManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final ClusterMetadataManifest fromXContentManifest = ClusterMetadataManifest.fromXContent(parser);
-            assertEquals(originalManifest, fromXContentManifest);
-        }
-    }
-
-    public void testClusterMetadataManifestXContentV4() throws IOException {
-        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path");
-        UploadedMetadataAttribute uploadedMetadataAttribute = new UploadedMetadataAttribute("attribute_name", "testing_attribute");
-        final StringKeyDiffProvider<IndexRoutingTable> routingTableIncrementalDiff = Mockito.mock(StringKeyDiffProvider.class);
-        ClusterStateChecksum checksum = new ClusterStateChecksum(createClusterState(), threadPool);
         ClusterMetadataManifest originalManifest = ClusterMetadataManifest.builder()
-            .clusterTerm(1L)
-            .stateVersion(1L)
-            .clusterUUID("test-cluster-uuid")
-            .stateUUID("test-state-uuid")
-            .opensearchVersion(Version.CURRENT)
-            .nodeId("test-node-id")
-            .committed(false)
-            .codecVersion(ClusterMetadataManifest.CODEC_V4)
-            .indices(Collections.singletonList(uploadedIndexMetadata))
-            .previousClusterUUID("prev-cluster-uuid")
-            .clusterUUIDCommitted(true)
-            .coordinationMetadata(uploadedMetadataAttribute)
-            .settingMetadata(uploadedMetadataAttribute)
-            .templatesMetadata(uploadedMetadataAttribute)
-            .customMetadataMap(
-                Collections.unmodifiableList(
-                    Arrays.asList(
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + RepositoriesMetadata.TYPE,
-                            "custom--repositories-file"
-                        ),
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + IndexGraveyard.TYPE,
-                            "custom--index_graveyard-file"
-                        ),
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + WeightedRoutingMetadata.TYPE,
-                            "custom--weighted_routing_netadata-file"
-                        )
-                    )
-                ).stream().collect(Collectors.toMap(UploadedMetadataAttribute::getAttributeName, Function.identity()))
-            )
-            .routingTableVersion(1L)
+    }
+        ClusterMetadataManifest originalManifest = ClusterMetadataManifest.builder()
+        }
+        builder.endObject();
+import org.opensearch.test.EqualsHashCodeTestUtils;
+                    uploadedIndexMetadata.getIndexName(),
+            assertEquals(originalManifest, fromXContentManifest);
+                }
             .indicesRouting(Collections.singletonList(uploadedIndexMetadata))
-            .discoveryNodesMetadata(uploadedMetadataAttribute)
-            .clusterBlocksMetadata(uploadedMetadataAttribute)
-            .transientSettingsMetadata(uploadedMetadataAttribute)
-            .hashesOfConsistentSettings(uploadedMetadataAttribute)
-            .clusterStateCustomMetadataMap(Collections.emptyMap())
-            .diffManifest(
-                new ClusterStateDiffManifest(
-                    RemoteClusterStateServiceTests.generateClusterStateWithOneIndex().build(),
-                    ClusterState.EMPTY_STATE,
-                    CODEC_V4,
-                    routingTableIncrementalDiff,
-                    uploadedMetadataAttribute.getUploadedFilename()
-                )
-            )
-            .checksum(checksum)
-            .build();
-        final XContentBuilder builder = JsonXContent.contentBuilder();
-        builder.startObject();
-        originalManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final ClusterMetadataManifest fromXContentManifest = ClusterMetadataManifest.fromXContent(parser);
-            assertEquals(originalManifest, fromXContentManifest);
-        }
-    }
-
-    public void testClusterMetadataManifestXContentV2WithoutEphemeral() throws IOException {
-        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path");
-        UploadedMetadataAttribute uploadedMetadataAttribute = new UploadedMetadataAttribute("attribute_name", "testing_attribute");
-        UploadedIndexMetadata uploadedIndexRoutingMetadata = new UploadedIndexMetadata(
-            "test-index",
-            "test-uuid",
-            "routing-path",
-            INDEX_ROUTING_METADATA_PREFIX
-        );
-        ClusterMetadataManifest originalManifest = ClusterMetadataManifest.builder()
-            .clusterTerm(1L)
+        final StringKeyDiffProvider<IndexRoutingTable> routingTableIncrementalDiff = Mockito.mock(StringKeyDiffProvider.class);
+                    ClusterMetadataManifest::new
             .stateVersion(1L)
-            .clusterUUID("test-cluster-uuid")
-            .stateUUID("test-state-uuid")
-            .opensearchVersion(Version.CURRENT)
-            .nodeId("test-node-id")
-            .committed(false)
-            .codecVersion(CODEC_V2)
-            .indices(Collections.singletonList(uploadedIndexMetadata))
-            .previousClusterUUID("prev-cluster-uuid")
-            .clusterUUIDCommitted(true)
-            .coordinationMetadata(uploadedMetadataAttribute)
-            .settingMetadata(uploadedMetadataAttribute)
-            .templatesMetadata(uploadedMetadataAttribute)
-            .customMetadataMap(
-                Collections.unmodifiableList(
-                    Arrays.asList(
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + RepositoriesMetadata.TYPE,
-                            "custom--repositories-file"
-                        ),
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + IndexGraveyard.TYPE,
-                            "custom--index_graveyard-file"
-                        ),
-                        new UploadedMetadataAttribute(
-                            CUSTOM_METADATA + CUSTOM_DELIMITER + WeightedRoutingMetadata.TYPE,
-                            "custom--weighted_routing_netadata-file"
-                        )
-                    )
-                ).stream().collect(Collectors.toMap(UploadedMetadataAttribute::getAttributeName, Function.identity()))
-            )
-            .indicesRouting(Collections.singletonList(uploadedIndexRoutingMetadata))
-            .build();
-        final XContentBuilder builder = JsonXContent.contentBuilder();
-        builder.startObject();
-        originalManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final ClusterMetadataManifest fromXContentManifest = ClusterMetadataManifest.fromXContent(parser);
-            assertEquals(originalManifest, fromXContentManifest);
-        }
-    }
-
-    public static List<UploadedIndexMetadata> randomUploadedIndexMetadataList() {
-        final int size = randomIntBetween(1, 10);
-        final List<UploadedIndexMetadata> uploadedIndexMetadataList = new ArrayList<>(size);
-        while (uploadedIndexMetadataList.size() < size) {
-            assertTrue(uploadedIndexMetadataList.add(randomUploadedIndexMetadata()));
-        }
-        return uploadedIndexMetadataList;
-    }
-
-    private static UploadedIndexMetadata randomUploadedIndexMetadata() {
-        return new UploadedIndexMetadata(randomAlphaOfLength(10), randomAlphaOfLength(10), randomAlphaOfLength(10));
-    }
-
-    private UploadedMetadataAttribute randomUploadedMetadataAttribute() {
-        return new UploadedMetadataAttribute("attribute_name", "testing_attribute");
-    }
-
-    public void testUploadedIndexMetadataSerializationEqualsHashCode() {
-        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path");
-        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-            uploadedIndexMetadata,
             orig -> OpenSearchTestCase.copyWriteable(orig, new NamedWriteableRegistry(Collections.emptyList()), UploadedIndexMetadata::new),
-            metadata -> randomlyChangingUploadedIndexMetadata(uploadedIndexMetadata)
-        );
-    }
-
-    public void testUploadedIndexMetadataWithoutComponentPrefix() throws IOException {
-        final UploadedIndexMetadata originalUploadedIndexMetadata = new UploadedIndexMetadata(
-            "test-index",
-            "test-index-uuid",
-            "test_file_name",
-            CODEC_V1
-        );
-        final XContentBuilder builder = JsonXContent.contentBuilder();
+                initialManifest,
+                initialManifest,
+                    return builder.build();
+        ClusterMetadataManifest originalManifest = ClusterMetadataManifest.builder()
+        {
+            "routing-path",
+import org.opensearch.cluster.metadata.TemplatesMetadata;
+            .coordinationMetadata(uploadedMetadataAttribute)
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+                        ),
+                    new NamedWriteableRegistry(Collections.emptyList()),
+            .opensearchVersion(Version.CURRENT)
+            .routingTableVersion(1L)
+                }
+                    ClusterMetadataManifest::new
+                    ClusterMetadataManifest::new
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+        }
+                    new NamedWriteableRegistry(Collections.emptyList()),
+        ClusterMetadataManifest originalManifest = ClusterMetadataManifest.builder()
+                    Arrays.asList(
+                        ),
+        return new UploadedMetadataAttribute("attribute_name", "testing_attribute");
+                            "custom--repositories-file"
+            .templatesMetadata(uploadedMetadataAttribute)
+                initialManifest,
         builder.startObject();
-        originalUploadedIndexMetadata.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final UploadedIndexMetadata fromXContentUploadedIndexMetadata = UploadedIndexMetadata.fromXContent(parser, 1L);
-            assertEquals(originalUploadedIndexMetadata, fromXContentUploadedIndexMetadata);
-        }
-    }
-
-    public void testGetCodecForVersion() {
-        assertEquals(-1, ClusterMetadataManifest.getCodecForVersion(Version.fromString("1.3.0")));
-        assertEquals(-1, ClusterMetadataManifest.getCodecForVersion(Version.V_2_1_0));
-        assertEquals(CODEC_V0, ClusterMetadataManifest.getCodecForVersion(Version.V_2_10_0));
-        assertEquals(CODEC_V1, ClusterMetadataManifest.getCodecForVersion(Version.V_2_12_0));
-        assertEquals(CODEC_V1, ClusterMetadataManifest.getCodecForVersion(Version.V_2_13_0));
-        assertEquals(CODEC_V2, ClusterMetadataManifest.getCodecForVersion(Version.V_2_15_0));
-        assertEquals(CODEC_V3, ClusterMetadataManifest.getCodecForVersion(Version.V_2_16_0));
-        assertEquals(CODEC_V4, ClusterMetadataManifest.getCodecForVersion(Version.V_2_17_0));
-    }
-
-    private UploadedIndexMetadata randomlyChangingUploadedIndexMetadata(UploadedIndexMetadata uploadedIndexMetadata) {
-        switch (randomInt(2)) {
-            case 0:
-                return new UploadedIndexMetadata(
-                    randomAlphaOfLength(10),
-                    uploadedIndexMetadata.getIndexUUID(),
-                    uploadedIndexMetadata.getUploadedFilename()
-                );
-            case 1:
-                return new UploadedIndexMetadata(
-                    uploadedIndexMetadata.getIndexName(),
-                    randomAlphaOfLength(10),
-                    uploadedIndexMetadata.getUploadedFilename()
-                );
-            case 2:
-                return new UploadedIndexMetadata(
-                    uploadedIndexMetadata.getIndexName(),
-                    uploadedIndexMetadata.getIndexUUID(),
-                    randomAlphaOfLength(10)
-                );
-        }
-        return uploadedIndexMetadata;
-    }
-
-    static ClusterState createClusterState() {
-        final Index index = new Index("test-index", "index-uuid");
-        final Settings idxSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, index.getUUID())
-            .build();
-        final IndexMetadata indexMetadata = new IndexMetadata.Builder(index.getName()).settings(idxSettings)
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
-        final CoordinationMetadata coordinationMetadata = CoordinationMetadata.builder().term(1L).build();
-        final Settings settings = Settings.builder().put("mock-settings", true).build();
-        final TemplatesMetadata templatesMetadata = TemplatesMetadata.builder()
-            .put(IndexTemplateMetadata.builder("template1").settings(idxSettings).patterns(List.of("test*")).build())
-            .build();
-        final RemoteClusterStateTestUtils.CustomMetadata1 customMetadata = new RemoteClusterStateTestUtils.CustomMetadata1(
-            "custom-metadata-1"
-        );
-        return ClusterState.builder(ClusterName.DEFAULT)
-            .version(1L)
-            .stateUUID("state-uuid")
-            .metadata(
-                Metadata.builder()
-                    .version(randomNonNegativeLong())
-                    .put(indexMetadata, true)
-                    .clusterUUID("cluster-uuid")
-                    .coordinationMetadata(coordinationMetadata)
-                    .persistentSettings(settings)
-                    .templates(templatesMetadata)
-                    .hashesOfConsistentSettings(Map.of("key1", "value1", "key2", "value2"))
-                    .putCustom(customMetadata.getWriteableName(), customMetadata)
-                    .build()
-            )
-            .routingTable(RoutingTable.builder().addAsNew(indexMetadata).version(1L).build())
-            .build();
-    }
+                    new NamedWriteableRegistry(Collections.emptyList()),
+                        new UploadedMetadataAttribute(
+            .clusterStateCustomMetadataMap(Collections.emptyMap())
+import org.opensearch.cluster.metadata.Metadata;
+            .discoveryNodesMetadata(new UploadedMetadataAttribute(DISCOVERY_NODES, "discovery-nodes-file"))
+        {
+        ClusterMetadataManifest initialManifest = ClusterMetadataManifest.builder()
+                )
 }
+            );
+            .customMetadataMap(
+                    ClusterMetadataManifest::new
+        assertEquals(CODEC_V4, ClusterMetadataManifest.getCodecForVersion(Version.V_2_17_0));
+        originalUploadedIndexMetadata.toXContent(builder, ToXContent.EMPTY_PARAMS);
+            );
+import org.opensearch.cluster.routing.StringKeyDiffProvider;
+                    return builder.build();
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+            .nodeId("test-node-id")
+            final UploadedIndexMetadata fromXContentUploadedIndexMetadata = UploadedIndexMetadata.fromXContent(parser, 1L);
+        originalManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+                ).stream().collect(Collectors.toMap(UploadedMetadataAttribute::getAttributeName, Function.identity()))
+                manifest -> {
+                        ),
+            .stateUUID("test-state-uuid")
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + RepositoriesMetadata.TYPE,
+                    orig,
+            .clusterUUIDCommitted(true)
+    public static List<UploadedIndexMetadata> randomUploadedIndexMetadataList() {
+        final UploadedIndexMetadata originalUploadedIndexMetadata = new UploadedIndexMetadata(
+                    RemoteClusterStateServiceTests.generateClusterStateWithOneIndex().build(),
+                ),
+                }
+                    Arrays.asList(
+import org.opensearch.cluster.ClusterName;
+                )
+        {
+            .clusterUUID("test-cluster-uuid")
+                initialManifest,
+                ),
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + IndexGraveyard.TYPE,
+            )
+                    new NamedWriteableRegistry(Collections.emptyList()),
+ */
+        );
+            .discoveryNodesMetadata(uploadedMetadataAttribute)
+            )
+    public void testClusterMetadataManifestSerializationEqualsHashCode() {
+        super.tearDown();
+            .build();
+        final XContentBuilder builder = JsonXContent.contentBuilder();
+    public void testClusterMetadataManifestXContentV1() throws IOException {
+        builder.startObject();
+            uploadedIndexMetadata,
+            // Mutate checksum
+        builder.endObject();
+            .opensearchVersion(Version.CURRENT)
+            .stateVersion(1L)
+        builder.startObject();
+                manifest -> {
+                    CODEC_V2,
+            .clusterUUIDCommitted(true)
+            .stateUUID("test-state-uuid")
+        {  // Mutate Indices
+            .codecVersion(CODEC_V2)
+            );
+            .numberOfReplicas(0)
+                    Arrays.asList(
+            "test-index",
+            .routingTableVersion(1L)
+            final ClusterMetadataManifest fromXContentManifest = ClusterMetadataManifest.fromXContent(parser);
+            final ClusterMetadataManifest fromXContentManifest = ClusterMetadataManifest.fromXContentV0(parser);
+                initialManifest,
+import java.util.stream.Collectors;
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+            .metadata(
+import org.opensearch.cluster.metadata.RepositoriesMetadata;
+            .indices(Collections.singletonList(uploadedIndexMetadata))
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+            )
+                    builder.checksum(null);
+                    builder.clusterUUID("efOkMiPbQZCUQQgtFWdbPw");
+import java.util.Map;
+ * compatible open source license.
+            case 2:
+            .put(IndexTemplateMetadata.builder("template1").settings(idxSettings).patterns(List.of("test*")).build())
+            .clusterStateCustomMetadataMap(Collections.emptyMap())
+        }
+                            "custom--index_graveyard-file"
+            "test_file_name",
+        originalManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
+            // Mutate diff manifest
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+                orig -> OpenSearchTestCase.copyWriteable(
+                    ClusterMetadataManifest::new
+        }
+                    ClusterMetadataManifest::new
+                    uploadedIndexMetadata.getUploadedFilename()
+import java.util.Arrays;
+            final ClusterMetadataManifest fromXContentManifest = ClusterMetadataManifest.fromXContent(parser);
+    }
+                        new UploadedMetadataAttribute(
+            .settingMetadata(uploadedMetadataAttribute)
+                    return builder.build();
+        {
+                ),
+    public void testUploadedIndexMetadataSerializationEqualsHashCode() {
+        );
+                    .putCustom(customMetadata.getWriteableName(), customMetadata)
+import java.util.Collections;
+                        new UploadedMetadataAttribute(
+        UploadedMetadataAttribute uploadedMetadataAttribute = new UploadedMetadataAttribute("attribute_name", "testing_attribute");
+                    orig,
+                ),
+                            "custom--weighted_routing_netadata-file"
+import org.opensearch.test.OpenSearchTestCase;
+                    ClusterState.EMPTY_STATE,
+                            "custom--repositories-file"
+                orig -> OpenSearchTestCase.copyWriteable(
+        {  // Mutate Committed State
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+                    builder.indices(randomUploadedIndexMetadataList());
+        }
+import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V4;
+import static org.opensearch.gateway.remote.ClusterMetadataManifest.CODEC_V0;
+                new ClusterStateDiffManifest(
+import java.io.IOException;
+            .routingTableVersion(1L)
+        final IndexMetadata indexMetadata = new IndexMetadata.Builder(index.getName()).settings(idxSettings)
+            .clusterBlocksMetadata(uploadedMetadataAttribute)
+                    routingTableIncrementalDiff,
+            .checksum(new ClusterStateChecksum(createClusterState(), threadPool))
+                        ),
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + RepositoriesMetadata.TYPE,
+        }
+import java.util.ArrayList;
+                orig -> OpenSearchTestCase.copyWriteable(
+            .discoveryNodesMetadata(uploadedMetadataAttribute)
+            .templatesMetadata(uploadedMetadataAttribute)
+    }
+        final StringKeyDiffProvider<IndexRoutingTable> routingTableIncrementalDiff = Mockito.mock(StringKeyDiffProvider.class);
+                            "custom--index_graveyard-file"
+            .indices(Collections.singletonList(uploadedIndexMetadata))
+        ClusterMetadataManifest originalManifest = ClusterMetadataManifest.builder()
+        }
+                ).stream().collect(Collectors.toMap(UploadedMetadataAttribute::getAttributeName, Function.identity()))
+            .opensearchVersion(Version.CURRENT)
+import static org.opensearch.gateway.remote.model.RemoteCustomMetadata.CUSTOM_METADATA;
+            );
+                    ClusterMetadataManifest::new
+            .stateUUID("test-state-uuid")
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + WeightedRoutingMetadata.TYPE,
+                    uploadedIndexMetadata.getUploadedFilename()
+            .clusterStateCustomMetadataMap(Collections.emptyMap())
+                    .templates(templatesMetadata)
+                initialManifest,
+                ),
+                    return builder.build();
+                    orig,
+            .committed(true)
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+            )
+                    orig,
+                    uploadedIndexMetadata.getIndexUUID(),
+        final RemoteClusterStateTestUtils.CustomMetadata1 customMetadata = new RemoteClusterStateTestUtils.CustomMetadata1(
+                            "custom--weighted_routing_netadata-file"
+        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path");
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+            .build();
+        { // Mutate Previous cluster UUID
+        final XContentBuilder builder = JsonXContent.contentBuilder();
+            .checksum(checksum)
+            metadata -> randomlyChangingUploadedIndexMetadata(uploadedIndexMetadata)
+                    new NamedWriteableRegistry(Collections.emptyList()),
+/*
+            .clusterTerm(1L)
+                    uploadedMetadataAttribute.getUploadedFilename()
+                }
+                manifest -> {
+            .stateVersion(1L)
+    }
+    public void testUploadedIndexMetadataWithoutComponentPrefix() throws IOException {
+            .version(1L)
+import org.opensearch.cluster.metadata.WeightedRoutingMetadata;
+        {
+                    orig,
+                ),
+        {  // Mutate Cluster UUID
+                    )
+                manifest -> {
+            );
+            .clusterUUIDCommitted(true)
+                    orig,
+                    builder.opensearchVersion(Version.V_EMPTY);
+            // Mutate cluster blocks
+        assertEquals(CODEC_V3, ClusterMetadataManifest.getCodecForVersion(Version.V_2_16_0));
+            .transientSettingsMetadata(uploadedMetadataAttribute)
+            .nodeId("test-node-id")
+                }
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + WeightedRoutingMetadata.TYPE,
+        final Index index = new Index("test-index", "index-uuid");
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+            );
+    public void testClusterMetadataManifestXContent() throws IOException {
+    }
+        }
+            assertEquals(originalUploadedIndexMetadata, fromXContentUploadedIndexMetadata);
+                    .hashesOfConsistentSettings(Map.of("key1", "value1", "key2", "value2"))
+                    ClusterMetadataManifest::new
+            .stateVersion(1L)
+                }
+                    new NamedWriteableRegistry(Collections.emptyList()),
+            .routingTableVersion(1L)
+            .transientSettingsMetadata(uploadedMetadataAttribute)
+    private UploadedMetadataAttribute randomUploadedMetadataAttribute() {
+                Collections.unmodifiableList(
+                ).stream().collect(Collectors.toMap(UploadedMetadataAttribute::getAttributeName, Function.identity()))
+            .diffManifest(
+        assertEquals(CODEC_V1, ClusterMetadataManifest.getCodecForVersion(Version.V_2_12_0));
+                manifest -> {
+                    return builder.build();
+                orig -> OpenSearchTestCase.copyWriteable(
+        }
+                    ClusterMetadataManifest::new
+        while (uploadedIndexMetadataList.size() < size) {
+        builder.startObject();
+                ),
+            .build();
+                initialManifest,
+        {  // Mutate State UUID
+                    new NamedWriteableRegistry(Collections.emptyList()),
+        final List<UploadedIndexMetadata> uploadedIndexMetadataList = new ArrayList<>(size);
+            .clusterUUID("test-cluster-uuid")
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + WeightedRoutingMetadata.TYPE,
+                Collections.unmodifiableList(
+            .previousClusterUUID("prev-cluster-uuid")
+                    null,
+                            "custom--index_graveyard-file"
+        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path");
+    private UploadedIndexMetadata randomlyChangingUploadedIndexMetadata(UploadedIndexMetadata uploadedIndexMetadata) {
+            CODEC_V1
+                orig -> OpenSearchTestCase.copyWriteable(
+            .settingMetadata(uploadedMetadataAttribute)
+            .templatesMetadata(uploadedMetadataAttribute)
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+        }
+                        )
+                        new UploadedMetadataAttribute(
+                    builder.templatesMetadata(randomUploadedMetadataAttribute());
+            .stateVersion(1L)
+            final ClusterMetadataManifest fromXContentManifest = ClusterMetadataManifest.fromXContent(parser);
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + RepositoriesMetadata.TYPE,
+        {
+                            "custom--weighted_routing_netadata-file"
+            .indicesRouting(Collections.singletonList(uploadedIndexMetadata))
+            // Mutate hashes of consistent settings
+            .build();
+            case 0:
+                manifest -> {
+        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+        final TemplatesMetadata templatesMetadata = TemplatesMetadata.builder()
+            // Mutate discovery nodes
+import org.opensearch.threadpool.TestThreadPool;
+                    orig,
+                    ClusterMetadataManifest::new
+import java.util.List;
+        builder.startObject();
+            .indices(Collections.singletonList(uploadedIndexMetadata))
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + RepositoriesMetadata.TYPE,
+                    builder.clusterTerm(1338L);
+                    builder.previousClusterUUID("vZX62DCQEOzGXlxXCrEu");
+            );
+        UploadedIndexMetadata uploadedIndexMetadata = new UploadedIndexMetadata("test-index", "test-uuid", "/test/upload/path");
+                        new UploadedMetadataAttribute(
+                    ClusterState.EMPTY_STATE,
+        return new UploadedIndexMetadata(randomAlphaOfLength(10), randomAlphaOfLength(10), randomAlphaOfLength(10));
+            .coordinationMetadata(uploadedMetadataAttribute)
+                        ),
+        builder.startObject();
+                    ClusterState.EMPTY_STATE,
+                ).stream().collect(Collectors.toMap(UploadedMetadataAttribute::getAttributeName, Function.identity()))
+            EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+                        new UploadedMetadataAttribute(
+                    .clusterUUID("cluster-uuid")
+            .routingTable(RoutingTable.builder().addAsNew(indexMetadata).version(1L).build())
+    }
+                ).stream().collect(Collectors.toMap(UploadedMetadataAttribute::getAttributeName, Function.identity()))
+    private final ThreadPool threadPool = new TestThreadPool(getClass().getName());
+                ),
+            .numberOfShards(1)
+            // Mutate Coordination metadata
+            .clusterUUIDCommitted(true)
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+            .committed(false)
+import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedIndexMetadata;
+import static org.opensearch.gateway.remote.model.RemoteTemplatesMetadata.TEMPLATES_METADATA;
+                manifest -> {
+import org.opensearch.cluster.metadata.IndexMetadata;
+            .committed(false)
+            .build();
+    static ClusterState createClusterState() {
+                    ClusterMetadataManifest::new
+            .clusterUUIDCommitted(true)
+        builder.endObject();
+                        new UploadedMetadataAttribute(
+        assertEquals(-1, ClusterMetadataManifest.getCodecForVersion(Version.V_2_1_0));
+                    orig,
+                    RemoteClusterStateServiceTests.generateClusterStateWithOneIndex().build(),
+        final XContentBuilder builder = JsonXContent.contentBuilder();
+            .previousClusterUUID("prev-cluster-uuid")
+        ClusterStateChecksum checksum = new ClusterStateChecksum(createClusterState(), threadPool);
+                manifest -> {
+        builder.startObject();
+            );
+                );
+            .previousClusterUUID("prev-cluster-uuid")
+                new ClusterStateDiffManifest(
+                    return builder.build();
+                        )
+                    ClusterMetadataManifest.Builder builder = ClusterMetadataManifest.builder(manifest);
+        }
+        }
+    public void teardown() throws Exception {
+            .build();
+                    ClusterMetadataManifest::new
+                    builder.transientSettingsMetadata(randomUploadedMetadataAttribute());
+            .clusterTerm(1L)
+        }
+            .clusterTerm(1L)
+                    builder.customMetadataMap(Collections.emptyMap());
+        { // Mutate cluster uuid committed
+            "test-uuid",
+    }
+                    new NamedWriteableRegistry(Collections.emptyList()),
+            assertEquals(originalManifest, fromXContentManifest);
+    public void testGetCodecForVersion() {
+                    Arrays.asList(
+            .clusterUUID("test-cluster-uuid")
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + IndexGraveyard.TYPE,
+                orig -> OpenSearchTestCase.copyWriteable(
+                manifest -> {
+                }
+                        new UploadedMetadataAttribute(
+                    new NamedWriteableRegistry(Collections.emptyList()),
+            .nodeId("test-node-id")
+                            CUSTOM_METADATA + CUSTOM_DELIMITER + IndexGraveyard.TYPE,
+                }
+            .settingMetadata(uploadedMetadataAttribute)
+                    return builder.build();
+            .committed(false)
+            .build();
+        );
+                    ClusterMetadataManifest::new
+            .diffManifest(
+            .clusterUUID("HrYF3kP5SmSPWtKlWhnNSA")
+            )
+        }
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+            .indices(randomUploadedIndexMetadataList())
+    }
+        UploadedMetadataAttribute uploadedMetadataAttribute = new UploadedMetadataAttribute("attribute_name", "testing_attribute");
+        originalManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);
+            .hashesOfConsistentSettings(new UploadedMetadataAttribute(HASHES_OF_CONSISTENT_SETTINGS, "hashes-of-consistent-settings-file"))
+            .opensearchVersion(Version.CURRENT)
+                            "custom--repositories-file"
+                        )
+            );
+        final XContentBuilder builder = JsonXContent.contentBuilder();
+                    )
+import java.util.function.Function;
+                    .persistentSettings(settings)
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+                    randomAlphaOfLength(10),
+        originalManifest.toXContent(builder, ToXContent.EMPTY_PARAMS);

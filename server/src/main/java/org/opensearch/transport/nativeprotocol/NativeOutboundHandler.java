@@ -1,226 +1,209 @@
-/*
-* SPDX-License-Identifier: Apache-2.0
+        final String action,
+*/
+    }
+    private final Version version;
 *
-* The OpenSearch Contributors require contributions made to
 * this file be licensed under the Apache-2.0 license or a
-* compatible open source license.
-*/
-
-/*
-* Licensed to Elasticsearch under one or more contributor
-* license agreements. See the NOTICE file distributed with
-* this work for additional information regarding copyright
-* ownership. Elasticsearch licenses this file to you under
-* the Apache License, Version 2.0 (the "License"); you may
-* not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing,
-* software distributed under the License is distributed on an
-* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-* KIND, either express or implied.  See the License for the
-* specific language governing permissions and limitations
-* under the License.
-*/
-
-/*
-* Modifications Copyright OpenSearch Contributors. See
-* GitHub history for details.
-*/
-
-package org.opensearch.transport.nativeprotocol;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.CheckedSupplier;
-import org.opensearch.common.io.stream.ReleasableBytesStreamOutput;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.action.ActionListener;
+            compress
+        final Version channelVersion,
+    /**
 import org.opensearch.core.common.bytes.BytesReference;
+    public void sendErrorResponse(
+import org.opensearch.threadpool.ThreadPool;
+        final String action,
+* ownership. Elasticsearch licenses this file to you under
+        }
+        final DiscoveryNode node,
+            isHandshake,
+            requestId,
+    /**
+ * Outbound data handler
+        RemoteTransportException tx = new RemoteTransportException(nodeName, address, action, error);
+import org.opensearch.common.CheckedSupplier;
+        MessageSerializer serializer = new MessageSerializer(networkMessage, bigArrays);
+import org.opensearch.transport.TransportRequestOptions;
+    }
+     */
+        this.statsTracker = statsTracker;
+            return message.serialize(bytesStreamOutput);
+    ) {
+        @Override
+import org.opensearch.transport.RemoteTransportException;
+        ActionListener<Void> listener = ActionListener.wrap(() -> messageListener.onResponseSent(requestId, action, error));
+    }
+    public void sendResponse(
+import org.opensearch.transport.StatsTracker;
+* Licensed to Elasticsearch under one or more contributor
+import org.opensearch.cluster.node.DiscoveryNode;
+    ) throws IOException, TransportException {
+        final Version nodeVersion,
+            features,
+* SPDX-License-Identifier: Apache-2.0
+        if (messageListener == TransportMessageListener.NOOP_LISTENER) {
+            request,
+    @Override
+        OutboundHandler.SendContext sendContext = new OutboundHandler.SendContext(statsTracker, channel, serializer, listener, serializer);
+    /**
+            throw new IllegalStateException("Cannot set message listener twice");
+            this.message = message;
+import org.opensearch.core.action.ActionListener;
+        );
+* "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    }
+        final TransportRequestOptions options,
+        final long requestId,
+    ) throws IOException {
+    @Override
+     */
+    }
+*/
+        Version version = Version.min(this.version, channelVersion);
+     *
+        }
+            IOUtils.closeWhileHandlingException(bytesStreamOutput);
+import org.opensearch.common.util.BigArrays;
+* Modifications Copyright OpenSearch Contributors. See
+        public BytesReference get() throws IOException {
+*/
+        } else {
+            version,
+        final TransportResponse response,
+        final Exception error
+        final TcpChannel channel,
+        );
+    private volatile TransportMessageListener messageListener = TransportMessageListener.NOOP_LISTENER;
+    public void setMessageListener(TransportMessageListener listener) {
+/**
+    private static class MessageSerializer implements CheckedSupplier<BytesReference, IOException>, Releasable {
+            threadPool.getThreadContext(),
+        String[] features,
+     * objects back to the caller.
+        final boolean compressRequest,
+        throws IOException {
+        this.nodeName = nodeName;
+    }
+            version,
+    }
+        private final BigArrays bigArrays;
 import org.opensearch.core.common.transport.TransportAddress;
 import org.opensearch.core.transport.TransportResponse;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.OutboundHandler;
-import org.opensearch.transport.ProtocolOutboundHandler;
-import org.opensearch.transport.RemoteTransportException;
-import org.opensearch.transport.StatsTracker;
-import org.opensearch.transport.TcpChannel;
-import org.opensearch.transport.TransportException;
-import org.opensearch.transport.TransportMessageListener;
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportRequestOptions;
-
-import java.io.IOException;
-import java.util.Set;
-
-/**
- * Outbound data handler
- *
- * @opensearch.internal
- */
 public final class NativeOutboundHandler extends ProtocolOutboundHandler {
-    private final String nodeName;
-    private final Version version;
-    private final String[] features;
-    private final StatsTracker statsTracker;
-    private final ThreadPool threadPool;
-    private final BigArrays bigArrays;
-    private volatile TransportMessageListener messageListener = TransportMessageListener.NOOP_LISTENER;
-    private final OutboundHandler handler;
-
-    public NativeOutboundHandler(
-        String nodeName,
-        Version version,
-        String[] features,
-        StatsTracker statsTracker,
-        ThreadPool threadPool,
-        BigArrays bigArrays,
-        OutboundHandler handler
-    ) {
-        this.nodeName = nodeName;
-        this.version = version;
-        this.features = features;
-        this.statsTracker = statsTracker;
-        this.threadPool = threadPool;
-        this.bigArrays = bigArrays;
-        this.handler = handler;
-    }
-
-    /**
-     * Sends the request to the given channel. This method should be used to send {@link TransportRequest}
      * objects back to the caller.
-     */
-    @Override
-    public void sendRequest(
-        final DiscoveryNode node,
-        final TcpChannel channel,
-        final long requestId,
-        final String action,
-        final TransportRequest request,
-        final TransportRequestOptions options,
-        final Version channelVersion,
-        final boolean compressRequest,
-        final boolean isHandshake
-    ) throws IOException, TransportException {
-        Version version = Version.min(this.version, channelVersion);
-        NativeOutboundMessage.Request message = new NativeOutboundMessage.Request(
-            threadPool.getThreadContext(),
-            features,
-            request,
-            version,
-            action,
             requestId,
-            isHandshake,
-            compressRequest
         );
-        ActionListener<Void> listener = ActionListener.wrap(() -> messageListener.onRequestSent(node, requestId, action, request, options));
-        sendMessage(requestId, channel, message, listener);
-    }
-
-    /**
-     * Sends the response to the given channel. This method should be used to send {@link TransportResponse}
-     * objects back to the caller.
-     *
-     * @see #sendErrorResponse(Version, Set, TcpChannel, long, String, Exception) for sending error responses
-     */
-    @Override
-    public void sendResponse(
-        final Version nodeVersion,
-        final Set<String> features,
-        final TcpChannel channel,
-        final long requestId,
-        final String action,
-        final TransportResponse response,
-        final boolean compress,
-        final boolean isHandshake
-    ) throws IOException {
-        Version version = Version.min(this.version, nodeVersion);
-        NativeOutboundMessage.Response message = new NativeOutboundMessage.Response(
-            threadPool.getThreadContext(),
+package org.opensearch.transport.nativeprotocol;
             features,
-            response,
-            version,
-            requestId,
-            isHandshake,
-            compress
-        );
-        ActionListener<Void> listener = ActionListener.wrap(() -> messageListener.onResponseSent(requestId, action, response));
-        sendMessage(requestId, channel, message, listener);
-    }
-
-    /**
-     * Sends back an error response to the caller via the given channel
-     */
-    @Override
-    public void sendErrorResponse(
-        final Version nodeVersion,
-        final Set<String> features,
-        final TcpChannel channel,
-        final long requestId,
-        final String action,
-        final Exception error
-    ) throws IOException {
-        Version version = Version.min(this.version, nodeVersion);
-        TransportAddress address = new TransportAddress(channel.getLocalAddress());
-        RemoteTransportException tx = new RemoteTransportException(nodeName, address, action, error);
-        NativeOutboundMessage.Response message = new NativeOutboundMessage.Response(
-            threadPool.getThreadContext(),
-            features,
-            tx,
-            version,
-            requestId,
-            false,
-            false
-        );
-        ActionListener<Void> listener = ActionListener.wrap(() -> messageListener.onResponseSent(requestId, action, error));
-        sendMessage(requestId, channel, message, listener);
-    }
-
-    private void sendMessage(long requestId, TcpChannel channel, NativeOutboundMessage networkMessage, ActionListener<Void> listener)
-        throws IOException {
-        MessageSerializer serializer = new MessageSerializer(networkMessage, bigArrays);
-        OutboundHandler.SendContext sendContext = new OutboundHandler.SendContext(statsTracker, channel, serializer, listener, serializer);
-        handler.sendBytes(requestId, channel, sendContext);
-    }
-
-    @Override
-    public void setMessageListener(TransportMessageListener listener) {
-        if (messageListener == TransportMessageListener.NOOP_LISTENER) {
-            messageListener = listener;
-        } else {
-            throw new IllegalStateException("Cannot set message listener twice");
-        }
-    }
-
-    /**
-     * Internal message serializer
-     *
      * @opensearch.internal
      */
-    private static class MessageSerializer implements CheckedSupplier<BytesReference, IOException>, Releasable {
-
-        private final NativeOutboundMessage message;
-        private final BigArrays bigArrays;
+* Unless required by applicable law or agreed to in writing,
+ */
+import org.opensearch.transport.TcpChannel;
+     * Sends back an error response to the caller via the given channel
+        }
+*    http://www.apache.org/licenses/LICENSE-2.0
+* not use this file except in compliance with the License.
+        sendMessage(requestId, channel, message, listener);
+            messageListener = listener;
+    /**
+*
+import org.opensearch.common.lease.Releasable;
+ * @opensearch.internal
+* license agreements. See the NOTICE file distributed with
+        NativeOutboundMessage.Request message = new NativeOutboundMessage.Request(
+            compressRequest
         private volatile ReleasableBytesStreamOutput bytesStreamOutput;
-
-        private MessageSerializer(NativeOutboundMessage message, BigArrays bigArrays) {
-            this.message = message;
-            this.bigArrays = bigArrays;
-        }
-
-        @Override
-        public BytesReference get() throws IOException {
             bytesStreamOutput = new ReleasableBytesStreamOutput(bigArrays);
-            return message.serialize(bytesStreamOutput);
+        Version version,
+ *
+     *
+import org.opensearch.Version;
+     * Sends the request to the given channel. This method should be used to send {@link TransportRequest}
+        private final NativeOutboundMessage message;
+import java.io.IOException;
+*
         }
-
+* the Apache License, Version 2.0 (the "License"); you may
+    private final ThreadPool threadPool;
+* software distributed under the License is distributed on an
+import org.opensearch.transport.TransportRequest;
+        Version version = Version.min(this.version, nodeVersion);
+        OutboundHandler handler
+        final TcpChannel channel,
         @Override
-        public void close() {
-            IOUtils.closeWhileHandlingException(bytesStreamOutput);
-        }
-    }
+    public NativeOutboundHandler(
+    private void sendMessage(long requestId, TcpChannel channel, NativeOutboundMessage networkMessage, ActionListener<Void> listener)
+        final TransportRequest request,
+        sendMessage(requestId, channel, message, listener);
+            response,
+            this.bigArrays = bigArrays;
+    private final BigArrays bigArrays;
+* KIND, either express or implied.  See the License for the
+import org.opensearch.transport.OutboundHandler;
+        String nodeName,
+    public void sendRequest(
+        final boolean isHandshake
+    private final String nodeName;
+            false,
+import org.opensearch.transport.ProtocolOutboundHandler;
+        StatsTracker statsTracker,
+        final Set<String> features,
+        BigArrays bigArrays,
+            action,
+* specific language governing permissions and limitations
+        ActionListener<Void> listener = ActionListener.wrap(() -> messageListener.onRequestSent(node, requestId, action, request, options));
+            tx,
+        ThreadPool threadPool,
+    private final StatsTracker statsTracker;
+        final boolean isHandshake
+* under the License.
+        final long requestId,
+        final long requestId,
+            threadPool.getThreadContext(),
+import org.opensearch.transport.TransportMessageListener;
+            features,
+     */
+        private MessageSerializer(NativeOutboundMessage message, BigArrays bigArrays) {
+     * @see #sendErrorResponse(Version, Set, TcpChannel, long, String, Exception) for sending error responses
+import java.util.Set;
+            false
+        final Set<String> features,
+        TransportAddress address = new TransportAddress(channel.getLocalAddress());
+        final boolean compress,
+    ) throws IOException {
+        this.features = features;
+     * Internal message serializer
+        NativeOutboundMessage.Response message = new NativeOutboundMessage.Response(
+        this.threadPool = threadPool;
+        final Version nodeVersion,
+        handler.sendBytes(requestId, channel, sendContext);
+import org.opensearch.common.io.stream.ReleasableBytesStreamOutput;
+* The OpenSearch Contributors require contributions made to
+        NativeOutboundMessage.Response message = new NativeOutboundMessage.Response(
+import org.opensearch.transport.TransportException;
+        sendMessage(requestId, channel, message, listener);
+            requestId,
 }
+        this.bigArrays = bigArrays;
+            isHandshake,
+        public void close() {
+* GitHub history for details.
+    private final String[] features;
+     * Sends the response to the given channel. This method should be used to send {@link TransportResponse}
+        this.handler = handler;
+* You may obtain a copy of the License at
+/*
+    @Override
+            threadPool.getThreadContext(),
+/*
+    @Override
+        ActionListener<Void> listener = ActionListener.wrap(() -> messageListener.onResponseSent(requestId, action, response));
+            version,
+        Version version = Version.min(this.version, nodeVersion);
+/*
+import org.opensearch.common.util.io.IOUtils;
+* this work for additional information regarding copyright
+    private final OutboundHandler handler;
+        final String action,
+        this.version = version;
+* compatible open source license.
+        final TcpChannel channel,

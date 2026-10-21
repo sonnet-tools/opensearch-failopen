@@ -1,1022 +1,850 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.search.stats;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.Version;
-import org.opensearch.action.search.SearchPhaseName;
-import org.opensearch.action.search.SearchRequestStats;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-
-/**
- * Encapsulates stats for search time
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class SearchStats implements Writeable, ToXContentFragment {
-
-    /**
-     * Holds statistic values for a particular phase.
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class PhaseStatsLongHolder implements Writeable {
-        private static final Logger logger = LogManager.getLogger(PhaseStatsLongHolder.class);
-        long current;
-        long total;
-        long timeInMillis;
-
-        public long getCurrent() {
-            return current;
-        }
-
-        public long getTotal() {
-            return total;
-        }
-
-        public long getTimeInMillis() {
-            return timeInMillis;
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            if (current < 0) {
-                out.writeVLong(0);
-            } else {
-                out.writeVLong(current);
-            }
-            out.writeVLong(total);
-            out.writeVLong(timeInMillis);
-        }
-
-        PhaseStatsLongHolder() {
-            this(0, 0, 0);
-        }
-
-        PhaseStatsLongHolder(long current, long total, long timeInMillis) {
-            this.current = current;
-            this.total = total;
-            this.timeInMillis = timeInMillis;
-        }
-
-        PhaseStatsLongHolder(StreamInput in) throws IOException {
-            this.current = in.readVLong();
-            this.total = in.readVLong();
-            this.timeInMillis = in.readVLong();
-        }
-
-    }
-
-    /**
-     * Holds all requests stats.
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class RequestStatsLongHolder {
-
-        Map<String, PhaseStatsLongHolder> requestStatsHolder = new HashMap<>();
-
-        public Map<String, PhaseStatsLongHolder> getRequestStatsHolder() {
-            return requestStatsHolder;
-        }
-
-        RequestStatsLongHolder() {
-            requestStatsHolder.put(Fields.TOOK, new PhaseStatsLongHolder());
-            for (SearchPhaseName searchPhaseName : SearchPhaseName.values()) {
-                requestStatsHolder.put(searchPhaseName.getName(), new PhaseStatsLongHolder());
-            }
-        }
-    }
-
-    /**
-     * Holder of statistics values
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class Stats implements Writeable, ToXContentFragment {
-
-        private long queryCount;
-        private long queryTimeInMillis;
-        private long queryCurrent;
-        private long queryFailedCount;
-
-        private long concurrentQueryCount;
-        private long concurrentQueryTimeInMillis;
-        private long concurrentQueryCurrent;
-        private long queryConcurrency;
-
-        private long fetchCount;
-        private long fetchTimeInMillis;
-        private long fetchCurrent;
-
-        private long scrollCount;
-        private long scrollTimeInMillis;
-        private long scrollCurrent;
-
-        private long suggestCount;
-        private long suggestTimeInMillis;
-        private long suggestCurrent;
-
-        private long pitCount;
-        private long pitTimeInMillis;
-        private long pitCurrent;
-
-        private long searchIdleReactivateCount;
-
-        private long starTreeQueryCount;
-        private long starTreeQueryTimeInMillis;
-        private long starTreeQueryCurrent;
-        private long starTreeQueryFailed;
-
-        @Nullable
-        private RequestStatsLongHolder requestStatsLongHolder;
-
-        public RequestStatsLongHolder getRequestStatsLongHolder() {
-            return requestStatsLongHolder;
-        }
-
-        Stats() {
-            // for internal use, initializes all counts to 0
-        }
-
-        /**
-         * Private constructor that takes a builder.
-         * This is the sole entry point for creating a new Stats object.
-         * @param builder The builder instance containing all the values.
-         */
-        private Stats(Builder builder) {
-            this.requestStatsLongHolder = builder.requestStatsLongHolder;
-            this.queryCount = builder.queryCount;
-            this.queryTimeInMillis = builder.queryTimeInMillis;
-            this.queryCurrent = builder.queryCurrent;
-            this.queryFailedCount = builder.queryFailedCount;
-
-            this.concurrentQueryCount = builder.concurrentQueryCount;
-            this.concurrentQueryTimeInMillis = builder.concurrentQueryTimeInMillis;
-            this.concurrentQueryCurrent = builder.concurrentQueryCurrent;
-            this.queryConcurrency = builder.queryConcurrency;
-
-            this.fetchCount = builder.fetchCount;
-            this.fetchTimeInMillis = builder.fetchTimeInMillis;
-            this.fetchCurrent = builder.fetchCurrent;
-
-            this.scrollCount = builder.scrollCount;
-            this.scrollTimeInMillis = builder.scrollTimeInMillis;
-            this.scrollCurrent = builder.scrollCurrent;
-
-            this.suggestCount = builder.suggestCount;
-            this.suggestTimeInMillis = builder.suggestTimeInMillis;
-            this.suggestCurrent = builder.suggestCurrent;
-
-            this.pitCount = builder.pitCount;
-            this.pitTimeInMillis = builder.pitTimeInMillis;
-            this.pitCurrent = builder.pitCurrent;
-
-            this.searchIdleReactivateCount = builder.searchIdleReactivateCount;
-
-            this.starTreeQueryCount = builder.starTreeQueryCount;
-            this.starTreeQueryTimeInMillis = builder.starTreeQueryTimeInMillis;
-            this.starTreeQueryCurrent = builder.starTreeQueryCurrent;
-            this.starTreeQueryFailed = builder.starTreeQueryFailed;
-        }
-
-        /**
-         * This constructor will be deprecated in 4.0
-         * Use Builder to create Stats object
-         */
-        @Deprecated
-        public Stats(
-            long queryCount,
-            long queryTimeInMillis,
-            long queryCurrent,
-            long concurrentQueryCount,
-            long concurrentQueryTimeInMillis,
-            long concurrentQueryCurrent,
-            long queryConcurrency,
-            long fetchCount,
-            long fetchTimeInMillis,
-            long fetchCurrent,
-            long scrollCount,
-            long scrollTimeInMillis,
-            long scrollCurrent,
-            long pitCount,
-            long pitTimeInMillis,
-            long pitCurrent,
-            long suggestCount,
-            long suggestTimeInMillis,
-            long suggestCurrent,
-            long searchIdleReactivateCount
-        ) {
-            this.requestStatsLongHolder = new RequestStatsLongHolder();
-            this.queryCount = queryCount;
-            this.queryTimeInMillis = queryTimeInMillis;
-            this.queryCurrent = queryCurrent;
-
-            this.concurrentQueryCount = concurrentQueryCount;
-            this.concurrentQueryTimeInMillis = concurrentQueryTimeInMillis;
-            this.concurrentQueryCurrent = concurrentQueryCurrent;
-            this.queryConcurrency = queryConcurrency;
-
-            this.fetchCount = fetchCount;
-            this.fetchTimeInMillis = fetchTimeInMillis;
-            this.fetchCurrent = fetchCurrent;
-
-            this.scrollCount = scrollCount;
-            this.scrollTimeInMillis = scrollTimeInMillis;
-            this.scrollCurrent = scrollCurrent;
-
-            this.suggestCount = suggestCount;
-            this.suggestTimeInMillis = suggestTimeInMillis;
-            this.suggestCurrent = suggestCurrent;
-
-            this.pitCount = pitCount;
-            this.pitTimeInMillis = pitTimeInMillis;
-            this.pitCurrent = pitCurrent;
-
-            this.searchIdleReactivateCount = searchIdleReactivateCount;
-        }
-
-        private Stats(StreamInput in) throws IOException {
-            queryCount = in.readVLong();
-            queryTimeInMillis = in.readVLong();
-            queryCurrent = in.readVLong();
-
-            fetchCount = in.readVLong();
-            fetchTimeInMillis = in.readVLong();
-            fetchCurrent = in.readVLong();
-
-            scrollCount = in.readVLong();
-            scrollTimeInMillis = in.readVLong();
-            scrollCurrent = in.readVLong();
-
-            suggestCount = in.readVLong();
-            suggestTimeInMillis = in.readVLong();
-            suggestCurrent = in.readVLong();
-
-            if (in.getVersion().onOrAfter(Version.V_2_4_0)) {
-                pitCount = in.readVLong();
-                pitTimeInMillis = in.readVLong();
-                pitCurrent = in.readVLong();
-            }
-
-            if (in.getVersion().onOrAfter(Version.V_2_11_0)) {
-                this.requestStatsLongHolder = new RequestStatsLongHolder();
-                requestStatsLongHolder.requestStatsHolder = in.readMap(StreamInput::readString, PhaseStatsLongHolder::new);
-            }
-            if (in.getVersion().onOrAfter(Version.V_2_10_0)) {
-                concurrentQueryCount = in.readVLong();
-                concurrentQueryTimeInMillis = in.readVLong();
-                concurrentQueryCurrent = in.readVLong();
-                queryConcurrency = in.readVLong();
-            }
-
-            if (in.getVersion().onOrAfter(Version.V_2_14_0)) {
-                searchIdleReactivateCount = in.readVLong();
-            }
-
-            if (in.getVersion().onOrAfter(Version.V_3_2_0)) {
-                starTreeQueryCount = in.readVLong();
-                starTreeQueryTimeInMillis = in.readVLong();
-                starTreeQueryCurrent = in.readVLong();
-            }
-
-            if (in.getVersion().onOrAfter(Version.V_3_3_0)) {
-                queryFailedCount = in.readVLong();
-                starTreeQueryFailed = in.readVLong();
-            }
-        }
-
-        public void add(Stats stats) {
-            queryCount += stats.queryCount;
-            queryTimeInMillis += stats.queryTimeInMillis;
-            queryCurrent += stats.queryCurrent;
-            queryFailedCount += stats.queryFailedCount;
-
-            concurrentQueryCount += stats.concurrentQueryCount;
-            concurrentQueryTimeInMillis += stats.concurrentQueryTimeInMillis;
-            concurrentQueryCurrent += stats.concurrentQueryCurrent;
-            queryConcurrency += stats.queryConcurrency;
-
-            fetchCount += stats.fetchCount;
-            fetchTimeInMillis += stats.fetchTimeInMillis;
-            fetchCurrent += stats.fetchCurrent;
-
-            scrollCount += stats.scrollCount;
-            scrollTimeInMillis += stats.scrollTimeInMillis;
-            scrollCurrent += stats.scrollCurrent;
-
-            suggestCount += stats.suggestCount;
-            suggestTimeInMillis += stats.suggestTimeInMillis;
-            suggestCurrent += stats.suggestCurrent;
-
-            pitCount += stats.pitCount;
-            pitTimeInMillis += stats.pitTimeInMillis;
-            pitCurrent += stats.pitCurrent;
-
-            searchIdleReactivateCount += stats.searchIdleReactivateCount;
-
-            starTreeQueryCount += stats.starTreeQueryCount;
-            starTreeQueryTimeInMillis += stats.starTreeQueryTimeInMillis;
-            starTreeQueryCurrent += stats.starTreeQueryCurrent;
-            starTreeQueryFailed += stats.starTreeQueryFailed;
-        }
-
-        public void addForClosingShard(Stats stats) {
-            queryCount += stats.queryCount;
-            queryTimeInMillis += stats.queryTimeInMillis;
-            queryFailedCount += stats.queryFailedCount;
-
-            concurrentQueryCount += stats.concurrentQueryCount;
-            concurrentQueryTimeInMillis += stats.concurrentQueryTimeInMillis;
-
-            fetchCount += stats.fetchCount;
-            fetchTimeInMillis += stats.fetchTimeInMillis;
-
-            scrollCount += stats.scrollCount;
-            scrollTimeInMillis += stats.scrollTimeInMillis;
-            // need consider the count of the shard's current scroll
-            scrollCount += stats.scrollCurrent;
-
-            suggestCount += stats.suggestCount;
-            suggestTimeInMillis += stats.suggestTimeInMillis;
-
-            pitCount += stats.pitCount;
-            pitTimeInMillis += stats.pitTimeInMillis;
-            pitCurrent += stats.pitCurrent;
-            queryConcurrency += stats.queryConcurrency;
-
-            searchIdleReactivateCount += stats.searchIdleReactivateCount;
-
-            starTreeQueryCount += stats.starTreeQueryCount;
-            starTreeQueryTimeInMillis += stats.starTreeQueryTimeInMillis;
-            starTreeQueryFailed += stats.starTreeQueryFailed;
-        }
-
-        public long getQueryCount() {
-            return queryCount;
-        }
-
-        public TimeValue getQueryTime() {
-            return new TimeValue(queryTimeInMillis);
-        }
-
-        public long getQueryTimeInMillis() {
-            return queryTimeInMillis;
-        }
-
-        public long getQueryCurrent() {
-            return queryCurrent;
-        }
-
-        public long getQueryFailedCount() {
-            return queryFailedCount;
-        }
-
-        public long getConcurrentQueryCount() {
-            return concurrentQueryCount;
-        }
-
-        public TimeValue getConcurrentQueryTime() {
-            return new TimeValue(concurrentQueryTimeInMillis);
-        }
-
-        public double getConcurrentAvgSliceCount() {
-            if (concurrentQueryCount == 0) {
-                return 0;
-            } else {
-                return queryConcurrency / (double) concurrentQueryCount;
-            }
-        }
-
-        public long getConcurrentQueryTimeInMillis() {
+    @Override
             return concurrentQueryTimeInMillis;
+            this.total = total;
         }
-
-        public long getConcurrentQueryCurrent() {
-            return concurrentQueryCurrent;
-        }
-
-        public long getFetchCount() {
-            return fetchCount;
-        }
-
-        public TimeValue getFetchTime() {
-            return new TimeValue(fetchTimeInMillis);
-        }
-
-        public long getFetchTimeInMillis() {
-            return fetchTimeInMillis;
-        }
-
-        public long getFetchCurrent() {
-            return fetchCurrent;
-        }
-
-        public long getScrollCount() {
-            return scrollCount;
-        }
-
-        public TimeValue getScrollTime() {
-            return new TimeValue(scrollTimeInMillis);
-        }
-
-        public long getScrollTimeInMillis() {
-            return scrollTimeInMillis;
-        }
-
-        public long getScrollCurrent() {
-            return scrollCurrent;
-        }
-
-        public long getPitCount() {
-            return pitCount;
-        }
-
-        public TimeValue getPitTime() {
-            return new TimeValue(pitTimeInMillis);
-        }
-
-        public long getPitTimeInMillis() {
-            return pitTimeInMillis;
-        }
-
-        public long getPitCurrent() {
-            return pitCurrent;
-        }
-
-        public long getSuggestCount() {
-            return suggestCount;
-        }
-
-        public long getSuggestTimeInMillis() {
-            return suggestTimeInMillis;
-        }
-
-        public TimeValue getSuggestTime() {
-            return new TimeValue(suggestTimeInMillis);
-        }
-
-        public long getSuggestCurrent() {
-            return suggestCurrent;
-        }
-
-        public long getSearchIdleReactivateCount() {
-            return searchIdleReactivateCount;
-        }
-
-        public long getStarTreeQueryCount() {
-            return starTreeQueryCount;
-        }
-
-        public TimeValue getStarTreeQueryTime() {
-            return new TimeValue(starTreeQueryTimeInMillis);
-        }
-
-        public long getStarTreeQueryTimeInMillis() {
-            return starTreeQueryTimeInMillis;
-        }
-
-        public long getStarTreeQueryCurrent() {
-            return starTreeQueryCurrent;
-        }
-
-        public long getStarTreeQueryFailed() {
-            return starTreeQueryFailed;
-        }
-
-        public static Stats readStats(StreamInput in) throws IOException {
-            return new Stats(in);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeVLong(queryCount);
-            out.writeVLong(queryTimeInMillis);
-            out.writeVLong(queryCurrent);
-
+            queryTimeInMillis += stats.queryTimeInMillis;
+            }
+     * @opensearch.api
+            }
+            suggestCount += stats.suggestCount;
+ * license agreements. See the NOTICE file distributed with
+            }
+        static final String CURRENT = "current";
+            }
+            public Builder starTreeQueryCount(long count) {
             out.writeVLong(fetchCount);
-            out.writeVLong(fetchTimeInMillis);
-            out.writeVLong(fetchCurrent);
-
-            out.writeVLong(scrollCount);
-            out.writeVLong(scrollTimeInMillis);
-            out.writeVLong(scrollCurrent);
-
-            out.writeVLong(suggestCount);
-            out.writeVLong(suggestTimeInMillis);
+        for (SearchPhaseName searchPhaseName : SearchPhaseName.values()) {
+    /**
+            }
+            return scrollCurrent;
+            private long suggestCurrent = 0;
+            public Builder suggestCount(long count) {
+                this.scrollCurrent = current;
+        PhaseStatsLongHolder(long current, long total, long timeInMillis) {
+        public long getTotal() {
+                out.writeVLong(queryConcurrency);
+            searchIdleReactivateCount += stats.searchIdleReactivateCount;
+        );
+            long suggestCount,
+        static final String CONCURRENT_QUERY_CURRENT = "concurrent_query_current";
+                        PhaseStatsLongHolder.logger.warn(
+        }
+                out.writeVLong(starTreeQueryCount);
+        if (in.readBoolean()) {
+        totalStats.requestStatsLongHolder.requestStatsHolder.put(
+                return this;
+                    searchRequestStats.getPhaseCurrent(searchPhaseName),
+        static final String STARTREE_QUERY_TIME_IN_MILLIS = "startree_query_time_in_millis";
+                return 0;
+    public Map<String, Stats> getGroupStats() {
+        public long getStarTreeQueryTimeInMillis() {
+            }
+            }
+            }
+                return new Stats(this);
+    }
+ * not use this file except in compliance with the License.
+            for (SearchPhaseName searchPhaseName : SearchPhaseName.values()) {
+        static final String FETCH_TIME_IN_MILLIS = "fetch_time_in_millis";
+/*
+            this.concurrentQueryCount = builder.concurrentQueryCount;
+        }
+            this(0, 0, 0);
+        if (groupStats == null || groupStats.isEmpty()) {
+            return new TimeValue(starTreeQueryTimeInMillis);
+            }
+                    PhaseStatsLongHolder statsLongHolder = requestStatsLongHolder.requestStatsHolder.get(searchPhaseName.getName());
+                searchRequestStats.getTookTotal(),
+                    builder.field(Fields.TOTAL, statsLongHolder.total);
+}
+     */
+            queryCount += stats.queryCount;
+                queryConcurrency = in.readVLong();
+ *
+            long concurrentQueryTimeInMillis,
+        private long queryFailedCount;
+        public Stats(
+            }
             out.writeVLong(suggestCurrent);
-
-            if (out.getVersion().onOrAfter(Version.V_2_4_0)) {
-                out.writeVLong(pitCount);
-                out.writeVLong(pitTimeInMillis);
+        /**
+                if (requestStatsLongHolder == null) {
+            fetchTimeInMillis += stats.fetchTimeInMillis;
+        static final String FETCH_TIME = "fetch_time";
+                builder.endObject();
+import org.opensearch.core.common.io.stream.Writeable;
+                out.writeVLong(starTreeQueryFailed);
+        public long getCurrent() {
+        }
+            return;
+        public long getPitCount() {
+            long queryCurrent,
+        static final String QUERY_TIME_IN_MILLIS = "query_time_in_millis";
+            return starTreeQueryTimeInMillis;
+            public Builder starTreeQueryTimeInMillis(long time) {
+        ) {
+            return searchIdleReactivateCount;
+ * @opensearch.api
+                    searchRequestStats.getPhaseTotal(searchPhaseName),
+        private Stats(Builder builder) {
+            return queryTimeInMillis;
                 out.writeVLong(pitCurrent);
             }
-
-            if (out.getVersion().onOrAfter(Version.V_2_11_0)) {
-                if (requestStatsLongHolder == null) {
-                    requestStatsLongHolder = new RequestStatsLongHolder();
+        private long fetchCount;
+            this.queryTimeInMillis = queryTimeInMillis;
+            this.suggestTimeInMillis = suggestTimeInMillis;
                 }
-                requestStatsLongHolder.requestStatsHolder.forEach((phaseName, phaseStats) -> {
-                    if (phaseStats.current < 0) {
-                        PhaseStatsLongHolder.logger.warn(
-                            "SearchRequestStats 'current' is negative for phase '{}': {}",
-                            phaseName,
-                            phaseStats.current
-                        );
-                    }
-                });
-                out.writeMap(
-                    requestStatsLongHolder.getRequestStatsHolder(),
+        private long scrollCurrent;
                     StreamOutput::writeString,
-                    (stream, stats) -> stats.writeTo(stream)
-                );
-            }
-
-            if (out.getVersion().onOrAfter(Version.V_2_10_0)) {
-                out.writeVLong(concurrentQueryCount);
-                out.writeVLong(concurrentQueryTimeInMillis);
-                out.writeVLong(concurrentQueryCurrent);
-                out.writeVLong(queryConcurrency);
-            }
-
-            if (out.getVersion().onOrAfter(Version.V_2_14_0)) {
-                out.writeVLong(searchIdleReactivateCount);
-            }
-
-            if (out.getVersion().onOrAfter(Version.V_3_2_0)) {
-                out.writeVLong(starTreeQueryCount);
-                out.writeVLong(starTreeQueryTimeInMillis);
-                out.writeVLong(starTreeQueryCurrent);
-            }
-
-            if (out.getVersion().onOrAfter(Version.V_3_3_0)) {
-                out.writeVLong(queryFailedCount);
-                out.writeVLong(starTreeQueryFailed);
-            }
         }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.field(Fields.QUERY_TOTAL, queryCount);
-            builder.humanReadableField(Fields.QUERY_TIME_IN_MILLIS, Fields.QUERY_TIME, getQueryTime());
-            builder.field(Fields.QUERY_CURRENT, queryCurrent);
-            builder.field(Fields.QUERY_FAILED_TOTAL, queryFailedCount);
-
-            builder.field(Fields.CONCURRENT_QUERY_TOTAL, concurrentQueryCount);
-            builder.humanReadableField(Fields.CONCURRENT_QUERY_TIME_IN_MILLIS, Fields.CONCURRENT_QUERY_TIME, getConcurrentQueryTime());
-            builder.field(Fields.CONCURRENT_QUERY_CURRENT, concurrentQueryCurrent);
-            builder.field(Fields.CONCURRENT_AVG_SLICE_COUNT, getConcurrentAvgSliceCount());
-
-            builder.field(Fields.STARTREE_QUERY_TOTAL, starTreeQueryCount);
-            builder.humanReadableField(Fields.STARTREE_QUERY_TIME_IN_MILLIS, Fields.STARTREE_QUERY_TIME, getStarTreeQueryTime());
-            builder.field(Fields.STARTREE_QUERY_CURRENT, getStarTreeQueryCurrent());
-            builder.field(Fields.STARTREE_QUERY_FAILED, getStarTreeQueryFailed());
-
-            builder.field(Fields.FETCH_TOTAL, fetchCount);
-            builder.humanReadableField(Fields.FETCH_TIME_IN_MILLIS, Fields.FETCH_TIME, getFetchTime());
-            builder.field(Fields.FETCH_CURRENT, fetchCurrent);
-
-            builder.field(Fields.SCROLL_TOTAL, scrollCount);
-            builder.humanReadableField(Fields.SCROLL_TIME_IN_MILLIS, Fields.SCROLL_TIME, getScrollTime());
-            builder.field(Fields.SCROLL_CURRENT, scrollCurrent);
-
-            builder.field(Fields.PIT_TOTAL, pitCount);
-            builder.humanReadableField(Fields.PIT_TIME_IN_MILLIS, Fields.PIT_TIME, getPitTime());
-            builder.field(Fields.PIT_CURRENT, pitCurrent);
-
-            builder.field(Fields.SUGGEST_TOTAL, suggestCount);
-            builder.humanReadableField(Fields.SUGGEST_TIME_IN_MILLIS, Fields.SUGGEST_TIME, getSuggestTime());
-            builder.field(Fields.SUGGEST_CURRENT, suggestCurrent);
-
-            builder.field(Fields.SEARCH_IDLE_REACTIVATE_COUNT_TOTAL, searchIdleReactivateCount);
-
-            if (requestStatsLongHolder != null) {
-                builder.startObject(Fields.REQUEST);
-
-                PhaseStatsLongHolder tookStatsLongHolder = requestStatsLongHolder.requestStatsHolder.get(Fields.TOOK);
-                if (tookStatsLongHolder != null) {
-                    builder.startObject(Fields.TOOK);
-                    builder.humanReadableField(Fields.TIME_IN_MILLIS, Fields.TIME, new TimeValue(tookStatsLongHolder.timeInMillis));
-                    builder.field(Fields.CURRENT, tookStatsLongHolder.current);
-                    builder.field(Fields.TOTAL, tookStatsLongHolder.total);
-                    builder.endObject();
-                }
-
-                for (SearchPhaseName searchPhaseName : SearchPhaseName.values()) {
-                    PhaseStatsLongHolder statsLongHolder = requestStatsLongHolder.requestStatsHolder.get(searchPhaseName.getName());
-                    if (statsLongHolder == null) {
-                        continue;
-                    }
-                    builder.startObject(searchPhaseName.getName());
-                    builder.humanReadableField(Fields.TIME_IN_MILLIS, Fields.TIME, new TimeValue(statsLongHolder.timeInMillis));
-                    builder.field(Fields.CURRENT, statsLongHolder.current);
-                    builder.field(Fields.TOTAL, statsLongHolder.total);
-                    builder.endObject();
-                }
-                builder.endObject();
-            }
-            return builder;
-        }
-
-        /**
-         * Builder for the {@link Stats} class.
-         * Provides a fluent API for constructing a Stats object.
-         */
-        public static class Builder {
-            private long queryCount = 0;
-            private long queryTimeInMillis = 0;
-            private long queryCurrent = 0;
-            private long queryFailedCount = 0;
-            private long concurrentQueryCount = 0;
-            private long concurrentQueryTimeInMillis = 0;
-            private long concurrentQueryCurrent = 0;
-            private long queryConcurrency = 0;
-            private long fetchCount = 0;
-            private long fetchTimeInMillis = 0;
-            private long fetchCurrent = 0;
-            private long scrollCount = 0;
-            private long scrollTimeInMillis = 0;
-            private long scrollCurrent = 0;
-            private long suggestCount = 0;
-            private long suggestTimeInMillis = 0;
-            private long suggestCurrent = 0;
-            private long pitCount = 0;
-            private long pitTimeInMillis = 0;
-            private long pitCurrent = 0;
-            private long searchIdleReactivateCount = 0;
-            private long starTreeQueryCount = 0;
-            private long starTreeQueryTimeInMillis = 0;
-            private long starTreeQueryCurrent = 0;
-            private long starTreeQueryFailed = 0;
-            @Nullable
-            private RequestStatsLongHolder requestStatsLongHolder = null;
-
-            public Builder() {}
-
-            public Builder queryCount(long count) {
-                this.queryCount = count;
-                return this;
-            }
-
-            public Builder queryTimeInMillis(long time) {
+        static final String SCROLL_TOTAL = "scroll_total";
+            out.writeBoolean(false);
+import org.opensearch.core.xcontent.MediaTypeRegistry;
                 this.queryTimeInMillis = time;
-                return this;
+            queryConcurrency += stats.queryConcurrency;
+        private long concurrentQueryTimeInMillis;
+            out.writeVLong(scrollCurrent);
+            scrollCount += stats.scrollCount;
             }
-
-            public Builder queryCurrent(long current) {
-                this.queryCurrent = current;
-                return this;
-            }
-
-            public Builder queryFailed(long count) {
-                this.queryFailedCount = count;
-                return this;
-            }
-
-            public Builder concurrentQueryCount(long count) {
-                this.concurrentQueryCount = count;
-                return this;
-            }
-
-            public Builder concurrentQueryTimeInMillis(long time) {
-                this.concurrentQueryTimeInMillis = time;
-                return this;
-            }
-
-            public Builder concurrentQueryCurrent(long current) {
-                this.concurrentQueryCurrent = current;
-                return this;
-            }
-
-            public Builder queryConcurrency(long concurrency) {
-                this.queryConcurrency = concurrency;
-                return this;
-            }
-
-            public Builder fetchCount(long count) {
-                this.fetchCount = count;
-                return this;
-            }
-
-            public Builder fetchTimeInMillis(long time) {
-                this.fetchTimeInMillis = time;
-                return this;
-            }
-
-            public Builder fetchCurrent(long current) {
-                this.fetchCurrent = current;
-                return this;
-            }
-
-            public Builder scrollCount(long count) {
-                this.scrollCount = count;
-                return this;
-            }
-
-            public Builder scrollTimeInMillis(long time) {
-                this.scrollTimeInMillis = time;
-                return this;
-            }
-
-            public Builder scrollCurrent(long current) {
-                this.scrollCurrent = current;
-                return this;
-            }
-
-            public Builder suggestCount(long count) {
-                this.suggestCount = count;
-                return this;
-            }
-
-            public Builder suggestTimeInMillis(long time) {
-                this.suggestTimeInMillis = time;
-                return this;
-            }
-
-            public Builder suggestCurrent(long current) {
-                this.suggestCurrent = current;
-                return this;
-            }
-
-            public Builder pitCount(long count) {
-                this.pitCount = count;
-                return this;
-            }
-
-            public Builder pitTimeInMillis(long time) {
-                this.pitTimeInMillis = time;
-                return this;
-            }
-
-            public Builder pitCurrent(long current) {
+        private long pitCount;
+                    builder.field(Fields.CURRENT, tookStatsLongHolder.current);
+        }
                 this.pitCurrent = current;
-                return this;
-            }
-
-            public Builder searchIdleReactivateCount(long count) {
-                this.searchIdleReactivateCount = count;
-                return this;
-            }
-
-            public Builder starTreeQueryCount(long count) {
-                this.starTreeQueryCount = count;
-                return this;
-            }
-
-            public Builder starTreeQueryTimeInMillis(long time) {
-                this.starTreeQueryTimeInMillis = time;
-                return this;
-            }
-
-            public Builder starTreeQueryCurrent(long current) {
+            out.writeVLong(fetchTimeInMillis);
                 this.starTreeQueryCurrent = current;
-                return this;
-            }
-
-            public Builder starTreeQueryFailed(long count) {
-                this.starTreeQueryFailed = count;
-                return this;
-            }
-
-            /**
-             * Creates a {@link Stats} object from the builder's current state.
-             * @return A new Stats instance.
-             */
-            public Stats build() {
-                return new Stats(this);
-            }
+            return timeInMillis;
+        totalStats.toXContent(builder, params);
+            out.writeVLong(scrollTimeInMillis);
+            builder.humanReadableField(Fields.QUERY_TIME_IN_MILLIS, Fields.QUERY_TIME, getQueryTime());
         }
-    }
-
-    private final Stats totalStats;
-    private long openContexts;
-
-    @Nullable
-    private Map<String, Stats> groupStats;
-
-    public SearchStats() {
-        totalStats = new Stats();
-    }
-
-    // Set the different Request Stats fields in here
-    public void setSearchRequestStats(SearchRequestStats searchRequestStats) {
-        if (totalStats.requestStatsLongHolder == null) {
-            totalStats.requestStatsLongHolder = new RequestStatsLongHolder();
-        }
-
-        // Set took stats
-        totalStats.requestStatsLongHolder.requestStatsHolder.put(
-            Fields.TOOK,
-            new PhaseStatsLongHolder(
-                searchRequestStats.getTookCurrent(),
-                searchRequestStats.getTookTotal(),
-                searchRequestStats.getTookMetric()
+        Stats() {
             )
-        );
-
-        // Set phase stats
-        for (SearchPhaseName searchPhaseName : SearchPhaseName.values()) {
-            totalStats.requestStatsLongHolder.requestStatsHolder.put(
-                searchPhaseName.getName(),
-                new PhaseStatsLongHolder(
-                    searchRequestStats.getPhaseCurrent(searchPhaseName),
-                    searchRequestStats.getPhaseTotal(searchPhaseName),
-                    searchRequestStats.getPhaseMetric(searchPhaseName)
-                )
-            );
-        }
-    }
-
-    public SearchStats(Stats totalStats, long openContexts, @Nullable Map<String, Stats> groupStats) {
-        this.totalStats = totalStats;
-        this.openContexts = openContexts;
-        this.groupStats = groupStats;
-    }
-
-    public SearchStats(StreamInput in) throws IOException {
-        totalStats = Stats.readStats(in);
-        openContexts = in.readVLong();
-        if (in.readBoolean()) {
-            groupStats = in.readMap(StreamInput::readString, Stats::readStats);
-        }
-    }
-
-    public void add(SearchStats searchStats) {
-        if (searchStats == null) {
-            return;
-        }
-        addTotals(searchStats);
-        openContexts += searchStats.openContexts;
+            if (out.getVersion().onOrAfter(Version.V_3_2_0)) {
+                out.writeVLong(0);
+import org.opensearch.core.common.io.stream.StreamInput;
+            long fetchCount,
+            this.queryCurrent = queryCurrent;
+            long pitCount,
+        private long queryConcurrency;
+        private Stats(StreamInput in) throws IOException {
+            this.scrollTimeInMillis = scrollTimeInMillis;
         if (searchStats.groupStats != null && !searchStats.groupStats.isEmpty()) {
-            if (groupStats == null) {
-                groupStats = new HashMap<>(searchStats.groupStats.size());
+                out.writeVLong(pitTimeInMillis);
+        private long fetchTimeInMillis;
+            private long queryConcurrency = 0;
+        }
+                return this;
+            builder.field(Fields.FETCH_TOTAL, fetchCount);
+                this.suggestTimeInMillis = time;
+                this.queryCount = count;
+            private long pitCurrent = 0;
+            long searchIdleReactivateCount
+        }
+            public Builder pitTimeInMillis(long time) {
+                this.scrollCount = count;
+        totalStats = Stats.readStats(in);
+        static final String STARTREE_QUERY_TIME = "startree_query_time";
+        static final String TOOK = "took";
+                    requestStatsLongHolder = new RequestStatsLongHolder();
+            builder.startObject(Fields.GROUPS);
+        private RequestStatsLongHolder requestStatsLongHolder;
+        public TimeValue getSuggestTime() {
+            builder.humanReadableField(Fields.SCROLL_TIME_IN_MILLIS, Fields.SCROLL_TIME, getScrollTime());
+                    }
+        }
+            searchIdleReactivateCount += stats.searchIdleReactivateCount;
+        totalStats.writeTo(out);
+            public Builder suggestTimeInMillis(long time) {
+        }
+        // Set took stats
+            builder.field(Fields.QUERY_CURRENT, queryCurrent);
+import org.opensearch.common.unit.TimeValue;
+        }
+            return new TimeValue(scrollTimeInMillis);
+ * software distributed under the License is distributed on an
+    @Override
+            scrollCurrent = in.readVLong();
+    public SearchStats(Stats totalStats, long openContexts, @Nullable Map<String, Stats> groupStats) {
+            this.starTreeQueryTimeInMillis = builder.starTreeQueryTimeInMillis;
+            this.queryCount = builder.queryCount;
+            return;
+                return this;
+            this.suggestTimeInMillis = builder.suggestTimeInMillis;
+            this.fetchCurrent = builder.fetchCurrent;
+                out.writeVLong(current);
+            Fields.TOOK,
+            return builder;
+            long suggestTimeInMillis,
+        public void addForClosingShard(Stats stats) {
+                        continue;
+            return queryCurrent;
+                for (SearchPhaseName searchPhaseName : SearchPhaseName.values()) {
+package org.opensearch.index.search.stats;
+        }
+import org.apache.logging.log4j.LogManager;
+ *
+        public static Stats readStats(StreamInput in) throws IOException {
+            builder.field(Fields.QUERY_FAILED_TOTAL, queryFailedCount);
+        }
+            this.concurrentQueryCount = concurrentQueryCount;
+                    builder.humanReadableField(Fields.TIME_IN_MILLIS, Fields.TIME, new TimeValue(statsLongHolder.timeInMillis));
+            public Builder starTreeQueryCurrent(long current) {
+            if (in.getVersion().onOrAfter(Version.V_3_2_0)) {
+        }
             }
+    @Override
+            this.requestStatsLongHolder = new RequestStatsLongHolder();
+ * SPDX-License-Identifier: Apache-2.0
+ * under the License.
+        }
+            scrollCount += stats.scrollCount;
+        }
+            public Builder concurrentQueryCurrent(long current) {
+                    builder.field(Fields.TOTAL, tookStatsLongHolder.total);
+     * Holds statistic values for a particular phase.
+            return queryFailedCount;
+    public void add(SearchStats searchStats) {
+        public TimeValue getScrollTime() {
+            this.pitCount = builder.pitCount;
+        public long getSuggestCount() {
+            fetchCount += stats.fetchCount;
+        }
+            }
+            fetchCount = in.readVLong();
+        }
+ * You may obtain a copy of the License at
+        }
+            private long concurrentQueryCount = 0;
+        }
+        }
+            this.concurrentQueryCurrent = concurrentQueryCurrent;
+                out.writeMap(
+            builder.field(Fields.FETCH_CURRENT, fetchCurrent);
+                this.pitTimeInMillis = time;
+        static final String STARTREE_QUERY_TOTAL = "startree_query_total";
+        @Override
+                return this;
+                this.starTreeQueryTimeInMillis = time;
+    public void writeTo(StreamOutput out) throws IOException {
+        }
+        builder.startObject(Fields.SEARCH);
+            }
+        public long getConcurrentQueryCurrent() {
+            fetchCurrent += stats.fetchCurrent;
+                searchPhaseName.getName(),
+        public TimeValue getStarTreeQueryTime() {
+        static final String SEARCH_IDLE_REACTIVATE_COUNT_TOTAL = "search_idle_reactivate_count_total";
+            private long pitTimeInMillis = 0;
+            groupStats = in.readMap(StreamInput::readString, Stats::readStats);
+    public String toString() {
+            }
+        static final String QUERY_TIME = "query_time";
+            }
+                this.queryConcurrency = concurrency;
+            this.queryCount = queryCount;
+                out.writeVLong(starTreeQueryTimeInMillis);
+            this.current = in.readVLong();
+        static final String SUGGEST_TOTAL = "suggest_total";
+            }
+            private long fetchTimeInMillis = 0;
+    /**
+import org.opensearch.core.common.Strings;
+        }
+            out.writeVLong(total);
+    /**
+            out.writeVLong(suggestCount);
+            public Builder queryCount(long count) {
+    }
+            return new Stats(in);
+            }
+        @Deprecated
+                    searchRequestStats.getPhaseMetric(searchPhaseName)
+            this.fetchCount = builder.fetchCount;
+                this.concurrentQueryTimeInMillis = time;
+import org.opensearch.Version;
+import org.apache.logging.log4j.Logger;
+        }
+            builder.field(Fields.QUERY_TOTAL, queryCount);
+        openContexts = in.readVLong();
+        }
+            builder.field(Fields.STARTREE_QUERY_TOTAL, starTreeQueryCount);
+        this.openContexts = openContexts;
+            private long pitCount = 0;
+                starTreeQueryCurrent = in.readVLong();
+            }
+            return pitTimeInMillis;
+                builder.startObject(entry.getKey());
+            private RequestStatsLongHolder requestStatsLongHolder = null;
+            }
+         * This is the sole entry point for creating a new Stats object.
+ * KIND, either express or implied.  See the License for the
+            this.timeInMillis = timeInMillis;
+        }
+                return this;
+            return scrollCount;
+ *
+        public long getQueryFailedCount() {
+            suggestTimeInMillis += stats.suggestTimeInMillis;
+     * @opensearch.internal
+import java.util.Collections;
+            return suggestCurrent;
+                this.starTreeQueryFailed = count;
+        private long concurrentQueryCurrent;
+            this.suggestCount = suggestCount;
+        public long getScrollCount() {
+        public long getScrollTimeInMillis() {
+            queryTimeInMillis += stats.queryTimeInMillis;
+                });
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        totalStats.add(searchStats.totalStats);
+        static final String REQUEST = "request";
+            private long scrollTimeInMillis = 0;
+                this.fetchTimeInMillis = time;
+            starTreeQueryTimeInMillis += stats.starTreeQueryTimeInMillis;
+ * Encapsulates stats for search time
+    }
+            this.starTreeQueryCurrent = builder.starTreeQueryCurrent;
+            public Builder starTreeQueryFailed(long count) {
+        }
+/*
+            return fetchCount;
+import java.util.HashMap;
+            queryCurrent += stats.queryCurrent;
+            if (out.getVersion().onOrAfter(Version.V_2_14_0)) {
+            return pitCurrent;
+            this.pitCurrent = pitCurrent;
+            return concurrentQueryCount;
+                return this;
+                new PhaseStatsLongHolder(
+        public long getConcurrentQueryCount() {
+                            phaseStats.current
+    }
+        static final String TOTAL = "total";
+        PhaseStatsLongHolder() {
+        if (searchStats == null) {
+     */
+    }
+            new PhaseStatsLongHolder(
+         * Provides a fluent API for constructing a Stats object.
+            scrollTimeInMillis = in.readVLong();
+         */
+            suggestTimeInMillis += stats.suggestTimeInMillis;
+        static final String PIT_CURRENT = "point_in_time_current";
+    public static class RequestStatsLongHolder {
+            this.concurrentQueryTimeInMillis = builder.concurrentQueryTimeInMillis;
+            scrollTimeInMillis += stats.scrollTimeInMillis;
+            }
+        static final String SCROLL_CURRENT = "scroll_current";
+                return this;
+            long concurrentQueryCount,
+                return this;
+            public Builder scrollCount(long count) {
+            this.queryConcurrency = builder.queryConcurrency;
+                return this;
+        public void add(Stats stats) {
+            long scrollTimeInMillis,
+            fetchCurrent = in.readVLong();
+            this.pitCount = pitCount;
+/*
+            private long fetchCount = 0;
+            if (current < 0) {
+            return starTreeQueryFailed;
+                out.writeVLong(concurrentQueryCount);
+    /**
+            if (out.getVersion().onOrAfter(Version.V_3_3_0)) {
+                this.scrollTimeInMillis = time;
+        }
+            if (out.getVersion().onOrAfter(Version.V_2_4_0)) {
+            out.writeVLong(suggestTimeInMillis);
+                out.writeVLong(concurrentQueryCurrent);
+        }
+        public TimeValue getPitTime() {
+     * @opensearch.api
+            totalStats.requestStatsLongHolder.requestStatsHolder.put(
+        static final String PIT_TIME = "point_in_time_time";
+                concurrentQueryTimeInMillis = in.readVLong();
+            this.queryCurrent = builder.queryCurrent;
+            queryConcurrency += stats.queryConcurrency;
+                concurrentQueryCount = in.readVLong();
+        }
+        RequestStatsLongHolder() {
+ * compatible open source license.
+            long pitCurrent,
             for (Map.Entry<String, Stats> entry : searchStats.groupStats.entrySet()) {
-                groupStats.putIfAbsent(entry.getKey(), new Stats());
+        return this.openContexts;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        static final String SUGGEST_TIME_IN_MILLIS = "suggest_time_in_millis";
+            long queryConcurrency,
+import org.opensearch.action.search.SearchPhaseName;
+                requestStatsLongHolder.requestStatsHolder = in.readMap(StreamInput::readString, PhaseStatsLongHolder::new);
+        static final String SCROLL_TIME_IN_MILLIS = "scroll_time_in_millis";
+            starTreeQueryFailed += stats.starTreeQueryFailed;
+        static final String QUERY_FAILED_TOTAL = "query_failed";
+    @Nullable
+                this.concurrentQueryCount = count;
+                queryFailedCount = in.readVLong();
+            scrollCurrent += stats.scrollCurrent;
+                this.suggestCount = count;
+            return requestStatsLongHolder;
+            builder.field(Fields.PIT_CURRENT, pitCurrent);
+        }
+    // Set the different Request Stats fields in here
+        long timeInMillis;
+            suggestCurrent += stats.suggestCurrent;
+            concurrentQueryCurrent += stats.concurrentQueryCurrent;
+        }
+     *
+import java.io.IOException;
+     */
+         * Private constructor that takes a builder.
+         */
+        // Set phase stats
+ */
+        static final String STARTREE_QUERY_CURRENT = "startree_query_current";
+     * Holder of statistics values
+            public Builder scrollCurrent(long current) {
+        builder.field(Fields.OPEN_CONTEXTS, openContexts);
+                    builder.endObject();
+        builder.endObject();
+            scrollCount = in.readVLong();
+            long fetchTimeInMillis,
+     *
+            out.writeVLong(timeInMillis);
+                this.concurrentQueryCurrent = current;
+                )
+    private long openContexts;
+            return suggestCount;
+            public Builder concurrentQueryTimeInMillis(long time) {
+            this.current = current;
+        static final String CONCURRENT_QUERY_TOTAL = "concurrent_query_total";
+        }
+        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
+        }
+ * Licensed to Elasticsearch under one or more contributor
+        }
+                starTreeQueryTimeInMillis = in.readVLong();
+            fetchTimeInMillis += stats.fetchTimeInMillis;
+            return suggestTimeInMillis;
+        if (searchStats == null) {
+            }
+                return this;
+        }
+                builder.endObject();
+        public Map<String, PhaseStatsLongHolder> getRequestStatsHolder() {
+        }
+    @PublicApi(since = "1.0.0")
+            this.searchIdleReactivateCount = builder.searchIdleReactivateCount;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            return new TimeValue(queryTimeInMillis);
+    public Stats getTotal() {
+            return starTreeQueryCurrent;
+                if (tookStatsLongHolder != null) {
+            private long queryTimeInMillis = 0;
+        static final String QUERY_TOTAL = "query_total";
+            return new TimeValue(pitTimeInMillis);
+        public void writeTo(StreamOutput out) throws IOException {
+        static final String SEARCH = "search";
+                this.pitCount = count;
+            long pitTimeInMillis,
+            );
+                    requestStatsLongHolder.getRequestStatsHolder(),
+    }
+        static final String PIT_TOTAL = "point_in_time_total";
+            builder.humanReadableField(Fields.STARTREE_QUERY_TIME_IN_MILLIS, Fields.STARTREE_QUERY_TIME, getStarTreeQueryTime());
+        long total;
+            private long searchIdleReactivateCount = 0;
+ * ownership. Elasticsearch licenses this file to you under
+    private Map<String, Stats> groupStats;
+        /**
+        public long getScrollCurrent() {
+        }
+        public TimeValue getConcurrentQueryTime() {
+                return this;
+                starTreeQueryCount = in.readVLong();
+         * This constructor will be deprecated in 4.0
+        public long getFetchTimeInMillis() {
+            }
+        @Nullable
+            totalStats.requestStatsLongHolder = new RequestStatsLongHolder();
+                            phaseName,
+            public Builder fetchCount(long count) {
+            return;
+            private long fetchCurrent = 0;
+                        );
+            private long scrollCurrent = 0;
+            public Builder queryCurrent(long current) {
                 groupStats.get(entry.getKey()).add(entry.getValue());
             }
-        }
-    }
-
-    public void addTotals(SearchStats searchStats) {
-        if (searchStats == null) {
-            return;
-        }
-        totalStats.add(searchStats.totalStats);
-    }
-
-    public void addTotalsForClosingShard(SearchStats searchStats) {
-        if (searchStats == null) {
-            return;
-        }
-        totalStats.addForClosingShard(searchStats.totalStats);
-    }
-
-    public Stats getTotal() {
-        return this.totalStats;
-    }
-
-    public long getOpenContexts() {
-        return this.openContexts;
-    }
-
-    @Nullable
-    public Map<String, Stats> getGroupStats() {
-        return this.groupStats != null ? Collections.unmodifiableMap(this.groupStats) : null;
-    }
-
-    @Override
+import org.opensearch.core.common.io.stream.StreamOutput;
+            return fetchTimeInMillis;
+        public TimeValue getFetchTime() {
+            this.pitTimeInMillis = builder.pitTimeInMillis;
+            pitCount += stats.pitCount;
+            private long starTreeQueryFailed = 0;
+        PhaseStatsLongHolder(StreamInput in) throws IOException {
     public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
-        builder.startObject(Fields.SEARCH);
-        builder.field(Fields.OPEN_CONTEXTS, openContexts);
-        totalStats.toXContent(builder, params);
-        if (groupStats != null && !groupStats.isEmpty()) {
-            builder.startObject(Fields.GROUPS);
-            for (Map.Entry<String, Stats> entry : groupStats.entrySet()) {
-                builder.startObject(entry.getKey());
-                entry.getValue().toXContent(builder, params);
-                builder.endObject();
+        private long starTreeQueryFailed;
+        private long suggestCurrent;
+            public Builder queryConcurrency(long concurrency) {
+        /**
+        static final String FETCH_TOTAL = "fetch_total";
+            queryFailedCount += stats.queryFailedCount;
+                return this;
+            this.total = in.readVLong();
+            suggestCount += stats.suggestCount;
+            public Builder pitCurrent(long current) {
+            private long starTreeQueryCount = 0;
+                return this;
+        public long getQueryCurrent() {
+     *
+import org.opensearch.common.Nullable;
+            return new TimeValue(fetchTimeInMillis);
+            builder.humanReadableField(Fields.SUGGEST_TIME_IN_MILLIS, Fields.SUGGEST_TIME, getSuggestTime());
+    public SearchStats(StreamInput in) throws IOException {
+            private long queryCount = 0;
+                pitTimeInMillis = in.readVLong();
+        public long getPitTimeInMillis() {
+         * Use Builder to create Stats object
+     */
+                this.queryFailedCount = count;
+            scrollCount += stats.scrollCurrent;
             }
+                out.writeVLong(queryFailedCount);
+            this.fetchTimeInMillis = fetchTimeInMillis;
+         */
+        }
+                searchIdleReactivateCount = in.readVLong();
+        static final String GROUPS = "groups";
+import org.opensearch.core.xcontent.ToXContent;
+    }
+            this.queryConcurrency = queryConcurrency;
+        }
+            suggestCount = in.readVLong();
+        private long pitTimeInMillis;
+            }
+                }
+        static final String PIT_TIME_IN_MILLIS = "point_in_time_time_in_millis";
+            this.suggestCurrent = builder.suggestCurrent;
+                    builder.endObject();
+            private long queryFailedCount = 0;
+            }
+            this.starTreeQueryFailed = builder.starTreeQueryFailed;
+import org.opensearch.core.xcontent.ToXContentFragment;
+            starTreeQueryCount += stats.starTreeQueryCount;
+            this.scrollTimeInMillis = builder.scrollTimeInMillis;
+        public long getFetchCount() {
+        static final String CONCURRENT_AVG_SLICE_COUNT = "concurrent_avg_slice_count";
+ * this work for additional information regarding copyright
+                return this;
+    public static class PhaseStatsLongHolder implements Writeable {
+                this.fetchCount = count;
+            this.queryTimeInMillis = builder.queryTimeInMillis;
+            }
+            private long starTreeQueryTimeInMillis = 0;
+    @Nullable
+                searchRequestStats.getTookCurrent(),
+            public Builder suggestCurrent(long current) {
+    private final Stats totalStats;
+            public Builder fetchCurrent(long current) {
+            queryFailedCount += stats.queryFailedCount;
+            public Stats build() {
+            out.writeVLong(fetchCurrent);
+        public long getTimeInMillis() {
+        }
+ * this file be licensed under the Apache-2.0 license or a
+    }
+            }
+            private long starTreeQueryCurrent = 0;
+            this.searchIdleReactivateCount = searchIdleReactivateCount;
+        if (groupStats != null && !groupStats.isEmpty()) {
+            this.fetchTimeInMillis = builder.fetchTimeInMillis;
+        }
+        return this.totalStats;
+            concurrentQueryTimeInMillis += stats.concurrentQueryTimeInMillis;
+                return this;
+        public long getStarTreeQueryCurrent() {
+        }
+            fetchCount += stats.fetchCount;
+                out.writeVLong(searchIdleReactivateCount);
+        public TimeValue getQueryTime() {
+                return this;
+                return this;
+            suggestCurrent = in.readVLong();
+            out.writeVLong(scrollCount);
+        private long searchIdleReactivateCount;
+                    }
+            starTreeQueryCurrent += stats.starTreeQueryCurrent;
+                this.queryCurrent = current;
+            }
+/**
+    public static class Stats implements Writeable, ToXContentFragment {
+            }
+        public long getSearchIdleReactivateCount() {
+            pitCurrent += stats.pitCurrent;
+            starTreeQueryCount += stats.starTreeQueryCount;
+            public Builder pitCount(long count) {
+            private long suggestCount = 0;
+        return builder;
+import java.util.Map;
+            this.concurrentQueryTimeInMillis = concurrentQueryTimeInMillis;
+        private long queryCount;
+        }
+                return this;
+        private long queryCurrent;
+            if (in.getVersion().onOrAfter(Version.V_2_4_0)) {
+                    builder.humanReadableField(Fields.TIME_IN_MILLIS, Fields.TIME, new TimeValue(tookStatsLongHolder.timeInMillis));
+            if (in.getVersion().onOrAfter(Version.V_3_3_0)) {
+                this.fetchCurrent = current;
+        out.writeVLong(openContexts);
+            // need consider the count of the shard's current scroll
+                    builder.field(Fields.CURRENT, statsLongHolder.current);
+     *
+            public Builder() {}
+            }
+            }
+        if (searchStats == null) {
+        }
+            this.pitCurrent = builder.pitCurrent;
+            }
+@PublicApi(since = "1.0.0")
+            builder.field(Fields.CONCURRENT_QUERY_TOTAL, concurrentQueryCount);
+            concurrentQueryCount += stats.concurrentQueryCount;
+        totalStats = new Stats();
+            if (in.getVersion().onOrAfter(Version.V_2_10_0)) {
+        @Override
+        long current;
+            } else {
+            private long concurrentQueryTimeInMillis = 0;
+        }
+            requestStatsHolder.put(Fields.TOOK, new PhaseStatsLongHolder());
+            this.scrollCurrent = scrollCurrent;
+    }
+                this.searchIdleReactivateCount = count;
+                return this;
+     * Fields for search statistics
+        public long getSuggestTimeInMillis() {
+            return new TimeValue(suggestTimeInMillis);
+            if (in.getVersion().onOrAfter(Version.V_2_14_0)) {
+        public static class Builder {
+    }
+        this.groupStats = groupStats;
+         * @param builder The builder instance containing all the values.
+        public long getStarTreeQueryFailed() {
+        return this.groupStats != null ? Collections.unmodifiableMap(this.groupStats) : null;
+            builder.field(Fields.SUGGEST_CURRENT, suggestCurrent);
+            out.writeVLong(queryCount);
+            }
+                return this;
+        private long starTreeQueryCurrent;
+    }
+        } else {
+                    if (phaseStats.current < 0) {
+        public long getSuggestCurrent() {
+        static final String SUGGEST_TIME = "suggest_time";
+        static final String FETCH_CURRENT = "fetch_current";
+            queryTimeInMillis = in.readVLong();
+            return scrollTimeInMillis;
+            queryCount = in.readVLong();
+            return fetchCurrent;
+                    builder.startObject(searchPhaseName.getName());
+            pitTimeInMillis += stats.pitTimeInMillis;
+            for (Map.Entry<String, Stats> entry : groupStats.entrySet()) {
+            long fetchCurrent,
+        private long starTreeQueryTimeInMillis;
+     * @opensearch.api
+            builder.humanReadableField(Fields.PIT_TIME_IN_MILLIS, Fields.PIT_TIME, getPitTime());
+            } else {
+            builder.field(Fields.SCROLL_TOTAL, scrollCount);
+ * specific language governing permissions and limitations
+            builder.field(Fields.CONCURRENT_QUERY_CURRENT, concurrentQueryCurrent);
+            this.timeInMillis = in.readVLong();
+            fetchTimeInMillis = in.readVLong();
+                );
+        }
+        }
+import org.opensearch.common.annotation.PublicApi;
+ * Unless required by applicable law or agreed to in writing,
+                pitCount = in.readVLong();
+        private long pitCurrent;
+            if (out.getVersion().onOrAfter(Version.V_2_11_0)) {
+            this.fetchCount = fetchCount;
+         * Builder for the {@link Stats} class.
+                out.writeVLong(starTreeQueryCurrent);
+            if (out.getVersion().onOrAfter(Version.V_2_10_0)) {
+    static final class Fields {
+        }
+            }
+                    (stream, stats) -> stats.writeTo(stream)
+        Map<String, PhaseStatsLongHolder> requestStatsHolder = new HashMap<>();
+                            "SearchRequestStats 'current' is negative for phase '{}': {}",
+import org.opensearch.action.search.SearchRequestStats;
+            return pitCount;
+        public long getStarTreeQueryCount() {
+                    if (statsLongHolder == null) {
+            starTreeQueryTimeInMillis += stats.starTreeQueryTimeInMillis;
+            builder.field(Fields.CONCURRENT_AVG_SLICE_COUNT, getConcurrentAvgSliceCount());
+ * Modifications Copyright OpenSearch Contributors. See
+                groupStats.putIfAbsent(entry.getKey(), new Stats());
+            @Nullable
+        }
+        public long getQueryTimeInMillis() {
+            public Builder queryFailed(long count) {
+            private long suggestTimeInMillis = 0;
+ */
+                requestStatsHolder.put(searchPhaseName.getName(), new PhaseStatsLongHolder());
+             * Creates a {@link Stats} object from the builder's current state.
+    }
+            out.writeBoolean(true);
+        this.totalStats = totalStats;
+            if (in.getVersion().onOrAfter(Version.V_2_11_0)) {
+        }
+        public long getConcurrentQueryTimeInMillis() {
+                return queryConcurrency / (double) concurrentQueryCount;
+        }
+    @PublicApi(since = "1.0.0")
+            }
+        static final String QUERY_CURRENT = "query_current";
+            long suggestCurrent,
+                requestStatsLongHolder.requestStatsHolder.forEach((phaseName, phaseStats) -> {
+        static final String OPEN_CONTEXTS = "open_contexts";
+                groupStats = new HashMap<>(searchStats.groupStats.size());
+                PhaseStatsLongHolder tookStatsLongHolder = requestStatsLongHolder.requestStatsHolder.get(Fields.TOOK);
+            builder.humanReadableField(Fields.CONCURRENT_QUERY_TIME_IN_MILLIS, Fields.CONCURRENT_QUERY_TIME, getConcurrentQueryTime());
+            this.suggestCount = builder.suggestCount;
+    public void addTotalsForClosingShard(SearchStats searchStats) {
+        }
+     * Holds all requests stats.
+        static final String TIME = "time";
+            // for internal use, initializes all counts to 0
+                out.writeVLong(concurrentQueryTimeInMillis);
+        private static final Logger logger = LogManager.getLogger(PhaseStatsLongHolder.class);
+            if (requestStatsLongHolder != null) {
+             * @return A new Stats instance.
+            this.starTreeQueryCount = builder.starTreeQueryCount;
+                return this;
+                this.starTreeQueryCount = count;
+            if (concurrentQueryCount == 0) {
+                pitCurrent = in.readVLong();
+            suggestTimeInMillis = in.readVLong();
+            }
+    }
+        static final String SCROLL_TIME = "scroll_time";
+                }
+        private long starTreeQueryCount;
+                return this;
+        public double getConcurrentAvgSliceCount() {
+ *
+            this.scrollCount = builder.scrollCount;
+            this.scrollCount = scrollCount;
+ */
+            private long concurrentQueryCurrent = 0;
+                this.suggestCurrent = current;
+            this.suggestCurrent = suggestCurrent;
+            private long scrollCount = 0;
+        private long scrollCount;
+            }
+            }
+    public void setSearchRequestStats(SearchRequestStats searchRequestStats) {
+            this.fetchCurrent = fetchCurrent;
+        private long scrollTimeInMillis;
+        }
+import org.opensearch.core.xcontent.XContentBuilder;
+    public SearchStats() {
+            }
+        if (totalStats.requestStatsLongHolder == null) {
+            scrollTimeInMillis += stats.scrollTimeInMillis;
+                starTreeQueryFailed = in.readVLong();
+            this.scrollCurrent = builder.scrollCurrent;
             builder.endObject();
         }
-        builder.endObject();
-        return builder;
-    }
-
-    @Override
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
-    }
-
-    /**
-     * Fields for search statistics
-     *
-     * @opensearch.internal
-     */
-    static final class Fields {
-        static final String SEARCH = "search";
-        static final String OPEN_CONTEXTS = "open_contexts";
-        static final String GROUPS = "groups";
-        static final String QUERY_TOTAL = "query_total";
-        static final String QUERY_TIME = "query_time";
-        static final String QUERY_TIME_IN_MILLIS = "query_time_in_millis";
-        static final String QUERY_CURRENT = "query_current";
-        static final String QUERY_FAILED_TOTAL = "query_failed";
-        static final String CONCURRENT_QUERY_TOTAL = "concurrent_query_total";
+            out.writeVLong(queryTimeInMillis);
         static final String CONCURRENT_QUERY_TIME = "concurrent_query_time";
-        static final String CONCURRENT_QUERY_TIME_IN_MILLIS = "concurrent_query_time_in_millis";
-        static final String CONCURRENT_QUERY_CURRENT = "concurrent_query_current";
-        static final String CONCURRENT_AVG_SLICE_COUNT = "concurrent_avg_slice_count";
-        static final String STARTREE_QUERY_TOTAL = "startree_query_total";
-        static final String STARTREE_QUERY_TIME = "startree_query_time";
-        static final String STARTREE_QUERY_TIME_IN_MILLIS = "startree_query_time_in_millis";
-        static final String STARTREE_QUERY_CURRENT = "startree_query_current";
+        private long queryTimeInMillis;
+            this.queryFailedCount = builder.queryFailedCount;
         static final String STARTREE_QUERY_FAILED = "startree_query_failed";
-        static final String FETCH_TOTAL = "fetch_total";
-        static final String FETCH_TIME = "fetch_time";
-        static final String FETCH_TIME_IN_MILLIS = "fetch_time_in_millis";
-        static final String FETCH_CURRENT = "fetch_current";
-        static final String SCROLL_TOTAL = "scroll_total";
-        static final String SCROLL_TIME = "scroll_time";
-        static final String SCROLL_TIME_IN_MILLIS = "scroll_time_in_millis";
-        static final String SCROLL_CURRENT = "scroll_current";
-        static final String PIT_TOTAL = "point_in_time_total";
-        static final String PIT_TIME = "point_in_time_time";
-        static final String PIT_TIME_IN_MILLIS = "point_in_time_time_in_millis";
-        static final String PIT_CURRENT = "point_in_time_current";
-        static final String SUGGEST_TOTAL = "suggest_total";
-        static final String SUGGEST_TIME = "suggest_time";
-        static final String SUGGEST_TIME_IN_MILLIS = "suggest_time_in_millis";
-        static final String SUGGEST_CURRENT = "suggest_current";
-        static final String REQUEST = "request";
-        static final String TIME_IN_MILLIS = "time_in_millis";
-        static final String TIME = "time";
-        static final String CURRENT = "current";
-        static final String TOTAL = "total";
-        static final String SEARCH_IDLE_REACTIVATE_COUNT_TOTAL = "search_idle_reactivate_count_total";
-        static final String TOOK = "took";
-
+                return this;
+        private long suggestCount;
+            concurrentQueryCount += stats.concurrentQueryCount;
+            return starTreeQueryCount;
+            long queryCount,
+            return total;
+             */
+        totalStats.addForClosingShard(searchStats.totalStats);
     }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        totalStats.writeTo(out);
-        out.writeVLong(openContexts);
-        if (groupStats == null || groupStats.isEmpty()) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
             out.writeMap(groupStats, StreamOutput::writeString, (stream, stats) -> stats.writeTo(stream));
+        static final String CONCURRENT_QUERY_TIME_IN_MILLIS = "concurrent_query_time_in_millis";
+                searchRequestStats.getTookMetric()
         }
+            out.writeVLong(queryCurrent);
+                entry.getValue().toXContent(builder, params);
+                return this;
+            builder.field(Fields.SCROLL_CURRENT, scrollCurrent);
     }
-}
+    public long getOpenContexts() {
+            /**
+        static final String TIME_IN_MILLIS = "time_in_millis";
+        private long concurrentQueryCount;
+            builder.field(Fields.SUGGEST_TOTAL, suggestCount);
+            builder.field(Fields.STARTREE_QUERY_FAILED, getStarTreeQueryFailed());
+                out.writeVLong(pitCount);
+            long scrollCurrent,
+        }
+            public Builder searchIdleReactivateCount(long count) {
+        public RequestStatsLongHolder getRequestStatsLongHolder() {
+        public long getPitCurrent() {
+            builder.field(Fields.PIT_TOTAL, pitCount);
+        private long fetchCurrent;
+            pitCount += stats.pitCount;
+        public long getFetchCurrent() {
+        addTotals(searchStats);
+                concurrentQueryCurrent = in.readVLong();
+        static final String SUGGEST_CURRENT = "suggest_current";
+            queryCount += stats.queryCount;
+            private long queryCurrent = 0;
+            if (groupStats == null) {
+            }
+                this.requestStatsLongHolder = new RequestStatsLongHolder();
+        }
+        openContexts += searchStats.openContexts;
+        public void writeTo(StreamOutput out) throws IOException {
+            builder.humanReadableField(Fields.FETCH_TIME_IN_MILLIS, Fields.FETCH_TIME, getFetchTime());
+            return queryCount;
+    public void addTotals(SearchStats searchStats) {
+            }
+            this.pitTimeInMillis = pitTimeInMillis;
+        }
+                    builder.startObject(Fields.TOOK);
+            public Builder scrollTimeInMillis(long time) {
+            concurrentQueryTimeInMillis += stats.concurrentQueryTimeInMillis;
+        @Override
+            long queryTimeInMillis,
+            builder.field(Fields.SEARCH_IDLE_REACTIVATE_COUNT_TOTAL, searchIdleReactivateCount);
+            return requestStatsHolder;
+    }
+    @PublicApi(since = "1.0.0")
+            builder.field(Fields.STARTREE_QUERY_CURRENT, getStarTreeQueryCurrent());
+            long concurrentQueryCurrent,
+            pitTimeInMillis += stats.pitTimeInMillis;
+        public long getQueryCount() {
+            return current;
+ * The OpenSearch Contributors require contributions made to
+                return this;
+            public Builder fetchTimeInMillis(long time) {
+ * GitHub history for details.
+            }
+ * the Apache License, Version 2.0 (the "License"); you may
+        private long suggestTimeInMillis;
+ */
+            public Builder queryTimeInMillis(long time) {
+public class SearchStats implements Writeable, ToXContentFragment {
+        }
+                builder.startObject(Fields.REQUEST);
+    }
+            return concurrentQueryCurrent;
+            this.requestStatsLongHolder = builder.requestStatsLongHolder;
+            return new TimeValue(concurrentQueryTimeInMillis);
+            this.concurrentQueryCurrent = builder.concurrentQueryCurrent;
+            queryCurrent = in.readVLong();
+            long scrollCount,
+            public Builder concurrentQueryCount(long count) {
+            starTreeQueryFailed += stats.starTreeQueryFailed;
+            pitCurrent += stats.pitCurrent;

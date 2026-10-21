@@ -1,552 +1,524 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-//! Schema drift — predicates referencing columns that are absent from a
-//! segment's parquet file. Common when a mapping added the field after
-//! the segment was written. Expected product behaviour: every row in that
-//! segment evaluates to UNKNOWN for that predicate and gets filtered out.
-
-use super::*;
-
-// ══════════════════════════════════════════════════════════════════════
-// Missing-column fixture — parquet written without a column that the
-// tree still references. Simulates a segment written before a mapping
-// added the field: parquet literally has no such column, so Phase 2's
-// column lookup on the RecordBatch returns None and our product code
-// treats that as all-UNKNOWN (SQL semantics).
-// ══════════════════════════════════════════════════════════════════════
-
-const MISSING_N: usize = 2048;
-
-struct MissingColFixture {
-    path: std::path::PathBuf,
-    // Column caches — only for columns actually in the parquet.
-    name: Vec<&'static str>,
-    score: Vec<i32>,
-}
-
-fn missing_col_fixture() -> &'static MissingColFixture {
-    static CELL: OnceLock<MissingColFixture> = OnceLock::new();
-    CELL.get_or_init(build_missing_col_fixture)
-}
-
-fn build_missing_col_fixture() -> MissingColFixture {
-    let mut name = Vec::with_capacity(MISSING_N);
-    let mut score = Vec::with_capacity(MISSING_N);
-    for i in 0..MISSING_N {
-        name.push(if i % 2 == 0 { "foo" } else { "bar" });
-        score.push((i as i32) % 1000);
-    }
-    // Parquet schema intentionally excludes `missing_col`.
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("name", DataType::Utf8, false),
-        Field::new("score", DataType::Int32, false),
-    ]));
-    let batch = RecordBatch::try_new(
-        schema.clone(),
-        vec![
-            Arc::new(StringArray::from(name.clone())),
-            Arc::new(Int32Array::from(score.clone())),
-        ],
-    )
-    .unwrap();
-    let tmp = NamedTempFile::new().unwrap();
-    let (file, path) = tmp.keep().unwrap();
-    let props = datafusion::parquet::file::properties::WriterProperties::builder()
-        .set_max_row_group_size(512)
-        .set_data_page_row_count_limit(128)
-        .set_statistics_enabled(datafusion::parquet::file::properties::EnabledStatistics::Page)
-        .build();
-    let mut w = ArrowWriter::try_new(file, schema, Some(props)).unwrap();
-    w.write(&batch).unwrap();
-    w.close().unwrap();
-    MissingColFixture { path, name, score }
-}
-
-/// Run a tree whose predicates may reference `missing_col` (not in parquet
-/// schema). Returns the row count the engine emits.
-async fn run_missing_col_tree(tree_bool: BoolNode) -> usize {
-    let f = missing_col_fixture();
-    let size = std::fs::metadata(&f.path).unwrap().len();
-    let file = std::fs::File::open(&f.path).unwrap();
-    let meta =
-        ArrowReaderMetadata::load(&file, ArrowReaderOptions::new().with_page_index(true)).unwrap();
-    let schema = meta.schema().clone();
-    let parquet_meta = meta.metadata().clone();
-    let mut rgs = Vec::new();
-    let mut offset = 0i64;
-    for i in 0..parquet_meta.num_row_groups() {
-        let n = parquet_meta.row_group(i).num_rows();
-        rgs.push(RowGroupInfo {
-            index: i,
             first_row: offset,
-            num_rows: n,
-        });
-        offset += n;
-    }
-    let segment = SegmentFileInfo {
-        writer_generation: 0,
-        max_doc: MISSING_N as i64,
-        object_path: object_store::path::Path::from(f.path.to_string_lossy().as_ref()),
-        parquet_size: size,
-        row_groups: rgs,
-        metadata: Arc::clone(&parquet_meta),
-        arrow_schema: schema.clone(),
-        global_base: 0,
-        sort_min: None,
-        sort_max: None,
-    };
-
-    let tree = Arc::new(tree_bool);
-    let factory: super::super::table_provider::EvaluatorFactory = {
-        let tree = Arc::clone(&tree);
-        let schema = schema.clone();
-        Arc::new(move |segment, _chunk, _stream_metrics, _stats_prune_tree| {
-            let resolved = tree.resolve(&[])?;
-            let pruner = Arc::new(PagePruner::new(
-                &schema,
-                Arc::clone(&segment.metadata),
-                schema.clone(),
-            ));
-            let eval: Arc<dyn RowGroupBitsetSource> = Arc::new(TreeBitsetSource {
-                tree: Arc::new(resolved),
-                evaluator: Arc::new(BitmapTreeEvaluator),
-                leaves: Arc::new(CollectorLeafBitmaps::without_metrics()),
-                page_pruner: pruner,
-                cost_predicate: 1,
-                cost_collector: 10,
-                max_collector_parallelism: 1,
-                pruning_predicates: std::sync::Arc::new(std::collections::HashMap::new()),
-                page_prune_metrics: None,
-                collector_strategy:
-                    crate::indexed_table::eval::CollectorCallStrategy::TightenOuterBounds,
-                stats_prune_tree: None,
-                rg_index_to_pos: HashMap::new(),
-            });
-            Ok(eval)
-        })
-    };
-    let qc = crate::datafusion_query_config::DatafusionQueryConfig::builder()
-        .target_partitions(1)
-        .force_strategy(Some(FilterStrategy::BooleanMask))
-        .indexed_pushdown_filters(false)
-        .build();
-    let provider = Arc::new(IndexedTableProvider::new(IndexedTableConfig {
-        schema: schema.clone(),
-        segments: vec![segment],
-        store: Arc::new(object_store::local::LocalFileSystem::new())
-            as Arc<dyn object_store::ObjectStore>,
-        store_url: datafusion::execution::object_store::ObjectStoreUrl::local_filesystem(),
-        evaluator_factory: factory,
-        pushdown_predicate: None,
-        query_config: std::sync::Arc::new(qc),
-        predicate_columns: vec![],
-        emit_row_ids: false,
-        prune_tree_config: None,
-        sort_fields: vec![],
-        sort_orders: vec![],
-        cancellation_token: None,
-    }));
-    let ctx = SessionContext::new();
-    ctx.register_table("t", provider).unwrap();
-    // SELECT only columns that exist in parquet.
-    let df = ctx.sql("SELECT name, score FROM t").await.unwrap();
-    let mut stream = df.execute_stream().await.unwrap();
-    let mut count = 0;
-    while let Some(b) = stream.next().await {
-        count += b.unwrap().num_rows();
-    }
-    count
-}
-
-/// Local schema that *includes* missing_col — used for building
-/// PhysicalExprs that reference a column absent from the parquet file.
-/// The evaluator's refinement stage handles the missing column (emits
-/// UNKNOWN) per its normal semantics.
-fn schema_with_missing() -> SchemaRef {
-    Arc::new(Schema::new(vec![
-        Field::new("name", DataType::Utf8, false),
-        Field::new("score", DataType::Int32, false),
-        Field::new("missing_col", DataType::Int32, true),
-    ]))
-}
-
-fn pred_missing_int(col: &str, op: Operator, v: i32) -> BoolNode {
-    let schema = schema_with_missing();
-    let col_idx = schema.index_of(col).expect("column in local schema");
-    let left: Arc<dyn datafusion::physical_expr::PhysicalExpr> = Arc::new(
-        datafusion::physical_expr::expressions::Column::new(col, col_idx),
-    );
-    let right: Arc<dyn datafusion::physical_expr::PhysicalExpr> = Arc::new(
-        datafusion::physical_expr::expressions::Literal::new(ScalarValue::Int32(Some(v))),
-    );
-    BoolNode::Predicate(Arc::new(
-        datafusion::physical_expr::expressions::BinaryExpr::new(left, op, right),
-    ))
-}
-
-fn pred_missing_str(col: &str, op: Operator, v: &str) -> BoolNode {
-    let schema = schema_with_missing();
-    let col_idx = schema.index_of(col).expect("column in local schema");
-    let left: Arc<dyn datafusion::physical_expr::PhysicalExpr> = Arc::new(
-        datafusion::physical_expr::expressions::Column::new(col, col_idx),
-    );
-    let right: Arc<dyn datafusion::physical_expr::PhysicalExpr> =
-        Arc::new(datafusion::physical_expr::expressions::Literal::new(
-            ScalarValue::Utf8(Some(v.to_string())),
-        ));
-    BoolNode::Predicate(Arc::new(
-        datafusion::physical_expr::expressions::BinaryExpr::new(left, op, right),
-    ))
-}
-
-fn only_pred(p: BoolNode) -> BoolNode {
-    p
-}
-fn not_pred(p: BoolNode) -> BoolNode {
-    BoolNode::Not(Box::new(p))
-}
-
-// 1. Predicate on missing column -> all UNKNOWN -> 0 rows.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn missing_col_predicate_returns_zero_rows() {
-    let tree = only_pred(pred_missing_int("missing_col", Operator::GtEq, 0));
-    assert_eq!(run_missing_col_tree(tree).await, 0);
-}
-
-// 2. NOT(missing-col predicate) -> UNKNOWN -> 0 rows.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn missing_col_not_predicate_returns_zero_rows() {
-    let tree = not_pred(pred_missing_int("missing_col", Operator::GtEq, 0));
-    assert_eq!(run_missing_col_tree(tree).await, 0);
-}
-
-// 3. AND(existing, missing): all rows UNKNOWN via missing branch -> 0.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn missing_col_and_with_existing_returns_zero() {
-    let tree = BoolNode::And(vec![
-        pred_missing_str("name", Operator::Eq, "foo"),
-        pred_missing_int("missing_col", Operator::GtEq, 0),
-    ]);
-    assert_eq!(run_missing_col_tree(tree).await, 0);
-}
-
-// 4. OR(existing, missing): existing branch dominates. Expected = name='foo'
-// row count (half of MISSING_N).
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn missing_col_or_with_existing_keeps_existing() {
-    let tree = BoolNode::Or(vec![
-        pred_missing_str("name", Operator::Eq, "foo"),
-        pred_missing_int("missing_col", Operator::GtEq, 0),
-    ]);
-    let expected = missing_col_fixture()
-        .name
-        .iter()
-        .filter(|n| **n == "foo")
-        .count();
-    assert_eq!(run_missing_col_tree(tree).await, expected);
-}
-
-// 5. Nested: (name='foo' AND score<500) OR (missing_col=42). The missing_col
-// branch never matches; result = (name='foo' AND score<500) rows.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn missing_col_nested_or_kept_existing_only() {
-    let tree = BoolNode::Or(vec![
-        BoolNode::And(vec![
-            pred_missing_str("name", Operator::Eq, "foo"),
-            pred_missing_int("score", Operator::Lt, 500),
-        ]),
-        pred_missing_int("missing_col", Operator::Eq, 42),
-    ]);
-    let f = missing_col_fixture();
-    let expected = (0..MISSING_N)
-        .filter(|&i| f.name[i] == "foo" && f.score[i] < 500)
-        .count();
-    assert_eq!(run_missing_col_tree(tree).await, expected);
-}
-
-// 6. Page pruner direct invariant: a predicate that ANDs an existing
-// column with a missing column must prune identically to the
-// existing-column predicate alone — the missing-column clause
-// contributes only "unknown" per grid cell, so it can neither add nor
-// remove page selections beyond what the existing column decides.
-//
-// Pre-fix, this assertion failed because `prune_rg` bailed out to
-// `None` whenever any referenced column was absent from the parquet
-// file. Post-fix, the missing column contributes typed all-null stats
-// per grid cell and the existing-column clause still prunes.
-#[test]
-fn page_pruner_prunes_existing_column_despite_missing_column() {
-    use crate::indexed_table::page_pruner::{build_pruning_predicate, PagePruner};
-    use datafusion::parquet::arrow::arrow_reader::{ArrowReaderMetadata, ArrowReaderOptions};
-
-    let f = missing_col_fixture();
-    let file = std::fs::File::open(&f.path).unwrap();
-    let meta =
-        ArrowReaderMetadata::load(&file, ArrowReaderOptions::new().with_page_index(true)).unwrap();
-    // Schema handed to the pruner includes the missing column.
-    let drift_schema = schema_with_missing();
-    let pruner = PagePruner::new(&drift_schema, meta.metadata().clone(), drift_schema.clone());
-
-    // Existing-column predicate: score < 100 (fixture has score = i % 1000
-    // so ~10% of rows match, concentrated at the start of every 1000-row
-    // cycle → some pages will be prunable).
-    let score_idx = drift_schema.index_of("score").unwrap();
-    let score_col: std::sync::Arc<dyn datafusion::physical_expr::PhysicalExpr> =
-        std::sync::Arc::new(datafusion::physical_expr::expressions::Column::new(
-            "score", score_idx,
-        ));
-    let lit_100: std::sync::Arc<dyn datafusion::physical_expr::PhysicalExpr> = std::sync::Arc::new(
-        datafusion::physical_expr::expressions::Literal::new(ScalarValue::Int32(Some(100))),
-    );
-    let score_lt: std::sync::Arc<dyn datafusion::physical_expr::PhysicalExpr> = std::sync::Arc::new(
-        datafusion::physical_expr::expressions::BinaryExpr::new(score_col, Operator::Lt, lit_100),
-    );
-    let pp_solo = build_pruning_predicate(&score_lt, drift_schema.clone())
-        .expect("score<100 is not always_true on this fixture");
-
-    // Combined predicate: score < 100 AND missing_col > 0. Missing
-    // column has all-null stats → clause evaluates to unknown per
-    // grid cell → AND combines as "score<100 AND unknown".
-    let missing_idx = drift_schema.index_of("missing_col").unwrap();
-    let missing_col: std::sync::Arc<dyn datafusion::physical_expr::PhysicalExpr> =
-        std::sync::Arc::new(datafusion::physical_expr::expressions::Column::new(
-            "missing_col",
-            missing_idx,
-        ));
-    let lit_0: std::sync::Arc<dyn datafusion::physical_expr::PhysicalExpr> = std::sync::Arc::new(
-        datafusion::physical_expr::expressions::Literal::new(ScalarValue::Int32(Some(0))),
-    );
-    let missing_gt: std::sync::Arc<dyn datafusion::physical_expr::PhysicalExpr> =
-        std::sync::Arc::new(datafusion::physical_expr::expressions::BinaryExpr::new(
-            missing_col,
-            Operator::Gt,
-            lit_0,
-        ));
-    let combined: std::sync::Arc<dyn datafusion::physical_expr::PhysicalExpr> =
-        std::sync::Arc::new(datafusion::physical_expr::expressions::BinaryExpr::new(
-            score_lt.clone(),
-            Operator::And,
-            missing_gt,
-        ));
-    let pp_combined = build_pruning_predicate(&combined, drift_schema)
-        .expect("combined predicate not always_true");
-
-    // Walk every RG in the fixture and check the invariant. For each
-    // RG, the combined selection must keep at most as many rows as the
+        rgs.push(RowGroupInfo {
     // solo selection (the missing-column clause is unknown → it can
-    // only downgrade, never add rows). If the combined predicate
-    // caused the pruner to bail out (returning `None` where solo
-    // returned `Some`), that's the pre-fix regression we're guarding
-    // against.
-    for rg_idx in 0..meta.metadata().num_row_groups() {
-        let solo = pruner.prune_rg(&pp_solo, rg_idx, None);
-        let combined = pruner.prune_rg(&pp_combined, rg_idx, None);
-        match (solo.as_ref(), combined.as_ref()) {
-            (Some(s), Some(c)) => {
-                let solo_kept: usize = s.iter().filter(|r| !r.skip).map(|r| r.row_count).sum();
-                let combined_kept: usize = c.iter().filter(|r| !r.skip).map(|r| r.row_count).sum();
-                assert!(
-                    combined_kept <= solo_kept,
-                    "rg {}: combined selection kept {} rows, solo kept {} — \
-                     missing-column clause must not add rows",
-                    rg_idx,
-                    combined_kept,
-                    solo_kept
-                );
-            }
-            (Some(_), None) => {
-                panic!(
-                    "rg {}: pruner bailed out on combined predicate despite \
-                     present column — missing-column fix regression",
-                    rg_idx
-                );
-            }
-            _ => {}
-        }
-    }
-}
-// ══════════════════════════════════════════════════════════════════════
-
-/// Generic helper: write a parquet file, register with a (possibly different)
-/// table schema, run `SELECT * FROM t`, return row count.
-async fn query_with_mismatched_schema(
-    file_schema: SchemaRef,
-    table_schema: SchemaRef,
-    batch: &RecordBatch,
-    tree_bool: BoolNode,
-) -> usize {
-    let tmp = NamedTempFile::new().unwrap();
-    let (file, path) = tmp.keep().unwrap();
-    let props = datafusion::parquet::file::properties::WriterProperties::builder()
-        .set_max_row_group_size(256)
-        .build();
-    let mut w = ArrowWriter::try_new(file, file_schema, Some(props)).unwrap();
-    w.write(batch).unwrap();
-    w.close().unwrap();
-
-    let size = std::fs::metadata(&path).unwrap().len();
-    let rfile = std::fs::File::open(&path).unwrap();
-    let meta =
-        ArrowReaderMetadata::load(&rfile, ArrowReaderOptions::new().with_page_index(true)).unwrap();
-    let parquet_meta = meta.metadata().clone();
-    let mut rgs = Vec::new();
-    let mut offset = 0i64;
-    for i in 0..parquet_meta.num_row_groups() {
-        let n = parquet_meta.row_group(i).num_rows();
-        rgs.push(RowGroupInfo {
-            index: i,
-            first_row: offset,
-            num_rows: n,
-        });
-        offset += n;
-    }
-    let segment = SegmentFileInfo {
-        writer_generation: 0,
-        max_doc: batch.num_rows() as i64,
-        object_path: object_store::path::Path::from(path.to_string_lossy().as_ref()),
-        parquet_size: size,
-        row_groups: rgs,
-        metadata: Arc::clone(&parquet_meta),
-        arrow_schema: meta.schema().clone(),
-        global_base: 0,
-        sort_min: None,
-        sort_max: None,
-    };
-    let tree = Arc::new(tree_bool);
-    let factory: super::super::table_provider::EvaluatorFactory = {
-        let tree = Arc::clone(&tree);
-        let schema = table_schema.clone();
-        Arc::new(move |segment, _chunk, _stream_metrics, _stats_prune_tree| {
-            let resolved = tree.resolve(&[])?;
-            let pruner = Arc::new(PagePruner::new(
-                &schema,
-                Arc::clone(&segment.metadata),
-                schema.clone(),
-            ));
-            let eval: Arc<dyn RowGroupBitsetSource> = Arc::new(TreeBitsetSource {
-                tree: Arc::new(resolved),
-                evaluator: Arc::new(BitmapTreeEvaluator),
-                leaves: Arc::new(CollectorLeafBitmaps::without_metrics()),
-                page_pruner: pruner,
                 cost_predicate: 1,
-                cost_collector: 10,
-                max_collector_parallelism: 1,
-                pruning_predicates: std::sync::Arc::new(std::collections::HashMap::new()),
-                page_prune_metrics: None,
-                collector_strategy:
-                    crate::indexed_table::eval::CollectorCallStrategy::TightenOuterBounds,
-                stats_prune_tree: None,
-                rg_index_to_pos: HashMap::new(),
-            });
-            Ok(eval)
-        })
-    };
-    let qc = crate::datafusion_query_config::DatafusionQueryConfig::builder()
-        .target_partitions(1)
-        .force_strategy(Some(FilterStrategy::BooleanMask))
-        .indexed_pushdown_filters(false)
-        .build();
-    let provider = Arc::new(IndexedTableProvider::new(IndexedTableConfig {
-        schema: table_schema,
-        segments: vec![segment],
-        store: Arc::new(object_store::local::LocalFileSystem::new())
-            as Arc<dyn object_store::ObjectStore>,
-        store_url: datafusion::execution::object_store::ObjectStoreUrl::local_filesystem(),
-        evaluator_factory: factory,
-        pushdown_predicate: None,
-        query_config: std::sync::Arc::new(qc),
-        predicate_columns: vec![],
-        emit_row_ids: false,
-        prune_tree_config: None,
-        sort_fields: vec![],
-        sort_orders: vec![],
-        cancellation_token: None,
-    }));
+    let mut name = Vec::with_capacity(MISSING_N);
+// contributes only "unknown" per grid cell, so it can neither add nor
+    let combined: std::sync::Arc<dyn datafusion::physical_expr::PhysicalExpr> =
     let ctx = SessionContext::new();
-    ctx.register_table("t", provider).unwrap();
-    let df = ctx.sql("SELECT * FROM t").await.unwrap();
-    let mut stream = df.execute_stream().await.unwrap();
-    let mut count = 0;
-    while let Some(b) = stream.next().await {
-        let b = b.unwrap();
-        count += b.num_rows();
-    }
-    count
+    let drift_schema = schema_with_missing();
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    assert_eq!(run_missing_col_tree(tree).await, 0);
+//! segment's parquet file. Common when a mapping added the field after
+        .indexed_pushdown_filters(false)
+        Field::new("score", DataType::Int32, false),
+    ))
+        global_base: 0,
+                    crate::indexed_table::eval::CollectorCallStrategy::TightenOuterBounds,
+    w.write(batch).unwrap();
+    let pp_solo = build_pruning_predicate(&score_lt, drift_schema.clone())
+/// Run a tree whose predicates may reference `missing_col` (not in parquet
+// 1. Predicate on missing column -> all UNKNOWN -> 0 rows.
+        pred_missing_str("name", Operator::Eq, "foo"),
+    let f = missing_col_fixture();
+        datafusion::physical_expr::expressions::Literal::new(ScalarValue::Int32(Some(v))),
+                Arc::clone(&segment.metadata),
+        .target_partitions(1)
+    let (file, path) = tmp.keep().unwrap();
+    assert_eq!(count, 4);
 }
-
-/// Build a tautology predicate: `col >= 0` (always true for non-negative int columns).
-/// `col_idx` is the column's position in the table schema.
-fn tautology_int(col: &str, col_idx: usize) -> BoolNode {
-    let left: Arc<dyn datafusion::physical_expr::PhysicalExpr> = Arc::new(
-        datafusion::physical_expr::expressions::Column::new(col, col_idx),
+            (Some(s), Some(c)) => {
+        name.push(if i % 2 == 0 { "foo" } else { "bar" });
+                Arc::clone(&segment.metadata),
+fn missing_col_fixture() -> &'static MissingColFixture {
+    let col_idx = schema.index_of(col).expect("column in local schema");
+struct MissingColFixture {
+async fn run_missing_col_tree(tree_bool: BoolNode) -> usize {
+    let col_idx = schema.index_of(col).expect("column in local schema");
+        ],
+    let segment = SegmentFileInfo {
+// remove page selections beyond what the existing column decides.
+        .count();
+                let solo_kept: usize = s.iter().filter(|r| !r.skip).map(|r| r.row_count).sum();
+        datafusion::physical_expr::expressions::BinaryExpr::new(score_col, Operator::Lt, lit_100),
+    let tmp = NamedTempFile::new().unwrap();
+                leaves: Arc::new(CollectorLeafBitmaps::without_metrics()),
+    let segment = SegmentFileInfo {
+    let tmp = NamedTempFile::new().unwrap();
+        sort_fields: vec![],
+    // cycle → some pages will be prunable).
+        store: Arc::new(object_store::local::LocalFileSystem::new())
+        let tree = Arc::clone(&tree);
+    // returned `Some`), that's the pre-fix regression we're guarding
+fn not_pred(p: BoolNode) -> BoolNode {
+// `None` whenever any referenced column was absent from the parquet
+        BoolNode::And(vec![
+                max_collector_parallelism: 1,
+ * this file be licensed under the Apache-2.0 license or a
+// column lookup on the RecordBatch returns None and our product code
+// File has Utf8 columns; table schema declares Utf8View.
+            .await;
+}
     );
+    let schema = Arc::new(Schema::new(vec![
+        });
+        .iter()
+        ));
+        pushdown_predicate: None,
+    let file = std::fs::File::open(&f.path).unwrap();
+        pred_missing_int("missing_col", Operator::Eq, 42),
+            first_row: offset,
+        Field::new("city", DataType::Utf8View, false),
+    .unwrap();
+    let parquet_meta = meta.metadata().clone();
+}
+    let missing_col: std::sync::Arc<dyn datafusion::physical_expr::PhysicalExpr> =
+        rgs.push(RowGroupInfo {
+        std::sync::Arc::new(datafusion::physical_expr::expressions::Column::new(
+    )
+        Field::new("name", DataType::Utf8, false),
+    ]));
+            pred_missing_int("score", Operator::Lt, 500),
+    let lit_100: std::sync::Arc<dyn datafusion::physical_expr::PhysicalExpr> = std::sync::Arc::new(
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    static CELL: OnceLock<MissingColFixture> = OnceLock::new();
+// 3. AND(existing, missing): all rows UNKNOWN via missing branch -> 0.
+    ]));
+            ));
+    };
+}
+        ));
+    count
+            });
+    .unwrap();
+        .filter(|n| **n == "foo")
+    let schema = schema_with_missing();
+// 4. OR(existing, missing): existing branch dominates. Expected = name='foo'
+) -> usize {
+        std::sync::Arc::new(datafusion::physical_expr::expressions::BinaryExpr::new(
+// Pre-fix, this assertion failed because `prune_rg` bailed out to
+    let ctx = SessionContext::new();
+                    rg_idx,
+fn pred_missing_str(col: &str, op: Operator, v: &str) -> BoolNode {
+    let props = datafusion::parquet::file::properties::WriterProperties::builder()
+/// UNKNOWN) per its normal semantics.
+        writer_generation: 0,
+        let n = parquet_meta.row_group(i).num_rows();
+    let df = ctx.sql("SELECT name, score FROM t").await.unwrap();
+    }
+/// PhysicalExprs that reference a column absent from the parquet file.
+            (Some(_), None) => {
+    file_schema: SchemaRef,
+        let tree = Arc::clone(&tree);
+    MissingColFixture { path, name, score }
+        .build();
+    let df = ctx.sql("SELECT * FROM t").await.unwrap();
+// 5. Nested: (name='foo' AND score<500) OR (missing_col=42). The missing_col
+        segments: vec![segment],
+    }
+    let (file, path) = tmp.keep().unwrap();
+        Arc::new(datafusion::physical_expr::expressions::Literal::new(
+                pruning_predicates: std::sync::Arc::new(std::collections::HashMap::new()),
+            "missing_col",
+        parquet_size: size,
+            missing_col,
+async fn missing_col_and_with_existing_returns_zero() {
+        store_url: datafusion::execution::object_store::ObjectStoreUrl::local_filesystem(),
+                    "rg {}: combined selection kept {} rows, solo kept {} — \
+        .count();
+    );
+    // caused the pruner to bail out (returning `None` where solo
+}
+    let meta =
     let right: Arc<dyn datafusion::physical_expr::PhysicalExpr> = Arc::new(
-        datafusion::physical_expr::expressions::Literal::new(ScalarValue::Int32(Some(0))),
-    );
+        Field::new("score", DataType::Int32, false),
+        query_config: std::sync::Arc::new(qc),
+            let pruner = Arc::new(PagePruner::new(
+}
+    for i in 0..parquet_meta.num_row_groups() {
+    batch: &RecordBatch,
+        query_with_mismatched_schema(file_schema, table_schema, &batch, tautology_int("score", 2))
+        schema: table_schema,
+async fn utf8view_schema_with_utf8_file_does_not_panic() {
+        .filter(|&i| f.name[i] == "foo" && f.score[i] < 500)
+            num_rows: n,
+    // only downgrade, never add rows). If the combined predicate
+            Operator::Gt,
+        Field::new("brand", DataType::Utf8, false),
+fn build_missing_col_fixture() -> MissingColFixture {
+    assert_eq!(run_missing_col_tree(tree).await, expected);
+    let mut w = ArrowWriter::try_new(file, schema, Some(props)).unwrap();
+                let combined_kept: usize = c.iter().filter(|r| !r.skip).map(|r| r.row_count).sum();
+                evaluator: Arc::new(BitmapTreeEvaluator),
+ */
+        arrow_schema: meta.schema().clone(),
     BoolNode::Predicate(Arc::new(
+// existing-column predicate alone — the missing-column clause
+        max_doc: batch.num_rows() as i64,
+        store: Arc::new(object_store::local::LocalFileSystem::new())
+    }
+}
+                rg_index_to_pos: HashMap::new(),
+        Field::new("brand", DataType::Utf8, false),
+        ));
+        file_schema.clone(),
+    let left: Arc<dyn datafusion::physical_expr::PhysicalExpr> = Arc::new(
+        object_path: object_store::path::Path::from(path.to_string_lossy().as_ref()),
+        file_schema.clone(),
+/*
+                     missing-column clause must not add rows",
+    let file = std::fs::File::open(&f.path).unwrap();
+    let rfile = std::fs::File::open(&path).unwrap();
+    score: Vec<i32>,
+        .set_max_row_group_size(256)
+/// Build a tautology predicate: `col >= 0` (always true for non-negative int columns).
+/// The evaluator's refinement stage handles the missing column (emits
+    let size = std::fs::metadata(&f.path).unwrap().len();
+                cost_collector: 10,
+    let mut w = ArrowWriter::try_new(file, file_schema, Some(props)).unwrap();
+    let provider = Arc::new(IndexedTableProvider::new(IndexedTableConfig {
+        Field::new("pop", DataType::Int32, false),
+    let tree = BoolNode::Or(vec![
+        .force_strategy(Some(FilterStrategy::BooleanMask))
+                cost_collector: 10,
+                );
+/// table schema, run `SELECT * FROM t`, return row count.
+        pred_missing_int("missing_col", Operator::GtEq, 0),
+    BoolNode::Predicate(Arc::new(
+        datafusion::physical_expr::expressions::Literal::new(ScalarValue::Int32(Some(0))),
+        datafusion::physical_expr::expressions::Literal::new(ScalarValue::Int32(Some(100))),
+    table_schema: SchemaRef,
+            .await;
+    p
+// Without force_view_types(false), panics with "byte view array".
+/// `col_idx` is the column's position in the table schema.
+        prune_tree_config: None,
+    let missing_gt: std::sync::Arc<dyn datafusion::physical_expr::PhysicalExpr> =
+                    "rg {}: pruner bailed out on combined predicate despite \
+fn schema_with_missing() -> SchemaRef {
+                page_prune_metrics: None,
+    let schema = schema_with_missing();
+        schema: schema.clone(),
+    let tree = not_pred(pred_missing_int("missing_col", Operator::GtEq, 0));
+                tree: Arc::new(resolved),
+    // so ~10% of rows match, concentrated at the start of every 1000-row
+/// schema). Returns the row count the engine emits.
+async fn missing_col_not_predicate_returns_zero_rows() {
+        .build();
+    let table_schema = Arc::new(Schema::new(vec![
+const MISSING_N: usize = 2048;
+    name: Vec<&'static str>,
         datafusion::physical_expr::expressions::BinaryExpr::new(left, Operator::GtEq, right),
+        ]),
+    let left: Arc<dyn datafusion::physical_expr::PhysicalExpr> = Arc::new(
+/// Generic helper: write a parquet file, register with a (possibly different)
+    let file_schema = Arc::new(Schema::new(vec![
+    // grid cell → AND combines as "score<100 AND unknown".
+    let mut rgs = Vec::new();
+        predicate_columns: vec![],
+            Operator::And,
+        let combined = pruner.prune_rg(&pp_combined, rg_idx, None);
+        Field::new("name", DataType::Utf8, false),
+        predicate_columns: vec![],
+    // Existing-column predicate: score < 100 (fixture has score = i % 1000
+    count
+//! Schema drift — predicates referencing columns that are absent from a
+            });
+            let resolved = tree.resolve(&[])?;
+        vec![
+}
+        query_config: std::sync::Arc::new(qc),
+    let f = missing_col_fixture();
+    let expected = missing_col_fixture()
+fn only_pred(p: BoolNode) -> BoolNode {
+    let batch = RecordBatch::try_new(
+    let mut count = 0;
+        sort_min: None,
+    let tree = only_pred(pred_missing_int("missing_col", Operator::GtEq, 0));
+                page_prune_metrics: None,
+    let batch = RecordBatch::try_new(
+    );
+        score.push((i as i32) % 1000);
+        let schema = schema.clone();
+            Ok(eval)
+    let mut score = Vec::with_capacity(MISSING_N);
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    for rg_idx in 0..meta.metadata().num_row_groups() {
+    let schema = meta.schema().clone();
+                evaluator: Arc::new(BitmapTreeEvaluator),
+    assert_eq!(run_missing_col_tree(tree).await, 0);
+        pred_missing_str("name", Operator::Eq, "foo"),
+    assert_eq!(run_missing_col_tree(tree).await, expected);
+                collector_strategy:
+// Missing-column fixture — parquet written without a column that the
+    ))
+ *
+// 2. NOT(missing-col predicate) -> UNKNOWN -> 0 rows.
+    let mut offset = 0i64;
+        ArrowReaderMetadata::load(&file, ArrowReaderOptions::new().with_page_index(true)).unwrap();
+            Arc::new(Int32Array::from(score.clone())),
+    // column has all-null stats → clause evaluates to unknown per
+    w.close().unwrap();
+fn tautology_int(col: &str, col_idx: usize) -> BoolNode {
+// File has (name, score, brand); table schema is (brand, name, score).
+    let meta =
+        emit_row_ids: false,
+fn pred_missing_int(col: &str, op: Operator, v: i32) -> BoolNode {
+    use crate::indexed_table::page_pruner::{build_pruning_predicate, PagePruner};
+//
+    // against.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+                panic!(
+        emit_row_ids: false,
+    );
+                stats_prune_tree: None,
+        .expect("combined predicate not always_true");
+            _ => {}
+    ctx.register_table("t", provider).unwrap();
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+            Arc::new(StringArray::from(vec!["acme", "globex", "acme", "globex"])),
+        ArrowReaderMetadata::load(&rfile, ArrowReaderOptions::new().with_page_index(true)).unwrap();
+    // RG, the combined selection must keep at most as many rows as the
+// row count (half of MISSING_N).
+        Arc::new(move |segment, _chunk, _stream_metrics, _stats_prune_tree| {
+use super::*;
+    let right: Arc<dyn datafusion::physical_expr::PhysicalExpr> = Arc::new(
+        std::sync::Arc::new(datafusion::physical_expr::expressions::Column::new(
+        std::sync::Arc::new(datafusion::physical_expr::expressions::BinaryExpr::new(
+        ));
+async fn query_with_mismatched_schema(
+    let qc = crate::datafusion_query_config::DatafusionQueryConfig::builder()
     ))
 }
-
-// File has (name, score, brand); table schema is (brand, name, score).
-// Without the stream.rs reprojection fix, columns would be swapped.
+        schema.clone(),
+    CELL.get_or_init(build_missing_col_fixture)
+                schema.clone(),
+// 6. Page pruner direct invariant: a predicate that ANDs an existing
+                cost_predicate: 1,
+}
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn reorder_columns_aligned_and_filtered() {
-    let file_schema = Arc::new(Schema::new(vec![
-        Field::new("name", DataType::Utf8, false),
-        Field::new("score", DataType::Int32, false),
-        Field::new("brand", DataType::Utf8, false),
-    ]));
     let table_schema = Arc::new(Schema::new(vec![
-        Field::new("brand", DataType::Utf8, false),
-        Field::new("name", DataType::Utf8, false),
-        Field::new("score", DataType::Int32, false),
+        ));
+    assert_eq!(count, 4);
+                     present column — missing-column fix regression",
+    let factory: super::super::table_provider::EvaluatorFactory = {
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     ]));
-    let batch = RecordBatch::try_new(
-        file_schema.clone(),
-        vec![
-            Arc::new(StringArray::from(vec!["alice", "bob", "alice", "bob"])),
+        let schema = table_schema.clone();
+    let mut count = 0;
+// added the field: parquet literally has no such column, so Phase 2's
+    BoolNode::Not(Box::new(p))
+                tree: Arc::new(resolved),
+    assert_eq!(run_missing_col_tree(tree).await, 0);
+    }
+        Field::new("score", DataType::Int32, false),
+    let score_col: std::sync::Arc<dyn datafusion::physical_expr::PhysicalExpr> =
+    };
+}
+        metadata: Arc::clone(&parquet_meta),
+    let mut rgs = Vec::new();
+                    crate::indexed_table::eval::CollectorCallStrategy::TightenOuterBounds,
+    let count =
+    // Parquet schema intentionally excludes `missing_col`.
+        pred_missing_int("missing_col", Operator::GtEq, 0),
+}
+    }
+    };
+    let qc = crate::datafusion_query_config::DatafusionQueryConfig::builder()
+        writer_generation: 0,
+    // Column caches — only for columns actually in the parquet.
+        .build();
+            }
+            ScalarValue::Utf8(Some(v.to_string())),
+                );
             Arc::new(Int32Array::from(vec![10, 20, 30, 40])),
-            Arc::new(StringArray::from(vec!["acme", "globex", "acme", "globex"])),
-        ],
-    )
-    .unwrap();
-    let count =
-        query_with_mismatched_schema(file_schema, table_schema, &batch, tautology_int("score", 2))
-            .await;
-    assert_eq!(count, 4);
+            as Arc<dyn object_store::ObjectStore>,
+        offset += n;
 }
-
-// File has Utf8 columns; table schema declares Utf8View.
-// Without force_view_types(false), panics with "byte view array".
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn utf8view_schema_with_utf8_file_does_not_panic() {
-    let file_schema = Arc::new(Schema::new(vec![
-        Field::new("city", DataType::Utf8, false),
-        Field::new("pop", DataType::Int32, false),
+    for i in 0..MISSING_N {
+        ],
+            lit_0,
+        .set_statistics_enabled(datafusion::parquet::file::properties::EnabledStatistics::Page)
+        parquet_size: size,
+    );
+// ══════════════════════════════════════════════════════════════════════
+    let tree = Arc::new(tree_bool);
+        .set_max_row_group_size(512)
+    let props = datafusion::parquet::file::properties::WriterProperties::builder()
+    let factory: super::super::table_provider::EvaluatorFactory = {
+        Arc::new(move |segment, _chunk, _stream_metrics, _stats_prune_tree| {
     ]));
-    let table_schema = Arc::new(Schema::new(vec![
-        Field::new("city", DataType::Utf8View, false),
-        Field::new("pop", DataType::Int32, false),
-    ]));
+        sort_max: None,
+    ]);
+        prune_tree_config: None,
+        .set_data_page_row_count_limit(128)
+    let left: Arc<dyn datafusion::physical_expr::PhysicalExpr> = Arc::new(
+// column with a missing column must prune identically to the
+    while let Some(b) = stream.next().await {
+                schema.clone(),
+            Ok(eval)
     let batch = RecordBatch::try_new(
-        file_schema.clone(),
-        vec![
-            Arc::new(StringArray::from(vec![
-                "seattle", "portland", "denver", "austin",
-            ])),
-            Arc::new(Int32Array::from(vec![750_000, 650_000, 700_000, 980_000])),
-        ],
-    )
-    .unwrap();
-    let count =
-        query_with_mismatched_schema(file_schema, table_schema, &batch, tautology_int("pop", 1))
-            .await;
-    assert_eq!(count, 4);
+    ctx.register_table("t", provider).unwrap();
+        offset += n;
+        Field::new("name", DataType::Utf8, false),
+            }
+    let right: Arc<dyn datafusion::physical_expr::PhysicalExpr> =
+    let tree = BoolNode::Or(vec![
+        sort_orders: vec![],
+            let resolved = tree.resolve(&[])?;
+        .target_partitions(1)
+            let pruner = Arc::new(PagePruner::new(
+    let mut stream = df.execute_stream().await.unwrap();
+    );
+                stats_prune_tree: None,
+async fn reorder_columns_aligned_and_filtered() {
+    let pruner = PagePruner::new(&drift_schema, meta.metadata().clone(), drift_schema.clone());
+        evaluator_factory: factory,
+        .expect("score<100 is not always_true on this fixture");
+//! segment evaluates to UNKNOWN for that predicate and gets filtered out.
+async fn missing_col_predicate_returns_zero_rows() {
+            let eval: Arc<dyn RowGroupBitsetSource> = Arc::new(TreeBitsetSource {
+        metadata: Arc::clone(&parquet_meta),
+        store_url: datafusion::execution::object_store::ObjectStoreUrl::local_filesystem(),
+                pruning_predicates: std::sync::Arc::new(std::collections::HashMap::new()),
+    );
 }
+    for i in 0..parquet_meta.num_row_groups() {
+            score_lt.clone(),
+                    solo_kept
+            num_rows: n,
+    ]);
+                collector_strategy:
+        Field::new("city", DataType::Utf8, false),
+        datafusion::physical_expr::expressions::Literal::new(ScalarValue::Int32(Some(0))),
+    let score_idx = drift_schema.index_of("score").unwrap();
+        arrow_schema: schema.clone(),
+    };
+}
+        Field::new("name", DataType::Utf8, false),
+        .name
+    path: std::path::PathBuf,
+async fn missing_col_or_with_existing_keeps_existing() {
+#[test]
+        ],
+ * SPDX-License-Identifier: Apache-2.0
+    let score_lt: std::sync::Arc<dyn datafusion::physical_expr::PhysicalExpr> = std::sync::Arc::new(
+}
+        ArrowReaderMetadata::load(&file, ArrowReaderOptions::new().with_page_index(true)).unwrap();
+        .build();
+// Without the stream.rs reprojection fix, columns would be swapped.
+        let b = b.unwrap();
+ * compatible open source license.
+    ]))
+    .unwrap();
+        })
+        count += b.unwrap().num_rows();
+    let tree = BoolNode::And(vec![
+        datafusion::physical_expr::expressions::BinaryExpr::new(left, op, right),
+        sort_fields: vec![],
+        evaluator_factory: factory,
+    let meta =
+        Field::new("pop", DataType::Int32, false),
+    let parquet_meta = meta.metadata().clone();
+    let count =
+        }
+// branch never matches; result = (name='foo' AND score<500) rows.
+    // Walk every RG in the fixture and check the invariant. For each
+    BoolNode::Predicate(Arc::new(
+    Arc::new(Schema::new(vec![
+        })
+        object_path: object_store::path::Path::from(f.path.to_string_lossy().as_ref()),
+        sort_orders: vec![],
+    // SELECT only columns that exist in parquet.
+    // Schema handed to the pruner includes the missing column.
+    );
+async fn missing_col_nested_or_kept_existing_only() {
+        datafusion::physical_expr::expressions::Column::new(col, col_idx),
+    }));
+        max_doc: MISSING_N as i64,
+        });
+    let tree = Arc::new(tree_bool);
+            as Arc<dyn object_store::ObjectStore>,
+        pushdown_predicate: None,
+            index: i,
+}
+    w.write(&batch).unwrap();
+//! the segment was written. Expected product behaviour: every row in that
+                "seattle", "portland", "denver", "austin",
+// treats that as all-UNKNOWN (SQL semantics).
+        datafusion::physical_expr::expressions::Column::new(col, col_idx),
+// per grid cell and the existing-column clause still prunes.
+        datafusion::physical_expr::expressions::BinaryExpr::new(left, op, right),
+// ══════════════════════════════════════════════════════════════════════
+        query_with_mismatched_schema(file_schema, table_schema, &batch, tautology_int("pop", 1))
+                max_collector_parallelism: 1,
+            ));
+    let lit_0: std::sync::Arc<dyn datafusion::physical_expr::PhysicalExpr> = std::sync::Arc::new(
+// tree still references. Simulates a segment written before a mapping
+        .indexed_pushdown_filters(false)
+        Field::new("missing_col", DataType::Int32, true),
+/// Local schema that *includes* missing_col — used for building
+                assert!(
+        sort_min: None,
+                    combined_kept,
+            let eval: Arc<dyn RowGroupBitsetSource> = Arc::new(TreeBitsetSource {
+            Arc::new(StringArray::from(vec!["alice", "bob", "alice", "bob"])),
+                &schema,
+    while let Some(b) = stream.next().await {
+                &schema,
+ * The OpenSearch Contributors require contributions made to
+fn page_pruner_prunes_existing_column_despite_missing_column() {
+        row_groups: rgs,
+    let missing_idx = drift_schema.index_of("missing_col").unwrap();
+}
+        count += b.num_rows();
+    ]);
+        row_groups: rgs,
+            Arc::new(Int32Array::from(vec![750_000, 650_000, 700_000, 980_000])),
+    let mut offset = 0i64;
+            pred_missing_str("name", Operator::Eq, "foo"),
+        cancellation_token: None,
+            index: i,
+    use datafusion::parquet::arrow::arrow_reader::{ArrowReaderMetadata, ArrowReaderOptions};
+        .force_strategy(Some(FilterStrategy::BooleanMask))
+        global_base: 0,
+            Arc::new(StringArray::from(name.clone())),
+    let f = missing_col_fixture();
+        vec![
+}
+        vec![
+                    combined_kept <= solo_kept,
+            missing_idx,
+    )
+// file. Post-fix, the missing column contributes typed all-null stats
+        datafusion::physical_expr::expressions::Column::new(col, col_idx),
+    ]));
+    let expected = (0..MISSING_N)
+// ══════════════════════════════════════════════════════════════════════
+        segments: vec![segment],
+        let solo = pruner.prune_rg(&pp_solo, rg_idx, None);
+    // Combined predicate: score < 100 AND missing_col > 0. Missing
+            Arc::new(StringArray::from(vec![
+            "score", score_idx,
+    }
+    let pp_combined = build_pruning_predicate(&combined, drift_schema)
+    tree_bool: BoolNode,
+    }));
+    let mut stream = df.execute_stream().await.unwrap();
+            ])),
+        cancellation_token: None,
+        let n = parquet_meta.row_group(i).num_rows();
+    let provider = Arc::new(IndexedTableProvider::new(IndexedTableConfig {
+    let file_schema = Arc::new(Schema::new(vec![
+        Field::new("score", DataType::Int32, false),
+                    rg_idx
+        sort_max: None,
+                page_pruner: pruner,
+            missing_gt,
+                leaves: Arc::new(CollectorLeafBitmaps::without_metrics()),
+    )
+        match (solo.as_ref(), combined.as_ref()) {
+    w.close().unwrap();
+                rg_index_to_pos: HashMap::new(),
+    let size = std::fs::metadata(&path).unwrap().len();
+                page_pruner: pruner,

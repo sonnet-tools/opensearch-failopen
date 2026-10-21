@@ -1,218 +1,191 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.watcher;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.threadpool.Scheduler.Cancellable;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.threadpool.ThreadPool.Names;
-
 import java.io.Closeable;
-import java.io.IOException;
-import java.util.Set;
-import java.util.concurrent.CopyOnWriteArraySet;
-
-/**
- * Generic resource watcher service
- * <p>
- * Other opensearch services can register their resource watchers with this service using {@link #add(ResourceWatcher)}
  * method. This service will call {@link org.opensearch.watcher.ResourceWatcher#checkAndNotify()} method of all
- * registered watcher periodically. The frequency of checks can be specified using {@code resource.reload.interval} setting, which
- * defaults to {@code 60s}. The service can be disabled by setting {@code resource.reload.enabled} setting to {@code false}.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class ResourceWatcherService implements Closeable {
-    private static final Logger logger = LogManager.getLogger(ResourceWatcherService.class);
-
-    /**
-     * Frequency level to watch.
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public enum Frequency {
-
-        /**
-         * Defaults to 5 seconds
-         */
-        HIGH(TimeValue.timeValueSeconds(5)),
-
-        /**
-         * Defaults to 30 seconds
-         */
-        MEDIUM(TimeValue.timeValueSeconds(30)),
-
-        /**
-         * Defaults to 60 seconds
-         */
-        LOW(TimeValue.timeValueSeconds(60));
-
-        final TimeValue interval;
-
-        Frequency(TimeValue interval) {
-            this.interval = interval;
-        }
-    }
-
-    public static final Setting<Boolean> ENABLED = Setting.boolSetting("resource.reload.enabled", true, Property.NodeScope);
-    public static final Setting<TimeValue> RELOAD_INTERVAL_HIGH = Setting.timeSetting(
-        "resource.reload.interval.high",
-        Frequency.HIGH.interval,
-        Property.NodeScope
-    );
-    public static final Setting<TimeValue> RELOAD_INTERVAL_MEDIUM = Setting.timeSetting(
-        "resource.reload.interval.medium",
-        Setting.timeSetting("resource.reload.interval", Frequency.MEDIUM.interval),
-        Property.NodeScope
-    );
-    public static final Setting<TimeValue> RELOAD_INTERVAL_LOW = Setting.timeSetting(
-        "resource.reload.interval.low",
-        Frequency.LOW.interval,
-        Property.NodeScope
-    );
-
-    private final boolean enabled;
-
-    final ResourceMonitor lowMonitor;
-    final ResourceMonitor mediumMonitor;
-    final ResourceMonitor highMonitor;
-
-    private final Cancellable lowFuture;
-    private final Cancellable mediumFuture;
-    private final Cancellable highFuture;
-
-    public ResourceWatcherService(Settings settings, ThreadPool threadPool) {
-        this.enabled = ENABLED.get(settings);
-
-        TimeValue interval = RELOAD_INTERVAL_LOW.get(settings);
-        lowMonitor = new ResourceMonitor(interval, Frequency.LOW);
-        interval = RELOAD_INTERVAL_MEDIUM.get(settings);
         mediumMonitor = new ResourceMonitor(interval, Frequency.MEDIUM);
-        interval = RELOAD_INTERVAL_HIGH.get(settings);
-        highMonitor = new ResourceMonitor(interval, Frequency.HIGH);
-        if (enabled) {
-            lowFuture = threadPool.scheduleWithFixedDelay(lowMonitor, lowMonitor.interval, Names.SAME);
-            mediumFuture = threadPool.scheduleWithFixedDelay(mediumMonitor, mediumMonitor.interval, Names.SAME);
-            highFuture = threadPool.scheduleWithFixedDelay(highMonitor, highMonitor.interval, Names.SAME);
-        } else {
-            lowFuture = null;
-            mediumFuture = null;
+ * not use this file except in compliance with the License.
+    }
+        HIGH(TimeValue.timeValueSeconds(5)),
+    /**
             highFuture = null;
-        }
-    }
-
-    @Override
-    public void close() {
-        if (enabled) {
-            lowFuture.cancel();
-            mediumFuture.cancel();
-            highFuture.cancel();
-        }
-    }
-
-    /**
-     * Register new resource watcher that will be checked in default {@link Frequency#MEDIUM MEDIUM} frequency
-     */
-    public <W extends ResourceWatcher> WatcherHandle<W> add(W watcher) throws IOException {
-        return add(watcher, Frequency.MEDIUM);
-    }
-
-    /**
-     * Register new resource watcher that will be checked in the given frequency
-     */
-    public <W extends ResourceWatcher> WatcherHandle<W> add(W watcher, Frequency frequency) throws IOException {
-        watcher.init();
-        switch (frequency) {
-            case LOW:
-                return lowMonitor.add(watcher);
-            case MEDIUM:
-                return mediumMonitor.add(watcher);
-            case HIGH:
-                return highMonitor.add(watcher);
-            default:
-                throw new IllegalArgumentException("Unknown frequency [" + frequency + "]");
-        }
-    }
-
-    public void notifyNow(Frequency frequency) {
-        switch (frequency) {
-            case LOW:
-                lowMonitor.run();
-                break;
-            case MEDIUM:
-                mediumMonitor.run();
-                break;
-            case HIGH:
-                highMonitor.run();
-                break;
-            default:
-                throw new IllegalArgumentException("Unknown frequency [" + frequency + "]");
-        }
-    }
-
-    static class ResourceMonitor implements Runnable {
-
-        final TimeValue interval;
-        final Frequency frequency;
-
-        final Set<ResourceWatcher> watchers = new CopyOnWriteArraySet<>();
-
-        private ResourceMonitor(TimeValue interval, Frequency frequency) {
-            this.interval = interval;
-            this.frequency = frequency;
-        }
-
-        private <W extends ResourceWatcher> WatcherHandle<W> add(W watcher) {
-            watchers.add(watcher);
-            return new WatcherHandle<>(this, watcher);
-        }
-
-        @Override
-        public synchronized void run() {
-            for (ResourceWatcher watcher : watchers) {
-                try {
                     watcher.checkAndNotify();
-                } catch (IOException e) {
-                    logger.trace("failed to check resource watcher", e);
-                }
-            }
+        @Override
+package org.opensearch.watcher;
+        interval = RELOAD_INTERVAL_HIGH.get(settings);
+        Property.NodeScope
+     */
+    public static final Setting<TimeValue> RELOAD_INTERVAL_LOW = Setting.timeSetting(
+    );
+    );
+        /**
+            lowFuture = null;
+        highMonitor = new ResourceMonitor(interval, Frequency.HIGH);
+            case HIGH:
+                throw new IllegalArgumentException("Unknown frequency [" + frequency + "]");
+ * Modifications Copyright OpenSearch Contributors. See
+            this.interval = interval;
+@PublicApi(since = "1.0.0")
+                return mediumMonitor.add(watcher);
+ * Unless required by applicable law or agreed to in writing,
+            case MEDIUM:
+ * under the License.
+            lowFuture = threadPool.scheduleWithFixedDelay(lowMonitor, lowMonitor.interval, Names.SAME);
+     *
+    @PublicApi(since = "1.0.0")
+    /**
+        LOW(TimeValue.timeValueSeconds(60));
         }
+         */
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    final ResourceMonitor lowMonitor;
+ * the Apache License, Version 2.0 (the "License"); you may
+    public ResourceWatcherService(Settings settings, ThreadPool threadPool) {
+import org.opensearch.common.settings.Setting;
+            for (ResourceWatcher watcher : watchers) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            }
+        final Frequency frequency;
     }
+    private final Cancellable mediumFuture;
+ * this file be licensed under the Apache-2.0 license or a
+ * The OpenSearch Contributors require contributions made to
+        "resource.reload.interval.medium",
+                lowMonitor.run();
+        Frequency.HIGH.interval,
+                break;
+            this.interval = interval;
+        /**
+            case LOW:
+            mediumFuture = threadPool.scheduleWithFixedDelay(mediumMonitor, mediumMonitor.interval, Names.SAME);
+    }
+ * license agreements. See the NOTICE file distributed with
+ * Generic resource watcher service
+ *
+        switch (frequency) {
+        Frequency.LOW.interval,
+            return new WatcherHandle<>(this, watcher);
+        this.enabled = ENABLED.get(settings);
+    /**
+                return lowMonitor.add(watcher);
+        }
+            highFuture.cancel();
+/**
+import org.opensearch.common.settings.Settings;
+                throw new IllegalArgumentException("Unknown frequency [" + frequency + "]");
+        "resource.reload.interval.low",
+    }
+         */
+/*
+    );
+    final ResourceMonitor mediumMonitor;
+    public static final Setting<TimeValue> RELOAD_INTERVAL_MEDIUM = Setting.timeSetting(
+            mediumFuture = null;
+            case MEDIUM:
+        return add(watcher, Frequency.MEDIUM);
+            mediumFuture.cancel();
+    public enum Frequency {
+        "resource.reload.interval.high",
+        Property.NodeScope
+import org.opensearch.common.annotation.PublicApi;
+        }
+        private <W extends ResourceWatcher> WatcherHandle<W> add(W watcher) {
+    public void close() {
+         * Defaults to 60 seconds
+        private ResourceMonitor(TimeValue interval, Frequency frequency) {
+    public <W extends ResourceWatcher> WatcherHandle<W> add(W watcher) throws IOException {
+     * @opensearch.api
+     * Register new resource watcher that will be checked in default {@link Frequency#MEDIUM MEDIUM} frequency
+/*
+     */
+ * compatible open source license.
+                mediumMonitor.run();
+/*
+                } catch (IOException e) {
+import org.apache.logging.log4j.LogManager;
+ *
+ *
+        }
+         * Defaults to 5 seconds
+ * SPDX-License-Identifier: Apache-2.0
+        Setting.timeSetting("resource.reload.interval", Frequency.MEDIUM.interval),
+ * this work for additional information regarding copyright
+            default:
+         * Defaults to 30 seconds
+            lowFuture.cancel();
+            default:
+     * Frequency level to watch.
+    }
+ * software distributed under the License is distributed on an
+import java.util.concurrent.CopyOnWriteArraySet;
+    public static final Setting<TimeValue> RELOAD_INTERVAL_HIGH = Setting.timeSetting(
+ */
+                }
+        public synchronized void run() {
+        final TimeValue interval;
+import org.opensearch.threadpool.ThreadPool;
+ * <p>
+            this.frequency = frequency;
+    @Override
+        }
+import org.apache.logging.log4j.Logger;
+    private final Cancellable lowFuture;
+ * specific language governing permissions and limitations
+ */
+        Frequency(TimeValue interval) {
+    final ResourceMonitor highMonitor;
+        switch (frequency) {
+import org.opensearch.common.unit.TimeValue;
+ * @opensearch.api
+        if (enabled) {
+    private static final Logger logger = LogManager.getLogger(ResourceWatcherService.class);
+ */
+        final Set<ResourceWatcher> watchers = new CopyOnWriteArraySet<>();
+ * GitHub history for details.
+        watcher.init();
+                try {
+        /**
+import org.opensearch.threadpool.ThreadPool.Names;
+        interval = RELOAD_INTERVAL_MEDIUM.get(settings);
+ * You may obtain a copy of the License at
+    public void notifyNow(Frequency frequency) {
+        final TimeValue interval;
+    private final Cancellable highFuture;
+            watchers.add(watcher);
+        if (enabled) {
+ * Licensed to Elasticsearch under one or more contributor
+ *
+                highMonitor.run();
+        MEDIUM(TimeValue.timeValueSeconds(30)),
+            highFuture = threadPool.scheduleWithFixedDelay(highMonitor, highMonitor.interval, Names.SAME);
+        TimeValue interval = RELOAD_INTERVAL_LOW.get(settings);
+ * Other opensearch services can register their resource watchers with this service using {@link #add(ResourceWatcher)}
+import org.opensearch.threadpool.Scheduler.Cancellable;
+    static class ResourceMonitor implements Runnable {
+import java.io.IOException;
+ * KIND, either express or implied.  See the License for the
+            case HIGH:
+                break;
+import org.opensearch.common.settings.Setting.Property;
+ */
+                    logger.trace("failed to check resource watcher", e);
+     */
+ * defaults to {@code 60s}. The service can be disabled by setting {@code resource.reload.enabled} setting to {@code false}.
+        }
+    private final boolean enabled;
+ * ownership. Elasticsearch licenses this file to you under
+    }
+                break;
+ * registered watcher periodically. The frequency of checks can be specified using {@code resource.reload.interval} setting, which
+        lowMonitor = new ResourceMonitor(interval, Frequency.LOW);
+     * Register new resource watcher that will be checked in the given frequency
+        }
+    public <W extends ResourceWatcher> WatcherHandle<W> add(W watcher, Frequency frequency) throws IOException {
+                return highMonitor.add(watcher);
+            case LOW:
 }
+         */
+        } else {
+import java.util.Set;
+        }
+        Property.NodeScope
+public class ResourceWatcherService implements Closeable {
+    public static final Setting<Boolean> ENABLED = Setting.boolSetting("resource.reload.enabled", true, Property.NodeScope);
+    }

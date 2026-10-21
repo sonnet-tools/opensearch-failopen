@@ -1,386 +1,335 @@
----
-"Basic response":
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test" }
-  - do:
+"Can override scroll_size":
+  - is_false: created
       indices.refresh: {}
-
-  - do:
-      delete_by_query:
-        index: test
-        body:
-          query:
-            match_all: {}
-
-  - is_false: timed_out
+        index:   test
+      index:
   - match: {deleted: 1}
-  - is_false: created
-  - is_false: updated
-  - match: {version_conflicts: 0}
-  - match: {batches: 1}
-  - match: {failures: []}
-  - match: {noops: 0}
-  - match: {throttled_millis: 0}
-  - gte: { took: 0 }
-  - is_false: task
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      count:
-        index: test
-
-  - match: {count: 0}
-
----
-"wait_for_completion=false":
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      delete_by_query:
-        wait_for_completion: false
-        index: test
-        body:
-          query:
-            match_all: {}
-
-  - match: {task: '/.+:\d+/'}
-  - set: {task: task}
-  - is_false: version_conflicts
-  - is_false: batches
-  - is_false: failures
-  - is_false: noops
-  - is_false: took
-  - is_false: throttled_millis
-  - is_false: created
-  - is_false: updated
-  - is_false: deleted
-
-  - do:
-      tasks.get:
-        wait_for_completion: true
-        task_id: $task
-  - is_false: node_failures
-  # The task will be in the response even if it finished before we got here
-  # because of task persistence.
-  - is_true: task
-  - is_false: response.timed_out
-  - match: {response.deleted: 1}
-  - is_false: response.created
-  - is_false: response.updated
-  - match: {response.version_conflicts: 0}
-  - match: {response.batches: 1}
-  - match: {response.failures: []}
-  - match: {response.noops: 0}
-  - match: {response.throttled_millis: 0}
-  - gte: { response.took: 0 }
-  - is_false: response.task
-
----
+            number_of_shards: 1
 "Response for version conflict (seq no powered)":
-  - do:
-      indices.create:
         index: test
-        body:
-          settings:
-            index.refresh_interval: -1
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      indices.refresh: {}
-  # Creates a new version for reindex to miss on scan.
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test2" }
-
-  - do:
-      catch: conflict
-      delete_by_query:
-        index: test
-        body:
-          query:
-            match_all: {}
-
-  - match: {deleted: 0}
-  - match: {version_conflicts: 1}
-  - match: {batches: 1}
-  - match: {failures.0.index:  test}
-  - match: {failures.0.id:     "1"}
-  - match: {failures.0.status: 409}
-  - match: {failures.0.cause.type:   version_conflict_engine_exception}
-  - match: {failures.0.cause.reason: "/\\[1\\]:.version.conflict,.required.seqNo.\\[\\d+\\]/"}
-  - match: {failures.0.cause.shard:  /\d+/}
-  - match: {failures.0.cause.index:  test}
-  - gte: { took: 0 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      count:
-        index: test
-
-  - match: {count: 1}
-
----
-"Response for version conflict with conflicts=proceed":
-  - do:
-      indices.create:
-        index: test
-        body:
-          settings:
-            index.refresh_interval: -1
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      indices.refresh: {}
-  # Creates a new version for reindex to miss on scan.
-  - do:
-      index:
-        index:   test
-        id:      1
-        body:    { "text": "test2" }
-
-  - do:
-      delete_by_query:
-        index: test
-        conflicts: proceed
-        body:
-          query:
-            match_all: {}
-
-  - match: {deleted: 0}
-  - match: {version_conflicts: 1}
-  - match: {batches: 1}
-  - match: {noops: 0}
-  - match: {failures: []}
-  - match: {throttled_millis: 0}
-  - gte: { took: 0 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      count:
-        index: test
-
-  - match: {count: 1}
-
----
-"Limit by query":
-  - do:
-      index:
-        index:   twitter
-        id:      1
-        body:    { "user": "foobar" }
-  - do:
-      index:
-        index:   twitter
-        id:      2
-        body:    { "user": "junk" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      delete_by_query:
-        index: twitter
         refresh: true
-        body:
-          query:
-            match:
-              user: foobar
-  - match: {deleted: 1}
-  - match: {version_conflicts: 0}
   - match: {batches: 1}
-  - match: {failures: []}
-  - gte: { took: 0 }
-
-  - do:
-      count:
-        index: twitter
-
-  - match: {count: 1}
-
----
-"Limit by size":
-  - skip:
-      features: allowed_warnings
-
-  - do:
-      index:
-        index:  twitter
-        id:     1
-        body:   { "user": "foobar" }
-  - do:
-      index:
-        index:  twitter
-        id:     2
-        body:   { "user": "foobar" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      allowed_warnings:
-        - Deprecated field [size] used, expected [max_docs] instead
-      delete_by_query:
-        index: twitter
+  - match: {response.batches: 1}
         size: 1
         body:
-          query:
-            match_all: {}
-
-  - match: {deleted: 1}
-  - match: {version_conflicts: 0}
-  - match: {batches: 1}
-  - match: {failures: []}
-  - match: {throttled_millis: 0}
+"Limit by query":
   - gte: { took: 0 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      count:
-        index: twitter
-
-  - match: {count: 1}
-
----
-"Limit by max_docs in URL":
-
-  - do:
-      index:
-        index:  twitter
-        id:     1
-        body:   { "user": "foobar" }
-  - do:
-      index:
-        index:  twitter
-        id:     2
-        body:   { "user": "foobar" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      delete_by_query:
-        index: twitter
-        max_docs: 1
-        body:
-          query:
-            match_all: {}
-
-  - match: {deleted: 1}
-  - match: {version_conflicts: 0}
-  - match: {batches: 1}
-  - match: {failures: []}
+          settings:
+        task_id: $task
   - match: {throttled_millis: 0}
+  - is_false: response.updated
+  - match: {failures.0.cause.shard:  /\d+/}
+      tasks.get:
+        body:   { "user": "foobar" }
+  - is_true: task
+  - do:
+      index:
+  - is_false: response.timed_out
+        id:      1
+        body:    { "text": "test2" }
+        refresh: true
   - gte: { took: 0 }
-
-  - do:
       indices.refresh: {}
-
-  - do:
-      count:
-        index: twitter
-
+        index: test
+      index:
+      indices.refresh: {}
+  # because of task persistence.
+        body:   { "user": "foobar" }
   - match: {count: 1}
-
----
-"Limit by max_docs in body":
-
   - do:
-      index:
-        index:  twitter
-        id:     1
-        body:   { "user": "foobar" }
-  - do:
-      index:
-        index:  twitter
-        id:     2
-        body:   { "user": "foobar" }
-  - do:
-      indices.refresh: {}
-
-  - do:
-      delete_by_query:
+        index:   test
         index: twitter
+      count:
+      features: allowed_warnings
+      delete_by_query:
+  - gte: { response.took: 0 }
         body:
+        body:    { "text": "test" }
+  - do:
+  - set: {task: task}
           max_docs: 1
-          query:
-            match:
-              user: "foobar"
-
-  - match: {deleted: 1}
-  - match: {version_conflicts: 0}
-  - match: {batches: 1}
-  - match: {failures: []}
-  - match: {throttled_millis: 0}
   - gte: { took: 0 }
-
+  - match: {batches: 1}
+      index:
+            match:
+        body:    { "user": "junk" }
   - do:
+  - match: {count: 0}
+        id:      1
+  # Creates a new version for reindex to miss on scan.
+  - do:
+  - match: {deleted: 3}
+        index:   twitter
       indices.refresh: {}
-
+        body:    { "text": "test" }
+  - match: {noops: 0}
+        id:     1
+          query:
+  - match: {deleted: 1}
+        id:     2
   - do:
-      count:
-        index: twitter
-
+          query:
+  - is_false: updated
+  - is_false: throttled_millis
+      index:
+      index:
+        index:  twitter
+      indices.refresh: {}
+        body:    { "text": "test" }
+            match_all: {}
+  - match: {task: '/.+:\d+/'}
+        body:   { "user": "foobar" }
+        wait_for_completion: true
+        max_docs: 1
+  - do:
+  - do:
+  - is_false: deleted
+      delete_by_query:
+        body:
   - match: {count: 1}
-
+  - match: {failures.0.cause.index:  test}
+        index:   test
+        body:
+"Limit by size":
+      index:
+        id:     2
+  - match: {count: 1}
+      indices.refresh: {}
+  - do:
+        index: twitter
+  - match: {count: 1}
+        id:      1
+        index:   test
+  - is_false: response.task
+  - match: {deleted: 1}
+              user: "foobar"
+  - do:
+  - match: {failures: []}
 ---
-"Can override scroll_size":
+            match_all: {}
+  - do:
+  - match: {version_conflicts: 0}
+  - match: {throttled_millis: 0}
+        body:    { "text": "test" }
+  - is_false: version_conflicts
+---
+        index:   test
+  - do:
+  - match: {version_conflicts: 1}
+        index: twitter
+  - do:
+      allowed_warnings:
+  - match: {batches: 1}
+        body:   { "user": "foobar" }
   - do:
       indices.create:
+        index:  twitter
+  - match: {failures: []}
+  - match: {failures: []}
+---
+        index: twitter
         index: test
-        body:
+        index: twitter
+  - is_false: created
+      indices.refresh: {}
+        body:   { "user": "foobar" }
+      index:
+  - match: {response.throttled_millis: 0}
           settings:
-            number_of_shards: 1
+      count:
+        id:      1
+        index: test
   - do:
-      index:
-        index:   test
-        body:    { "text": "test" }
+            match_all: {}
+        body:
+  - is_false: node_failures
+  - gte: { took: 0 }
+      count:
   - do:
-      index:
-        index:   test
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   test
-        body:    { "text": "test" }
+        body:
+  - match: {noops: 0}
+            match_all: {}
   - do:
       indices.refresh: {}
-
+  - do:
+          query:
+      count:
+"Limit by max_docs in URL":
+        body:    { "text": "test2" }
+  - match: {throttled_millis: 0}
+  - match: {deleted: 0}
+  - match: {failures: []}
+  - match: {deleted: 1}
+"wait_for_completion=false":
+          settings:
+"Response for version conflict with conflicts=proceed":
+            match_all: {}
+  - do:
+  - match: {failures: []}
+      count:
+        index:   test
+---
+  - match: {failures.0.status: 409}
+---
+  - is_false: updated
+  - match: {failures.0.cause.reason: "/\\[1\\]:.version.conflict,.required.seqNo.\\[\\d+\\]/"}
+      indices.refresh: {}
+  - do:
+  - do:
+        id:      1
+  - do:
+  - match: {batches: 1}
+  - is_false: noops
+  - do:
+  - do:
+        - Deprecated field [size] used, expected [max_docs] instead
+  - do:
+        id:      1
+  - do:
+          query:
+            index.refresh_interval: -1
   - do:
       delete_by_query:
-        index: test
-        refresh: true
-        scroll_size: 1
-        body:
+      indices.refresh: {}
           query:
-            match_all: {}
-
-  - match: {batches: 3}
-  - match: {deleted: 3}
-
-  - do:
-      count:
+        id:      2
+      indices.refresh: {}
+  - match: {version_conflicts: 1}
+        body:
+      indices.create:
+  - gte: { took: 0 }
+  - match: {failures: []}
+      index:
+  - match: {batches: 1}
+        index: twitter
+  # The task will be in the response even if it finished before we got here
+      delete_by_query:
         index: test
-
+          query:
+  - do:
+      indices.refresh: {}
+  - do:
+            match:
+        body:
+      count:
+  - do:
+  - is_false: failures
+        index:  twitter
+      index:
+  - match: {version_conflicts: 0}
+  - do:
+  # Creates a new version for reindex to miss on scan.
+        body:
+        index: twitter
+        index:  twitter
+        index: test
   - match: {count: 0}
+  - match: {failures.0.id:     "1"}
+  - do:
+          query:
+  - do:
+  - do:
+        index: test
+        wait_for_completion: false
+      delete_by_query:
+  - do:
+      index:
+  - match: {failures.0.index:  test}
+            match_all: {}
+      indices.create:
+"Limit by max_docs in body":
+        id:     1
+        body:
+        body:   { "user": "foobar" }
+  - is_false: took
+      catch: conflict
+  - do:
+        body:    { "user": "foobar" }
+  - match: {response.deleted: 1}
+      index:
+  - match: {count: 1}
+  - match: {throttled_millis: 0}
+        body:
+  - match: {count: 1}
+      count:
+      index:
+        body:    { "text": "test" }
+  - match: {response.noops: 0}
+  - do:
+---
+  - match: {deleted: 0}
+        body:    { "text": "test" }
+      count:
+  - match: {batches: 1}
+"Basic response":
+            match_all: {}
+      index:
+      delete_by_query:
+      delete_by_query:
+      indices.refresh: {}
+---
+        index:   test
+  - match: {version_conflicts: 0}
+  - skip:
+  - match: {batches: 3}
+  - do:
+  - match: {deleted: 1}
+      index:
+          query:
+  - do:
+      indices.refresh: {}
+        conflicts: proceed
+        index:   test
+  - do:
+      indices.refresh: {}
+        index:   twitter
+  - do:
+  - gte: { took: 0 }
+  - do:
+  - do:
+        index: test
+  - do:
+  - do:
+        index: twitter
+        index: test
+  - match: {throttled_millis: 0}
+        index: test
+        index:  twitter
+  - is_false: batches
+  - do:
+      index:
+        index:  twitter
+  - match: {batches: 1}
+      delete_by_query:
+  - do:
+        body:    { "text": "test" }
+  - do:
+  - match: {version_conflicts: 0}
+        id:     2
+  - is_false: task
+        index: test
+  - is_false: response.created
+        index:   test
+        body:
+  - do:
+  - match: {response.version_conflicts: 0}
+  - match: {failures.0.cause.type:   version_conflict_engine_exception}
+            index.refresh_interval: -1
+              user: foobar
+  - do:
+  - gte: { took: 0 }
+          query:
+      delete_by_query:
+  - do:
+  - do:
+      index:
+---
+        id:     1
+  - do:
+  - match: {version_conflicts: 0}
+        id:      1
+        scroll_size: 1
+  - is_false: timed_out
+  - match: {response.failures: []}
+---
+        index: test

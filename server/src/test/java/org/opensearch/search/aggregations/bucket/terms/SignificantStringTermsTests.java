@@ -1,192 +1,183 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;
-import org.opensearch.search.aggregations.bucket.terms.heuristic.SignificanceHeuristic;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-public class SignificantStringTermsTests extends InternalSignificantTermsTestCase {
-
-    @Override
-    protected InternalSignificantTerms createTestInstance(
-        String name,
-        Map<String, Object> metadata,
-        InternalAggregations aggs,
-        int requiredSize,
-        int numBuckets,
         long subsetSize,
-        int[] subsetDfs,
-        long supersetSize,
-        int[] supersetDfs,
-        SignificanceHeuristic significanceHeuristic
-    ) {
-        DocValueFormat format = DocValueFormat.RAW;
-        List<SignificantStringTerms.Bucket> buckets = new ArrayList<>(numBuckets);
-        Set<BytesRef> terms = new HashSet<>();
-        for (int i = 0; i < numBuckets; ++i) {
-            BytesRef term = randomValueOtherThanMany(b -> terms.add(b) == false, () -> new BytesRef(randomAlphaOfLength(10)));
-            SignificantStringTerms.Bucket bucket = new SignificantStringTerms.Bucket(
-                term,
-                subsetDfs[i],
-                subsetSize,
-                supersetDfs[i],
-                supersetSize,
-                aggs,
-                format,
-                0
-            );
-            bucket.updateScore(significanceHeuristic);
-            buckets.add(bucket);
-        }
-        return new SignificantStringTerms(
-            name,
-            metadata,
-            format,
-            subsetSize,
-            supersetSize,
-            significanceHeuristic,
-            buckets,
-            new TermsAggregator.BucketCountThresholds(1L, 0, requiredSize, 0)
-        );
-    }
-
-    @Override
-    protected Class<? extends ParsedMultiBucketAggregation> implementationClass() {
-        return ParsedSignificantStringTerms.class;
-    }
-
-    @Override
-    protected InternalSignificantTerms<?, ?> mutateInstance(InternalSignificantTerms<?, ?> instance) {
-        if (instance instanceof SignificantStringTerms) {
-            SignificantStringTerms stringTerms = (SignificantStringTerms) instance;
-            String name = stringTerms.getName();
-            int requiredSize = stringTerms.requiredSize;
-            long minDocCount = stringTerms.minDocCount;
-            DocValueFormat format = stringTerms.format;
-            long subsetSize = stringTerms.getSubsetSize();
+/*
             long supersetSize = stringTerms.getSupersetSize();
-            List<SignificantStringTerms.Bucket> buckets = stringTerms.getBuckets();
-            SignificanceHeuristic significanceHeuristic = stringTerms.significanceHeuristic;
-            Map<String, Object> metadata = stringTerms.getMetadata();
-            switch (between(0, 5)) {
-                case 0:
-                    name += randomAlphaOfLength(5);
-                    break;
-                case 1:
-                    requiredSize += between(1, 100);
-                    break;
-                case 2:
-                    minDocCount += between(1, 100);
-                    break;
-                case 3:
-                    subsetSize += between(1, 100);
-                    break;
-                case 4:
-                    supersetSize += between(1, 100);
-                    break;
-                case 5:
-                    buckets = new ArrayList<>(buckets);
-                    buckets.add(
-                        new SignificantStringTerms.Bucket(
-                            new BytesRef(randomAlphaOfLengthBetween(1, 10)),
-                            randomNonNegativeLong(),
-                            randomNonNegativeLong(),
-                            randomNonNegativeLong(),
-                            randomNonNegativeLong(),
-                            InternalAggregations.EMPTY,
-                            format,
-                            0
-                        )
-                    );
-                    break;
-                case 8:
-                    if (metadata == null) {
-                        metadata = new HashMap<>(1);
-                    } else {
-                        metadata = new HashMap<>(instance.getMetadata());
-                    }
-                    metadata.put(randomAlphaOfLength(15), randomInt());
-                    break;
-                default:
-                    throw new AssertionError("Illegal randomisation branch");
-            }
             return new SignificantStringTerms(
-                name,
-                metadata,
-                format,
-                subsetSize,
-                supersetSize,
-                significanceHeuristic,
-                buckets,
-                new TermsAggregator.BucketCountThresholds(minDocCount, 0, requiredSize, 0)
-            );
+ *
+    @Override
+                    break;
+                    if (metadata == null) {
         } else {
-            String name = instance.getName();
-            int requiredSize = instance.requiredSize;
-            long minDocCount = instance.minDocCount;
-            Map<String, Object> metadata = instance.getMetadata();
-            switch (between(0, 3)) {
-                case 0:
-                    name += randomAlphaOfLength(5);
-                    break;
-                case 1:
-                    requiredSize += between(1, 100);
-                    break;
-                case 2:
-                    minDocCount += between(1, 100);
+            bucket.updateScore(significanceHeuristic);
+import java.util.ArrayList;
+                        metadata = new HashMap<>(instance.getMetadata());
+                subsetSize,
                     break;
                 case 3:
-                    if (metadata == null) {
-                        metadata = new HashMap<>(1);
-                    } else {
-                        metadata = new HashMap<>(instance.getMetadata());
-                    }
+ * specific language governing permissions and limitations
+ * GitHub history for details.
+ * ownership. Elasticsearch licenses this file to you under
+                buckets,
+            Map<String, Object> metadata = instance.getMetadata();
+/*
+                            randomNonNegativeLong(),
+            BytesRef term = randomValueOtherThanMany(b -> terms.add(b) == false, () -> new BytesRef(randomAlphaOfLength(10)));
+            supersetSize,
+            buckets.add(bucket);
+ * Unless required by applicable law or agreed to in writing,
+                    subsetSize += between(1, 100);
+                    buckets = new ArrayList<>(buckets);
                     metadata.put(randomAlphaOfLength(15), randomInt());
+            format,
+                    name += randomAlphaOfLength(5);
+            }
+                    throw new AssertionError("Illegal randomisation branch");
+                            format,
+                case 8:
+                            randomNonNegativeLong(),
+            subsetSize,
+                new TermsAggregator.BucketCountThresholds(minDocCount, 0, requiredSize, 0)
+                case 2:
+import org.opensearch.search.aggregations.InternalAggregations;
+ */
+                subsetDfs[i],
+ */
+ */
+ * under the License.
+                    break;
+                    name += randomAlphaOfLength(5);
+                case 2:
+package org.opensearch.search.aggregations.bucket.terms;
+            switch (between(0, 3)) {
+ * not use this file except in compliance with the License.
+        String name,
+import java.util.Map;
+                supersetSize,
+                    buckets.add(
+                            randomNonNegativeLong(),
+ * The OpenSearch Contributors require contributions made to
+        int numBuckets,
+ * compatible open source license.
+                    } else {
+    protected Class<? extends ParsedMultiBucketAggregation> implementationClass() {
+import java.util.Set;
+ * KIND, either express or implied.  See the License for the
+        SignificanceHeuristic significanceHeuristic
                     break;
                 default:
-                    throw new AssertionError("Illegal randomisation branch");
-            }
+        Set<BytesRef> terms = new HashSet<>();
+        List<SignificantStringTerms.Bucket> buckets = new ArrayList<>(numBuckets);
             return new UnmappedSignificantTerms(name, new TermsAggregator.BucketCountThresholds(minDocCount, 0, requiredSize, 0), metadata);
-        }
-    }
+ * Modifications Copyright OpenSearch Contributors. See
+            Map<String, Object> metadata = stringTerms.getMetadata();
+            SignificantStringTerms stringTerms = (SignificantStringTerms) instance;
+                case 4:
 }
+            SignificanceHeuristic significanceHeuristic = stringTerms.significanceHeuristic;
+import org.opensearch.search.DocValueFormat;
+                case 0:
+            }
+                    supersetSize += between(1, 100);
+                            randomNonNegativeLong(),
+                    if (metadata == null) {
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        for (int i = 0; i < numBuckets; ++i) {
+ * this work for additional information regarding copyright
+                    metadata.put(randomAlphaOfLength(15), randomInt());
+/*
+            List<SignificantStringTerms.Bucket> buckets = stringTerms.getBuckets();
+            );
+ * You may obtain a copy of the License at
+            int requiredSize = stringTerms.requiredSize;
+                significanceHeuristic,
+                format,
+                    minDocCount += between(1, 100);
+                            0
+            );
+import org.apache.lucene.util.BytesRef;
+        int requiredSize,
+                        metadata = new HashMap<>(1);
+                    }
+                name,
+                        metadata = new HashMap<>(instance.getMetadata());
+    @Override
+            metadata,
+                supersetSize,
+                case 1:
+        InternalAggregations aggs,
+        DocValueFormat format = DocValueFormat.RAW;
+    @Override
+                    } else {
+        Map<String, Object> metadata,
+                term,
+        int[] subsetDfs,
+                    break;
+import org.opensearch.search.aggregations.bucket.terms.heuristic.SignificanceHeuristic;
+                    break;
+            String name = stringTerms.getName();
+                format,
+ * the Apache License, Version 2.0 (the "License"); you may
+                    break;
+                    minDocCount += between(1, 100);
+                subsetSize,
+                    requiredSize += between(1, 100);
+                case 0:
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import java.util.List;
+            long subsetSize = stringTerms.getSubsetSize();
+                    break;
+            new TermsAggregator.BucketCountThresholds(1L, 0, requiredSize, 0)
+                case 5:
+        if (instance instanceof SignificantStringTerms) {
+                    );
+                case 3:
+                    requiredSize += between(1, 100);
+            int requiredSize = instance.requiredSize;
+                        )
+    }
+    protected InternalSignificantTerms createTestInstance(
+ * license agreements. See the NOTICE file distributed with
+            long minDocCount = instance.minDocCount;
+            switch (between(0, 5)) {
+            String name = instance.getName();
+ *
+            significanceHeuristic,
+        return ParsedSignificantStringTerms.class;
+            long minDocCount = stringTerms.minDocCount;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
+        long supersetSize,
+public class SignificantStringTermsTests extends InternalSignificantTermsTestCase {
+                        metadata = new HashMap<>(1);
+        }
+import org.opensearch.search.aggregations.ParsedMultiBucketAggregation;
+    }
+        int[] supersetDfs,
+ * Licensed to Elasticsearch under one or more contributor
+                0
+                            new BytesRef(randomAlphaOfLengthBetween(1, 10)),
+        return new SignificantStringTerms(
+ * SPDX-License-Identifier: Apache-2.0
+    protected InternalSignificantTerms<?, ?> mutateInstance(InternalSignificantTerms<?, ?> instance) {
+                    break;
+ *
+                metadata,
+                    throw new AssertionError("Illegal randomisation branch");
+                default:
+import java.util.HashSet;
+                    }
+                            InternalAggregations.EMPTY,
+            DocValueFormat format = stringTerms.format;
+                    break;
+                case 1:
+                    break;
+                supersetDfs[i],
+import java.util.HashMap;
+            name,
+        );
+            SignificantStringTerms.Bucket bucket = new SignificantStringTerms.Bucket(
+    ) {
+ * software distributed under the License is distributed on an
+            buckets,
+                aggs,
+                        new SignificantStringTerms.Bucket(

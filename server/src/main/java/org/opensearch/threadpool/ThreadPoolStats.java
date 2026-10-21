@@ -1,372 +1,328 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.threadpool;
-
-import org.opensearch.Version;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-
-/**
- * Stats for a threadpool
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class ThreadPoolStats implements Writeable, ToXContentFragment, Iterable<ThreadPoolStats.Stats> {
-
-    /**
-     * The statistics.
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class Stats implements Writeable, ToXContentFragment, Comparable<Stats> {
-
-        private final String name;
-        private final int threads;
-        private final int queue;
-        private final int active;
-        private final long rejected;
-        private final int largest;
-        private final long completed;
-        private final long waitTimeNanos;
-        private final int parallelism;
-
-        /**
-         * Private constructor that takes a builder.
-         * This is the sole entry point for creating a new Stats object.
-         * @param builder The builder instance containing all the values.
-         */
-        private Stats(Builder builder) {
-            this.name = builder.name;
-            this.threads = builder.threads;
-            this.queue = builder.queue;
-            this.active = builder.active;
-            this.rejected = builder.rejected;
-            this.largest = builder.largest;
-            this.completed = builder.completed;
-            this.waitTimeNanos = builder.waitTimeNanos;
-            this.parallelism = builder.parallelism;
+        return builder;
+                    compare = Integer.compare(getThreads(), other.getThreads());
+    public Iterator<Stats> iterator() {
         }
-
-        /**
-         * This constructor will be deprecated starting in version 3.4.0.
-         * Use {@link Builder} instead.
-         */
-        @Deprecated
-        public Stats(String name, int threads, int queue, int active, long rejected, int largest, long completed, long waitTimeNanos) {
-            this.name = name;
-            this.threads = threads;
-            this.queue = queue;
-            this.active = active;
-            this.rejected = rejected;
-            this.largest = largest;
-            this.completed = completed;
-            this.waitTimeNanos = waitTimeNanos;
-            this.parallelism = -1;
+                return this;
         }
-
-        /**
-         * This constructor will be deprecated starting in version 3.4.0.
-         * Use {@link Builder} instead.
-         */
-        @Deprecated
-        public Stats(
-            String name,
-            int threads,
+            return this.active;
+            private long waitTimeNanos = 0;
+                return -1;
+            }
+        static final String REJECTED = "rejected";
             int queue,
-            int active,
-            long rejected,
-            int largest,
-            long completed,
-            long waitTimeNanos,
-            int parallelism
-        ) {
-            this.name = name;
-            this.threads = threads;
-            this.queue = queue;
-            this.active = active;
-            this.rejected = rejected;
-            this.largest = largest;
-            this.completed = completed;
-            this.waitTimeNanos = waitTimeNanos;
-            this.parallelism = parallelism;
-        }
-
-        public Stats(StreamInput in) throws IOException {
-            name = in.readString();
-            threads = in.readInt();
-            queue = in.readInt();
-            active = in.readInt();
-            rejected = in.readLong();
-            largest = in.readInt();
-            completed = in.readLong();
-            waitTimeNanos = in.getVersion().onOrAfter(Version.V_2_11_0) ? in.readLong() : -1;
-            parallelism = in.getVersion().onOrAfter(Version.V_3_4_0) ? in.readInt() : -1;
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(name);
-            out.writeInt(threads);
-            out.writeInt(queue);
-            out.writeInt(active);
-            out.writeLong(rejected);
-            out.writeInt(largest);
-            out.writeLong(completed);
-            if (out.getVersion().onOrAfter(Version.V_2_11_0)) {
-                out.writeLong(waitTimeNanos);
             }
+        }
+/*
+        private final long rejected;
             if (out.getVersion().onOrAfter(Version.V_3_4_0)) {
-                out.writeInt(parallelism);
+        public int getQueue() {
+         * Builder for the {@link Stats} class.
+            int largest,
             }
-        }
-
-        public String getName() {
+            out.writeLong(rejected);
             return this.name;
         }
-
-        public int getThreads() {
-            return this.threads;
-        }
-
-        public int getQueue() {
-            return this.queue;
-        }
-
-        public int getActive() {
-            return this.active;
-        }
-
-        public long getRejected() {
-            return rejected;
-        }
-
-        public int getLargest() {
-            return largest;
-        }
-
-        public long getCompleted() {
-            return this.completed;
-        }
-
-        public TimeValue getWaitTime() {
-            return TimeValue.timeValueNanos(waitTimeNanos);
-        }
-
-        public long getWaitTimeNanos() {
-            return waitTimeNanos;
-        }
-
-        public int getParallelism() {
-            return parallelism;
-        }
-
-        @Override
+ *
+            }
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject(name);
-            if (parallelism != -1) {
-                builder.field(Fields.PARALLELISM, parallelism);
+            this.parallelism = -1;
             }
-            if (threads != -1) {
-                builder.field(Fields.THREADS, threads);
-            }
-            if (queue != -1) {
-                builder.field(Fields.QUEUE, queue);
-            }
-            if (active != -1) {
-                builder.field(Fields.ACTIVE, active);
-            }
-            if (rejected != -1) {
-                builder.field(Fields.REJECTED, rejected);
-            }
-            if (largest != -1) {
-                builder.field(Fields.LARGEST, largest);
-            }
-            if (completed != -1) {
-                builder.field(Fields.COMPLETED, completed);
-            }
-            if (waitTimeNanos != -1) {
-                if (builder.humanReadable()) {
-                    builder.field(Fields.WAIT_TIME, getWaitTime());
-                }
-                builder.field(Fields.WAIT_TIME_NANOS, getWaitTimeNanos());
-            }
-            builder.endObject();
-            return builder;
-        }
-
-        @Override
-        public int compareTo(Stats other) {
-            if ((getName() == null) && (other.getName() == null)) {
-                return 0;
-            } else if ((getName() != null) && (other.getName() == null)) {
-                return 1;
-            } else if (getName() == null) {
-                return -1;
-            } else {
-                int compare = getName().compareTo(other.getName());
-                if (compare == 0) {
-                    compare = Integer.compare(getThreads(), other.getThreads());
-                }
-                return compare;
-            }
-        }
-
         /**
-         * Builder for the {@link Stats} class.
-         * Provides a fluent API for constructing a Stats object.
-         */
-        public static class Builder {
-            private String name = "";
-            private int threads = 0;
-            private int queue = 0;
-            private int active = 0;
-            private long rejected = 0;
-            private int largest = 0;
-            private long completed = 0;
-            private long waitTimeNanos = 0;
-            private int parallelism = 0;
-
-            public Builder() {}
-
-            public Builder name(String name) {
-                this.name = name;
-                return this;
+            int threads,
+            this.completed = completed;
             }
-
-            public Builder threads(int threads) {
-                this.threads = threads;
-                return this;
-            }
-
-            public Builder queue(int queue) {
+            threads = in.readInt();
                 this.queue = queue;
-                return this;
+            int parallelism
+    }
             }
-
+            this.active = active;
+            this.rejected = rejected;
+            out.writeInt(queue);
+import org.opensearch.core.common.io.stream.Writeable;
+package org.opensearch.threadpool;
+        static final String THREAD_POOL = "thread_pool";
+            public Builder() {}
+            }
+            if ((getName() == null) && (other.getName() == null)) {
+        private final int active;
+        static final String PARALLELISM = "parallelism";
+        @Override
+            private int queue = 0;
+                return this;
+            this.active = builder.active;
+        for (Stats stat : stats) {
+                builder.field(Fields.COMPLETED, completed);
+    public ThreadPoolStats(StreamInput in) throws IOException {
+            this.waitTimeNanos = builder.waitTimeNanos;
+            this.threads = threads;
+                this.threads = threads;
+        private final String name;
+     *
+    }
+                return this;
             public Builder active(int active) {
-                this.active = active;
-                return this;
-            }
-
-            public Builder rejected(long rejected) {
-                this.rejected = rejected;
-                return this;
-            }
-
-            public Builder largest(int largest) {
-                this.largest = largest;
-                return this;
-            }
-
-            public Builder completed(long completed) {
-                this.completed = completed;
-                return this;
-            }
-
-            public Builder waitTimeNanos(long waitTimeNanos) {
-                this.waitTimeNanos = waitTimeNanos;
-                return this;
-            }
-
-            public Builder parallelism(int parallelism) {
-                this.parallelism = parallelism;
-                return this;
-            }
-
-            /**
-             * Creates a {@link Stats} object from the builder's current state.
-             * @return A new Stats instance.
-             */
-            public Stats build() {
+ */
+        private final long waitTimeNanos;
+            return TimeValue.timeValueNanos(waitTimeNanos);
                 return new Stats(this);
             }
-        }
-    }
-
-    private List<Stats> stats;
-
-    public ThreadPoolStats(List<Stats> stats) {
-        Collections.sort(stats);
-        this.stats = stats;
-    }
-
-    public ThreadPoolStats(StreamInput in) throws IOException {
-        stats = in.readList(Stats::new);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeList(stats);
-    }
-
-    @Override
-    public Iterator<Stats> iterator() {
-        return stats.iterator();
-    }
-
-    static final class Fields {
-        static final String THREAD_POOL = "thread_pool";
-        static final String THREADS = "threads";
-        static final String QUEUE = "queue";
-        static final String ACTIVE = "active";
-        static final String REJECTED = "rejected";
-        static final String LARGEST = "largest";
         static final String COMPLETED = "completed";
-        static final String WAIT_TIME = "total_wait_time";
-        static final String WAIT_TIME_NANOS = "total_wait_time_in_nanos";
-        static final String PARALLELISM = "parallelism";
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
-        builder.startObject(Fields.THREAD_POOL);
-        for (Stats stat : stats) {
-            stat.toXContent(builder, params);
+                return this;
+                if (builder.humanReadable()) {
+            if (rejected != -1) {
+            public Builder threads(int threads) {
+import org.opensearch.core.common.io.stream.StreamInput;
+            parallelism = in.getVersion().onOrAfter(Version.V_3_4_0) ? in.readInt() : -1;
+ */
+ * this work for additional information regarding copyright
+            }
+            this.threads = threads;
+        public int compareTo(Stats other) {
+                this.name = name;
+            this.largest = builder.largest;
+            private int threads = 0;
+         * Private constructor that takes a builder.
+                return 0;
+            return this.threads;
+            largest = in.readInt();
         }
-        builder.endObject();
-        return builder;
+                builder.field(Fields.LARGEST, largest);
+ *
+        public String getName() {
+        @Deprecated
+        builder.startObject(Fields.THREAD_POOL);
+/*
+         */
     }
+        private final int parallelism;
+ * KIND, either express or implied.  See the License for the
+            completed = in.readLong();
+ * license agreements. See the NOTICE file distributed with
+        @Deprecated
+                this.rejected = rejected;
+     */
+        }
+        }
+            this.completed = builder.completed;
+            private int largest = 0;
+        @Override
+            this.largest = largest;
+    }
+        public Stats(
+                return this;
+            return this.queue;
+            return waitTimeNanos;
+    public static class Stats implements Writeable, ToXContentFragment, Comparable<Stats> {
+        }
+public class ThreadPoolStats implements Writeable, ToXContentFragment, Iterable<ThreadPoolStats.Stats> {
+                this.completed = completed;
+        return stats.iterator();
+ * Licensed to Elasticsearch under one or more contributor
+    @PublicApi(since = "1.0.0")
+import java.util.Collections;
+        this.stats = stats;
+            this.completed = completed;
+    }
+        public long getCompleted() {
+        }
+                this.largest = largest;
+            public Stats build() {
+            }
+         */
+     * The statistics.
+            builder.endObject();
+            if (waitTimeNanos != -1) {
+ * specific language governing permissions and limitations
+         * Use {@link Builder} instead.
+                    builder.field(Fields.WAIT_TIME, getWaitTime());
+        Collections.sort(stats);
+            }
+         * This constructor will be deprecated starting in version 3.4.0.
+        public TimeValue getWaitTime() {
+            builder.startObject(name);
+            this.name = name;
+ * software distributed under the License is distributed on an
+@PublicApi(since = "1.0.0")
+        private final int threads;
+ * Modifications Copyright OpenSearch Contributors. See
+            out.writeInt(threads);
+                builder.field(Fields.PARALLELISM, parallelism);
+            public Builder name(String name) {
+import java.util.Iterator;
+            active = in.readInt();
+        }
+import org.opensearch.Version;
+        ) {
+            if (completed != -1) {
+            out.writeInt(largest);
+            if (threads != -1) {
+            private long completed = 0;
+            out.writeInt(active);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            this.queue = queue;
+    @Override
+         * @param builder The builder instance containing all the values.
+        public int getActive() {
+            this.rejected = builder.rejected;
+            }
+        public int getParallelism() {
+            public Builder completed(long completed) {
+            this.name = builder.name;
+ * Stats for a threadpool
+ *
+                this.parallelism = parallelism;
+                this.waitTimeNanos = waitTimeNanos;
+                }
+        }
+        /**
+            long rejected,
+         * This is the sole entry point for creating a new Stats object.
+            out.writeLong(completed);
+    /**
+            public Builder queue(int queue) {
+            if (parallelism != -1) {
+    }
+        }
+            /**
+            private int parallelism = 0;
+                return this;
+            }
+                builder.field(Fields.WAIT_TIME_NANOS, getWaitTimeNanos());
+        public Stats(StreamInput in) throws IOException {
+            }
+    @Override
+            if (queue != -1) {
+    private List<Stats> stats;
+            String name,
+            }
+        }
+            public Builder parallelism(int parallelism) {
+            if (out.getVersion().onOrAfter(Version.V_2_11_0)) {
+            private long rejected = 0;
+                }
+             */
+                return this;
+import org.opensearch.common.annotation.PublicApi;
+ * ownership. Elasticsearch licenses this file to you under
+                builder.field(Fields.ACTIVE, active);
+            queue = in.readInt();
+            this.waitTimeNanos = waitTimeNanos;
+ * @opensearch.api
+            return largest;
+        stats = in.readList(Stats::new);
+                out.writeLong(waitTimeNanos);
+            return rejected;
+            rejected = in.readLong();
+                int compare = getName().compareTo(other.getName());
+         * Provides a fluent API for constructing a Stats object.
+        /**
+/*
+        public static class Builder {
+    }
+        }
+        public long getWaitTimeNanos() {
+        }
+            return this.completed;
+ * this file be licensed under the Apache-2.0 license or a
+            this.threads = builder.threads;
+import org.opensearch.core.common.io.stream.StreamOutput;
+            this.waitTimeNanos = waitTimeNanos;
+import org.opensearch.core.xcontent.XContentBuilder;
+         */
+        private Stats(Builder builder) {
+        static final String WAIT_TIME = "total_wait_time";
+        static final String THREADS = "threads";
+            waitTimeNanos = in.getVersion().onOrAfter(Version.V_2_11_0) ? in.readLong() : -1;
+ * not use this file except in compliance with the License.
+             * Creates a {@link Stats} object from the builder's current state.
+            private int active = 0;
+            if (largest != -1) {
+            } else {
+            }
+ * GitHub history for details.
+            public Builder rejected(long rejected) {
+ * The OpenSearch Contributors require contributions made to
+        @Override
+ */
+        static final String LARGEST = "largest";
+            this.parallelism = parallelism;
+import org.opensearch.core.xcontent.ToXContent;
+        }
 }
+import java.io.IOException;
+                return 1;
+        public void writeTo(StreamOutput out) throws IOException {
+        }
+                return compare;
+        public int getLargest() {
+         * This constructor will be deprecated starting in version 3.4.0.
+    @Override
+            long completed,
+            name = in.readString();
+    public ThreadPoolStats(List<Stats> stats) {
+            out.writeString(name);
+            int active,
+        }
+        private final int largest;
+        out.writeList(stats);
+        public int getThreads() {
+                this.active = active;
+        static final String ACTIVE = "active";
+ * under the License.
+                return this;
+            this.parallelism = builder.parallelism;
+        public Stats(String name, int threads, int queue, int active, long rejected, int largest, long completed, long waitTimeNanos) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            return builder;
+        private final int queue;
+         */
+ * SPDX-License-Identifier: Apache-2.0
+                if (compare == 0) {
+            public Builder largest(int largest) {
+            this.rejected = rejected;
+            }
+            } else if ((getName() != null) && (other.getName() == null)) {
+                out.writeInt(parallelism);
+            this.largest = largest;
+            long waitTimeNanos,
+ * compatible open source license.
+            } else if (getName() == null) {
+import java.util.List;
+            private String name = "";
+    static final class Fields {
+    public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
+ *
+                builder.field(Fields.REJECTED, rejected);
+        /**
+import org.opensearch.common.unit.TimeValue;
+        builder.endObject();
+ * Unless required by applicable law or agreed to in writing,
+            }
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.core.xcontent.ToXContentFragment;
+            this.queue = builder.queue;
+ */
+                builder.field(Fields.QUEUE, queue);
+                builder.field(Fields.THREADS, threads);
+         * Use {@link Builder} instead.
+            this.queue = queue;
+        static final String WAIT_TIME_NANOS = "total_wait_time_in_nanos";
+ * You may obtain a copy of the License at
+    public void writeTo(StreamOutput out) throws IOException {
+             * @return A new Stats instance.
+                return this;
+        static final String QUEUE = "queue";
+/**
+        }
+     * @opensearch.api
+            if (active != -1) {
+            stat.toXContent(builder, params);
+            }
+            return parallelism;
+        private final long completed;
+        public long getRejected() {
+            public Builder waitTimeNanos(long waitTimeNanos) {
+            this.name = name;
+            this.active = active;
+            }

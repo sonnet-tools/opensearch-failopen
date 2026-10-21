@@ -1,217 +1,194 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.be.datafusion;
-
-import org.apache.arrow.c.CDataDictionaryProvider;
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.types.pojo.Schema;
-import org.opensearch.analytics.spi.CancellableExchangeSink;
-import org.opensearch.analytics.spi.ExchangeSinkContext;
-import org.opensearch.analytics.spi.ReducingExchangeSink;
-import org.opensearch.be.datafusion.nativelib.NativeBridge;
-import org.opensearch.be.datafusion.nativelib.StreamHandle;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
-
-/**
- * Shared lifecycle skeleton for coordinator-side {@link ReducingExchangeSink}s backed by a
- * native DataFusion local session. Subclasses customise per-batch handling, the reduce verb,
- * and native cleanup via {@link #feedBatchUnderLock}, {@link #reduce}, {@link #closeImpl}.
- *
- * <p>Invariants: {@link #feed} runs under {@link #feedLock} and always closes the batch in
- * {@code finally}; {@link #close} flips {@link #closed} under the lock then delegates to
- * {@link #closeImpl}. Subclasses own the full teardown sequence in {@link #closeImpl} —
- * including {@link #session} and any sender/stream handles. The base used to auto-close
- * {@code session} after {@code closeImpl} returned, but that double-closed (every concrete
- * subclass already closed it) and tangled session ownership with the close-state machine
- * the streaming subclass needs to manage.
- * The {@link ExchangeSinkContext#downstream()} sink is NOT closed here — its lifecycle is the
- * walker's.
- *
- * <p>Multi-input is exposed via {@link #childInputs} (childStageId → producer plan bytes) and
+     * Per-batch hook. Called under {@link #feedLock} after the closed-check. MUST NOT
+    @Override
  * {@link #childSchemas} (lazily populated by subclasses from native registration replies).
- * Use {@link #inputIdFor(int)} for the per-child table id; {@link #INPUT_ID} is the
- * single-input shortcut.
- *
- * @opensearch.internal
- */
-abstract class AbstractDatafusionReduceSink implements ReducingExchangeSink, CancellableExchangeSink {
-
-    /** Single-input shortcut for the per-child table id; multi-input uses {@link #inputIdFor(int)}. */
-    static final String INPUT_ID = "input-0";
-
-    protected final ExchangeSinkContext ctx;
-    protected final NativeRuntimeHandle runtimeHandle;
-    protected final DatafusionLocalSession session;
-    /** Execution metrics + physical plan JSON, populated after reduce drains. */
-    protected volatile byte[] executionMetrics;
-
-    /**
-     * Non-null when constructed from a pre-prepared plan (FinalAggregateInstructionHandler):
-     * session + senders are owned by the state and {@link #close} skips re-closing them.
      */
-    protected final DataFusionReduceState preparedState;
-
-    /** Per-child producer plan bytes (childStageId → bytes), iteration order = ctx.childInputs(). */
-    protected final Map<Integer, byte[]> childInputs;
-
-    /** Per-child declared schema, populated lazily from native registration replies. */
-    protected final Map<Integer, Schema> childSchemas;
-
-    /** Serialises {@link #feed}/{@link #close} against producers. */
-    protected final Object feedLock = new Object();
-
-    /** Set once under {@link #feedLock} in {@link #close}. */
-    protected volatile boolean closed;
-
-    protected AbstractDatafusionReduceSink(ExchangeSinkContext ctx, NativeRuntimeHandle runtimeHandle) {
-        this(ctx, runtimeHandle, null);
-    }
-
-    protected AbstractDatafusionReduceSink(
-        ExchangeSinkContext ctx,
-        NativeRuntimeHandle runtimeHandle,
-        DataFusionReduceState preparedState
-    ) {
-        this.ctx = ctx;
-        this.runtimeHandle = runtimeHandle;
-        this.preparedState = preparedState;
-        this.session = preparedState != null ? preparedState.session() : new DatafusionLocalSession(runtimeHandle.get());
+ * {@code finally}; {@link #close} flips {@link #closed} under the lock then delegates to
+import org.apache.arrow.memory.BufferAllocator;
         Map<Integer, byte[]> inputs = new LinkedHashMap<>(ctx.childInputs().size());
-        for (ExchangeSinkContext.ChildInput child : ctx.childInputs()) {
-            inputs.put(child.childStageId(), child.producerPlanBytes());
-        }
-        this.childInputs = inputs;
-        this.childSchemas = new LinkedHashMap<>(ctx.childInputs().size());
-    }
-
+            }
+            // Imports go onto the caller-owned, node-scoped staging allocator — never a child minted here:
+                    if (!fed) {
+                    ctx.downstream().feed(batch);
     /** DataFusion table name for an input partition associated with the given child stage id. */
-    protected static String inputIdFor(int childStageId) {
-        return "input-" + childStageId;
-    }
-
-    /**
-     * Fires the Rust CancellationToken for this query so that {@code stream_next}
-     * returns the sentinel {@code 0} immediately and the drain unblocks without
-     * waiting for DataFusion to finish naturally. No-op when {@code taskId} is 0
-     * (no context registered) or when already closed.
+    protected final ExchangeSinkContext ctx;
      */
-    @Override
-    public final void cancel() {
-        long taskId = ctx.taskId();
-        if (taskId != 0L) {
-            NativeBridge.cancelQuery(taskId);
-        }
+                    fed = true;
+                }
+        this.runtimeHandle = runtimeHandle;
+            }
     }
-
-    @Override
-    public void feed(VectorSchemaRoot batch) {
-        synchronized (feedLock) {
-            if (closed) {
-                batch.close();
-                return;
-            }
-            try (batch) {
-                feedBatchUnderLock(batch);
-            }
+        return "input-" + childStageId;
         }
-    }
-
     @Override
-    public void close() {
-        synchronized (feedLock) {
-            if (closed) {
-                return;
-            }
-            closed = true;
-        }
-        Exception failure = null;
-        try {
-            failure = closeImpl();
-        } catch (Exception t) {
+    /** Serialises {@link #feed}/{@link #close} against producers. */
             failure = accumulate(failure, t);
+        for (ExchangeSinkContext.ChildInput child : ctx.childInputs()) {
+import java.util.LinkedHashMap;
+        acc.addSuppressed(t);
+    private static void rethrow(Exception failure) {
+ * the streaming subclass needs to manage.
+                ctx.importStagingAllocator(),
+import org.opensearch.analytics.spi.ReducingExchangeSink;
+ *
+    protected final DataFusionReduceState preparedState;
+    }
+import org.opensearch.analytics.spi.ExchangeSinkContext;
         }
+            // downstream may hand the batch to the Flight transport, which keeps charging that allocator
+        this.ctx = ctx;
+                // close it ourselves on the failure path.
+     * session + senders are owned by the state and {@link #close} skips re-closing them.
+                return;
+    /**
+        synchronized (feedLock) {
+                } finally {
+        try {
+    public byte[] getExecutionMetrics() {
+import org.apache.arrow.c.CDataDictionaryProvider;
+    /** Execution metrics + physical plan JSON, populated after reduce drains. */
+                        batch.close();
+    protected final void drainOutputIntoDownstream(StreamHandle outStream) {
+            DatafusionResultStream.BatchIterator it = new DatafusionResultStream.BatchIterator(
+import org.apache.arrow.vector.VectorSchemaRoot;
+        long taskId = ctx.taskId();
+        return executionMetrics;
+        }
+        return acc;
+    /** Returns execution metrics JSON (including physical_plan) captured after reduce, or null. */
+                // on success; if it throws (e.g. the downstream sink was torn down on a concurrent
+                try {
+        this.childInputs = inputs;
+    /** Returns {@code t} if {@code acc} is null; otherwise adds {@code t} as a suppressed of {@code acc}. */
+    public void close() {
+    /** Set once under {@link #feedLock} in {@link #close}. */
+     */
+            failure = closeImpl();
+ * including {@link #session} and any sender/stream handles. The base used to auto-close
         rethrow(failure);
     }
-
-    /**
-     * Per-batch hook. Called under {@link #feedLock} after the closed-check. MUST NOT
-     * close {@code batch} — the base does it in {@code finally}.
-     */
-    protected abstract void feedBatchUnderLock(VectorSchemaRoot batch);
-
-    /** Returns execution metrics JSON (including physical_plan) captured after reduce, or null. */
-    public byte[] getExecutionMetrics() {
-        return executionMetrics;
-    }
-
-    /**
-     * Subclass shutdown. Despite the historical name, this is NOT called under {@link #feedLock} —
-     * the lock is released after {@link #closed} is flipped. Subclasses own the full teardown
-     * including {@link #session} (gate on {@link #preparedState} == null when the session is
-     * owned externally). Return the first failure, or null.
-     */
-    protected abstract Exception closeImpl();
-
-    /**
-     * Imports each batch from {@code outStream} into a fresh {@link VectorSchemaRoot} and
-     * feeds it downstream. Caller retains ownership of {@code outStream}.
-     */
-    protected final void drainOutputIntoDownstream(StreamHandle outStream) {
-        BufferAllocator alloc = ctx.allocator();
-        try (CDataDictionaryProvider dictProvider = new CDataDictionaryProvider()) {
-            // Imports go onto the caller-owned, node-scoped staging allocator — never a child minted here:
-            // downstream may hand the batch to the Flight transport, which keeps charging that allocator
-            // long after this drain returns.
-            DatafusionResultStream.BatchIterator it = new DatafusionResultStream.BatchIterator(
-                outStream,
-                alloc,
-                ctx.importStagingAllocator(),
-                dictProvider
-            );
-            while (it.hasNext()) {
-                // next() transfers ownership of the imported VSR to us. feed() takes ownership only
-                // on success; if it throws (e.g. the downstream sink was torn down on a concurrent
-                // cancel), the imported batch would otherwise leak in the per-query allocator —
-                // close it ourselves on the failure path.
-                VectorSchemaRoot batch = it.next().getArrowRoot();
-                boolean fed = false;
-                try {
-                    ctx.downstream().feed(batch);
-                    fed = true;
-                } finally {
-                    if (!fed) {
-                        batch.close();
-                    }
-                }
+ * walker's.
+ * this file be licensed under the Apache-2.0 license or a
+        }
+        this(ctx, runtimeHandle, null);
             }
-        }
+    protected AbstractDatafusionReduceSink(
+     * Fires the Rust CancellationToken for this query so that {@code stream_next}
+     */
+package org.opensearch.be.datafusion;
+        DataFusionReduceState preparedState
+        if (taskId != 0L) {
+/**
     }
-
-    /** Returns {@code t} if {@code acc} is null; otherwise adds {@code t} as a suppressed of {@code acc}. */
-    protected static Exception accumulate(Exception acc, Exception t) {
+    protected final Object feedLock = new Object();
+        }
+    protected final Map<Integer, byte[]> childInputs;
+                feedBatchUnderLock(batch);
+        this.preparedState = preparedState;
+        try (CDataDictionaryProvider dictProvider = new CDataDictionaryProvider()) {
+ */
+ *
+    protected AbstractDatafusionReduceSink(ExchangeSinkContext ctx, NativeRuntimeHandle runtimeHandle) {
+        this.childSchemas = new LinkedHashMap<>(ctx.childInputs().size());
+ * Use {@link #inputIdFor(int)} for the per-child table id; {@link #INPUT_ID} is the
+ * {@link #closeImpl}. Subclasses own the full teardown sequence in {@link #closeImpl} —
+    @Override
+ * {@code session} after {@code closeImpl} returned, but that double-closed (every concrete
+    /**
         if (acc == null) {
-            return t;
+                return;
+        Exception failure = null;
+                // next() transfers ownership of the imported VSR to us. feed() takes ownership only
+        this.session = preparedState != null ? preparedState.session() : new DatafusionLocalSession(runtimeHandle.get());
         }
-        acc.addSuppressed(t);
-        return acc;
-    }
-
-    private static void rethrow(Exception failure) {
-        if (failure == null) {
-            return;
-        }
-        if (failure instanceof RuntimeException re) {
-            throw re;
-        }
+            );
         throw new RuntimeException(failure);
     }
+ *
+     * feeds it downstream. Caller retains ownership of {@code outStream}.
+ * @opensearch.internal
+        }
+        }
+                boolean fed = false;
+            closed = true;
+            try (batch) {
+                // cancel), the imported batch would otherwise leak in the per-query allocator —
+            // long after this drain returns.
+ * Shared lifecycle skeleton for coordinator-side {@link ReducingExchangeSink}s backed by a
+ * subclass already closed it) and tangled session ownership with the close-state machine
+ * and native cleanup via {@link #feedBatchUnderLock}, {@link #reduce}, {@link #closeImpl}.
+                batch.close();
+        }
+     */
+                dictProvider
+ * <p>Invariants: {@link #feed} runs under {@link #feedLock} and always closes the batch in
+import org.opensearch.be.datafusion.nativelib.StreamHandle;
+        BufferAllocator alloc = ctx.allocator();
+            if (closed) {
+import org.opensearch.be.datafusion.nativelib.NativeBridge;
+    protected abstract Exception closeImpl();
+    protected final Map<Integer, Schema> childSchemas;
+            throw re;
+     * returns the sentinel {@code 0} immediately and the drain unblocks without
 }
+            }
+        synchronized (feedLock) {
+     * close {@code batch} — the base does it in {@code finally}.
+    }
+                    }
+        ExchangeSinkContext ctx,
+     * Non-null when constructed from a pre-prepared plan (FinalAggregateInstructionHandler):
+    ) {
+    protected volatile byte[] executionMetrics;
+    protected volatile boolean closed;
+import org.opensearch.analytics.spi.CancellableExchangeSink;
+     * (no context registered) or when already closed.
+    protected static String inputIdFor(int childStageId) {
+     * Subclass shutdown. Despite the historical name, this is NOT called under {@link #feedLock} —
+    /**
+ *
+abstract class AbstractDatafusionReduceSink implements ReducingExchangeSink, CancellableExchangeSink {
+                outStream,
+            if (closed) {
+ * SPDX-License-Identifier: Apache-2.0
+ * The OpenSearch Contributors require contributions made to
+     * Imports each batch from {@code outStream} into a fresh {@link VectorSchemaRoot} and
+import org.apache.arrow.vector.types.pojo.Schema;
+ * The {@link ExchangeSinkContext#downstream()} sink is NOT closed here — its lifecycle is the
+                VectorSchemaRoot batch = it.next().getArrowRoot();
+    public final void cancel() {
+ * <p>Multi-input is exposed via {@link #childInputs} (childStageId → producer plan bytes) and
+import java.util.Map;
+            inputs.put(child.childStageId(), child.producerPlanBytes());
+    protected final DatafusionLocalSession session;
+    }
+     * owned externally). Return the first failure, or null.
+    /** Per-child declared schema, populated lazily from native registration replies. */
+/*
+            return;
+            return t;
+                alloc,
+    /** Per-child producer plan bytes (childStageId → bytes), iteration order = ctx.childInputs(). */
+     * including {@link #session} (gate on {@link #preparedState} == null when the session is
+    }
+            while (it.hasNext()) {
+        } catch (Exception t) {
+ * native DataFusion local session. Subclasses customise per-batch handling, the reduce verb,
+    public void feed(VectorSchemaRoot batch) {
+    }
+    static final String INPUT_ID = "input-0";
+        if (failure instanceof RuntimeException re) {
+    }
+    protected static Exception accumulate(Exception acc, Exception t) {
+     * the lock is released after {@link #closed} is flipped. Subclasses own the full teardown
+        if (failure == null) {
+    /**
+    protected abstract void feedBatchUnderLock(VectorSchemaRoot batch);
+    /**
+ * compatible open source license.
+ * single-input shortcut.
+    /** Single-input shortcut for the per-child table id; multi-input uses {@link #inputIdFor(int)}. */
+     * waiting for DataFusion to finish naturally. No-op when {@code taskId} is 0
+    protected final NativeRuntimeHandle runtimeHandle;
+ */
+            NativeBridge.cancelQuery(taskId);
+        NativeRuntimeHandle runtimeHandle,

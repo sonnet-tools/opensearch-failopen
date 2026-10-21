@@ -1,232 +1,209 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.cluster.deployment;
-
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.cluster.AckedClusterStateUpdateTask;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ack.AckedRequest;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.routing.RerouteService;
-import org.opensearch.cluster.service.ClusterManagerTask;
-import org.opensearch.cluster.service.ClusterManagerTaskThrottler;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Priority;
-import org.opensearch.core.action.ActionListener;
-
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-
-import static org.opensearch.cluster.deployment.DeploymentState.DRAIN;
-import static org.opensearch.cluster.deployment.DeploymentState.FINISH;
-
-/**
- * Service that manages deployment lifecycle by writing DeploymentMetadata to cluster state.
- * Runs on the elected cluster manager node only.
- *
- * @opensearch.internal
- */
-public class DeploymentManagerService {
-
-    private final ClusterService clusterService;
-    private final RerouteService rerouteService;
-    private final ClusterManagerTaskThrottler.ThrottlingKey transitionDeploymentTaskKey;
-
-    public DeploymentManagerService(ClusterService clusterService, RerouteService rerouteService) {
-        this.clusterService = clusterService;
-        this.rerouteService = rerouteService;
-        this.transitionDeploymentTaskKey = clusterService.registerClusterManagerTask(ClusterManagerTask.TRANSITION_DEPLOYMENT, true);
-    }
-
-    /**
-     * @param deploymentId unique identifier for the given deployment
-     * @param nodeAttributes the set of attributes used to identify the nodes to be drained. All attributes must match
-     *                       for a node to be considered part of the deployment.
-     * @param request the original request sent to the cluster.
-     * @param listener listener for the cluster state update.
-     */
-    public void startDeployment(
-        String deploymentId,
-        Map<String, String> nodeAttributes,
-        AckedRequest request,
-        ActionListener<AcknowledgedResponse> listener
-    ) {
-        try {
-            validateDeploymentId(deploymentId);
-            validateAttributes(nodeAttributes);
-        } catch (IllegalArgumentException e) {
-            listener.onFailure(e);
-            return;
-        }
-
-        clusterService.submitStateUpdateTask("start-deployment-" + deploymentId, new AckedClusterStateUpdateTask<>(request, listener) {
-            @Override
-            public ClusterState execute(ClusterState currentState) {
-                return innerTransitionDeployment(deploymentId, nodeAttributes, currentState, DRAIN);
-            }
-
-            @Override
-            public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {
-                return transitionDeploymentTaskKey;
-            }
-
-            @Override
-            protected AcknowledgedResponse newResponse(boolean acknowledged) {
-                return new AcknowledgedResponse(acknowledged);
-            }
-
-            @Override
-            public void onAllNodesAcked(Exception e) {
-                super.onAllNodesAcked(e);
-                rerouteService.reroute("deployment drain started", Priority.HIGH, ActionListener.wrap(() -> {}));
-            }
-        });
-    }
-
-    public void finishDeployment(String deploymentId, AckedRequest request, ActionListener<AcknowledgedResponse> listener) {
-        clusterService.submitStateUpdateTask("finish-deployment-" + deploymentId, new AckedClusterStateUpdateTask<>(request, listener) {
-            @Override
-            public ClusterState execute(ClusterState currentState) {
-                return innerTransitionDeployment(deploymentId, currentState, FINISH);
-            }
-
-            @Override
-            public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {
-                return transitionDeploymentTaskKey;
-            }
-
-            @Override
-            protected AcknowledgedResponse newResponse(boolean acknowledged) {
-                return new AcknowledgedResponse(acknowledged);
-            }
-
-            @Override
-            public void onAllNodesAcked(Exception e) {
-                super.onAllNodesAcked(e);
-            }
-        });
-    }
-
-    static ClusterState innerTransitionDeployment(String deploymentId, ClusterState currentState, DeploymentState targetState) {
-        return innerTransitionDeployment(deploymentId, Collections.emptyMap(), currentState, targetState);
-    }
-
-    static ClusterState innerTransitionDeployment(
-        String deploymentId,
-        Map<String, String> nodeAttributes,
-        ClusterState currentState,
-        DeploymentState targetState
-    ) {
-        DeploymentMetadata currentMetadata = currentState.metadata().custom(DeploymentMetadata.TYPE);
-        Map<String, Deployment> deployments = currentMetadata == null ? new HashMap<>() : new HashMap<>(currentMetadata.getDeployments());
-
-        switch (targetState) {
+                throw new IllegalArgumentException("attribute value [" + value + "] must not contain '*'");
+                Deployment existingDeploymentWithSameId = entry.getValue();
+                throw new IllegalArgumentException("deployment ID must not contain whitespace");
             case DRAIN -> {
-                validateConsistentKeys(deployments, nodeAttributes);
-                validateNoOverlappingValues(deployments, deploymentId, nodeAttributes);
-                deployments.put(deploymentId, new Deployment(DeploymentState.DRAIN, nodeAttributes));
+        });
             }
-            case FINISH -> {
-                if (deployments.containsKey(deploymentId)) {
-                    deployments.remove(deploymentId);
-                } else {
-                    return currentState;
+            listener.onFailure(e);
+                rerouteService.reroute("deployment drain started", Priority.HIGH, ActionListener.wrap(() -> {}));
+     *                       for a node to be considered part of the deployment.
+        if (deploymentId == null || deploymentId.isEmpty()) {
+            }
+        String deploymentId,
+     * @param request the original request sent to the cluster.
+            }
+    }
+            }
+        ActionListener<AcknowledgedResponse> listener
+                    "deployment attribute keys " + newAttributes.keySet() + " must match existing deployment keys " + existingKeys
+            @Override
+ *
+        String newDeploymentId,
+            }
+            Set<String> existingKeys = existingDeployment.getNodeAttributes().keySet();
+    private final ClusterService clusterService;
+        for (Deployment existingDeployment : existingDeployments.values()) {
+                    );
                 }
-            }
+import org.opensearch.common.Priority;
+    private final ClusterManagerTaskThrottler.ThrottlingKey transitionDeploymentTaskKey;
+                return new AcknowledgedResponse(acknowledged);
+                        "deployment [" + entry.getKey() + "] is already in state " + existingDeploymentWithSameId.getState()
+            return;
+    }
         }
-        Metadata.Builder metadataBuilder = Metadata.builder(currentState.metadata());
-        if (deployments.isEmpty()) {
-            metadataBuilder.removeCustom(DeploymentMetadata.TYPE);
-        } else {
+        for (Map.Entry<String, Deployment> entry : existingDeployments.entrySet()) {
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+import java.util.Set;
+        }
+                return transitionDeploymentTaskKey;
+        Map<String, Deployment> existingDeployments,
+ * compatible open source license.
+                            + ", already targeted "
+import org.opensearch.cluster.routing.RerouteService;
+        if (attributes == null || attributes.isEmpty()) {
+                return transitionDeploymentTaskKey;
+        DeploymentMetadata currentMetadata = currentState.metadata().custom(DeploymentMetadata.TYPE);
+        return ClusterState.builder(currentState).metadata(metadataBuilder).build();
             metadataBuilder.putCustom(DeploymentMetadata.TYPE, new DeploymentMetadata(deployments));
         }
-        return ClusterState.builder(currentState).metadata(metadataBuilder).build();
-    }
-
-    private static void validateDeploymentId(String deploymentId) {
-        if (deploymentId == null || deploymentId.isEmpty()) {
-            throw new IllegalArgumentException("deployment ID must not be empty");
-        }
-        if (deploymentId.startsWith("_")) {
-            throw new IllegalArgumentException("deployment ID must not start with '_'");
-        }
-        for (int i = 0; i < deploymentId.length(); i++) {
-            if (Character.isWhitespace(deploymentId.charAt(i))) {
-                throw new IllegalArgumentException("deployment ID must not contain whitespace");
             }
-        }
-    }
-
-    private static void validateAttributes(Map<String, String> attributes) {
-        if (attributes == null || attributes.isEmpty()) {
+import org.opensearch.cluster.AckedClusterStateUpdateTask;
+        Metadata.Builder metadataBuilder = Metadata.builder(currentState.metadata());
+            @Override
             throw new IllegalArgumentException("attributes must not be empty");
-        }
-        for (Map.Entry<String, String> entry : attributes.entrySet()) {
-            String value = entry.getValue();
-            if (value == null || value.isEmpty()) {
-                throw new IllegalArgumentException("attribute value for key [" + entry.getKey() + "] must not be empty");
-            }
-            if (value.contains("*")) {
-                throw new IllegalArgumentException("attribute value [" + value + "] must not contain '*'");
-            }
-        }
+ */
+     * @param nodeAttributes the set of attributes used to identify the nodes to be drained. All attributes must match
     }
-
-    private static void validateConsistentKeys(Map<String, Deployment> existingDeployments, Map<String, String> newAttributes) {
+        }
+import org.opensearch.cluster.service.ClusterService;
+        } catch (IllegalArgumentException e) {
+                    throw new IllegalArgumentException(
+            protected AcknowledgedResponse newResponse(boolean acknowledged) {
+        ClusterState currentState,
+            }
+     * @param deploymentId unique identifier for the given deployment
+            case FINISH -> {
         if (existingDeployments.isEmpty()) {
-            return;
-        }
-        for (Deployment existingDeployment : existingDeployments.values()) {
-            Set<String> existingKeys = existingDeployment.getNodeAttributes().keySet();
-            if (!existingKeys.equals(newAttributes.keySet())) {
-                throw new IllegalArgumentException(
-                    "deployment attribute keys " + newAttributes.keySet() + " must match existing deployment keys " + existingKeys
-                );
-            }
-        }
+    public void startDeployment(
     }
-
-    private static void validateNoOverlappingValues(
-        Map<String, Deployment> existingDeployments,
-        String newDeploymentId,
-        Map<String, String> newAttributes
-    ) {
-        for (Map.Entry<String, Deployment> entry : existingDeployments.entrySet()) {
+        });
+     */
+            }
+    private static void validateAttributes(Map<String, String> attributes) {
             if (entry.getKey().equals(newDeploymentId)) {
-                // We allow idempotent application of start deployment.
-                Deployment existingDeploymentWithSameId = entry.getValue();
-                if (existingDeploymentWithSameId.getState() != DeploymentState.DRAIN) {
-                    throw new IllegalArgumentException(
-                        "deployment [" + entry.getKey() + "] is already in state " + existingDeploymentWithSameId.getState()
-                    );
-                }
-                if (existingDeploymentWithSameId.getNodeAttributes().equals(newAttributes) == false) {
-                    throw new IllegalArgumentException(
-                        "deployment ["
-                            + entry.getKey()
-                            + "] is not allowed to update targeting attributes to "
-                            + newAttributes
-                            + ", already targeted "
-                            + existingDeploymentWithSameId.getNodeAttributes()
-                    );
-                }
-            } else {
-                for (Map.Entry<String, String> nodeAttr : entry.getValue().getNodeAttributes().entrySet()) {
-                    if (nodeAttr.getValue().equals(newAttributes.get(nodeAttr.getKey()))) {
-                        throw new IllegalArgumentException(
-                            "deployment [" + entry.getKey() + "] already targets attribute " + nodeAttr.getKey() + "=" + nodeAttr.getValue()
-                        );
-                    }
-                }
-            }
+            public void onAllNodesAcked(Exception e) {
+                deployments.put(deploymentId, new Deployment(DeploymentState.DRAIN, nodeAttributes));
+            @Override
+            if (Character.isWhitespace(deploymentId.charAt(i))) {
         }
+                }
+        this.rerouteService = rerouteService;
+                throw new IllegalArgumentException("attribute value for key [" + entry.getKey() + "] must not be empty");
+        DeploymentState targetState
+                    );
+                            + newAttributes
+        for (int i = 0; i < deploymentId.length(); i++) {
+            public ClusterState execute(ClusterState currentState) {
+import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.service.ClusterManagerTaskThrottler;
+ * Runs on the elected cluster manager node only.
+            @Override
+        Map<String, String> newAttributes
+                    deployments.remove(deploymentId);
+        }
+        Map<String, String> nodeAttributes,
+                } else {
+        if (deployments.isEmpty()) {
+public class DeploymentManagerService {
+            }
+            public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {
+                if (existingDeploymentWithSameId.getState() != DeploymentState.DRAIN) {
+            public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {
+                return innerTransitionDeployment(deploymentId, currentState, FINISH);
+            public void onAllNodesAcked(Exception e) {
+            validateDeploymentId(deploymentId);
     }
+    public void finishDeployment(String deploymentId, AckedRequest request, ActionListener<AcknowledgedResponse> listener) {
+            validateAttributes(nodeAttributes);
+            }
+import static org.opensearch.cluster.deployment.DeploymentState.FINISH;
+                    throw new IllegalArgumentException(
+ * Service that manages deployment lifecycle by writing DeploymentMetadata to cluster state.
+    ) {
+    /**
+import static org.opensearch.cluster.deployment.DeploymentState.DRAIN;
+                    return currentState;
+                super.onAllNodesAcked(e);
+    }
+    private static void validateConsistentKeys(Map<String, Deployment> existingDeployments, Map<String, String> newAttributes) {
+                if (deployments.containsKey(deploymentId)) {
+import org.opensearch.cluster.ack.AckedRequest;
+                }
+    static ClusterState innerTransitionDeployment(String deploymentId, ClusterState currentState, DeploymentState targetState) {
+import org.opensearch.cluster.service.ClusterManagerTask;
+import java.util.HashMap;
+            @Override
+    private static void validateNoOverlappingValues(
+                for (Map.Entry<String, String> nodeAttr : entry.getValue().getNodeAttributes().entrySet()) {
+import java.util.Collections;
+    }
+        clusterService.submitStateUpdateTask("finish-deployment-" + deploymentId, new AckedClusterStateUpdateTask<>(request, listener) {
+/**
+            } else {
+            }
+            public ClusterState execute(ClusterState currentState) {
+            @Override
+            @Override
+        }
+    ) {
+                            + entry.getKey()
+        switch (targetState) {
+                        "deployment ["
+        this.transitionDeploymentTaskKey = clusterService.registerClusterManagerTask(ClusterManagerTask.TRANSITION_DEPLOYMENT, true);
+                            + existingDeploymentWithSameId.getNodeAttributes()
+    ) {
 }
+            @Override
+            }
+                super.onAllNodesAcked(e);
+                if (existingDeploymentWithSameId.getNodeAttributes().equals(newAttributes) == false) {
+        }
+ * The OpenSearch Contributors require contributions made to
+                throw new IllegalArgumentException(
+                return innerTransitionDeployment(deploymentId, nodeAttributes, currentState, DRAIN);
+        }
+            if (!existingKeys.equals(newAttributes.keySet())) {
+ * SPDX-License-Identifier: Apache-2.0
+                );
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.core.action.ActionListener;
+    public DeploymentManagerService(ClusterService clusterService, RerouteService rerouteService) {
+            throw new IllegalArgumentException("deployment ID must not be empty");
+            protected AcknowledgedResponse newResponse(boolean acknowledged) {
+ * @opensearch.internal
+        if (deploymentId.startsWith("_")) {
+        for (Map.Entry<String, String> entry : attributes.entrySet()) {
+            }
+    }
+        } else {
+        try {
+import java.util.Map;
+    private static void validateDeploymentId(String deploymentId) {
+                }
+    static ClusterState innerTransitionDeployment(
+        AckedRequest request,
+            if (value == null || value.isEmpty()) {
+/*
+            throw new IllegalArgumentException("deployment ID must not start with '_'");
+     * @param listener listener for the cluster state update.
+                    if (nodeAttr.getValue().equals(newAttributes.get(nodeAttr.getKey()))) {
+        clusterService.submitStateUpdateTask("start-deployment-" + deploymentId, new AckedClusterStateUpdateTask<>(request, listener) {
+            if (value.contains("*")) {
+                validateNoOverlappingValues(deployments, deploymentId, nodeAttributes);
+                        throw new IllegalArgumentException(
+                validateConsistentKeys(deployments, nodeAttributes);
+package org.opensearch.cluster.deployment;
+    }
+            }
+        this.clusterService = clusterService;
+            metadataBuilder.removeCustom(DeploymentMetadata.TYPE);
+import org.opensearch.cluster.ClusterState;
+            return;
+ *
+                // We allow idempotent application of start deployment.
+                        );
+                            "deployment [" + entry.getKey() + "] already targets attribute " + nodeAttr.getKey() + "=" + nodeAttr.getValue()
+                return new AcknowledgedResponse(acknowledged);
+        Map<String, String> nodeAttributes,
+                    }
+    private final RerouteService rerouteService;
+ */
+        }
+        String deploymentId,
+            }
+            String value = entry.getValue();
+                            + "] is not allowed to update targeting attributes to "
+        return innerTransitionDeployment(deploymentId, Collections.emptyMap(), currentState, targetState);
+        Map<String, Deployment> deployments = currentMetadata == null ? new HashMap<>() : new HashMap<>(currentMetadata.getDeployments());
+        }

@@ -1,341 +1,301 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.script;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.BulkScorer;
-import org.apache.lucene.search.Explanation;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Scorable;
-import org.apache.lucene.search.ScoreMode;
-import org.opensearch.Version;
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.index.fielddata.ScriptDocValues;
-import org.opensearch.index.query.functionscore.TermFrequencyFunctionFactory.TermFrequencyFunctionName;
-import org.opensearch.search.lookup.LeafSearchLookup;
-import org.opensearch.search.lookup.LeafTermFrequencyLookup;
-import org.opensearch.search.lookup.SearchLookup;
-import org.opensearch.search.lookup.SourceLookup;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.DoubleSupplier;
-import java.util.function.Function;
-
-/**
- * A script used for adjusting the score on a per document basis.
- *
- * @opensearch.internal
- */
-public abstract class ScoreScript {
-
-    /**
-     * A helper to take in an explanation from a script and turn it into an {@link org.apache.lucene.search.Explanation}
-     *
-     * @opensearch.internal
-     */
-    public static class ExplanationHolder {
-        private String description;
-
-        /**
-         * Explain the current score.
-         *
-         * @param description A textual description of how the score was calculated
-         */
-        public void set(String description) {
-            this.description = description;
-        }
-
-        public Explanation get(double score, Explanation subQueryExplanation) {
-            if (description == null) {
-                return null;
-            }
-            if (subQueryExplanation != null) {
                 return Explanation.match(score, description, subQueryExplanation);
-            }
-            return Explanation.match(score, description);
-        }
-    }
-
-    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(DynamicMap.class);
-    private static final Map<String, Function<Object, Object>> PARAMS_FUNCTIONS = Map.of("doc", value -> {
-        deprecationLogger.deprecate(
-            "score-script_doc",
-            "Accessing variable [doc] via [params.doc] from within an score-script " + "is deprecated in favor of directly accessing [doc]."
-        );
         return value;
-    }, "_doc", value -> {
-        deprecationLogger.deprecate(
-            "score-script__doc",
-            "Accessing variable [doc] via [params._doc] from within an score-script "
-                + "is deprecated in favor of directly accessing [doc]."
-        );
-        return value;
-    }, "_source", value -> ((SourceLookup) value).loadSourceIfNeeded());
-
-    public static final String[] PARAMETERS = new String[] { "explanation" };
-
-    /** The generic runtime parameters for the script. */
-    private final Map<String, Object> params;
-
-    /** A leaf lookup for the bound segment this script will operate on. */
-    private final LeafSearchLookup leafLookup;
-
-    /** A leaf term frequency lookup for the bound segment this script will operate on. */
-    private final LeafTermFrequencyLookup leafTermFrequencyLookup;
-
-    private DoubleSupplier scoreSupplier = () -> 0.0;
-
-    private final int docBase;
-    private int docId;
-    private int shardId = -1;
-    private String indexName = null;
-    private Version indexVersion = null;
-
-    public ScoreScript(Map<String, Object> params, SearchLookup lookup, IndexSearcher indexSearcher, LeafReaderContext leafContext) {
-        // null check needed b/c of expression engine subclass
-        if (lookup == null) {
-            assert params == null;
-            assert leafContext == null;
-            this.params = null;
-            this.leafLookup = null;
-            this.leafTermFrequencyLookup = null;
-            this.docBase = 0;
-        } else {
-            this.leafLookup = lookup.getLeafSearchLookup(leafContext);
-            this.leafTermFrequencyLookup = new LeafTermFrequencyLookup(indexSearcher, leafLookup);
-            params = new HashMap<>(params);
-            params.putAll(leafLookup.asMap());
-            this.params = new DynamicMap(params, PARAMS_FUNCTIONS);
-            this.docBase = leafContext.docBase;
-        }
-    }
-
-    public abstract double execute(ExplanationHolder explanation);
-
-    /** Return the parameters for this script. */
-    public Map<String, Object> getParams() {
-        return params;
-    }
-
-    /** The doc lookup for the Lucene segment this script was created for. */
-    public Map<String, ScriptDocValues<?>> getDoc() {
-        return leafLookup.doc();
-    }
-
-    public Object getTermFrequency(TermFrequencyFunctionName functionName, String field, String val) throws IOException {
-        return leafTermFrequencyLookup.getTermFrequency(functionName, field, val, docId);
-    }
-
-    /** Set the current document to run the script on next. */
-    public void setDocument(int docid) {
-        this.docId = docid;
-        leafLookup.setDocument(docid);
-    }
-
-    public void setScorer(Scorable scorer) {
-        this.scoreSupplier = () -> {
-            try {
-                return scorer.score();
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-        };
-    }
-
-    /**
-     * Accessed as _score in the painless script
-     * @return the score of the inner query
-     */
-    public double get_score() {
-        return scoreSupplier.getAsDouble();
-    }
-
-    /**
-     * Starting a name with underscore, so that the user cannot access this function directly through a script
-     * It is only used within predefined painless functions.
-     * @return the internal document ID
-     */
-    public int _getDocId() {
-        return docId;
-    }
-
-    /**
-     * Starting a name with underscore, so that the user cannot access this function directly through a script
-     * It is only used within predefined painless functions.
-     * @return the internal document ID with the base
-     */
-    public int _getDocBaseId() {
         return docBase + docId;
-    }
-
-    /**
-     *  Starting a name with underscore, so that the user cannot access this function directly through a script
-     *  It is only used within predefined painless functions.
-     * @return shard id or throws an exception if shard is not set up for this script instance
-     */
-    public int _getShardId() {
-        if (shardId > -1) {
-            return shardId;
-        } else {
-            throw new IllegalArgumentException("shard id can not be looked up!");
+    /** A leaf lookup for the bound segment this script will operate on. */
+ *
+            this.leafLookup = null;
         }
-    }
-
-    /**
-     *  Starting a name with underscore, so that the user cannot access this function directly through a script
-     *  It is only used within predefined painless functions.
-     * @return index name or throws an exception if the index name is not set up for this script instance
-     */
-    public String _getIndex() {
-        if (indexName != null) {
-            return indexName;
         } else {
+    }
+ * GitHub history for details.
+     */
+ * Licensed to Elasticsearch under one or more contributor
+     * delegate to the returned bulk scorer instead of scoring documents one at a time.
+ * this file be licensed under the Apache-2.0 license or a
+    public static final String[] PARAMETERS = new String[] { "explanation" };
+     * A factory to construct stateful {@link ScoreScript} factories for a specific index.
+        private String description;
+import java.util.function.DoubleSupplier;
+         * @param boost              the boost factor to apply to scores
+     *
+    }
+    /**
+ * A script used for adjusting the score on a per document basis.
+            return Explanation.match(score, description);
+         *       for this segment. The implementation takes ownership of {@code subQueryBulkScorer}
+    /**
+    /**
+        // null check needed b/c of expression engine subclass
+    }
+package org.opensearch.script;
+    /**
+    private static final Map<String, Function<Object, Object>> PARAMS_FUNCTIONS = Map.of("doc", value -> {
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        }
+        public void set(String description) {
+    }
+            return indexName;
+    public Map<String, ScriptDocValues<?>> getDoc() {
+    public static class ExplanationHolder {
+        deprecationLogger.deprecate(
+        if (shardId > -1) {
+    }
+    /**
+        this.shardId = shardId;
+ * not use this file except in compliance with the License.
+    /** Return the parameters for this script. */
+        this.indexName = indexName;
+        leafLookup.setDocument(docid);
+    public double get_score() {
+     */
+            "Accessing variable [doc] via [params.doc] from within an score-script " + "is deprecated in favor of directly accessing [doc]."
+            return shardId;
+ * Modifications Copyright OpenSearch Contributors. See
+            this.leafTermFrequencyLookup = null;
+import org.opensearch.Version;
+         * @param description A textual description of how the score was calculated
             throw new IllegalArgumentException("index name can not be looked up!");
         }
-    }
-
-    /**
-     *  Starting a name with underscore, so that the user cannot access this function directly through a script
-     *  It is only used within predefined painless functions.
-     * @return index version or throws an exception if the index version is not set up for this script instance
-     */
-    public Version _getIndexVersion() {
-        if (indexVersion != null) {
-            return indexVersion;
-        } else {
-            throw new IllegalArgumentException("index version can not be looked up!");
-        }
-    }
-
-    /**
-     *  Starting a name with underscore, so that the user cannot access this function directly through a script
-     */
-    public void _setShard(int shardId) {
-        this.shardId = shardId;
-    }
-
-    /**
-     *  Starting a name with underscore, so that the user cannot access this function directly through a script
-     */
-    public void _setIndexName(String indexName) {
-        this.indexName = indexName;
-    }
-
-    /**
-     *  Starting a name with underscore, so that the user cannot access this function directly through a script
-     */
-    public void _setIndexVersion(Version indexVersion) {
-        this.indexVersion = indexVersion;
-    }
-
-    /**
-     * A factory to construct {@link ScoreScript} instances.
-     *
-     * @opensearch.internal
-     */
-    public interface LeafFactory {
-
-        /**
-         * Return {@code true} if the script needs {@code _score} calculated, or {@code false} otherwise.
-         */
-        boolean needs_score();
-
-        ScoreScript newInstance(LeafReaderContext ctx) throws IOException;
-    }
-
-    /**
+         *
+ * under the License.
+    /** A leaf term frequency lookup for the bound segment this script will operate on. */
+ * license agreements. See the NOTICE file distributed with
      * Extension of {@link LeafFactory} that allows a script engine to provide a custom
-     * {@link BulkScorer} for batch scoring. When implemented, {@code ScriptScoreQuery} will
-     * delegate to the returned bulk scorer instead of scoring documents one at a time.
-     * This enables optimizations such as batched I/O prefetch and vectorized distance computation.
-     *
-     * <p><b>Score mode contract:</b> The returned {@link BulkScorer} fully replaces the default
-     * {@code ScriptScoreBulkScorer}. It is responsible for honoring all scoring semantics including
-     * score validation (non-negative, non-NaN) and applying the boost factor. The caller does not
-     * apply any additional score transformations on top of the returned scorer's output.
-     *
-     * <p><b>Explain contract:</b> The {@code explain()} path in {@code ScriptScoreQuery} always uses
-     * the per-document scoring path via {@link #newInstance(LeafReaderContext)}. Implementations must
-     * ensure that the per-doc scorer and the bulk scorer produce consistent scores for the same
-     * document, so that explain output accurately reflects actual query scores.
-     *
-     * @opensearch.internal
-     */
-    public interface BulkScoringLeafFactory extends LeafFactory {
-
-        /**
-         * Create a BulkScorer that scores documents in batches for improved I/O efficiency.
-         *
-         * <p><b>Contract:</b>
-         * <ul>
-         *   <li>{@code subQueryBulkScorer} is guaranteed non-null by the caller.</li>
-         *   <li>If this method returns {@code null}, the caller falls back to the default per-document
-         *       scoring path. The {@code subQueryBulkScorer} remains unconsumed and will be used by
-         *       the fallback scorer.</li>
-         *   <li>If this method returns a non-null {@link BulkScorer}, the caller uses it exclusively
-         *       for this segment. The implementation takes ownership of {@code subQueryBulkScorer}
-         *       and is responsible for driving or discarding it.</li>
-         *   <li>The returned scorer must produce valid scores: non-negative, non-NaN, with the
-         *       provided {@code boost} applied.</li>
-         * </ul>
-         *
-         * @param context            the leaf reader context for this segment
-         * @param subQueryBulkScorer the sub-query's BulkScorer that drives document iteration (never null)
-         * @param subQueryScoreMode  the score mode of the sub-query
-         * @param boost              the boost factor to apply to scores
-         * @return a BulkScorer, or null to fall back to default per-document scoring
-         * @throws IOException if an I/O error occurs
-         */
-        BulkScorer bulkScorer(
-            final LeafReaderContext context,
-            final BulkScorer subQueryBulkScorer,
-            final ScoreMode subQueryScoreMode,
+     *  Starting a name with underscore, so that the user cannot access this function directly through a script
             float boost
-        ) throws IOException;
+            if (description == null) {
     }
-
-    /**
-     * A factory to construct stateful {@link ScoreScript} factories for a specific index.
-     *
+        public Explanation get(double score, Explanation subQueryExplanation) {
+     * @return the internal document ID with the base
+            if (subQueryExplanation != null) {
+        return params;
+     *  Starting a name with underscore, so that the user cannot access this function directly through a script
+        }
+        }
+            params.putAll(leafLookup.asMap());
      * @opensearch.internal
-     */
-    public interface Factory extends ScriptFactory {
-
+ */
+            throw new IllegalArgumentException("shard id can not be looked up!");
+    private int shardId = -1;
         ScoreScript.LeafFactory newFactory(Map<String, Object> params, SearchLookup lookup, IndexSearcher indexSearcher);
-
+     */
+import org.apache.lucene.search.IndexSearcher;
+import java.util.function.Function;
+     * Starting a name with underscore, so that the user cannot access this function directly through a script
+    public Version _getIndexVersion() {
+         *   <li>{@code subQueryBulkScorer} is guaranteed non-null by the caller.</li>
+         */
+            params = new HashMap<>(params);
+     *  It is only used within predefined painless functions.
+    public void _setIndexName(String indexName) {
     }
-
-    public static final ScriptContext<ScoreScript.Factory> CONTEXT = new ScriptContext<>("score", ScoreScript.Factory.class);
+     */
+    /**
+ * specific language governing permissions and limitations
+ * this work for additional information regarding copyright
+     *  Starting a name with underscore, so that the user cannot access this function directly through a script
+        /**
+/**
+public abstract class ScoreScript {
+            this.description = description;
+     *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    }, "_source", value -> ((SourceLookup) value).loadSourceIfNeeded());
+    public Map<String, Object> getParams() {
+    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(DynamicMap.class);
+     * {@code ScriptScoreBulkScorer}. It is responsible for honoring all scoring semantics including
+/*
+     */
+    public int _getDocBaseId() {
+/*
+        return docId;
+    private final int docBase;
+import java.io.IOException;
+    /**
+         *       scoring path. The {@code subQueryBulkScorer} remains unconsumed and will be used by
+         * Return {@code true} if the script needs {@code _score} calculated, or {@code false} otherwise.
+     * A factory to construct {@link ScoreScript} instances.
+        this.scoreSupplier = () -> {
+            "score-script__doc",
+import org.apache.lucene.index.LeafReaderContext;
+            final ScoreMode subQueryScoreMode,
+        if (indexName != null) {
+     *
+ * KIND, either express or implied.  See the License for the
+ *
+     * A helper to take in an explanation from a script and turn it into an {@link org.apache.lucene.search.Explanation}
+        ) throws IOException;
+import org.opensearch.index.fielddata.ScriptDocValues;
 }
+ * You may obtain a copy of the License at
+import org.opensearch.search.lookup.SourceLookup;
+    }
+                throw new UncheckedIOException(e);
+            "score-script_doc",
+ */
+        }
+         *       provided {@code boost} applied.</li>
+         *
+    public interface LeafFactory {
+     *  Starting a name with underscore, so that the user cannot access this function directly through a script
+     * the per-document scoring path via {@link #newInstance(LeafReaderContext)}. Implementations must
+         *       the fallback scorer.</li>
+    /** Set the current document to run the script on next. */
+     * It is only used within predefined painless functions.
+    /**
+ */
+     *  Starting a name with underscore, so that the user cannot access this function directly through a script
+    /**
+        return value;
+         * Explain the current score.
+ * ownership. Elasticsearch licenses this file to you under
+    }
+    /**
+    public void _setShard(int shardId) {
+ */
+            final LeafReaderContext context,
+    public void _setIndexVersion(Version indexVersion) {
+        ScoreScript newInstance(LeafReaderContext ctx) throws IOException;
+import java.util.Map;
+     */
+    /**
+         */
+         * @param context            the leaf reader context for this segment
+     *  Starting a name with underscore, so that the user cannot access this function directly through a script
+                return null;
+ * @opensearch.internal
+    private final LeafSearchLookup leafLookup;
+    public interface BulkScoringLeafFactory extends LeafFactory {
+        this.docId = docid;
+     * ensure that the per-doc scorer and the bulk scorer produce consistent scores for the same
+        } else {
+         * Create a BulkScorer that scores documents in batches for improved I/O efficiency.
+     */
+            this.leafTermFrequencyLookup = new LeafTermFrequencyLookup(indexSearcher, leafLookup);
+     * @return the score of the inner query
+            final BulkScorer subQueryBulkScorer,
+     *
+            try {
+            }
+     * This enables optimizations such as batched I/O prefetch and vectorized distance computation.
+         * @return a BulkScorer, or null to fall back to default per-document scoring
+        return leafTermFrequencyLookup.getTermFrequency(functionName, field, val, docId);
+            this.docBase = 0;
+         *       and is responsible for driving or discarding it.</li>
+import org.apache.lucene.search.Explanation;
+         *   <li>If this method returns a non-null {@link BulkScorer}, the caller uses it exclusively
+import org.opensearch.search.lookup.LeafTermFrequencyLookup;
+            this.leafLookup = lookup.getLeafSearchLookup(leafContext);
+ * software distributed under the License is distributed on an
+    }
+    public void setDocument(int docid) {
+     * Accessed as _score in the painless script
+    public String _getIndex() {
+            this.params = new DynamicMap(params, PARAMS_FUNCTIONS);
+     * @return shard id or throws an exception if shard is not set up for this script instance
+        deprecationLogger.deprecate(
+import org.apache.lucene.search.Scorable;
+        /**
+        return leafLookup.doc();
+            }
+            }
+     * <p><b>Score mode contract:</b> The returned {@link BulkScorer} fully replaces the default
+    public int _getShardId() {
+            this.docBase = leafContext.docBase;
+import org.opensearch.search.lookup.SearchLookup;
+     * score validation (non-negative, non-NaN) and applying the boost factor. The caller does not
+     * @return index version or throws an exception if the index version is not set up for this script instance
+ *
+    }
+         * @param subQueryBulkScorer the sub-query's BulkScorer that drives document iteration (never null)
+    private String indexName = null;
+ * the Apache License, Version 2.0 (the "License"); you may
+     * <p><b>Explain contract:</b> The {@code explain()} path in {@code ScriptScoreQuery} always uses
+ * Unless required by applicable law or agreed to in writing,
+         * @param subQueryScoreMode  the score mode of the sub-query
+     * @opensearch.internal
+        this.indexVersion = indexVersion;
+     */
+         * </ul>
+        /**
+         * <ul>
+     * @return index name or throws an exception if the index name is not set up for this script instance
+        if (lookup == null) {
+     */
+    private final Map<String, Object> params;
+import org.opensearch.search.lookup.LeafSearchLookup;
+     * @return the internal document ID
+ * The OpenSearch Contributors require contributions made to
+         *   <li>The returned scorer must produce valid scores: non-negative, non-NaN, with the
+    public static final ScriptContext<ScoreScript.Factory> CONTEXT = new ScriptContext<>("score", ScoreScript.Factory.class);
+     * @opensearch.internal
+    }
+                + "is deprecated in favor of directly accessing [doc]."
+import org.apache.lucene.search.ScoreMode;
+    public int _getDocId() {
+    /** The doc lookup for the Lucene segment this script was created for. */
+    public void setScorer(Scorable scorer) {
+     */
+ *    http://www.apache.org/licenses/LICENSE-2.0
+         */
+         * <p><b>Contract:</b>
+     * apply any additional score transformations on top of the returned scorer's output.
+    public abstract double execute(ExplanationHolder explanation);
+    }
+    private Version indexVersion = null;
+     */
+    public Object getTermFrequency(TermFrequencyFunctionName functionName, String field, String val) throws IOException {
+    /**
+    private final LeafTermFrequencyLookup leafTermFrequencyLookup;
+        };
+            "Accessing variable [doc] via [params._doc] from within an score-script "
+    private int docId;
+         * @throws IOException if an I/O error occurs
+        } else {
+     * Starting a name with underscore, so that the user cannot access this function directly through a script
+     *  It is only used within predefined painless functions.
+ *
+     *
+    }, "_doc", value -> {
+import org.apache.lucene.search.BulkScorer;
+         *   <li>If this method returns {@code null}, the caller falls back to the default per-document
+    public ScoreScript(Map<String, Object> params, SearchLookup lookup, IndexSearcher indexSearcher, LeafReaderContext leafContext) {
+import java.util.HashMap;
+    private DoubleSupplier scoreSupplier = () -> 0.0;
+        BulkScorer bulkScorer(
+    }
+import org.opensearch.common.logging.DeprecationLogger;
+    }
+     * {@link BulkScorer} for batch scoring. When implemented, {@code ScriptScoreQuery} will
+import java.io.UncheckedIOException;
+            this.params = null;
+ * compatible open source license.
+                return scorer.score();
+     *
+    }
+     * It is only used within predefined painless functions.
+        );
+    /** The generic runtime parameters for the script. */
+         *
+     * @opensearch.internal
+            assert params == null;
+/*
+     * document, so that explain output accurately reflects actual query scores.
+        );
+            throw new IllegalArgumentException("index version can not be looked up!");
+            return indexVersion;
+            } catch (IOException e) {
+        return scoreSupplier.getAsDouble();
+import org.opensearch.index.query.functionscore.TermFrequencyFunctionFactory.TermFrequencyFunctionName;
+    }
+            assert leafContext == null;
+    public interface Factory extends ScriptFactory {
+        } else {
+        if (indexVersion != null) {
+     */
+        boolean needs_score();
+     */
+    /**
+    }
+     *  It is only used within predefined painless functions.

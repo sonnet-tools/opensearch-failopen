@@ -1,243 +1,205 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.xcontent;
-
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.xcontent.InstantiatingObjectParser;
-import org.opensearch.core.xcontent.ParserConstructor;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.Objects;
-
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-
-public class InstantiatingObjectParserTests extends OpenSearchTestCase {
-
-    public static class NoAnnotations {
-        final int a;
-        final String b;
-        final long c;
-
-        public NoAnnotations() {
-            this(1, "2", 3);
-        }
-
-        private NoAnnotations(int a) {
-            this(a, "2", 3);
-        }
-
-        public NoAnnotations(int a, String b) {
-            this(a, b, 3);
-        }
-
-        public NoAnnotations(int a, long c) {
-            this(a, "2", c);
-        }
-
-        public NoAnnotations(int a, String b, long c) {
-            this.a = a;
-            this.b = b;
-            this.c = c;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            NoAnnotations that = (NoAnnotations) o;
-            return a == that.a && c == that.c && Objects.equals(b, that.b);
-        }
-
-        @Override
+    public void testAnnotationWrongArgumentNumber() {
+        builder.declareString(constructorArg(), new ParseField("b"));
+    }
         public int hashCode() {
-            return Objects.hash(a, b, c);
-        }
-    }
-
-    public void testNoAnnotation() throws IOException {
-        InstantiatingObjectParser.Builder<NoAnnotations, Void> builder = InstantiatingObjectParser.builder("foo", NoAnnotations.class);
-        builder.declareInt(constructorArg(), new ParseField("a"));
-        builder.declareString(constructorArg(), new ParseField("b"));
-        builder.declareLong(constructorArg(), new ParseField("c"));
-        InstantiatingObjectParser<NoAnnotations, Void> parser = builder.build();
-        try (XContentParser contentParser = createParser(JsonXContent.jsonXContent, "{\"a\": 5, \"b\":\"6\", \"c\": 7 }")) {
-            assertThat(parser.parse(contentParser, null), equalTo(new NoAnnotations(5, "6", 7)));
-        }
-    }
-
-    public void testNoAnnotationWrongArgumentNumber() {
-        InstantiatingObjectParser.Builder<NoAnnotations, Void> builder = InstantiatingObjectParser.builder("foo", NoAnnotations.class);
-        builder.declareInt(constructorArg(), new ParseField("a"));
-        builder.declareString(constructorArg(), new ParseField("b"));
-        builder.declareLong(constructorArg(), new ParseField("c"));
-        builder.declareLong(constructorArg(), new ParseField("d"));
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, builder::build);
-        assertThat(e.getMessage(), containsString("No public constructors with 4 parameters exist in the class"));
-    }
-
-    public void testAmbiguousConstructor() {
-        InstantiatingObjectParser.Builder<NoAnnotations, Void> builder = InstantiatingObjectParser.builder("foo", NoAnnotations.class);
-        builder.declareInt(constructorArg(), new ParseField("a"));
-        builder.declareString(constructorArg(), new ParseField("b"));
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, builder::build);
-        assertThat(
-            e.getMessage(),
-            containsString("More then one public constructor with 2 arguments found. The use of @ParserConstructor annotation is required")
-        );
-    }
-
-    public void testPrivateConstructor() {
-        InstantiatingObjectParser.Builder<NoAnnotations, Void> builder = InstantiatingObjectParser.builder("foo", NoAnnotations.class);
-        builder.declareInt(constructorArg(), new ParseField("a"));
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, builder::build);
-        assertThat(e.getMessage(), containsString("No public constructors with 1 parameters exist in the class "));
-    }
-
-    public static class LonelyArgument {
-        public final int a;
-
-        private String b;
-
-        public LonelyArgument(int a) {
-            this.a = a;
-            this.b = "Not set";
-        }
-
-        public void setB(String b) {
-            this.b = b;
-        }
-
-        public String getB() {
-            return b;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            LonelyArgument that = (LonelyArgument) o;
-            return a == that.a && Objects.equals(b, that.b);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(a, b);
-        }
-    }
-
-    public void testOneArgConstructor() throws IOException {
-        InstantiatingObjectParser.Builder<LonelyArgument, Void> builder = InstantiatingObjectParser.builder("foo", LonelyArgument.class);
-        builder.declareInt(constructorArg(), new ParseField("a"));
-        InstantiatingObjectParser<LonelyArgument, Void> parser = builder.build();
-        try (XContentParser contentParser = createParser(JsonXContent.jsonXContent, "{\"a\": 5 }")) {
-            assertThat(parser.parse(contentParser, null), equalTo(new LonelyArgument(5)));
-        }
-    }
-
-    public void testSetNonConstructor() throws IOException {
-        InstantiatingObjectParser.Builder<LonelyArgument, Void> builder = InstantiatingObjectParser.builder("foo", LonelyArgument.class);
-        builder.declareInt(constructorArg(), new ParseField("a"));
-        builder.declareString(LonelyArgument::setB, new ParseField("b"));
-        InstantiatingObjectParser<LonelyArgument, Void> parser = builder.build();
-        try (XContentParser contentParser = createParser(JsonXContent.jsonXContent, "{\"a\": 5, \"b\": \"set\" }")) {
-            LonelyArgument expected = parser.parse(contentParser, null);
+/*
             assertThat(expected.a, equalTo(5));
-            assertThat(expected.b, equalTo("set"));
-        }
-    }
-
-    public static class Annotations {
-        final int a;
-        final String b;
-        final long c;
-
-        public Annotations() {
-            this(1, "2", 3);
-        }
-
-        public Annotations(int a, String b) {
-            this(a, b, -1);
-        }
-
-        public Annotations(int a, String b, long c) {
-            this.a = a;
-            this.b = b;
-            this.c = c;
-        }
-
-        @ParserConstructor
-        public Annotations(int a, String b, String c) {
-            this.a = a;
-            this.b = b;
-            this.c = Long.parseLong(c);
-        }
-
+        );
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
+        }
+    public void testSetNonConstructor() throws IOException {
+            NoAnnotations that = (NoAnnotations) o;
             if (o == null || getClass() != o.getClass()) return false;
-            Annotations that = (Annotations) o;
-            return a == that.a && c == that.c && Objects.equals(b, that.b);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(a, b, c);
-        }
-    }
-
-    public void testAnnotation() throws IOException {
-        InstantiatingObjectParser.Builder<Annotations, Void> builder = InstantiatingObjectParser.builder("foo", Annotations.class);
-        builder.declareInt(constructorArg(), new ParseField("a"));
-        builder.declareString(constructorArg(), new ParseField("b"));
-        builder.declareString(constructorArg(), new ParseField("c"));
-        InstantiatingObjectParser<Annotations, Void> parser = builder.build();
-        try (XContentParser contentParser = createParser(JsonXContent.jsonXContent, "{\"a\": 5, \"b\":\"6\", \"c\": \"7\"}")) {
+ */
+        public boolean equals(Object o) {
+        final int a;
+/*
             assertThat(parser.parse(contentParser, null), equalTo(new Annotations(5, "6", 7)));
         }
-    }
-
-    public void testAnnotationWrongArgumentNumber() {
-        InstantiatingObjectParser.Builder<Annotations, Void> builder = InstantiatingObjectParser.builder("foo", Annotations.class);
+        InstantiatingObjectParser<Annotations, Void> parser = builder.build();
+        public String getB() {
         builder.declareInt(constructorArg(), new ParseField("a"));
-        builder.declareString(constructorArg(), new ParseField("b"));
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, builder::build);
-        assertThat(e.getMessage(), containsString("Annotated constructor doesn't have 2 arguments in the class"));
+        try (XContentParser contentParser = createParser(JsonXContent.jsonXContent, "{\"a\": 5, \"b\": \"set\" }")) {
     }
-
+    }
+        }
+        }
+            this.a = a;
+            this.b = b;
+        assertThat(
+        @Override
+        }
+            return b;
+        }
+        }
+        builder.declareString(constructorArg(), new ParseField("b"));
+            return Objects.hash(a, b, c);
+        InstantiatingObjectParser.Builder<NoAnnotations, Void> builder = InstantiatingObjectParser.builder("foo", NoAnnotations.class);
+    public void testAmbiguousConstructor() {
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, builder::build);
+        public LonelyArgument(int a) {
+        builder.declareString(constructorArg(), new ParseField("c"));
+            this.a = a;
+ * specific language governing permissions and limitations
+public class InstantiatingObjectParserTests extends OpenSearchTestCase {
+        assertThat(e.getMessage(), containsString("No public constructors with 1 parameters exist in the class "));
+        @Override
+        }
+        builder.declareLong(constructorArg(), new ParseField("c"));
+        @ParserConstructor
+package org.opensearch.common.xcontent;
+import org.opensearch.core.ParseField;
+        InstantiatingObjectParser.Builder<NoAnnotations, Void> builder = InstantiatingObjectParser.builder("foo", NoAnnotations.class);
+ */
+import static org.hamcrest.Matchers.equalTo;
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, builder::build);
+            this.b = b;
+import org.opensearch.core.xcontent.ParserConstructor;
+            this(a, "2", c);
+        }
+        public boolean equals(Object o) {
+ * Unless required by applicable law or agreed to in writing,
+        @Override
+        builder.declareInt(constructorArg(), new ParseField("a"));
+        InstantiatingObjectParser.Builder<NoAnnotations, Void> builder = InstantiatingObjectParser.builder("foo", NoAnnotations.class);
+ * not use this file except in compliance with the License.
+        builder.declareInt(constructorArg(), new ParseField("a"));
+        InstantiatingObjectParser<NoAnnotations, Void> parser = builder.build();
+            assertThat(parser.parse(contentParser, null), equalTo(new LonelyArgument(5)));
+        final long c;
+        public NoAnnotations(int a, long c) {
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, builder::build);
+    }
+        builder.declareInt(constructorArg(), new ParseField("a"));
+        private NoAnnotations(int a) {
+            this.c = c;
+    }
+            if (this == o) return true;
+        public NoAnnotations(int a, String b, long c) {
+    }
+        }
+        final long c;
+            Annotations that = (Annotations) o;
+ */
+            LonelyArgument expected = parser.parse(contentParser, null);
+    }
+ *
+ *
+        public int hashCode() {
+            this.c = c;
+import org.opensearch.core.xcontent.InstantiatingObjectParser;
+import java.util.Objects;
+        builder.declareString(constructorArg(), new ParseField("b"));
+        public Annotations(int a, String b, String c) {
+            return a == that.a && c == that.c && Objects.equals(b, that.b);
+    public void testAnnotation() throws IOException {
+    public void testNoAnnotation() throws IOException {
+ * You may obtain a copy of the License at
+    public void testPrivateConstructor() {
+        try (XContentParser contentParser = createParser(JsonXContent.jsonXContent, "{\"a\": 5 }")) {
+            if (o == null || getClass() != o.getClass()) return false;
+        assertThat(e.getMessage(), containsString("No public constructors with 4 parameters exist in the class"));
+        try (XContentParser contentParser = createParser(JsonXContent.jsonXContent, "{\"a\": 5, \"b\":\"6\", \"c\": \"7\"}")) {
+        builder.declareString(LonelyArgument::setB, new ParseField("b"));
+            this(a, b, -1);
+            this(1, "2", 3);
+        builder.declareLong(constructorArg(), new ParseField("c"));
+        public void setB(String b) {
+        }
+ * this file be licensed under the Apache-2.0 license or a
+            this.b = "Not set";
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * compatible open source license.
+        final String b;
+import org.opensearch.common.xcontent.json.JsonXContent;
+        }
+            return a == that.a && c == that.c && Objects.equals(b, that.b);
+        InstantiatingObjectParser.Builder<LonelyArgument, Void> builder = InstantiatingObjectParser.builder("foo", LonelyArgument.class);
+        }
+        InstantiatingObjectParser.Builder<NoAnnotations, Void> builder = InstantiatingObjectParser.builder("foo", NoAnnotations.class);
+    }
+    }
+import static org.hamcrest.Matchers.containsString;
 }
+            assertThat(expected.b, equalTo("set"));
+            this.c = Long.parseLong(c);
+        InstantiatingObjectParser<LonelyArgument, Void> parser = builder.build();
+import java.io.IOException;
+            e.getMessage(),
+import org.opensearch.core.xcontent.XContentParser;
+        builder.declareString(constructorArg(), new ParseField("b"));
+        public int hashCode() {
+        public NoAnnotations() {
+    public static class LonelyArgument {
+            if (this == o) return true;
+        public final int a;
+ * Licensed to Elasticsearch under one or more contributor
+        InstantiatingObjectParser.Builder<LonelyArgument, Void> builder = InstantiatingObjectParser.builder("foo", LonelyArgument.class);
+            assertThat(parser.parse(contentParser, null), equalTo(new NoAnnotations(5, "6", 7)));
+        public NoAnnotations(int a, String b) {
+        }
+            LonelyArgument that = (LonelyArgument) o;
+        }
+        final int a;
+            this.a = a;
+        }
+        }
+ * ownership. Elasticsearch licenses this file to you under
+            return Objects.hash(a, b, c);
+/*
+ *
+        }
+            this(a, "2", 3);
+        assertThat(e.getMessage(), containsString("Annotated constructor doesn't have 2 arguments in the class"));
+            containsString("More then one public constructor with 2 arguments found. The use of @ParserConstructor annotation is required")
+            this(1, "2", 3);
+        InstantiatingObjectParser.Builder<Annotations, Void> builder = InstantiatingObjectParser.builder("foo", Annotations.class);
+            return Objects.hash(a, b);
+        public Annotations(int a, String b, long c) {
+ * GitHub history for details.
+        }
+        private String b;
+        public Annotations() {
+        InstantiatingObjectParser.Builder<Annotations, Void> builder = InstantiatingObjectParser.builder("foo", Annotations.class);
+            if (this == o) return true;
+ * software distributed under the License is distributed on an
+        @Override
+        final String b;
+ * Modifications Copyright OpenSearch Contributors. See
+        InstantiatingObjectParser<LonelyArgument, Void> parser = builder.build();
+            this.b = b;
+    public void testNoAnnotationWrongArgumentNumber() {
+    }
+        builder.declareInt(constructorArg(), new ParseField("a"));
+        }
+    }
+        builder.declareString(constructorArg(), new ParseField("b"));
+ * the Apache License, Version 2.0 (the "License"); you may
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, builder::build);
+        @Override
+            this.a = a;
+        builder.declareLong(constructorArg(), new ParseField("d"));
+ * KIND, either express or implied.  See the License for the
+        public Annotations(int a, String b) {
+        builder.declareInt(constructorArg(), new ParseField("a"));
+ * license agreements. See the NOTICE file distributed with
+        try (XContentParser contentParser = createParser(JsonXContent.jsonXContent, "{\"a\": 5, \"b\":\"6\", \"c\": 7 }")) {
+            if (o == null || getClass() != o.getClass()) return false;
+ * SPDX-License-Identifier: Apache-2.0
+            return a == that.a && Objects.equals(b, that.b);
+import org.opensearch.test.OpenSearchTestCase;
+        builder.declareInt(constructorArg(), new ParseField("a"));
+ * under the License.
+    public static class Annotations {
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public void testOneArgConstructor() throws IOException {
+            this.b = b;
+ * The OpenSearch Contributors require contributions made to
+ * this work for additional information regarding copyright
+            this(a, b, 3);
+        builder.declareInt(constructorArg(), new ParseField("a"));
+    public static class NoAnnotations {
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+        }

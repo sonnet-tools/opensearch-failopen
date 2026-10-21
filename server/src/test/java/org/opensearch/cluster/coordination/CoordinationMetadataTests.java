@@ -1,265 +1,239 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.coordination;
-
-import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfigExclusion;
-import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfiguration;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.util.set.Sets;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.BufferedChecksumStreamOutput;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.EqualsHashCodeTestUtils;
-import org.opensearch.test.EqualsHashCodeTestUtils.CopyFunction;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.Set;
-import java.util.stream.Collectors;
-
-import static org.hamcrest.Matchers.equalTo;
-
-public class CoordinationMetadataTests extends OpenSearchTestCase {
-
-    public void testVotingConfiguration() {
-        VotingConfiguration config0 = new VotingConfiguration(Sets.newHashSet());
-        assertThat(config0, equalTo(VotingConfiguration.EMPTY_CONFIG));
-        assertThat(config0.getNodeIds(), equalTo(Sets.newHashSet()));
-        assertThat(config0.isEmpty(), equalTo(true));
-        assertThat(config0.hasQuorum(Sets.newHashSet()), equalTo(false));
-        assertThat(config0.hasQuorum(Sets.newHashSet("id1")), equalTo(false));
-
-        VotingConfiguration config1 = new VotingConfiguration(Sets.newHashSet("id1"));
-        assertThat(config1.getNodeIds(), equalTo(Sets.newHashSet("id1")));
-        assertThat(config1.isEmpty(), equalTo(false));
-        assertThat(config1.hasQuorum(Sets.newHashSet("id1")), equalTo(true));
-        assertThat(config1.hasQuorum(Sets.newHashSet("id1", "id2")), equalTo(true));
-        assertThat(config1.hasQuorum(Sets.newHashSet("id2")), equalTo(false));
-        assertThat(config1.hasQuorum(Sets.newHashSet()), equalTo(false));
-
-        VotingConfiguration config2 = new VotingConfiguration(Sets.newHashSet("id1", "id2"));
-        assertThat(config2.getNodeIds(), equalTo(Sets.newHashSet("id1", "id2")));
-        assertThat(config2.isEmpty(), equalTo(false));
-        assertThat(config2.hasQuorum(Sets.newHashSet("id1", "id2")), equalTo(true));
-        assertThat(config2.hasQuorum(Sets.newHashSet("id1", "id2", "id3")), equalTo(true));
-        assertThat(config2.hasQuorum(Sets.newHashSet("id1")), equalTo(false));
-        assertThat(config2.hasQuorum(Sets.newHashSet("id2")), equalTo(false));
-        assertThat(config2.hasQuorum(Sets.newHashSet("id3")), equalTo(false));
-        assertThat(config2.hasQuorum(Sets.newHashSet("id1", "id3")), equalTo(false));
-        assertThat(config2.hasQuorum(Sets.newHashSet()), equalTo(false));
-
-        VotingConfiguration config3 = new VotingConfiguration(Sets.newHashSet("id1", "id2", "id3"));
-        assertThat(config3.getNodeIds(), equalTo(Sets.newHashSet("id1", "id2", "id3")));
-        assertThat(config3.isEmpty(), equalTo(false));
-        assertThat(config3.hasQuorum(Sets.newHashSet("id1", "id2")), equalTo(true));
-        assertThat(config3.hasQuorum(Sets.newHashSet("id2", "id3")), equalTo(true));
-        assertThat(config3.hasQuorum(Sets.newHashSet("id1", "id3")), equalTo(true));
-        assertThat(config3.hasQuorum(Sets.newHashSet("id1", "id2", "id3")), equalTo(true));
-        assertThat(config3.hasQuorum(Sets.newHashSet("id1", "id2", "id4")), equalTo(true));
-        assertThat(config3.hasQuorum(Sets.newHashSet("id1")), equalTo(false));
-        assertThat(config3.hasQuorum(Sets.newHashSet("id2")), equalTo(false));
-        assertThat(config3.hasQuorum(Sets.newHashSet("id3")), equalTo(false));
-        assertThat(config3.hasQuorum(Sets.newHashSet("id1", "id4")), equalTo(false));
-        assertThat(config3.hasQuorum(Sets.newHashSet("id1", "id4", "id5")), equalTo(false));
-        assertThat(config3.hasQuorum(Sets.newHashSet()), equalTo(false));
-    }
-
-    public void testVotingConfigurationSerializationEqualsHashCode() {
-        VotingConfiguration initialConfig = randomVotingConfig();
-        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
-        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-            initialConfig,
-            (CopyFunction<VotingConfiguration>) orig -> OpenSearchTestCase.copyWriteable(
-                orig,
-                new NamedWriteableRegistry(Collections.emptyList()),
-                VotingConfiguration::new
-            ),
-            cfg -> randomlyChangeVotingConfiguration(cfg)
-        );
-    }
-
-    private static VotingConfiguration randomVotingConfig() {
-        return new VotingConfiguration(Sets.newHashSet(generateRandomStringArray(randomInt(10), 20, false)));
-    }
-
-    public void testVotingTombstoneSerializationEqualsHashCode() {
-        VotingConfigExclusion tombstone = new VotingConfigExclusion(randomAlphaOfLength(10), randomAlphaOfLength(10));
-        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
-        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-            tombstone,
-            (CopyFunction<VotingConfigExclusion>) orig -> OpenSearchTestCase.copyWriteable(
-                orig,
-                new NamedWriteableRegistry(Collections.emptyList()),
-                VotingConfigExclusion::new
-            ),
-            orig -> randomlyChangeVotingTombstone(orig)
-        );
-    }
-
-    public void testVotingTombstoneXContent() throws IOException {
-        VotingConfigExclusion originalTombstone = new VotingConfigExclusion(randomAlphaOfLength(10), randomAlphaOfLength(10));
-
-        final XContentBuilder builder = JsonXContent.contentBuilder();
-        originalTombstone.toXContent(builder, ToXContent.EMPTY_PARAMS);
-
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final VotingConfigExclusion fromXContentTombstone = VotingConfigExclusion.fromXContent(parser);
-            assertThat(originalTombstone, equalTo(fromXContentTombstone));
-        }
-    }
-
-    private VotingConfigExclusion randomlyChangeVotingTombstone(VotingConfigExclusion tombstone) {
-        if (randomBoolean()) {
-            return new VotingConfigExclusion(randomAlphaOfLength(10), tombstone.getNodeName());
-        } else {
-            return new VotingConfigExclusion(tombstone.getNodeId(), randomAlphaOfLength(10));
-        }
-    }
-
-    private VotingConfiguration randomlyChangeVotingConfiguration(VotingConfiguration cfg) {
-        Set<String> newNodeIds = new HashSet<>(cfg.getNodeIds());
-        if (cfg.isEmpty() == false && randomBoolean()) {
-            // remove random element
-            newNodeIds.remove(randomFrom(cfg.getNodeIds()));
-        } else if (cfg.isEmpty() == false && randomBoolean()) {
-            // change random element
-            newNodeIds.remove(randomFrom(cfg.getNodeIds()));
-            newNodeIds.add(randomAlphaOfLength(20));
-        } else {
-            // add random element
-            newNodeIds.add(randomAlphaOfLength(20));
-        }
-        return new VotingConfiguration(newNodeIds);
-    }
-
-    private Set<VotingConfigExclusion> randomVotingTombstones() {
-        final int size = randomIntBetween(1, 10);
-        final Set<VotingConfigExclusion> nodes = new HashSet<>(size);
-        while (nodes.size() < size) {
-            assertTrue(nodes.add(new VotingConfigExclusion(randomAlphaOfLength(10), randomAlphaOfLength(10))));
-        }
-        return nodes;
-    }
-
-    public void testCoordinationMetadataSerializationEqualsHashCode() {
-        CoordinationMetadata initialMetadata = new CoordinationMetadata(
-            randomNonNegativeLong(),
-            randomVotingConfig(),
-            randomVotingConfig(),
-            randomVotingTombstones()
-        );
-        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
-        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
-            initialMetadata,
-            (CopyFunction<CoordinationMetadata>) orig -> OpenSearchTestCase.copyWriteable(
-                orig,
-                new NamedWriteableRegistry(Collections.emptyList()),
-                CoordinationMetadata::new
-            ),
-            meta -> {
-                CoordinationMetadata.Builder builder = CoordinationMetadata.builder(meta);
-                switch (randomInt(3)) {
-                    case 0:
-                        builder.term(randomValueOtherThan(meta.term(), OpenSearchTestCase::randomNonNegativeLong));
-                        break;
-                    case 1:
-                        builder.lastCommittedConfiguration(randomlyChangeVotingConfiguration(meta.getLastCommittedConfiguration()));
-                        break;
-                    case 2:
-                        builder.lastAcceptedConfiguration(randomlyChangeVotingConfiguration(meta.getLastAcceptedConfiguration()));
-                        break;
-                    case 3:
-                        if (meta.getVotingConfigExclusions().isEmpty() == false && randomBoolean()) {
-                            builder.clearVotingConfigExclusions();
-                        } else {
-                            randomVotingTombstones().forEach(dn -> builder.addVotingConfigExclusion(dn));
-                        }
-                        break;
-                }
-                return builder.build();
-            }
-        );
-    }
-
-    public void testXContent() throws IOException {
-        CoordinationMetadata originalMeta = new CoordinationMetadata(
-            randomNonNegativeLong(),
-            randomVotingConfig(),
-            randomVotingConfig(),
-            randomVotingTombstones()
-        );
-
-        final XContentBuilder builder = JsonXContent.contentBuilder();
         builder.startObject();
-        originalMeta.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
-            final CoordinationMetadata fromXContentMeta = CoordinationMetadata.fromXContent(parser);
-            assertThat(originalMeta, equalTo(fromXContentMeta));
+                        if (meta.getVotingConfigExclusions().isEmpty() == false && randomBoolean()) {
+        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
+        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+        assertThat(config1.hasQuorum(Sets.newHashSet()), equalTo(false));
+    }
         }
+            randomVotingConfig(),
+import java.io.IOException;
+/*
+            assertThat(originalTombstone, equalTo(fromXContentTombstone));
+        final XContentBuilder builder = JsonXContent.contentBuilder();
+        VotingConfigExclusion tombstone = new VotingConfigExclusion(randomAlphaOfLength(10), randomAlphaOfLength(10));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            randomVotingConfig(),
+ */
+        assertThat(config0.hasQuorum(Sets.newHashSet("id1")), equalTo(false));
+                CoordinationMetadata::new
+ * compatible open source license.
     }
-
-    public void testWriteVerifiableTo() throws IOException {
-        VotingConfiguration votingConfiguration = randomVotingConfig();
-        Set<VotingConfigExclusion> votingTombstones = randomVotingTombstones();
-        CoordinationMetadata meta1 = new CoordinationMetadata(1, votingConfiguration, votingConfiguration, votingTombstones);
-        BytesStreamOutput out = new BytesStreamOutput();
-        BufferedChecksumStreamOutput checksumOut = new BufferedChecksumStreamOutput(out);
-        meta1.writeVerifiableTo(checksumOut);
-        StreamInput in = out.bytes().streamInput();
+            // add random element
+            newNodeIds.remove(randomFrom(cfg.getNodeIds()));
+        assertThat(config3.hasQuorum(Sets.newHashSet("id1", "id4", "id5")), equalTo(false));
         CoordinationMetadata result = new CoordinationMetadata(in);
-
-        assertEquals(meta1, result);
-
+            final CoordinationMetadata fromXContentMeta = CoordinationMetadata.fromXContent(parser);
+ *
+    private VotingConfigExclusion randomlyChangeVotingTombstone(VotingConfigExclusion tombstone) {
         VotingConfiguration votingConfiguration2 = new VotingConfiguration(
-            (Set<String>) votingConfiguration.getNodeIds().stream().sorted().collect(Collectors.toCollection(LinkedHashSet::new))
-        );
-        Set<VotingConfigExclusion> votingTombstones2 = votingTombstones.stream()
-            .sorted(Comparator.comparing(VotingConfigExclusion::getNodeId))
-            .collect(Collectors.toCollection(LinkedHashSet::new));
-        CoordinationMetadata meta2 = new CoordinationMetadata(1, votingConfiguration2, votingConfiguration2, votingTombstones2);
-        BytesStreamOutput out2 = new BytesStreamOutput();
-        BufferedChecksumStreamOutput checksumOut2 = new BufferedChecksumStreamOutput(out2);
-        meta2.writeVerifiableTo(checksumOut2);
-        assertEquals(checksumOut.getChecksum(), checksumOut2.getChecksum());
+            ),
+import org.opensearch.test.OpenSearchTestCase;
+ *
+            randomVotingTombstones()
+import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfigExclusion;
+ * this work for additional information regarding copyright
+ * license agreements. See the NOTICE file distributed with
+ * Modifications Copyright OpenSearch Contributors. See
+                switch (randomInt(3)) {
+                    case 1:
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+import java.util.HashSet;
+        VotingConfiguration config0 = new VotingConfiguration(Sets.newHashSet());
+                        builder.term(randomValueOtherThan(meta.term(), OpenSearchTestCase::randomNonNegativeLong));
+            ),
+package org.opensearch.cluster.coordination;
+        assertThat(config3.hasQuorum(Sets.newHashSet("id2")), equalTo(false));
+        VotingConfigExclusion originalTombstone = new VotingConfigExclusion(randomAlphaOfLength(10), randomAlphaOfLength(10));
+        StreamInput in = out.bytes().streamInput();
+        assertThat(config0.hasQuorum(Sets.newHashSet()), equalTo(false));
+            randomVotingConfig(),
     }
+                VotingConfigExclusion::new
+        assertThat(config3.hasQuorum(Sets.newHashSet("id1", "id2", "id4")), equalTo(true));
+        assertEquals(checksumOut.getChecksum(), checksumOut2.getChecksum());
+        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
+            randomNonNegativeLong(),
+        final XContentBuilder builder = JsonXContent.contentBuilder();
+        VotingConfiguration config1 = new VotingConfiguration(Sets.newHashSet("id1"));
+        while (nodes.size() < size) {
+        assertThat(config2.hasQuorum(Sets.newHashSet()), equalTo(false));
+    public void testVotingTombstoneSerializationEqualsHashCode() {
+        BytesStreamOutput out = new BytesStreamOutput();
+        assertThat(config0, equalTo(VotingConfiguration.EMPTY_CONFIG));
+            return new VotingConfigExclusion(randomAlphaOfLength(10), tombstone.getNodeName());
+        assertThat(config3.hasQuorum(Sets.newHashSet("id1", "id4")), equalTo(false));
+/*
+            tombstone,
+        );
+import org.opensearch.core.common.io.stream.BufferedChecksumStreamOutput;
+            meta -> {
+        assertThat(config3.getNodeIds(), equalTo(Sets.newHashSet("id1", "id2", "id3")));
+        assertThat(config1.hasQuorum(Sets.newHashSet("id1", "id2")), equalTo(true));
+        final Set<VotingConfigExclusion> nodes = new HashSet<>(size);
+        assertThat(config1.isEmpty(), equalTo(false));
+                    case 3:
+    public void testXContent() throws IOException {
+ * Licensed to Elasticsearch under one or more contributor
+        meta2.writeVerifiableTo(checksumOut2);
+            randomVotingConfig(),
+        // Note: the explicit cast of the CopyFunction is needed for some IDE (specifically Eclipse 4.8.0) to infer the right type
+                VotingConfiguration::new
+    }
+            final VotingConfigExclusion fromXContentTombstone = VotingConfigExclusion.fromXContent(parser);
 }
+    private Set<VotingConfigExclusion> randomVotingTombstones() {
+                    case 0:
+                CoordinationMetadata.Builder builder = CoordinationMetadata.builder(meta);
+import java.util.Set;
+        );
+                return builder.build();
+        assertThat(config0.isEmpty(), equalTo(true));
+        CoordinationMetadata meta1 = new CoordinationMetadata(1, votingConfiguration, votingConfiguration, votingTombstones);
+        CoordinationMetadata initialMetadata = new CoordinationMetadata(
+        return new VotingConfiguration(Sets.newHashSet(generateRandomStringArray(randomInt(10), 20, false)));
+    public void testVotingConfigurationSerializationEqualsHashCode() {
+        originalTombstone.toXContent(builder, ToXContent.EMPTY_PARAMS);
+            orig -> randomlyChangeVotingTombstone(orig)
+import java.util.LinkedHashSet;
+        }
+    public void testWriteVerifiableTo() throws IOException {
+        assertThat(config3.hasQuorum(Sets.newHashSet()), equalTo(false));
+        } else {
+        meta1.writeVerifiableTo(checksumOut);
+        );
+import org.opensearch.common.util.set.Sets;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * specific language governing permissions and limitations
+                        }
+                        builder.lastAcceptedConfiguration(randomlyChangeVotingConfiguration(meta.getLastAcceptedConfiguration()));
+        originalMeta.toXContent(builder, ToXContent.EMPTY_PARAMS);
+        if (cfg.isEmpty() == false && randomBoolean()) {
+import java.util.Collections;
+        } else if (cfg.isEmpty() == false && randomBoolean()) {
+            // remove random element
+            newNodeIds.add(randomAlphaOfLength(20));
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        Set<VotingConfigExclusion> votingTombstones = randomVotingTombstones();
+    public void testVotingTombstoneXContent() throws IOException {
+                        break;
+/*
+                }
+ * Unless required by applicable law or agreed to in writing,
+    }
+    }
+            (CopyFunction<VotingConfiguration>) orig -> OpenSearchTestCase.copyWriteable(
+import org.opensearch.test.EqualsHashCodeTestUtils;
+        assertThat(config2.hasQuorum(Sets.newHashSet("id1", "id2", "id3")), equalTo(true));
+        assertThat(config1.hasQuorum(Sets.newHashSet("id1")), equalTo(true));
+ * SPDX-License-Identifier: Apache-2.0
+ * ownership. Elasticsearch licenses this file to you under
+        VotingConfiguration initialConfig = randomVotingConfig();
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+        CoordinationMetadata meta2 = new CoordinationMetadata(1, votingConfiguration2, votingConfiguration2, votingTombstones2);
+        }
+        assertThat(config1.hasQuorum(Sets.newHashSet("id2")), equalTo(false));
+        return nodes;
+            (CopyFunction<CoordinationMetadata>) orig -> OpenSearchTestCase.copyWriteable(
+        return new VotingConfiguration(newNodeIds);
+            initialConfig,
+ * this file be licensed under the Apache-2.0 license or a
+        assertThat(config3.hasQuorum(Sets.newHashSet("id1")), equalTo(false));
+        assertThat(config2.hasQuorum(Sets.newHashSet("id1", "id2")), equalTo(true));
+            // change random element
+            cfg -> randomlyChangeVotingConfiguration(cfg)
+                    case 2:
+import org.opensearch.core.xcontent.XContentParser;
+        assertThat(config2.hasQuorum(Sets.newHashSet("id1")), equalTo(false));
+        } else {
+import org.opensearch.core.common.bytes.BytesReference;
+                orig,
+ * software distributed under the License is distributed on an
+ */
+                        builder.lastCommittedConfiguration(randomlyChangeVotingConfiguration(meta.getLastCommittedConfiguration()));
+    private VotingConfiguration randomlyChangeVotingConfiguration(VotingConfiguration cfg) {
+        );
+                        break;
+        );
+        assertThat(config1.getNodeIds(), equalTo(Sets.newHashSet("id1")));
+    }
+        assertThat(config2.getNodeIds(), equalTo(Sets.newHashSet("id1", "id2")));
+        assertThat(config3.hasQuorum(Sets.newHashSet("id1", "id2", "id3")), equalTo(true));
+ * KIND, either express or implied.  See the License for the
+        VotingConfiguration votingConfiguration = randomVotingConfig();
+        VotingConfiguration config3 = new VotingConfiguration(Sets.newHashSet("id1", "id2", "id3"));
+import org.opensearch.test.EqualsHashCodeTestUtils.CopyFunction;
+            assertTrue(nodes.add(new VotingConfigExclusion(randomAlphaOfLength(10), randomAlphaOfLength(10))));
+ */
+        assertThat(config3.hasQuorum(Sets.newHashSet("id1", "id3")), equalTo(true));
+ * You may obtain a copy of the License at
+        assertThat(config3.hasQuorum(Sets.newHashSet("id2", "id3")), equalTo(true));
+    }
+import java.util.Comparator;
+        }
+        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+        assertEquals(meta1, result);
+        BytesStreamOutput out2 = new BytesStreamOutput();
+        assertThat(config2.hasQuorum(Sets.newHashSet("id2")), equalTo(false));
+            assertThat(originalMeta, equalTo(fromXContentMeta));
+import org.opensearch.common.io.stream.BytesStreamOutput;
+            newNodeIds.remove(randomFrom(cfg.getNodeIds()));
+import static org.hamcrest.Matchers.equalTo;
+    private static VotingConfiguration randomVotingConfig() {
+ * not use this file except in compliance with the License.
+                        } else {
+            }
+        }
+            .sorted(Comparator.comparing(VotingConfigExclusion::getNodeId))
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, BytesReference.bytes(builder))) {
+        CoordinationMetadata originalMeta = new CoordinationMetadata(
+                new NamedWriteableRegistry(Collections.emptyList()),
+            (Set<String>) votingConfiguration.getNodeIds().stream().sorted().collect(Collectors.toCollection(LinkedHashSet::new))
+        assertThat(config2.hasQuorum(Sets.newHashSet("id1", "id3")), equalTo(false));
+        assertThat(config2.isEmpty(), equalTo(false));
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.xcontent.XContentBuilder;
+        Set<VotingConfigExclusion> votingTombstones2 = votingTombstones.stream()
+    }
+                        break;
+ * The OpenSearch Contributors require contributions made to
+        builder.endObject();
+    }
+                orig,
+                new NamedWriteableRegistry(Collections.emptyList()),
+            return new VotingConfigExclusion(tombstone.getNodeId(), randomAlphaOfLength(10));
+        assertThat(config2.hasQuorum(Sets.newHashSet("id3")), equalTo(false));
+import org.opensearch.common.xcontent.json.JsonXContent;
+            randomVotingTombstones()
+ * GitHub history for details.
+import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfiguration;
+        assertThat(config0.getNodeIds(), equalTo(Sets.newHashSet()));
+        BufferedChecksumStreamOutput checksumOut = new BufferedChecksumStreamOutput(out);
+            ),
+        );
+import java.util.stream.Collectors;
+        VotingConfiguration config2 = new VotingConfiguration(Sets.newHashSet("id1", "id2"));
+        assertThat(config3.isEmpty(), equalTo(false));
+ *
+    public void testCoordinationMetadataSerializationEqualsHashCode() {
+            randomNonNegativeLong(),
+                orig,
+        BufferedChecksumStreamOutput checksumOut2 = new BufferedChecksumStreamOutput(out2);
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+        final int size = randomIntBetween(1, 10);
+        Set<String> newNodeIds = new HashSet<>(cfg.getNodeIds());
+    public void testVotingConfiguration() {
+        if (randomBoolean()) {
+                            randomVotingTombstones().forEach(dn -> builder.addVotingConfigExclusion(dn));
+            newNodeIds.add(randomAlphaOfLength(20));
+ * under the License.
+        EqualsHashCodeTestUtils.checkEqualsAndHashCode(
+        assertThat(config3.hasQuorum(Sets.newHashSet("id3")), equalTo(false));
+                            builder.clearVotingConfigExclusions();
+                new NamedWriteableRegistry(Collections.emptyList()),
+public class CoordinationMetadataTests extends OpenSearchTestCase {
+    }
+        assertThat(config3.hasQuorum(Sets.newHashSet("id1", "id2")), equalTo(true));
+            initialMetadata,
+            (CopyFunction<VotingConfigExclusion>) orig -> OpenSearchTestCase.copyWriteable(
+import org.opensearch.core.xcontent.ToXContent;
+                        break;

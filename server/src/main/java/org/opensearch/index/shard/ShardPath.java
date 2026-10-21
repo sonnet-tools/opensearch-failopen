@@ -1,368 +1,329 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.shard;
-
-import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.env.ShardLock;
-import org.opensearch.index.IndexSettings;
-
-import java.io.IOException;
-import java.math.BigInteger;
-import java.nio.file.FileStore;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * Path for a shard
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public final class ShardPath {
-    public static final String INDEX_FOLDER_NAME = "index";
     public static final String TRANSLOG_FOLDER_NAME = "translog";
-
-    private final Path path;
-    private final ShardId shardId;
-    private final Path shardStatePath;
-    private final boolean isCustomDataPath;
-
-    public ShardPath(boolean isCustomDataPath, Path dataPath, Path shardStatePath, ShardId shardId) {
-        assert dataPath.getFileName().toString().equals(Integer.toString(shardId.id())) : "dataPath must end with the shard ID but didn't: "
-            + dataPath.toString();
-        assert shardStatePath.getFileName().toString().equals(Integer.toString(shardId.id()))
-            : "shardStatePath must end with the shard ID but didn't: " + dataPath.toString();
-        assert dataPath.getParent().getFileName().toString().equals(shardId.getIndex().getUUID())
-            : "dataPath must end with index path id but didn't: " + dataPath.toString();
-        assert shardStatePath.getParent().getFileName().toString().equals(shardId.getIndex().getUUID())
-            : "shardStatePath must end with index path id but didn't: " + dataPath.toString();
-        if (isCustomDataPath && dataPath.equals(shardStatePath)) {
-            throw new IllegalArgumentException("shard state path must be different to the data path when using custom data paths");
-        }
-        this.isCustomDataPath = isCustomDataPath;
-        this.path = dataPath;
-        this.shardId = shardId;
-        this.shardStatePath = shardStatePath;
-    }
-
     public Path resolveTranslog() {
-        return path.resolve(TRANSLOG_FOLDER_NAME);
-    }
-
-    public Path resolveIndex() {
-        return path.resolve(INDEX_FOLDER_NAME);
-    }
-
-    public Path resolve(String subDirectory) {
-        return path.resolve(subDirectory);
-    }
-
-    public Path getDataPath() {
-        return path;
-    }
-
-    public boolean exists() {
-        return Files.exists(path);
-    }
-
-    public ShardId getShardId() {
-        return shardId;
-    }
-
-    public Path getShardStatePath() {
-        return shardStatePath;
-    }
-
-    /**
-     * Returns the data-path root for this shard. The root is a parent of {@link #getDataPath()} without the index name
-     * and the shard ID.
-     */
-    public Path getRootDataPath() {
-        Path noIndexShardId = getDataPath().getParent().getParent();
-        return isCustomDataPath ? noIndexShardId : noIndexShardId.getParent(); // also strip the indices folder
-    }
-
-    /**
-     * Returns the state-path root for this shard. The root is a parent of {@link #getRootStatePath()} ()} without the index name
-     * and the shard ID.
-     */
-    public Path getRootStatePath() {
-        return getShardStatePath().getParent().getParent().getParent(); // also strip the indices folder
-    }
-
-    /**
-     * Returns <code>true</code> iff the data location is a custom data location and therefore outside of the nodes configured data paths.
-     */
-    public boolean isCustomDataPath() {
-        return isCustomDataPath;
-    }
-
-    /**
-     * Returns the shard path to be stored within the cache on the search capable node.
-     */
-    public static ShardPath loadFileCachePath(NodeEnvironment env, ShardId shardId) {
-        NodeEnvironment.NodePath path = env.fileCacheNodePath();
-        final Path dataPath = env.resolveFileCacheLocation(path.fileCachePath, shardId);
-        final Path statePath = path.resolve(shardId);
-        return new ShardPath(true, dataPath, statePath, shardId);
-    }
-
-    /**
-     * This method walks through the nodes shard paths to find the data and state path for the given shard. If multiple
-     * directories with a valid shard state exist the one with the highest version will be used.
-     * <b>Note:</b> this method resolves custom data locations for the shard if such a custom data path is provided.
-     */
-    public static ShardPath loadShardPath(Logger logger, NodeEnvironment env, ShardId shardId, String customDataPath) throws IOException {
-        final Path[] paths = env.availableShardPaths(shardId);
-        final int nodeLockId = env.getNodeLockId();
+                } else {
+                dataPath = NodeEnvironment.resolveCustomLocation(customDataPath, shardId, sharedDataPath, nodeLockId);
+/*
+import java.util.Objects;
+                    throw new IllegalStateException(shardId + " more than one shard state found");
+        if (o == null || getClass() != o.getClass()) {
+import org.opensearch.env.ShardLock;
+            }
         final Path sharedDataPath = env.sharedDataPath();
-        return loadShardPath(logger, shardId, customDataPath, paths, nodeLockId, sharedDataPath);
-    }
-
-    /**
-     * This method walks through the nodes shard paths to find the data and state path for the given shard. If multiple
-     * directories with a valid shard state exist the one with the highest version will be used.
      * <b>Note:</b> this method resolves custom data locations for the shard.
+        final Path dataPath = env.resolveFileCacheLocation(path.fileCachePath, shardId);
+    }
+        return shardStatePath;
+                            + "shard seems to be leftover from a different index with the same name. "
+                            + load.indexUUID
+                            + " on shard path: "
+        }
+        if (indexSettings.hasCustomDataPath()) {
+                totFreeSpace = totFreeSpace.add(BigInteger.valueOf(nodePath.fileStore.getUsableSpace()));
+ * @opensearch.api
+                            );
+ * Unless required by applicable law or agreed to in writing,
+     * and the shard ID.
+    }
+                    // Sort by the number of shards for this index
+    /**
+     */
+        return path.resolve(TRANSLOG_FOLDER_NAME);
+            : "dataPath must end with index path id but didn't: " + dataPath.toString();
+                    assert Files.isDirectory(path) : path + " is not a directory";
+                                // if the number of shards is equal, tie-break with the usable bytes
+    /**
+ * compatible open source license.
+        assert dataPath.getFileName().toString().equals(Integer.toString(shardId.id())) : "dataPath must end with the shard ID but didn't: "
+    }
+            // how large they will be once they're done copying, instead of a silly guess for such cases:
+                            cmp = Integer.compare(
+import org.opensearch.common.util.io.IOUtils;
+            if (paths.length != 1) {
+     */
+    public Path getDataPath() {
+import java.math.BigInteger;
+                    })
+            }
+     * Returns the shard path to be stored within the cache on the search capable node.
+                            + " index UUID in shard state was: "
+     * Returns the data-path root for this shard. The root is a parent of {@link #getDataPath()} without the index name
+                        shardId
+ * GitHub history for details.
+                }
+        throws IOException {
+@PublicApi(since = "1.0.0")
+    @Override
+    /**
+                if (load.indexUUID.equals(indexUUID) == false && IndexMetadata.INDEX_UUID_NA_VALUE.equals(load.indexUUID) == false) {
+    ) throws IOException {
+        this.shardId = shardId;
+    public Path getRootStatePath() {
+ * KIND, either express or implied.  See the License for the
+            ShardStateMetadata load = ShardStateMetadata.FORMAT.loadLatestState(logger, NamedXContentRegistry.EMPTY, path);
+     * <b>Note:</b> this method resolves custom data locations for the shard if such a custom data path is provided.
+        Path noIndexShardId = getDataPath().getParent().getParent();
+ */
+ * specific language governing permissions and limitations
+        final Path[] paths = env.availableShardPaths(lock.getShardId());
+                    IOUtils.rm(path);
+ * software distributed under the License is distributed on an
+import java.util.Map;
+    public Path resolve(String subDirectory) {
+        Path[] availableShardPaths,
+            dataPath = env.resolveCustomLocation(indexSettings.customDataPath(), shardId);
+import java.nio.file.FileStore;
+            return new ShardPath(hasCustomDataPath, dataPath, statePath, shardId);
+        int nodeLockId,
+package org.opensearch.index.shard;
+     */
+        final NodeEnvironment.NodePath[] paths = env.nodePaths();
+ * SPDX-License-Identifier: Apache-2.0
+ * license agreements. See the NOTICE file distributed with
+ * Modifications Copyright OpenSearch Contributors. See
+        return loadShardPath(logger, shardId, customDataPath, paths, nodeLockId, sharedDataPath);
+                            }
+ * this file be licensed under the Apache-2.0 license or a
+    public ShardPath(boolean isCustomDataPath, Path dataPath, Path shardStatePath, ShardId shardId) {
+    }
+                        return cmp;
+                bestPath = nodePath;
      */
     public static ShardPath loadShardPath(
-        Logger logger,
-        ShardId shardId,
-        String customDataPath,
-        Path[] availableShardPaths,
-        int nodeLockId,
-        Path sharedDataPath
-    ) throws IOException {
-        final String indexUUID = shardId.getIndex().getUUID();
-        Path loadedPath = null;
-        for (Path path : availableShardPaths) {
-            // EMPTY is safe here because we never call namedObject
-            ShardStateMetadata load = ShardStateMetadata.FORMAT.loadLatestState(logger, NamedXContentRegistry.EMPTY, path);
-            if (load != null) {
-                if (load.indexUUID.equals(indexUUID) == false && IndexMetadata.INDEX_UUID_NA_VALUE.equals(load.indexUUID) == false) {
-                    logger.warn(
-                        "{} found shard on path: [{}] with a different index UUID - this "
-                            + "shard seems to be leftover from a different index with the same name. "
-                            + "Remove the leftover shard in order to reuse the path with the current index",
-                        shardId,
-                        path
-                    );
-                    throw new IllegalStateException(
-                        shardId
-                            + " index UUID in shard state was: "
-                            + load.indexUUID
-                            + " expected: "
-                            + indexUUID
-                            + " on shard path: "
-                            + path
-                    );
-                }
-                if (loadedPath == null) {
-                    loadedPath = path;
-                } else {
-                    throw new IllegalStateException(shardId + " more than one shard state found");
-                }
-            }
-
-        }
-        if (loadedPath == null) {
-            return null;
-        } else {
-            final Path dataPath;
-            final Path statePath = loadedPath;
-            final boolean hasCustomDataPath = !Strings.isNullOrEmpty(customDataPath);
-            if (hasCustomDataPath) {
-                dataPath = NodeEnvironment.resolveCustomLocation(customDataPath, shardId, sharedDataPath, nodeLockId);
-            } else {
-                dataPath = statePath;
-            }
-            logger.debug("{} loaded data path [{}], state path [{}]", shardId, dataPath, statePath);
-            return new ShardPath(hasCustomDataPath, dataPath, statePath, shardId);
-        }
+    private final ShardId shardId;
     }
-
-    /**
-     * This method tries to delete left-over shards where the index name has been reused but the UUID is different
-     * to allow the new shard to be allocated.
-     */
-    public static void deleteLeftoverShardDirectory(Logger logger, NodeEnvironment env, ShardLock lock, IndexSettings indexSettings)
-        throws IOException {
-        final String indexUUID = indexSettings.getUUID();
-        final Path[] paths = env.availableShardPaths(lock.getShardId());
-        for (Path path : paths) {
-            // EMPTY is safe here because we never call namedObject
-            ShardStateMetadata load = ShardStateMetadata.FORMAT.loadLatestState(logger, NamedXContentRegistry.EMPTY, path);
-            if (load != null) {
                 if (load.indexUUID.equals(indexUUID) == false && IndexMetadata.INDEX_UUID_NA_VALUE.equals(load.indexUUID) == false) {
-                    logger.warn("{} deleting leftover shard on path: [{}] with a different index UUID", lock.getShardId(), path);
-                    assert Files.isDirectory(path) : path + " is not a directory";
-                    NodeEnvironment.acquireFSLockForPaths(indexSettings, paths);
-                    IOUtils.rm(path);
-                }
-            }
-        }
-    }
-
-    public static ShardPath selectNewPathForShard(
-        NodeEnvironment env,
-        ShardId shardId,
-        IndexSettings indexSettings,
-        long avgShardSizeInBytes,
-        Map<Path, Integer> dataPathToShardCount
-    ) throws IOException {
-
-        final Path dataPath;
-        final Path statePath;
-
-        if (indexSettings.hasCustomDataPath()) {
-            dataPath = env.resolveCustomLocation(indexSettings.customDataPath(), shardId);
-            statePath = env.nodePaths()[0].resolve(shardId);
-        } else {
-            BigInteger totFreeSpace = BigInteger.ZERO;
-            for (NodeEnvironment.NodePath nodePath : env.nodePaths()) {
-                totFreeSpace = totFreeSpace.add(BigInteger.valueOf(nodePath.fileStore.getUsableSpace()));
-            }
-
-            // TODO: this is a hack!! We should instead keep track of incoming (relocated) shards since we know
-            // how large they will be once they're done copying, instead of a silly guess for such cases:
-
-            // Very rough heuristic of how much disk space we expect the shard will use over its lifetime, the max of current average
-            // shard size across the cluster and 5% of the total available free space on this node:
-            BigInteger estShardSizeInBytes = BigInteger.valueOf(avgShardSizeInBytes).max(totFreeSpace.divide(BigInteger.valueOf(20)));
-
-            // TODO - do we need something more extensible? Yet, this does the job for now...
-            final NodeEnvironment.NodePath[] paths = env.nodePaths();
-
-            // If no better path is chosen, use the one with the most space by default
-            NodeEnvironment.NodePath bestPath = getPathWithMostFreeSpace(env);
-
-            if (paths.length != 1) {
-                Map<NodeEnvironment.NodePath, Long> pathToShardCount = env.shardCountPerPath(shardId.getIndex());
-
-                // Compute how much space there is on each path
-                final Map<NodeEnvironment.NodePath, BigInteger> pathsToSpace = new HashMap<>(paths.length);
-                for (NodeEnvironment.NodePath nodePath : paths) {
-                    FileStore fileStore = nodePath.fileStore;
-                    BigInteger usableBytes = BigInteger.valueOf(fileStore.getUsableSpace());
-                    pathsToSpace.put(nodePath, usableBytes);
-                }
-
-                bestPath = Arrays.stream(paths)
-                    // Filter out paths that have enough space
-                    .filter((path) -> pathsToSpace.get(path).subtract(estShardSizeInBytes).compareTo(BigInteger.ZERO) > 0)
-                    // Sort by the number of shards for this index
-                    .sorted((p1, p2) -> {
-                        int cmp = Long.compare(pathToShardCount.getOrDefault(p1, 0L), pathToShardCount.getOrDefault(p2, 0L));
-                        if (cmp == 0) {
-                            // if the number of shards is equal, tie-break with the number of total shards
-                            cmp = Integer.compare(
-                                dataPathToShardCount.getOrDefault(p1.path, 0),
-                                dataPathToShardCount.getOrDefault(p2.path, 0)
-                            );
-                            if (cmp == 0) {
-                                // if the number of shards is equal, tie-break with the usable bytes
-                                cmp = pathsToSpace.get(p2).compareTo(pathsToSpace.get(p1));
-                            }
-                        }
-                        return cmp;
-                    })
-                    // Return the first result
-                    .findFirst()
-                    // Or the existing best path if there aren't any that fit the criteria
                     .orElse(bestPath);
-            }
-
-            statePath = bestPath.resolve(shardId);
-            dataPath = statePath;
-        }
-        return new ShardPath(indexSettings.hasCustomDataPath(), dataPath, statePath, shardId);
+                            if (cmp == 0) {
+                }
+        final String indexUUID = indexSettings.getUUID();
+                    // Filter out paths that have enough space
+}
+    public int hashCode() {
+                    throw new IllegalStateException(
+    public boolean isCustomDataPath() {
     }
-
-    static NodeEnvironment.NodePath getPathWithMostFreeSpace(NodeEnvironment env) throws IOException {
-        final NodeEnvironment.NodePath[] paths = env.nodePaths();
-        NodeEnvironment.NodePath bestPath = null;
-        long maxUsableBytes = Long.MIN_VALUE;
-        for (NodeEnvironment.NodePath nodePath : paths) {
             FileStore fileStore = nodePath.fileStore;
-            long usableBytes = fileStore.getUsableSpace(); // NB usable bytes doesn't account for reserved space (e.g. incoming recoveries)
-            assert usableBytes >= 0 : "usable bytes must be >= 0, got: " + usableBytes;
-
-            if (bestPath == null || usableBytes > maxUsableBytes) {
+                bestPath = Arrays.stream(paths)
+        return bestPath;
+     * Returns <code>true</code> iff the data location is a custom data location and therefore outside of the nodes configured data paths.
+                            // if the number of shards is equal, tie-break with the number of total shards
+    private final boolean isCustomDataPath;
+                                dataPathToShardCount.getOrDefault(p2.path, 0)
+                                cmp = pathsToSpace.get(p2).compareTo(pathsToSpace.get(p1));
+            + dataPath.toString();
+     * and the shard ID.
+        return isCustomDataPath;
+        } else {
+     * This method tries to delete left-over shards where the index name has been reused but the UUID is different
+        for (NodeEnvironment.NodePath nodePath : paths) {
                 // This path has been determined to be "better" based on the usable bytes
-                maxUsableBytes = usableBytes;
-                bestPath = nodePath;
+import java.nio.file.Path;
+                }
+    }
+        }
+            // shard size across the cluster and 5% of the total available free space on this node:
+        ShardId shardId,
+        }
+            // EMPTY is safe here because we never call namedObject
+        return "ShardPath{" + "path=" + path + ", shard=" + shardId + '}';
+    public static ShardPath selectNewPathForShard(
+                        "{} found shard on path: [{}] with a different index UUID - this "
+                dataPath = statePath;
+            final boolean hasCustomDataPath = !Strings.isNullOrEmpty(customDataPath);
+    /**
+        }
+import org.apache.logging.log4j.Logger;
+    public boolean equals(Object o) {
+        if (Objects.equals(shardId, shardPath.shardId) == false) {
+import org.opensearch.common.annotation.PublicApi;
+            statePath = env.nodePaths()[0].resolve(shardId);
+        return path.resolve(subDirectory);
+            // Very rough heuristic of how much disk space we expect the shard will use over its lifetime, the max of current average
+        Map<Path, Integer> dataPathToShardCount
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+    public Path getRootDataPath() {
+            ShardStateMetadata load = ShardStateMetadata.FORMAT.loadLatestState(logger, NamedXContentRegistry.EMPTY, path);
+    public Path getShardStatePath() {
+                final Map<NodeEnvironment.NodePath, BigInteger> pathsToSpace = new HashMap<>(paths.length);
+        }
+     * to allow the new shard to be allocated.
+        final String indexUUID = shardId.getIndex().getUUID();
+        return true;
+            return false;
+    }
+        int result = path != null ? path.hashCode() : 0;
+                        path
+                            + " expected: "
+                    FileStore fileStore = nodePath.fileStore;
+            BigInteger estShardSizeInBytes = BigInteger.valueOf(avgShardSizeInBytes).max(totFreeSpace.divide(BigInteger.valueOf(20)));
+        return new ShardPath(indexSettings.hasCustomDataPath(), dataPath, statePath, shardId);
+                            + indexUUID
+                    );
+                        shardId,
+                    .findFirst()
+    }
+     */
             }
         }
-        return bestPath;
+import org.opensearch.env.NodeEnvironment;
     }
-
+        assert shardStatePath.getParent().getFileName().toString().equals(shardId.getIndex().getUUID())
+ * You may obtain a copy of the License at
+            throw new IllegalArgumentException("shard state path must be different to the data path when using custom data paths");
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
+    }
+        final int nodeLockId = env.getNodeLockId();
+            // TODO: this is a hack!! We should instead keep track of incoming (relocated) shards since we know
+            if (load != null) {
+                    .filter((path) -> pathsToSpace.get(path).subtract(estShardSizeInBytes).compareTo(BigInteger.ZERO) > 0)
+    public boolean exists() {
+        Path loadedPath = null;
+                    logger.warn(
+     * directories with a valid shard state exist the one with the highest version will be used.
         }
-        if (o == null || getClass() != o.getClass()) {
+                    BigInteger usableBytes = BigInteger.valueOf(fileStore.getUsableSpace());
+                }
+/*
+        result = 31 * result + (shardId != null ? shardId.hashCode() : 0);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import java.io.IOException;
+        return Files.exists(path);
+            final Path dataPath;
+            final NodeEnvironment.NodePath[] paths = env.nodePaths();
+ * not use this file except in compliance with the License.
+    /**
+            }
+            statePath = bestPath.resolve(shardId);
+        assert dataPath.getParent().getFileName().toString().equals(shardId.getIndex().getUUID())
+                    );
+        for (Path path : paths) {
+            for (NodeEnvironment.NodePath nodePath : env.nodePaths()) {
+ * ownership. Elasticsearch licenses this file to you under
+        final Path[] paths = env.availableShardPaths(shardId);
+                if (loadedPath == null) {
+ *
+            } else {
+     * directories with a valid shard state exist the one with the highest version will be used.
+     */
+        return new ShardPath(true, dataPath, statePath, shardId);
+ * under the License.
+        this.isCustomDataPath = isCustomDataPath;
+        NodeEnvironment.NodePath path = env.fileCacheNodePath();
+        NodeEnvironment env,
             return false;
-        }
+ *
+            // EMPTY is safe here because we never call namedObject
+                    logger.warn("{} deleting leftover shard on path: [{}] with a different index UUID", lock.getShardId(), path);
+    public Path resolveIndex() {
+    }
+        return result;
+            assert usableBytes >= 0 : "usable bytes must be >= 0, got: " + usableBytes;
         final ShardPath shardPath = (ShardPath) o;
-        if (Objects.equals(shardId, shardPath.shardId) == false) {
+ * The OpenSearch Contributors require contributions made to
+ */
+            : "shardStatePath must end with index path id but didn't: " + dataPath.toString();
+    }
+                        int cmp = Long.compare(pathToShardCount.getOrDefault(p1, 0L), pathToShardCount.getOrDefault(p2, 0L));
+                    NodeEnvironment.acquireFSLockForPaths(indexSettings, paths);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        for (Path path : availableShardPaths) {
+ */
+    }
+     * Returns the state-path root for this shard. The root is a parent of {@link #getRootStatePath()} ()} without the index name
+        long avgShardSizeInBytes,
+                    // Return the first result
+        long maxUsableBytes = Long.MIN_VALUE;
+ * this work for additional information regarding copyright
+ */
+public final class ShardPath {
+import org.opensearch.core.index.shard.ShardId;
+        ShardId shardId,
+import java.util.Arrays;
+     */
+                for (NodeEnvironment.NodePath nodePath : paths) {
+    private final Path shardStatePath;
+        IndexSettings indexSettings,
+    public ShardId getShardId() {
+            long usableBytes = fileStore.getUsableSpace(); // NB usable bytes doesn't account for reserved space (e.g. incoming recoveries)
+        final Path statePath = path.resolve(shardId);
+                Map<NodeEnvironment.NodePath, Long> pathToShardCount = env.shardCountPerPath(shardId.getIndex());
+    }
+ *
+        return getShardStatePath().getParent().getParent().getParent(); // also strip the indices folder
+            if (hasCustomDataPath) {
+            // TODO - do we need something more extensible? Yet, this does the job for now...
+                        }
+ * Licensed to Elasticsearch under one or more contributor
+                maxUsableBytes = usableBytes;
+    public static void deleteLeftoverShardDirectory(Logger logger, NodeEnvironment env, ShardLock lock, IndexSettings indexSettings)
+    }
+import org.opensearch.core.common.Strings;
+        this.shardStatePath = shardStatePath;
+        if (this == o) {
+    public String toString() {
+            final Path statePath = loadedPath;
+            : "shardStatePath must end with the shard ID but didn't: " + dataPath.toString();
+        if (loadedPath == null) {
+        final Path dataPath;
+                            + path
+/*
+            return true;
+import org.opensearch.index.IndexSettings;
+    /**
+        NodeEnvironment.NodePath bestPath = null;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+    }
+            BigInteger totFreeSpace = BigInteger.ZERO;
+    public static ShardPath loadShardPath(Logger logger, NodeEnvironment env, ShardId shardId, String customDataPath) throws IOException {
+                // Compute how much space there is on each path
+        assert shardStatePath.getFileName().toString().equals(Integer.toString(shardId.id()))
+ *
+            // If no better path is chosen, use the one with the most space by default
+                    loadedPath = path;
+            logger.debug("{} loaded data path [{}], state path [{}]", shardId, dataPath, statePath);
+    }
+            if (bestPath == null || usableBytes > maxUsableBytes) {
+                                dataPathToShardCount.getOrDefault(p1.path, 0),
+    public static ShardPath loadFileCachePath(NodeEnvironment env, ShardId shardId) {
+    ) throws IOException {
+    @Override
+    /**
+/**
+    public static final String INDEX_FOLDER_NAME = "index";
+            NodeEnvironment.NodePath bestPath = getPathWithMostFreeSpace(env);
+        String customDataPath,
+        this.path = dataPath;
+import java.nio.file.Files;
+import java.util.HashMap;
+    }
+                    .sorted((p1, p2) -> {
+        } else {
+                            + "Remove the leftover shard in order to reuse the path with the current index",
+                    // Or the existing best path if there aren't any that fit the criteria
+        return path;
+                        if (cmp == 0) {
+ * Path for a shard
+     * This method walks through the nodes shard paths to find the data and state path for the given shard. If multiple
+            }
+        }
+        final Path statePath;
+            if (load != null) {
+        if (isCustomDataPath && dataPath.equals(shardStatePath)) {
+        Logger logger,
             return false;
+                    pathsToSpace.put(nodePath, usableBytes);
+     * This method walks through the nodes shard paths to find the data and state path for the given shard. If multiple
+    }
+            return null;
         }
         if (Objects.equals(path, shardPath.path) == false) {
-            return false;
-        }
-
-        return true;
-    }
-
-    @Override
-    public int hashCode() {
-        int result = path != null ? path.hashCode() : 0;
-        result = 31 * result + (shardId != null ? shardId.hashCode() : 0);
-        return result;
-    }
-
-    @Override
-    public String toString() {
-        return "ShardPath{" + "path=" + path + ", shard=" + shardId + '}';
-    }
-}
+    static NodeEnvironment.NodePath getPathWithMostFreeSpace(NodeEnvironment env) throws IOException {
+        return shardId;
+            dataPath = statePath;
+import org.opensearch.cluster.metadata.IndexMetadata;
+        return path.resolve(INDEX_FOLDER_NAME);
+            }
+        return isCustomDataPath ? noIndexShardId : noIndexShardId.getParent(); // also strip the indices folder
+        Path sharedDataPath
+    private final Path path;

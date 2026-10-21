@@ -1,301 +1,257 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common;
-
-import org.opensearch.common.io.Channels;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.test.OpenSearchTestCase;
-import org.hamcrest.Matchers;
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.EOFException;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
-import java.nio.channels.ReadableByteChannel;
-import java.nio.channels.WritableByteChannel;
+            try {
+    @Override
+            return delegate.transferFrom(src, position, count);
+        copy.duplicate().get(tmp);
+        public FileLock lock(long position, long size, boolean shared) throws IOException {
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-
-import static org.hamcrest.Matchers.containsString;
-
-public class ChannelsTests extends OpenSearchTestCase {
-
-    byte[] randomBytes;
-    FileChannel fileChannel;
-
-    @Override
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        Path tmpFile = createTempFile();
-        FileChannel randomAccessFile = FileChannel.open(tmpFile, StandardOpenOption.READ, StandardOpenOption.WRITE);
-        fileChannel = new MockFileChannel(randomAccessFile);
-        randomBytes = randomUnicodeOfLength(scaledRandomIntBetween(10, 100000)).getBytes("UTF-8");
+ * under the License.
+import org.junit.After;
+ * You may obtain a copy of the License at
+ * license agreements. See the NOTICE file distributed with
     }
-
-    @Override
-    @After
-    public void tearDown() throws Exception {
-        fileChannel.close();
-        super.tearDown();
-    }
-
-    public void testReadWriteThoughArrays() throws Exception {
-        writeToChannel(randomBytes, fileChannel);
-        byte[] readBytes = Channels.readFromFileChannel(fileChannel, 0, randomBytes.length);
-        assertThat("read bytes didn't match written bytes", randomBytes, Matchers.equalTo(readBytes));
-    }
-
-    public void testPartialReadWriteThroughArrays() throws Exception {
-        int length = randomIntBetween(1, randomBytes.length / 2);
-        int offset = randomIntBetween(0, randomBytes.length - length);
-        writeToChannel(randomBytes, offset, length, fileChannel);
-
-        int lengthToRead = randomIntBetween(1, length);
-        int offsetToRead = randomIntBetween(0, length - lengthToRead);
-        byte[] readBytes = new byte[randomBytes.length];
-        Channels.readFromFileChannel(fileChannel, offsetToRead, readBytes, offset + offsetToRead, lengthToRead);
-
-        BytesReference source = new BytesArray(randomBytes, offset + offsetToRead, lengthToRead);
-        BytesReference read = new BytesArray(readBytes, offset + offsetToRead, lengthToRead);
-
-        assertThat("read bytes didn't match written bytes", BytesReference.toBytes(source), Matchers.equalTo(BytesReference.toBytes(read)));
-    }
-
-    public void testBufferReadPastEOFWithException() throws Exception {
-        int bytesToWrite = randomIntBetween(0, randomBytes.length - 1);
-        writeToChannel(randomBytes, 0, bytesToWrite, fileChannel);
-        try {
-            Channels.readFromFileChannel(fileChannel, 0, bytesToWrite + 1 + randomInt(1000));
-            fail("Expected an EOFException");
+        }
         } catch (EOFException e) {
-            assertThat(e.getMessage(), containsString("read past EOF"));
         }
-    }
-
-    public void testBufferReadPastEOFWithoutException() throws Exception {
-        int bytesToWrite = randomIntBetween(0, randomBytes.length - 1);
-        writeToChannel(randomBytes, 0, bytesToWrite, fileChannel);
-        byte[] bytes = new byte[bytesToWrite + 1 + randomInt(1000)];
-        int read = Channels.readFromFileChannel(fileChannel, 0, bytes, 0, bytes.length);
-        assertThat(read, Matchers.lessThan(0));
-    }
-
-    public void testReadWriteThroughBuffers() throws IOException {
-        ByteBuffer source;
-        if (randomBoolean()) {
-            source = ByteBuffer.wrap(randomBytes);
+ * ownership. Elasticsearch licenses this file to you under
+}
+ *
+        }
         } else {
-            source = ByteBuffer.allocateDirect(randomBytes.length);
-            source.put(randomBytes);
-            source.flip();
         }
-        Channels.writeToChannel(source, fileChannel);
-        ByteBuffer copy;
+        @Override
+    private static void writeToChannel(byte[] source, int offset, int length, FileChannel channel) throws IOException {
+ * Licensed to Elasticsearch under one or more contributor
         if (randomBoolean()) {
+    public void testBufferReadPastEOFWithException() throws Exception {
+        } else {
+            source.flip();
+        int offset = randomIntBetween(0, randomBytes.length - length);
+    }
+        public FileChannel truncate(long size) throws IOException {
+import org.hamcrest.Matchers;
+        }
+            return delegate.tryLock(position, size, shared);
+        public long transferTo(long position, long count, WritableByteChannel target) throws IOException {
+        Channels.writeToChannel(source, fileChannel);
+        writeToChannel(randomBytes, 0, bytesToWrite, fileChannel);
+        int offsetToRead = randomIntBetween(0, length - lengthToRead);
+            fail("Expected an EOFException");
+        public long size() throws IOException {
+            return delegate.position(newPosition);
+            Channels.writeToChannel(source, offset, length, channel, channel.position());
+            Channels.writeToChannel(source, channel);
+        @Override
+        ByteBuffer source;
+        int read = Channels.readFromFileChannel(fileChannel, 0, bytes, 0, bytes.length);
+    public void setUp() throws Exception {
+    public void testReadWriteThroughBuffers() throws IOException {
+                return delegate.write(mockSrc);
+    }
+        writeToChannel(randomBytes, 0, bytesToWrite, fileChannel);
+            int willActuallyWrite = randomInt(src.remaining());
+            return delegate.write(srcs, offset, length);
+        @Override
+        writeToChannel(randomBytes, fileChannel);
+            source = ByteBuffer.wrap(randomBytes);
+        BytesReference sourceRef = new BytesArray(randomBytes, offset + offsetToRead, lengthToRead);
+ * compatible open source license.
+ * KIND, either express or implied.  See the License for the
+        public FileLock tryLock(long position, long size, boolean shared) throws IOException {
+        }
+        FileChannel randomAccessFile = FileChannel.open(tmpFile, StandardOpenOption.READ, StandardOpenOption.WRITE);
+    }
+        public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
+        }
+ * software distributed under the License is distributed on an
             copy = ByteBuffer.allocate(randomBytes.length);
         } else {
-            copy = ByteBuffer.allocateDirect(randomBytes.length);
-        }
-        int read = Channels.readFromFileChannel(fileChannel, 0, copy);
-        assertThat(read, Matchers.equalTo(randomBytes.length));
-        byte[] copyBytes = new byte[read];
-        copy.flip();
-        copy.get(copyBytes);
-        assertThat("read bytes didn't match written bytes", randomBytes, Matchers.equalTo(copyBytes));
-    }
-
-    public void testPartialReadWriteThroughBuffers() throws IOException {
-        int length = randomIntBetween(1, randomBytes.length / 2);
-        int offset = randomIntBetween(0, randomBytes.length - length);
-        ByteBuffer source;
-        if (randomBoolean()) {
-            source = ByteBuffer.wrap(randomBytes, offset, length);
-        } else {
-            source = ByteBuffer.allocateDirect(length);
-            source.put(randomBytes, offset, length);
-            source.flip();
-        }
-        Channels.writeToChannel(source, fileChannel);
-
-        int lengthToRead = randomIntBetween(1, length);
-        int offsetToRead = randomIntBetween(0, length - lengthToRead);
-        ByteBuffer copy;
-        if (randomBoolean()) {
-            copy = ByteBuffer.allocate(lengthToRead);
-        } else {
-            copy = ByteBuffer.allocateDirect(lengthToRead);
-        }
-        int read = Channels.readFromFileChannel(fileChannel, offsetToRead, copy);
-        assertThat(read, Matchers.equalTo(lengthToRead));
-        copy.flip();
-
-        BytesReference sourceRef = new BytesArray(randomBytes, offset + offsetToRead, lengthToRead);
-        byte[] tmp = new byte[copy.remaining()];
-        copy.duplicate().get(tmp);
-        BytesReference copyRef = new BytesArray(tmp);
-
-        assertTrue("read bytes didn't match written bytes", sourceRef.equals(copyRef));
-    }
-
-    private static void writeToChannel(byte[] source, int offset, int length, FileChannel channel) throws IOException {
-        if (randomBoolean()) {
-            Channels.writeToChannel(source, offset, length, channel, channel.position());
-        } else {
-            Channels.writeToChannel(source, offset, length, channel);
-        }
-    }
-
-    private static void writeToChannel(byte[] source, FileChannel channel) throws IOException {
-        if (randomBoolean()) {
-            Channels.writeToChannel(source, channel, channel.position());
-        } else {
-            Channels.writeToChannel(source, channel);
-        }
-    }
-
-    class MockFileChannel extends FileChannel {
-
-        FileChannel delegate;
-
-        MockFileChannel(FileChannel delegate) {
-            this.delegate = delegate;
-        }
-
+    byte[] randomBytes;
         @Override
-        public int read(ByteBuffer dst) throws IOException {
-            // delay buffer read..
-            int willActuallyRead = randomInt(dst.remaining());
-            ByteBuffer mockDst = dst.duplicate();
-            mockDst.limit(mockDst.position() + willActuallyRead);
-            try {
-                return delegate.read(mockDst);
-            } finally {
-                dst.position(mockDst.position());
-            }
-        }
-
-        @Override
-        public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
             return delegate.read(dsts, offset, length);
-        }
-
-        @Override
-        public int write(ByteBuffer src) throws IOException {
-            // delay buffer write..
-            int willActuallyWrite = randomInt(src.remaining());
+            return delegate.write(src, position);
+ */
+ * this work for additional information regarding copyright
+public class ChannelsTests extends OpenSearchTestCase {
+            return delegate.map(mode, position, size);
+                return delegate.read(mockDst);
+ * Modifications Copyright OpenSearch Contributors. See
             ByteBuffer mockSrc = src.duplicate();
-            mockSrc.limit(mockSrc.position() + willActuallyWrite);
-            try {
-                return delegate.write(mockSrc);
-            } finally {
-                src.position(mockSrc.position());
-            }
+import org.junit.Before;
+        fileChannel = new MockFileChannel(randomAccessFile);
+ * The OpenSearch Contributors require contributions made to
+        Path tmpFile = createTempFile();
+        BytesReference read = new BytesArray(readBytes, offset + offsetToRead, lengthToRead);
+        assertThat("read bytes didn't match written bytes", randomBytes, Matchers.equalTo(copyBytes));
+    public void testReadWriteThoughArrays() throws Exception {
         }
-
+        } else {
+            Channels.writeToChannel(source, channel, channel.position());
+        MockFileChannel(FileChannel delegate) {
+        public long transferFrom(ReadableByteChannel src, long position, long count) throws IOException {
+        FileChannel delegate;
+import org.opensearch.test.OpenSearchTestCase;
+ * Unless required by applicable law or agreed to in writing,
+ * the Apache License, Version 2.0 (the "License"); you may
+    FileChannel fileChannel;
+        assertThat(read, Matchers.equalTo(lengthToRead));
+        int lengthToRead = randomIntBetween(1, length);
+    public void tearDown() throws Exception {
         @Override
-        public long write(ByteBuffer[] srcs, int offset, int length) throws IOException {
-            return delegate.write(srcs, offset, length);
+    }
+        int bytesToWrite = randomIntBetween(0, randomBytes.length - 1);
+        ByteBuffer copy;
+import org.opensearch.common.io.Channels;
+    @Before
         }
-
         @Override
+import java.nio.channels.ReadableByteChannel;
+        assertThat("read bytes didn't match written bytes", BytesReference.toBytes(source), Matchers.equalTo(BytesReference.toBytes(read)));
+import java.nio.channels.FileLock;
+        byte[] copyBytes = new byte[read];
+        @Override
+import java.nio.ByteBuffer;
         public long position() throws IOException {
+ */
+        } else {
+        @Override
+            copy = ByteBuffer.allocateDirect(lengthToRead);
+    public void testPartialReadWriteThroughArrays() throws Exception {
+            delegate.close();
+        byte[] bytes = new byte[bytesToWrite + 1 + randomInt(1000)];
+            try {
+            source = ByteBuffer.allocateDirect(length);
+            source.put(randomBytes);
+            return delegate.lock(position, size, shared);
+ * GitHub history for details.
+            ByteBuffer mockDst = dst.duplicate();
+    }
+        copy.flip();
+        @Override
+    }
+            source.flip();
+import org.opensearch.core.common.bytes.BytesArray;
+        ByteBuffer source;
+    }
+        }
+        @Override
+                dst.position(mockDst.position());
+        int offsetToRead = randomIntBetween(0, length - lengthToRead);
+        if (randomBoolean()) {
+import static org.hamcrest.Matchers.containsString;
+            source = ByteBuffer.wrap(randomBytes, offset, length);
+            source = ByteBuffer.allocateDirect(randomBytes.length);
+        super.setUp();
+            return delegate.truncate(size);
+        public void force(boolean metadata) throws IOException {
+        }
+/*
+    class MockFileChannel extends FileChannel {
+        assertThat(read, Matchers.equalTo(randomBytes.length));
+        @Override
+        }
+        @Override
+        }
             return delegate.position();
         }
-
+            return delegate.read(dst, position);
+        protected void implCloseChannel() throws IOException {
+ */
+            copy = ByteBuffer.allocateDirect(randomBytes.length);
+ * specific language governing permissions and limitations
+        BytesReference copyRef = new BytesArray(tmp);
+        BytesReference source = new BytesArray(randomBytes, offset + offsetToRead, lengthToRead);
+package org.opensearch.common;
+        byte[] readBytes = new byte[randomBytes.length];
+ * not use this file except in compliance with the License.
+            assertThat(e.getMessage(), containsString("read past EOF"));
+            // delay buffer read..
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+/*
         @Override
-        public FileChannel position(long newPosition) throws IOException {
-            return delegate.position(newPosition);
-        }
-
+        Channels.readFromFileChannel(fileChannel, offsetToRead, readBytes, offset + offsetToRead, lengthToRead);
+            }
+        ByteBuffer copy;
+        } else {
         @Override
-        public long size() throws IOException {
+    }
+        int offset = randomIntBetween(0, randomBytes.length - length);
+ *
+        writeToChannel(randomBytes, offset, length, fileChannel);
+            int willActuallyRead = randomInt(dst.remaining());
             return delegate.size();
+        copy.get(copyBytes);
         }
-
-        @Override
-        public FileChannel truncate(long size) throws IOException {
-            return delegate.truncate(size);
+        int read = Channels.readFromFileChannel(fileChannel, 0, copy);
+ *
+        public int write(ByteBuffer src, long position) throws IOException {
+    }
+import java.io.EOFException;
+    @After
         }
-
-        @Override
-        public void force(boolean metadata) throws IOException {
+        int length = randomIntBetween(1, randomBytes.length / 2);
+        }
+        public int write(ByteBuffer src) throws IOException {
+        int bytesToWrite = randomIntBetween(0, randomBytes.length - 1);
+import org.opensearch.core.common.bytes.BytesReference;
+        public int read(ByteBuffer dst, long position) throws IOException {
+        assertTrue("read bytes didn't match written bytes", sourceRef.equals(copyRef));
+            } finally {
+        public MappedByteBuffer map(MapMode mode, long position, long size) throws IOException {
+        int read = Channels.readFromFileChannel(fileChannel, offsetToRead, copy);
+        if (randomBoolean()) {
+        try {
+    @Override
+        public long write(ByteBuffer[] srcs, int offset, int length) throws IOException {
+        byte[] readBytes = Channels.readFromFileChannel(fileChannel, 0, randomBytes.length);
+            } finally {
+ * this file be licensed under the Apache-2.0 license or a
+        }
+        int length = randomIntBetween(1, randomBytes.length / 2);
             delegate.force(metadata);
-        }
-
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        super.tearDown();
         @Override
-        public long transferTo(long position, long count, WritableByteChannel target) throws IOException {
+        }
+        if (randomBoolean()) {
+        }
+        @Override
+            Channels.readFromFileChannel(fileChannel, 0, bytesToWrite + 1 + randomInt(1000));
+            copy = ByteBuffer.allocate(lengthToRead);
+        }
+        copy.flip();
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
+        @Override
+import java.io.IOException;
+            this.delegate = delegate;
+        if (randomBoolean()) {
+import java.nio.file.StandardOpenOption;
+        public int read(ByteBuffer dst) throws IOException {
             return delegate.transferTo(position, count, target);
         }
-
-        @Override
-        public long transferFrom(ReadableByteChannel src, long position, long count) throws IOException {
-            return delegate.transferFrom(src, position, count);
         }
-
-        @Override
-        public int read(ByteBuffer dst, long position) throws IOException {
-            return delegate.read(dst, position);
+            // delay buffer write..
+                src.position(mockSrc.position());
         }
-
-        @Override
-        public int write(ByteBuffer src, long position) throws IOException {
-            return delegate.write(src, position);
+    private static void writeToChannel(byte[] source, FileChannel channel) throws IOException {
+        byte[] tmp = new byte[copy.remaining()];
+ * SPDX-License-Identifier: Apache-2.0
+            Channels.writeToChannel(source, offset, length, channel);
+            mockSrc.limit(mockSrc.position() + willActuallyWrite);
+        public FileChannel position(long newPosition) throws IOException {
+        randomBytes = randomUnicodeOfLength(scaledRandomIntBetween(10, 100000)).getBytes("UTF-8");
+            }
         }
-
-        @Override
-        public MappedByteBuffer map(MapMode mode, long position, long size) throws IOException {
-            return delegate.map(mode, position, size);
-        }
-
-        @Override
-        public FileLock lock(long position, long size, boolean shared) throws IOException {
-            return delegate.lock(position, size, shared);
-        }
-
-        @Override
-        public FileLock tryLock(long position, long size, boolean shared) throws IOException {
-            return delegate.tryLock(position, size, shared);
-        }
-
-        @Override
-        protected void implCloseChannel() throws IOException {
-            delegate.close();
-        }
+    public void testPartialReadWriteThroughBuffers() throws IOException {
+        if (randomBoolean()) {
+        int lengthToRead = randomIntBetween(1, length);
+/*
+        Channels.writeToChannel(source, fileChannel);
+    public void testBufferReadPastEOFWithoutException() throws Exception {
+import java.nio.channels.WritableByteChannel;
     }
-}
+        fileChannel.close();
+            source.put(randomBytes, offset, length);
+        assertThat("read bytes didn't match written bytes", randomBytes, Matchers.equalTo(readBytes));
+        assertThat(read, Matchers.lessThan(0));
+            mockDst.limit(mockDst.position() + willActuallyRead);

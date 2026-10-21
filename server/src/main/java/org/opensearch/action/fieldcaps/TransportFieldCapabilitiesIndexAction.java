@@ -1,388 +1,354 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.fieldcaps;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.action.ActionRunnable;
-import org.opensearch.action.ActionType;
-import org.opensearch.action.NoShardAvailableActionException;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.ChannelActionListener;
-import org.opensearch.action.support.HandledTransportAction;
-import org.opensearch.action.support.TransportIndicesResolvingAction;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.ResolvedIndices;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.FailAwareWeightedRouting;
-import org.opensearch.cluster.routing.GroupShardsIterator;
-import org.opensearch.cluster.routing.ShardIterator;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.logging.LoggerMessageFormat;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.ObjectMapper;
-import org.opensearch.index.query.MatchAllQueryBuilder;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.search.SearchService;
-import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.search.internal.AliasFilter;
-import org.opensearch.search.internal.ShardSearchRequest;
-import org.opensearch.tasks.Task;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportChannel;
-import org.opensearch.transport.TransportException;
-import org.opensearch.transport.TransportRequestHandler;
-import org.opensearch.transport.TransportResponseHandler;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.Executor;
-import java.util.function.Predicate;
-
-import static org.opensearch.action.support.TransportActions.isShardNotAvailableException;
-
-/**
- * Transport action for field capabilities request in an index
- *
- * @opensearch.internal
- */
 public class TransportFieldCapabilitiesIndexAction extends HandledTransportAction<
-    FieldCapabilitiesIndexRequest,
-    FieldCapabilitiesIndexResponse> implements TransportIndicesResolvingAction<FieldCapabilitiesIndexRequest> {
-
-    private static final Logger logger = LogManager.getLogger(TransportFieldCapabilitiesIndexAction.class);
-
-    private static final String ACTION_NAME = FieldCapabilitiesAction.NAME + "[index]";
-    private static final String ACTION_SHARD_NAME = ACTION_NAME + "[s]";
-    public static final ActionType<FieldCapabilitiesIndexResponse> TYPE = new ActionType<>(
-        ACTION_NAME,
         FieldCapabilitiesIndexResponse::new
-    );
-
-    private final ClusterService clusterService;
-    private final TransportService transportService;
-    private final SearchService searchService;
-    private final IndicesService indicesService;
-    private final Executor executor;
-
-    @Inject
-    public TransportFieldCapabilitiesIndexAction(
-        ClusterService clusterService,
-        TransportService transportService,
-        IndicesService indicesService,
-        SearchService searchService,
-        ThreadPool threadPool,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver
-    ) {
-        super(ACTION_NAME, transportService, actionFilters, FieldCapabilitiesIndexRequest::new);
-        this.clusterService = clusterService;
-        this.transportService = transportService;
-        this.searchService = searchService;
-        this.indicesService = indicesService;
-        this.executor = threadPool.executor(ThreadPool.Names.MANAGEMENT);
-        transportService.registerRequestHandler(
-            ACTION_SHARD_NAME,
-            ThreadPool.Names.SAME,
-            FieldCapabilitiesIndexRequest::new,
-            new ShardTransportHandler()
-        );
-    }
-
-    @Override
-    protected void doExecute(Task task, FieldCapabilitiesIndexRequest request, ActionListener<FieldCapabilitiesIndexResponse> listener) {
-        new AsyncShardsAction(request, listener).start();
-    }
-
-    private FieldCapabilitiesIndexResponse shardOperation(final FieldCapabilitiesIndexRequest request) throws IOException {
-        if (canMatchShard(request) == false) {
-            return new FieldCapabilitiesIndexResponse(request.index(), Collections.emptyMap(), false);
         }
-        ShardId shardId = request.shardId();
-        IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());
-        MapperService mapperService = indexService.mapperService();
-        IndexSettings indexSettings = indexService.getIndexSettings();
-        Set<String> fieldNames = new HashSet<>();
-        for (String field : request.fields()) {
-            fieldNames.addAll(mapperService.simpleMatchToFullName(field));
-        }
-        Predicate<String> fieldPredicate = indicesService.getFieldFilter().apply(shardId.getIndexName());
-        Map<String, IndexFieldCapabilities> responseMap = new HashMap<>();
-        for (String field : fieldNames) {
-            MappedFieldType ft = mapperService.fieldType(field);
-            if (ft != null) {
-                if (indicesService.isMetadataField(field) || fieldPredicate.test(ft.name())) {
-                    // On a pluggable data format index, doc-values-backed fields can be searched, so
-                    // report searchability accordingly; otherwise use the plain indexed flag.
-                    boolean searchable;
-                    if (indexSettings.isPluggableDataFormatEnabled()) {
-                        searchable = ft.isSearchableViaDocValues(indexSettings);
-                    } else {
-                        searchable = ft.isSearchable();
-                    }
-                    IndexFieldCapabilities fieldCap = new IndexFieldCapabilities(
-                        field,
-                        ft.familyTypeName(),
-                        searchable,
-                        ft.isAggregatable(),
-                        ft.meta()
-                    );
-                    responseMap.put(field, fieldCap);
-                } else {
-                    continue;
-                }
-                // add nested and object fields
-                int dotIndex = ft.name().lastIndexOf('.');
-                while (dotIndex > -1) {
-                    String parentField = ft.name().substring(0, dotIndex);
-                    if (responseMap.containsKey(parentField)) {
-                        // we added this path on another field already
-                        break;
-                    }
-                    // checks if the parent field contains sub-fields
-                    if (mapperService.fieldType(parentField) == null) {
-                        // no field type, it must be an object field
-                        ObjectMapper mapper = mapperService.getObjectMapper(parentField);
-                        if (mapper == null) {
-                            // parentField is part of a literal dotted field name under a disable_objects=true parent
-                            // No ObjectMapper exists for this intermediate path so skip it and continue up the chain
-                            dotIndex = parentField.lastIndexOf('.');
-                            continue;
-                        }
-                        String type = mapper.nested().isNested() ? "nested" : "object";
-                        IndexFieldCapabilities fieldCap = new IndexFieldCapabilities(
-                            parentField,
-                            type,
-                            false,
-                            false,
-                            Collections.emptyMap()
-                        );
-                        responseMap.put(parentField, fieldCap);
-                    }
-                    dotIndex = parentField.lastIndexOf('.');
-                }
-            }
-        }
-        return new FieldCapabilitiesIndexResponse(request.index(), responseMap, true);
-    }
-
-    private boolean canMatchShard(FieldCapabilitiesIndexRequest req) throws IOException {
-        if (req.indexFilter() == null || req.indexFilter() instanceof MatchAllQueryBuilder) {
-            return true;
-        }
-        assert req.nowInMillis() != 0L;
-        ShardSearchRequest searchRequest = new ShardSearchRequest(req.shardId(), req.nowInMillis(), AliasFilter.EMPTY);
-        searchRequest.source(new SearchSourceBuilder().query(req.indexFilter()));
-        return searchService.canMatch(searchRequest).canMatch();
-    }
-
-    private ClusterBlockException checkGlobalBlock(ClusterState state) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.READ);
-    }
-
-    private ClusterBlockException checkRequestBlock(ClusterState state, String concreteIndex) {
-        return state.blocks().indexBlockedException(ClusterBlockLevel.READ, concreteIndex);
-    }
-
-    @Override
-    public ResolvedIndices resolveIndices(FieldCapabilitiesIndexRequest request) {
-        return ResolvedIndices.of(request.index());
-    }
-
-    /**
-     * An action that executes on each shard sequentially until it finds one that can match the provided
-     * {@link FieldCapabilitiesIndexRequest#indexFilter()}. In which case the shard is used
-     * to create the final {@link FieldCapabilitiesIndexResponse}.
-     *
-     * @opensearch.internal
-     */
-    class AsyncShardsAction {
-        private final FieldCapabilitiesIndexRequest request;
-        private final DiscoveryNodes nodes;
-        private final ActionListener<FieldCapabilitiesIndexResponse> listener;
-        private final GroupShardsIterator<ShardIterator> shardsIt;
-
-        private volatile int shardIndex = 0;
-
         private AsyncShardsAction(FieldCapabilitiesIndexRequest request, ActionListener<FieldCapabilitiesIndexResponse> listener) {
-            this.listener = listener;
-
-            ClusterState clusterState = clusterService.state();
-            if (logger.isTraceEnabled()) {
-                logger.trace("executing [{}] based on cluster state version [{}]", request, clusterState.version());
-            }
-            nodes = clusterState.nodes();
-            ClusterBlockException blockException = checkGlobalBlock(clusterState);
-            if (blockException != null) {
-                throw blockException;
-            }
-
-            this.request = request;
-            blockException = checkRequestBlock(clusterState, request.index());
-            if (blockException != null) {
-                throw blockException;
-            }
-
-            shardsIt = clusterService.operationRouting().searchShards(clusterService.state(), new String[] { request.index() }, null, null);
-        }
-
-        public void start() {
-            tryNext(null, true);
-        }
-
-        private void onFailure(ShardRouting shardRouting, Exception e) {
-            if (e != null) {
-                logger.trace(() -> new ParameterizedMessage("{}: failed to execute [{}]", shardRouting, request), e);
-            }
-            tryNext(e, false);
-        }
-
-        private ShardRouting nextRoutingOrNull(Exception failure) {
-            if (shardsIt.size() == 0 || shardIndex >= shardsIt.size()) {
-                return null;
-            }
-            ShardRouting next = FailAwareWeightedRouting.getInstance()
-                .findNext(shardsIt.get(shardIndex), clusterService.state(), failure, this::moveToNextShard);
-
-            if (next != null) {
-                return next;
-            }
-            moveToNextShard();
-            return nextRoutingOrNull(failure);
-        }
-
-        private void moveToNextShard() {
-            ++shardIndex;
-        }
-
-        private void tryNext(@Nullable final Exception lastFailure, boolean canMatchShard) {
-            ShardRouting shardRouting = nextRoutingOrNull(lastFailure);
-            if (shardRouting == null) {
-                if (canMatchShard == false) {
-                    listener.onResponse(new FieldCapabilitiesIndexResponse(request.index(), Collections.emptyMap(), false));
-                } else {
-                    if (lastFailure == null || isShardNotAvailableException(lastFailure)) {
-                        listener.onFailure(
-                            new NoShardAvailableActionException(
+                        }
+    }
+import org.opensearch.action.ActionRunnable;
+ */
+import org.opensearch.action.support.HandledTransportAction;
+        transportService.registerRequestHandler(
                                 null,
-                                LoggerMessageFormat.format("No shard available for [{}]", request),
-                                lastFailure
-                            )
-                        );
-                    } else {
-                        logger.debug(() -> new ParameterizedMessage("{}: failed to execute [{}]", null, request), lastFailure);
-                        listener.onFailure(lastFailure);
-                    }
-                }
-                return;
+/**
+            return new FieldCapabilitiesIndexResponse(request.index(), Collections.emptyMap(), false);
+    private final Executor executor;
+        TransportService transportService,
             }
-            DiscoveryNode node = nodes.get(shardRouting.currentNodeId());
-            if (node == null) {
-                onFailure(shardRouting, new NoShardAvailableActionException(shardRouting.shardId()));
-            } else {
-                request.shardId(shardRouting.shardId());
-                if (logger.isTraceEnabled()) {
-                    logger.trace("sending request [{}] on node [{}]", request, node);
-                }
-                transportService.sendRequest(
+        }
+                            onFailure(shardRouting, exp);
+                            )
+            if (next != null) {
+                            parentField,
+import org.opensearch.transport.TransportException;
+            if (logger.isTraceEnabled()) {
+import org.opensearch.transport.TransportChannel;
+import org.opensearch.index.IndexService;
+                        @Override
+import static org.opensearch.action.support.TransportActions.isShardNotAvailableException;
+    }
+ * software distributed under the License is distributed on an
+import java.util.function.Predicate;
+            tryNext(null, true);
+                    if (responseMap.containsKey(parentField)) {
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.core.common.logging.LoggerMessageFormat;
+                        }
+    private ClusterBlockException checkGlobalBlock(ClusterState state) {
+ */
+    private final TransportService transportService;
+/*
+                while (dotIndex > -1) {
+import org.opensearch.cluster.routing.ShardIterator;
+                    }
                     node,
-                    ACTION_SHARD_NAME,
-                    request,
-                    new TransportResponseHandler<FieldCapabilitiesIndexResponse>() {
-
-                        @Override
-                        public FieldCapabilitiesIndexResponse read(StreamInput in) throws IOException {
-                            return new FieldCapabilitiesIndexResponse(in);
-                        }
-
-                        @Override
-                        public String executor() {
                             return ThreadPool.Names.SAME;
-                        }
-
+     * @opensearch.internal
+        ThreadPool threadPool,
+import org.opensearch.search.internal.ShardSearchRequest;
+        Predicate<String> fieldPredicate = indicesService.getFieldFilter().apply(shardId.getIndexName());
+import org.opensearch.tasks.Task;
+                }
+            if (blockException != null) {
+                return null;
+import org.apache.logging.log4j.Logger;
+            ++shardIndex;
+        this.transportService = transportService;
+            if (blockException != null) {
+        IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());
+            nodes = clusterState.nodes();
+        private ShardRouting nextRoutingOrNull(Exception failure) {
+    private static final String ACTION_SHARD_NAME = ACTION_NAME + "[s]";
+    private boolean canMatchShard(FieldCapabilitiesIndexRequest req) throws IOException {
+                if (canMatchShard == false) {
+ *
+                        );
+}
+        private void onFailure(ShardRouting shardRouting, Exception e) {
+ * compatible open source license.
+        IndexSettings indexSettings = indexService.getIndexSettings();
                         @Override
+ * Licensed to Elasticsearch under one or more contributor
+                            // parentField is part of a literal dotted field name under a disable_objects=true parent
+                    if (lastFailure == null || isShardNotAvailableException(lastFailure)) {
+                    // On a pluggable data format index, doc-values-backed fields can be searched, so
+import org.opensearch.search.internal.AliasFilter;
+     * to create the final {@link FieldCapabilitiesIndexResponse}.
+ * Modifications Copyright OpenSearch Contributors. See
+                onFailure(shardRouting, new NoShardAvailableActionException(shardRouting.shardId()));
+import org.opensearch.action.NoShardAvailableActionException;
+                        break;
+                    // checks if the parent field contains sub-fields
+            new ShardTransportHandler()
+ * this file be licensed under the Apache-2.0 license or a
+                    }
+        private void tryNext(@Nullable final Exception lastFailure, boolean canMatchShard) {
+    @Override
+                        String type = mapper.nested().isNested() ? "nested" : "object";
+            tryNext(e, false);
+     */
+    private static final String ACTION_NAME = FieldCapabilitiesAction.NAME + "[index]";
+        ShardSearchRequest searchRequest = new ShardSearchRequest(req.shardId(), req.nowInMillis(), AliasFilter.EMPTY);
+                }
+            ShardRouting next = FailAwareWeightedRouting.getInstance()
+                                LoggerMessageFormat.format("No shard available for [{}]", request),
+ * GitHub history for details.
+                        searchable = ft.isSearchableViaDocValues(indexSettings);
+        searchRequest.source(new SearchSourceBuilder().query(req.indexFilter()));
+        Set<String> fieldNames = new HashSet<>();
+import org.opensearch.action.support.TransportIndicesResolvingAction;
+ *
+    private final ClusterService clusterService;
+                    listener.onResponse(new FieldCapabilitiesIndexResponse(request.index(), Collections.emptyMap(), false));
+            }
+                            continue;
+                        public String executor() {
+                    if (mapperService.fieldType(parentField) == null) {
+    /**
+            throws Exception {
+    private class ShardTransportHandler implements TransportRequestHandler<FieldCapabilitiesIndexRequest> {
+                    new TransportResponseHandler<FieldCapabilitiesIndexResponse>() {
+                        // we added this path on another field already
+            DiscoveryNode node = nodes.get(shardRouting.currentNodeId());
+        }
+import org.opensearch.search.SearchService;
+                        public FieldCapabilitiesIndexResponse read(StreamInput in) throws IOException {
+                );
+                        responseMap.put(parentField, fieldCap);
+            ClusterBlockException blockException = checkGlobalBlock(clusterState);
+                    IndexFieldCapabilities fieldCap = new IndexFieldCapabilities(
+                            return new FieldCapabilitiesIndexResponse(in);
+            }
                         public void handleResponse(final FieldCapabilitiesIndexResponse response) {
-                            if (response.canMatch()) {
-                                listener.onResponse(response);
+        private void moveToNextShard() {
+                }
+import org.opensearch.core.action.ActionListener;
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.metadata.ResolvedIndices;
+import org.opensearch.cluster.block.ClusterBlockException;
+ */
+            }
                             } else {
-                                moveToNextShard();
-                                tryNext(null, false);
-                            }
+        ClusterService clusterService,
+                    // report searchability accordingly; otherwise use the plain indexed flag.
+            ActionListener<FieldCapabilitiesIndexResponse> listener = new ChannelActionListener<>(channel, ACTION_SHARD_NAME, request);
+package org.opensearch.action.fieldcaps;
+ * license agreements. See the NOTICE file distributed with
+            if (ft != null) {
+import org.opensearch.common.inject.Inject;
+import java.util.Collections;
+                throw blockException;
+    ) {
+import org.opensearch.action.support.ActionFilters;
+            } else {
+                        searchable = ft.isSearchable();
+ */
+            }
+                    );
+        private final ActionListener<FieldCapabilitiesIndexResponse> listener;
+    private final SearchService searchService;
+     *
+                        listener.onFailure(lastFailure);
+     * @opensearch.internal
+                logger.trace("executing [{}]", request);
+    FieldCapabilitiesIndexRequest,
                         }
-
+                            if (response.canMatch()) {
+    private final IndicesService indicesService;
+import org.opensearch.index.mapper.ObjectMapper;
+                    }
+    }
+import org.apache.logging.log4j.message.ParameterizedMessage;
+     *
+        IndexNameExpressionResolver indexNameExpressionResolver
+        public void messageReceived(final FieldCapabilitiesIndexRequest request, final TransportChannel channel, Task task)
+            ACTION_SHARD_NAME,
+            if (shardRouting == null) {
+ * specific language governing permissions and limitations
+        }
+                            false,
+import java.util.concurrent.Executor;
+ * SPDX-License-Identifier: Apache-2.0
+                            }
+                    } else {
+    protected void doExecute(Task task, FieldCapabilitiesIndexRequest request, ActionListener<FieldCapabilitiesIndexResponse> listener) {
+                                tryNext(null, false);
+        return state.blocks().globalBlockedException(ClusterBlockLevel.READ);
+ * @opensearch.internal
+            moveToNextShard();
+            this.listener = listener;
+import org.opensearch.cluster.node.DiscoveryNode;
+ * KIND, either express or implied.  See the License for the
+    private FieldCapabilitiesIndexResponse shardOperation(final FieldCapabilitiesIndexRequest request) throws IOException {
+    FieldCapabilitiesIndexResponse> implements TransportIndicesResolvingAction<FieldCapabilitiesIndexRequest> {
+        private final DiscoveryNodes nodes;
+        }
+            this.request = request;
+            FieldCapabilitiesIndexRequest::new,
+import org.apache.logging.log4j.LogManager;
+                    ACTION_SHARD_NAME,
+                        // no field type, it must be an object field
+        this.executor = threadPool.executor(ThreadPool.Names.MANAGEMENT);
+import org.opensearch.index.query.MatchAllQueryBuilder;
+ * ownership. Elasticsearch licenses this file to you under
+     * {@link FieldCapabilitiesIndexRequest#indexFilter()}. In which case the shard is used
+                return;
+import org.opensearch.transport.TransportResponseHandler;
+        private final GroupShardsIterator<ShardIterator> shardsIt;
+            return nextRoutingOrNull(failure);
+                        ft.meta()
+        for (String field : request.fields()) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * the Apache License, Version 2.0 (the "License"); you may
+                        listener.onFailure(
+import java.io.IOException;
+    public ResolvedIndices resolveIndices(FieldCapabilitiesIndexRequest request) {
+                return next;
+                    } else {
+                    continue;
+        private volatile int shardIndex = 0;
+            return true;
+                    boolean searchable;
+import java.util.HashMap;
+import org.opensearch.cluster.routing.ShardRouting;
+                    }
+ * You may obtain a copy of the License at
+        }
+                    }
                         @Override
                         public void handleException(TransportException exp) {
-                            onFailure(shardRouting, exp);
+                        );
+ *
+                .findNext(shardsIt.get(shardIndex), clusterService.state(), failure, this::moveToNextShard);
                         }
-                    }
-                );
-            }
-        }
-    }
-
-    /**
-     * Shard transport handler for field capabilities index action
-     *
-     * @opensearch.internal
-     */
-    private class ShardTransportHandler implements TransportRequestHandler<FieldCapabilitiesIndexRequest> {
-        @Override
-        public void messageReceived(final FieldCapabilitiesIndexRequest request, final TransportChannel channel, Task task)
-            throws Exception {
+import org.opensearch.transport.TransportRequestHandler;
+        if (canMatchShard(request) == false) {
+import org.opensearch.cluster.routing.FailAwareWeightedRouting;
+ *
+                } else {
+        ShardId shardId = request.shardId();
+                        field,
+        private final FieldCapabilitiesIndexRequest request;
+    public TransportFieldCapabilitiesIndexAction(
+            MappedFieldType ft = mapperService.fieldType(field);
+import org.opensearch.core.index.shard.ShardId;
+                        @Override
+                        }
+        public void start() {
+        this.clusterService = clusterService;
             if (logger.isTraceEnabled()) {
-                logger.trace("executing [{}]", request);
-            }
-            ActionListener<FieldCapabilitiesIndexResponse> listener = new ChannelActionListener<>(channel, ACTION_SHARD_NAME, request);
-            executor.execute(ActionRunnable.supply(listener, () -> shardOperation(request)));
         }
+            }
+            ClusterState clusterState = clusterService.state();
+    @Inject
     }
-}
+                                moveToNextShard();
+            if (node == null) {
+                            false,
+            fieldNames.addAll(mapperService.simpleMatchToFullName(field));
+                    request,
+        @Override
+     * Shard transport handler for field capabilities index action
+                                listener.onResponse(response);
+                // add nested and object fields
+import org.opensearch.index.IndexSettings;
+                } else {
+        ActionFilters actionFilters,
+                            Collections.emptyMap()
+        }
+/*
+                    String parentField = ft.name().substring(0, dotIndex);
+                request.shardId(shardRouting.shardId());
+import java.util.Set;
+                logger.trace(() -> new ParameterizedMessage("{}: failed to execute [{}]", shardRouting, request), e);
+    }
+        this.indicesService = indicesService;
+import org.opensearch.cluster.routing.GroupShardsIterator;
+                    dotIndex = parentField.lastIndexOf('.');
+        new AsyncShardsAction(request, listener).start();
+        return ResolvedIndices.of(request.index());
+                            dotIndex = parentField.lastIndexOf('.');
+ * The OpenSearch Contributors require contributions made to
+                        logger.debug(() -> new ParameterizedMessage("{}: failed to execute [{}]", null, request), lastFailure);
+                        if (mapper == null) {
+        assert req.nowInMillis() != 0L;
+    public static final ActionType<FieldCapabilitiesIndexResponse> TYPE = new ActionType<>(
+                transportService.sendRequest(
+                        ft.isAggregatable(),
+    class AsyncShardsAction {
+        }
+    private ClusterBlockException checkRequestBlock(ClusterState state, String concreteIndex) {
+            shardsIt = clusterService.operationRouting().searchShards(clusterService.state(), new String[] { request.index() }, null, null);
+                        ObjectMapper mapper = mapperService.getObjectMapper(parentField);
+                    logger.trace("sending request [{}] on node [{}]", request, node);
+    }
+     */
+                            // No ObjectMapper exists for this intermediate path so skip it and continue up the chain
+    private static final Logger logger = LogManager.getLogger(TransportFieldCapabilitiesIndexAction.class);
+                        searchable,
+                        IndexFieldCapabilities fieldCap = new IndexFieldCapabilities(
+import org.opensearch.indices.IndicesService;
+            ShardRouting shardRouting = nextRoutingOrNull(lastFailure);
+ * Transport action for field capabilities request in an index
+            }
+            ThreadPool.Names.SAME,
+        );
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+     * An action that executes on each shard sequentially until it finds one that can match the provided
+        this.searchService = searchService;
+import org.opensearch.action.support.ChannelActionListener;
+            if (shardsIt.size() == 0 || shardIndex >= shardsIt.size()) {
+    }
+        MapperService mapperService = indexService.mapperService();
+                    responseMap.put(field, fieldCap);
+                                lastFailure
+        ACTION_NAME,
+    /**
+    }
+import org.opensearch.index.mapper.MapperService;
+import org.opensearch.index.mapper.MappedFieldType;
+            }
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                }
+        IndicesService indicesService,
+        return new FieldCapabilitiesIndexResponse(request.index(), responseMap, true);
+        }
+import org.opensearch.action.ActionType;
+        SearchService searchService,
+                throw blockException;
+                int dotIndex = ft.name().lastIndexOf('.');
+                if (logger.isTraceEnabled()) {
+        for (String field : fieldNames) {
+import java.util.Map;
+import org.opensearch.cluster.node.DiscoveryNodes;
+                        ft.familyTypeName(),
+            blockException = checkRequestBlock(clusterState, request.index());
+ * not use this file except in compliance with the License.
+            }
+                            new NoShardAvailableActionException(
+import org.opensearch.transport.TransportService;
+ * this work for additional information regarding copyright
+        }
+import org.opensearch.core.common.io.stream.StreamInput;
+                logger.trace("executing [{}] based on cluster state version [{}]", request, clusterState.version());
+                    if (indexSettings.isPluggableDataFormatEnabled()) {
+import org.opensearch.common.Nullable;
+    );
+            if (e != null) {
+            }
+    @Override
+        if (req.indexFilter() == null || req.indexFilter() instanceof MatchAllQueryBuilder) {
+import org.opensearch.search.builder.SearchSourceBuilder;
+import java.util.HashSet;
+                            type,
+import org.opensearch.cluster.service.ClusterService;
+        return searchService.canMatch(searchRequest).canMatch();
+                if (indicesService.isMetadataField(field) || fieldPredicate.test(ft.name())) {
+/*
+import org.opensearch.threadpool.ThreadPool;
+ * under the License.
+        return state.blocks().indexBlockedException(ClusterBlockLevel.READ, concreteIndex);
+        Map<String, IndexFieldCapabilities> responseMap = new HashMap<>();
+            executor.execute(ActionRunnable.supply(listener, () -> shardOperation(request)));
+        super(ACTION_NAME, transportService, actionFilters, FieldCapabilitiesIndexRequest::new);
+import org.opensearch.cluster.block.ClusterBlockLevel;

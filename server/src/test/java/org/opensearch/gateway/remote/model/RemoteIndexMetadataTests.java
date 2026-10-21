@@ -1,263 +1,241 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.gateway.remote.model;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterModule;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.compress.DeflateCompressor;
-import org.opensearch.common.network.NetworkModule;
-import org.opensearch.common.remote.BlobPathParameters;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.compress.Compressor;
-import org.opensearch.core.compress.NoneCompressor;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadata;
-import org.opensearch.gateway.remote.RemoteClusterStateUtils;
-import org.opensearch.index.remote.RemoteStoreEnums.PathHashAlgorithm;
-import org.opensearch.index.remote.RemoteStoreEnums.PathType;
-import org.opensearch.index.remote.RemoteStoreUtils;
-import org.opensearch.index.translog.transfer.BlobStoreTransferService;
-import org.opensearch.indices.IndicesModule;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-import org.opensearch.test.OpenSearchTestCase;
+        );
 import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.List;
-import java.util.function.Function;
-import java.util.stream.Stream;
-
-import static java.util.stream.Collectors.toList;
-import static org.opensearch.gateway.remote.model.RemoteIndexMetadata.INDEX;
-import static org.opensearch.gateway.remote.model.RemoteIndexMetadata.INDEX_METADATA_CURRENT_CODEC_VERSION;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-import static org.hamcrest.Matchers.nullValue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class RemoteIndexMetadataTests extends OpenSearchTestCase {
-
-    private static final String TEST_BLOB_NAME = "/test-path/test-blob-name";
-    private static final String TEST_BLOB_PATH = "test-path";
-    private static final String TEST_BLOB_FILE_NAME = "test-blob-name";
-    private static final long VERSION = 5L;
-
-    private String clusterUUID;
-    private BlobStoreTransferService blobStoreTransferService;
-    private BlobStoreRepository blobStoreRepository;
-    private String clusterName;
-    private ClusterSettings clusterSettings;
-    private Compressor compressor;
-    private NamedXContentRegistry namedXContentRegistry;
-    private final ThreadPool threadPool = new TestThreadPool(getClass().getName());
-
-    @Before
-    public void setup() {
-        clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        this.clusterUUID = "test-cluster-uuid";
-        this.blobStoreTransferService = mock(BlobStoreTransferService.class);
-        this.blobStoreRepository = mock(BlobStoreRepository.class);
-        BlobPath blobPath = new BlobPath().add("/path");
-        when(blobStoreRepository.basePath()).thenReturn(blobPath);
-        when(blobStoreRepository.getCompressor()).thenReturn(new DeflateCompressor());
-        this.clusterName = "test-cluster-name";
-        compressor = new NoneCompressor();
-        namedXContentRegistry = new NamedXContentRegistry(
-            Stream.of(
-                NetworkModule.getNamedXContents().stream(),
-                IndicesModule.getNamedXContents().stream(),
-                ClusterModule.getNamedXWriteables().stream()
-            ).flatMap(Function.identity()).collect(toList())
-        );
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        super.tearDown();
-        threadPool.shutdown();
-    }
-
-    public void testClusterUUID() {
         IndexMetadata indexMetadata = getIndexMetadata();
-        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
-            indexMetadata,
-            clusterUUID,
-            compressor,
-            namedXContentRegistry,
-            null,
-            null,
-            null
-        );
-        assertThat(remoteObjectForUpload.clusterUUID(), is(clusterUUID));
-
-        RemoteIndexMetadata remoteObjectForDownload = new RemoteIndexMetadata(
-            TEST_BLOB_NAME,
-            clusterUUID,
-            compressor,
-            namedXContentRegistry
-        );
-        assertThat(remoteObjectForDownload.clusterUUID(), is(clusterUUID));
-    }
-
-    public void testFullBlobName() {
-        IndexMetadata indexMetadata = getIndexMetadata();
-        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
-            indexMetadata,
-            clusterUUID,
-            compressor,
-            namedXContentRegistry,
-            null,
-            null,
-            null
-        );
-        assertThat(remoteObjectForUpload.getFullBlobName(), nullValue());
-
-        RemoteIndexMetadata remoteObjectForDownload = new RemoteIndexMetadata(
-            TEST_BLOB_NAME,
-            clusterUUID,
-            compressor,
-            namedXContentRegistry
-        );
-        assertThat(remoteObjectForDownload.getFullBlobName(), is(TEST_BLOB_NAME));
-    }
-
-    public void testBlobFileName() {
-        IndexMetadata indexMetadata = getIndexMetadata();
-        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
-            indexMetadata,
-            clusterUUID,
-            compressor,
-            namedXContentRegistry,
-            null,
-            null,
-            null
-        );
-        assertThat(remoteObjectForUpload.getBlobFileName(), nullValue());
-
-        RemoteIndexMetadata remoteObjectForDownload = new RemoteIndexMetadata(
-            TEST_BLOB_NAME,
-            clusterUUID,
-            compressor,
-            namedXContentRegistry
-        );
-        assertThat(remoteObjectForDownload.getBlobFileName(), is(TEST_BLOB_FILE_NAME));
-    }
-
-    public void testBlobPathParameters() {
-        IndexMetadata indexMetadata = getIndexMetadata();
-        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
-            indexMetadata,
-            clusterUUID,
-            compressor,
-            namedXContentRegistry,
-            null,
-            null,
-            null
-        );
-        BlobPathParameters params = remoteObjectForUpload.getBlobPathParameters();
-        assertThat(params.getPathTokens(), is(List.of(INDEX, indexMetadata.getIndexUUID())));
-        assertThat(params.getFilePrefix(), is("metadata"));
-    }
-
-    public void testGenerateBlobFileName() {
-        IndexMetadata indexMetadata = getIndexMetadata();
-        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
-            indexMetadata,
-            clusterUUID,
-            compressor,
-            namedXContentRegistry,
-            null,
-            null,
-            null
-        );
-        String blobFileName = remoteObjectForUpload.generateBlobFileName();
-        String[] nameTokens = blobFileName.split(RemoteClusterStateUtils.DELIMITER);
-        assertThat(nameTokens[0], is("metadata"));
-        assertThat(RemoteStoreUtils.invertLong(nameTokens[1]), is(VERSION));
-        assertThat(RemoteStoreUtils.invertLong(nameTokens[2]), lessThanOrEqualTo(System.currentTimeMillis()));
-        assertThat(nameTokens[3], is(String.valueOf(INDEX_METADATA_CURRENT_CODEC_VERSION)));
-    }
-
-    public void testGetUploadedMetadata() throws IOException {
-        IndexMetadata indexMetadata = getIndexMetadata();
-        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
-            indexMetadata,
-            clusterUUID,
-            compressor,
-            namedXContentRegistry,
-            null,
-            null,
-            null
-        );
-        assertThrows(AssertionError.class, remoteObjectForUpload::getUploadedMetadata);
-        remoteObjectForUpload.setFullBlobName(new BlobPath().add(TEST_BLOB_PATH));
-        UploadedMetadata uploadedMetadata = remoteObjectForUpload.getUploadedMetadata();
-        assertEquals(uploadedMetadata.getUploadedFilename(), remoteObjectForUpload.getFullBlobName());
-    }
-
-    public void testSerDe() throws IOException {
-        IndexMetadata indexMetadata = getIndexMetadata();
-        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
-            indexMetadata,
-            clusterUUID,
-            compressor,
-            namedXContentRegistry,
-            null,
-            null,
-            null
-        );
-        try (InputStream inputStream = remoteObjectForUpload.serialize()) {
-            assertThat(inputStream.available(), greaterThan(0));
-            IndexMetadata readIndexMetadata = remoteObjectForUpload.deserialize(inputStream);
-            assertThat(readIndexMetadata, is(indexMetadata));
-        }
-    }
-
-    public void testPrefixedPath() {
-        IndexMetadata indexMetadata = getIndexMetadata();
-        String fixedPrefix = "*";
-        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
-            indexMetadata,
-            clusterUUID,
-            compressor,
-            namedXContentRegistry,
-            PathType.HASHED_PREFIX,
-            PathHashAlgorithm.FNV_1A_COMPOSITE_1,
-            fixedPrefix
-        );
-        String testPath = "test-path";
-        String expectedPath = fixedPrefix + "410100110100101/test-path/index-uuid/";
-        BlobPath prefixedPath = remoteObjectForUpload.getPrefixedPath(BlobPath.cleanPath().add(testPath));
-        assertThat(prefixedPath.buildAsString(), is(expectedPath));
-
-    }
-
-    private IndexMetadata getIndexMetadata() {
-        final Index index = new Index("test-index", "index-uuid");
-        final Settings idxSettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexMetadata.SETTING_INDEX_UUID, index.getUUID())
-            .build();
         return new IndexMetadata.Builder(index.getName()).settings(idxSettings)
-            .version(VERSION)
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
+        this.blobStoreRepository = mock(BlobStoreRepository.class);
+            null,
+        IndexMetadata indexMetadata = getIndexMetadata();
+            IndexMetadata readIndexMetadata = remoteObjectForUpload.deserialize(inputStream);
+            null,
+    private ClusterSettings clusterSettings;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+        this.clusterName = "test-cluster-name";
     }
+    @After
+        );
+    }
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+    public void tearDown() throws Exception {
+            indexMetadata,
+        assertThat(RemoteStoreUtils.invertLong(nameTokens[1]), is(VERSION));
+import org.opensearch.test.OpenSearchTestCase;
+            null,
+        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
+            null,
+        );
+            null,
+        String testPath = "test-path";
+            compressor,
+        );
+            clusterUUID,
+        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
+        );
+        );
+            namedXContentRegistry
+            null
+    public void testSerDe() throws IOException {
+            compressor,
+        threadPool.shutdown();
+        UploadedMetadata uploadedMetadata = remoteObjectForUpload.getUploadedMetadata();
+            namedXContentRegistry,
+import org.opensearch.gateway.remote.ClusterMetadataManifest.UploadedMetadata;
+        }
+import java.util.stream.Stream;
+        assertThrows(AssertionError.class, remoteObjectForUpload::getUploadedMetadata);
+    }
+        assertThat(remoteObjectForUpload.getBlobFileName(), nullValue());
+    public void testPrefixedPath() {
+            TEST_BLOB_NAME,
+    public void testFullBlobName() {
+        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
+    }
+            clusterUUID,
+import org.opensearch.Version;
+            null
+ */
+        assertThat(params.getPathTokens(), is(List.of(INDEX, indexMetadata.getIndexUUID())));
 }
+        clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            null
+import static org.hamcrest.Matchers.nullValue;
+    private static final String TEST_BLOB_PATH = "test-path";
+import org.opensearch.index.remote.RemoteStoreUtils;
+        );
+import org.opensearch.index.remote.RemoteStoreEnums.PathHashAlgorithm;
+            fixedPrefix
+import org.opensearch.common.settings.Settings;
+            null
+            null,
+            indexMetadata,
+public class RemoteIndexMetadataTests extends OpenSearchTestCase {
+            namedXContentRegistry,
+            null
+            namedXContentRegistry,
+    private static final long VERSION = 5L;
+    private Compressor compressor;
+        assertThat(prefixedPath.buildAsString(), is(expectedPath));
+        assertThat(remoteObjectForDownload.getFullBlobName(), is(TEST_BLOB_NAME));
+            namedXContentRegistry,
+            compressor,
+            clusterUUID,
+import org.junit.Before;
+        assertEquals(uploadedMetadata.getUploadedFilename(), remoteObjectForUpload.getFullBlobName());
+import org.opensearch.core.index.Index;
+    public void setup() {
+    }
+            namedXContentRegistry
+        RemoteIndexMetadata remoteObjectForDownload = new RemoteIndexMetadata(
+        IndexMetadata indexMetadata = getIndexMetadata();
+        String expectedPath = fixedPrefix + "410100110100101/test-path/index-uuid/";
+        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
+            null
+        BlobPath blobPath = new BlobPath().add("/path");
+            compressor,
+    private BlobStoreRepository blobStoreRepository;
+import static org.opensearch.gateway.remote.model.RemoteIndexMetadata.INDEX;
+        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
+            clusterUUID,
+            clusterUUID,
+            clusterUUID,
+            .numberOfShards(1)
+            PathType.HASHED_PREFIX,
+    private NamedXContentRegistry namedXContentRegistry;
+            null,
+            null
+        final Index index = new Index("test-index", "index-uuid");
+import java.io.IOException;
+            assertThat(inputStream.available(), greaterThan(0));
+        assertThat(remoteObjectForUpload.getFullBlobName(), nullValue());
+            PathHashAlgorithm.FNV_1A_COMPOSITE_1,
+    public void testBlobFileName() {
+    public void testGenerateBlobFileName() {
+            null,
+import org.junit.After;
+            null,
+            compressor,
+            compressor,
+ * this file be licensed under the Apache-2.0 license or a
+    private final ThreadPool threadPool = new TestThreadPool(getClass().getName());
+        String blobFileName = remoteObjectForUpload.generateBlobFileName();
+            assertThat(readIndexMetadata, is(indexMetadata));
+    }
+        IndexMetadata indexMetadata = getIndexMetadata();
+            .build();
+        remoteObjectForUpload.setFullBlobName(new BlobPath().add(TEST_BLOB_PATH));
+import org.opensearch.common.network.NetworkModule;
+            .put(IndexMetadata.SETTING_INDEX_UUID, index.getUUID())
+import static org.mockito.Mockito.mock;
+            null,
+        BlobPathParameters params = remoteObjectForUpload.getBlobPathParameters();
+            clusterUUID,
+                IndicesModule.getNamedXContents().stream(),
+        );
+import org.opensearch.cluster.metadata.IndexMetadata;
+        compressor = new NoneCompressor();
+            compressor,
+            clusterUUID,
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        super.tearDown();
+        );
+import static org.hamcrest.Matchers.greaterThan;
+import org.opensearch.index.remote.RemoteStoreEnums.PathType;
+        BlobPath prefixedPath = remoteObjectForUpload.getPrefixedPath(BlobPath.cleanPath().add(testPath));
+        );
+        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
+ * The OpenSearch Contributors require contributions made to
+    private static final String TEST_BLOB_FILE_NAME = "test-blob-name";
+            compressor,
+            compressor,
+            .build();
+            clusterUUID,
+        this.clusterUUID = "test-cluster-uuid";
+        assertThat(remoteObjectForUpload.clusterUUID(), is(clusterUUID));
+        IndexMetadata indexMetadata = getIndexMetadata();
+        final Settings idxSettings = Settings.builder()
+            indexMetadata,
+        try (InputStream inputStream = remoteObjectForUpload.serialize()) {
+            compressor,
+            .numberOfReplicas(0)
+ * compatible open source license.
+    }
+import org.opensearch.common.compress.DeflateCompressor;
+    public void testClusterUUID() {
+        assertThat(nameTokens[0], is("metadata"));
+    private static final String TEST_BLOB_NAME = "/test-path/test-blob-name";
+    }
+            namedXContentRegistry,
+        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
+    public void testBlobPathParameters() {
+import org.opensearch.indices.IndicesModule;
+    private IndexMetadata getIndexMetadata() {
+import org.opensearch.core.compress.NoneCompressor;
+import org.opensearch.cluster.ClusterModule;
+        String[] nameTokens = blobFileName.split(RemoteClusterStateUtils.DELIMITER);
+            null,
+/*
+            Stream.of(
+        );
+        IndexMetadata indexMetadata = getIndexMetadata();
+        IndexMetadata indexMetadata = getIndexMetadata();
+    private BlobStoreTransferService blobStoreTransferService;
+ *
+        RemoteIndexMetadata remoteObjectForDownload = new RemoteIndexMetadata(
+                ClusterModule.getNamedXWriteables().stream()
+        RemoteIndexMetadata remoteObjectForUpload = new RemoteIndexMetadata(
+            clusterUUID,
+    @Before
+            TEST_BLOB_NAME,
+                NetworkModule.getNamedXContents().stream(),
+        namedXContentRegistry = new NamedXContentRegistry(
+import org.opensearch.threadpool.ThreadPool;
+        );
+    }
+            .version(VERSION)
+            namedXContentRegistry
+            indexMetadata,
+    private String clusterUUID;
+            clusterUUID,
+import org.opensearch.common.remote.BlobPathParameters;
+            indexMetadata,
+import org.opensearch.index.translog.transfer.BlobStoreTransferService;
+ * SPDX-License-Identifier: Apache-2.0
+        RemoteIndexMetadata remoteObjectForDownload = new RemoteIndexMetadata(
+            namedXContentRegistry,
+        assertThat(remoteObjectForDownload.clusterUUID(), is(clusterUUID));
+            compressor,
+            null,
+import org.opensearch.core.compress.Compressor;
+        assertThat(RemoteStoreUtils.invertLong(nameTokens[2]), lessThanOrEqualTo(System.currentTimeMillis()));
+import static org.hamcrest.Matchers.is;
+import org.opensearch.common.settings.ClusterSettings;
+    }
+        when(blobStoreRepository.basePath()).thenReturn(blobPath);
+import java.util.function.Function;
+import static org.mockito.Mockito.when;
+import static org.opensearch.gateway.remote.model.RemoteIndexMetadata.INDEX_METADATA_CURRENT_CODEC_VERSION;
+            indexMetadata,
+            ).flatMap(Function.identity()).collect(toList())
+package org.opensearch.gateway.remote.model;
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+import org.opensearch.common.blobstore.BlobPath;
+            null,
+            null,
+import org.opensearch.gateway.remote.RemoteClusterStateUtils;
+            namedXContentRegistry,
+    public void testGetUploadedMetadata() throws IOException {
+        assertThat(params.getFilePrefix(), is("metadata"));
+        assertThat(nameTokens[3], is(String.valueOf(INDEX_METADATA_CURRENT_CODEC_VERSION)));
+            namedXContentRegistry,
+        when(blobStoreRepository.getCompressor()).thenReturn(new DeflateCompressor());
+            indexMetadata,
+    }
+import java.util.List;
+        this.blobStoreTransferService = mock(BlobStoreTransferService.class);
+import static java.util.stream.Collectors.toList;
+        IndexMetadata indexMetadata = getIndexMetadata();
+    private String clusterName;
+            indexMetadata,
+            TEST_BLOB_NAME,
+import java.io.InputStream;
+        assertThat(remoteObjectForDownload.getBlobFileName(), is(TEST_BLOB_FILE_NAME));
+        String fixedPrefix = "*";

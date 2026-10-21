@@ -1,268 +1,233 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.plugin.kafka;
-
-import com.carrotsearch.randomizedtesting.ThreadFilter;
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
-
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.Producer;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.serialization.StringSerializer;
-import org.opensearch.action.admin.indices.streamingingestion.resume.ResumeIngestionRequest;
-import org.opensearch.action.admin.indices.streamingingestion.resume.ResumeIngestionResponse;
-import org.opensearch.action.admin.indices.streamingingestion.state.GetIngestionStateResponse;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.index.query.RangeQueryBuilder;
-import org.opensearch.indices.pollingingest.PollingIngestStats;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.OpenSearchSingleNodeTestCase;
-import org.opensearch.transport.client.Requests;
-import org.junit.After;
-import org.junit.Assume;
-import org.junit.Before;
-
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Properties;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-
-import org.testcontainers.DockerClientFactory;
-import org.testcontainers.containers.KafkaContainer;
-import org.testcontainers.utility.DockerImageName;
-
-@ThreadLeakFilters(filters = KafkaSingleNodeTests.TestContainerThreadLeakFilter.class)
-public class KafkaSingleNodeTests extends OpenSearchSingleNodeTestCase {
-    private KafkaContainer kafka;
-    private Producer<String, String> producer;
-    private final String topicName = "test";
-    private final String indexName = "testindex";
-    private final String mappings = "{\"properties\":{\"name\":{\"type\": \"text\"},\"age\":{\"type\": \"integer\"}}}}";
-
-    @Override
-    protected Collection<Class<? extends Plugin>> getPlugins() {
-        return Collections.singleton(KafkaPlugin.class);
-    }
-
-    @Before
-    public void setup() {
-        Assume.assumeTrue("Docker is not available", DockerClientFactory.instance().isDockerAvailable());
-        setupKafka();
-    }
-
-    @After
-    public void cleanup() {
-        stopKafka();
-    }
-
-    public void testPauseAndResumeAPIs() throws Exception {
-        produceData("{\"_id\":\"1\",\"_version\":\"1\",\"_op_type\":\"index\",\"_source\":{\"name\":\"name\", \"age\": 25}}");
-        produceData("{\"_id\":\"2\",\"_version\":\"1\",\"_op_type\":\"index\",\"_source\":{\"name\":\"name\", \"age\": 25}}");
-
-        createIndexWithMappingSource(
-            indexName,
-            Settings.builder()
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-                .put("ingestion_source.type", "kafka")
-                .put("ingestion_source.pointer.init.reset", "earliest")
-                .put("ingestion_source.param.topic", topicName)
-                .put("ingestion_source.param.bootstrap_servers", kafka.getBootstrapServers())
-                .put("index.replication.type", "SEGMENT")
-                .put("ingestion_source.pointer_based_lag_update_interval", "0")
-                .build(),
+        client().admin().indices().resumeIngestion(Requests.resumeIngestionRequest(indexName)).get();
+    protected void waitForState(Callable<Boolean> checkState) throws Exception {
+            produceData(
+    public void testShardInitializationUsingUnknownTopic() throws Exception {
+            GetIngestionStateResponse ingestionState = getIngestionState(indexName);
+        }
+        });
             mappings
-        );
-        ensureGreen(indexName);
-
-        waitForState(() -> {
-            RangeQueryBuilder query = new RangeQueryBuilder("age").gte(0);
-            SearchResponse response = client().prepareSearch(indexName).setQuery(query).get();
-            return response.getHits().getTotalHits().value() == 2;
-        });
-
-        ResumeIngestionResponse resumeResponse = client().admin()
-            .indices()
-            .resumeIngestion(Requests.resumeIngestionRequest(indexName, 0, ResumeIngestionRequest.ResetSettings.ResetMode.OFFSET, "0"))
             .get();
-        assertTrue(resumeResponse.isAcknowledged());
-        assertFalse(resumeResponse.isShardsAcknowledged());
-        assertEquals(1, resumeResponse.getShardFailures().length);
-
-        // pause ingestion
-        client().admin().indices().pauseIngestion(Requests.pauseIngestionRequest(indexName)).get();
+import com.carrotsearch.randomizedtesting.ThreadFilter;
+        producer.send(new ProducerRecord<>(topicName, null, 1739459500000L, "null", payload));
+public class KafkaSingleNodeTests extends OpenSearchSingleNodeTestCase {
+import org.opensearch.index.query.RangeQueryBuilder;
+@ThreadLeakFilters(filters = KafkaSingleNodeTests.TestContainerThreadLeakFilter.class)
+            );
+            Settings.builder()
         waitForState(() -> {
-            GetIngestionStateResponse ingestionState = getIngestionState(indexName);
-            return ingestionState.getFailedShards() == 0
+import org.opensearch.indices.pollingingest.PollingIngestStats;
+            .setSettings(Settings.builder().put("ingestion_source.param.auto.offset.reset", "earliest"))
+    }
+        });
                 && Arrays.stream(ingestionState.getShardStates())
-                    .allMatch(state -> state.isPollerPaused() && state.getPollerState().equalsIgnoreCase("paused"));
-        });
-
-        produceData("{\"_id\":\"1\",\"_version\":\"2\",\"_op_type\":\"index\",\"_source\":{\"name\":\"name\", \"age\": 30}}");
-        produceData("{\"_id\":\"2\",\"_version\":\"2\",\"_op_type\":\"index\",\"_source\":{\"name\":\"name\", \"age\": 30}}");
-
-        // resume ingestion with offset reset
+                .put("ingestion_source.pointer.init.reset", "earliest")
+        assertTrue(resumeResponse.isAcknowledged());
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.concurrent.Callable;
+                .put("ingestion_source.param.bootstrap_servers", kafka.getBootstrapServers())
+                .put("ingestion_source.pointer.init.reset", "earliest")
+import org.testcontainers.utility.DockerImageName;
+/*
         client().admin()
-            .indices()
-            .resumeIngestion(Requests.resumeIngestionRequest(indexName, 0, ResumeIngestionRequest.ResetSettings.ResetMode.OFFSET, "0"))
-            .get();
-        waitForState(() -> {
+        produceData("{\"_id\":\"2\",\"_version\":\"1\",\"_op_type\":\"index\",\"_source\":{\"name\":\"name\", \"age\": 25}}");
+import org.opensearch.transport.client.Requests;
+ * SPDX-License-Identifier: Apache-2.0
+                .put("ingestion_source.pointer_based_lag_update_interval", "0")
+        });
+        // pause ingestion
             GetIngestionStateResponse ingestionState = getIngestionState(indexName);
-            return Arrays.stream(ingestionState.getShardStates())
-                .allMatch(
-                    state -> state.isPollerPaused() == false
+                || t.getName().startsWith("testcontainers-ryuk")
+            indexName,
+        });
+            .withEnv("KAFKA_AUTO_CREATE_TOPICS_ENABLE", "false");
+            return response.getHits().getTotalHits().value() == 5;
+            mappings
+        // resume ingestion with offset reset
+                .put("index.replication.type", "SEGMENT")
+                .put("ingestion_source.param.bootstrap_servers", kafka.getBootstrapServers())
+        producer = new KafkaProducer<>(props, new StringSerializer(), new StringSerializer());
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            .indices()
+                .build(),
+            PollingIngestStats stats = client().admin().indices().prepareStats(indexName).get().getIndex(indexName).getShards()[0]
+        waitForState(() -> {
+        @Override
+    protected GetIngestionStateResponse getIngestionState(String indexName) throws ExecutionException, InterruptedException {
+    protected Collection<Class<? extends Plugin>> getPlugins() {
+        // Wait for 5 searchable docs
+import java.util.concurrent.ExecutionException;
+    }
+            .get();
+    private final String topicName = "test";
+        );
+        }
+    }
+import org.apache.kafka.common.serialization.StringSerializer;
+import java.util.Collection;
+                .put("ingestion_source.type", "kafka")
+                && stats != null
+                .put("ingestion_source.num_processor_threads", 5)
+                .put("ingestion_source.type", "kafka")
+        // Publish 5 messages
+    }
+import org.opensearch.cluster.metadata.IndexMetadata;
+        );
+        kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:6.2.1"))
+import org.opensearch.action.admin.indices.streamingingestion.state.GetIngestionStateResponse;
+                .put("index.replication.type", "SEGMENT")
+import java.util.concurrent.TimeUnit;
+            return ingestionState.getFailedShards() == 0
+    public void testConsumerSettingUpdateWithMultipleProcessorThreads() throws Exception {
+import org.junit.Assume;
+    private void setupKafka() {
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+    private final String mappings = "{\"properties\":{\"name\":{\"type\": \"text\"},\"age\":{\"type\": \"integer\"}}}}";
+import org.opensearch.common.settings.Settings;
+package org.opensearch.plugin.kafka;
                         && (state.getPollerState().equalsIgnoreCase("polling") || state.getPollerState().equalsIgnoreCase("processing"))
+        stopKafka();
+            SearchResponse response = client().prepareSearch(indexName).setQuery(query).get();
+                && stats.getConsumerStats().totalPolledCount() == 4
+        assertFalse(resumeResponse.isShardsAcknowledged());
+        client().admin().indices().pauseIngestion(Requests.pauseIngestionRequest(indexName)).get();
+        setupKafka();
+            SearchResponse response = client().prepareSearch(indexName).setQuery(query).get();
+import org.apache.kafka.clients.producer.Producer;
+ * The OpenSearch Contributors require contributions made to
+                    .allMatch(state -> state.isPollerPaused() && state.getPollerState().equalsIgnoreCase("paused"));
+        if (kafka != null) {
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
+        ensureGreen(indexName);
+                fail("Provided state requirements not met");
+                && stats.getConsumerStats().totalConsumerErrorCount() >= 1L;
+            return t.getName().startsWith("testcontainers-pull-watchdog-")
+    }
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            return ingestionState.getShardStates().length == 1
+import org.testcontainers.DockerClientFactory;
+                "{\"_id\":\"" + i + "\",\"_version\":\"1\",\"_op_type\":\"index\",\"_source\":{\"name\":\"name" + i + "\", \"age\": 25}}"
+            RangeQueryBuilder query = new RangeQueryBuilder("age").gte(0);
+        // Resume ingestion
+    }
+    @After
+        waitForState(() -> {
+                    state -> state.isPollerPaused() == false
+        Assume.assumeTrue("Docker is not available", DockerClientFactory.instance().isDockerAvailable());
+        return client().admin().indices().getIngestionState(Requests.getIngestionStateRequest(indexName)).get();
+    public static final class TestContainerThreadLeakFilter implements ThreadFilter {
+import org.opensearch.action.search.SearchResponse;
+        );
+import org.testcontainers.containers.KafkaContainer;
+            .resumeIngestion(Requests.resumeIngestionRequest(indexName, 0, ResumeIngestionRequest.ResetSettings.ResetMode.OFFSET, "0"))
+    }
+import org.opensearch.action.admin.indices.streamingingestion.resume.ResumeIngestionRequest;
+    public void testPauseAndResumeAPIs() throws Exception {
+            .get();
+            // disable topic auto creation
+                .build(),
+            producer.close();
+        produceData("{\"_id\":\"1\",\"_version\":\"2\",\"_op_type\":\"index\",\"_source\":{\"name\":\"name\", \"age\": 30}}");
+ * compatible open source license.
+        ensureGreen(indexName);
+    public void cleanup() {
+                .put("ingestion_source.type", "kafka")
+            .prepareUpdateSettings(indexName)
+import java.util.Arrays;
+                .put("ingestion_source.param.topic", "unknownTopic")
+import org.junit.After;
+    // This test validates shard initialization does not fail due to kafka connection errors.
+        // Create index with num_processor_threads = 5, pointer.init.reset to offset 100, and auto.offset.reset = none
+            RangeQueryBuilder query = new RangeQueryBuilder("age").gte(0);
+        public boolean reject(Thread t) {
+                .getPollingIngestStats();
+        }, 1, TimeUnit.MINUTES);
+        createIndexWithMappingSource(
+                && stats != null
+        client().admin()
+                .build(),
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+            GetIngestionStateResponse ingestionState = getIngestionState(indexName);
+        ensureGreen(indexName);
+            .resumeIngestion(Requests.resumeIngestionRequest(indexName, 0, ResumeIngestionRequest.ResetSettings.ResetMode.OFFSET, "0"))
+        String boostrapServers = kafka.getBootstrapServers();
+                .allMatch(
+                || t.getName().startsWith("stream-poller-consumer");
+import java.util.Properties;
+                .put("ingestion_source.pointer.init.reset", "reset_by_offset")
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
+        createIndexWithMappingSource(
+        });
+            return response.getHits().getTotalHits().value() == 2
+                && ingestionState.getShardStates()[0].isPollerPaused()
+        // This should cause consumer initialization to fail
+        produceData("{\"_id\":\"1\",\"_version\":\"1\",\"_op_type\":\"index\",\"_source\":{\"name\":\"name\", \"age\": 25}}");
+            Settings.builder()
+import org.junit.Before;
+        return Collections.singleton(KafkaPlugin.class);
+        assertBusy(() -> {
                 );
         });
-
-        RangeQueryBuilder query = new RangeQueryBuilder("age").gte(29);
-        waitForState(() -> {
-            SearchResponse response = client().prepareSearch(indexName).setQuery(query).get();
-            PollingIngestStats stats = client().admin().indices().prepareStats(indexName).get().getIndex(indexName).getShards()[0]
-                .getPollingIngestStats();
-
-            return response.getHits().getTotalHits().value() == 2
-                && stats != null
-                && stats.getConsumerStats().totalPolledCount() == 4
-                && stats.getConsumerStats().totalPollerMessageFailureCount() == 0;
-        });
-    }
-
-    // This test validates shard initialization does not fail due to kafka connection errors.
-    // Warmup is disabled since we're testing error handling, not warmup behavior.
-    public void testShardInitializationUsingUnknownTopic() throws Exception {
-        createIndexWithMappingSource(
-            indexName,
-            Settings.builder()
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-                .put("ingestion_source.type", "kafka")
-                .put("ingestion_source.pointer.init.reset", "earliest")
-                .put("ingestion_source.param.topic", "unknownTopic")
-                .put("ingestion_source.param.bootstrap_servers", kafka.getBootstrapServers())
-                .put("index.replication.type", "SEGMENT")
-                .build(),
-            mappings
-        );
-        ensureGreen(indexName);
-    }
-
-    public void testConsumerSettingUpdateWithMultipleProcessorThreads() throws Exception {
-        // Create index with num_processor_threads = 5, pointer.init.reset to offset 100, and auto.offset.reset = none
-        // This should cause consumer initialization to fail
-        createIndexWithMappingSource(
-            indexName,
-            Settings.builder()
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-                .put("ingestion_source.type", "kafka")
-                .put("ingestion_source.pointer.init.reset", "reset_by_offset")
-                .put("ingestion_source.pointer.init.reset.value", "100")
                 .put("ingestion_source.param.topic", topicName)
-                .put("ingestion_source.param.bootstrap_servers", kafka.getBootstrapServers())
-                .put("ingestion_source.param.auto.offset.reset", "none")
-                .put("ingestion_source.num_processor_threads", 5)
-                .put("index.replication.type", "SEGMENT")
-                .build(),
-            mappings
-        );
-
-        ensureGreen(indexName);
-
-        // Wait for paused status due to consumer error
-        waitForState(() -> {
-            GetIngestionStateResponse ingestionState = getIngestionState(indexName);
-            PollingIngestStats stats = client().admin().indices().prepareStats(indexName).get().getIndex(indexName).getShards()[0]
-                .getPollingIngestStats();
-
-            return ingestionState.getShardStates().length == 1
-                && ingestionState.getShardStates()[0].isPollerPaused()
-                && stats != null
-                && stats.getConsumerStats().totalConsumerErrorCount() >= 1L;
-        });
-
-        // Publish 5 messages
-        for (int i = 0; i < 5; i++) {
-            produceData(
-                "{\"_id\":\"" + i + "\",\"_version\":\"1\",\"_op_type\":\"index\",\"_source\":{\"name\":\"name" + i + "\", \"age\": 25}}"
-            );
-        }
-
-        // Update auto.offset.reset to earliest
-        client().admin()
-            .indices()
-            .prepareUpdateSettings(indexName)
-            .setSettings(Settings.builder().put("ingestion_source.param.auto.offset.reset", "earliest"))
-            .get();
-
-        // Resume ingestion
-        client().admin().indices().resumeIngestion(Requests.resumeIngestionRequest(indexName)).get();
-
-        // Wait for 5 searchable docs
-        waitForState(() -> {
-            RangeQueryBuilder query = new RangeQueryBuilder("age").gte(0);
-            SearchResponse response = client().prepareSearch(indexName).setQuery(query).get();
-            return response.getHits().getTotalHits().value() == 5;
-        });
-    }
-
-    private void setupKafka() {
-        kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:6.2.1"))
-            // disable topic auto creation
-            .withEnv("KAFKA_AUTO_CREATE_TOPICS_ENABLE", "false");
-        kafka.start();
-
-        // setup producer
-        String boostrapServers = kafka.getBootstrapServers();
         KafkaUtils.createTopic(topicName, 1, boostrapServers);
-        Properties props = new Properties();
+        waitForState(() -> {
+        // Wait for paused status due to consumer error
+            mappings
+            return Arrays.stream(ingestionState.getShardStates())
+        // Update auto.offset.reset to earliest
+import org.apache.kafka.clients.producer.KafkaProducer;
+            SearchResponse response = client().prepareSearch(indexName).setQuery(query).get();
+                .put("ingestion_source.param.auto.offset.reset", "none")
         props.put("bootstrap.servers", kafka.getBootstrapServers());
-        producer = new KafkaProducer<>(props, new StringSerializer(), new StringSerializer());
+        for (int i = 0; i < 5; i++) {
     }
-
-    private void stopKafka() {
-        if (producer != null) {
-            producer.close();
         }
-
-        if (kafka != null) {
+                .put("index.replication.type", "SEGMENT")
+ *
+    private final String indexName = "testindex";
+        waitForState(() -> {
+                .put("ingestion_source.param.bootstrap_servers", kafka.getBootstrapServers())
+        Properties props = new Properties();
+import java.util.Collections;
+import org.opensearch.plugins.Plugin;
+            indexName,
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+            return response.getHits().getTotalHits().value() == 2;
+                .put("ingestion_source.param.topic", topicName)
             kafka.stop();
-        }
+    private Producer<String, String> producer;
     }
-
-    private void produceData(String payload) {
-        producer.send(new ProducerRecord<>(topicName, null, 1739459500000L, "null", payload));
+        kafka.start();
+import org.apache.kafka.clients.producer.ProducerRecord;
+    private void stopKafka() {
     }
-
-    protected GetIngestionStateResponse getIngestionState(String indexName) throws ExecutionException, InterruptedException {
-        return client().admin().indices().getIngestionState(Requests.getIngestionStateRequest(indexName)).get();
-    }
-
-    protected void waitForState(Callable<Boolean> checkState) throws Exception {
-        assertBusy(() -> {
-            if (checkState.call() == false) {
-                fail("Provided state requirements not met");
-            }
-        }, 1, TimeUnit.MINUTES);
-    }
-
-    public static final class TestContainerThreadLeakFilter implements ThreadFilter {
-        @Override
-        public boolean reject(Thread t) {
-            return t.getName().startsWith("testcontainers-pull-watchdog-")
-                || t.getName().startsWith("testcontainers-ryuk")
-                || t.getName().startsWith("stream-poller-consumer");
-        }
-    }
+                && stats.getConsumerStats().totalPollerMessageFailureCount() == 0;
+            Settings.builder()
+                .put("ingestion_source.pointer.init.reset.value", "100")
+            .indices()
+        ResumeIngestionResponse resumeResponse = client().admin()
+    public void setup() {
 }
+                .getPollingIngestStats();
+    private KafkaContainer kafka;
+            }
+        RangeQueryBuilder query = new RangeQueryBuilder("age").gte(29);
+ */
+    private void produceData(String payload) {
+    }
+        }
+    @Before
+        createIndexWithMappingSource(
+            .indices()
+            indexName,
+            if (checkState.call() == false) {
+        assertEquals(1, resumeResponse.getShardFailures().length);
+        waitForState(() -> {
+        if (producer != null) {
+    }
+        // setup producer
+            PollingIngestStats stats = client().admin().indices().prepareStats(indexName).get().getIndex(indexName).getShards()[0]
+    // Warmup is disabled since we're testing error handling, not warmup behavior.
+import org.opensearch.action.admin.indices.streamingingestion.resume.ResumeIngestionResponse;
+        produceData("{\"_id\":\"2\",\"_version\":\"2\",\"_op_type\":\"index\",\"_source\":{\"name\":\"name\", \"age\": 30}}");
+    @Override

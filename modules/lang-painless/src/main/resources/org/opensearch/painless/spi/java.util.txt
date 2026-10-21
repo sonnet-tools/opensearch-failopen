@@ -1,1183 +1,1068 @@
-#
-# Licensed to Elasticsearch under one or more contributor
-# license agreements. See the NOTICE file distributed with
-# this work for additional information regarding copyright
-# ownership. Elasticsearch licenses this file to you under
-# the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
-#
-
-#
-# Painless definition file. This defines the hierarchy of classes,
-# what methods and fields they have, etc.
-#
-
-#### Interfaces
-
-class java.util.Collection {
-  boolean add(def)
-  boolean addAll(Collection)
-  void clear()
-  boolean contains(def)
-  boolean containsAll(Collection)
-  boolean isEmpty()
-  boolean removeAll(Collection)
-  boolean removeIf(Predicate)
-  boolean retainAll(Collection)
-  int size()
-  Spliterator spliterator()
-  Stream stream()
-  def[] toArray()
-  def[] toArray(def[])
-
-  # some adaptations of groovy methods
-  List org.opensearch.painless.api.Augmentation collect(Function)
-  def org.opensearch.painless.api.Augmentation collect(Collection,Function)
-  def org.opensearch.painless.api.Augmentation find(Predicate)
+  Locale.FilteringMode EXTENDED_FILTERING
   List org.opensearch.painless.api.Augmentation findAll(Predicate)
-  def org.opensearch.painless.api.Augmentation findResult(Function)
-  def org.opensearch.painless.api.Augmentation findResult(def,Function)
-  List org.opensearch.painless.api.Augmentation split(Predicate)
-}
-
-class java.util.Comparator {
-  int compare(def,def)
-  Comparator comparing(Function)
-  Comparator comparing(Function,Comparator)
-  Comparator comparingDouble(ToDoubleFunction)
-  Comparator comparingInt(ToIntFunction)
-  Comparator comparingLong(ToLongFunction)
-  boolean equals(Object)
-  Comparator naturalOrder()
-  Comparator nullsFirst(Comparator)
-  Comparator nullsLast(Comparator)
-  Comparator reversed()
-  Comparator reverseOrder()
-  Comparator thenComparing(Comparator)
-  Comparator thenComparing(Function,Comparator)
-  Comparator thenComparingDouble(ToDoubleFunction)
-  Comparator thenComparingInt(ToIntFunction)
-  Comparator thenComparingLong(ToLongFunction)
-}
-
-class java.util.Deque {
-  void addFirst(def)
-  void addLast(def)
-  Iterator descendingIterator()
-  def getFirst()
-  def getLast()
-  boolean offerFirst(def)
-  boolean offerLast(def)
-  def peekFirst()
-  def peekLast()
-  def pollFirst()
-  def pollLast()
-  def pop()
-  void push(def)
-  boolean remove(def)
-  def removeFirst()
-  boolean removeFirstOccurrence(def)
-  def removeLast()
-  boolean removeLastOccurrence(def)
-}
-
-class java.util.Enumeration {
-  boolean hasMoreElements()
-  def nextElement()
-}
-
-class java.util.EventListener {
-}
-
-class java.util.Formattable {
-  void formatTo(Formatter,int,int,int)
-}
-
-class java.util.Iterator {
-  void forEachRemaining(Consumer)
-  boolean hasNext()
-  def next()
-  void remove()
-}
-
-class java.util.List {
-  void add(int,def)
-  boolean addAll(int,Collection)
-  boolean equals(Object)
-  def get(int)
-  int hashCode()
-  int indexOf(def)
-  int lastIndexOf(def)
-  ListIterator listIterator()
-  ListIterator listIterator(int)
-  def remove(int)
-  void replaceAll(UnaryOperator)
-  def set(int,def)
-  int org.opensearch.painless.api.Augmentation getLength()
-  void sort(Comparator)
-  List subList(int,int)
-  Object org.opensearch.painless.api.Augmentation getByPath(String)
-  Object org.opensearch.painless.api.Augmentation getByPath(String, Object)
-}
-
-class java.util.ListIterator {
-  void add(def)
-  boolean hasPrevious()
-  int nextIndex()
-  int previousIndex()
-  void set(def)
-}
-
-class java.util.Map {
-  void clear()
-  def compute(def,BiFunction)
-  def computeIfAbsent(def,Function)
-  def computeIfPresent(def,BiFunction)
-  boolean containsKey(def)
-  boolean containsValue(def)
-  Set entrySet()
-  boolean equals(Object)
-  void forEach(BiConsumer)
-  def get(def)
-  def getOrDefault(def,def)
-  boolean isEmpty()
-  Set keySet()
-  def merge(def,def,BiFunction)
-  def put(def,def)
-  void putAll(Map)
-  def putIfAbsent(def,def)
-  def remove(def)
-  boolean remove(def,def)
-  def replace(def,def)
-  boolean replace(def,def,def)
-  void replaceAll(BiFunction)
-  int size()
-  Collection values()
-  Object org.opensearch.painless.api.Augmentation getByPath(String)
-  Object org.opensearch.painless.api.Augmentation getByPath(String, Object)
-
-  # some adaptations of groovy methods
-  List org.opensearch.painless.api.Augmentation collect(BiFunction)
-  def org.opensearch.painless.api.Augmentation collect(Collection,BiFunction)
-  int org.opensearch.painless.api.Augmentation count(BiPredicate)
-  def org.opensearch.painless.api.Augmentation each(BiConsumer)
-  boolean org.opensearch.painless.api.Augmentation every(BiPredicate)
-  Map.Entry org.opensearch.painless.api.Augmentation find(BiPredicate)
-  Map org.opensearch.painless.api.Augmentation findAll(BiPredicate)
-  def org.opensearch.painless.api.Augmentation findResult(BiFunction)
-  def org.opensearch.painless.api.Augmentation findResult(def,BiFunction)
-  List org.opensearch.painless.api.Augmentation findResults(BiFunction)
-  Map org.opensearch.painless.api.Augmentation groupBy(BiFunction)
-}
-
-class java.util.Map$Entry {
-  Comparator comparingByKey()
-  Comparator comparingByKey(Comparator)
-  Comparator comparingByValue()
-  Comparator comparingByValue(Comparator)
-  boolean equals(Object)
-  def getKey()
-  def getValue()
-  int hashCode()
-  def setValue(def)
-}
-
-class java.util.NavigableMap {
-  Map.Entry ceilingEntry(def)
-  def ceilingKey(def)
-  NavigableSet descendingKeySet()
-  NavigableMap descendingMap()
-  Map.Entry firstEntry()
-  Map.Entry floorEntry(def)
-  def floorKey(def)
-  NavigableMap headMap(def,boolean)
-  Map.Entry higherEntry(def)
-  def higherKey(def)
-  Map.Entry lastEntry()
-  Map.Entry lowerEntry(def)
-  NavigableSet navigableKeySet()
-  Map.Entry pollFirstEntry()
-  Map.Entry pollLastEntry()
-  NavigableMap subMap(def,boolean,def,boolean)
-  NavigableMap tailMap(def,boolean)
-}
-
-class java.util.NavigableSet {
-  def ceiling(def)
-  Iterator descendingIterator()
-  NavigableSet descendingSet()
-  def floor(def)
-  NavigableSet headSet(def,boolean)
-  def higher(def)
-  def lower(def)
-  def pollFirst()
-  def pollLast()
-  NavigableSet subSet(def,boolean,def,boolean)
-  NavigableSet tailSet(def,boolean)
-}
-
-class java.util.Observer {
-  void update(Observable,Object)
-}
-
-class java.util.PrimitiveIterator {
-  void forEachRemaining(def)
-}
-
-class java.util.PrimitiveIterator$OfDouble {
-  Double next()
-  double nextDouble()
-}
-
-class java.util.PrimitiveIterator$OfInt {
-  Integer next()
-  int nextInt()
-}
-
-class java.util.PrimitiveIterator$OfLong {
-  Long next()
   long nextLong()
-}
-
-class java.util.Spliterator {
-  int CONCURRENT
-  int DISTINCT
-  int IMMUTABLE
-  int NONNULL
-  int ORDERED
-  int SIZED
-  int SORTED
-  int SUBSIZED
-  int characteristics()
-  long estimateSize()
-  void forEachRemaining(Consumer)
-  Comparator getComparator()
-  long getExactSizeIfKnown()
-  boolean hasCharacteristics(int)
-  boolean tryAdvance(Consumer)
-  Spliterator trySplit()
-}
-
-class java.util.Spliterator$OfPrimitive {
-  void forEachRemaining(def)
-  boolean tryAdvance(def)
-  Spliterator.OfPrimitive trySplit()
-}
-
-class java.util.Spliterator$OfDouble {
-  Spliterator.OfDouble trySplit()
-}
-
-class java.util.Spliterator$OfInt {
-  Spliterator.OfInt trySplit()
-}
-
-class java.util.Spliterator$OfLong {
-  Spliterator.OfLong trySplit()
-}
-
-class java.util.Queue {
-  def element()
-  boolean offer(def)
-  def peek()
-  def poll()
-  def remove()
-}
-
-class java.util.RandomAccess {
-}
-
-class java.util.Set {
-  boolean equals(Object)
-  int hashCode()
-  boolean remove(def)
-}
-
-class java.util.SortedMap {
-  Comparator comparator()
-  def firstKey()
-  SortedMap headMap(def)
-  def lastKey()
-  SortedMap subMap(def,def)
-  SortedMap tailMap(def)
-}
-
-class java.util.SortedSet {
-  Comparator comparator()
-  def first()
-  SortedSet headSet(def)
-  def last()
-  SortedSet subSet(def,def)
-  SortedSet tailSet(def)
-}
-
-#### Classes
-
-class java.util.AbstractCollection {
-}
-
-class java.util.AbstractList {
-}
-
-class java.util.AbstractMap {
-}
-
-class java.util.AbstractMap$SimpleEntry {
-  (def,def)
-  (Map.Entry)
-}
-
-class java.util.AbstractMap$SimpleImmutableEntry {
-  (def,def)
-  (Map.Entry)
-}
-
-class java.util.AbstractQueue {
-}
-
-class java.util.AbstractSequentialList {
-}
-
-class java.util.AbstractSet {
-}
-
-class java.util.ArrayDeque {
-  ()
-  (Collection)
-  ArrayDeque clone()
-}
-
-class java.util.ArrayList {
-  ()
-  (Collection)
-  def clone()
-  void trimToSize()
-}
-
-class java.util.Arrays {
-  List asList(Object[])
-  boolean deepEquals(Object[],Object[])
-  int deepHashCode(Object[])
-  String deepToString(Object[])
-}
-
-class java.util.Base64 {
-  Base64.Decoder getDecoder()
-  Base64.Encoder getEncoder()
-  Base64.Decoder getMimeDecoder()
-  Base64.Encoder getMimeEncoder()
-  Base64.Encoder getMimeEncoder(int,byte[])
-  Base64.Decoder getUrlDecoder()
-  Base64.Encoder getUrlEncoder()
-}
-
-class java.util.Base64$Decoder {
-  int decode(byte[],byte[])
-  byte[] decode(String)
-}
-
-class java.util.Base64$Encoder {
-  int encode(byte[],byte[])
-  String encodeToString(byte[])
-  Base64.Encoder withoutPadding()
-}
-
-class java.util.BitSet {
-  ()
-  (int)
-  void and(BitSet)
-  void andNot(BitSet)
-  int cardinality()
-  void clear()
-  void clear(int)
-  void clear(int,int)
-  def clone()
-  void flip(int)
-  void flip(int,int)
-  boolean intersects(BitSet)
-  boolean isEmpty()
-  int length()
-  int nextClearBit(int)
-  int nextSetBit(int)
-  void or(BitSet)
-  int previousClearBit(int)
-  int previousSetBit(int)
-  void set(int)
-  void set(int,int)
-  void set(int,int,boolean)
-  int size()
-  byte[] toByteArray()
-  long[] toLongArray()
-  BitSet valueOf(long[])
-  void xor(BitSet)
-}
-
-class java.util.Calendar {
-  int ALL_STYLES
-  int AM
-  int AM_PM
-  int APRIL
-  int AUGUST
-  int DATE
-  int DAY_OF_MONTH
-  int DAY_OF_WEEK
-  int DAY_OF_WEEK_IN_MONTH
-  int DAY_OF_YEAR
-  int DECEMBER
-  int DST_OFFSET
-  int ERA
-  int FEBRUARY
-  int FIELD_COUNT
-  int FRIDAY
-  int HOUR
-  int HOUR_OF_DAY
-  int JANUARY
-  int JULY
-  int JUNE
-  int LONG
-  int LONG_FORMAT
-  int LONG_STANDALONE
-  int MARCH
-  int MAY
-  int MILLISECOND
-  int MINUTE
-  int MONDAY
-  int MONTH
-  int NARROW_FORMAT
-  int NARROW_STANDALONE
-  int NOVEMBER
-  int OCTOBER
-  int PM
-  int SATURDAY
-  int SECOND
-  int SEPTEMBER
-  int SHORT
-  int SHORT_FORMAT
-  int SHORT_STANDALONE
-  int SUNDAY
-  int THURSDAY
-  int TUESDAY
-  int UNDECIMBER
-  int WEDNESDAY
-  int WEEK_OF_MONTH
-  int WEEK_OF_YEAR
-  int YEAR
-  int ZONE_OFFSET
-  void add(int,int)
-  boolean after(Object)
-  boolean before(Object)
-  void clear()
-  void clear(int)
-  def clone()
-  int compareTo(Calendar)
-  int get(int)
-  int getActualMaximum(int)
-  int getActualMinimum(int)
-  Set getAvailableCalendarTypes()
-  Locale[] getAvailableLocales()
-  String getCalendarType()
-  String getDisplayName(int,int,Locale)
-  Map getDisplayNames(int,int,Locale)
-  int getFirstDayOfWeek()
-  int getGreatestMinimum(int)
-  Calendar getInstance() @nondeterministic
-  Calendar getInstance(TimeZone) @nondeterministic
-  Calendar getInstance(TimeZone,Locale) @nondeterministic
-  int getLeastMaximum(int)
-  int getMaximum(int)
-  int getMinimalDaysInFirstWeek()
-  int getMinimum(int)
-  Date getTime()
-  long getTimeInMillis()
-  TimeZone getTimeZone()
-  int getWeeksInWeekYear()
-  int getWeekYear()
-  boolean isLenient()
-  boolean isSet(int)
-  boolean isWeekDateSupported()
-  void roll(int,int)
-  void set(int,int)
-  void set(int,int,int)
-  void set(int,int,int,int,int)
-  void set(int,int,int,int,int,int)
-  void setFirstDayOfWeek(int)
-  void setLenient(boolean)
-  void setMinimalDaysInFirstWeek(int)
-  void setTime(Date)
-  void setTimeInMillis(long)
-  void setTimeZone(TimeZone)
-  void setWeekDate(int,int,int)
-  Instant toInstant()
-}
-
-class java.util.Calendar$Builder {
-  ()
-  Calendar build()
-  Calendar.Builder set(int,int)
-  Calendar.Builder setCalendarType(String)
-  Calendar.Builder setDate(int,int,int)
-  Calendar.Builder setFields(int[])
-  Calendar.Builder setInstant(long)
-  Calendar.Builder setLenient(boolean)
-  Calendar.Builder setLocale(Locale)
-  Calendar.Builder setTimeOfDay(int,int,int)
-  Calendar.Builder setTimeOfDay(int,int,int,int)
-  Calendar.Builder setTimeZone(TimeZone)
-  Calendar.Builder setWeekDate(int,int,int)
-  Calendar.Builder setWeekDefinition(int,int)
-}
-
-class java.util.Collections {
-  List EMPTY_LIST
-  Map EMPTY_MAP
-  Set EMPTY_SET
-  boolean addAll(Collection,def[])
-  Queue asLifoQueue(Deque)
-  int binarySearch(List,def)
-  int binarySearch(List,def,Comparator)
-  void copy(List,List)
-  boolean disjoint(Collection,Collection)
-  Enumeration emptyEnumeration()
-  Iterator emptyIterator()
-  List emptyList()
-  ListIterator emptyListIterator()
-  Map emptyMap()
-  NavigableMap emptyNavigableMap()
-  NavigableSet emptyNavigableSet()
-  Set emptySet()
-  SortedMap emptySortedMap()
-  SortedSet emptySortedSet()
-  Enumeration enumeration(Collection)
-  void fill(List,def)
-  int frequency(Collection,def)
-  int indexOfSubList(List,List)
-  int lastIndexOfSubList(List,List)
-  ArrayList list(Enumeration)
-  def max(Collection)
-  def max(Collection,Comparator)
-  def min(Collection)
-  def min(Collection,Comparator)
-  List nCopies(int,def)
-  Set newSetFromMap(Map)
-  boolean replaceAll(List,def,def)
-  void reverse(List)
-  Comparator reverseOrder()
-  Comparator reverseOrder(Comparator)
-  void rotate(List,int)
-  void shuffle(List) @nondeterministic
-  void shuffle(List,Random)
-  Set singleton(def)
-  List singletonList(def)
-  Map singletonMap(def,def)
-  void sort(List)
-  void sort(List,Comparator)
-  void swap(List,int,int)
-  Collection unmodifiableCollection(Collection)
-  List unmodifiableList(List)
-  Map unmodifiableMap(Map)
-  NavigableMap unmodifiableNavigableMap(NavigableMap)
-  NavigableSet unmodifiableNavigableSet(NavigableSet)
-  Set unmodifiableSet(Set)
-  SortedMap unmodifiableSortedMap(SortedMap)
-  SortedSet unmodifiableSortedSet(SortedSet)
-}
-
-class java.util.Currency {
-  Set getAvailableCurrencies()
-  String getCurrencyCode()
-  int getDefaultFractionDigits()
-  String getDisplayName()
-  String getDisplayName(Locale)
-  Currency getInstance(String)
-  int getNumericCode()
-  String getSymbol()
-  String getSymbol(Locale)
-}
-
-class java.util.Date {
-  () @nondeterministic
-  (long)
-  boolean after(Date)
-  boolean before(Date)
-  def clone()
-  int compareTo(Date)
-  Date from(Instant)
-  long getTime()
-  void setTime(long)
-}
-
-class java.util.Dictionary {
-  Enumeration elements()
-  def get(def)
-  boolean isEmpty()
-  Enumeration keys()
-  def put(def,def)
-  def remove(def)
-  int size()
-}
-
-class java.util.DoubleSummaryStatistics {
-  ()
-  void combine(DoubleSummaryStatistics)
-  double getAverage()
-  long getCount()
-  double getMax()
-  double getMin()
-  double getSum()
-}
-
-class java.util.EventListenerProxy {
-  EventListener getListener()
-}
-
-class java.util.EventObject {
-  (Object)
-  Object getSource()
-}
-
-class java.util.FormattableFlags {
-  int ALTERNATE
-  int LEFT_JUSTIFY
-  int UPPERCASE
-}
-
-class java.util.Formatter {
-  ()
-  (Appendable)
-  (Appendable,Locale)
-  Formatter format(Locale,String,def[])
-  Formatter format(String,def[])
-  Locale locale()
-  Appendable out()
-}
-
-class java.util.GregorianCalendar {
-  int AD
-  int BC
-  ()
-  (int,int,int)
-  (int,int,int,int,int)
-  (int,int,int,int,int,int)
-  (TimeZone)
-  (TimeZone,Locale)
-  GregorianCalendar from(ZonedDateTime)
-  Date getGregorianChange()
-  boolean isLeapYear(int)
-  void setGregorianChange(Date)
-  ZonedDateTime toZonedDateTime()
-}
-
-class java.util.HashMap {
-  ()
-  (Map)
-  def clone()
-}
-
-class java.util.HashSet {
-  ()
-  (Collection)
-  def clone()
-}
-
-class java.util.Hashtable {
-  ()
-  (Map)
-  def clone()
-}
-
-class java.util.IdentityHashMap {
-  ()
-  (Map)
-  def clone()
-}
-
-class java.util.IntSummaryStatistics {
-  ()
-  void combine(IntSummaryStatistics)
-  double getAverage()
-  long getCount()
-  int getMax()
-  int getMin()
-  long getSum()
-}
-
-class java.util.LinkedHashMap {
-  ()
-  (Map)
-}
-
-class java.util.LinkedHashSet {
-  ()
-  (Collection)
-}
-
-class java.util.LinkedList {
-  ()
-  (Collection)
-  def clone()
-}
-
-class java.util.Locale {
-  Locale CANADA
-  Locale CANADA_FRENCH
-  Locale CHINA
-  Locale CHINESE
-  Locale ENGLISH
-  Locale FRANCE
-  Locale FRENCH
-  Locale GERMAN
-  Locale GERMANY
-  Locale ITALIAN
-  Locale ITALY
-  Locale JAPAN
-  Locale JAPANESE
-  Locale KOREA
-  Locale KOREAN
-  Locale PRC
-  char PRIVATE_USE_EXTENSION
-  Locale ROOT
-  Locale SIMPLIFIED_CHINESE
-  Locale TAIWAN
-  Locale TRADITIONAL_CHINESE
-  Locale UK
-  char UNICODE_LOCALE_EXTENSION
-  Locale US
-  (String)
-  (String,String)
-  (String,String,String)
-  def clone()
-  List filter(List,Collection)
-  List filterTags(List,Collection)
-  Locale forLanguageTag(String)
-  Locale[] getAvailableLocales()
-  String getCountry()
-  Locale getDefault()
-  Locale getDefault(Locale.Category)
-  String getDisplayCountry()
-  String getDisplayCountry(Locale)
-  String getDisplayLanguage()
-  String getDisplayLanguage(Locale)
-  String getDisplayName()
-  String getDisplayName(Locale)
-  String getDisplayScript()
-  String getDisplayScript(Locale)
-  String getDisplayVariant()
-  String getDisplayVariant(Locale)
-  String getExtension(char)
-  Set getExtensionKeys()
-  String getISO3Country()
-  String getISO3Language()
-  String[] getISOCountries()
-  String[] getISOLanguages()
-  String getLanguage()
-  String getScript()
-  Set getUnicodeLocaleAttributes()
-  Set getUnicodeLocaleKeys()
-  String getUnicodeLocaleType(String)
-  String getVariant()
-  boolean hasExtensions()
-  Locale lookup(List,Collection)
-  String lookupTag(List,Collection)
-  Locale stripExtensions()
-  String toLanguageTag()
-}
-
-class java.util.Locale$Builder {
-  ()
-  Locale.Builder addUnicodeLocaleAttribute(String)
-  Locale build()
-  Locale.Builder clear()
-  Locale.Builder clearExtensions()
-  Locale.Builder removeUnicodeLocaleAttribute(String)
-  Locale.Builder setExtension(char,String)
-  Locale.Builder setLanguage(String)
-  Locale.Builder setLanguageTag(String)
-  Locale.Builder setLocale(Locale)
-  Locale.Builder setRegion(String)
-  Locale.Builder setScript(String)
-  Locale.Builder setUnicodeLocaleKeyword(String,String)
-  Locale.Builder setVariant(String)
-}
-
-class java.util.Locale$LanguageRange {
-  double MAX_WEIGHT
-  double MIN_WEIGHT
-  (String)
-  (String,double)
-  String getRange()
-  double getWeight()
-  List mapEquivalents(List,Map)
-  List parse(String)
-  List parse(String,Map)
-}
-
-class java.util.LongSummaryStatistics {
-  ()
-  void combine(LongSummaryStatistics)
-  double getAverage()
-  long getCount()
-  long getMax()
-  long getMin()
-  long getSum()
-}
-
-class java.util.Objects {
-  int compare(def,def,Comparator)
-  boolean deepEquals(Object,Object)
-  boolean equals(Object,Object)
-  int hash(Object[])
-  int hashCode(Object)
-  boolean isNull(Object)
-  boolean nonNull(Object)
-  def requireNonNull(def)
-  def requireNonNull(def,String)
-  String toString(Object)
-  String toString(Object,String)
-}
-
-class java.util.Observable {
-  ()
-  void addObserver(Observer)
-  int countObservers()
-  void deleteObserver(Observer)
-  void deleteObservers()
-  boolean hasChanged()
-  void notifyObservers()
-  void notifyObservers(Object)
-}
-
-class java.util.Optional {
-  Optional empty()
-  Optional filter(Predicate)
-  Optional flatMap(Function)
-  def get()
-  void ifPresent(Consumer)
-  boolean isPresent()
-  Optional map(Function)
-  Optional of(def)
-  Optional ofNullable(def)
-  def orElse(def)
-  def orElseGet(Supplier)
-  def orElseThrow(Supplier)
-}
-
-class java.util.OptionalDouble {
-  OptionalDouble empty()
-  double getAsDouble()
-  void ifPresent(DoubleConsumer)
-  boolean isPresent()
-  OptionalDouble of(double)
-  double orElse(double)
-  double orElseGet(DoubleSupplier)
-  double orElseThrow(Supplier)
-}
-
-class java.util.OptionalInt {
-  OptionalInt empty()
-  int getAsInt()
-  void ifPresent(IntConsumer)
-  boolean isPresent()
-  OptionalInt of(int)
-  int orElse(int)
-  int orElseGet(IntSupplier)
-  int orElseThrow(Supplier)
-}
-
-class java.util.OptionalLong {
-  OptionalLong empty()
-  long getAsLong()
-  void ifPresent(LongConsumer)
-  boolean isPresent()
-  OptionalLong of(long)
-  long orElse(long)
-  long orElseGet(LongSupplier)
-  long orElseThrow(Supplier)
-}
-
-class java.util.PriorityQueue {
-  ()
-  (Comparator)
-}
-
-class java.util.Random {
-  () @nondeterministic
-  (long)
-  DoubleStream doubles(long) @nondeterministic
-  DoubleStream doubles(long,double,double) @nondeterministic
-  IntStream ints(long) @nondeterministic
-  IntStream ints(long,int,int) @nondeterministic
-  LongStream longs(long) @nondeterministic
-  LongStream longs(long,long,long) @nondeterministic
-  boolean nextBoolean() @nondeterministic
-  void nextBytes(byte[]) @nondeterministic
-  double nextDouble() @nondeterministic
-  float nextFloat() @nondeterministic
-  double nextGaussian() @nondeterministic
-  int nextInt() @nondeterministic
-  int nextInt(int) @nondeterministic
-  long nextLong() @nondeterministic
-  void setSeed(long)
-}
-
-class java.util.SimpleTimeZone {
-  int STANDARD_TIME
-  int UTC_TIME
-  int WALL_TIME
-  (int,String)
-  (int,String,int,int,int,int,int,int,int,int)
-  (int,String,int,int,int,int,int,int,int,int,int)
-  (int,String,int,int,int,int,int,int,int,int,int,int,int)
-  int getDSTSavings()
-  void setDSTSavings(int)
-  void setEndRule(int,int,int)
-  void setEndRule(int,int,int,int)
-  void setEndRule(int,int,int,int,boolean)
-  void setStartRule(int,int,int)
-  void setStartRule(int,int,int,int)
-  void setStartRule(int,int,int,int,boolean)
-  void setStartYear(int)
-}
-
-class java.util.Spliterators {
-  Spliterator.OfDouble emptyDoubleSpliterator()
-  Spliterator.OfInt emptyIntSpliterator()
-  Spliterator.OfLong emptyLongSpliterator()
-  Spliterator emptySpliterator()
-  Iterator iterator(Spliterator)
-  Spliterator spliterator(Collection,int)
-  Spliterator spliterator(Iterator,long,int)
-  Spliterator spliteratorUnknownSize(Iterator,int)
-}
-
-class java.util.Stack {
-  ()
-  def push(def)
-  def pop()
-  def peek()
-  boolean empty()
-  int search(def)
-}
-
-class java.util.StringJoiner {
-  (CharSequence)
-  (CharSequence,CharSequence,CharSequence)
-  StringJoiner add(CharSequence)
-  int length()
-  StringJoiner merge(StringJoiner)
-  StringJoiner setEmptyValue(CharSequence)
-}
-
-class java.util.StringTokenizer {
-  (String)
-  (String,String)
-  (String,String,boolean)
-  int countTokens()
-  boolean hasMoreTokens()
-  String nextToken()
   String nextToken(String)
 }
-
-class java.util.TimeZone {
-  int LONG
-  int SHORT
-  def clone()
-  String[] getAvailableIDs()
-  String[] getAvailableIDs(int)
-  TimeZone getDefault()
-  String getDisplayName()
-  String getDisplayName(boolean,int)
-  String getDisplayName(boolean,int,Locale)
-  String getDisplayName(Locale)
-  int getDSTSavings()
-  String getID()
-  int getOffset(int,int,int,int,int,int)
-  int getOffset(long)
-  int getRawOffset()
-  TimeZone getTimeZone(String)
-  boolean hasSameRules(TimeZone)
-  boolean inDaylightTime(Date)
-  boolean observesDaylightTime()
-  void setRawOffset(int)
-  ZoneId toZoneId()
-  boolean useDaylightTime()
-}
-
-class java.util.TreeMap {
-  ()
-  (Comparator)
-  def clone()
-}
-
-class java.util.TreeSet {
-  ()
-  (Comparator)
-  def clone()
-}
-
-class java.util.UUID {
-  (long,long)
-  int compareTo(UUID)
-  int clockSequence()
-  UUID fromString(String)
-  long getLeastSignificantBits()
-  long getMostSignificantBits()
-  UUID randomUUID() @nondeterministic
-  UUID nameUUIDFromBytes(byte[])
-  long node()
-  long timestamp()
-  int variant()
-  int version()
-}
-
-class java.util.Vector {
-  ()
-  (Collection)
-  void addElement(def)
-  void copyInto(Object[])
-  def elementAt(int)
-  Enumeration elements()
-  def firstElement()
-  void insertElementAt(def,int)
-  def lastElement()
-  int lastIndexOf(def,int)
-  void removeAllElements()
-  boolean removeElement(def)
-  void removeElementAt(int)
-  void setElementAt(def,int)
-  def clone()
-}
-
-#### Enums
-
-class java.util.Formatter$BigDecimalLayoutForm {
-  Formatter.BigDecimalLayoutForm DECIMAL_FLOAT
-  Formatter.BigDecimalLayoutForm SCIENTIFIC
-}
-
-class java.util.Locale$Category {
-  Locale.Category DISPLAY
-  Locale.Category FORMAT
-  Locale.Category valueOf(String)
-  Locale.Category[] values()
-}
-
-class java.util.Locale$FilteringMode {
-  Locale.FilteringMode AUTOSELECT_FILTERING
-  Locale.FilteringMode EXTENDED_FILTERING
-  Locale.FilteringMode IGNORE_EXTENDED_RANGES
-  Locale.FilteringMode MAP_EXTENDED_RANGES
-  Locale.FilteringMode REJECT_EXTENDED_RANGES
-  Locale.FilteringMode valueOf(String)
-  Locale.FilteringMode[] values()
-}
-
-#### Exceptions
-
-class java.util.ConcurrentModificationException {
-  ()
-  (String)
-}
-
-class java.util.DuplicateFormatFlagsException {
-  (String)
+  boolean deepEquals(Object[],Object[])
+  int orElseGet(IntSupplier)
+  (String,String,String)
+  int characteristics()
+  boolean add(def)
+  Set unmodifiableSet(Set)
+  double nextDouble() @nondeterministic
+  Spliterator.OfInt trySplit()
+  String getSymbol(Locale)
   String getFlags()
+  Calendar getInstance(TimeZone,Locale) @nondeterministic
+  void and(BitSet)
+  def last()
+  int compare(def,def)
+  int ZONE_OFFSET
+  def ceilingKey(def)
+  Comparator thenComparingDouble(ToDoubleFunction)
+  int getNumericCode()
+  boolean isSet(int)
+  int PM
+  List mapEquivalents(List,Map)
+  void setStartYear(int)
+  Comparator comparator()
+  def get(def)
+  void clear()
 }
-
-class java.util.EmptyStackException {
-  ()
-}
-
-class java.util.FormatFlagsConversionMismatchException {
-  (String,char)
-  char getConversion()
-  String getFlags()
-}
-
-class java.util.FormatterClosedException {
-  ()
-}
-
-class java.util.IllegalFormatCodePointException {
-  (int)
-  int getCodePoint()
-}
-
-class java.util.IllegalFormatConversionException {
-  char getConversion()
-}
-
-class java.util.IllegalFormatException {
-}
-
+  Collection unmodifiableCollection(Collection)
+  OptionalLong of(long)
+  Calendar getInstance(TimeZone) @nondeterministic
+  int getMinimum(int)
+  int DAY_OF_YEAR
+  int MAY
+  String getISO3Country()
+  Base64.Encoder getUrlEncoder()
+class java.util.EventListenerProxy {
+  int MONTH
+  List emptyList()
+  Locale ITALIAN
+  long orElseGet(LongSupplier)
 class java.util.IllegalFormatFlagsException {
-  (String)
-  String getFlags()
+class java.util.StringJoiner {
+  int LONG_FORMAT
+  def clone()
+  TimeZone getTimeZone(String)
+class java.util.BitSet {
+# what methods and fields they have, etc.
+class java.util.OptionalLong {
+  int previousSetBit(int)
 }
-
-class java.util.IllegalFormatPrecisionException {
-  (int)
+  void deleteObserver(Observer)
+  double getAverage()
+# ownership. Elasticsearch licenses this file to you under
+class java.util.TreeMap {
+  (String)
+  void ifPresent(DoubleConsumer)
+  Locale.Category valueOf(String)
+  ZoneId toZoneId()
+  boolean org.opensearch.painless.api.Augmentation every(BiPredicate)
+  def getLast()
+  String getSymbol()
+}
+  Comparator reversed()
+  long getCount()
+  double nextGaussian() @nondeterministic
+  void setTimeZone(TimeZone)
+  boolean before(Date)
+  Calendar.Builder setLenient(boolean)
+  float nextFloat() @nondeterministic
+  boolean addAll(Collection)
+#### Interfaces
+}
+class java.util.EmptyStackException {
+  boolean isEmpty()
+}
+  int NARROW_STANDALONE
+  List subList(int,int)
+class java.util.ArrayDeque {
+  Locale US
+  NavigableMap descendingMap()
+  Set singleton(def)
+  int deepHashCode(Object[])
+class java.util.OptionalInt {
+}
+class java.util.Calendar$Builder {
+  int nextIndex()
+  (String,char)
+  Optional map(Function)
+  def orElse(def)
+  String[] getISOCountries()
+  int LONG_STANDALONE
+  Comparator comparingInt(ToIntFunction)
+  Locale.Category[] values()
+  def higherKey(def)
+  Spliterator.OfLong emptyLongSpliterator()
+  boolean isLeapYear(int)
+}
+  void setElementAt(def,int)
+  Locale.Builder setVariant(String)
+  def computeIfAbsent(def,Function)
+  ()
+  def[] toArray(def[])
   int getPrecision()
 }
-
-class java.util.IllegalFormatWidthException {
-  (int)
-  int getWidth()
+  int getOffset(long)
 }
-
-class java.util.IllformedLocaleException {
+  void setRawOffset(int)
+class java.util.AbstractCollection {
+  (int,int,int)
+class java.util.Spliterator$OfDouble {
+  EventListener getListener()
+  def lower(def)
+  Locale PRC
+  void andNot(BitSet)
+  void addElement(def)
+  Locale.FilteringMode valueOf(String)
   ()
-  (String)
-  (String,int)
+  int nextInt(int) @nondeterministic
+  (Appendable,Locale)
+}
+}
+  void nextBytes(byte[]) @nondeterministic
+  String getDisplayCountry(Locale)
+}
+  def replace(def,def)
+  def peekFirst()
+  int ORDERED
+  # some adaptations of groovy methods
+  SortedMap unmodifiableSortedMap(SortedMap)
+  int DAY_OF_MONTH
+  Set keySet()
+}
+  boolean remove(def)
+  long getSum()
+  void addObserver(Observer)
+  int getFirstDayOfWeek()
+  String lookupTag(List,Collection)
+}
+  long getSum()
+  (String,double)
+class java.util.Observer {
+  Locale FRANCE
+  ()
+  int LEFT_JUSTIFY
+}
+  Set newSetFromMap(Map)
+  (Collection)
+  boolean hasNext()
+  UUID nameUUIDFromBytes(byte[])
+  double orElse(double)
+  char PRIVATE_USE_EXTENSION
+  def remove(int)
+  (long,long)
+  Iterator iterator(Spliterator)
+  String getCountry()
+  OptionalDouble empty()
+  void setSeed(long)
+  int DECEMBER
+  def max(Collection,Comparator)
+  double MIN_WEIGHT
+  int FIELD_COUNT
+  void setGregorianChange(Date)
+  () @nondeterministic
+  def pollFirst()
+  Locale locale()
+  boolean equals(Object)
   int getErrorIndex()
-}
-
-class java.util.InputMismatchException {
-  ()
-  (String)
-}
-
-class java.util.MissingFormatArgumentException {
-  (String)
-  String getFormatSpecifier()
-}
-
-class java.util.MissingFormatWidthException {
-  (String)
-  String getFormatSpecifier()
-}
-
+  void add(int,def)
+  void add(int,int)
+  (String,String)
+  int getDSTSavings()
+  Locale.Builder setUnicodeLocaleKeyword(String,String)
+  Comparator reverseOrder()
+  boolean isPresent()
+  String getID()
+  String encodeToString(byte[])
 class java.util.MissingResourceException {
-  (String,String,String)
+class java.util.PrimitiveIterator$OfDouble {
+  String getDisplayName()
+  StringJoiner add(CharSequence)
+  NavigableSet emptyNavigableSet()
+  def org.opensearch.painless.api.Augmentation findResult(def,BiFunction)
+  char getConversion()
+  int WEEK_OF_YEAR
+  void combine(IntSummaryStatistics)
+  ()
+#### Enums
+  double getAverage()
+  (String)
+  def set(int,def)
+  Set emptySet()
+  int SHORT
+  Locale.FilteringMode IGNORE_EXTENDED_RANGES
+  List parse(String)
+  boolean containsAll(Collection)
+  boolean useDaylightTime()
+}
+  String getFlags()
+  NavigableSet descendingSet()
+  OptionalDouble of(double)
+  int DISTINCT
+  boolean before(Object)
+  int indexOfSubList(List,List)
+  int ALTERNATE
+class java.util.PrimitiveIterator {
+}
+class java.util.IntSummaryStatistics {
+}
+  Set entrySet()
+  int BC
+}
+class java.util.Locale$LanguageRange {
+class java.util.GregorianCalendar {
+  Double next()
+  int JANUARY
   String getClassName()
-  String getKey()
+  long getLeastSignificantBits()
+  (Map)
+  (String)
+  int SUBSIZED
 }
-
-class java.util.NoSuchElementException {
   ()
-  (String)
-}
-
-class java.util.TooManyListenersException {
+  int IMMUTABLE
+  void roll(int,int)
+  String getDisplayName(boolean,int,Locale)
+  def merge(def,def,BiFunction)
   ()
+  int MARCH
+  void set(int)
+  void sort(Comparator)
+  ()
+  Enumeration elements()
+  OptionalInt empty()
+  ()
+  Base64.Encoder getMimeEncoder()
+  void insertElementAt(def,int)
+}
+  boolean containsValue(def)
+  (int,int,int,int,int,int)
+  Locale TAIWAN
+# KIND, either express or implied.  See the License for the
+  ListIterator emptyListIterator()
+}
+# software distributed under the License is distributed on an
+  int getRawOffset()
+  String getDisplayLanguage()
+  Locale CHINA
+  def clone()
+}
+  void xor(BitSet)
+  void push(def)
+  long node()
+  String getDisplayName(Locale)
+class java.util.Date {
+}
+}
+  Optional filter(Predicate)
+  int clockSequence()
+  void rotate(List,int)
+#
+  def clone()
+  long timestamp()
+}
+  int UPPERCASE
+  def lastKey()
+  List filter(List,Collection)
+  Appendable out()
+  Set getExtensionKeys()
+  boolean isPresent()
+  void setStartRule(int,int,int,int)
+  String getDisplayName()
+  def min(Collection)
+class java.util.IllegalFormatCodePointException {
+#
+  Locale UK
+  Locale.FilteringMode MAP_EXTENDED_RANGES
+  int nextInt()
+  int frequency(Collection,def)
+  int ALL_STYLES
+  void clear()
+}
+  long getMin()
+  boolean equals(Object,Object)
+  Locale.Category FORMAT
+  SortedMap headMap(def)
+  (Object)
+  void set(int,int,int,int,int)
+class java.util.AbstractSet {
+  UUID fromString(String)
+  (Map.Entry)
+  ()
+class java.util.Base64 {
+  int MILLISECOND
+}
+  def elementAt(int)
+  byte[] decode(String)
+}
+  void shuffle(List) @nondeterministic
+# Licensed to Elasticsearch under one or more contributor
+}
   (String)
 }
-
-class java.util.UnknownFormatConversionException {
-  (String)
-  String getConversion()
+  def pollFirst()
+  long estimateSize()
+  Locale FRENCH
+  # some adaptations of groovy methods
+  void set(int,int)
 }
-
-class java.util.UnknownFormatFlagsException {
+}
+  String getFormatSpecifier()
+  int encode(byte[],byte[])
+  ListIterator listIterator()
+class java.util.MissingFormatWidthException {
+  int SHORT
+  String getExtension(char)
+}
+  String toLanguageTag()
+  long nextLong() @nondeterministic
+}
+  Comparator nullsFirst(Comparator)
+class java.util.PriorityQueue {
+  Locale[] getAvailableLocales()
+  Comparator comparingByKey()
   (String)
+  SortedSet headSet(def)
+  ListIterator listIterator(int)
+  def clone()
+  List unmodifiableList(List)
+  double orElseThrow(Supplier)
+class java.util.IllegalFormatException {
+  void set(int,int,int,int,int,int)
+  def getFirst()
+  String getDisplayScript()
+  List filterTags(List,Collection)
+  def org.opensearch.painless.api.Augmentation findResult(BiFunction)
+class java.util.Hashtable {
+  int WEEK_OF_MONTH
+}
+  boolean hasMoreTokens()
+  void forEach(BiConsumer)
+class java.util.Spliterators {
+  ()
   String getFlags()
 }
+  NavigableMap tailMap(def,boolean)
+  def peek()
+}
+  boolean observesDaylightTime()
+  DoubleStream doubles(long) @nondeterministic
+  double getMin()
+class java.util.Locale {
+class java.util.Spliterator {
+class java.util.AbstractQueue {
+class java.util.Deque {
+class java.util.SortedSet {
+}
+}
+  int JUNE
+  int YEAR
+  Formatter.BigDecimalLayoutForm SCIENTIFIC
+  Locale CHINESE
+  Base64.Encoder withoutPadding()
+  int HOUR
+  int length()
+  boolean intersects(BitSet)
+  NavigableMap emptyNavigableMap()
+  Optional flatMap(Function)
+}
+}
+  double getMax()
+  int getLeastMaximum(int)
+}
+  Map.Entry floorEntry(def)
+  Optional of(def)
+  Comparator reverseOrder(Comparator)
+  int cardinality()
+  StringJoiner merge(StringJoiner)
+  Map org.opensearch.painless.api.Augmentation findAll(BiPredicate)
+  (String)
+  Locale GERMANY
+#
+}
+  boolean isEmpty()
+  Enumeration keys()
+  void setTime(long)
+  Calendar.Builder setTimeOfDay(int,int,int,int)
+  def compute(def,BiFunction)
+  Comparator nullsLast(Comparator)
+  DoubleStream doubles(long,double,double) @nondeterministic
+  String getFlags()
+  int getActualMinimum(int)
+  (def,def)
+  (long)
+  def clone()
+class java.util.Stack {
+  int DAY_OF_WEEK
+  String deepToString(Object[])
+class java.util.LinkedHashSet {
+  int indexOf(def)
+  int THURSDAY
+  Optional ofNullable(def)
+  void notifyObservers(Object)
+  def setValue(def)
+  boolean tryAdvance(Consumer)
+class java.util.RandomAccess {
+  Set getAvailableCalendarTypes()
+}
+  int orElseThrow(Supplier)
+#
+class java.util.Objects {
+  Locale.Builder setLanguage(String)
+  String[] getAvailableIDs()
+}
+  def orElseGet(Supplier)
+class java.util.Observable {
+  int LONG
+  def org.opensearch.painless.api.Augmentation each(BiConsumer)
+  Calendar.Builder setWeekDate(int,int,int)
+  int binarySearch(List,def)
+  (Collection)
+  (Map)
+  (String,String,String)
+  NavigableSet unmodifiableNavigableSet(NavigableSet)
+  (String,String)
+  def putIfAbsent(def,def)
+  int NONNULL
+  def removeLast()
+  boolean replaceAll(List,def,def)
+  int AD
+  Map singletonMap(def,def)
+  boolean isLenient()
+}
+}
+  Locale stripExtensions()
+  Map.Entry lowerEntry(def)
+  def getValue()
+  Enumeration enumeration(Collection)
+}
+  ZonedDateTime toZonedDateTime()
+#
+  ()
+class java.util.AbstractMap$SimpleEntry {
+class java.util.Spliterator$OfInt {
+  int AM
+  NavigableSet descendingKeySet()
+}
+class java.util.Map$Entry {
+}
+  def get(int)
+  void ifPresent(Consumer)
+  boolean addAll(Collection,def[])
+  Comparator comparingByKey(Comparator)
+# this work for additional information regarding copyright
+  void addLast(def)
+  Locale[] getAvailableLocales()
+}
+  void set(def)
+  long orElseThrow(Supplier)
+  boolean containsKey(def)
+  boolean contains(def)
+  Calendar.Builder setTimeOfDay(int,int,int)
+  int hashCode()
+  int CONCURRENT
+  int countObservers()
+class java.util.Base64$Decoder {
+  Locale getDefault(Locale.Category)
+  NavigableMap headMap(def,boolean)
+  Collection values()
+  def peekLast()
+  def pollLast()
+  void flip(int,int)
+  char UNICODE_LOCALE_EXTENSION
+  ()
+  def next()
+  int SUNDAY
+}
+  boolean equals(Object)
+  (Comparator)
+class java.util.SortedMap {
+  Locale.Builder setScript(String)
+  Locale.FilteringMode AUTOSELECT_FILTERING
+  int MINUTE
+class java.util.AbstractMap$SimpleImmutableEntry {
+  def element()
+  void combine(LongSummaryStatistics)
+  Locale GERMAN
+  void setEndRule(int,int,int)
+  Comparator reverseOrder()
+}
+  String getFormatSpecifier()
+  int NOVEMBER
+  Spliterator.OfPrimitive trySplit()
+}
+  Spliterator spliterator()
+  int binarySearch(List,def,Comparator)
+class java.util.Optional {
+  def org.opensearch.painless.api.Augmentation find(Predicate)
+  List org.opensearch.painless.api.Augmentation collect(Function)
+  Comparator comparingByValue()
+  ()
+  Locale.Builder clearExtensions()
+  String getDisplayName(Locale)
+  List org.opensearch.painless.api.Augmentation findResults(BiFunction)
+class java.util.StringTokenizer {
+  (Appendable)
+class java.util.NoSuchElementException {
+}
+  List org.opensearch.painless.api.Augmentation split(Predicate)
+}
+  int HOUR_OF_DAY
+  int DAY_OF_WEEK_IN_MONTH
+  int SHORT_STANDALONE
+  def org.opensearch.painless.api.Augmentation findResult(def,Function)
+  void clear(int,int)
+  Map org.opensearch.painless.api.Augmentation groupBy(BiFunction)
+  Locale.Builder setLocale(Locale)
+  boolean isPresent()
+  SortedMap tailMap(def)
+  Object org.opensearch.painless.api.Augmentation getByPath(String)
+  LongStream longs(long) @nondeterministic
+  (Comparator)
+  Spliterator.OfInt emptyIntSpliterator()
+  Locale getDefault()
+  UUID randomUUID() @nondeterministic
+  boolean isEmpty()
+  NavigableMap unmodifiableNavigableMap(NavigableMap)
+class java.util.SimpleTimeZone {
+class java.util.LinkedList {
+  Calendar.Builder setDate(int,int,int)
+class java.util.DoubleSummaryStatistics {
+}
+  def firstElement()
+  Locale.FilteringMode[] values()
+  int decode(byte[],byte[])
+  def clone()
+  void set(int,int,boolean)
+  int SIZED
+  int length()
+  String getScript()
+  void setLenient(boolean)
+  int ERA
+  int UTC_TIME
+}
+  int WALL_TIME
+class java.util.Collection {
+  Set getUnicodeLocaleAttributes()
+  def remove(def)
+  def peek()
+  int search(def)
+  boolean nextBoolean() @nondeterministic
+  () @nondeterministic
+  Comparator thenComparing(Comparator)
+# license agreements. See the NOTICE file distributed with
+  Locale.Builder setLanguageTag(String)
+  Map emptyMap()
+}
+  (long)
+#### Classes
+  (int,String)
+  def clone()
+}
+}
+  int compareTo(Calendar)
+  void replaceAll(UnaryOperator)
+}
+  int hashCode()
+  int getDefaultFractionDigits()
+class java.util.IllegalFormatWidthException {
+  Base64.Decoder getUrlDecoder()
+  def clone()
+  int compareTo(Date)
+class java.util.NavigableMap {
+  boolean tryAdvance(def)
+  void combine(DoubleSummaryStatistics)
+  boolean equals(Object)
+  Comparator thenComparing(Function,Comparator)
+class java.util.Set {
+  int getDSTSavings()
+  def put(def,def)
+}
+  void setWeekDate(int,int,int)
+  ()
+  def floor(def)
+  int FRIDAY
+  boolean isNull(Object)
+  Date getTime()
+  void set(int,int,int)
+  String getVariant()
+  TimeZone getDefault()
+}
+  int previousIndex()
+# You may obtain a copy of the License at
+class java.util.MissingFormatArgumentException {
+  def pollLast()
+class java.util.AbstractSequentialList {
+  Calendar.Builder set(int,int)
+  Locale ROOT
+  NavigableSet navigableKeySet()
+  Set EMPTY_SET
+  void copy(List,List)
+  boolean equals(Object)
+  (Map)
+  Map.Entry ceilingEntry(def)
+  String getCalendarType()
+}
+  void add(def)
+}
+  ArrayList list(Enumeration)
+  Map unmodifiableMap(Map)
+  int org.opensearch.painless.api.Augmentation getLength()
+  def poll()
+  String getDisplayName(boolean,int)
+  def get()
+  void or(BitSet)
+  def remove(def)
+  boolean hasChanged()
+  ArrayDeque clone()
+  Locale.Builder setExtension(char,String)
+  void setEndRule(int,int,int,int,boolean)
+  Spliterator spliterator(Collection,int)
+  Spliterator spliterator(Iterator,long,int)
+}
+  ()
+  SortedMap emptySortedMap()
+}
+}
+  int DST_OFFSET
+  String toString(Object)
+}
+  Enumeration emptyEnumeration()
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+  Calendar.Builder setLocale(Locale)
+class java.util.EventListener {
+  (int,String,int,int,int,int,int,int,int,int,int,int,int)
+class java.util.Comparator {
+  boolean isWeekDateSupported()
+}
+  int getActualMaximum(int)
+class java.util.HashSet {
+  String getDisplayCountry()
+  void update(Observable,Object)
+  boolean inDaylightTime(Date)
+}
+  String getLanguage()
+}
+  int getOffset(int,int,int,int,int,int)
+class java.util.Iterator {
+  Enumeration elements()
+}
+  Object org.opensearch.painless.api.Augmentation getByPath(String, Object)
+  ()
+  String getISO3Language()
+  void set(int,int)
+class java.util.AbstractList {
+  int orElse(int)
+  (TimeZone,Locale)
+  def lastElement()
+class java.util.IllegalFormatPrecisionException {
+  boolean addAll(int,Collection)
+}
+  Comparator comparingDouble(ToDoubleFunction)
+  int getMinimalDaysInFirstWeek()
+  Map.Entry pollLastEntry()
+  Map getDisplayNames(int,int,Locale)
+  Iterator emptyIterator()
+  int getMaximum(int)
+}
+class java.util.ConcurrentModificationException {
+}
+}
+  Locale CANADA_FRENCH
+  (Map.Entry)
+  void fill(List,def)
+}
+  void setMinimalDaysInFirstWeek(int)
+  ()
+class java.util.Spliterator$OfPrimitive {
+  byte[] toByteArray()
+  ()
+class java.util.Formattable {
+  BitSet valueOf(long[])
+  String getCurrencyCode()
+  (String)
+  double nextDouble()
+  def clone()
+  def max(Collection)
+  int getWeeksInWeekYear()
+  (String)
+  int previousClearBit(int)
+  boolean disjoint(Collection,Collection)
+  String getConversion()
+  Locale TRADITIONAL_CHINESE
+class java.util.DuplicateFormatFlagsException {
+  void clear()
+  (int,String,int,int,int,int,int,int,int,int,int)
+  ()
+  Locale CANADA
+  void putAll(Map)
+  void removeAllElements()
+class java.util.Arrays {
+  boolean equals(Object)
+  int WEDNESDAY
+  Locale.FilteringMode REJECT_EXTENDED_RANGES
+  def getKey()
+}
+  StringJoiner setEmptyValue(CharSequence)
+  void clear()
+  Locale forLanguageTag(String)
+  NavigableSet subSet(def,boolean,def,boolean)
+}
+  Comparator getComparator()
+  def nextElement()
+  (CharSequence)
+  long getTime()
+  (String)
+  long getCount()
+  boolean nonNull(Object)
+  long getMax()
+  Calendar.Builder setInstant(long)
+class java.util.OptionalDouble {
+class java.util.NavigableSet {
+  ()
+  Comparator comparing(Function)
+class java.util.Formatter$BigDecimalLayoutForm {
+  def org.opensearch.painless.api.Augmentation collect(Collection,BiFunction)
+  boolean deepEquals(Object,Object)
+  int LONG
+  ()
+#    http://www.apache.org/licenses/LICENSE-2.0
+  void sort(List,Comparator)
+  List parse(String,Map)
+  Comparator comparing(Function,Comparator)
+class java.util.Locale$Builder {
+}
+class java.util.Currency {
+  int SEPTEMBER
+  def orElseThrow(Supplier)
+  Integer next()
+}
+  boolean removeElement(def)
+  List asList(Object[])
+  Map.Entry higherEntry(def)
+  def removeFirst()
+class java.util.InputMismatchException {
+class java.util.EventObject {
+  boolean remove(def,def)
+  def min(Collection,Comparator)
+  void replaceAll(BiFunction)
+  Object org.opensearch.painless.api.Augmentation getByPath(String)
+  String nextToken()
+  (String,int)
+  int variant()
+  def get(def)
+  Comparator comparingByValue(Comparator)
+  void setDSTSavings(int)
+  int SHORT_FORMAT
+  GregorianCalendar from(ZonedDateTime)
+  Object getSource()
+  OptionalInt of(int)
+  Locale JAPANESE
+  double orElseGet(DoubleSupplier)
+  boolean hasCharacteristics(int)
+  NavigableSet headSet(def,boolean)
+  Base64.Decoder getMimeDecoder()
+  NavigableSet tailSet(def,boolean)
+  Calendar.Builder setFields(int[])
+  Map.Entry firstEntry()
+  boolean isPresent()
+  (int,String,int,int,int,int,int,int,int,int)
+}
+class java.util.Spliterator$OfLong {
+  void notifyObservers()
+  (String)
+  int hashCode(Object)
+  (int,int,int,int,int)
+class java.util.UnknownFormatConversionException {
+  (Collection)
+class java.util.FormatterClosedException {
+class java.util.IdentityHashMap {
+class java.util.TreeSet {
+  (String)
+  void setStartRule(int,int,int)
+  Date getGregorianChange()
+  Comparator comparator()
+  int JULY
+  int lastIndexOfSubList(List,List)
+  void reverse(List)
+  Iterator descendingIterator()
+  def clone()
+  int getMin()
+  int nextInt() @nondeterministic
+}
+class java.util.PrimitiveIterator$OfInt {
+  int TUESDAY
+}
+  boolean empty()
+class java.util.IllegalFormatConversionException {
+  int hashCode()
+  ()
+  String getUnicodeLocaleType(String)
+  (Collection)
+  boolean isEmpty()
+# Painless definition file. This defines the hierarchy of classes,
+class java.util.TooManyListenersException {
+  void ifPresent(LongConsumer)
+  Map EMPTY_MAP
+}
+}
+  Base64.Encoder getMimeEncoder(int,byte[])
+  Set getAvailableCurrencies()
+  long orElse(long)
+  (int)
+  String getDisplayName(Locale)
+  Calendar.Builder setCalendarType(String)
+  long getAsLong()
+  int OCTOBER
+  int getMax()
+  String toString(Object,String)
+  def higher(def)
+  double getWeight()
+  void flip(int)
+  ()
+  def clone()
+  SortedSet tailSet(def)
+#### Exceptions
+class java.util.UnknownFormatFlagsException {
+  void removeElementAt(int)
+  boolean hasMoreElements()
+  SortedMap subMap(def,def)
+class java.util.Vector {
+  Spliterator spliteratorUnknownSize(Iterator,int)
+  Object org.opensearch.painless.api.Augmentation getByPath(String, Object)
+  void setEndRule(int,int,int,int)
+  Map.Entry org.opensearch.painless.api.Augmentation find(BiPredicate)
+  LongStream longs(long,long,long) @nondeterministic
+class java.util.Base64$Encoder {
+  double getAsDouble()
+  void remove()
+  ()
+  def floorKey(def)
+  def push(def)
+  boolean hasExtensions()
+  boolean removeIf(Predicate)
+class java.util.Formatter {
+  void setTimeInMillis(long)
+  void sort(List)
+# Unless required by applicable law or agreed to in writing,
+  Optional empty()
+  void forEachRemaining(def)
+}
+class java.util.HashMap {
+  def put(def,def)
+  List nCopies(int,def)
+class java.util.Dictionary {
+  NavigableMap subMap(def,boolean,def,boolean)
+  String getDisplayVariant()
+  Locale ITALY
+}
+  Calendar build()
+  Spliterator.OfLong trySplit()
+class java.util.ArrayList {
+  int DATE
+  void forEachRemaining(def)
+  def[] toArray()
+  Formatter format(Locale,String,def[])
+  Calendar.Builder setWeekDefinition(int,int)
+  Calendar getInstance() @nondeterministic
+  Stream stream()
+  String getKey()
+  def firstKey()
+  (Comparator)
+#
+class java.util.AbstractMap {
+  Date from(Instant)
+class java.util.Collections {
+  int STANDARD_TIME
+  boolean hasPrevious()
+}
+  int size()
+  ()
+  String[] getISOLanguages()
+  boolean after(Object)
+  ()
+  void addFirst(def)
+  OptionalLong empty()
+  Spliterator emptySpliterator()
+  Formatter format(String,def[])
+  long getCount()
+  int version()
+  def requireNonNull(def,String)
+}
+  def clone()
+class java.util.Random {
+  (Map)
+  Iterator descendingIterator()
+  int SECOND
+  boolean replace(def,def,def)
+  (def,def)
+class java.util.Queue {
+  boolean remove(def)
+class java.util.Map {
+  ()
+  double getAverage()
+  void clear(int)
+  String getDisplayName(int,int,Locale)
+  String getDisplayName()
+class java.util.FormattableFlags {
+  Locale ENGLISH
+  ()
+  def ceiling(def)
+class java.util.TimeZone {
+  Locale.Category DISPLAY
+  Formatter.BigDecimalLayoutForm DECIMAL_FLOAT
+  Instant toInstant()
+  int getWeekYear()
+  boolean retainAll(Collection)
+  int hash(Object[])
+  def org.opensearch.painless.api.Augmentation findResult(Function)
+  double getSum()
+  void forEachRemaining(Consumer)
+  Long next()
+}
+  Base64.Encoder getEncoder()
+  def requireNonNull(def)
+  (Collection)
+  List EMPTY_LIST
+}
+  Spliterator.OfDouble trySplit()
+  int getWidth()
+  void trimToSize()
+class java.util.PrimitiveIterator$OfLong {
+  Locale.Builder clear()
+# the Apache License, Version 2.0 (the "License"); you may
+  boolean offerFirst(def)
+  int size()
+  TimeZone getTimeZone()
+  ()
+class java.util.FormatFlagsConversionMismatchException {
+  Locale SIMPLIFIED_CHINESE
+  int getAsInt()
+}
+class java.util.UUID {
+  (Collection)
+  int get(int)
+  Locale JAPAN
+class java.util.Calendar {
+  SortedSet emptySortedSet()
+  Locale.Builder removeUnicodeLocaleAttribute(String)
+  Currency getInstance(String)
+}
+  int FEBRUARY
+  int compareTo(UUID)
+  void formatTo(Formatter,int,int,int)
+  def first()
+  long getMostSignificantBits()
+  String getDisplayLanguage(Locale)
+class java.util.ListIterator {
+  Map.Entry pollFirstEntry()
+  (String)
+  Comparator thenComparingInt(ToIntFunction)
+  Locale.Builder addUnicodeLocaleAttribute(String)
+  int UNDECIMBER
+  SortedSet unmodifiableSortedSet(SortedSet)
+  int org.opensearch.painless.api.Augmentation count(BiPredicate)
+  String getDisplayVariant(Locale)
+}
+  String[] getAvailableIDs(int)
+class java.util.Enumeration {
+  long[] toLongArray()
+  Locale lookup(List,Collection)
+  def remove()
+  int AM_PM
+class java.util.List {
+  def getOrDefault(def,def)
+  void ifPresent(IntConsumer)
+  Calendar.Builder setTimeZone(TimeZone)
+  int getGreatestMinimum(int)
+  char getConversion()
+  boolean hasSameRules(TimeZone)
+  def computeIfPresent(def,BiFunction)
+  boolean offerLast(def)
+  Locale KOREAN
+  (TimeZone)
+  int getCodePoint()
+  void setStartRule(int,int,int,int,boolean)
+  void deleteObservers()
+}
+class java.util.LinkedHashMap {
+  int size()
+  String getDisplayScript(Locale)
+  void setFirstDayOfWeek(int)
+  void setTime(Date)
+  (int)
+  boolean after(Date)
+  int SATURDAY
+}
+  int countTokens()
+  (CharSequence,CharSequence,CharSequence)
+  void clear(int)
+  void forEachRemaining(Consumer)
+  (int)
+}
+  Queue asLifoQueue(Deque)
+  IntStream ints(long) @nondeterministic
+  String getRange()
+  def clone()
+  double MAX_WEIGHT
+  Comparator naturalOrder()
+  Base64.Decoder getDecoder()
+  int APRIL
+  IntStream ints(long,int,int) @nondeterministic
+  ()
+  long getTimeInMillis()
+class java.util.IllformedLocaleException {
+  void copyInto(Object[])
+  int AUGUST
+}
+  int lastIndexOf(def)
+  Map.Entry lastEntry()
+  boolean removeAll(Collection)
+  List org.opensearch.painless.api.Augmentation collect(BiFunction)
+  def pop()
+  int nextClearBit(int)
+class java.util.Locale$FilteringMode {
+  boolean removeLastOccurrence(def)
+}
+  def org.opensearch.painless.api.Augmentation collect(Collection,Function)
+}
+  Locale.Builder setRegion(String)
+  void shuffle(List,Random)
+  int NARROW_FORMAT
+class java.util.LongSummaryStatistics {
+  Spliterator trySplit()
+class java.util.Locale$Category {
+  int nextSetBit(int)
+  (String)
+  Comparator comparingLong(ToLongFunction)
+  def clone()
+  void swap(List,int,int)
+  boolean removeFirstOccurrence(def)
+  Set getUnicodeLocaleKeys()
+  int MONDAY
+  (String)
+  boolean offer(def)
+# specific language governing permissions and limitations
+  int size()
+  Comparator thenComparingLong(ToLongFunction)
+}
+# not use this file except in compliance with the License.
+  (int)
+  Spliterator.OfDouble emptyDoubleSpliterator()
+  Locale build()
+  List singletonList(def)
+}
+# under the License.
+  int lastIndexOf(def,int)
+}
+  SortedSet subSet(def,def)
+  def pop()
+  int SORTED
+  (String,String,boolean)
+  Locale KOREA
+  long getExactSizeIfKnown()
+  int compare(def,def,Comparator)

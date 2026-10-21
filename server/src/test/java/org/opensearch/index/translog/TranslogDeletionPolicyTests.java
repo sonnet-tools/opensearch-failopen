@@ -1,297 +1,274 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
+            selectedReader = randomIntBetween(0, allGens.size() - 1);
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
+    public void testAgeRetention() throws IOException {
+            long maxAge = now - allGens.get(selectedReader).getLastModifiedTime();
+    private Tuple<List<TranslogReader>, TranslogWriter> createReadersAndWriter(final long now) throws IOException {
+                // disable size
+import java.io.IOException;
+            // make a new policy as committed gen can't go backwards (for now)
+            Mockito.doReturn(now - (numberOfReaders - gen + 1) * 1000).when(writer).getLastModifiedTime();
+                1L,
+        List<BaseTranslogReader> allGens = new ArrayList<>(readersAndWriter.v1());
+        long expectedGen
+                final TranslogReader reader = Mockito.spy(writer.closeIntoReader());
+import java.util.List;
+            assertThat(
+            deletionPolicy = new MockDeletionPolicy(now, size, maxAge, totalFiles);
+                writer.add(ReleasableBytesReference.wrap(out.bytes()), ops);
+        }
+                deletionPolicy.setRetentionAgeInMillis(-1);
+        final String translogUUID = UUIDs.randomBase64UUID(random());
+import java.nio.channels.FileChannel;
+                new ShardId("index", "uuid", 0),
+        try {
+     * Tests that age trumps size but recovery trumps both.
+                assertMinGenRequired(
+                    readersAndWriter,
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
+                TranslogDeletionPolicy.getMinTranslogGenByAge(readersAndWriter.v1(), readersAndWriter.v2(), -1, now),
+            }
+        for (long gen = 1; gen <= numberOfReaders + 1; gen++) {
+            assertThat(
+                    min(viewGen, Math.max(selectedGenerationByAge, selectedGenerationByTotalFiles))
  * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
-
-package org.opensearch.index.translog;
-
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.bytes.ReleasableBytesReference;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.nio.channels.FileChannel;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-
-import org.mockito.Mockito;
-
-import static java.lang.Math.min;
-import static org.hamcrest.Matchers.equalTo;
-
-public class TranslogDeletionPolicyTests extends OpenSearchTestCase {
-
-    private static long TOTAL_OPS_IN_GEN = 10L;
-
-    public void testNoRetention() throws IOException {
-        long now = System.currentTimeMillis();
-        Tuple<List<TranslogReader>, TranslogWriter> readersAndWriter = createReadersAndWriter(now);
-        List<BaseTranslogReader> allGens = new ArrayList<>(readersAndWriter.v1());
         allGens.add(readersAndWriter.v2());
-        try {
-            TranslogDeletionPolicy deletionPolicy = new MockDeletionPolicy(now, 0, 0, 0);
-            assertMinGenRequired(deletionPolicy, readersAndWriter, allGens.get(allGens.size() - 1).generation);
-        } finally {
-            IOUtils.close(readersAndWriter.v1());
-            IOUtils.close(readersAndWriter.v2());
-        }
-    }
-
-    public void testBytesRetention() throws IOException {
+                ),
+                    readersAndWriter.v1(),
         long now = System.currentTimeMillis();
-        Tuple<List<TranslogReader>, TranslogWriter> readersAndWriter = createReadersAndWriter(now);
-        List<BaseTranslogReader> allGens = new ArrayList<>(readersAndWriter.v1());
-        allGens.add(readersAndWriter.v2());
-        try {
-            final int selectedReader = randomIntBetween(0, allGens.size() - 1);
-            final long selectedGeneration = allGens.get(selectedReader).generation;
-            long size = allGens.stream().skip(selectedReader).map(BaseTranslogReader::sizeInBytes).reduce(Long::sum).get();
-            assertThat(
-                TranslogDeletionPolicy.getMinTranslogGenBySize(readersAndWriter.v1(), readersAndWriter.v2(), size),
-                equalTo(selectedGeneration)
-            );
-            assertThat(
-                TranslogDeletionPolicy.getMinTranslogGenBySize(readersAndWriter.v1(), readersAndWriter.v2(), -1),
-                equalTo(Long.MIN_VALUE)
-            );
-        } finally {
-            IOUtils.close(readersAndWriter.v1());
-            IOUtils.close(readersAndWriter.v2());
-        }
-    }
-
-    public void testAgeRetention() throws IOException {
-        long now = System.currentTimeMillis();
-        Tuple<List<TranslogReader>, TranslogWriter> readersAndWriter = createReadersAndWriter(now);
-        List<BaseTranslogReader> allGens = new ArrayList<>(readersAndWriter.v1());
-        allGens.add(readersAndWriter.v2());
-        try {
-            final int selectedReader = randomIntBetween(0, allGens.size() - 1);
-            final long selectedGeneration = allGens.get(selectedReader).generation;
-            long maxAge = now - allGens.get(selectedReader).getLastModifiedTime();
-            assertThat(
-                TranslogDeletionPolicy.getMinTranslogGenByAge(readersAndWriter.v1(), readersAndWriter.v2(), maxAge, now),
-                equalTo(selectedGeneration)
-            );
-            assertThat(
-                TranslogDeletionPolicy.getMinTranslogGenByAge(readersAndWriter.v1(), readersAndWriter.v2(), -1, now),
-                equalTo(Long.MIN_VALUE)
-            );
-        } finally {
-            IOUtils.close(readersAndWriter.v1());
-            IOUtils.close(readersAndWriter.v2());
-        }
-    }
-
     public void testTotalFilesRetention() throws Exception {
-        Tuple<List<TranslogReader>, TranslogWriter> readersAndWriter = createReadersAndWriter(System.currentTimeMillis());
-        List<BaseTranslogReader> allGens = new ArrayList<>(readersAndWriter.v1());
-        allGens.add(readersAndWriter.v2());
-        try {
+    private static class MockDeletionPolicy extends DefaultTranslogDeletionPolicy {
+        long now;
+/*
+            }
             assertThat(
-                TranslogDeletionPolicy.getMinTranslogGenByTotalFiles(
-                    readersAndWriter.v1(),
-                    readersAndWriter.v2(),
-                    randomIntBetween(Integer.MIN_VALUE, 1)
-                ),
-                equalTo(readersAndWriter.v2().generation)
-            );
-            assertThat(
-                TranslogDeletionPolicy.getMinTranslogGenByTotalFiles(
-                    readersAndWriter.v1(),
-                    readersAndWriter.v2(),
-                    randomIntBetween(allGens.size(), Integer.MAX_VALUE)
-                ),
-                equalTo(allGens.get(0).generation)
-            );
-            int numFiles = randomIntBetween(1, allGens.size());
-            long selectedGeneration = allGens.get(allGens.size() - numFiles).generation;
-            assertThat(
-                TranslogDeletionPolicy.getMinTranslogGenByTotalFiles(readersAndWriter.v1(), readersAndWriter.v2(), numFiles),
-                equalTo(selectedGeneration)
-            );
-        } finally {
-            IOUtils.close(readersAndWriter.v1());
-            IOUtils.close(readersAndWriter.v2());
+        protected long currentTime() {
         }
-    }
-
-    /**
-     * Tests that age trumps size but recovery trumps both.
-     */
-    public void testRetentionHierarchy() throws IOException {
-        long now = System.currentTimeMillis();
-        Tuple<List<TranslogReader>, TranslogWriter> readersAndWriter = createReadersAndWriter(now);
-        List<BaseTranslogReader> allGens = new ArrayList<>(readersAndWriter.v1());
-        allGens.add(readersAndWriter.v2());
-        try {
-            DefaultTranslogDeletionPolicy deletionPolicy = new MockDeletionPolicy(now, Long.MAX_VALUE, Long.MAX_VALUE, Integer.MAX_VALUE);
-            int selectedReader = randomIntBetween(0, allGens.size() - 1);
-            final long selectedGenerationByAge = allGens.get(selectedReader).generation;
+            writer = Mockito.spy(writer);
+ * this file be licensed under the Apache-2.0 license or a
+            IOUtils.close(readersAndWriter.v1());
+        MockDeletionPolicy(long now, long retentionSizeInBytes, long maxRetentionAgeInMillis, int maxRetentionTotalFiles) {
+        TranslogDeletionPolicy deletionPolicy,
+                readersAndWriter,
+                equalTo(Long.MIN_VALUE)
+            );
             long maxAge = now - allGens.get(selectedReader).getLastModifiedTime();
-            selectedReader = randomIntBetween(0, allGens.size() - 1);
-            final long selectedGenerationBySize = allGens.get(selectedReader).generation;
+                readersAndWriter,
+        List<BaseTranslogReader> allGens = new ArrayList<>(readersAndWriter.v1());
+            IOUtils.close(readersAndWriter.v2());
+            if (writer != null) {
+            IOUtils.close(readersAndWriter.v2());
+                    deletionPolicy,
+            long selectedGeneration = allGens.get(allGens.size() - numFiles).generation;
+}
+            IOUtils.close(readersAndWriter.v1());
+            DefaultTranslogDeletionPolicy deletionPolicy = new MockDeletionPolicy(now, Long.MAX_VALUE, Long.MAX_VALUE, Integer.MAX_VALUE);
+            assertThat(
+    }
+/*
+            IOUtils.close(readersAndWriter.v2());
+    private static long max3(long x1, long x2, long x3) {
+ */
+        long now = System.currentTimeMillis();
+ * under the License.
+                out.writeInt((int) ops);
+    ) throws IOException {
+import org.opensearch.common.io.stream.BytesStreamOutput;
+                () -> 1L,
+ * KIND, either express or implied.  See the License for the
+                TranslogDeletionPolicy.getMinTranslogGenBySize(readersAndWriter.v1(), readersAndWriter.v2(), size),
+ * You may obtain a copy of the License at
+    public void testNoRetention() throws IOException {
+                tempDir.resolve(Translog.getFilename(gen)),
+        allGens.add(readersAndWriter.v2());
+public class TranslogDeletionPolicyTests extends OpenSearchTestCase {
+                    min(viewGen, max3(selectedGenerationByAge, selectedGenerationBySize, selectedGenerationByTotalFiles))
+        }
+                // disable age
+            assertThat(
+                translogUUID,
+        final int numberOfReaders = randomIntBetween(0, 10);
+        }
+                deletionPolicy,
             long size = allGens.stream().skip(selectedReader).map(BaseTranslogReader::sizeInBytes).reduce(Long::sum).get();
-            selectedReader = randomIntBetween(0, allGens.size() - 1);
-            final long selectedGenerationByTotalFiles = allGens.get(selectedReader).generation;
+            return now;
+                deletionPolicy.setRetentionAgeInMillis(maxAge);
+        Tuple<List<TranslogReader>, TranslogWriter> readersAndWriter = createReadersAndWriter(now);
+                    randomIntBetween(Integer.MIN_VALUE, 1)
+    }
+            }
+                    readersAndWriter,
+        allGens.add(readersAndWriter.v2());
+                    deletionPolicy,
+                deletionPolicy,
+                deletionPolicy.setRetentionTotalFiles(0);
+        Tuple<List<TranslogReader>, TranslogWriter> readersAndWriter,
+            TranslogDeletionPolicy deletionPolicy = new MockDeletionPolicy(now, 0, 0, 0);
+            );
+        long now = System.currentTimeMillis();
+            IOUtils.close(readersAndWriter.v2());
+                TranslogDeletionPolicy.getMinTranslogGenByTotalFiles(
+    }
+        List<BaseTranslogReader> allGens = new ArrayList<>(readersAndWriter.v1());
+                TranslogConfig.DEFAULT_BUFFER_SIZE,
+     */
+                gen,
+            final long startSeqNo = (gen - 1) * TOTAL_OPS_IN_GEN;
+        }
+                // disable total files
+                max3(selectedGenerationByAge, selectedGenerationBySize, selectedGenerationByTotalFiles)
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import java.nio.file.Path;
+                    readersAndWriter.v1(),
+                randomNonNegativeLong(),
+            );
+            this.now = now;
             deletionPolicy.setRetentionAgeInMillis(maxAge);
+import java.util.ArrayList;
+import org.opensearch.common.bytes.ReleasableBytesReference;
+                TranslogDeletionPolicy.getMinTranslogGenByTotalFiles(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                FileChannel::open,
+        } finally {
+ * Licensed to Elasticsearch under one or more contributor
+            final long selectedGenerationBySize = allGens.get(selectedReader).generation;
+                );
+            );
+ *
+                TranslogDeletionPolicy.getMinTranslogGenByAge(readersAndWriter.v1(), readersAndWriter.v2(), maxAge, now),
+            final long selectedGenerationByAge = allGens.get(selectedReader).generation;
+            );
+        }
+            BytesStreamOutput out = new BytesStreamOutput(4);
+            IOUtils.close(readersAndWriter.v1());
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.common.UUIDs;
+            final long selectedGeneration = allGens.get(selectedReader).generation;
+                readers.add(reader);
+        long now = System.currentTimeMillis();
+                );
+                null,
+                    deletionPolicy,
             deletionPolicy.setRetentionSizeInBytes(size);
+ */
+                deletionPolicy.setRetentionAgeInMillis(-1);
+        return Math.max(Math.max(x1, x2), x3);
+ * not use this file except in compliance with the License.
+        List<TranslogReader> readers = new ArrayList<>();
             final int totalFiles = allGens.size() - selectedReader;
+                // disable age and zie
+ * ownership. Elasticsearch licenses this file to you under
+            writer = TranslogWriter.create(
+import java.nio.file.Files;
+                new TragicExceptionHolder(),
+            int selectedReader = randomIntBetween(0, allGens.size() - 1);
+            assertMinGenRequired(
+        Tuple<List<TranslogReader>, TranslogWriter> readersAndWriter = createReadersAndWriter(now);
+    }
+ * Unless required by applicable law or agreed to in writing,
             deletionPolicy.setRetentionTotalFiles(totalFiles);
             assertMinGenRequired(
-                deletionPolicy,
-                readersAndWriter,
-                max3(selectedGenerationByAge, selectedGenerationBySize, selectedGenerationByTotalFiles)
-            );
-            // make a new policy as committed gen can't go backwards (for now)
-            deletionPolicy = new MockDeletionPolicy(now, size, maxAge, totalFiles);
-            assertMinGenRequired(
-                deletionPolicy,
-                readersAndWriter,
-                max3(selectedGenerationByAge, selectedGenerationBySize, selectedGenerationByTotalFiles)
-            );
-            long viewGen = randomFrom(allGens).generation;
-            try (Releasable ignored = deletionPolicy.acquireTranslogGen(viewGen)) {
-                assertMinGenRequired(
-                    deletionPolicy,
-                    readersAndWriter,
-                    min(viewGen, max3(selectedGenerationByAge, selectedGenerationBySize, selectedGenerationByTotalFiles))
-                );
-                // disable age
-                deletionPolicy.setRetentionAgeInMillis(-1);
-                assertMinGenRequired(
-                    deletionPolicy,
-                    readersAndWriter,
-                    min(viewGen, Math.max(selectedGenerationBySize, selectedGenerationByTotalFiles))
-                );
-                // disable size
-                deletionPolicy.setRetentionAgeInMillis(maxAge);
-                deletionPolicy.setRetentionSizeInBytes(-1);
-                assertMinGenRequired(
-                    deletionPolicy,
-                    readersAndWriter,
-                    min(viewGen, Math.max(selectedGenerationByAge, selectedGenerationByTotalFiles))
-                );
-                // disable age and zie
-                deletionPolicy.setRetentionAgeInMillis(-1);
-                deletionPolicy.setRetentionSizeInBytes(-1);
-                assertMinGenRequired(deletionPolicy, readersAndWriter, viewGen);
-                // disable total files
-                deletionPolicy.setRetentionTotalFiles(0);
-                assertMinGenRequired(deletionPolicy, readersAndWriter, viewGen);
-            }
+    private static long TOTAL_OPS_IN_GEN = 10L;
+    }
         } finally {
-            IOUtils.close(readersAndWriter.v1());
+            );
+                assertMinGenRequired(
+            assertThat(
+                equalTo(Long.MIN_VALUE)
+                seqNo -> {},
+                TranslogDeletionPolicy.getMinTranslogGenByTotalFiles(readersAndWriter.v1(), readersAndWriter.v2(), numFiles),
+                    readersAndWriter,
+            try (Releasable ignored = deletionPolicy.acquireTranslogGen(viewGen)) {
+            selectedReader = randomIntBetween(0, allGens.size() - 1);
             IOUtils.close(readersAndWriter.v2());
         }
-
-    }
-
-    private void assertMinGenRequired(
-        TranslogDeletionPolicy deletionPolicy,
-        Tuple<List<TranslogReader>, TranslogWriter> readersAndWriter,
-        long expectedGen
-    ) throws IOException {
-        assertThat(deletionPolicy.minTranslogGenRequired(readersAndWriter.v1(), readersAndWriter.v2()), equalTo(expectedGen));
-    }
-
-    private Tuple<List<TranslogReader>, TranslogWriter> createReadersAndWriter(final long now) throws IOException {
-        final Path tempDir = createTempDir();
-        Files.createFile(tempDir.resolve(Translog.CHECKPOINT_FILE_NAME));
-        TranslogWriter writer = null;
-        List<TranslogReader> readers = new ArrayList<>();
-        final int numberOfReaders = randomIntBetween(0, 10);
-        final String translogUUID = UUIDs.randomBase64UUID(random());
-        for (long gen = 1; gen <= numberOfReaders + 1; gen++) {
-            if (writer != null) {
-                final TranslogReader reader = Mockito.spy(writer.closeIntoReader());
-                Mockito.doReturn(writer.getLastModifiedTime()).when(reader).getLastModifiedTime();
-                readers.add(reader);
-            }
-            writer = TranslogWriter.create(
-                new ShardId("index", "uuid", 0),
-                translogUUID,
-                gen,
-                tempDir.resolve(Translog.getFilename(gen)),
-                FileChannel::open,
-                TranslogConfig.DEFAULT_BUFFER_SIZE,
-                1L,
-                1L,
-                () -> 1L,
-                () -> 1L,
-                randomNonNegativeLong(),
-                new TragicExceptionHolder(),
-                seqNo -> {},
-                BigArrays.NON_RECYCLING_INSTANCE,
-                null,
-                TranslogOperationHelper.DEFAULT
+            long size = allGens.stream().skip(selectedReader).map(BaseTranslogReader::sizeInBytes).reduce(Long::sum).get();
+                equalTo(selectedGeneration)
+                equalTo(selectedGeneration)
             );
-            writer = Mockito.spy(writer);
-            Mockito.doReturn(now - (numberOfReaders - gen + 1) * 1000).when(writer).getLastModifiedTime();
-            BytesStreamOutput out = new BytesStreamOutput(4);
-
-            final long startSeqNo = (gen - 1) * TOTAL_OPS_IN_GEN;
-            final long endSeqNo = startSeqNo + TOTAL_OPS_IN_GEN - 1;
-            for (long ops = endSeqNo; ops >= startSeqNo; ops--) {
-                out.reset();
-                out.writeInt((int) ops);
-                writer.add(ReleasableBytesReference.wrap(out.bytes()), ops);
-            }
-        }
-        return new Tuple<>(readers, writer);
-    }
-
-    private static class MockDeletionPolicy extends DefaultTranslogDeletionPolicy {
-
-        long now;
-
-        MockDeletionPolicy(long now, long retentionSizeInBytes, long maxRetentionAgeInMillis, int maxRetentionTotalFiles) {
+                    randomIntBetween(allGens.size(), Integer.MAX_VALUE)
+                deletionPolicy.setRetentionSizeInBytes(-1);
+                    readersAndWriter.v2(),
+        TranslogWriter writer = null;
+        Files.createFile(tempDir.resolve(Translog.CHECKPOINT_FILE_NAME));
             super(retentionSizeInBytes, maxRetentionAgeInMillis, maxRetentionTotalFiles);
-            this.now = now;
-        }
-
+    }
+            );
+    private void assertMinGenRequired(
+            final long endSeqNo = startSeqNo + TOTAL_OPS_IN_GEN - 1;
+        allGens.add(readersAndWriter.v2());
+import org.mockito.Mockito;
+        allGens.add(readersAndWriter.v2());
+                assertMinGenRequired(deletionPolicy, readersAndWriter, viewGen);
+                TranslogDeletionPolicy.getMinTranslogGenBySize(readersAndWriter.v1(), readersAndWriter.v2(), -1),
+            assertMinGenRequired(deletionPolicy, readersAndWriter, allGens.get(allGens.size() - 1).generation);
+ * compatible open source license.
+    }
+ * software distributed under the License is distributed on an
+    }
+                out.reset();
+ */
+            assertThat(
+import org.opensearch.common.util.BigArrays;
+        } finally {
+                assertMinGenRequired(
+        } finally {
+            final long selectedGeneration = allGens.get(selectedReader).generation;
+        List<BaseTranslogReader> allGens = new ArrayList<>(readersAndWriter.v1());
+            for (long ops = endSeqNo; ops >= startSeqNo; ops--) {
+                );
+    public void testRetentionHierarchy() throws IOException {
+    }
+ * specific language governing permissions and limitations
+        } finally {
+import org.opensearch.common.collect.Tuple;
+        try {
+        try {
+import org.opensearch.test.OpenSearchTestCase;
+            int numFiles = randomIntBetween(1, allGens.size());
+import org.opensearch.common.util.io.IOUtils;
+ * the Apache License, Version 2.0 (the "License"); you may
+package org.opensearch.index.translog;
         @Override
-        protected long currentTime() {
-            return now;
+    public void testBytesRetention() throws IOException {
+import org.opensearch.common.lease.Releasable;
+        Tuple<List<TranslogReader>, TranslogWriter> readersAndWriter = createReadersAndWriter(System.currentTimeMillis());
+                equalTo(readersAndWriter.v2().generation)
+                Mockito.doReturn(writer.getLastModifiedTime()).when(reader).getLastModifiedTime();
+            final long selectedGenerationByTotalFiles = allGens.get(selectedReader).generation;
+                    min(viewGen, Math.max(selectedGenerationBySize, selectedGenerationByTotalFiles))
+        Tuple<List<TranslogReader>, TranslogWriter> readersAndWriter = createReadersAndWriter(now);
+                    readersAndWriter.v2(),
+/*
+                max3(selectedGenerationByAge, selectedGenerationBySize, selectedGenerationByTotalFiles)
+        try {
+        Tuple<List<TranslogReader>, TranslogWriter> readersAndWriter = createReadersAndWriter(now);
+            IOUtils.close(readersAndWriter.v1());
+            long viewGen = randomFrom(allGens).generation;
+ * this work for additional information regarding copyright
+            );
+                1L,
+                assertMinGenRequired(deletionPolicy, readersAndWriter, viewGen);
+    /**
+ * The OpenSearch Contributors require contributions made to
+import static org.hamcrest.Matchers.equalTo;
+        return new Tuple<>(readers, writer);
+                () -> 1L,
+                deletionPolicy.setRetentionSizeInBytes(-1);
         }
-    }
-
-    private static long max3(long x1, long x2, long x3) {
-        return Math.max(Math.max(x1, x2), x3);
-    }
-}
+        assertThat(deletionPolicy.minTranslogGenRequired(readersAndWriter.v1(), readersAndWriter.v2()), equalTo(expectedGen));
+                equalTo(selectedGeneration)
+        try {
+                TranslogOperationHelper.DEFAULT
+                ),
+            final int selectedReader = randomIntBetween(0, allGens.size() - 1);
+                equalTo(allGens.get(0).generation)
+            IOUtils.close(readersAndWriter.v1());
+        List<BaseTranslogReader> allGens = new ArrayList<>(readersAndWriter.v1());
+        final Path tempDir = createTempDir();
+ *
+                BigArrays.NON_RECYCLING_INSTANCE,
+            final int selectedReader = randomIntBetween(0, allGens.size() - 1);
+import static java.lang.Math.min;
+            );
+ * SPDX-License-Identifier: Apache-2.0

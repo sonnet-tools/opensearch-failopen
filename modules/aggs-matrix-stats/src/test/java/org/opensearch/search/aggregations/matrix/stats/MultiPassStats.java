@@ -1,191 +1,174 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
+        // skewness (multi-pass is more susceptible to round-off error so we need to slightly relax the tolerance)
+        assertTrue(nearlyEqual(kurtosis.get(fieldAKey), stats.getKurtosis(fieldAKey), 1e-4));
+    private Map<String, Double> means = new HashMap<>();
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
+        // compute mean
+        assertTrue(nearlyEqual(covariances.get(fieldBKey).get(fieldAKey), stats.getCovariance(fieldBKey, fieldAKey), 1e-7));
 /*
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.matrix.stats;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
-class MultiPassStats {
-
-    private final String fieldAKey;
-    private final String fieldBKey;
-
-    private long count;
-    private Map<String, Double> means = new HashMap<>();
     private Map<String, Double> variances = new HashMap<>();
-    private Map<String, Double> skewness = new HashMap<>();
-    private Map<String, Double> kurtosis = new HashMap<>();
-    private Map<String, HashMap<String, Double>> covariances = new HashMap<>();
-    private Map<String, HashMap<String, Double>> correlations = new HashMap<>();
-
-    MultiPassStats(String fieldAName, String fieldBName) {
-        this.fieldAKey = fieldAName;
-        this.fieldBKey = fieldBName;
+    private long count;
     }
-
-    void computeStats(final List<Double> fieldA, final List<Double> fieldB) {
-        // set count
-        count = fieldA.size();
-        double meanA = 0d;
-        double meanB = 0d;
-
-        // compute mean
-        for (int n = 0; n < count; ++n) {
-            // fieldA
-            meanA += fieldA.get(n);
-            meanB += fieldB.get(n);
-        }
-        means.put(fieldAKey, meanA / count);
-        means.put(fieldBKey, meanB / count);
-
-        // compute variance, skewness, and kurtosis
-        double dA;
-        double dB;
-        double skewA = 0d;
-        double skewB = 0d;
-        double kurtA = 0d;
-        double kurtB = 0d;
-        double varA = 0d;
-        double varB = 0d;
-        double cVar = 0d;
-        for (int n = 0; n < count; ++n) {
-            dA = fieldA.get(n) - means.get(fieldAKey);
-            varA += dA * dA;
-            skewA += dA * dA * dA;
-            kurtA += dA * dA * dA * dA;
+/*
+        // variances
             dB = fieldB.get(n) - means.get(fieldBKey);
-            varB += dB * dB;
-            skewB += dB * dB * dB;
-            kurtB += dB * dB * dB * dB;
-            cVar += dA * dB;
-        }
-        variances.put(fieldAKey, varA / (count - 1));
-        final double stdA = Math.sqrt(variances.get(fieldAKey));
-        variances.put(fieldBKey, varB / (count - 1));
-        final double stdB = Math.sqrt(variances.get(fieldBKey));
-        skewness.put(fieldAKey, skewA / ((count - 1) * variances.get(fieldAKey) * stdA));
-        skewness.put(fieldBKey, skewB / ((count - 1) * variances.get(fieldBKey) * stdB));
-        kurtosis.put(fieldAKey, kurtA / ((count - 1) * variances.get(fieldAKey) * variances.get(fieldAKey)));
-        kurtosis.put(fieldBKey, kurtB / ((count - 1) * variances.get(fieldBKey) * variances.get(fieldBKey)));
-
-        // compute covariance
-        final HashMap<String, Double> fieldACovar = new HashMap<>(2);
-        fieldACovar.put(fieldAKey, 1d);
-        cVar /= count - 1;
-        fieldACovar.put(fieldBKey, cVar);
-        covariances.put(fieldAKey, fieldACovar);
-        final HashMap<String, Double> fieldBCovar = new HashMap<>(2);
-        fieldBCovar.put(fieldAKey, cVar);
-        fieldBCovar.put(fieldBKey, 1d);
-        covariances.put(fieldBKey, fieldBCovar);
-
-        // compute correlation
-        final HashMap<String, Double> fieldACorr = new HashMap<>();
-        fieldACorr.put(fieldAKey, 1d);
-        double corr = covariances.get(fieldAKey).get(fieldBKey);
-        corr /= stdA * stdB;
-        fieldACorr.put(fieldBKey, corr);
-        correlations.put(fieldAKey, fieldACorr);
-        final HashMap<String, Double> fieldBCorr = new HashMap<>();
-        fieldBCorr.put(fieldAKey, corr);
-        fieldBCorr.put(fieldBKey, 1d);
-        correlations.put(fieldBKey, fieldBCorr);
-    }
-
+ * the Apache License, Version 2.0 (the "License"); you may
+            meanA += fieldA.get(n);
     void assertNearlyEqual(MatrixStatsResults stats) {
-        assertEquals(count, stats.getDocCount());
-        assertEquals(count, stats.getFieldCount(fieldAKey));
-        assertEquals(count, stats.getFieldCount(fieldBKey));
-        // means
-        assertTrue(nearlyEqual(means.get(fieldAKey), stats.getMean(fieldAKey), 1e-7));
-        assertTrue(nearlyEqual(means.get(fieldBKey), stats.getMean(fieldBKey), 1e-7));
-        // variances
-        assertTrue(nearlyEqual(variances.get(fieldAKey), stats.getVariance(fieldAKey), 1e-7));
-        assertTrue(nearlyEqual(variances.get(fieldBKey), stats.getVariance(fieldBKey), 1e-7));
-        // skewness (multi-pass is more susceptible to round-off error so we need to slightly relax the tolerance)
-        assertTrue(nearlyEqual(skewness.get(fieldAKey), stats.getSkewness(fieldAKey), 1e-4));
-        assertTrue(nearlyEqual(skewness.get(fieldBKey), stats.getSkewness(fieldBKey), 1e-4));
-        // kurtosis (multi-pass is more susceptible to round-off error so we need to slightly relax the tolerance)
-        assertTrue(nearlyEqual(kurtosis.get(fieldAKey), stats.getKurtosis(fieldAKey), 1e-4));
-        assertTrue(nearlyEqual(kurtosis.get(fieldBKey), stats.getKurtosis(fieldBKey), 1e-4));
-        // covariances
-        assertTrue(nearlyEqual(covariances.get(fieldAKey).get(fieldBKey), stats.getCovariance(fieldAKey, fieldBKey), 1e-7));
-        assertTrue(nearlyEqual(covariances.get(fieldBKey).get(fieldAKey), stats.getCovariance(fieldBKey, fieldAKey), 1e-7));
-        // correlation
-        assertTrue(nearlyEqual(correlations.get(fieldAKey).get(fieldBKey), stats.getCorrelation(fieldAKey, fieldBKey), 1e-7));
-        assertTrue(nearlyEqual(correlations.get(fieldBKey).get(fieldAKey), stats.getCorrelation(fieldBKey, fieldAKey), 1e-7));
-    }
-
-    void assertNearlyEqual(InternalMatrixStats stats) {
-        assertEquals(count, stats.getDocCount());
-        assertEquals(count, stats.getFieldCount(fieldAKey));
-        assertEquals(count, stats.getFieldCount(fieldBKey));
-        // means
-        assertTrue(nearlyEqual(means.get(fieldAKey), stats.getMean(fieldAKey), 1e-7));
-        assertTrue(nearlyEqual(means.get(fieldBKey), stats.getMean(fieldBKey), 1e-7));
-        // variances
-        assertTrue(nearlyEqual(variances.get(fieldAKey), stats.getVariance(fieldAKey), 1e-7));
-        assertTrue(nearlyEqual(variances.get(fieldBKey), stats.getVariance(fieldBKey), 1e-7));
-        // skewness (multi-pass is more susceptible to round-off error so we need to slightly relax the tolerance)
-        assertTrue(nearlyEqual(skewness.get(fieldAKey), stats.getSkewness(fieldAKey), 1e-4));
-        assertTrue(nearlyEqual(skewness.get(fieldBKey), stats.getSkewness(fieldBKey), 1e-4));
-        // kurtosis (multi-pass is more susceptible to round-off error so we need to slightly relax the tolerance)
-        assertTrue(nearlyEqual(kurtosis.get(fieldAKey), stats.getKurtosis(fieldAKey), 1e-4));
-        assertTrue(nearlyEqual(kurtosis.get(fieldBKey), stats.getKurtosis(fieldBKey), 1e-4));
-        // covariances
-        assertTrue(nearlyEqual(covariances.get(fieldAKey).get(fieldBKey), stats.getCovariance(fieldAKey, fieldBKey), 1e-7));
-        assertTrue(nearlyEqual(covariances.get(fieldBKey).get(fieldAKey), stats.getCovariance(fieldBKey, fieldAKey), 1e-7));
-        // correlation
-        assertTrue(nearlyEqual(correlations.get(fieldAKey).get(fieldBKey), stats.getCorrelation(fieldAKey, fieldBKey), 1e-7));
-        assertTrue(nearlyEqual(correlations.get(fieldBKey).get(fieldAKey), stats.getCorrelation(fieldBKey, fieldAKey), 1e-7));
-    }
-
-    private static boolean nearlyEqual(double a, double b, double epsilon) {
-        final double absA = Math.abs(a);
-        final double absB = Math.abs(b);
-        final double diff = Math.abs(a - b);
-
-        if (a == b) { // shortcut, handles infinities
-            return true;
-        } else if (a == 0 || b == 0 || diff < Double.MIN_NORMAL) {
-            // a or b is zero or both are extremely close to it
-            // relative error is less meaningful here
-            return diff < (epsilon * Double.MIN_NORMAL);
-        } else { // use relative error
-            return diff / Math.min((absA + absB), Double.MAX_VALUE) < epsilon;
+    private Map<String, Double> kurtosis = new HashMap<>();
+            kurtB += dB * dB * dB * dB;
+        // compute covariance
         }
+        assertTrue(nearlyEqual(skewness.get(fieldAKey), stats.getSkewness(fieldAKey), 1e-4));
+        assertTrue(nearlyEqual(variances.get(fieldAKey), stats.getVariance(fieldAKey), 1e-7));
+        covariances.put(fieldBKey, fieldBCovar);
+        // set count
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        assertEquals(count, stats.getDocCount());
+ * ownership. Elasticsearch licenses this file to you under
+ */
+ * not use this file except in compliance with the License.
+            return true;
+    private final String fieldBKey;
+            kurtA += dA * dA * dA * dA;
+        corr /= stdA * stdB;
+            // fieldA
+            return diff < (epsilon * Double.MIN_NORMAL);
+            varA += dA * dA;
+import static org.junit.Assert.assertTrue;
+import java.util.Map;
+        // correlation
+ * this work for additional information regarding copyright
+        skewness.put(fieldBKey, skewB / ((count - 1) * variances.get(fieldBKey) * stdB));
+        assertEquals(count, stats.getFieldCount(fieldAKey));
+        fieldBCovar.put(fieldAKey, cVar);
+        final HashMap<String, Double> fieldBCorr = new HashMap<>();
+ * license agreements. See the NOTICE file distributed with
+        // variances
+            skewA += dA * dA * dA;
+        covariances.put(fieldAKey, fieldACovar);
+        for (int n = 0; n < count; ++n) {
+        // covariances
+        if (a == b) { // shortcut, handles infinities
+ * The OpenSearch Contributors require contributions made to
+        skewness.put(fieldAKey, skewA / ((count - 1) * variances.get(fieldAKey) * stdA));
+        correlations.put(fieldAKey, fieldACorr);
+        assertTrue(nearlyEqual(correlations.get(fieldAKey).get(fieldBKey), stats.getCorrelation(fieldAKey, fieldBKey), 1e-7));
+            cVar += dA * dB;
+        assertEquals(count, stats.getFieldCount(fieldBKey));
+        fieldACorr.put(fieldAKey, 1d);
+ * Unless required by applicable law or agreed to in writing,
+        variances.put(fieldBKey, varB / (count - 1));
+            // a or b is zero or both are extremely close to it
+ * You may obtain a copy of the License at
+        assertEquals(count, stats.getDocCount());
+        final double absA = Math.abs(a);
+        kurtosis.put(fieldAKey, kurtA / ((count - 1) * variances.get(fieldAKey) * variances.get(fieldAKey)));
+        double corr = covariances.get(fieldAKey).get(fieldBKey);
+        final double stdB = Math.sqrt(variances.get(fieldBKey));
+ * compatible open source license.
+        assertTrue(nearlyEqual(correlations.get(fieldBKey).get(fieldAKey), stats.getCorrelation(fieldBKey, fieldAKey), 1e-7));
+ *
+        fieldACovar.put(fieldAKey, 1d);
+        // correlation
+ *
+        means.put(fieldAKey, meanA / count);
+        double varB = 0d;
+/*
+        fieldACovar.put(fieldBKey, cVar);
+    private final String fieldAKey;
+        // kurtosis (multi-pass is more susceptible to round-off error so we need to slightly relax the tolerance)
+        double skewB = 0d;
+        // skewness (multi-pass is more susceptible to round-off error so we need to slightly relax the tolerance)
+        final HashMap<String, Double> fieldBCovar = new HashMap<>(2);
+    void assertNearlyEqual(InternalMatrixStats stats) {
+        fieldACorr.put(fieldBKey, corr);
+        for (int n = 0; n < count; ++n) {
     }
+class MultiPassStats {
+        } else { // use relative error
+    private Map<String, HashMap<String, Double>> covariances = new HashMap<>();
+        cVar /= count - 1;
+        fieldBCorr.put(fieldBKey, 1d);
+    private Map<String, Double> skewness = new HashMap<>();
+        assertTrue(nearlyEqual(means.get(fieldAKey), stats.getMean(fieldAKey), 1e-7));
+        double dA;
+        count = fieldA.size();
+        final double absB = Math.abs(b);
+        this.fieldAKey = fieldAName;
+        assertTrue(nearlyEqual(means.get(fieldBKey), stats.getMean(fieldBKey), 1e-7));
+ * SPDX-License-Identifier: Apache-2.0
+        // means
+        assertTrue(nearlyEqual(variances.get(fieldAKey), stats.getVariance(fieldAKey), 1e-7));
+        final HashMap<String, Double> fieldACorr = new HashMap<>();
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * KIND, either express or implied.  See the License for the
+        this.fieldBKey = fieldBName;
+    void computeStats(final List<Double> fieldA, final List<Double> fieldB) {
+import static org.junit.Assert.assertEquals;
+ */
+        assertEquals(count, stats.getFieldCount(fieldAKey));
+        } else if (a == 0 || b == 0 || diff < Double.MIN_NORMAL) {
+package org.opensearch.search.aggregations.matrix.stats;
+ *
+        double kurtA = 0d;
+            varB += dB * dB;
+        // compute correlation
+import java.util.List;
+            skewB += dB * dB * dB;
+        assertTrue(nearlyEqual(means.get(fieldBKey), stats.getMean(fieldBKey), 1e-7));
+        correlations.put(fieldBKey, fieldBCorr);
+        fieldBCovar.put(fieldBKey, 1d);
+        fieldBCorr.put(fieldAKey, corr);
+        assertTrue(nearlyEqual(covariances.get(fieldBKey).get(fieldAKey), stats.getCovariance(fieldBKey, fieldAKey), 1e-7));
+        double meanA = 0d;
+    MultiPassStats(String fieldAName, String fieldBName) {
+        assertTrue(nearlyEqual(skewness.get(fieldBKey), stats.getSkewness(fieldBKey), 1e-4));
+ * software distributed under the License is distributed on an
+        final double diff = Math.abs(a - b);
+    private Map<String, HashMap<String, Double>> correlations = new HashMap<>();
+            // relative error is less meaningful here
+        assertTrue(nearlyEqual(skewness.get(fieldAKey), stats.getSkewness(fieldAKey), 1e-4));
+        means.put(fieldBKey, meanB / count);
+ */
+        assertTrue(nearlyEqual(kurtosis.get(fieldAKey), stats.getKurtosis(fieldAKey), 1e-4));
+            return diff / Math.min((absA + absB), Double.MAX_VALUE) < epsilon;
+        double varA = 0d;
+    private static boolean nearlyEqual(double a, double b, double epsilon) {
+    }
+        kurtosis.put(fieldBKey, kurtB / ((count - 1) * variances.get(fieldBKey) * variances.get(fieldBKey)));
+        double meanB = 0d;
 }
+        double skewA = 0d;
+        assertTrue(nearlyEqual(kurtosis.get(fieldBKey), stats.getKurtosis(fieldBKey), 1e-4));
+        // covariances
+        double kurtB = 0d;
+        assertTrue(nearlyEqual(skewness.get(fieldBKey), stats.getSkewness(fieldBKey), 1e-4));
+        // means
+        double cVar = 0d;
+            meanB += fieldB.get(n);
+ * GitHub history for details.
+        assertTrue(nearlyEqual(correlations.get(fieldAKey).get(fieldBKey), stats.getCorrelation(fieldAKey, fieldBKey), 1e-7));
+        assertTrue(nearlyEqual(kurtosis.get(fieldBKey), stats.getKurtosis(fieldBKey), 1e-4));
+        assertTrue(nearlyEqual(variances.get(fieldBKey), stats.getVariance(fieldBKey), 1e-7));
+        assertEquals(count, stats.getFieldCount(fieldBKey));
+import java.util.HashMap;
+        assertTrue(nearlyEqual(covariances.get(fieldAKey).get(fieldBKey), stats.getCovariance(fieldAKey, fieldBKey), 1e-7));
+        }
+        assertTrue(nearlyEqual(covariances.get(fieldAKey).get(fieldBKey), stats.getCovariance(fieldAKey, fieldBKey), 1e-7));
+    }
+            dA = fieldA.get(n) - means.get(fieldAKey);
+        double dB;
+        assertTrue(nearlyEqual(variances.get(fieldBKey), stats.getVariance(fieldBKey), 1e-7));
+        final double stdA = Math.sqrt(variances.get(fieldAKey));
+        variances.put(fieldAKey, varA / (count - 1));
+        // compute variance, skewness, and kurtosis
+        }
+ * under the License.
+        assertTrue(nearlyEqual(means.get(fieldAKey), stats.getMean(fieldAKey), 1e-7));
+ * specific language governing permissions and limitations
+        // kurtosis (multi-pass is more susceptible to round-off error so we need to slightly relax the tolerance)
+        final HashMap<String, Double> fieldACovar = new HashMap<>(2);
+    }
+        assertTrue(nearlyEqual(correlations.get(fieldBKey).get(fieldAKey), stats.getCorrelation(fieldBKey, fieldAKey), 1e-7));
+ * Licensed to Elasticsearch under one or more contributor

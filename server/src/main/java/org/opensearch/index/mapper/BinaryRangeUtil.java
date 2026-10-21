@@ -1,273 +1,233 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.document.InetAddressPoint;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.NumericUtils;
-import org.opensearch.common.TriFunction;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.io.stream.BytesStreamInput;
-
-import java.io.IOException;
-import java.net.InetAddress;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Set;
-
-/**
- * Utility class for binary ranges
- *
- * @opensearch.internal
- */
+            offset += length;
+        List<RangeFieldMapper.Range> sortedRanges = new ArrayList<>(ranges);
+     */
+        } else {
+        boolean isNegative = (bytes[offset] & 128) == 0;
 final class BinaryRangeUtil {
-
-    private BinaryRangeUtil() {};
-
-    static BytesRef encodeIPRanges(Set<RangeFieldMapper.Range> ranges) throws IOException {
-        final BytesStreamOutput out = new BytesStreamOutput(5 + (16 * 2) * ranges.size());
-        out.writeVInt(ranges.size());
-        for (RangeFieldMapper.Range range : ranges) {
-            InetAddress fromValue = (InetAddress) range.from;
-            byte[] encodedFromValue = InetAddressPoint.encode(fromValue);
-            out.writeBytes(encodedFromValue, 0, encodedFromValue.length);
-
-            InetAddress toValue = (InetAddress) range.to;
-            byte[] encodedToValue = InetAddressPoint.encode(toValue);
-            out.writeBytes(encodedToValue, 0, encodedToValue.length);
-        }
-        return out.bytes().toBytesRef();
-    }
-
-    static List<RangeFieldMapper.Range> decodeIPRanges(BytesRef encodedRanges) throws IOException {
-        return decodeRanges(encodedRanges, RangeType.IP, BinaryRangeUtil::decodeIP);
-    }
-
-    private static InetAddress decodeIP(byte[] bytes, int offset, int length) {
-        // offset + length because copyOfRange wants a from and a to, not an offset & length
-        byte[] slice = Arrays.copyOfRange(bytes, offset, offset + length);
-        return InetAddressPoint.decode(slice);
-    }
-
-    static BytesRef encodeLongRanges(Set<RangeFieldMapper.Range> ranges) throws IOException {
-        List<RangeFieldMapper.Range> sortedRanges = new ArrayList<>(ranges);
-        Comparator<RangeFieldMapper.Range> fromComparator = Comparator.comparingLong(range -> ((Number) range.from).longValue());
-        Comparator<RangeFieldMapper.Range> toComparator = Comparator.comparingLong(range -> ((Number) range.to).longValue());
+            Object from = decodeBytes.apply(bytes, offset, length);
         sortedRanges.sort(fromComparator.thenComparing(toComparator));
-
-        final BytesStreamOutput out = new BytesStreamOutput(5 + (9 * 2) * sortedRanges.size());
-        out.writeVInt(sortedRanges.size());
-        for (RangeFieldMapper.Range range : sortedRanges) {
-            byte[] encodedFrom = encodeLong(((Number) range.from).longValue());
-            out.writeBytes(encodedFrom, encodedFrom.length);
-            byte[] encodedTo = encodeLong(((Number) range.to).longValue());
             out.writeBytes(encodedTo, encodedTo.length);
-        }
-        return out.bytes().toBytesRef();
-    }
-
-    static List<RangeFieldMapper.Range> decodeLongRanges(BytesRef encodedRanges) throws IOException {
-        return decodeRanges(encodedRanges, RangeType.LONG, BinaryRangeUtil::decodeLong);
-    }
-
-    static BytesRef encodeDoubleRanges(Set<RangeFieldMapper.Range> ranges) throws IOException {
-        List<RangeFieldMapper.Range> sortedRanges = new ArrayList<>(ranges);
-        Comparator<RangeFieldMapper.Range> fromComparator = Comparator.comparingDouble(range -> ((Number) range.from).doubleValue());
-        Comparator<RangeFieldMapper.Range> toComparator = Comparator.comparingDouble(range -> ((Number) range.to).doubleValue());
-        sortedRanges.sort(fromComparator.thenComparing(toComparator));
-
-        final BytesStreamOutput out = new BytesStreamOutput(5 + (8 * 2) * sortedRanges.size());
+    ) throws IOException {
+        // - up to 3 bits of the value
+/*
         out.writeVInt(sortedRanges.size());
+ * Licensed to Elasticsearch under one or more contributor
+    }
         for (RangeFieldMapper.Range range : sortedRanges) {
-            byte[] encodedFrom = encodeDouble(((Number) range.from).doubleValue());
-            out.writeBytes(encodedFrom, encodedFrom.length);
-            byte[] encodedTo = encodeDouble(((Number) range.to).doubleValue());
-            out.writeBytes(encodedTo, encodedTo.length);
-        }
         return out.bytes().toBytesRef();
+        if (sign > 0) {
+        NumericUtils.intToSortableBytes(NumericUtils.floatToSortableInt(number), encoded, 0);
+        Comparator<RangeFieldMapper.Range> fromComparator = Comparator.comparingDouble(range -> ((Number) range.from).floatValue());
+    static float decodeFloat(byte[] bytes, int offset, int length) {
+ *
+        Comparator<RangeFieldMapper.Range> toComparator = Comparator.comparingDouble(range -> ((Number) range.to).floatValue());
     }
-
-    static List<RangeFieldMapper.Range> decodeDoubleRanges(BytesRef encodedRanges) throws IOException {
-        return decodeRanges(encodedRanges, RangeType.DOUBLE, BinaryRangeUtil::decodeDouble);
     }
-
-    static List<RangeFieldMapper.Range> decodeFloatRanges(BytesRef encodedRanges) throws IOException {
+import java.net.InetAddress;
+        NumericUtils.longToSortableBytes(NumericUtils.doubleToSortableLong(number), encoded, 0);
+ *
         return decodeRanges(encodedRanges, RangeType.FLOAT, BinaryRangeUtil::decodeFloat);
     }
-
-    static List<RangeFieldMapper.Range> decodeRanges(
-        BytesRef encodedRanges,
-        RangeType rangeType,
-        TriFunction<byte[], Integer, Integer, Object> decodeBytes
-    ) throws IOException {
-
-        RangeType.LengthType lengthType = rangeType.lengthType;
-        BytesStreamInput in = new BytesStreamInput(encodedRanges.bytes, encodedRanges.offset, encodedRanges.length);
-        int numRanges = in.readVInt();
-
-        List<RangeFieldMapper.Range> ranges = new ArrayList<>(numRanges);
-
-        final byte[] bytes = encodedRanges.bytes;
-        int offset = in.getPosition();
-        for (int i = 0; i < numRanges; i++) {
-            int length = lengthType.readLength(bytes, offset);
-            Object from = decodeBytes.apply(bytes, offset, length);
-            offset += length;
-
-            length = lengthType.readLength(bytes, offset);
-            Object to = decodeBytes.apply(bytes, offset, length);
-            offset += length;
-            // TODO: Support for exclusive ranges, pending resolution of #40601
-            RangeFieldMapper.Range decodedRange = new RangeFieldMapper.Range(rangeType, from, to, true, true);
-            ranges.add(decodedRange);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        // write data bytes
         }
-        return ranges;
-    }
-
-    static BytesRef encodeFloatRanges(Set<RangeFieldMapper.Range> ranges) throws IOException {
-        List<RangeFieldMapper.Range> sortedRanges = new ArrayList<>(ranges);
-        Comparator<RangeFieldMapper.Range> fromComparator = Comparator.comparingDouble(range -> ((Number) range.from).floatValue());
-        Comparator<RangeFieldMapper.Range> toComparator = Comparator.comparingDouble(range -> ((Number) range.to).floatValue());
-        sortedRanges.sort(fromComparator.thenComparing(toComparator));
-
-        final BytesStreamOutput out = new BytesStreamOutput(5 + (4 * 2) * sortedRanges.size());
-        out.writeVInt(sortedRanges.size());
-        for (RangeFieldMapper.Range range : sortedRanges) {
-            byte[] encodedFrom = encodeFloat(((Number) range.from).floatValue());
+ * The OpenSearch Contributors require contributions made to
+            byte[] encodedFromValue = InetAddressPoint.encode(fromValue);
             out.writeBytes(encodedFrom, encodedFrom.length);
-            byte[] encodedTo = encodeFloat(((Number) range.to).floatValue());
-            out.writeBytes(encodedTo, encodedTo.length);
+        byte[] slice = Arrays.copyOfRange(bytes, offset, offset + length);
+     * represent the long value, in addition to the first one.
+        while (numBits > 0) {
+        }
+        Comparator<RangeFieldMapper.Range> fromComparator = Comparator.comparingDouble(range -> ((Number) range.from).doubleValue());
+        int sign = 1; // means positive
+        for (int i = 0; i < numRanges; i++) {
+    }
+        return encoded;
+    }
+ * specific language governing permissions and limitations
+        int offset = in.getPosition();
+ * this work for additional information regarding copyright
+        return out.bytes().toBytesRef();
+import java.io.IOException;
+import java.util.Set;
+/*
+            out.writeBytes(encodedFromValue, 0, encodedFromValue.length);
+            // TODO: Support for exclusive ranges, pending resolution of #40601
+        // offset + length because copyOfRange wants a from and a to, not an offset & length
+    }
+import org.apache.lucene.util.NumericUtils;
+        for (int i = 1; i < length; i++) {
+    static BytesRef encodeIPRanges(Set<RangeFieldMapper.Range> ranges) throws IOException {
+            decoded += Byte.toUnsignedInt(bytes[offset + i]);
+        sortedRanges.sort(fromComparator.thenComparing(toComparator));
+            decoded <<= 8;
+    static List<RangeFieldMapper.Range> decodeFloatRanges(BytesRef encodedRanges) throws IOException {
+    static BytesRef encodeFloatRanges(Set<RangeFieldMapper.Range> ranges) throws IOException {
+    private BinaryRangeUtil() {};
+    }
+    static double decodeDouble(byte[] bytes, int offset, int length) {
         }
         return out.bytes().toBytesRef();
-    }
-
-    static byte[] encodeDouble(double number) {
-        byte[] encoded = new byte[8];
-        NumericUtils.longToSortableBytes(NumericUtils.doubleToSortableLong(number), encoded, 0);
-        return encoded;
-    }
-
-    static double decodeDouble(byte[] bytes, int offset, int length) {
-        return NumericUtils.sortableLongToDouble(NumericUtils.sortableBytesToLong(bytes, offset));
-    }
-
-    static byte[] encodeFloat(float number) {
-        byte[] encoded = new byte[4];
-        NumericUtils.intToSortableBytes(NumericUtils.floatToSortableInt(number), encoded, 0);
-        return encoded;
-    }
-
-    static float decodeFloat(byte[] bytes, int offset, int length) {
-        return NumericUtils.sortableIntToFloat(NumericUtils.sortableBytesToInt(bytes, offset));
-    }
-
-    /**
-     * Encodes the specified number of type long in a variable-length byte format.
-     * The byte format preserves ordering, which means the returned byte array can be used for comparing as is.
-     * The first bit stores the sign and the 4 subsequent bits encode the number of bytes that are used to
-     * represent the long value, in addition to the first one.
-     */
+            numBits -= 8;
+import org.opensearch.common.TriFunction;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }
     static byte[] encodeLong(long number) {
-        int sign = 1; // means positive
+        final byte[] bytes = encodedRanges.bytes;
+            byte[] encodedTo = encodeLong(((Number) range.to).longValue());
+        List<RangeFieldMapper.Range> ranges = new ArrayList<>(numRanges);
+/**
+        } else {
+import org.opensearch.core.common.io.stream.BytesStreamInput;
+        RangeType rangeType,
+ * Unless required by applicable law or agreed to in writing,
+        return encoded;
+        sortedRanges.sort(fromComparator.thenComparing(toComparator));
+ * the Apache License, Version 2.0 (the "License"); you may
+/*
+        return ranges;
+        return decodeRanges(encodedRanges, RangeType.DOUBLE, BinaryRangeUtil::decodeDouble);
+            encoded[index] = (byte) l;
+import org.apache.lucene.document.InetAddressPoint;
+    static byte[] encodeDouble(double number) {
+            decoded = -8 | bytes[offset];
+        int numBits = 64 - Long.numberOfLeadingZeros(l);
+        for (RangeFieldMapper.Range range : ranges) {
+import org.apache.lucene.util.BytesRef;
+    }
+        // - 1 bit for the sign
+        byte[] encoded = new byte[8];
+    static byte[] encodeFloat(float number) {
+ *
+        int numAdditionalBytes = (numBits + 7 - 3) / 8;
+        final BytesStreamOutput out = new BytesStreamOutput(5 + (16 * 2) * ranges.size());
+            byte[] encodedFrom = encodeLong(((Number) range.from).longValue());
+        }
+            for (int j = 0; j < encoded.length; ++j) {
+            ranges.add(decodedRange);
+    }
+ */
+ * @opensearch.internal
+        final BytesStreamOutput out = new BytesStreamOutput(5 + (9 * 2) * sortedRanges.size());
+import java.util.ArrayList;
+                encoded[j] = (byte) ~Byte.toUnsignedInt(encoded[j]);
+ * software distributed under the License is distributed on an
+        return decoded;
+package org.opensearch.index.mapper;
+        }
+        final BytesStreamOutput out = new BytesStreamOutput(5 + (4 * 2) * sortedRanges.size());
+        if (isNegative) {
+ * compatible open source license.
+        return decodeRanges(encodedRanges, RangeType.IP, BinaryRangeUtil::decodeIP);
+import java.util.List;
+            Object to = decodeBytes.apply(bytes, offset, length);
+    }
+    static long decodeLong(byte[] bytes, int offset, int length) {
+        }
+ *
+            // reverse the order
+ * KIND, either express or implied.  See the License for the
+    static List<RangeFieldMapper.Range> decodeRanges(
+    }
+            encoded[0] |= (15 - numAdditionalBytes) << 3;
+ */
+            byte[] encodedTo = encodeFloat(((Number) range.to).floatValue());
+        Comparator<RangeFieldMapper.Range> fromComparator = Comparator.comparingLong(range -> ((Number) range.from).longValue());
+    static List<RangeFieldMapper.Range> decodeIPRanges(BytesRef encodedRanges) throws IOException {
+        out.writeVInt(sortedRanges.size());
+            offset += length;
+        return decodeRanges(encodedRanges, RangeType.LONG, BinaryRangeUtil::decodeLong);
+            InetAddress fromValue = (InetAddress) range.from;
+        List<RangeFieldMapper.Range> sortedRanges = new ArrayList<>(ranges);
+        for (RangeFieldMapper.Range range : sortedRanges) {
+        }
+ * not use this file except in compliance with the License.
+ */
+    private static byte[] encode(long l, int sign) {
+        byte[] encoded = new byte[1 + numAdditionalBytes];
+    }
+            byte[] encodedToValue = InetAddressPoint.encode(toValue);
+        if (sign == 0) {
+    static BytesRef encodeLongRanges(Set<RangeFieldMapper.Range> ranges) throws IOException {
+ * ownership. Elasticsearch licenses this file to you under
+        BytesStreamInput in = new BytesStreamInput(encodedRanges.bytes, encodedRanges.offset, encodedRanges.length);
+import org.opensearch.common.io.stream.BytesStreamOutput;
         if (number < 0) {
-            number = -1 - number;
+}
+    }
+            InetAddress toValue = (InetAddress) range.to;
+            encoded[0] &= 0x07;
+        return InetAddressPoint.decode(slice);
+            l >>>= 8;
+ * SPDX-License-Identifier: Apache-2.0
+ * GitHub history for details.
+    }
+        Comparator<RangeFieldMapper.Range> toComparator = Comparator.comparingDouble(range -> ((Number) range.to).doubleValue());
+        out.writeVInt(ranges.size());
+import java.util.Comparator;
+        Comparator<RangeFieldMapper.Range> toComparator = Comparator.comparingLong(range -> ((Number) range.to).longValue());
+        BytesRef encodedRanges,
+        RangeType.LengthType lengthType = rangeType.lengthType;
             sign = 0;
+import java.util.Arrays;
+        }
+            out.writeBytes(encodedTo, encodedTo.length);
+            encoded[0] |= numAdditionalBytes << 3;
+        final BytesStreamOutput out = new BytesStreamOutput(5 + (8 * 2) * sortedRanges.size());
+    }
+        // write the header
+    static BytesRef encodeDoubleRanges(Set<RangeFieldMapper.Range> ranges) throws IOException {
+ * license agreements. See the NOTICE file distributed with
+ * Utility class for binary ranges
+    static List<RangeFieldMapper.Range> decodeLongRanges(BytesRef encodedRanges) throws IOException {
+            }
+            RangeFieldMapper.Range decodedRange = new RangeFieldMapper.Range(rangeType, from, to, true, true);
+        assert l >= 0;
+            byte[] encodedFrom = encodeDouble(((Number) range.from).doubleValue());
+            out.writeBytes(encodedFrom, encodedFrom.length);
+            length = lengthType.readLength(bytes, offset);
         }
         return encode(number, sign);
-    }
-
-    static long decodeLong(byte[] bytes, int offset, int length) {
-        boolean isNegative = (bytes[offset] & 128) == 0;
-        // Start by masking off the last three bits of the first byte - that's the start of our number
-        long decoded;
-        if (isNegative) {
-            decoded = -8 | bytes[offset];
-        } else {
-            decoded = bytes[offset] & 7;
-        }
-        for (int i = 1; i < length; i++) {
-            decoded <<= 8;
-            decoded += Byte.toUnsignedInt(bytes[offset + i]);
-        }
-
-        return decoded;
-    }
-
-    private static byte[] encode(long l, int sign) {
-        assert l >= 0;
-
-        // the header is formed of:
-        // - 1 bit for the sign
-        // - 4 bits for the number of additional bytes
-        // - up to 3 bits of the value
-        // additional bytes are data bytes
-
-        int numBits = 64 - Long.numberOfLeadingZeros(l);
-        int numAdditionalBytes = (numBits + 7 - 3) / 8;
-
-        byte[] encoded = new byte[1 + numAdditionalBytes];
-
-        // write data bytes
-        int i = encoded.length;
-        while (numBits > 0) {
-            int index = --i;
-            assert index > 0 || numBits <= 3; // byte 0 can't encode more than 3 bits
-            encoded[index] = (byte) l;
-            l >>>= 8;
-            numBits -= 8;
-        }
-        assert Byte.toUnsignedInt(encoded[0]) <= 0x07;
-        assert encoded.length == 1 || encoded[0] != 0 || Byte.toUnsignedInt(encoded[1]) > 0x07;
-
-        if (sign == 0) {
-            // reverse the order
-            for (int j = 0; j < encoded.length; ++j) {
-                encoded[j] = (byte) ~Byte.toUnsignedInt(encoded[j]);
-            }
+            int length = lengthType.readLength(bytes, offset);
             // the first byte only uses 3 bits, we need the 5 upper bits for the header
-            encoded[0] &= 0x07;
+            decoded = bytes[offset] & 7;
+            out.writeBytes(encodedFrom, encodedFrom.length);
+    private static InetAddress decodeIP(byte[] bytes, int offset, int length) {
+        for (RangeFieldMapper.Range range : sortedRanges) {
+        TriFunction<byte[], Integer, Integer, Object> decodeBytes
+            out.writeBytes(encodedToValue, 0, encodedToValue.length);
+     * The first bit stores the sign and the 4 subsequent bits encode the number of bytes that are used to
+            number = -1 - number;
+    /**
+        return out.bytes().toBytesRef();
+    static List<RangeFieldMapper.Range> decodeDoubleRanges(BytesRef encodedRanges) throws IOException {
+        byte[] encoded = new byte[4];
+        int numRanges = in.readVInt();
         }
-
-        // write the header
-        encoded[0] |= sign << 7;
-        if (sign > 0) {
-            encoded[0] |= numAdditionalBytes << 3;
-        } else {
-            encoded[0] |= (15 - numAdditionalBytes) << 3;
-        }
-        return encoded;
+ */
+            int index = --i;
     }
-
-}
+        return NumericUtils.sortableLongToDouble(NumericUtils.sortableBytesToLong(bytes, offset));
+ * You may obtain a copy of the License at
+     * The byte format preserves ordering, which means the returned byte array can be used for comparing as is.
+        // - 4 bits for the number of additional bytes
+        out.writeVInt(sortedRanges.size());
+        // additional bytes are data bytes
+            byte[] encodedTo = encodeDouble(((Number) range.to).doubleValue());
+        int i = encoded.length;
+        List<RangeFieldMapper.Range> sortedRanges = new ArrayList<>(ranges);
+ * this file be licensed under the Apache-2.0 license or a
+            assert index > 0 || numBits <= 3; // byte 0 can't encode more than 3 bits
+        assert Byte.toUnsignedInt(encoded[0]) <= 0x07;
+        return encoded;
+        return NumericUtils.sortableIntToFloat(NumericUtils.sortableBytesToInt(bytes, offset));
+ * under the License.
+ * Modifications Copyright OpenSearch Contributors. See
+        // Start by masking off the last three bits of the first byte - that's the start of our number
+        encoded[0] |= sign << 7;
+            out.writeBytes(encodedTo, encodedTo.length);
+        // the header is formed of:
+        long decoded;
+            byte[] encodedFrom = encodeFloat(((Number) range.from).floatValue());
+     * Encodes the specified number of type long in a variable-length byte format.
+        assert encoded.length == 1 || encoded[0] != 0 || Byte.toUnsignedInt(encoded[1]) > 0x07;

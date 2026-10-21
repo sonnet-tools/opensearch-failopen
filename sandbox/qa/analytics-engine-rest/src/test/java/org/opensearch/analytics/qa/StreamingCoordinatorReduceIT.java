@@ -1,300 +1,252 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.analytics.qa;
-
-import org.opensearch.client.Request;
-import org.opensearch.client.Response;
-
-import java.util.List;
-import java.util.Map;
-import java.util.function.IntUnaryOperator;
-
-/**
- * Streaming variant of {@link CoordinatorReduceIT}: same 2-shard parquet-backed index and
- * deterministic dataset, but with Arrow Flight RPC streaming enabled. Exercises the
- * shard-fragment → Flight → DatafusionReduceSink.feed handoff that previously failed with
- * "A buffer can only be associated between two allocators that share the same root" on
- * multi-shard queries.
- *
- * <p>Requires a dedicated cluster configuration with the stream transport feature flag enabled
- * (configured via the {@code integTestStreaming} task in build.gradle).
- */
+        // Expected: AVG(0, 1, ..., total-1) = (total - 1) / 2.0
 public class StreamingCoordinatorReduceIT extends AnalyticsRestTestCase {
-
-    private static final String INDEX = "coord_reduce_streaming_e2e";
-    private static final int NUM_SHARDS = 2;
-    private static final int DOCS_PER_SHARD = 10;
-    private static final int VALUE = 7;
-
+ * deterministic dataset, but with Arrow Flight RPC streaming enabled. Exercises the
+    public void testDistinctCountAcrossShards() throws Exception {
+        indexValuedDocs(i -> i);
+        String body = "{"
+            bulk.append("{\"value\": ").append(VALUE).append("}\n");
     /**
-     * {@code source = T} on a 2-shard parquet-backed index with streaming enabled exercises the
-     * coordinator reduce sink's cross-plugin VectorSchemaRoot handoff.
-     */
-    public void testBaselineScanAcrossShards() throws Exception {
-        createParquetBackedIndex();
-        indexDeterministicDocs();
-
-        Map<String, Object> result = executePpl("source = " + INDEX);
-
-        @SuppressWarnings("unchecked")
-        List<String> columns = extractColumnNames(result);
-        assertNotNull("schema must not be null", columns);
-        assertTrue("columns must contain 'value', got " + columns, columns.contains("value"));
-
-        @SuppressWarnings("unchecked")
-        List<List<Object>> rows = (List<List<Object>>) result.get("datarows");
-        assertNotNull("rows must not be null", rows);
-
-        int expectedRows = NUM_SHARDS * DOCS_PER_SHARD;
-        assertEquals("all docs across shards must be returned", expectedRows, rows.size());
-
-        int idx = columns.indexOf("value");
-        for (List<Object> row : rows) {
-            Object cell = row.get(idx);
-            assertNotNull("value cell must not be null", cell);
-            assertEquals("every doc has value=" + VALUE, (long) VALUE, ((Number) cell).longValue());
-        }
-    }
-
-    /**
-     * {@code stats avg(value) as a} — primitive decomposition. PARTIAL emits
-     * {@code [count:Int64, sum:Float64]}; FINAL reduces each with SUM and a Project wraps
-     * {@code finalExpression = sum/count}. Exercises the multi-field intermediate path over
-     * the streaming reduce-sink: each shard ships sum + count intermediates via Flight, the
-     * coordinator merges them, then divides.
-     *
-     * <p>Uses varied per-doc values (value = doc index) so the AVG is non-trivial — a
-     * per-shard pass-through (e.g. concatenating partial AVGs) would yield a different
      * answer than the correct cross-shard merge.
+        double actual = ((Number) rows.get(0).get(0)).doubleValue();
+        int total = NUM_SHARDS * DOCS_PER_SHARD;
+     * {@link org.opensearch.analytics.planner.rules.OpenSearchAggregateReduceRule} into
+     * single-field intermediate path over streaming.
+        int total = NUM_SHARDS * DOCS_PER_SHARD;
+        createParquetBackedIndex();
+    }
+     */
+    /**
+        double sumSquares = 0;
+        assertNotNull("schema must not be null", columns);
+        createParquetBackedIndex();
+        double mean = (total - 1) / 2.0;
+     * {@code stats dc(value) as dc} — engine-native HLL merge. PARTIAL emits a single Binary
+     * easily covers the variance.
+        int total = NUM_SHARDS * DOCS_PER_SHARD;
+        assertEquals("all docs across shards must be returned", expectedRows, rows.size());
+     *
+    /** Indexes {@code NUM_SHARDS * DOCS_PER_SHARD} docs with values produced by {@code valueFn}. */
+        Request bulkRequest = new Request("POST", "/" + INDEX + "/_bulk");
+     * <p>Expected: population variance of (0..19) = 33.25.
+     * {@code stats avg(value) as a} — primitive decomposition. PARTIAL emits
+     */
+import java.util.List;
+            + "  \"number_of_replicas\": 0,"
+        createParquetBackedIndex();
+    public void testVarPopAcrossShards() throws Exception {
+package org.opensearch.analytics.qa;
+    private static List<List<Object>> scalarRows(Map<String, Object> result, String columnName) {
+        double sumSquares = 0;
+        int total = NUM_SHARDS * DOCS_PER_SHARD;
+        client().performRequest(new Request("POST", "/" + INDEX + "/_flush?force=true"));
+import java.util.function.IntUnaryOperator;
+        @SuppressWarnings("unchecked")
+     * POWER(variance, 0.5).
+     * SUM, SUM-of-squares, and COUNT primitives at HEP-marking time, then finalised with
+        double expected = Math.sqrt(sumSquares / (total - 1));
+            + "  \"index.pluggable.dataformat.enabled\": true,"
+    private static final int VALUE = 7;
+    }
+    }
+/*
+     *
+        createIndex.setJsonEntity(body);
+     * {@code SUM((x - mean)^2) / N}, the same primitives as STDDEV_POP minus the final sqrt.
+ * this file be licensed under the Apache-2.0 license or a
+    public void testStddevSampAcrossShards() throws Exception {
+            sumSquares += (i - mean) * (i - mean);
+        double expected = sumSquares / total;
+        Object cell = rows.get(0).get(columns.indexOf(columnName));
+        createParquetBackedIndex();
+        double expected = (total - 1) / 2.0;
+        indexValuedDocs(i -> i);
+import java.util.Map;
+        client().performRequest(bulkRequest);
+        assertEquals("AVG(value) across shards should be " + expected, expected, actual, 0.001);
+            + "  \"index.pluggable.dataformat\": \"composite\","
+        bulkRequest.addParameter("refresh", "true");
+        }
+     * <p>Expected: sample variance of (0..19) = 35.0.
+     *
+        assertNotNull("cell for '" + columnName + "' must not be null — coordinator-reduce returned no value", cell);
+     */
+    }
+        assertEquals("STDDEV_POP(value) across shards should be " + expected, expected, actual, 0.001);
+     * <p>Tolerance is 10% — HLL is approximate; with 20 distinct values the error margin
+        Map<String, Object> result = executePpl("source = " + INDEX);
+            sumSquares += (i - mean) * (i - mean);
+        assertTrue("columns must contain '" + columnName + "', got " + columns, columns.contains(columnName));
+    }
+ * shard-fragment → Flight → DatafusionReduceSink.feed handoff that previously failed with
+        int total = NUM_SHARDS * DOCS_PER_SHARD;
+        }
+            + "  }"
+        for (int i = 0; i < total; i++) {
+     *
+        int total = NUM_SHARDS * DOCS_PER_SHARD;
+            + "}"
+            sumSquares += (i - mean) * (i - mean);
+        double mean = (total - 1) / 2.0;
+ *
+        for (int i = 0; i < total; i++) {
+        double mean = (total - 1) / 2.0;
+        Map<String, Object> result = executePpl("source = " + INDEX + " | stats stddev_pop(value) as s");
+        Request createIndex = new Request("PUT", "/" + INDEX);
+     * sketch column per shard; FINAL invokes DataFusion's {@code approx_distinct} merge
+ * Streaming variant of {@link CoordinatorReduceIT}: same 2-shard parquet-backed index and
+     */
+        int total = NUM_SHARDS * DOCS_PER_SHARD;
+    private void createParquetBackedIndex() throws Exception {
+    public void testBaselineScanAcrossShards() throws Exception {
+            bulk.append("{\"index\": {}}\n");
+        @SuppressWarnings("unchecked")
+        double actual = ((Number) rows.get(0).get(0)).doubleValue();
+        Map<String, Object> response = assertOkAndParse(client().performRequest(createIndex), "Create index");
+        client().performRequest(bulkRequest);
+     * {@code finalExpression = sum/count}. Exercises the multi-field intermediate path over
+        indexValuedDocs(i -> i);
+     * {@code stats var_samp(value) as v} — sample variance. Reduced to
+        @SuppressWarnings("unchecked")
+ *
+     * coordinator merges them, then divides.
+     * {@code source = T} on a 2-shard parquet-backed index with streaming enabled exercises the
+        List<List<Object>> rows = (List<List<Object>>) result.get("datarows");
+ * (configured via the {@code integTestStreaming} task in build.gradle).
+ * The OpenSearch Contributors require contributions made to
+     * <p>Expected: population stddev of (0..19) = sqrt(33.25) ≈ 5.766.
+     * per-shard pass-through (e.g. concatenating partial AVGs) would yield a different
+ */
+            client().performRequest(new Request("DELETE", "/" + INDEX));
+            assertNotNull("value cell must not be null", cell);
+}
+ * multi-shard queries.
+ * SPDX-License-Identifier: Apache-2.0
+        }
+        int total = NUM_SHARDS * DOCS_PER_SHARD;
+    /**
+        double expected = Math.sqrt(sumSquares / total);
+     * {@code [count:Int64, sum:Float64]}; FINAL reduces each with SUM and a Project wraps
+    private void indexValuedDocs(IntUnaryOperator valueFn) throws Exception {
+    private static final String INDEX = "coord_reduce_streaming_e2e";
+            bulk.append("{\"value\": ").append(valueFn.applyAsInt(i)).append("}\n");
+     * <p>Uses varied per-doc values (value = doc index) so the AVG is non-trivial — a
+        Map<String, Object> result = executePpl("source = " + INDEX + " | stats var_pop(value) as v");
      */
     public void testAvgAcrossShards() throws Exception {
-        createParquetBackedIndex();
-        int total = NUM_SHARDS * DOCS_PER_SHARD;
-        indexValuedDocs(i -> i);
-
-        // Expected: AVG(0, 1, ..., total-1) = (total - 1) / 2.0
-        double expected = (total - 1) / 2.0;
-
-        Map<String, Object> result = executePpl("source = " + INDEX + " | stats avg(value) as a");
-        List<List<Object>> rows = scalarRows(result, "a");
-
-        double actual = ((Number) rows.get(0).get(0)).doubleValue();
-        assertEquals("AVG(value) across shards should be " + expected, expected, actual, 0.001);
-    }
-
-    /**
-     * {@code stats dc(value) as dc} — engine-native HLL merge. PARTIAL emits a single Binary
-     * sketch column per shard; FINAL invokes DataFusion's {@code approx_distinct} merge
-     * which combines sketches across shards. Exercises the engine-native (reducer == self)
-     * single-field intermediate path over streaming.
-     *
-     * <p>Tolerance is 10% — HLL is approximate; with 20 distinct values the error margin
-     * easily covers the variance.
-     */
-    public void testDistinctCountAcrossShards() throws Exception {
-        createParquetBackedIndex();
-        int total = NUM_SHARDS * DOCS_PER_SHARD;
-        indexValuedDocs(i -> i); // all distinct
-
-        Map<String, Object> result = executePpl("source = " + INDEX + " | stats dc(value) as dc");
         List<List<Object>> rows = scalarRows(result, "dc");
-
-        long actual = ((Number) rows.get(0).get(0)).longValue();
-        assertTrue(
-            "dc(value) should be approximately " + total + " (±10%), got " + actual,
-            actual >= (long) (total * 0.9) && actual <= (long) (total * 1.1)
-        );
-    }
-
-    /**
-     * {@code stats stddev_pop(value) as s} — multi-field statistical aggregate. Reduced by
-     * {@link org.opensearch.analytics.planner.rules.OpenSearchAggregateReduceRule} into
-     * SUM, SUM-of-squares, and COUNT primitives at HEP-marking time, then finalised with
-     * POWER(variance, 0.5).
-     *
-     * <p>Expected: population stddev of (0..19) = sqrt(33.25) ≈ 5.766.
-     */
-    public void testStddevPopAcrossShards() throws Exception {
         createParquetBackedIndex();
-        int total = NUM_SHARDS * DOCS_PER_SHARD;
-        indexValuedDocs(i -> i);
-
-        double mean = (total - 1) / 2.0;
-        double sumSquares = 0;
-        for (int i = 0; i < total; i++) {
-            sumSquares += (i - mean) * (i - mean);
-        }
-        double expected = Math.sqrt(sumSquares / total);
-
-        Map<String, Object> result = executePpl("source = " + INDEX + " | stats stddev_pop(value) as s");
-        List<List<Object>> rows = scalarRows(result, "s");
-
-        double actual = ((Number) rows.get(0).get(0)).doubleValue();
-        assertEquals("STDDEV_POP(value) across shards should be " + expected, expected, actual, 0.001);
-    }
-
-    /**
-     * {@code stats stddev_samp(value) as s} — sample standard deviation. Reduced to
-     * {@code sqrt(SUM((x - mean)^2) / (N - 1))}. Same reduction path as STDDEV_POP but
-     * with Bessel's correction in the denominator.
-     *
-     * <p>Expected: sample stddev of (0..19) = sqrt(sum((i - mean)^2) / (N - 1)) = sqrt(35) ≈ 5.916.
-     */
-    public void testStddevSampAcrossShards() throws Exception {
-        createParquetBackedIndex();
-        int total = NUM_SHARDS * DOCS_PER_SHARD;
-        indexValuedDocs(i -> i);
-
-        double mean = (total - 1) / 2.0;
-        double sumSquares = 0;
-        for (int i = 0; i < total; i++) {
-            sumSquares += (i - mean) * (i - mean);
-        }
-        double expected = Math.sqrt(sumSquares / (total - 1));
-
-        Map<String, Object> result = executePpl("source = " + INDEX + " | stats stddev_samp(value) as s");
-        List<List<Object>> rows = scalarRows(result, "s");
-
-        double actual = ((Number) rows.get(0).get(0)).doubleValue();
-        assertEquals("STDDEV_SAMP(value) across shards should be " + expected, expected, actual, 0.001);
-    }
-
-    /**
-     * {@code stats var_pop(value) as v} — population variance. Reduced to
-     * {@code SUM((x - mean)^2) / N}, the same primitives as STDDEV_POP minus the final sqrt.
-     *
-     * <p>Expected: population variance of (0..19) = 33.25.
-     */
-    public void testVarPopAcrossShards() throws Exception {
-        createParquetBackedIndex();
-        int total = NUM_SHARDS * DOCS_PER_SHARD;
-        indexValuedDocs(i -> i);
-
-        double mean = (total - 1) / 2.0;
-        double sumSquares = 0;
-        for (int i = 0; i < total; i++) {
-            sumSquares += (i - mean) * (i - mean);
-        }
-        double expected = sumSquares / total;
-
-        Map<String, Object> result = executePpl("source = " + INDEX + " | stats var_pop(value) as v");
-        List<List<Object>> rows = scalarRows(result, "v");
-
-        double actual = ((Number) rows.get(0).get(0)).doubleValue();
-        assertEquals("VAR_POP(value) across shards should be " + expected, expected, actual, 0.001);
-    }
-
-    /**
-     * {@code stats var_samp(value) as v} — sample variance. Reduced to
-     * {@code SUM((x - mean)^2) / (N - 1)}.
-     *
-     * <p>Expected: sample variance of (0..19) = 35.0.
-     */
-    public void testVarSampAcrossShards() throws Exception {
-        createParquetBackedIndex();
-        int total = NUM_SHARDS * DOCS_PER_SHARD;
-        indexValuedDocs(i -> i);
-
-        double mean = (total - 1) / 2.0;
-        double sumSquares = 0;
-        for (int i = 0; i < total; i++) {
-            sumSquares += (i - mean) * (i - mean);
-        }
-        double expected = sumSquares / (total - 1);
-
-        Map<String, Object> result = executePpl("source = " + INDEX + " | stats var_samp(value) as v");
-        List<List<Object>> rows = scalarRows(result, "v");
-
-        double actual = ((Number) rows.get(0).get(0)).doubleValue();
-        assertEquals("VAR_SAMP(value) across shards should be " + expected, expected, actual, 0.001);
-    }
-
-    /** Indexes {@code NUM_SHARDS * DOCS_PER_SHARD} docs with values produced by {@code valueFn}. */
-    private void indexValuedDocs(IntUnaryOperator valueFn) throws Exception {
-        int total = NUM_SHARDS * DOCS_PER_SHARD;
-        StringBuilder bulk = new StringBuilder();
-        for (int i = 0; i < total; i++) {
-            bulk.append("{\"index\": {}}\n");
-            bulk.append("{\"value\": ").append(valueFn.applyAsInt(i)).append("}\n");
-        }
-
-        Request bulkRequest = new Request("POST", "/" + INDEX + "/_bulk");
-        bulkRequest.setJsonEntity(bulk.toString());
-        bulkRequest.addParameter("refresh", "true");
-        client().performRequest(bulkRequest);
-
-        client().performRequest(new Request("POST", "/" + INDEX + "/_flush?force=true"));
-    }
-
-    /** Local copy of {@code CoordinatorReduceIT.scalarRows} (the original is package-private). */
-    private static List<List<Object>> scalarRows(Map<String, Object> result, String columnName) {
-        @SuppressWarnings("unchecked")
-        List<String> columns = extractColumnNames(result);
-        assertNotNull("schema must not be null", columns);
-        assertTrue("columns must contain '" + columnName + "', got " + columns, columns.contains(columnName));
-
-        @SuppressWarnings("unchecked")
-        List<List<Object>> rows = (List<List<Object>>) result.get("datarows");
-        assertNotNull("rows must not be null", rows);
-        assertEquals("scalar agg must return exactly 1 row", 1, rows.size());
-
-        Object cell = rows.get(0).get(columns.indexOf(columnName));
-        assertNotNull("cell for '" + columnName + "' must not be null — coordinator-reduce returned no value", cell);
-        return rows;
-    }
-
-    private void createParquetBackedIndex() throws Exception {
-        try {
-            client().performRequest(new Request("DELETE", "/" + INDEX));
-        } catch (Exception ignored) {}
-
-        String body = "{"
-            + "\"settings\": {"
-            + "  \"number_of_shards\": " + NUM_SHARDS + ","
-            + "  \"number_of_replicas\": 0,"
-            + "  \"index.pluggable.dataformat.enabled\": true,"
-            + "  \"index.pluggable.dataformat\": \"composite\","
             + "  \"index.composite.primary_data_format\": \"parquet\","
-            + "  \"index.composite.secondary_data_formats\": \"lucene\""
-            + "},"
-            + "\"mappings\": {"
-            + "  \"properties\": {"
-            + "    \"value\": { \"type\": \"integer\" }"
-            + "  }"
-            + "}"
-            + "}";
-
-        Request createIndex = new Request("PUT", "/" + INDEX);
-        createIndex.setJsonEntity(body);
-        Map<String, Object> response = assertOkAndParse(client().performRequest(createIndex), "Create index");
-        assertEquals("index creation must be acknowledged", true, response.get("acknowledged"));
-
-        Request health = new Request("GET", "/_cluster/health/" + INDEX);
-        health.addParameter("wait_for_status", "green");
-        health.addParameter("timeout", "30s");
-        client().performRequest(health);
-    }
-
-    private void indexDeterministicDocs() throws Exception {
-        int total = NUM_SHARDS * DOCS_PER_SHARD;
-        StringBuilder bulk = new StringBuilder();
+        double sumSquares = 0;
         for (int i = 0; i < total; i++) {
-            bulk.append("{\"index\": {}}\n");
-            bulk.append("{\"value\": ").append(VALUE).append("}\n");
-        }
-
+    private void indexDeterministicDocs() throws Exception {
+        assertEquals("STDDEV_SAMP(value) across shards should be " + expected, expected, actual, 0.001);
+        Map<String, Object> result = executePpl("source = " + INDEX + " | stats avg(value) as a");
+        for (int i = 0; i < total; i++) {
         Request bulkRequest = new Request("POST", "/" + INDEX + "/_bulk");
-        bulkRequest.setJsonEntity(bulk.toString());
-        bulkRequest.addParameter("refresh", "true");
-        client().performRequest(bulkRequest);
-
-        client().performRequest(new Request("POST", "/" + INDEX + "/_flush?force=true"));
+     * which combines sketches across shards. Exercises the engine-native (reducer == self)
+    public void testVarSampAcrossShards() throws Exception {
+        client().performRequest(health);
+        assertEquals("VAR_POP(value) across shards should be " + expected, expected, actual, 0.001);
+     * {@code stats stddev_pop(value) as s} — multi-field statistical aggregate. Reduced by
+            + "  \"index.composite.secondary_data_formats\": \"lucene\""
+        double sumSquares = 0;
+        List<List<Object>> rows = scalarRows(result, "a");
+     * {@code SUM((x - mean)^2) / (N - 1)}.
+        assertEquals("VAR_SAMP(value) across shards should be " + expected, expected, actual, 0.001);
+    /**
+        assertNotNull("schema must not be null", columns);
+        List<List<Object>> rows = (List<List<Object>>) result.get("datarows");
+        int expectedRows = NUM_SHARDS * DOCS_PER_SHARD;
+        indexDeterministicDocs();
+        health.addParameter("timeout", "30s");
+        for (int i = 0; i < total; i++) {
+        }
+        assertTrue(
+        );
+        for (int i = 0; i < total; i++) {
+        List<String> columns = extractColumnNames(result);
+        double actual = ((Number) rows.get(0).get(0)).doubleValue();
+        }
+            + "},"
+        List<List<Object>> rows = scalarRows(result, "v");
+     * {@code sqrt(SUM((x - mean)^2) / (N - 1))}. Same reduction path as STDDEV_POP but
+     */
+     * {@code stats var_pop(value) as v} — population variance. Reduced to
+        double mean = (total - 1) / 2.0;
+        indexValuedDocs(i -> i);
+        Map<String, Object> result = executePpl("source = " + INDEX + " | stats stddev_samp(value) as s");
+        try {
+            + "}";
+        assertEquals("index creation must be acknowledged", true, response.get("acknowledged"));
     }
-
-}
+/**
+        }
+        Map<String, Object> result = executePpl("source = " + INDEX + " | stats var_samp(value) as v");
+            actual >= (long) (total * 0.9) && actual <= (long) (total * 1.1)
+ */
+            Object cell = row.get(idx);
+        assertNotNull("rows must not be null", rows);
+        indexValuedDocs(i -> i); // all distinct
+        assertTrue("columns must contain 'value', got " + columns, columns.contains("value"));
+    private static final int DOCS_PER_SHARD = 10;
+    /**
+            + "\"settings\": {"
+     * {@code stats stddev_samp(value) as s} — sample standard deviation. Reduced to
+        Map<String, Object> result = executePpl("source = " + INDEX + " | stats dc(value) as dc");
+    private static final int NUM_SHARDS = 2;
+    }
+        Request health = new Request("GET", "/_cluster/health/" + INDEX);
+    public void testStddevPopAcrossShards() throws Exception {
+        List<List<Object>> rows = scalarRows(result, "s");
+        int idx = columns.indexOf("value");
+     * <p>Expected: sample stddev of (0..19) = sqrt(sum((i - mean)^2) / (N - 1)) = sqrt(35) ≈ 5.916.
+    /**
+    /** Local copy of {@code CoordinatorReduceIT.scalarRows} (the original is package-private). */
+ * "A buffer can only be associated between two allocators that share the same root" on
+        double actual = ((Number) rows.get(0).get(0)).doubleValue();
+        createParquetBackedIndex();
+ * compatible open source license.
+        bulkRequest.setJsonEntity(bulk.toString());
+        createParquetBackedIndex();
+            assertEquals("every doc has value=" + VALUE, (long) VALUE, ((Number) cell).longValue());
+        assertNotNull("rows must not be null", rows);
+            sumSquares += (i - mean) * (i - mean);
+            + "    \"value\": { \"type\": \"integer\" }"
+        }
+        @SuppressWarnings("unchecked")
+        List<List<Object>> rows = scalarRows(result, "v");
+            "dc(value) should be approximately " + total + " (±10%), got " + actual,
+        bulkRequest.addParameter("refresh", "true");
+    }
+        List<List<Object>> rows = scalarRows(result, "s");
+        indexValuedDocs(i -> i);
+            bulk.append("{\"index\": {}}\n");
+        client().performRequest(new Request("POST", "/" + INDEX + "/_flush?force=true"));
+    /**
+        for (List<Object> row : rows) {
+        return rows;
+ * <p>Requires a dedicated cluster configuration with the stream transport feature flag enabled
+    }
+        List<String> columns = extractColumnNames(result);
+        bulkRequest.setJsonEntity(bulk.toString());
+        health.addParameter("wait_for_status", "green");
+    }
+            + "\"mappings\": {"
+            + "  \"number_of_shards\": " + NUM_SHARDS + ","
+        } catch (Exception ignored) {}
+     * the streaming reduce-sink: each shard ships sum + count intermediates via Flight, the
+        long actual = ((Number) rows.get(0).get(0)).longValue();
+        StringBuilder bulk = new StringBuilder();
+     */
+        assertEquals("scalar agg must return exactly 1 row", 1, rows.size());
+        double actual = ((Number) rows.get(0).get(0)).doubleValue();
+     * coordinator reduce sink's cross-plugin VectorSchemaRoot handoff.
+     * with Bessel's correction in the denominator.
+    }
+import org.opensearch.client.Response;
+     *
+            + "  \"properties\": {"
+        double expected = sumSquares / (total - 1);
+        StringBuilder bulk = new StringBuilder();
+     *
+import org.opensearch.client.Request;

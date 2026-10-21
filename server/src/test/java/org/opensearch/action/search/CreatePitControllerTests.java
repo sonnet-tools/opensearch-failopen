@@ -1,536 +1,482 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.action.search;
-
-import org.apache.lucene.search.TotalHits;
-import org.opensearch.Version;
-import org.opensearch.action.LatchedActionListener;
-import org.opensearch.action.StepListener;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.index.query.IdsQueryBuilder;
-import org.opensearch.index.query.MatchAllQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.search.SearchHit;
-import org.opensearch.search.SearchHits;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.internal.InternalSearchResponse;
-import org.opensearch.tasks.Task;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.RemoteClusterConnectionTests;
-import org.opensearch.transport.Transport;
-import org.opensearch.transport.client.node.NodeClient;
-import org.junit.Before;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-
-import static org.opensearch.action.search.PitTestsUtil.getPitId;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-/**
- * Functional tests for various methods in create pit controller. Covers update pit phase specifically since
- * integration tests don't cover it.
- */
-public class CreatePitControllerTests extends OpenSearchTestCase {
-
-    DiscoveryNode node1 = null;
-    DiscoveryNode node2 = null;
-    DiscoveryNode node3 = null;
-    String pitId = null;
-    TransportSearchAction transportSearchAction = null;
-    Task task = null;
-    DiscoveryNodes nodes = null;
-    NamedWriteableRegistry namedWriteableRegistry = null;
-    SearchResponse searchResponse = null;
-    ActionListener<CreatePitResponse> createPitListener = null;
-    ClusterService clusterServiceMock = null;
-
-    private final ThreadPool threadPool = new TestThreadPool(getClass().getName());
-    Settings settings = Settings.builder().put("node.name", CreatePitControllerTests.class.getSimpleName()).build();
-    NodeClient client = new NodeClient(settings, threadPool);
-
-    @Override
-    public void tearDown() throws Exception {
-        super.tearDown();
-        ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
-    }
-
-    private MockTransportService startTransport(String id, List<DiscoveryNode> knownNodes, Version version) {
-        return startTransport(id, knownNodes, version, Settings.EMPTY);
-    }
-
-    private MockTransportService startTransport(
-        final String id,
-        final List<DiscoveryNode> knownNodes,
-        final Version version,
-        final Settings settings
-    ) {
-        return RemoteClusterConnectionTests.startTransport(id, knownNodes, version, threadPool, settings);
-    }
-
-    @Before
-    public void setupData() {
-        node1 = new DiscoveryNode("node_1", buildNewFakeTransportAddress(), Version.CURRENT);
-        node2 = new DiscoveryNode("node_2", buildNewFakeTransportAddress(), Version.CURRENT);
-        node3 = new DiscoveryNode("node_3", buildNewFakeTransportAddress(), Version.CURRENT);
-        pitId = getPitId();
-        namedWriteableRegistry = new NamedWriteableRegistry(
-            Arrays.asList(
-                new NamedWriteableRegistry.Entry(QueryBuilder.class, TermQueryBuilder.NAME, TermQueryBuilder::new),
-                new NamedWriteableRegistry.Entry(QueryBuilder.class, MatchAllQueryBuilder.NAME, MatchAllQueryBuilder::new),
-                new NamedWriteableRegistry.Entry(QueryBuilder.class, IdsQueryBuilder.NAME, IdsQueryBuilder::new)
-            )
-        );
-        nodes = DiscoveryNodes.builder().add(node1).add(node2).add(node3).build();
-        transportSearchAction = mock(TransportSearchAction.class);
-        task = new Task(
-            randomLong(),
-            "transport",
-            SearchAction.NAME,
-            "description",
-            new TaskId(randomLong() + ":" + randomLong()),
-            Collections.emptyMap()
-        );
-        InternalSearchResponse response = new InternalSearchResponse(
-            new SearchHits(new SearchHit[0], new TotalHits(0, TotalHits.Relation.EQUAL_TO), Float.NaN),
-            InternalAggregations.EMPTY,
-            null,
-            null,
-            false,
-            null,
-            1
-        );
-        searchResponse = new SearchResponse(
-            response,
-            null,
-            3,
-            3,
-            0,
-            100,
-            ShardSearchFailure.EMPTY_ARRAY,
-            SearchResponse.Clusters.EMPTY,
-            pitId
-        );
-        createPitListener = new ActionListener<CreatePitResponse>() {
-            @Override
-            public void onResponse(CreatePitResponse createPITResponse) {
-                assertEquals(3, createPITResponse.getTotalShards());
-            }
-
-            @Override
-            public void onFailure(Exception e) {
+                 */
+                    public void onResponse(CreatePitResponse createPITResponse) {
+                    pitService
                 throw new AssertionError(e);
-            }
-        };
-
-        clusterServiceMock = mock(ClusterService.class);
-        ClusterState state = mock(ClusterState.class);
-
-        final Settings keepAliveSettings = Settings.builder().put(CreatePitController.PIT_INIT_KEEP_ALIVE.getKey(), 30000).build();
-        when(clusterServiceMock.getSettings()).thenReturn(keepAliveSettings);
-
-        when(state.getMetadata()).thenReturn(Metadata.EMPTY_METADATA);
-        when(state.metadata()).thenReturn(Metadata.EMPTY_METADATA);
-        when(clusterServiceMock.state()).thenReturn(state);
-        when(state.getNodes()).thenReturn(nodes);
-    }
-
-    /**
-     * Test if transport call for update pit is made to all nodes present as part of PIT ID returned from phase one of create pit
-     */
-    public void testUpdatePitAfterCreatePitSuccess() throws InterruptedException {
-        List<DiscoveryNode> updateNodesInvoked = new CopyOnWriteArrayList<>();
-        List<DiscoveryNode> deleteNodesInvoked = new CopyOnWriteArrayList<>();
-        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
-        try (
-            MockTransportService cluster1Transport = startTransport("cluster_1_node", knownNodes, Version.CURRENT);
-            MockTransportService cluster2Transport = startTransport("cluster_2_node", knownNodes, Version.CURRENT)
-        ) {
             knownNodes.add(cluster1Transport.getLocalDiscoNode());
-            knownNodes.add(cluster2Transport.getLocalDiscoNode());
-            Collections.shuffle(knownNodes, random());
-
-            try (
-                MockTransportService transportService = MockTransportService.createNewService(
-                    Settings.EMPTY,
-                    Version.CURRENT,
-                    threadPool,
-                    NoopTracer.INSTANCE
-                )
-            ) {
-                transportService.start();
-                transportService.acceptIncomingRequests();
-                SearchTransportService searchTransportService = new SearchTransportService(transportService, null) {
-                    @Override
-                    public void updatePitContext(
+        final Settings settings
                         Transport.Connection connection,
-                        UpdatePitContextRequest request,
-                        ActionListener<UpdatePitContextResponse> listener
-                    ) {
-                        updateNodesInvoked.add(connection.getNode());
-                        Thread t = new Thread(() -> listener.onResponse(new UpdatePitContextResponse("pitid", 500000, 500000)));
-                        t.start();
-                    }
-
-                    /**
-                     * Test if cleanup request is called
                      */
-                    @Override
-                    public void sendFreePITContexts(
-                        Transport.Connection connection,
-                        List<PitSearchContextIdForNode> contextIds,
-                        ActionListener<DeletePitResponse> listener
-                    ) {
-                        deleteNodesInvoked.add(connection.getNode());
-                        Thread t = new Thread(() -> listener.onResponse(new DeletePitResponse(new ArrayList<>())));
-                        t.start();
-                    }
-
-                    @Override
-                    public Transport.Connection getConnection(String clusterAlias, DiscoveryNode node) {
-                        return new SearchAsyncActionTests.MockConnection(node);
-                    }
                 };
-
-                CountDownLatch latch = new CountDownLatch(1);
-
-                CreatePitRequest request = new CreatePitRequest(TimeValue.timeValueDays(1), true);
-                request.setIndices(new String[] { "index" });
-
-                PitService pitService = new PitService(clusterServiceMock, searchTransportService, transportService, client);
-                CreatePitController controller = new CreatePitController(
-                    searchTransportService,
-                    clusterServiceMock,
-                    transportSearchAction,
-                    namedWriteableRegistry,
-                    pitService
-                );
-
-                ActionListener<CreatePitResponse> updatelistener = new LatchedActionListener<>(new ActionListener<CreatePitResponse>() {
-                    @Override
-                    public void onResponse(CreatePitResponse createPITResponse) {
-                        assertEquals(3, createPITResponse.getTotalShards());
-                    }
-
-                    @Override
-                    public void onFailure(Exception e) {
-                        throw new AssertionError(e);
-                    }
-                }, latch);
-
-                StepListener<SearchResponse> createListener = new StepListener<>();
-                controller.executeCreatePit(request, task, createListener, updatelistener);
-                createListener.onResponse(searchResponse);
-                latch.await();
-                assertEquals(3, updateNodesInvoked.size());
-                assertEquals(0, deleteNodesInvoked.size());
-            }
-        }
-    }
-
-    /**
-     * If create phase results in failure, update pit phase should not proceed and propagate the exception
-     */
-    public void testUpdatePitAfterCreatePitFailure() throws InterruptedException {
-        List<DiscoveryNode> updateNodesInvoked = new CopyOnWriteArrayList<>();
-        List<DiscoveryNode> deleteNodesInvoked = new CopyOnWriteArrayList<>();
-        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
-        try (
-            MockTransportService cluster1Transport = startTransport("cluster_1_node", knownNodes, Version.CURRENT);
-            MockTransportService cluster2Transport = startTransport("cluster_2_node", knownNodes, Version.CURRENT)
-        ) {
-            knownNodes.add(cluster1Transport.getLocalDiscoNode());
-            knownNodes.add(cluster2Transport.getLocalDiscoNode());
-            Collections.shuffle(knownNodes, random());
-
-            try (
-                MockTransportService transportService = MockTransportService.createNewService(
-                    Settings.EMPTY,
-                    Version.CURRENT,
-                    threadPool,
-                    NoopTracer.INSTANCE
-                )
-            ) {
-                transportService.start();
-                transportService.acceptIncomingRequests();
-                SearchTransportService searchTransportService = new SearchTransportService(transportService, null) {
-                    @Override
-                    public void updatePitContext(
-                        Transport.Connection connection,
-                        UpdatePitContextRequest request,
-                        ActionListener<UpdatePitContextResponse> listener
-                    ) {
-                        updateNodesInvoked.add(connection.getNode());
-                        Thread t = new Thread(() -> listener.onResponse(new UpdatePitContextResponse("pitid", 500000, 500000)));
-                        t.start();
-                    }
-
-                    @Override
-                    public Transport.Connection getConnection(String clusterAlias, DiscoveryNode node) {
-                        return new SearchAsyncActionTests.MockConnection(node);
-                    }
-
-                    @Override
-                    public void sendFreePITContexts(
-                        Transport.Connection connection,
-                        List<PitSearchContextIdForNode> contextIds,
-                        ActionListener<DeletePitResponse> listener
-                    ) {
-                        deleteNodesInvoked.add(connection.getNode());
-                        Thread t = new Thread(() -> listener.onResponse(new DeletePitResponse(new ArrayList<>())));
-                        t.start();
-                    }
-                };
-
-                CountDownLatch latch = new CountDownLatch(1);
-
-                CreatePitRequest request = new CreatePitRequest(TimeValue.timeValueDays(1), true);
-                request.setIndices(new String[] { "index" });
-                PitService pitService = new PitService(clusterServiceMock, searchTransportService, transportService, client);
-                CreatePitController controller = new CreatePitController(
-                    searchTransportService,
-                    clusterServiceMock,
-                    transportSearchAction,
-                    namedWriteableRegistry,
-                    pitService
-                );
-
-                ActionListener<CreatePitResponse> updatelistener = new LatchedActionListener<>(new ActionListener<CreatePitResponse>() {
-                    @Override
-                    public void onResponse(CreatePitResponse createPITResponse) {
-                        throw new AssertionError("on response is called");
-                    }
-
-                    @Override
-                    public void onFailure(Exception e) {
-                        assertTrue(e.getCause().getMessage().contains("Exception occurred in phase 1"));
-                    }
-                }, latch);
-
-                StepListener<SearchResponse> createListener = new StepListener<>();
-
-                controller.executeCreatePit(request, task, createListener, updatelistener);
-                createListener.onFailure(new Exception("Exception occurred in phase 1"));
-                latch.await();
-                assertEquals(0, updateNodesInvoked.size());
-                /*
-                  cleanup is not called on create pit phase one failure
-                 */
-                assertEquals(0, deleteNodesInvoked.size());
-            }
-        }
-    }
-
-    /**
-     * Testing that any update pit failures fails the request
-     */
-    public void testUpdatePitFailureForNodeDrop() throws InterruptedException {
-        List<DiscoveryNode> updateNodesInvoked = new CopyOnWriteArrayList<>();
-        List<DiscoveryNode> deleteNodesInvoked = new CopyOnWriteArrayList<>();
-        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
-        try (
-            MockTransportService cluster1Transport = startTransport("cluster_1_node", knownNodes, Version.CURRENT);
-            MockTransportService cluster2Transport = startTransport("cluster_2_node", knownNodes, Version.CURRENT)
-        ) {
-            knownNodes.add(cluster1Transport.getLocalDiscoNode());
-            knownNodes.add(cluster2Transport.getLocalDiscoNode());
-            Collections.shuffle(knownNodes, random());
-
-            try (
-                MockTransportService transportService = MockTransportService.createNewService(
-                    Settings.EMPTY,
-                    Version.CURRENT,
-                    threadPool,
-                    NoopTracer.INSTANCE
-                )
-            ) {
-                transportService.start();
-                transportService.acceptIncomingRequests();
-
-                SearchTransportService searchTransportService = new SearchTransportService(transportService, null) {
-                    @Override
-                    public void updatePitContext(
-                        Transport.Connection connection,
-                        UpdatePitContextRequest request,
-                        ActionListener<UpdatePitContextResponse> listener
-                    ) {
-
-                        updateNodesInvoked.add(connection.getNode());
-                        if (connection.getNode().getId() == "node_3") {
-                            Thread t = new Thread(() -> listener.onFailure(new Exception("node 3 down")));
-                            t.start();
-                        } else {
-                            Thread t = new Thread(() -> listener.onResponse(new UpdatePitContextResponse("pitid", 500000, 500000)));
-                            t.start();
-                        }
-                    }
-
-                    @Override
-                    public void sendFreePITContexts(
-                        Transport.Connection connection,
-                        List<PitSearchContextIdForNode> contextIds,
-                        ActionListener<DeletePitResponse> listener
-                    ) {
-                        deleteNodesInvoked.add(connection.getNode());
-                        Thread t = new Thread(() -> listener.onResponse(new DeletePitResponse(new ArrayList<>())));
-                        t.start();
-                    }
-
-                    @Override
-                    public Transport.Connection getConnection(String clusterAlias, DiscoveryNode node) {
-                        return new SearchAsyncActionTests.MockConnection(node);
-                    }
-                };
-
-                CreatePitRequest request = new CreatePitRequest(TimeValue.timeValueDays(1), true);
-                request.setIndices(new String[] { "index" });
-                PitService pitService = new PitService(clusterServiceMock, searchTransportService, transportService, client);
-                CreatePitController controller = new CreatePitController(
-                    searchTransportService,
-                    clusterServiceMock,
-                    transportSearchAction,
-                    namedWriteableRegistry,
-                    pitService
-                );
-
-                CountDownLatch latch = new CountDownLatch(1);
-
-                ActionListener<CreatePitResponse> updatelistener = new LatchedActionListener<>(new ActionListener<CreatePitResponse>() {
-                    @Override
-                    public void onResponse(CreatePitResponse createPITResponse) {
-                        throw new AssertionError("response is called");
-                    }
-
-                    @Override
-                    public void onFailure(Exception e) {
-                        assertTrue(e.getMessage().contains("node 3 down"));
-                    }
-                }, latch);
-
-                StepListener<SearchResponse> createListener = new StepListener<>();
-                controller.executeCreatePit(request, task, createListener, updatelistener);
-                createListener.onResponse(searchResponse);
-                latch.await();
-                assertEquals(3, updateNodesInvoked.size());
-                /*
                   check if cleanup is called for all nodes in case of update pit failure
-                 */
-                assertEquals(3, deleteNodesInvoked.size());
-            }
-        }
-    }
-
-    public void testUpdatePitFailureWhereAllNodesDown() throws InterruptedException {
-        List<DiscoveryNode> updateNodesInvoked = new CopyOnWriteArrayList<>();
-        List<DiscoveryNode> deleteNodesInvoked = new CopyOnWriteArrayList<>();
+ * this file be licensed under the Apache-2.0 license or a
+        ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
+            "transport",
+import org.opensearch.search.internal.InternalSearchResponse;
+import org.opensearch.cluster.node.DiscoveryNode;
+            null,
         List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
-        try (
-            MockTransportService cluster1Transport = startTransport("cluster_1_node", knownNodes, Version.CURRENT);
-            MockTransportService cluster2Transport = startTransport("cluster_2_node", knownNodes, Version.CURRENT)
-        ) {
-            knownNodes.add(cluster1Transport.getLocalDiscoNode());
-            knownNodes.add(cluster2Transport.getLocalDiscoNode());
-            Collections.shuffle(knownNodes, random());
-
-            try (
-                MockTransportService transportService = MockTransportService.createNewService(
-                    Settings.EMPTY,
-                    Version.CURRENT,
-                    threadPool,
-                    NoopTracer.INSTANCE
-                )
-            ) {
-                transportService.start();
-                transportService.acceptIncomingRequests();
-                SearchTransportService searchTransportService = new SearchTransportService(transportService, null) {
-                    @Override
-                    public void updatePitContext(
-                        Transport.Connection connection,
-                        UpdatePitContextRequest request,
-                        ActionListener<UpdatePitContextResponse> listener
-                    ) {
-                        updateNodesInvoked.add(connection.getNode());
-                        Thread t = new Thread(() -> listener.onFailure(new Exception("node down")));
-                        t.start();
-                    }
-
-                    @Override
-                    public void sendFreePITContexts(
-                        Transport.Connection connection,
-                        List<PitSearchContextIdForNode> contextIds,
+        List<DiscoveryNode> deleteNodesInvoked = new CopyOnWriteArrayList<>();
                         ActionListener<DeletePitResponse> listener
-                    ) {
-                        deleteNodesInvoked.add(connection.getNode());
-                        Thread t = new Thread(() -> listener.onResponse(new DeletePitResponse(new ArrayList<>())));
-                        t.start();
-                    }
-
-                    @Override
-                    public Transport.Connection getConnection(String clusterAlias, DiscoveryNode node) {
-                        return new SearchAsyncActionTests.MockConnection(node);
-                    }
-                };
-                CreatePitRequest request = new CreatePitRequest(TimeValue.timeValueDays(1), true);
-                request.setIndices(new String[] { "index" });
-                PitService pitService = new PitService(clusterServiceMock, searchTransportService, transportService, client);
-                CreatePitController controller = new CreatePitController(
-                    searchTransportService,
-                    clusterServiceMock,
-                    transportSearchAction,
-                    namedWriteableRegistry,
-                    pitService
-                );
-
-                CountDownLatch latch = new CountDownLatch(1);
-
-                ActionListener<CreatePitResponse> updatelistener = new LatchedActionListener<>(new ActionListener<CreatePitResponse>() {
-                    @Override
-                    public void onResponse(CreatePitResponse createPITResponse) {
-                        throw new AssertionError("response is called");
-                    }
-
-                    @Override
-                    public void onFailure(Exception e) {
-                        assertTrue(e.getMessage().contains("node down"));
-                    }
-                }, latch);
-
-                StepListener<SearchResponse> createListener = new StepListener<>();
-                controller.executeCreatePit(request, task, createListener, updatelistener);
-                createListener.onResponse(searchResponse);
-                latch.await();
-                assertEquals(3, updateNodesInvoked.size());
-                /*
-                  check if cleanup is called for all nodes in case of update pit failure
-                 */
-                assertEquals(3, deleteNodesInvoked.size());
-            }
-        }
+                new NamedWriteableRegistry.Entry(QueryBuilder.class, IdsQueryBuilder.NAME, IdsQueryBuilder::new)
+            SearchResponse.Clusters.EMPTY,
+        namedWriteableRegistry = new NamedWriteableRegistry(
     }
 }
+        when(state.getNodes()).thenReturn(nodes);
+                CreatePitController controller = new CreatePitController(
+                    @Override
+                SearchTransportService searchTransportService = new SearchTransportService(transportService, null) {
+                    ) {
+                        updateNodesInvoked.add(connection.getNode());
+package org.opensearch.action.search;
+    DiscoveryNode node3 = null;
+                        Thread t = new Thread(() -> listener.onResponse(new DeletePitResponse(new ArrayList<>())));
+                transportService.acceptIncomingRequests();
+                        UpdatePitContextRequest request,
+    }
+                        t.start();
+import java.util.concurrent.TimeUnit;
+    }
+import org.opensearch.transport.RemoteClusterConnectionTests;
+                        }
+                  cleanup is not called on create pit phase one failure
+                    @Override
+                        Thread t = new Thread(() -> listener.onFailure(new Exception("node down")));
+    /**
+            MockTransportService cluster2Transport = startTransport("cluster_2_node", knownNodes, Version.CURRENT)
+                    clusterServiceMock,
+                    ) {
+                createListener.onFailure(new Exception("Exception occurred in phase 1"));
+    private final ThreadPool threadPool = new TestThreadPool(getClass().getName());
+                    }
+    ) {
+                StepListener<SearchResponse> createListener = new StepListener<>();
+                    }
+                assertEquals(0, updateNodesInvoked.size());
+        try (
+                SearchTransportService searchTransportService = new SearchTransportService(transportService, null) {
+        List<DiscoveryNode> updateNodesInvoked = new CopyOnWriteArrayList<>();
+        pitId = getPitId();
+            MockTransportService cluster2Transport = startTransport("cluster_2_node", knownNodes, Version.CURRENT)
+                    ) {
+                    @Override
+    public void testUpdatePitFailureForNodeDrop() throws InterruptedException {
+                    }
+                    namedWriteableRegistry,
+                        assertTrue(e.getMessage().contains("node 3 down"));
+                    }
+                transportService.start();
+                    Settings.EMPTY,
+        };
+                createListener.onResponse(searchResponse);
+    SearchResponse searchResponse = null;
+                };
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+                }, latch);
+import org.opensearch.threadpool.ThreadPool;
+            ) {
+                transportService.start();
+                PitService pitService = new PitService(clusterServiceMock, searchTransportService, transportService, client);
+import org.opensearch.search.SearchHits;
+        List<DiscoveryNode> updateNodesInvoked = new CopyOnWriteArrayList<>();
+                    }
+        }
+                    searchTransportService,
+        try (
+                        if (connection.getNode().getId() == "node_3") {
+                    clusterServiceMock,
+                    }
+                    @Override
+                        } else {
+        nodes = DiscoveryNodes.builder().add(node1).add(node2).add(node3).build();
+                PitService pitService = new PitService(clusterServiceMock, searchTransportService, transportService, client);
+            public void onResponse(CreatePitResponse createPITResponse) {
+                        Thread t = new Thread(() -> listener.onResponse(new UpdatePitContextResponse("pitid", 500000, 500000)));
+                    @Override
+import java.util.Collections;
+import org.opensearch.index.query.QueryBuilder;
+                    namedWriteableRegistry,
+                    @Override
+            ) {
+                latch.await();
+                StepListener<SearchResponse> createListener = new StepListener<>();
+                    public void onResponse(CreatePitResponse createPITResponse) {
+                transportService.acceptIncomingRequests();
+            ShardSearchFailure.EMPTY_ARRAY,
+                StepListener<SearchResponse> createListener = new StepListener<>();
+    private MockTransportService startTransport(
+                        t.start();
+import org.opensearch.common.unit.TimeValue;
+                            Thread t = new Thread(() -> listener.onResponse(new UpdatePitContextResponse("pitid", 500000, 500000)));
+        ) {
+            knownNodes.add(cluster2Transport.getLocalDiscoNode());
+            new TaskId(randomLong() + ":" + randomLong()),
+import java.util.concurrent.CopyOnWriteArrayList;
+                        deleteNodesInvoked.add(connection.getNode());
+    /**
+                )
+    NodeClient client = new NodeClient(settings, threadPool);
+        );
+            InternalAggregations.EMPTY,
+ */
+                            t.start();
+                assertEquals(3, updateNodesInvoked.size());
+                    Version.CURRENT,
+                PitService pitService = new PitService(clusterServiceMock, searchTransportService, transportService, client);
+            knownNodes.add(cluster1Transport.getLocalDiscoNode());
+        when(state.metadata()).thenReturn(Metadata.EMPTY_METADATA);
+                        t.start();
+                    ) {
+                        List<PitSearchContextIdForNode> contextIds,
+            randomLong(),
+        when(state.getMetadata()).thenReturn(Metadata.EMPTY_METADATA);
+                        return new SearchAsyncActionTests.MockConnection(node);
+        node2 = new DiscoveryNode("node_2", buildNewFakeTransportAddress(), Version.CURRENT);
+                 */
+                        Transport.Connection connection,
+                MockTransportService transportService = MockTransportService.createNewService(
+                assertEquals(3, deleteNodesInvoked.size());
+                        ActionListener<UpdatePitContextResponse> listener
+            }
+import org.opensearch.test.transport.MockTransportService;
+        List<DiscoveryNode> updateNodesInvoked = new CopyOnWriteArrayList<>();
+import org.opensearch.index.query.TermQueryBuilder;
+        }
+                        Transport.Connection connection,
+                        UpdatePitContextRequest request,
+                latch.await();
+                };
+    @Override
+                );
+    NamedWriteableRegistry namedWriteableRegistry = null;
+            3,
+public class CreatePitControllerTests extends OpenSearchTestCase {
+        List<DiscoveryNode> updateNodesInvoked = new CopyOnWriteArrayList<>();
+     * Test if transport call for update pit is made to all nodes present as part of PIT ID returned from phase one of create pit
+        final List<DiscoveryNode> knownNodes,
+                        t.start();
+                ActionListener<CreatePitResponse> updatelistener = new LatchedActionListener<>(new ActionListener<CreatePitResponse>() {
+                    @Override
+            }
+            Collections.emptyMap()
+                CreatePitController controller = new CreatePitController(
+            @Override
+import static org.mockito.Mockito.when;
+                    pitService
+                );
+                    @Override
+    @Before
+                new NamedWriteableRegistry.Entry(QueryBuilder.class, TermQueryBuilder.NAME, TermQueryBuilder::new),
+import org.opensearch.core.action.ActionListener;
+                    ) {
+                    @Override
+                    @Override
+import org.opensearch.index.query.MatchAllQueryBuilder;
+                /*
+import org.opensearch.core.tasks.TaskId;
+                MockTransportService transportService = MockTransportService.createNewService(
+                /*
+ * compatible open source license.
+                );
+        List<DiscoveryNode> deleteNodesInvoked = new CopyOnWriteArrayList<>();
+import org.opensearch.transport.client.node.NodeClient;
+                request.setIndices(new String[] { "index" });
+ * integration tests don't cover it.
+                            Thread t = new Thread(() -> listener.onFailure(new Exception("node 3 down")));
+        ClusterState state = mock(ClusterState.class);
+                    public void sendFreePITContexts(
+                    public void sendFreePITContexts(
+                        ActionListener<UpdatePitContextResponse> listener
+                        Transport.Connection connection,
+                        deleteNodesInvoked.add(connection.getNode());
+                    public void sendFreePITContexts(
+            }
+                    public Transport.Connection getConnection(String clusterAlias, DiscoveryNode node) {
+                }, latch);
+                        assertTrue(e.getMessage().contains("node down"));
+                ActionListener<CreatePitResponse> updatelistener = new LatchedActionListener<>(new ActionListener<CreatePitResponse>() {
+        super.tearDown();
+            }
+                    public void onFailure(Exception e) {
+                    NoopTracer.INSTANCE
+        node3 = new DiscoveryNode("node_3", buildNewFakeTransportAddress(), Version.CURRENT);
+                    NoopTracer.INSTANCE
+                    }
+            Collections.shuffle(knownNodes, random());
+                 */
+                    Version.CURRENT,
+            }
+                controller.executeCreatePit(request, task, createListener, updatelistener);
+                    }
+                CountDownLatch latch = new CountDownLatch(1);
+                }, latch);
+                        ActionListener<DeletePitResponse> listener
+            100,
+            knownNodes.add(cluster1Transport.getLocalDiscoNode());
+                assertEquals(3, updateNodesInvoked.size());
+    public void testUpdatePitAfterCreatePitSuccess() throws InterruptedException {
+                    public void onFailure(Exception e) {
+                    threadPool,
+            MockTransportService cluster1Transport = startTransport("cluster_1_node", knownNodes, Version.CURRENT);
+            "description",
+                        ActionListener<DeletePitResponse> listener
+                        ActionListener<UpdatePitContextResponse> listener
+            knownNodes.add(cluster2Transport.getLocalDiscoNode());
+                CountDownLatch latch = new CountDownLatch(1);
+                    }
+                    @Override
+                    }
+                )
+            false,
+                        assertTrue(e.getCause().getMessage().contains("Exception occurred in phase 1"));
+        InternalSearchResponse response = new InternalSearchResponse(
+            Collections.shuffle(knownNodes, random());
+    public void testUpdatePitAfterCreatePitFailure() throws InterruptedException {
+    DiscoveryNode node2 = null;
+    ActionListener<CreatePitResponse> createPitListener = null;
+import org.opensearch.tasks.Task;
+            MockTransportService cluster1Transport = startTransport("cluster_1_node", knownNodes, Version.CURRENT);
+                        Transport.Connection connection,
+        }
+                        t.start();
+                request.setIndices(new String[] { "index" });
+            MockTransportService cluster1Transport = startTransport("cluster_1_node", knownNodes, Version.CURRENT);
+            SearchAction.NAME,
+                    ) {
+            MockTransportService cluster2Transport = startTransport("cluster_2_node", knownNodes, Version.CURRENT)
+                        return new SearchAsyncActionTests.MockConnection(node);
+                createListener.onResponse(searchResponse);
+                     * Test if cleanup request is called
+                    public void onResponse(CreatePitResponse createPITResponse) {
+/**
+                    public void sendFreePITContexts(
+ * The OpenSearch Contributors require contributions made to
+        searchResponse = new SearchResponse(
+import org.opensearch.action.LatchedActionListener;
+import org.apache.lucene.search.TotalHits;
+                    }
+                };
+    }
+                    }
+                    transportSearchAction,
+                transportService.start();
+                CreatePitController controller = new CreatePitController(
+                    threadPool,
+                        throw new AssertionError("response is called");
+                latch.await();
+                    searchTransportService,
+                    ) {
+                    }
+                }, latch);
+                    clusterServiceMock,
+        node1 = new DiscoveryNode("node_1", buildNewFakeTransportAddress(), Version.CURRENT);
+     */
+            )
+            ) {
+            null,
+                    }
+                        t.start();
+                    @Override
+    private MockTransportService startTransport(String id, List<DiscoveryNode> knownNodes, Version version) {
+    /**
+                    pitService
+                CreatePitRequest request = new CreatePitRequest(TimeValue.timeValueDays(1), true);
+    Task task = null;
+                )
+import org.opensearch.threadpool.TestThreadPool;
+                        t.start();
+                    ) {
+    }
+ * SPDX-License-Identifier: Apache-2.0
+                    @Override
+import org.junit.Before;
+    TransportSearchAction transportSearchAction = null;
+        createPitListener = new ActionListener<CreatePitResponse>() {
+                    }
+            try (
+                    clusterServiceMock,
+                assertEquals(0, deleteNodesInvoked.size());
+                    transportSearchAction,
+            0,
+                        List<PitSearchContextIdForNode> contextIds,
+                    public Transport.Connection getConnection(String clusterAlias, DiscoveryNode node) {
+                        return new SearchAsyncActionTests.MockConnection(node);
+                new NamedWriteableRegistry.Entry(QueryBuilder.class, MatchAllQueryBuilder.NAME, MatchAllQueryBuilder::new),
+                        Transport.Connection connection,
+                request.setIndices(new String[] { "index" });
+                    pitService
+/*
+                        assertEquals(3, createPITResponse.getTotalShards());
+import static org.mockito.Mockito.mock;
+                        Transport.Connection connection,
+                MockTransportService transportService = MockTransportService.createNewService(
+import org.opensearch.action.StepListener;
+            @Override
+        return startTransport(id, knownNodes, version, Settings.EMPTY);
+import java.util.Arrays;
+            1
+            3,
+import org.opensearch.cluster.metadata.Metadata;
+                    public void updatePitContext(
+                    public void onFailure(Exception e) {
+import org.opensearch.cluster.node.DiscoveryNodes;
+                    transportSearchAction,
+            public void onFailure(Exception e) {
+                    NoopTracer.INSTANCE
+    }
+                        ActionListener<DeletePitResponse> listener
+        when(clusterServiceMock.state()).thenReturn(state);
+                );
+import org.opensearch.test.OpenSearchTestCase;
+                    /**
+        ) {
+                    threadPool,
+                    NoopTracer.INSTANCE
+import org.opensearch.search.SearchHit;
+            try (
+                /*
+            knownNodes.add(cluster2Transport.getLocalDiscoNode());
+                SearchTransportService searchTransportService = new SearchTransportService(transportService, null) {
+    DiscoveryNodes nodes = null;
+    public void setupData() {
+                createListener.onResponse(searchResponse);
+                controller.executeCreatePit(request, task, createListener, updatelistener);
+ * Functional tests for various methods in create pit controller. Covers update pit phase specifically since
+import java.util.concurrent.CountDownLatch;
+            MockTransportService cluster1Transport = startTransport("cluster_1_node", knownNodes, Version.CURRENT);
+        ) {
+                    public Transport.Connection getConnection(String clusterAlias, DiscoveryNode node) {
+    }
+                )
+        return RemoteClusterConnectionTests.startTransport(id, knownNodes, version, threadPool, settings);
+                        deleteNodesInvoked.add(connection.getNode());
+                    }
+                    public void updatePitContext(
+        final String id,
+import org.opensearch.cluster.service.ClusterService;
+                        UpdatePitContextRequest request,
+                    searchTransportService,
+                    namedWriteableRegistry,
+     */
+                transportService.start();
+ *
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+                    Settings.EMPTY,
+                        updateNodesInvoked.add(connection.getNode());
+                    public Transport.Connection getConnection(String clusterAlias, DiscoveryNode node) {
+                transportService.acceptIncomingRequests();
+                CreatePitRequest request = new CreatePitRequest(TimeValue.timeValueDays(1), true);
+        final Settings keepAliveSettings = Settings.builder().put(CreatePitController.PIT_INIT_KEEP_ALIVE.getKey(), 30000).build();
+                    searchTransportService,
+            try (
+                    namedWriteableRegistry,
+    String pitId = null;
+            ) {
+        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
+    public void tearDown() throws Exception {
+                    @Override
+                controller.executeCreatePit(request, task, createListener, updatelistener);
+        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
+     * If create phase results in failure, update pit phase should not proceed and propagate the exception
+                            t.start();
+        when(clusterServiceMock.getSettings()).thenReturn(keepAliveSettings);
+                    @Override
+                    Settings.EMPTY,
+        try (
+                assertEquals(3, deleteNodesInvoked.size());
+            }
+                        Thread t = new Thread(() -> listener.onResponse(new DeletePitResponse(new ArrayList<>())));
+import org.opensearch.index.query.IdsQueryBuilder;
+                controller.executeCreatePit(request, task, createListener, updatelistener);
+        List<DiscoveryNode> knownNodes = new CopyOnWriteArrayList<>();
+                        Thread t = new Thread(() -> listener.onResponse(new DeletePitResponse(new ArrayList<>())));
+        );
+import org.opensearch.search.aggregations.InternalAggregations;
+                    public void onResponse(CreatePitResponse createPITResponse) {
+    ClusterService clusterServiceMock = null;
+                        ActionListener<UpdatePitContextResponse> listener
+                    transportSearchAction,
+                        updateNodesInvoked.add(connection.getNode());
+                    @Override
+                CountDownLatch latch = new CountDownLatch(1);
+        ) {
+    public void testUpdatePitFailureWhereAllNodesDown() throws InterruptedException {
+    Settings settings = Settings.builder().put("node.name", CreatePitControllerTests.class.getSimpleName()).build();
+                assertEquals(3, createPITResponse.getTotalShards());
+                    }
+import org.opensearch.Version;
+                ActionListener<CreatePitResponse> updatelistener = new LatchedActionListener<>(new ActionListener<CreatePitResponse>() {
+        task = new Task(
+                    public void updatePitContext(
+import org.opensearch.cluster.ClusterState;
+     * Testing that any update pit failures fails the request
+        List<DiscoveryNode> deleteNodesInvoked = new CopyOnWriteArrayList<>();
+    DiscoveryNode node1 = null;
+            try (
+        );
+            response,
+                  check if cleanup is called for all nodes in case of update pit failure
+                        return new SearchAsyncActionTests.MockConnection(node);
+                CreatePitRequest request = new CreatePitRequest(TimeValue.timeValueDays(1), true);
+import org.opensearch.transport.Transport;
+        }
+                    @Override
+            new SearchHits(new SearchHit[0], new TotalHits(0, TotalHits.Relation.EQUAL_TO), Float.NaN),
+            null,
+                SearchTransportService searchTransportService = new SearchTransportService(transportService, null) {
+        clusterServiceMock = mock(ClusterService.class);
+                    threadPool,
+import static org.opensearch.action.search.PitTestsUtil.getPitId;
+            MockTransportService cluster2Transport = startTransport("cluster_2_node", knownNodes, Version.CURRENT)
+                    public void onFailure(Exception e) {
+                assertEquals(3, updateNodesInvoked.size());
+            Collections.shuffle(knownNodes, random());
+                    }
+        final Version version,
+                assertEquals(0, deleteNodesInvoked.size());
+                        UpdatePitContextRequest request,
+                    }
+            pitId
+                        List<PitSearchContextIdForNode> contextIds,
+                latch.await();
+                        Thread t = new Thread(() -> listener.onResponse(new UpdatePitContextResponse("pitid", 500000, 500000)));
+                        throw new AssertionError(e);
+                    @Override
+    }
+                    @Override
+            Collections.shuffle(knownNodes, random());
+import java.util.ArrayList;
+                MockTransportService transportService = MockTransportService.createNewService(
+                        List<PitSearchContextIdForNode> contextIds,
+                        deleteNodesInvoked.add(connection.getNode());
+            Arrays.asList(
+                        Thread t = new Thread(() -> listener.onResponse(new DeletePitResponse(new ArrayList<>())));
+        List<DiscoveryNode> deleteNodesInvoked = new CopyOnWriteArrayList<>();
+     */
+            knownNodes.add(cluster2Transport.getLocalDiscoNode());
+                StepListener<SearchResponse> createListener = new StepListener<>();
+                    }
+                    @Override
+                CountDownLatch latch = new CountDownLatch(1);
+                    public void updatePitContext(
+import org.opensearch.common.settings.Settings;
+        );
+            null,
+        try (
+                        throw new AssertionError("on response is called");
+                CreatePitController controller = new CreatePitController(
+                CreatePitRequest request = new CreatePitRequest(TimeValue.timeValueDays(1), true);
+                PitService pitService = new PitService(clusterServiceMock, searchTransportService, transportService, client);
+                        Transport.Connection connection,
+                    Settings.EMPTY,
+                        throw new AssertionError("response is called");
+                    Version.CURRENT,
+                request.setIndices(new String[] { "index" });
+        transportSearchAction = mock(TransportSearchAction.class);
+                        updateNodesInvoked.add(connection.getNode());
+                    Version.CURRENT,
+                ActionListener<CreatePitResponse> updatelistener = new LatchedActionListener<>(new ActionListener<CreatePitResponse>() {
+ */
+                transportService.acceptIncomingRequests();
+            knownNodes.add(cluster1Transport.getLocalDiscoNode());

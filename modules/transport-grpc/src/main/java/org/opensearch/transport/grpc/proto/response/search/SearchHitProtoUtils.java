@@ -1,405 +1,357 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-package org.opensearch.transport.grpc.proto.response.search;
-
-import com.google.protobuf.ByteString;
-import com.google.protobuf.UnsafeByteOperations;
-import org.apache.lucene.search.Explanation;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.document.DocumentField;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.protobufs.InnerHitsResult;
-import org.opensearch.protobufs.NestedIdentity;
-import org.opensearch.protobufs.ObjectMap;
-import org.opensearch.search.SearchHit;
-import org.opensearch.search.SearchHits;
-import org.opensearch.search.fetch.subphase.highlight.HighlightField;
-import org.opensearch.transport.RemoteClusterAware;
-import org.opensearch.transport.grpc.proto.response.common.ObjectMapProtoUtils;
-
-import java.io.IOException;
-import java.util.Map;
-
-/**
- * Utility class for converting SearchHit objects to Protocol Buffers.
- * This class handles the conversion of search hit data to their
- * Protocol Buffer representation for gRPC communication.
- */
-public class SearchHitProtoUtils {
-
-    private SearchHitProtoUtils() {
-        // Utility class, no instances
-    }
-
-    /**
-     * Converts a SearchHit to its Protocol Buffer representation.
-     * This method is equivalent to {@link SearchHit#toXContent(XContentBuilder, ToXContent.Params)}
-     *
-     * @param hit The SearchHit to convert
-     * @return A Protocol Buffer Hit representation
-     * @throws IOException if there's an error during conversion
-     */
-    protected static org.opensearch.protobufs.HitsMetadataHitsInner toProto(SearchHit hit) throws IOException {
-        org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder = org.opensearch.protobufs.HitsMetadataHitsInner.newBuilder();
-        toProto(hit, hitBuilder);
-        return hitBuilder.build();
-    }
-
-    /**
-     * Converts a SearchHit to its Protocol Buffer representation.
-     * This method is equivalent to {@link SearchHit#toInnerXContent(XContentBuilder, ToXContent.Params)}
-     *
-     * @param hit The SearchHit to convert
-     * @param hitBuilder The builder to populate with the SearchHit data
-     * @throws IOException if there's an error during conversion
-     */
-    protected static void toProto(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) throws IOException {
-        // Process shard information
-        processShardInfo(hit, hitBuilder);
-
-        // Process basic hit information
-        processBasicInfo(hit, hitBuilder);
-
-        // Process score
-        processScore(hit, hitBuilder);
-
-        // Process metadata fields
-        processMetadataFields(hit, hitBuilder);
-
-        // Process source
-        processSource(hit, hitBuilder);
-
-        // Process document fields
-        processDocumentFields(hit, hitBuilder);
-
-        // Process highlight fields
-        processHighlightFields(hit, hitBuilder);
-
-        // Process sort values
-        SearchSortValuesProtoUtils.toProto(hitBuilder, hit.getSortValues());
-
-        // Process matched queries
-        processMatchedQueries(hit, hitBuilder);
-
-        // Process explanation
-        processExplanation(hit, hitBuilder);
-
-        // Process inner hits
-        processInnerHits(hit, hitBuilder);
-    }
-
-    /**
-     * Helper method to process shard information.
-     *
      * @param hit The SearchHit to process
+    /**
      * @param hitBuilder The builder to populate with the shard information
-     */
-    private static void processShardInfo(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
-        // For inner_hit hits shard is null and that is ok, because the parent search hit has all this information.
-        // Even if this was included in the inner_hit hits this would be the same, so better leave it out.
-        if (hit.getExplanation() != null && hit.getShard() != null) {
-            hitBuilder.setXShard(String.valueOf(hit.getShard().getShardId().id()));
-            hitBuilder.setXNode(hit.getShard().getNodeIdText().string());
-        }
-    }
-
-    /**
-     * Helper method to process basic hit information.
      *
-     * @param hit The SearchHit to process
-     * @param hitBuilder The builder to populate with the basic information
-     */
-    private static void processBasicInfo(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
-        // Set index if available
-        if (hit.getIndex() != null) {
-            hitBuilder.setXIndex(RemoteClusterAware.buildRemoteIndexName(hit.getClusterAlias(), hit.getIndex()));
-        }
-
-        // Set ID if available
-        if (hit.getId() != null) {
-            hitBuilder.setXId(hit.getId());
-        }
-
-        // Set nested identity if available
-        if (hit.getNestedIdentity() != null) {
-            hitBuilder.setXNested(NestedIdentityProtoUtils.toProto(hit.getNestedIdentity()));
-        }
-
-        // Set version if available
-        if (hit.getVersion() != -1) {
-            hitBuilder.setXVersion(hit.getVersion());
-        }
-
-        // Set sequence number and primary term if available
-        if (hit.getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO) {
-            hitBuilder.setXSeqNo(hit.getSeqNo());
-            hitBuilder.setXPrimaryTerm(hit.getPrimaryTerm());
-        }
-    }
-
-    /**
-     * Helper method to process score information.
-     *
-     * @param hit The SearchHit to process
-     * @param hitBuilder The builder to populate with the score information
-     */
-    private static void processScore(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
-        if (!Float.isNaN(hit.getScore())) {
-            org.opensearch.protobufs.HitXScore.Builder scoreBuilder = org.opensearch.protobufs.HitXScore.newBuilder();
-            scoreBuilder.setDouble(hit.getScore());
-            hitBuilder.setXScore(scoreBuilder.build());
-        } else {
-            // Handle null/NaN score case
-            org.opensearch.protobufs.HitXScore.Builder scoreBuilder = org.opensearch.protobufs.HitXScore.newBuilder();
-            scoreBuilder.setNullValue(org.opensearch.protobufs.NullValue.NULL_VALUE_NULL);
-            hitBuilder.setXScore(scoreBuilder.build());
-        }
-    }
-
-    /**
-     * Helper method to process metadata fields.
-     *
-     * @param hit The SearchHit to process
-     * @param hitBuilder The builder to populate with the metadata fields
-     */
-    private static void processMetadataFields(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
-        // Only process if there are non-empty metadata fields
-        if (hit.getMetaFields().values().stream().anyMatch(field -> !field.getValues().isEmpty())) {
-            ObjectMap.Builder objectMapBuilder = ObjectMap.newBuilder();
-
-            for (DocumentField field : hit.getMetaFields().values()) {
-                // ignore empty metadata fields
-                if (field.getValues().isEmpty()) {
-                    continue;
-                }
-
-                objectMapBuilder.putFields(field.getName(), ObjectMapProtoUtils.toProto(field.getValues()));
-            }
-
-            hitBuilder.setMetaFields(objectMapBuilder.build());
-        }
-    }
-
-    /**
-     * Helper method to process source information.
-     *
-     * @param hit The SearchHit to process
-     * @param hitBuilder The builder to populate with the source information
-     */
-    private static void processSource(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
-        if (hit.getSourceRef() != null) {
-            BytesReference sourceRef = hit.getSourceRef();
-            BytesRef bytesRef = sourceRef.toBytesRef();
-
-            if (sourceRef instanceof BytesArray) {
-                if (bytesRef.offset == 0 && bytesRef.length == bytesRef.bytes.length) {
-                    hitBuilder.setXSource(UnsafeByteOperations.unsafeWrap(bytesRef.bytes));
-                } else {
-                    hitBuilder.setXSource(UnsafeByteOperations.unsafeWrap(bytesRef.bytes, bytesRef.offset, bytesRef.length));
-                }
-            } else {
-                hitBuilder.setXSource(ByteString.copyFrom(bytesRef.bytes, bytesRef.offset, bytesRef.length));
-            }
-        }
-    }
-
-    /**
-     * Helper method to process document fields.
-     *
-     * @param hit The SearchHit to process
      * @param hitBuilder The builder to populate with the document fields
-     */
-    private static void processDocumentFields(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
-        if (!hit.getDocumentFields().isEmpty() &&
-        // ignore fields all together if they are all empty
             hit.getDocumentFields().values().stream().anyMatch(df -> !df.getValues().isEmpty())) {
-
-            ObjectMap.Builder fieldsStructBuilder = ObjectMap.newBuilder();
-
-            for (DocumentField field : hit.getDocumentFields().values()) {
-                if (!field.getValues().isEmpty()) {
-                    fieldsStructBuilder.putFields(field.getName(), ObjectMapProtoUtils.toProto(field.getValues()));
-                }
-            }
-
-            hitBuilder.setFields(fieldsStructBuilder.build());
-        }
-    }
-
-    /**
-     * Helper method to process highlight fields.
-     *
-     * @param hit The SearchHit to process
-     * @param hitBuilder The builder to populate with the highlight fields
-     */
-    private static void processHighlightFields(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
-        if (hit.getHighlightFields() != null && !hit.getHighlightFields().isEmpty()) {
-            for (HighlightField field : hit.getHighlightFields().values()) {
-                hitBuilder.putHighlight(field.getName(), HighlightFieldProtoUtils.toProto(field.getFragments()));
-            }
-        }
-    }
-
-    /**
-     * Helper method to process matched queries.
-     *
-     * @param hit The SearchHit to process
-     * @param hitBuilder The builder to populate with the matched queries
-     */
-    private static void processMatchedQueries(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
-        if (hit.getMatchedQueries().length > 0) {
-            // TODO pass params in
-            // boolean includeMatchedQueriesScore = params.paramAsBoolean(RestSearchAction.INCLUDE_NAMED_QUERIES_SCORE_PARAM, false);
-            boolean includeMatchedQueriesScore = false;
-
-            org.opensearch.protobufs.HitMatchedQueries.Builder matchedQueriesBuilder = org.opensearch.protobufs.HitMatchedQueries
-                .newBuilder();
-            if (includeMatchedQueriesScore) {
-                // TODO: uncomment when have a way to pass the param to the converter
-                // Map<String, Float> matchedQueriesWithScores = hit.getMatchedQueriesAndScores();
-                // org.opensearch.protobufs.DoubleMap.Builder doubleMapBuilder = org.opensearch.protobufs.DoubleMap.newBuilder();
-                // for (Map.Entry<String, Float> entry : matchedQueriesWithScores.entrySet()) {
-                // doubleMapBuilder.putDoubleMap(entry.getKey(), entry.getValue().doubleValue());
-                // }
-                // matchedQueriesBuilder.setScores(doubleMapBuilder.build());
-            } else {
-                org.opensearch.protobufs.StringArray.Builder namesBuilder = org.opensearch.protobufs.StringArray.newBuilder();
-                for (String matchedFilter : hit.getMatchedQueries()) {
                     namesBuilder.addStringArray(matchedFilter);
-                }
+            // boolean includeMatchedQueriesScore = params.paramAsBoolean(RestSearchAction.INCLUDE_NAMED_QUERIES_SCORE_PARAM, false);
+import org.opensearch.search.fetch.subphase.highlight.HighlightField;
+     * @param hitBuilder The builder to populate with the score information
+        }
                 matchedQueriesBuilder.setNames(namesBuilder.build());
-
-                // Populate deprecated matched_queries field for backward compatibility with old clients
-                for (String matchedFilter : hit.getMatchedQueries()) {
-                    hitBuilder.addMatchedQueries(matchedFilter);
-                }
             }
-
-            hitBuilder.setMatchedQueries2(matchedQueriesBuilder.build());
-        }
-    }
-
-    /**
-     * Helper method to process explanation.
+                hitBuilder.putInnerHits(entry.getKey(), InnerHitsResult.newBuilder().setHits(hitsBuilder.build()).build());
+import org.opensearch.core.common.bytes.BytesReference;
      *
-     * @param hit The SearchHit to process
-     * @param hitBuilder The builder to populate with the explanation
-     * @throws IOException if there's an error during conversion
-     */
-    private static void processExplanation(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder)
-        throws IOException {
-        if (hit.getExplanation() != null) {
-            org.opensearch.protobufs.Explanation.Builder explanationBuilder = org.opensearch.protobufs.Explanation.newBuilder();
-            buildExplanation(hit.getExplanation(), explanationBuilder);
-            hitBuilder.setXExplanation(explanationBuilder.build());
-        }
+    ) throws IOException {
+                // Populate deprecated matched_queries field for backward compatibility with old clients
+     * @return A Protocol Buffer Hit representation
     }
-
+     */
+                SearchHitsProtoUtils.toProto(entry.getValue(), hitsBuilder);
     /**
+        protoExplanationBuilder.setValue(explanation.getValue().floatValue());
+        // Process matched queries
+                protoExplanationBuilder.addDetails(detailBuilder.build());
+import org.opensearch.protobufs.ObjectMap;
+                // matchedQueriesBuilder.setScores(doubleMapBuilder.build());
+         */
+        // Process document fields
+        // Process metadata fields
+    }
+        // ignore fields all together if they are all empty
+     * Helper method to process metadata fields.
+        }
+                toProto(nestedIdentity.getChild(), childBuilder);
+        }
+                for (String matchedFilter : hit.getMatchedQueries()) {
+                // Map<String, Float> matchedQueriesWithScores = hit.getMatchedQueriesAndScores();
+            org.opensearch.protobufs.HitMatchedQueries.Builder matchedQueriesBuilder = org.opensearch.protobufs.HitMatchedQueries
+    /**
+import com.google.protobuf.ByteString;
+import org.opensearch.transport.grpc.proto.response.common.ObjectMapProtoUtils;
+            for (DocumentField field : hit.getMetaFields().values()) {
+     * @param hitBuilder The builder to populate with the SearchHit data
+                    fieldsStructBuilder.putFields(field.getName(), ObjectMapProtoUtils.toProto(field.getValues()));
+            scoreBuilder.setNullValue(org.opensearch.protobufs.NullValue.NULL_VALUE_NULL);
+        processSource(hit, hitBuilder);
+     * @throws IOException if there's an error during conversion
+    /**
+     * @param hit The SearchHit to process
+     * Helper method to process score information.
+            scoreBuilder.setDouble(hit.getScore());
+import org.opensearch.transport.RemoteClusterAware;
+        } else {
+     */
+            for (Map.Entry<String, SearchHits> entry : hit.getInnerHits().entrySet()) {
+         */
+        // Set index if available
+        processBasicInfo(hit, hitBuilder);
+            org.opensearch.protobufs.HitXScore.Builder scoreBuilder = org.opensearch.protobufs.HitXScore.newBuilder();
+     * @param hitBuilder The builder to populate with the explanation
+            NestedIdentity.Builder nestedIdentityBuilder = NestedIdentity.newBuilder();
+        // Process explanation
+        }
+            toProto(nestedIdentity, nestedIdentityBuilder);
+    private static void processExplanation(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder)
+        if (hit.getMetaFields().values().stream().anyMatch(field -> !field.getValues().isEmpty())) {
+    private static void processInnerHits(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder)
+         * @param nestedIdentity The NestedIdentity to convert
+    protected static class NestedIdentityProtoUtils {
+public class SearchHitProtoUtils {
+                buildExplanation(exp, detailBuilder);
+         * @return A Protocol Buffer NestedIdentity representation
+     * @throws IOException if there's an error during conversion
      * Helper method to process inner hits.
      *
-     * @param hit The SearchHit to process
-     * @param hitBuilder The builder to populate with the inner hits
-     * @throws IOException if there's an error during conversion
-     */
-    private static void processInnerHits(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder)
+            for (DocumentField field : hit.getDocumentFields().values()) {
+            }
         throws IOException {
-        if (hit.getInnerHits() != null) {
-            for (Map.Entry<String, SearchHits> entry : hit.getInnerHits().entrySet()) {
-                org.opensearch.protobufs.HitsMetadata.Builder hitsBuilder = org.opensearch.protobufs.HitsMetadata.newBuilder();
-                SearchHitsProtoUtils.toProto(entry.getValue(), hitsBuilder);
-
-                hitBuilder.putInnerHits(entry.getKey(), InnerHitsResult.newBuilder().setHits(hitsBuilder.build()).build());
-            }
         }
-    }
-
-    /**
-     * Recursively builds a Protocol Buffer Explanation from a Lucene Explanation.
-     * This method converts the Lucene explanation structure, including nested details,
-     * into the corresponding Protocol Buffer representation.
-     *
-     * @param explanation The Lucene Explanation to convert
-     * @param protoExplanationBuilder The builder to populate with the explanation data
-     * @throws IOException if there's an error during conversion
-     */
-    private static void buildExplanation(
-        org.apache.lucene.search.Explanation explanation,
-        org.opensearch.protobufs.Explanation.Builder protoExplanationBuilder
-    ) throws IOException {
-        protoExplanationBuilder.setValue(explanation.getValue().floatValue());
-        protoExplanationBuilder.setDescription(explanation.getDescription());
-
-        org.apache.lucene.search.Explanation[] innerExps = explanation.getDetails();
-        if (innerExps != null) {
-            for (Explanation exp : innerExps) {
-                org.opensearch.protobufs.Explanation.Builder detailBuilder = org.opensearch.protobufs.Explanation.newBuilder();
-                buildExplanation(exp, detailBuilder);
-                protoExplanationBuilder.addDetails(detailBuilder.build());
-            }
-        }
-    }
-
-    /**
-     * Utility class for converting NestedIdentity components between OpenSearch and Protocol Buffers formats.
-     * This class handles the transformation of nested document identity information to ensure proper
-     * representation of nested search hits.
-     */
-    protected static class NestedIdentityProtoUtils {
-        /**
-         * Private constructor to prevent instantiation.
-         * This is a utility class with only static methods.
-         */
-        private NestedIdentityProtoUtils() {
-            // Utility class, no instances
-        }
-
-        /**
-         * Converts a SearchHit.NestedIdentity to its Protocol Buffer representation.
-         * Similar to {@link SearchHit.NestedIdentity#toXContent(XContentBuilder, ToXContent.Params)}
-         * This method creates a new builder and returns a built value.
-         *
-         * @param nestedIdentity The NestedIdentity to convert
-         * @return A Protocol Buffer NestedIdentity representation
-         */
-        protected static NestedIdentity toProto(SearchHit.NestedIdentity nestedIdentity) {
-            NestedIdentity.Builder nestedIdentityBuilder = NestedIdentity.newBuilder();
-            toProto(nestedIdentity, nestedIdentityBuilder);
-            return nestedIdentityBuilder.build();
-        }
-
-        /**
-         * Converts a SearchHit.NestedIdentity to its Protocol Buffer representation.
-         * Similar to {@link SearchHit.NestedIdentity#innerToXContent(XContentBuilder, ToXContent.Params)}
-         *
-         * @param nestedIdentity The NestedIdentity to convert
-         * @param nestedIdentityBuilder The builder to populate with the nested identity data
-         */
-        protected static void toProto(SearchHit.NestedIdentity nestedIdentity, NestedIdentity.Builder nestedIdentityBuilder) {
-            // Set field if available
-            if (nestedIdentity.getField() != null) {
-                nestedIdentityBuilder.setField(nestedIdentity.getField().string());
-            }
-
-            // Set offset if available
-            if (nestedIdentity.getOffset() != -1) {
-                nestedIdentityBuilder.setOffset(nestedIdentity.getOffset());
-            }
-
-            // Set child if available
             if (nestedIdentity.getChild() != null) {
-                NestedIdentity.Builder childBuilder = NestedIdentity.newBuilder();
-                toProto(nestedIdentity.getChild(), childBuilder);
+            boolean includeMatchedQueriesScore = false;
+     */
+         * @param nestedIdentityBuilder The builder to populate with the nested identity data
+     * @throws IOException if there's an error during conversion
+        }
+ * Protocol Buffer representation for gRPC communication.
+package org.opensearch.transport.grpc.proto.response.search;
+            // TODO pass params in
+     */
+        SearchSortValuesProtoUtils.toProto(hitBuilder, hit.getSortValues());
+                }
+     *
+import org.opensearch.search.SearchHits;
+        org.apache.lucene.search.Explanation[] innerExps = explanation.getDetails();
+     *
+            }
+    private SearchHitProtoUtils() {
+     * @param hitBuilder The builder to populate with the highlight fields
+        if (hit.getExplanation() != null && hit.getShard() != null) {
+    private static void processMatchedQueries(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
+                hitBuilder.setXSource(ByteString.copyFrom(bytesRef.bytes, bytesRef.offset, bytesRef.length));
+     */
+        if (hit.getExplanation() != null) {
+     * This method is equivalent to {@link SearchHit#toXContent(XContentBuilder, ToXContent.Params)}
+         * Private constructor to prevent instantiation.
+     * This class handles the transformation of nested document identity information to ensure proper
+                if (bytesRef.offset == 0 && bytesRef.length == bytesRef.bytes.length) {
+     * This method converts the Lucene explanation structure, including nested details,
+                // org.opensearch.protobufs.DoubleMap.Builder doubleMapBuilder = org.opensearch.protobufs.DoubleMap.newBuilder();
+     * Converts a SearchHit to its Protocol Buffer representation.
+                    hitBuilder.setXSource(UnsafeByteOperations.unsafeWrap(bytesRef.bytes));
+                if (!field.getValues().isEmpty()) {
+     * @param hit The SearchHit to convert
+     * Converts a SearchHit to its Protocol Buffer representation.
+        if (hit.getIndex() != null) {
+                org.opensearch.protobufs.HitsMetadata.Builder hitsBuilder = org.opensearch.protobufs.HitsMetadata.newBuilder();
+    }
+        // Set ID if available
+import java.io.IOException;
+        if (hit.getInnerHits() != null) {
+            hitBuilder.setXExplanation(explanationBuilder.build());
                 nestedIdentityBuilder.setXNested(childBuilder.build());
+     */
+ * SPDX-License-Identifier: Apache-2.0
+            }
+                objectMapBuilder.putFields(field.getName(), ObjectMapProtoUtils.toProto(field.getValues()));
+     * @param hit The SearchHit to process
+        }
+    private static void processMetadataFields(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
+            hitBuilder.setMatchedQueries2(matchedQueriesBuilder.build());
+     */
+                nestedIdentityBuilder.setField(nestedIdentity.getField().string());
+        // Set nested identity if available
+         * Similar to {@link SearchHit.NestedIdentity#toXContent(XContentBuilder, ToXContent.Params)}
+        }
+        if (hit.getVersion() != -1) {
+    private static void buildExplanation(
+        if (hit.getSourceRef() != null) {
+        // Even if this was included in the inner_hit hits this would be the same, so better leave it out.
+     * Helper method to process highlight fields.
+        }
+        // Process source
+        }
+    protected static void toProto(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) throws IOException {
+     * @param hit The SearchHit to process
+    }
+            // Set offset if available
+     *
             }
         }
+    /**
+    private static void processDocumentFields(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
+        processInnerHits(hit, hitBuilder);
+        processShardInfo(hit, hitBuilder);
+ * this file be licensed under the Apache-2.0 license or a
+            hitBuilder.setXIndex(RemoteClusterAware.buildRemoteIndexName(hit.getClusterAlias(), hit.getIndex()));
+import org.opensearch.protobufs.NestedIdentity;
+     * @param hit The SearchHit to process
+    private static void processScore(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
+     * @param hit The SearchHit to process
+     *
+    /**
+         * @param nestedIdentity The NestedIdentity to convert
+            // Handle null/NaN score case
+        }
+            hitBuilder.setFields(fieldsStructBuilder.build());
+        // Process sort values
+                // ignore empty metadata fields
+                }
+import org.opensearch.index.seqno.SequenceNumbers;
+import org.apache.lucene.util.BytesRef;
+                for (String matchedFilter : hit.getMatchedQueries()) {
+    /**
+    /**
     }
+                    continue;
+            buildExplanation(hit.getExplanation(), explanationBuilder);
+    protected static org.opensearch.protobufs.HitsMetadataHitsInner toProto(SearchHit hit) throws IOException {
+     * @param hitBuilder The builder to populate with the metadata fields
+                    hitBuilder.setXSource(UnsafeByteOperations.unsafeWrap(bytesRef.bytes, bytesRef.offset, bytesRef.length));
+        protected static void toProto(SearchHit.NestedIdentity nestedIdentity, NestedIdentity.Builder nestedIdentityBuilder) {
+    }
+import com.google.protobuf.UnsafeByteOperations;
+ */
+     * Helper method to process matched queries.
+        // Process score
+                org.opensearch.protobufs.StringArray.Builder namesBuilder = org.opensearch.protobufs.StringArray.newBuilder();
+     */
+        org.opensearch.protobufs.Explanation.Builder protoExplanationBuilder
+            BytesRef bytesRef = sourceRef.toBytesRef();
+        if (hit.getHighlightFields() != null && !hit.getHighlightFields().isEmpty()) {
+     */
+            if (sourceRef instanceof BytesArray) {
+     *
+        }
+ * Utility class for converting SearchHit objects to Protocol Buffers.
+         * This is a utility class with only static methods.
+                }
+     * @param hitBuilder The builder to populate with the matched queries
+        // Process inner hits
+        if (hit.getId() != null) {
+            hitBuilder.setXId(hit.getId());
+     * @param hit The SearchHit to process
+            for (HighlightField field : hit.getHighlightFields().values()) {
+    /**
+            }
+            } else {
+    }
+        // For inner_hit hits shard is null and that is ok, because the parent search hit has all this information.
+     */
+     * @param hitBuilder The builder to populate with the basic information
+                NestedIdentity.Builder childBuilder = NestedIdentity.newBuilder();
+        throws IOException {
+import org.opensearch.common.document.DocumentField;
+     * Helper method to process document fields.
+     *
+            if (nestedIdentity.getOffset() != -1) {
+ */
+        if (innerExps != null) {
+        if (hit.getMatchedQueries().length > 0) {
+            hitBuilder.setXScore(scoreBuilder.build());
+import java.util.Map;
+         * Similar to {@link SearchHit.NestedIdentity#innerToXContent(XContentBuilder, ToXContent.Params)}
+                // TODO: uncomment when have a way to pass the param to the converter
+    }
+     * @param hit The SearchHit to process
+        processScore(hit, hitBuilder);
+     */
+        org.apache.lucene.search.Explanation explanation,
+            hitBuilder.setXScore(scoreBuilder.build());
+            }
+     * This method is equivalent to {@link SearchHit#toInnerXContent(XContentBuilder, ToXContent.Params)}
+        }
+            org.opensearch.protobufs.HitXScore.Builder scoreBuilder = org.opensearch.protobufs.HitXScore.newBuilder();
+    }
+ * This class handles the conversion of search hit data to their
+ * The OpenSearch Contributors require contributions made to
+     * Helper method to process basic hit information.
+            return nestedIdentityBuilder.build();
+                }
+        return hitBuilder.build();
+     * @throws IOException if there's an error during conversion
+    }
+    /**
+    private static void processSource(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
+    private static void processHighlightFields(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
+        processMatchedQueries(hit, hitBuilder);
+                // doubleMapBuilder.putDoubleMap(entry.getKey(), entry.getValue().doubleValue());
+    /**
+        if (!Float.isNaN(hit.getScore())) {
+         */
+     * representation of nested search hits.
+import org.opensearch.search.SearchHit;
+    }
+                .newBuilder();
+            for (Explanation exp : innerExps) {
+import org.opensearch.protobufs.InnerHitsResult;
+         * Converts a SearchHit.NestedIdentity to its Protocol Buffer representation.
+        /**
+        private NestedIdentityProtoUtils() {
+ * compatible open source license.
+        if (hit.getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO) {
+        if (hit.getNestedIdentity() != null) {
+        /**
+     */
+            // Set child if available
+     * @param hit The SearchHit to convert
+                }
+            org.opensearch.protobufs.Explanation.Builder explanationBuilder = org.opensearch.protobufs.Explanation.newBuilder();
+            ObjectMap.Builder fieldsStructBuilder = ObjectMap.newBuilder();
+        processMetadataFields(hit, hitBuilder);
+            if (includeMatchedQueriesScore) {
+        // Process highlight fields
+ *
+        }
+    /**
+            BytesReference sourceRef = hit.getSourceRef();
+/*
+         * Converts a SearchHit.NestedIdentity to its Protocol Buffer representation.
+    }
+    /**
+            }
+     *
+        protoExplanationBuilder.setDescription(explanation.getDescription());
+     *
+                hitBuilder.putHighlight(field.getName(), HighlightFieldProtoUtils.toProto(field.getFragments()));
+    private static void processShardInfo(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
+    }
+     * into the corresponding Protocol Buffer representation.
+            hitBuilder.setXNested(NestedIdentityProtoUtils.toProto(hit.getNestedIdentity()));
+                } else {
+                    hitBuilder.addMatchedQueries(matchedFilter);
+     *
+            hitBuilder.setXVersion(hit.getVersion());
+        if (!hit.getDocumentFields().isEmpty() &&
+                if (field.getValues().isEmpty()) {
+     * @param explanation The Lucene Explanation to convert
+    }
+        processDocumentFields(hit, hitBuilder);
+        }
+import org.opensearch.core.common.bytes.BytesArray;
+     * Recursively builds a Protocol Buffer Explanation from a Lucene Explanation.
+            ObjectMap.Builder objectMapBuilder = ObjectMap.newBuilder();
+            }
+     * @param hitBuilder The builder to populate with the inner hits
+        // Set version if available
+            // Set field if available
+            hitBuilder.setXSeqNo(hit.getSeqNo());
+     * Helper method to process explanation.
+        /**
+        // Process basic hit information
+     * @param protoExplanationBuilder The builder to populate with the explanation data
+     */
+/**
+     *
+            if (nestedIdentity.getField() != null) {
+     * @param hit The SearchHit to process
+        protected static NestedIdentity toProto(SearchHit.NestedIdentity nestedIdentity) {
+            hitBuilder.setXShard(String.valueOf(hit.getShard().getShardId().id()));
+            hitBuilder.setXNode(hit.getShard().getNodeIdText().string());
+        // Process shard information
+                // }
+    }
+         *
+import org.opensearch.core.xcontent.XContentBuilder;
+     * @throws IOException if there's an error during conversion
+        toProto(hit, hitBuilder);
+        }
+        org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder = org.opensearch.protobufs.HitsMetadataHitsInner.newBuilder();
+        processHighlightFields(hit, hitBuilder);
+import org.apache.lucene.search.Explanation;
+        processExplanation(hit, hitBuilder);
+            hitBuilder.setMetaFields(objectMapBuilder.build());
+            // Utility class, no instances
+     * @param hit The SearchHit to process
+            }
+     */
+        }
+                org.opensearch.protobufs.Explanation.Builder detailBuilder = org.opensearch.protobufs.Explanation.newBuilder();
+    private static void processBasicInfo(SearchHit hit, org.opensearch.protobufs.HitsMetadataHitsInner.Builder hitBuilder) {
+                nestedIdentityBuilder.setOffset(nestedIdentity.getOffset());
+            } else {
+            hitBuilder.setXPrimaryTerm(hit.getPrimaryTerm());
+     * Utility class for converting NestedIdentity components between OpenSearch and Protocol Buffers formats.
+     * Helper method to process shard information.
+     * Helper method to process source information.
+        // Utility class, no instances
+     * @param hitBuilder The builder to populate with the source information
+        // Only process if there are non-empty metadata fields
 }
+                // for (Map.Entry<String, Float> entry : matchedQueriesWithScores.entrySet()) {
+         *
+        // Set sequence number and primary term if available
+         * This method creates a new builder and returns a built value.
+    /**

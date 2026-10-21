@@ -1,284 +1,249 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch;
-
-import org.opensearch.common.Booleans;
-import org.opensearch.core.util.FileSystemUtils;
-
-import java.io.IOException;
-import java.net.URL;
-import java.security.CodeSource;
-import java.util.Objects;
-import java.util.jar.JarInputStream;
-import java.util.jar.Manifest;
-
-/**
- * Information about a build of OpenSearch.
- *
- * @opensearch.internal
- */
-public class Build {
-    /**
-     * The current build of OpenSearch. Filled with information scanned at
-     * startup from the jar.
-     */
-    public static final Build CURRENT;
-
-    /**
-     * The type of build
-     *
-     * @opensearch.internal
-     */
-    public enum Type {
-
-        DEB("deb"),
-        DOCKER("docker"),
-        RPM("rpm"),
-        TAR("tar"),
-        ZIP("zip"),
-        UNKNOWN("unknown");
-
-        final String displayName;
-
-        public String displayName() {
-            return displayName;
-        }
-
-        Type(final String displayName) {
-            this.displayName = displayName;
-        }
-
-        public static Type fromDisplayName(final String displayName, final boolean strict) {
-            switch (displayName) {
-                case "deb":
-                    return Type.DEB;
-                case "docker":
-                    return Type.DOCKER;
-                case "rpm":
-                    return Type.RPM;
-                case "tar":
-                    return Type.TAR;
-                case "zip":
-                    return Type.ZIP;
-                case "unknown":
-                    return Type.UNKNOWN;
-                default:
-                    if (strict) {
-                        throw new IllegalStateException("unexpected distribution type [" + displayName + "]; your distribution is broken");
-                    } else {
-                        return Type.UNKNOWN;
-                    }
-            }
-        }
-
-    }
-
-    static {
-        final Type type;
-        final String hash;
-        final String date;
-        final boolean isSnapshot;
-        final String version;
-        final String distribution = "opensearch";
-
-        // these are parsed at startup, and we require that we are able to recognize the values passed in by the startup scripts
-        type = Type.fromDisplayName(System.getProperty("opensearch.distribution.type", "unknown"), true);
-
-        final String opensearchPrefix = distribution;
-        final URL url = getOpenSearchCodeSourceLocation();
-        final String urlStr = url == null ? "" : url.toString();
-        if (urlStr.startsWith("file:/")
-            && (urlStr.endsWith(opensearchPrefix + "-" + Version.CURRENT + ".jar")
-                || urlStr.matches(
-                    "(.*)" + opensearchPrefix + "(-)?(.*?)" + Version.CURRENT + "(-)?((alpha|beta|rc)[0-9]+)?(-SNAPSHOT)?.jar"
-                ))) {
-            try (JarInputStream jar = new JarInputStream(FileSystemUtils.openFileURLStream(url))) {
-                Manifest manifest = jar.getManifest();
-                hash = manifest.getMainAttributes().getValue("Change");
-                date = manifest.getMainAttributes().getValue("Build-Date");
-                isSnapshot = "true".equals(manifest.getMainAttributes().getValue("X-Compile-OpenSearch-Snapshot"));
-                version = manifest.getMainAttributes().getValue("X-Compile-OpenSearch-Version");
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        } else {
-            // not running from the official opensearch jar file (unit tests, IDE, uber client jar, shadiness)
-            hash = "unknown";
-            date = "unknown";
-            version = Version.CURRENT.toString();
-            final String buildSnapshot = System.getProperty("build.snapshot");
-            if (buildSnapshot != null) {
-                try {
-                    Class.forName("com.carrotsearch.randomizedtesting.RandomizedContext");
-                } catch (final ClassNotFoundException e) {
-                    // we are not in tests but build.snapshot is set, bail hard
-                    throw new IllegalStateException("build.snapshot set to [" + buildSnapshot + "] but not running tests");
-                }
-                isSnapshot = Booleans.parseBoolean(buildSnapshot);
-            } else {
-                isSnapshot = true;
-            }
-        }
-        if (hash == null) {
-            throw new IllegalStateException(
-                "Error finding the build hash. "
-                    + "Stopping OpenSearch now so it doesn't run in subtly broken ways. This is likely a build bug."
-            );
-        }
-        if (date == null) {
-            throw new IllegalStateException(
-                "Error finding the build date. "
-                    + "Stopping OpenSearch now so it doesn't run in subtly broken ways. This is likely a build bug."
-            );
-        }
-        if (version == null) {
-            throw new IllegalStateException(
-                "Error finding the build version. "
-                    + "Stopping OpenSearch now so it doesn't run in subtly broken ways. This is likely a build bug."
-            );
-        }
-
-        CURRENT = new Build(type, hash, date, isSnapshot, version, distribution);
-    }
-
-    private final boolean isSnapshot;
-
-    /**
-     * The location of the code source for OpenSearch
-     *
-     * @return the location of the code source for OpenSearch which may be null
-     */
-    static URL getOpenSearchCodeSourceLocation() {
-        final CodeSource codeSource = Build.class.getProtectionDomain().getCodeSource();
-        return codeSource == null ? null : codeSource.getLocation();
-    }
-
-    private final Type type;
-    private final String hash;
-    private final String date;
-    private final String version;
-    private final String distribution;
-
-    public Build(final Type type, final String hash, final String date, boolean isSnapshot, String version, String distribution) {
-        this.type = type;
-        this.hash = hash;
-        this.date = date;
-        this.isSnapshot = isSnapshot;
-        this.version = version;
-        this.distribution = distribution;
-    }
-
-    public String hash() {
-        return hash;
-    }
-
-    public String date() {
-        return date;
-    }
-
-    /**
-     * Get the distribution name (expected to be OpenSearch; empty if legacy; something else if forked)
-     * @return distribution name as a string
-     */
-    public String getDistribution() {
-        return distribution;
-    }
-
-    /**
-     * Get the version as considered at build time
-     * <p>
-     * Offers a way to get the fully qualified version as configured by the build.
-     * This will be the same as {@link Version} for production releases, but may include on of the qualifier ( e.x alpha1 )
-     * or -SNAPSHOT for others.
-     *
-     * @return the fully qualified build
-     */
-    public String getQualifiedVersion() {
-        return version;
-    }
-
-    public Type type() {
-        return type;
-    }
-
-    public boolean isSnapshot() {
-        return isSnapshot;
-    }
-
-    /**
-     * Provides information about the intent of the build
-     *
-     * @return true if the build is intended for production use
-     */
-    public boolean isProductionRelease() {
-        return version.matches("[0-9]+\\.[0-9]+\\.[0-9]+");
-    }
-
-    @Override
-    public String toString() {
         return "[" + type.displayName + "][" + hash + "][" + date + "][" + version + "]";
+        type = Type.fromDisplayName(System.getProperty("opensearch.distribution.type", "unknown"), true);
+                case "rpm":
+ */
     }
-
     @Override
-    public boolean equals(Object o) {
+            } catch (IOException e) {
+        ZIP("zip"),
+ * Unless required by applicable law or agreed to in writing,
+                    return Type.RPM;
+    @Override
+     */
+     * or -SNAPSHOT for others.
+            return false;
+     * The type of build
+    /**
+    public static final Build CURRENT;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+/*
+            try (JarInputStream jar = new JarInputStream(FileSystemUtils.openFileURLStream(url))) {
+ * SPDX-License-Identifier: Apache-2.0
+            return false;
+    }
+    }
+                isSnapshot = Booleans.parseBoolean(buildSnapshot);
+        }
+                } catch (final ClassNotFoundException e) {
+        return type;
+        }
+    }
+        this.type = type;
+ * You may obtain a copy of the License at
+    public String toString() {
+ * Licensed to Elasticsearch under one or more contributor
+import java.util.jar.Manifest;
+    }
+                    return Type.UNKNOWN;
+            }
+                case "tar":
+        return version.matches("[0-9]+\\.[0-9]+\\.[0-9]+");
+        // these are parsed at startup, and we require that we are able to recognize the values passed in by the startup scripts
+     */
+    }
+        this.date = date;
+        return distribution;
+                    return Type.ZIP;
+     * This will be the same as {@link Version} for production releases, but may include on of the qualifier ( e.x alpha1 )
+     */
+        final CodeSource codeSource = Build.class.getProtectionDomain().getCodeSource();
+ * compatible open source license.
+import org.opensearch.common.Booleans;
+     * @return distribution name as a string
+            } else {
+            return false;
+    static URL getOpenSearchCodeSourceLocation() {
+            return displayName;
+                    + "Stopping OpenSearch now so it doesn't run in subtly broken ways. This is likely a build bug."
+ *
+                "Error finding the build date. "
+                Manifest manifest = jar.getManifest();
+ * license agreements. See the NOTICE file distributed with
+                    + "Stopping OpenSearch now so it doesn't run in subtly broken ways. This is likely a build bug."
+        public static Type fromDisplayName(final String displayName, final boolean strict) {
+        DEB("deb"),
+        }
+     * @opensearch.internal
+     *
+    /**
+        if (version == null) {
+    private final Type type;
+            throw new IllegalStateException(
+                    if (strict) {
         if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
+    static {
+import java.util.jar.JarInputStream;
+        return codeSource == null ? null : codeSource.getLocation();
+        DOCKER("docker"),
+ * GitHub history for details.
+        if (hash == null) {
+        UNKNOWN("unknown");
+     *
+     * The location of the code source for OpenSearch
+        final URL url = getOpenSearchCodeSourceLocation();
+/*
+    public String hash() {
+ */
+                }
+ * The OpenSearch Contributors require contributions made to
+/**
+import java.net.URL;
+                throw new RuntimeException(e);
+        return date.equals(build.date);
+                case "unknown":
+     * Offers a way to get the fully qualified version as configured by the build.
+    private final String distribution;
+            final String buildSnapshot = System.getProperty("build.snapshot");
+     * startup from the jar.
+        final Type type;
+            switch (displayName) {
+            );
+    private final String date;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            && (urlStr.endsWith(opensearchPrefix + "-" + Version.CURRENT + ".jar")
+     */
+            if (buildSnapshot != null) {
+    }
+    private final String version;
             return false;
-        }
-
-        Build build = (Build) o;
-
         if (!type.equals(build.type)) {
-            return false;
+            throw new IllegalStateException(
+                    // we are not in tests but build.snapshot is set, bail hard
+            );
+                        return Type.UNKNOWN;
+     * @return the location of the code source for OpenSearch which may be null
+    public String date() {
+                    } else {
+                isSnapshot = true;
+                || urlStr.matches(
+package org.opensearch;
         }
-
+        Type(final String displayName) {
+            return true;
         if (isSnapshot != build.isSnapshot) {
-            return false;
+     * Get the version as considered at build time
+                    return Type.DEB;
+    /**
+ * ownership. Elasticsearch licenses this file to you under
+     * @return true if the build is intended for production use
+ * the Apache License, Version 2.0 (the "License"); you may
+}
+ * @opensearch.internal
+                    throw new IllegalStateException("build.snapshot set to [" + buildSnapshot + "] but not running tests");
+ * specific language governing permissions and limitations
+ *
+import java.io.IOException;
+     * <p>
+                default:
+                "Error finding the build version. "
+            }
+                "Error finding the build hash. "
+                        throw new IllegalStateException("unexpected distribution type [" + displayName + "]; your distribution is broken");
+        if (date == null) {
         }
+    public enum Type {
+ *
+                    Class.forName("com.carrotsearch.randomizedtesting.RandomizedContext");
         if (hash.equals(build.hash) == false) {
-            return false;
+        }
+                    return Type.DOCKER;
+    /**
+    public boolean equals(Object o) {
+        }
+ * this file be licensed under the Apache-2.0 license or a
+            date = "unknown";
+     */
+        return isSnapshot;
+        if (o == null || getClass() != o.getClass()) {
+    }
         }
         if (version.equals(build.version) == false) {
-            return false;
+    public String getDistribution() {
+ * KIND, either express or implied.  See the License for the
+    }
+            // not running from the official opensearch jar file (unit tests, IDE, uber client jar, shadiness)
+                hash = manifest.getMainAttributes().getValue("Change");
+                    + "Stopping OpenSearch now so it doesn't run in subtly broken ways. This is likely a build bug."
+    private final boolean isSnapshot;
+    public Type type() {
+        final String urlStr = url == null ? "" : url.toString();
+ * Modifications Copyright OpenSearch Contributors. See
         }
-        return date.equals(build.date);
+    /**
+                    "(.*)" + opensearchPrefix + "(-)?(.*?)" + Version.CURRENT + "(-)?((alpha|beta|rc)[0-9]+)?(-SNAPSHOT)?.jar"
+     * Get the distribution name (expected to be OpenSearch; empty if legacy; something else if forked)
+        } else {
+        final String hash;
+                case "deb":
+ * software distributed under the License is distributed on an
+            );
+import java.security.CodeSource;
+        }
+    /**
+    public boolean isProductionRelease() {
+        return version;
+import java.util.Objects;
+        TAR("tar"),
+     *
+        Build build = (Build) o;
+/*
+                    }
+        final String distribution = "opensearch";
+                date = manifest.getMainAttributes().getValue("Build-Date");
+            version = Version.CURRENT.toString();
     }
-
     @Override
-    public int hashCode() {
-        return Objects.hash(type, isSnapshot, hash, date, version);
     }
-
-}
+ */
+ * Information about a build of OpenSearch.
+    public String getQualifiedVersion() {
+                version = manifest.getMainAttributes().getValue("X-Compile-OpenSearch-Version");
+        final String version;
+ */
+        if (urlStr.startsWith("file:/")
+     */
+                ))) {
+        this.version = version;
+    }
+     * The current build of OpenSearch. Filled with information scanned at
+        RPM("rpm"),
+                case "zip":
+    private final String hash;
+        public String displayName() {
+        }
+public class Build {
+        }
+     * @return the fully qualified build
+        return Objects.hash(type, isSnapshot, hash, date, version);
+            return false;
+        this.hash = hash;
+     * Provides information about the intent of the build
+    public Build(final Type type, final String hash, final String date, boolean isSnapshot, String version, String distribution) {
+    }
+        final String displayName;
+                isSnapshot = "true".equals(manifest.getMainAttributes().getValue("X-Compile-OpenSearch-Snapshot"));
+        final boolean isSnapshot;
+            throw new IllegalStateException(
+        }
+ * not use this file except in compliance with the License.
+                try {
+ *
+ * under the License.
+        final String date;
+    public int hashCode() {
+        this.distribution = distribution;
+        this.isSnapshot = isSnapshot;
+                    return Type.TAR;
+    public boolean isSnapshot() {
+        CURRENT = new Build(type, hash, date, isSnapshot, version, distribution);
+            hash = "unknown";
+    }
+        return hash;
+     *
+                case "docker":
+            }
+        return date;
+ * this work for additional information regarding copyright
+import org.opensearch.core.util.FileSystemUtils;
+            this.displayName = displayName;
+        final String opensearchPrefix = distribution;

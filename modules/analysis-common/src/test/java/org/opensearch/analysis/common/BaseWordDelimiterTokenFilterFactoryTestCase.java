@@ -1,218 +1,203 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+            "wi",
+        String[] expected = new String[] { "Power", "Shot", "50042", "wi", "fi", "wi", "fi", "4000", "j", "2", "se", "O", "Neil" };
+                .put("index.analysis.filter.my_word_delimiter.type", type)
+        assertTokenStreamContents(tokenFilter.create(tokenizer), expected);
+            "Shot",
+                .build(),
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+import java.io.StringReader;
+        );
+            Settings.builder()
  */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
+            "Power",
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.analysis.common;
-
+            Settings.builder()
+        );
+        Tokenizer tokenizer = new WhitespaceTokenizer();
+                .put("index.analysis.filter.my_word_delimiter.split_on_case_change", "false")
+        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_word_delimiter");
+        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_word_delimiter");
 import org.apache.lucene.analysis.Tokenizer;
-import org.apache.lucene.analysis.core.WhitespaceTokenizer;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.env.Environment;
+ * Unless required by applicable law or agreed to in writing,
+        String source = "PowerShot 500-42 wi-fi wi-fi-4000 j2se O'Neil's";
+        tokenizer.setReader(new StringReader(source));
+ * specific language governing permissions and limitations
+ * You may obtain a copy of the License at
+ * ownership. Elasticsearch licenses this file to you under
+        assertTokenStreamContents(tokenFilter.create(tokenizer), expected);
+        );
+import java.io.IOException;
+        tokenizer.setReader(new StringReader(source));
+                .put("index.analysis.filter.my_word_delimiter.catenate_all", "true")
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        String source = "PowerShot 500-42 wi-fi wi-fi-4000 j2se O'Neil's";
+        Tokenizer tokenizer = new WhitespaceTokenizer();
+                .build(),
+                .build(),
+public abstract class BaseWordDelimiterTokenFilterFactoryTestCase extends OpenSearchTokenStreamTestCase {
+    }
+            "2",
+            Settings.builder()
+    }
+                .put("index.analysis.filter.my_word_delimiter.generate_word_parts", "false")
+        tokenizer.setReader(new StringReader(source));
+                .build(),
+                .build(),
+            "Neil" };
+        tokenizer.setReader(new StringReader(source));
+            "wi",
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+                .put("index.analysis.filter.my_word_delimiter.catenate_words", "true")
+                .put("index.analysis.filter.my_word_delimiter.type", type)
+            new CommonAnalysisModulePlugin()
+        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_word_delimiter");
+                .put("index.analysis.filter.my_word_delimiter.type", type)
+    final String type;
+            new CommonAnalysisModulePlugin()
+/**
+ * this file be licensed under the Apache-2.0 license or a
+                .build(),
+                .put("index.analysis.filter.my_word_delimiter.type", type)
+                .put("index.analysis.filter.my_word_delimiter.generate_word_parts", "true")
+ * KIND, either express or implied.  See the License for the
+    }
+            "fi",
+            Settings.builder()
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+            "42",
+        assertTokenStreamContents(tokenFilter.create(tokenizer), expected);
+            "se",
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+ */
+            "O",
+            "PowerShot",
+        String source = "PowerShot 500-42 wi-fi wi-fi-4000 j2se O'Neil's";
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+            "500-42",
+    }
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+    }
+                .put("index.analysis.filter.my_word_delimiter.stem_english_possessive", "false")
 import org.opensearch.index.analysis.AnalysisTestsHelper;
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_word_delimiter");
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
 import org.opensearch.index.analysis.TokenFilterFactory;
+        );
+            Settings.builder()
+                .put("index.analysis.filter.my_word_delimiter.catenate_words", "true")
+        assertEquals("Line [5]: Invalid mapping rule: [abc => ALPHA]. Only a single character is allowed.", ex.getMessage());
+    public BaseWordDelimiterTokenFilterFactoryTestCase(String type) {
+                .put("index.analysis.filter.my_word_delimiter.generate_number_parts", "false")
+        String[] rules = { "# This is a comment", "# => ALPHANUM", "$ => DIGIT", "\\u200D => ALPHANUM", "abc => ALPHA" };
+            new CommonAnalysisModulePlugin()
+        this.type = type;
+            new CommonAnalysisModulePlugin()
+        assertTokenStreamContents(tokenFilter.create(tokenizer), expected);
+    }
+    }
+        tokenizer.setReader(new StringReader(source));
+            "fi",
+        );
+        );
+    public void testStemEnglishPossessive() throws IOException {
+        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_word_delimiter");
+ *
+ * software distributed under the License is distributed on an
+        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_word_delimiter");
+                .put("index.analysis.filter.my_word_delimiter.generate_word_parts", "false")
+    }
+            "j2se",
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+ * compatible open source license.
+    public void testSplitOnCaseChange() throws IOException {
+            Settings.builder()
+        String[] expected = new String[] { "PowerShot", "50042", "wifi", "wifi4000", "j2se", "ONeil" };
+            Settings.builder()
+        String[] expected = new String[] { "Power", "Shot", "500", "42", "wi", "fi", "wi", "fi", "4000", "j", "2", "se", "O", "Neil", "s" };
+        String[] expected = new String[] { "PowerShot", "500", "42", "wifi", "wifi", "4000", "j", "2", "se", "ONeil" };
+        );
+        assertTokenStreamContents(tokenFilter.create(tokenizer), expected);
+ *
+                .put("index.analysis.filter.my_word_delimiter.type", type)
+    public void testCatenateNumbers() throws IOException {
+                .putList("index.analysis.filter.my_word_delimiter.type_table", rules)
+        assertTokenStreamContents(tokenFilter.create(tokenizer), expected);
+                .put("index.analysis.filter.my_word_delimiter.type", type)
+    public void testTypeTableParsingError() {
+                .put("index.analysis.filter.my_word_delimiter.type", type)
+ * GitHub history for details.
+/*
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+package org.opensearch.analysis.common;
+            "j",
+        Tokenizer tokenizer = new WhitespaceTokenizer();
+            new CommonAnalysisModulePlugin()
+        String[] expected = new String[] { "Power", "Shot", "500", "42", "wi", "fi", "wi", "fi", "4000", "j", "2", "se", "O", "Neil" };
+            new CommonAnalysisModulePlugin()
+ * Licensed to Elasticsearch under one or more contributor
+    public void testPreserveOriginal() throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.env.Environment;
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+    }
+            new CommonAnalysisModulePlugin()
+        analysis.tokenFilter.get("my_word_delimiter");
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.test.OpenSearchTokenStreamTestCase;
-
-import java.io.IOException;
-import java.io.StringReader;
-
-/**
  * Base class to test {@link WordDelimiterTokenFilterFactory} and
- * {@link WordDelimiterGraphTokenFilterFactory}.
- */
-public abstract class BaseWordDelimiterTokenFilterFactoryTestCase extends OpenSearchTokenStreamTestCase {
-    final String type;
-
-    public BaseWordDelimiterTokenFilterFactoryTestCase(String type) {
-        this.type = type;
-    }
-
-    public void testDefault() throws IOException {
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
-            Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-                .put("index.analysis.filter.my_word_delimiter.type", type)
-                .build(),
-            new CommonAnalysisModulePlugin()
-        );
-        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_word_delimiter");
-        String source = "PowerShot 500-42 wi-fi wi-fi-4000 j2se O'Neil's";
-        String[] expected = new String[] { "Power", "Shot", "500", "42", "wi", "fi", "wi", "fi", "4000", "j", "2", "se", "O", "Neil" };
         Tokenizer tokenizer = new WhitespaceTokenizer();
-        tokenizer.setReader(new StringReader(source));
-        assertTokenStreamContents(tokenFilter.create(tokenizer), expected);
-    }
-
-    public void testCatenateWords() throws IOException {
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
-            Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-                .put("index.analysis.filter.my_word_delimiter.type", type)
-                .put("index.analysis.filter.my_word_delimiter.catenate_words", "true")
-                .put("index.analysis.filter.my_word_delimiter.generate_word_parts", "false")
-                .build(),
-            new CommonAnalysisModulePlugin()
-        );
-        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_word_delimiter");
-        String source = "PowerShot 500-42 wi-fi wi-fi-4000 j2se O'Neil's";
-        String[] expected = new String[] { "PowerShot", "500", "42", "wifi", "wifi", "4000", "j", "2", "se", "ONeil" };
         Tokenizer tokenizer = new WhitespaceTokenizer();
-        tokenizer.setReader(new StringReader(source));
-        assertTokenStreamContents(tokenFilter.create(tokenizer), expected);
-    }
-
-    public void testCatenateNumbers() throws IOException {
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
-            Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-                .put("index.analysis.filter.my_word_delimiter.type", type)
-                .put("index.analysis.filter.my_word_delimiter.generate_number_parts", "false")
-                .put("index.analysis.filter.my_word_delimiter.catenate_numbers", "true")
+/*
                 .build(),
-            new CommonAnalysisModulePlugin()
-        );
-        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_word_delimiter");
-        String source = "PowerShot 500-42 wi-fi wi-fi-4000 j2se O'Neil's";
-        String[] expected = new String[] { "Power", "Shot", "50042", "wi", "fi", "wi", "fi", "4000", "j", "2", "se", "O", "Neil" };
-        Tokenizer tokenizer = new WhitespaceTokenizer();
-        tokenizer.setReader(new StringReader(source));
-        assertTokenStreamContents(tokenFilter.create(tokenizer), expected);
-    }
-
-    public void testCatenateAll() throws IOException {
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
-            Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-                .put("index.analysis.filter.my_word_delimiter.type", type)
-                .put("index.analysis.filter.my_word_delimiter.generate_word_parts", "false")
-                .put("index.analysis.filter.my_word_delimiter.generate_number_parts", "false")
-                .put("index.analysis.filter.my_word_delimiter.catenate_all", "true")
-                .build(),
-            new CommonAnalysisModulePlugin()
-        );
-        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_word_delimiter");
-        String source = "PowerShot 500-42 wi-fi wi-fi-4000 j2se O'Neil's";
-        String[] expected = new String[] { "PowerShot", "50042", "wifi", "wifi4000", "j2se", "ONeil" };
-        Tokenizer tokenizer = new WhitespaceTokenizer();
-        tokenizer.setReader(new StringReader(source));
-        assertTokenStreamContents(tokenFilter.create(tokenizer), expected);
-    }
-
-    public void testSplitOnCaseChange() throws IOException {
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
-            Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-                .put("index.analysis.filter.my_word_delimiter.type", type)
-                .put("index.analysis.filter.my_word_delimiter.split_on_case_change", "false")
-                .build(),
-            new CommonAnalysisModulePlugin()
-        );
-        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_word_delimiter");
         String source = "PowerShot";
+ * The OpenSearch Contributors require contributions made to
+ *
+                .build(),
+ * under the License.
+ */
+        tokenizer.setReader(new StringReader(source));
+import org.apache.lucene.analysis.core.WhitespaceTokenizer;
         String[] expected = new String[] { "PowerShot" };
-        Tokenizer tokenizer = new WhitespaceTokenizer();
-        tokenizer.setReader(new StringReader(source));
-        assertTokenStreamContents(tokenFilter.create(tokenizer), expected);
-    }
-
-    public void testPreserveOriginal() throws IOException {
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+import org.opensearch.common.settings.Settings;
             Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-                .put("index.analysis.filter.my_word_delimiter.type", type)
-                .put("index.analysis.filter.my_word_delimiter.preserve_original", "true")
-                .build(),
-            new CommonAnalysisModulePlugin()
-        );
-        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_word_delimiter");
-        String source = "PowerShot 500-42 wi-fi wi-fi-4000 j2se O'Neil's";
-        String[] expected = new String[] {
-            "PowerShot",
-            "Power",
-            "Shot",
-            "500-42",
-            "500",
-            "42",
-            "wi-fi",
-            "wi",
-            "fi",
             "wi-fi-4000",
-            "wi",
-            "fi",
-            "4000",
-            "j2se",
-            "j",
-            "2",
-            "se",
-            "O'Neil's",
-            "O",
-            "Neil" };
-        Tokenizer tokenizer = new WhitespaceTokenizer();
-        tokenizer.setReader(new StringReader(source));
-        assertTokenStreamContents(tokenFilter.create(tokenizer), expected);
-    }
-
-    public void testStemEnglishPossessive() throws IOException {
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
-            Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-                .put("index.analysis.filter.my_word_delimiter.type", type)
-                .put("index.analysis.filter.my_word_delimiter.stem_english_possessive", "false")
-                .build(),
-            new CommonAnalysisModulePlugin()
         );
-        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_word_delimiter");
-        String source = "PowerShot 500-42 wi-fi wi-fi-4000 j2se O'Neil's";
-        String[] expected = new String[] { "Power", "Shot", "500", "42", "wi", "fi", "wi", "fi", "4000", "j", "2", "se", "O", "Neil", "s" };
-        Tokenizer tokenizer = new WhitespaceTokenizer();
-        tokenizer.setReader(new StringReader(source));
-        assertTokenStreamContents(tokenFilter.create(tokenizer), expected);
-    }
-
-    private void createTokenFilterFactoryWithTypeTable(String[] rules) throws IOException {
-        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
-            Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
-                .put("index.analysis.filter.my_word_delimiter.type", type)
-                .putList("index.analysis.filter.my_word_delimiter.type_table", rules)
-                .put("index.analysis.filter.my_word_delimiter.catenate_words", "true")
-                .put("index.analysis.filter.my_word_delimiter.generate_word_parts", "true")
-                .build(),
-            new CommonAnalysisModulePlugin()
-        );
-        analysis.tokenFilter.get("my_word_delimiter");
-    }
-
-    public void testTypeTableParsingError() {
-        String[] rules = { "# This is a comment", "# => ALPHANUM", "$ => DIGIT", "\\u200D => ALPHANUM", "abc => ALPHA" };
-        RuntimeException ex = expectThrows(RuntimeException.class, () -> createTokenFilterFactoryWithTypeTable(rules));
-        assertEquals("Line [5]: Invalid mapping rule: [abc => ALPHA]. Only a single character is allowed.", ex.getMessage());
-    }
+ * not use this file except in compliance with the License.
+ * {@link WordDelimiterGraphTokenFilterFactory}.
+        String[] expected = new String[] {
+ */
+ * the Apache License, Version 2.0 (the "License"); you may
 }
+                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+            new CommonAnalysisModulePlugin()
+        tokenizer.setReader(new StringReader(source));
+ * license agreements. See the NOTICE file distributed with
+                .put("index.analysis.filter.my_word_delimiter.type", type)
+        OpenSearchTestCase.TestAnalysis analysis = AnalysisTestsHelper.createTestAnalysisFromSettings(
+            "O'Neil's",
+    private void createTokenFilterFactoryWithTypeTable(String[] rules) throws IOException {
+        String source = "PowerShot 500-42 wi-fi wi-fi-4000 j2se O'Neil's";
+                .put("index.analysis.filter.my_word_delimiter.preserve_original", "true")
+        TokenFilterFactory tokenFilter = analysis.tokenFilter.get("my_word_delimiter");
+            "wi-fi",
+        String source = "PowerShot 500-42 wi-fi wi-fi-4000 j2se O'Neil's";
+/*
+        RuntimeException ex = expectThrows(RuntimeException.class, () -> createTokenFilterFactoryWithTypeTable(rules));
+        assertTokenStreamContents(tokenFilter.create(tokenizer), expected);
+    public void testCatenateWords() throws IOException {
+            "500",
+                .put("index.analysis.filter.my_word_delimiter.generate_number_parts", "false")
+    }
+    public void testDefault() throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See
+        Tokenizer tokenizer = new WhitespaceTokenizer();
+            "4000",
+        String source = "PowerShot 500-42 wi-fi wi-fi-4000 j2se O'Neil's";
+        Tokenizer tokenizer = new WhitespaceTokenizer();
+ * this work for additional information regarding copyright
+                .put("index.analysis.filter.my_word_delimiter.catenate_numbers", "true")
+    public void testCatenateAll() throws IOException {

@@ -1,358 +1,331 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.NumericDocValuesField;
-import org.apache.lucene.document.SortedNumericDocValuesField;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.index.RandomIndexWriter;
-import org.apache.lucene.util.NumericUtils;
-import org.opensearch.common.CheckedConsumer;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.NumberFieldMapper;
-import org.opensearch.search.aggregations.AggregatorTestCase;
-import org.opensearch.search.aggregations.support.AggregationInspectionHelper;
-
-import java.io.IOException;
-import java.util.function.Consumer;
-
+            assertEquals(expected.varianceSampling(), stats.getVarianceSampling(), TOLERANCE);
+            min = Math.min(min, value);
 import static java.util.Collections.singleton;
-
-public class ExtendedStatsAggregatorTests extends AggregatorTestCase {
-    private static final double TOLERANCE = 1e-5;
-
-    // TODO: Add script test cases. Should fail with defaultValuesSourceType() commented out.
-
-    public void testEmpty() throws IOException {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.LONG);
-        testCase(ft, iw -> {}, stats -> {
-            assertEquals(0d, stats.getCount(), 0);
-            assertEquals(0d, stats.getSum(), 0);
-            assertEquals(Float.NaN, stats.getAvg(), 0);
-            assertEquals(Double.POSITIVE_INFINITY, stats.getMin(), 0);
-            assertEquals(Double.NEGATIVE_INFINITY, stats.getMax(), 0);
-            assertEquals(Double.NaN, stats.getVariance(), 0);
-            assertEquals(Double.NaN, stats.getVariancePopulation(), 0);
-            assertEquals(Double.NaN, stats.getVarianceSampling(), 0);
-            assertEquals(Double.NaN, stats.getStdDeviation(), 0);
-            assertEquals(Double.NaN, stats.getStdDeviationPopulation(), 0);
-            assertEquals(Double.NaN, stats.getStdDeviationSampling(), 0);
-            assertEquals(0d, stats.getSumOfSquares(), 0);
-            assertFalse(AggregationInspectionHelper.hasValue(stats));
-        });
-    }
-
-    public void testRandomDoubles() throws IOException {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.DOUBLE);
-        final ExtendedSimpleStatsAggregator expected = new ExtendedSimpleStatsAggregator();
-        testCase(ft, iw -> {
-            int numDocs = randomIntBetween(10, 50);
-            for (int i = 0; i < numDocs; i++) {
-                Document doc = new Document();
-                int numValues = randomIntBetween(1, 5);
-                for (int j = 0; j < numValues; j++) {
-                    double value = randomDoubleBetween(-100d, 100d, true);
-                    long valueAsLong = NumericUtils.doubleToSortableLong(value);
-                    doc.add(new SortedNumericDocValuesField("field", valueAsLong));
-                    expected.add(value);
-                }
-                iw.addDocument(doc);
-            }
-        }, stats -> {
-            assertEquals(expected.count, stats.getCount(), 0);
-            assertEquals(expected.sum, stats.getSum(), TOLERANCE);
-            assertEquals(expected.min, stats.getMin(), 0);
-            assertEquals(expected.max, stats.getMax(), 0);
-            assertEquals(expected.sum / expected.count, stats.getAvg(), TOLERANCE);
-            assertEquals(expected.sumOfSqrs, stats.getSumOfSquares(), TOLERANCE);
-            assertEquals(expected.stdDev(), stats.getStdDeviation(), TOLERANCE);
-            assertEquals(expected.stdDevPopulation(), stats.getStdDeviationPopulation(), TOLERANCE);
-            assertEquals(expected.stdDevSampling(), stats.getStdDeviationSampling(), TOLERANCE);
-            assertEquals(expected.variance(), stats.getVariance(), TOLERANCE);
-            assertEquals(expected.variancePopulation(), stats.getVariancePopulation(), TOLERANCE);
-            assertEquals(expected.varianceSampling(), stats.getVarianceSampling(), TOLERANCE);
-            assertEquals(
-                expected.stdDevBound(ExtendedStats.Bounds.LOWER, stats.getSigma()),
-                stats.getStdDeviationBound(ExtendedStats.Bounds.LOWER),
-                TOLERANCE
-            );
-            assertEquals(
-                expected.stdDevBound(ExtendedStats.Bounds.UPPER, stats.getSigma()),
-                stats.getStdDeviationBound(ExtendedStats.Bounds.UPPER),
-                TOLERANCE
-            );
-            assertEquals(
-                expected.stdDevBound(ExtendedStats.Bounds.LOWER_POPULATION, stats.getSigma()),
-                stats.getStdDeviationBound(ExtendedStats.Bounds.LOWER_POPULATION),
-                TOLERANCE
-            );
-            assertEquals(
-                expected.stdDevBound(ExtendedStats.Bounds.UPPER_POPULATION, stats.getSigma()),
-                stats.getStdDeviationBound(ExtendedStats.Bounds.UPPER_POPULATION),
-                TOLERANCE
-            );
-            assertEquals(
-                expected.stdDevBound(ExtendedStats.Bounds.LOWER_SAMPLING, stats.getSigma()),
-                stats.getStdDeviationBound(ExtendedStats.Bounds.LOWER_SAMPLING),
-                TOLERANCE
-            );
-            assertEquals(
-                expected.stdDevBound(ExtendedStats.Bounds.UPPER_SAMPLING, stats.getSigma()),
-                stats.getStdDeviationBound(ExtendedStats.Bounds.UPPER_SAMPLING),
-                TOLERANCE
-            );
-            assertTrue(AggregationInspectionHelper.hasValue(stats));
-        });
-    }
-
-    /**
-     * Testcase for https://github.com/elastic/elasticsearch/issues/37303
-     */
     public void testVarianceNonNegative() throws IOException {
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.DOUBLE);
-        final ExtendedSimpleStatsAggregator expected = new ExtendedSimpleStatsAggregator();
-        testCase(ft, iw -> {
-            int numDocs = 3;
-            for (int i = 0; i < numDocs; i++) {
-                Document doc = new Document();
-                double value = 49.95d;
-                long valueAsLong = NumericUtils.doubleToSortableLong(value);
-                doc.add(new SortedNumericDocValuesField("field", valueAsLong));
-                expected.add(value);
-                iw.addDocument(doc);
-            }
-        }, stats -> {
-            // since the value(49.95) is a constant, variance should be 0
-            assertEquals(0.0d, stats.getVariance(), TOLERANCE);
-            assertEquals(0.0d, stats.getVariancePopulation(), TOLERANCE);
-            assertEquals(0.0d, stats.getVarianceSampling(), TOLERANCE);
-            assertEquals(0.0d, stats.getStdDeviation(), TOLERANCE);
-            assertEquals(0.0d, stats.getStdDeviationPopulation(), TOLERANCE);
-            assertEquals(0.0d, stats.getStdDeviationSampling(), TOLERANCE);
-        });
-    }
-
-    public void testRandomLongs() throws IOException {
+        for (int i = 0; i < n; i++) {
         MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.LONG);
-        final ExtendedSimpleStatsAggregator expected = new ExtendedSimpleStatsAggregator();
-        testCase(ft, iw -> {
-            int numDocs = randomIntBetween(10, 50);
-            for (int i = 0; i < numDocs; i++) {
-                Document doc = new Document();
-                int numValues = randomIntBetween(1, 5);
-                for (int j = 0; j < numValues; j++) {
-                    long value = randomIntBetween(-100, 100);
-                    doc.add(new SortedNumericDocValuesField("field", value));
-                    expected.add(value);
-                }
-                iw.addDocument(doc);
-            }
+                case LOWER:
+        }
+            assertEquals(0.0d, stats.getVariancePopulation(), TOLERANCE);
+            assertEquals(0.0d, stats.getStdDeviationSampling(), TOLERANCE);
+import org.apache.lucene.document.Document;
+                expected.add(value);
         }, stats -> {
-            assertEquals(expected.count, stats.getCount(), 0);
-            assertEquals(expected.sum, stats.getSum(), TOLERANCE);
-            assertEquals(expected.min, stats.getMin(), 0);
-            assertEquals(expected.max, stats.getMax(), 0);
-            assertEquals(expected.sum / expected.count, stats.getAvg(), TOLERANCE);
-            assertEquals(expected.sumOfSqrs, stats.getSumOfSquares(), TOLERANCE);
-            assertEquals(expected.stdDev(), stats.getStdDeviation(), TOLERANCE);
-            assertEquals(expected.stdDevPopulation(), stats.getStdDeviationPopulation(), TOLERANCE);
-            assertEquals(expected.stdDevSampling(), stats.getStdDeviationSampling(), TOLERANCE);
-            assertEquals(expected.variance(), stats.getVariance(), TOLERANCE);
-            assertEquals(expected.variancePopulation(), stats.getVariancePopulation(), TOLERANCE);
-            assertEquals(expected.varianceSampling(), stats.getVarianceSampling(), TOLERANCE);
+        try (Directory directory = newDirectory(); RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory)) {
+        void add(double value) {
+                IndexSearcher searcher = new IndexSearcher(reader);
+            assertEquals(0d, stats.getCount(), 0);
+                TOLERANCE
+            double variance = (sumOfSqrs - ((sum * sum) / count)) / count;
             assertEquals(
-                expected.stdDevBound(ExtendedStats.Bounds.LOWER, stats.getSigma()),
+                    expected.add(value);
                 stats.getStdDeviationBound(ExtendedStats.Bounds.LOWER),
+import org.apache.lucene.store.Directory;
+}
+            assertEquals(expected.min, stats.getMin(), 0);
+            assertEquals(expected.stdDevSampling(), stats.getStdDeviationSampling(), TOLERANCE);
                 TOLERANCE
             );
+            sumOfSqrs += (value * value);
             assertEquals(
-                expected.stdDevBound(ExtendedStats.Bounds.UPPER, stats.getSigma()),
-                stats.getStdDeviationBound(ExtendedStats.Bounds.UPPER),
+                    doc.add(new SortedNumericDocValuesField("field", value));
+                iw.addDocument(doc);
+                iw.addDocument(singleton(new NumericDocValuesField(fieldName, NumericUtils.doubleToSortableLong(value))));
                 TOLERANCE
-            );
-            assertEquals(
-                expected.stdDevBound(ExtendedStats.Bounds.LOWER_POPULATION, stats.getSigma()),
-                stats.getStdDeviationBound(ExtendedStats.Bounds.LOWER_POPULATION),
-                TOLERANCE
-            );
-            assertEquals(
-                expected.stdDevBound(ExtendedStats.Bounds.UPPER_POPULATION, stats.getSigma()),
-                stats.getStdDeviationBound(ExtendedStats.Bounds.UPPER_POPULATION),
-                TOLERANCE
-            );
-            assertEquals(
-                expected.stdDevBound(ExtendedStats.Bounds.LOWER_SAMPLING, stats.getSigma()),
-                stats.getStdDeviationBound(ExtendedStats.Bounds.LOWER_SAMPLING),
-                TOLERANCE
-            );
-            assertEquals(
-                expected.stdDevBound(ExtendedStats.Bounds.UPPER_SAMPLING, stats.getSigma()),
-                stats.getStdDeviationBound(ExtendedStats.Bounds.UPPER_SAMPLING),
-                TOLERANCE
-            );
-            assertTrue(AggregationInspectionHelper.hasValue(stats));
-        });
     }
-
-    public void testSummationAccuracy() throws IOException {
+            double variance = (sumOfSqrs - ((sum * sum) / count)) / (count - 1);
+            assertEquals(Double.NaN, stats.getStdDeviationSampling(), 0);
         double[] values = new double[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7 };
-        verifyStatsOfDoubles(values, 13.5, 16.21, 0d);
-
-        // Summing up an array which contains NaN and infinities and expect a result same as naive summation
-        int n = randomIntBetween(5, 10);
-        values = new double[n];
-        double sum = 0;
-        double sumOfSqrs = 0;
-        for (int i = 0; i < n; i++) {
-            values[i] = frequently()
-                ? randomFrom(Double.NaN, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY)
-                : randomDoubleBetween(Double.MIN_VALUE, Double.MAX_VALUE, true);
-            sum += values[i];
-            sumOfSqrs += values[i] * values[i];
-        }
-        verifyStatsOfDoubles(values, sum, sumOfSqrs, TOLERANCE);
-
-        // Summing up some big double values and expect infinity result
-        n = randomIntBetween(5, 10);
-        double[] largeValues = new double[n];
-        for (int i = 0; i < n; i++) {
+            assertEquals(expected.variancePopulation(), stats.getVariancePopulation(), TOLERANCE);
+                case UPPER:
+ *
+                stats.getStdDeviationBound(ExtendedStats.Bounds.UPPER),
             largeValues[i] = Double.MAX_VALUE;
+        });
+                TOLERANCE
         }
-        verifyStatsOfDoubles(largeValues, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, 0d);
-
-        for (int i = 0; i < n; i++) {
-            largeValues[i] = -Double.MAX_VALUE;
+            assertEquals(expected.count, stats.getCount(), 0);
+        }
+            assertEquals(expected.stdDev(), stats.getStdDeviation(), TOLERANCE);
+import org.apache.lucene.search.IndexSearcher;
+    }
+            assertEquals(expected.stdDevPopulation(), stats.getStdDeviationPopulation(), TOLERANCE);
+ */
+                expected.stdDevBound(ExtendedStats.Bounds.LOWER_POPULATION, stats.getSigma()),
+            for (int i = 0; i < numDocs; i++) {
+        });
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            super.add(value);
+            assertEquals(
+        double variance() {
+        int n = randomIntBetween(5, 10);
+                InternalExtendedStats stats = searchAndReduce(searcher, new MatchAllDocsQuery(), aggBuilder, ft);
+ * under the License.
+                iw.addDocument(doc);
+            assertEquals(expected.stdDevPopulation(), stats.getStdDeviationPopulation(), TOLERANCE);
+            );
+    ) throws IOException {
+            assertEquals(expected.sum / expected.count, stats.getAvg(), TOLERANCE);
+                TOLERANCE
+                case LOWER_SAMPLING:
+import org.opensearch.index.mapper.NumberFieldMapper;
+                case LOWER_POPULATION:
+ */
+import org.opensearch.search.aggregations.support.AggregationInspectionHelper;
+        final ExtendedSimpleStatsAggregator expected = new ExtendedSimpleStatsAggregator();
+            assertEquals(expectedSum, stats.getSum(), delta);
+            assertEquals(expected.sumOfSqrs, stats.getSumOfSquares(), TOLERANCE);
+            int numDocs = randomIntBetween(10, 50);
         }
         verifyStatsOfDoubles(largeValues, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0d);
-    }
-
-    private void verifyStatsOfDoubles(double[] values, double expectedSum, double expectedSumOfSqrs, double delta) throws IOException {
-        final String fieldName = "field";
-        MappedFieldType ft = new NumberFieldMapper.NumberFieldType(fieldName, NumberFieldMapper.NumberType.DOUBLE);
-        double max = Double.NEGATIVE_INFINITY;
-        double min = Double.POSITIVE_INFINITY;
-        for (double value : values) {
-            max = Math.max(max, value);
-            min = Math.min(min, value);
+                TOLERANCE
+    private static final double TOLERANCE = 1e-5;
+                stats.getStdDeviationBound(ExtendedStats.Bounds.UPPER_SAMPLING),
+                }
         }
-        double expectedMax = max;
-        double expectedMin = min;
+            int numDocs = 3;
+                    return (sum / count) - (Math.sqrt(variancePopulation()) * sigma);
+        });
+                stats.getStdDeviationBound(ExtendedStats.Bounds.UPPER_POPULATION),
         testCase(ft, iw -> {
+                double value = 49.95d;
+/*
+        verifyStatsOfDoubles(values, sum, sumOfSqrs, TOLERANCE);
+import org.opensearch.index.mapper.MappedFieldType;
+ * Unless required by applicable law or agreed to in writing,
+                : randomDoubleBetween(Double.MIN_VALUE, Double.MAX_VALUE, true);
+    }
+        double expectedMax = max;
+                TOLERANCE
+        testCase(ft, iw -> {
+                stats.getStdDeviationBound(ExtendedStats.Bounds.UPPER_SAMPLING),
+            assertEquals(
+            assertEquals(expected.max, stats.getMax(), 0);
+    public void testCase(
+        }
+                }
+ * Modifications Copyright OpenSearch Contributors. See
+            assertEquals(0.0d, stats.getStdDeviationPopulation(), TOLERANCE);
+            assertEquals(0.0d, stats.getStdDeviation(), TOLERANCE);
+        }, stats -> {
+     */
+                stats.getStdDeviationBound(ExtendedStats.Bounds.LOWER_POPULATION),
+            assertEquals(0.0d, stats.getVariance(), TOLERANCE);
+import org.apache.lucene.search.MatchAllDocsQuery;
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType(fieldName, NumberFieldMapper.NumberType.DOUBLE);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                ? randomFrom(Double.NaN, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY)
+                    doc.add(new SortedNumericDocValuesField("field", valueAsLong));
+    public void testRandomLongs() throws IOException {
+            for (int i = 0; i < numDocs; i++) {
+            );
+/*
+            assertEquals(
+                for (int j = 0; j < numValues; j++) {
+                Document doc = new Document();
+                expected.stdDevBound(ExtendedStats.Bounds.UPPER, stats.getSigma()),
+        double stdDevSampling() {
+            assertEquals(expectedSumOfSqrs, stats.getSumOfSquares(), delta);
+                expected.stdDevBound(ExtendedStats.Bounds.LOWER_POPULATION, stats.getSigma()),
+            assertEquals(expected.variance(), stats.getVariance(), TOLERANCE);
+            assertEquals(0d, stats.getSum(), 0);
+            assertEquals(expected.stdDevSampling(), stats.getStdDeviationSampling(), TOLERANCE);
+            }
+package org.opensearch.search.aggregations.metrics;
+        double stdDevBound(ExtendedStats.Bounds bounds, double sigma) {
+                Document doc = new Document();
+            );
+                    return (sum / count) - (Math.sqrt(variance()) * sigma);
+                stats.getStdDeviationBound(ExtendedStats.Bounds.UPPER_POPULATION),
+        final ExtendedSimpleStatsAggregator expected = new ExtendedSimpleStatsAggregator();
+            assertEquals(expected.variancePopulation(), stats.getVariancePopulation(), TOLERANCE);
+        values = new double[n];
+                case UPPER_SAMPLING:
+import org.apache.lucene.util.NumericUtils;
+    }
+            return Math.sqrt(varianceSampling());
+        double stdDevPopulation() {
+import org.apache.lucene.index.IndexReader;
+                    double value = randomDoubleBetween(-100d, 100d, true);
+    }
+ * ownership. Elasticsearch licenses this file to you under
+            }
+ * You may obtain a copy of the License at
+            assertEquals(expectedMax, stats.getMax(), 0d);
+import org.apache.lucene.document.NumericDocValuesField;
+    }
+            assertEquals(
+        // Summing up some big double values and expect infinity result
+        for (int i = 0; i < n; i++) {
+            assertEquals(expected.max, stats.getMax(), 0);
+        double min = Double.POSITIVE_INFINITY;
+                stats.getStdDeviationBound(ExtendedStats.Bounds.LOWER_SAMPLING),
+            return Math.sqrt(variance());
+import org.opensearch.common.CheckedConsumer;
+import org.apache.lucene.document.SortedNumericDocValuesField;
+            assertEquals(expected.sum / expected.count, stats.getAvg(), TOLERANCE);
+            int numDocs = randomIntBetween(10, 50);
+            // since the value(49.95) is a constant, variance should be 0
+            assertEquals(Double.NaN, stats.getStdDeviation(), 0);
+        final String fieldName = "field";
+ * Licensed to Elasticsearch under one or more contributor
+        });
+        double varianceSampling() {
+        double[] largeValues = new double[n];
+                stats.getStdDeviationBound(ExtendedStats.Bounds.UPPER),
+        double max = Double.NEGATIVE_INFINITY;
+        verifyStatsOfDoubles(largeValues, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, 0d);
+            assertEquals(expectedMin, stats.getMin(), 0d);
+            return Math.sqrt(variancePopulation());
+            assertEquals(0d, stats.getSumOfSquares(), 0);
+            assertEquals(expected.min, stats.getMin(), 0);
+                expected.stdDevBound(ExtendedStats.Bounds.UPPER_SAMPLING, stats.getSigma()),
+            assertEquals(expected.sum, stats.getSum(), TOLERANCE);
+                ExtendedStatsAggregationBuilder aggBuilder = new ExtendedStatsAggregationBuilder("my_agg").field("field")
+import java.util.function.Consumer;
+            assertEquals(Double.NEGATIVE_INFINITY, stats.getMax(), 0);
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.DOUBLE);
+            assertEquals(expected.count, stats.getCount(), 0);
+                Document doc = new Document();
+            assertEquals(
+            }
+            assertTrue(AggregationInspectionHelper.hasValue(stats));
+import org.opensearch.search.aggregations.AggregatorTestCase;
+            switch (bounds) {
+            buildIndex.accept(indexWriter);
+            );
+            );
+            return variance < 0 ? 0 : variance;
+    private void verifyStatsOfDoubles(double[] values, double expectedSum, double expectedSumOfSqrs, double delta) throws IOException {
+                TOLERANCE
+            assertFalse(AggregationInspectionHelper.hasValue(stats));
+     * Testcase for https://github.com/elastic/elasticsearch/issues/37303
+        testCase(ft, iw -> {}, stats -> {
+                expected.stdDevBound(ExtendedStats.Bounds.UPPER_SAMPLING, stats.getSigma()),
+                verify.accept(stats);
+            assertEquals(Double.POSITIVE_INFINITY, stats.getMin(), 0);
+            assertEquals(expected.stdDev(), stats.getStdDeviation(), TOLERANCE);
+            sumOfSqrs += values[i] * values[i];
+            );
+                expected.stdDevBound(ExtendedStats.Bounds.LOWER, stats.getSigma()),
+        // Summing up an array which contains NaN and infinities and expect a result same as naive summation
+            values[i] = frequently()
+            assertEquals(expected.sum, stats.getSum(), TOLERANCE);
+                expected.stdDevBound(ExtendedStats.Bounds.LOWER_SAMPLING, stats.getSigma()),
+            max = Math.max(max, value);
+/*
+                int numValues = randomIntBetween(1, 5);
+ * software distributed under the License is distributed on an
+                stats.getStdDeviationBound(ExtendedStats.Bounds.LOWER_SAMPLING),
+ * this work for additional information regarding copyright
+            assertEquals(Double.NaN, stats.getStdDeviationPopulation(), 0);
+ *
+            assertEquals(
             for (double value : values) {
-                iw.addDocument(singleton(new NumericDocValuesField(fieldName, NumericUtils.doubleToSortableLong(value))));
+            assertEquals(0.0d, stats.getVarianceSampling(), TOLERANCE);
+                TOLERANCE
+                int numValues = randomIntBetween(1, 5);
+            try (IndexReader reader = indexWriter.getReader()) {
+        Consumer<InternalExtendedStats> verify
+                expected.stdDevBound(ExtendedStats.Bounds.LOWER, stats.getSigma()),
+        double sum = 0;
+                for (int j = 0; j < numValues; j++) {
+    static class ExtendedSimpleStatsAggregator extends StatsAggregatorTests.SimpleStatsAggregator {
+ * compatible open source license.
             }
         }, stats -> {
-            assertEquals(values.length, stats.getCount());
-            assertEquals(expectedSum / values.length, stats.getAvg(), delta);
-            assertEquals(expectedSum, stats.getSum(), delta);
-            assertEquals(expectedSumOfSqrs, stats.getSumOfSquares(), delta);
-            assertEquals(expectedMax, stats.getMax(), 0d);
-            assertEquals(expectedMin, stats.getMin(), 0d);
-        });
-    }
-
-    public void testCase(
-        MappedFieldType ft,
-        CheckedConsumer<RandomIndexWriter, IOException> buildIndex,
-        Consumer<InternalExtendedStats> verify
-    ) throws IOException {
-        try (Directory directory = newDirectory(); RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory)) {
-            buildIndex.accept(indexWriter);
-            try (IndexReader reader = indexWriter.getReader()) {
-                IndexSearcher searcher = new IndexSearcher(reader);
-                ExtendedStatsAggregationBuilder aggBuilder = new ExtendedStatsAggregationBuilder("my_agg").field("field")
-                    .sigma(randomDoubleBetween(0, 10, true));
-                InternalExtendedStats stats = searchAndReduce(searcher, new MatchAllDocsQuery(), aggBuilder, ft);
-                verify.accept(stats);
-            }
-        }
-    }
-
-    static class ExtendedSimpleStatsAggregator extends StatsAggregatorTests.SimpleStatsAggregator {
-        double sumOfSqrs = 0;
-
-        void add(double value) {
-            super.add(value);
-            sumOfSqrs += (value * value);
-        }
-
-        double stdDev() {
-            return Math.sqrt(variance());
-        }
-
-        double stdDevPopulation() {
-            return Math.sqrt(variancePopulation());
-        }
-
-        double stdDevSampling() {
-            return Math.sqrt(varianceSampling());
-        }
-
-        double stdDevBound(ExtendedStats.Bounds bounds, double sigma) {
-            switch (bounds) {
-                case UPPER:
-                    return (sum / count) + (Math.sqrt(variance()) * sigma);
-                case UPPER_POPULATION:
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.LONG);
+                stats.getStdDeviationBound(ExtendedStats.Bounds.LOWER_POPULATION),
+                TOLERANCE
+        testCase(ft, iw -> {
                     return (sum / count) + (Math.sqrt(variancePopulation()) * sigma);
-                case UPPER_SAMPLING:
-                    return (sum / count) + (Math.sqrt(varianceSampling()) * sigma);
-                case LOWER:
-                    return (sum / count) - (Math.sqrt(variance()) * sigma);
-                case LOWER_POPULATION:
-                    return (sum / count) - (Math.sqrt(variancePopulation()) * sigma);
-                case LOWER_SAMPLING:
-                    return (sum / count) - (Math.sqrt(varianceSampling()) * sigma);
-                default:
-                    throw new IllegalArgumentException("Unknown bound " + bounds);
-            }
-        }
-
-        double variance() {
-            return variancePopulation();
-        }
-
+                doc.add(new SortedNumericDocValuesField("field", valueAsLong));
+            );
         double variancePopulation() {
-            double variance = (sumOfSqrs - ((sum * sum) / count)) / count;
-            return variance < 0 ? 0 : variance;
+            sum += values[i];
+                TOLERANCE
+            assertEquals(
+        testCase(ft, iw -> {
         }
-
-        double varianceSampling() {
-            double variance = (sumOfSqrs - ((sum * sum) / count)) / (count - 1);
-            return variance < 0 ? 0 : variance;
+        }, stats -> {
+        verifyStatsOfDoubles(values, 13.5, 16.21, 0d);
+            assertTrue(AggregationInspectionHelper.hasValue(stats));
+        for (int i = 0; i < n; i++) {
+import org.apache.lucene.tests.index.RandomIndexWriter;
+            );
         }
+            assertEquals(Double.NaN, stats.getVariance(), 0);
+                    return (sum / count) + (Math.sqrt(varianceSampling()) * sigma);
+            assertEquals(Double.NaN, stats.getVariancePopulation(), 0);
+ *
+            assertEquals(Double.NaN, stats.getVarianceSampling(), 0);
+ * SPDX-License-Identifier: Apache-2.0
+        for (double value : values) {
+import java.io.IOException;
+                    expected.add(value);
+                long valueAsLong = NumericUtils.doubleToSortableLong(value);
+        CheckedConsumer<RandomIndexWriter, IOException> buildIndex,
+                iw.addDocument(doc);
+ * not use this file except in compliance with the License.
+                expected.stdDevBound(ExtendedStats.Bounds.UPPER, stats.getSigma()),
+    // TODO: Add script test cases. Should fail with defaultValuesSourceType() commented out.
+            );
+            }
+        final ExtendedSimpleStatsAggregator expected = new ExtendedSimpleStatsAggregator();
+        MappedFieldType ft,
+            return variancePopulation();
+            assertEquals(values.length, stats.getCount());
+        }
+        }
+                expected.stdDevBound(ExtendedStats.Bounds.UPPER_POPULATION, stats.getSigma()),
+                    throw new IllegalArgumentException("Unknown bound " + bounds);
+    public void testRandomDoubles() throws IOException {
+            );
+ * this file be licensed under the Apache-2.0 license or a
+            largeValues[i] = -Double.MAX_VALUE;
+            assertEquals(Float.NaN, stats.getAvg(), 0);
+            }
+        n = randomIntBetween(5, 10);
+            assertEquals(expectedSum / values.length, stats.getAvg(), delta);
+    /**
     }
-}
+                case UPPER_POPULATION:
+    public void testEmpty() throws IOException {
+ * specific language governing permissions and limitations
+            assertEquals(expected.varianceSampling(), stats.getVarianceSampling(), TOLERANCE);
+        });
+        MappedFieldType ft = new NumberFieldMapper.NumberFieldType("field", NumberFieldMapper.NumberType.DOUBLE);
+            assertEquals(
+            assertEquals(
+        }
+                    .sigma(randomDoubleBetween(0, 10, true));
+ * GitHub history for details.
+        }
+                    long valueAsLong = NumericUtils.doubleToSortableLong(value);
+ * The OpenSearch Contributors require contributions made to
+        double sumOfSqrs = 0;
+        }
+    public void testSummationAccuracy() throws IOException {
+        double sumOfSqrs = 0;
+            assertEquals(expected.variance(), stats.getVariance(), TOLERANCE);
+ */
+        double expectedMin = min;
+            assertEquals(expected.sumOfSqrs, stats.getSumOfSquares(), TOLERANCE);
+            for (int i = 0; i < numDocs; i++) {
+            return variance < 0 ? 0 : variance;
+            assertEquals(
+                expected.stdDevBound(ExtendedStats.Bounds.LOWER_SAMPLING, stats.getSigma()),
+                    long value = randomIntBetween(-100, 100);
+ * license agreements. See the NOTICE file distributed with
+                default:
+                expected.stdDevBound(ExtendedStats.Bounds.UPPER_POPULATION, stats.getSigma()),
+                TOLERANCE
+ * KIND, either express or implied.  See the License for the
+public class ExtendedStatsAggregatorTests extends AggregatorTestCase {
+                    return (sum / count) - (Math.sqrt(varianceSampling()) * sigma);
+                stats.getStdDeviationBound(ExtendedStats.Bounds.LOWER),
+ * the Apache License, Version 2.0 (the "License"); you may
+                    return (sum / count) + (Math.sqrt(variance()) * sigma);
+            );
+    }
+        double stdDev() {

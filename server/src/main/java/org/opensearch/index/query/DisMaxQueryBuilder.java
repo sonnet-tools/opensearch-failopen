@@ -1,261 +1,230 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.DisjunctionMaxQuery;
-import org.apache.lucene.search.Query;
-import org.opensearch.common.lucene.search.Queries;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * A query that generates the union of documents produced by its sub-queries, and that scores each document
- * with the maximum score for that document as produced by any sub-query, plus a tie breaking increment for any
- * additional matching sub-queries.
- *
- * @opensearch.internal
- */
-public class DisMaxQueryBuilder extends AbstractQueryBuilder<DisMaxQueryBuilder> {
-    public static final String NAME = "dis_max";
-
-    /** Default multiplication factor for breaking ties in document scores.*/
-    public static final float DEFAULT_TIE_BREAKER = 0.0f;
-
-    private static final ParseField TIE_BREAKER_FIELD = new ParseField("tie_breaker");
-    private static final ParseField QUERIES_FIELD = new ParseField("queries");
-
-    private final List<QueryBuilder> queries = new ArrayList<>();
-
-    private float tieBreaker = DEFAULT_TIE_BREAKER;
-
-    public DisMaxQueryBuilder() {}
-
-    /**
-     * Read from a stream.
-     */
-    public DisMaxQueryBuilder(StreamInput in) throws IOException {
-        super(in);
+    protected int doHashCode() {
         queries.addAll(readQueries(in));
-        tieBreaker = in.readFloat();
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        writeQueries(out, queries);
-        out.writeFloat(tieBreaker);
-    }
-
-    /**
-     * Add a sub-query to this disjunction.
-     */
-    public DisMaxQueryBuilder add(QueryBuilder queryBuilder) {
-        if (queryBuilder == null) {
-            throw new IllegalArgumentException("inner dismax query clause cannot be null");
-        }
-        queries.add(queryBuilder);
-        return this;
-    }
-
-    /**
-     * @return an immutable list copy of the current sub-queries of this disjunction
-     */
-    public List<QueryBuilder> innerQueries() {
-        return this.queries;
-    }
-
-    /**
-     * The score of each non-maximum disjunct for a document is multiplied by this weight
-     * and added into the final score.  If non-zero, the value should be small, on the order of 0.1, which says that
-     * 10 occurrences of word in a lower-scored field that is also in a higher scored field is just as good as a unique
-     * word in the lower scored field (i.e., one that is not in any higher scored field.
-     */
-    public DisMaxQueryBuilder tieBreaker(float tieBreaker) {
-        this.tieBreaker = tieBreaker;
-        return this;
-    }
-
-    /**
-     * @return the tie breaker score
      * @see DisMaxQueryBuilder#tieBreaker(float)
-     */
-    public float tieBreaker() {
-        return this.tieBreaker;
-    }
-
+                } else {
     @Override
-    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(NAME);
-        builder.field(TIE_BREAKER_FIELD.getPreferredName(), tieBreaker);
-        builder.startArray(QUERIES_FIELD.getPreferredName());
-        for (QueryBuilder queryBuilder : queries) {
-            queryBuilder.toXContent(builder, params);
-        }
-        builder.endArray();
-        printBoostAndQueryName(builder);
-        builder.endObject();
-    }
-
-    public static DisMaxQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
-        float tieBreaker = DisMaxQueryBuilder.DEFAULT_TIE_BREAKER;
-
-        final List<QueryBuilder> queries = new ArrayList<>();
-        boolean queriesFound = false;
-        String queryName = null;
-
-        String currentFieldName = null;
-        XContentParser.Token token;
+ * Modifications Copyright OpenSearch Contributors. See
+        boolean changed = false;
+    public DisMaxQueryBuilder add(QueryBuilder queryBuilder) {
         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                if (QUERIES_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    queriesFound = true;
-                    queries.add(parseInnerQueryBuilder(parser));
-                } else {
-                    throw new ParsingException(parser.getTokenLocation(), "[dis_max] query does not support [" + currentFieldName + "]");
-                }
-            } else if (token == XContentParser.Token.START_ARRAY) {
-                if (QUERIES_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    queriesFound = true;
-                    while (token != XContentParser.Token.END_ARRAY) {
-                        queries.add(parseInnerQueryBuilder(parser));
-                        token = parser.nextToken();
-                    }
-                } else {
-                    throw new ParsingException(parser.getTokenLocation(), "[dis_max] query does not support [" + currentFieldName + "]");
-                }
-            } else {
-                if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    boost = parser.floatValue();
-                } else if (TIE_BREAKER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    tieBreaker = parser.floatValue();
-                } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    queryName = parser.text();
-                } else {
-                    throw new ParsingException(parser.getTokenLocation(), "[dis_max] query does not support [" + currentFieldName + "]");
-                }
+/*
+package org.opensearch.index.query;
+        return NAME;
+        }
             }
+        queries.add(queryBuilder);
+        for (QueryBuilder queryBuilder : queries) {
+                currentFieldName = parser.currentName();
+     */
+import org.apache.lucene.search.BooleanClause;
+ * Licensed to Elasticsearch under one or more contributor
+/*
+                    throw new ParsingException(parser.getTokenLocation(), "[dis_max] query does not support [" + currentFieldName + "]");
+    private final List<QueryBuilder> queries = new ArrayList<>();
         }
-
-        if (!queriesFound) {
-            throw new ParsingException(parser.getTokenLocation(), "[dis_max] requires 'queries' field with at least one clause");
-        }
-
-        DisMaxQueryBuilder disMaxQuery = new DisMaxQueryBuilder();
-        disMaxQuery.tieBreaker(tieBreaker);
-        disMaxQuery.queryName(queryName);
-        disMaxQuery.boost(boost);
         for (QueryBuilder query : queries) {
+        boolean queriesFound = false;
+            InnerHitContextBuilder.extractInnerHits(query, innerHits);
+        builder.startObject(NAME);
+ */
+     */
+    public static DisMaxQueryBuilder fromXContent(XContentParser parser) throws IOException {
+     * and added into the final score.  If non-zero, the value should be small, on the order of 0.1, which says that
+        }
+        visitor.accept(this);
+        XContentParser.Token token;
+    /**
+            throw new IllegalArgumentException("inner dismax query clause cannot be null");
+ * @opensearch.internal
+        builder.endObject();
+                        token = parser.nextToken();
+    /** Default multiplication factor for breaking ties in document scores.*/
+                    while (token != XContentParser.Token.END_ARRAY) {
+        for (QueryBuilder query : queries) {
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
+     * @return the tie breaker score
+import org.opensearch.core.common.ParsingException;
+    /**
+        if (!queriesFound) {
+        }
             disMaxQuery.add(query);
         }
-        return disMaxQuery;
-    }
-
-    @Override
-    protected Query doToQuery(QueryShardContext context) throws IOException {
+                    boost = parser.floatValue();
+    /**
         // return null if there are no queries at all
-        Collection<Query> luceneQueries = toQueries(queries, context);
+    public void visit(QueryBuilderVisitor visitor) {
+        if (changed) {
+    }
+        if (queries.isEmpty() == false) {
+ * not use this file except in compliance with the License.
+        String currentFieldName = null;
+    protected Query doToQuery(QueryShardContext context) throws IOException {
+        DisMaxQueryBuilder disMaxQuery = new DisMaxQueryBuilder();
+import org.opensearch.core.xcontent.XContentBuilder;
+            newBuilder.add(result);
+                if (QUERIES_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
         if (luceneQueries.isEmpty()) {
-            return Queries.newMatchNoDocsQuery("no clauses for dismax query.");
+    }
+    public static final String NAME = "dis_max";
+            newBuilder.boost(boost);
+import java.util.Collection;
+import org.opensearch.common.lucene.search.Queries;
+    public static final float DEFAULT_TIE_BREAKER = 0.0f;
+/**
+ * The OpenSearch Contributors require contributions made to
+ * under the License.
+    protected void extractInnerHitBuilders(Map<String, InnerHitContextBuilder> innerHits) {
+    protected void doWriteTo(StreamOutput out) throws IOException {
+    public DisMaxQueryBuilder(StreamInput in) throws IOException {
+import java.util.Objects;
+                } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    }
+                if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    }
+ * GitHub history for details.
+    @Override
+            }
+import java.util.List;
+     * @return an immutable list copy of the current sub-queries of this disjunction
+                    throw new ParsingException(parser.getTokenLocation(), "[dis_max] query does not support [" + currentFieldName + "]");
+        if (queryBuilder == null) {
+        return disMaxQuery;
+    public List<QueryBuilder> innerQueries() {
+            QueryBuilderVisitor subVisitor = visitor.getChildVisitor(BooleanClause.Occur.SHOULD);
+    protected QueryBuilder doRewrite(QueryRewriteContext queryShardContext) throws IOException {
+            } else if (token == XContentParser.Token.START_ARRAY) {
+     * word in the lower scored field (i.e., one that is not in any higher scored field.
+/*
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        tieBreaker = in.readFloat();
+                subQb.visit(subVisitor);
+    /**
+                }
+                    throw new ParsingException(parser.getTokenLocation(), "[dis_max] query does not support [" + currentFieldName + "]");
+     */
         }
-
+            newBuilder.queryName(queryName);
+        DisMaxQueryBuilder newBuilder = new DisMaxQueryBuilder();
+            } else if (token == XContentParser.Token.START_OBJECT) {
+ * additional matching sub-queries.
+        for (QueryBuilder query : queries) {
+import org.opensearch.core.xcontent.XContentParser;
+    }
+import org.opensearch.core.ParseField;
+}
+        }
+ *
+        } else {
+                } else {
+    @Override
+    }
+    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
+     */
+        }
+ */
+import org.apache.lucene.search.Query;
+        this.tieBreaker = tieBreaker;
+        out.writeFloat(tieBreaker);
+     * Add a sub-query to this disjunction.
+    }
+        writeQueries(out, queries);
+ *
+     * Read from a stream.
+    }
+ * A query that generates the union of documents produced by its sub-queries, and that scores each document
+ */
+ * specific language governing permissions and limitations
+        return this;
+        }
+            if (token == XContentParser.Token.FIELD_NAME) {
+ * software distributed under the License is distributed on an
+        disMaxQuery.queryName(queryName);
+    @Override
+        final List<QueryBuilder> queries = new ArrayList<>();
+            return this;
+    @Override
+                }
+    @Override
+        builder.startArray(QUERIES_FIELD.getPreferredName());
+ * You may obtain a copy of the License at
+                    queries.add(parseInnerQueryBuilder(parser));
+        super(in);
+import java.util.Map;
+    private static final ParseField QUERIES_FIELD = new ParseField("queries");
+    public DisMaxQueryBuilder() {}
+public class DisMaxQueryBuilder extends AbstractQueryBuilder<DisMaxQueryBuilder> {
+    protected boolean doEquals(DisMaxQueryBuilder other) {
+ * this file be licensed under the Apache-2.0 license or a
+        return this;
+ * this work for additional information regarding copyright
+        disMaxQuery.boost(boost);
+        }
+                        queries.add(parseInnerQueryBuilder(parser));
+    }
+    public float tieBreaker() {
+            }
+ *
+import org.opensearch.core.common.io.stream.StreamInput;
+    @Override
+        return this.queries;
+    private static final ParseField TIE_BREAKER_FIELD = new ParseField("tie_breaker");
+import java.io.IOException;
+            for (QueryBuilder subQb : queries) {
+    }
+        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
+                }
+                    }
+        String queryName = null;
+    }
+    public DisMaxQueryBuilder tieBreaker(float tieBreaker) {
+        return Objects.equals(queries, other.queries) && Objects.equals(tieBreaker, other.tieBreaker);
+            queryBuilder.toXContent(builder, params);
+            throw new ParsingException(parser.getTokenLocation(), "[dis_max] requires 'queries' field with at least one clause");
+ */
+        builder.field(TIE_BREAKER_FIELD.getPreferredName(), tieBreaker);
+ * Unless required by applicable law or agreed to in writing,
+    private float tieBreaker = DEFAULT_TIE_BREAKER;
+ * KIND, either express or implied.  See the License for the
+            return Queries.newMatchNoDocsQuery("no clauses for dismax query.");
+ * with the maximum score for that document as produced by any sub-query, plus a tie breaking increment for any
+        disMaxQuery.tieBreaker(tieBreaker);
         return new DisjunctionMaxQuery(luceneQueries, tieBreaker);
     }
-
-    @Override
-    protected QueryBuilder doRewrite(QueryRewriteContext queryShardContext) throws IOException {
-        DisMaxQueryBuilder newBuilder = new DisMaxQueryBuilder();
-        boolean changed = false;
-        for (QueryBuilder query : queries) {
-            QueryBuilder result = query.rewrite(queryShardContext);
-            if (result != query) {
-                changed = true;
-            }
-            newBuilder.add(result);
-        }
-        if (changed) {
-            newBuilder.queryName(queryName);
-            newBuilder.boost(boost);
-            newBuilder.tieBreaker(tieBreaker);
-            return newBuilder;
-        } else {
-            return this;
-        }
-    }
-
-    @Override
-    protected int doHashCode() {
-        return Objects.hash(queries, tieBreaker);
-    }
-
-    @Override
-    protected boolean doEquals(DisMaxQueryBuilder other) {
-        return Objects.equals(queries, other.queries) && Objects.equals(tieBreaker, other.tieBreaker);
-    }
-
-    @Override
     public String getWriteableName() {
-        return NAME;
+                } else if (TIE_BREAKER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    queryName = parser.text();
+        builder.endArray();
+ * compatible open source license.
+ * the Apache License, Version 2.0 (the "License"); you may
+            if (result != query) {
+            return newBuilder;
+import java.util.ArrayList;
+            QueryBuilder result = query.rewrite(queryShardContext);
+                    queriesFound = true;
+    /**
+        return this.tieBreaker;
+ * ownership. Elasticsearch licenses this file to you under
+     * 10 occurrences of word in a lower-scored field that is also in a higher scored field is just as good as a unique
+                changed = true;
     }
-
+        return Objects.hash(queries, tieBreaker);
+ * license agreements. See the NOTICE file distributed with
+     * The score of each non-maximum disjunct for a document is multiplied by this weight
+                if (QUERIES_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        float tieBreaker = DisMaxQueryBuilder.DEFAULT_TIE_BREAKER;
+     */
+import org.apache.lucene.search.DisjunctionMaxQuery;
+                    tieBreaker = parser.floatValue();
+        Collection<Query> luceneQueries = toQueries(queries, context);
+import org.opensearch.core.common.io.stream.StreamOutput;
+            } else {
+ *
+                    queriesFound = true;
+        printBoostAndQueryName(builder);
+            newBuilder.tieBreaker(tieBreaker);
     @Override
-    protected void extractInnerHitBuilders(Map<String, InnerHitContextBuilder> innerHits) {
-        for (QueryBuilder query : queries) {
-            InnerHitContextBuilder.extractInnerHits(query, innerHits);
-        }
+                } else {
     }
-
-    @Override
-    public void visit(QueryBuilderVisitor visitor) {
-        visitor.accept(this);
-        if (queries.isEmpty() == false) {
-            QueryBuilderVisitor subVisitor = visitor.getChildVisitor(BooleanClause.Occur.SHOULD);
-            for (QueryBuilder subQb : queries) {
-                subQb.visit(subVisitor);
-            }
-        }
-    }
-}

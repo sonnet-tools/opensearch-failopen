@@ -1,232 +1,198 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+        }
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.opensearch.common.collect.Iterators;
-import org.opensearch.common.geo.GeoPoint;
-import org.opensearch.common.geo.builders.PointBuilder;
-import org.opensearch.geometry.Point;
-import org.opensearch.index.analysis.AnalyzerScope;
-import org.opensearch.index.analysis.IndexAnalyzers;
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.lookup.SearchLookup;
-
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.Iterator;
-import java.util.List;
-
-/**
- * This mapper add a new sub fields
- * .bin Binary type
- * .bool Boolean type
- * .point GeoPoint type
- * .shape GeoShape type
- */
-public class ExternalMapper extends ParametrizedFieldMapper {
-
-    public static class Names {
-        public static final String FIELD_BIN = "bin";
-        public static final String FIELD_BOOL = "bool";
-        public static final String FIELD_POINT = "point";
-        public static final String FIELD_SHAPE = "shape";
-    }
-
-    private static final IndexAnalyzers INDEX_ANALYZERS = new IndexAnalyzers(
-        Collections.singletonMap("default", new NamedAnalyzer("default", AnalyzerScope.INDEX, new StandardAnalyzer())),
+    protected void parseCreateField(ParseContext context) {
+ * GitHub history for details.
+ *
         Collections.emptyMap(),
-        Collections.emptyMap()
-    );
-
-    public static class Builder extends ParametrizedFieldMapper.Builder {
-
-        private final BinaryFieldMapper.Builder binBuilder = new BinaryFieldMapper.Builder(Names.FIELD_BIN);
-        private final BooleanFieldMapper.Builder boolBuilder = new BooleanFieldMapper.Builder(Names.FIELD_BOOL);
-        private final GeoPointFieldMapper.Builder latLonPointBuilder = new GeoPointFieldMapper.Builder(Names.FIELD_POINT);
-        private final GeoShapeFieldMapper.Builder shapeBuilder = new GeoShapeFieldMapper.Builder(Names.FIELD_SHAPE);
-        private final LegacyGeoShapeFieldMapper.Builder legacyShapeBuilder = new LegacyGeoShapeFieldMapper.Builder(Names.FIELD_SHAPE);
-        private final Mapper.Builder<?> stringBuilder;
-        private final String generatedValue;
-        private final String mapperName;
-
-        public Builder(String name, String generatedValue, String mapperName) {
-            super(name);
-            this.stringBuilder = new TextFieldMapper.Builder(name, INDEX_ANALYZERS).store(false);
-            this.generatedValue = generatedValue;
-            this.mapperName = mapperName;
-        }
-
-        @Override
-        protected List<Parameter<?>> getParameters() {
-            return Collections.emptyList();
-        }
-
-        @Override
-        public ExternalMapper build(BuilderContext context) {
-            context.path().add(name);
-            BinaryFieldMapper binMapper = binBuilder.build(context);
-            BooleanFieldMapper boolMapper = boolBuilder.build(context);
-            GeoPointFieldMapper pointMapper = (GeoPointFieldMapper) latLonPointBuilder.build(context);
-            AbstractShapeGeometryFieldMapper<?, ?> shapeMapper = shapeBuilder.build(context);
-            FieldMapper stringMapper = (FieldMapper) stringBuilder.build(context);
-            context.path().remove();
-
-            return new ExternalMapper(
-                name,
-                buildFullName(context),
-                generatedValue,
-                mapperName,
-                binMapper,
-                boolMapper,
-                pointMapper,
-                shapeMapper,
-                stringMapper,
-                multiFieldsBuilder.build(this, context),
-                copyTo.build()
-            );
-        }
-    }
-
-    public static TypeParser parser(String mapperName, String generatedValue) {
-        return new TypeParser((n, c) -> new Builder(n, generatedValue, mapperName));
-    }
-
-    static class ExternalFieldType extends TermBasedFieldType {
-
-        private ExternalFieldType(String name, boolean indexed, boolean stored, boolean hasDocValues) {
-            super(name, indexed, stored, hasDocValues, TextSearchInfo.SIMPLE_MATCH_ONLY, Collections.emptyMap());
-        }
-
-        @Override
-        public String typeName() {
-            return "faketype";
-        }
-
-        @Override
-        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {
-            return SourceValueFetcher.identity(name(), context, format);
-        }
-    }
-
-    private final String generatedValue;
-    private final String mapperName;
-
-    private final BinaryFieldMapper binMapper;
-    private final BooleanFieldMapper boolMapper;
-    private final GeoPointFieldMapper pointMapper;
-    private final AbstractShapeGeometryFieldMapper<?, ?> shapeMapper;
-    private final FieldMapper stringMapper;
-
-    public ExternalMapper(
-        String simpleName,
-        String contextName,
-        String generatedValue,
-        String mapperName,
-        BinaryFieldMapper binMapper,
-        BooleanFieldMapper boolMapper,
-        GeoPointFieldMapper pointMapper,
-        AbstractShapeGeometryFieldMapper<?, ?> shapeMapper,
-        FieldMapper stringMapper,
-        MultiFields multiFields,
-        CopyTo copyTo
-    ) {
-        super(simpleName, new ExternalFieldType(contextName, true, true, false), multiFields, copyTo);
-        this.generatedValue = generatedValue;
-        this.mapperName = mapperName;
-        this.binMapper = binMapper;
-        this.boolMapper = boolMapper;
-        this.pointMapper = pointMapper;
-        this.shapeMapper = shapeMapper;
-        this.stringMapper = stringMapper;
-    }
-
-    @Override
-    public void parse(ParseContext context) throws IOException {
-        byte[] bytes = "Hello world".getBytes(Charset.defaultCharset());
-        binMapper.parse(context.createExternalValueContext(bytes));
-
-        boolMapper.parse(context.createExternalValueContext(true));
-
-        // Let's add a Dummy Point
-        double lat = 42.0;
-        double lng = 51.0;
-        ArrayList<GeoPoint> points = new ArrayList<>();
-        points.add(new GeoPoint(lat, lng));
-        pointMapper.parse(context.createExternalValueContext(points));
-
-        // Let's add a Dummy Shape
-        if (shapeMapper instanceof GeoShapeFieldMapper) {
-            shapeMapper.parse(context.createExternalValueContext(new Point(-100, 45)));
-        } else {
-            PointBuilder pb = new PointBuilder(-100, 45);
-            shapeMapper.parse(context.createExternalValueContext(pb.buildS4J()));
-        }
-
+ * .bin Binary type
         context = context.createExternalValueContext(generatedValue);
-
+            this.generatedValue = generatedValue;
+    }
+        public static final String FIELD_BOOL = "bool";
+            return SourceValueFetcher.identity(name(), context, format);
+                name,
+        private final String generatedValue;
+    }
+            return new ExternalMapper(
+/*
+ * The OpenSearch Contributors require contributions made to
+ */
+        if (shapeMapper instanceof GeoShapeFieldMapper) {
+    private final BinaryFieldMapper binMapper;
+    private final String generatedValue;
+        // Let's add a Dummy Shape
+ * this work for additional information regarding copyright
+import java.util.ArrayList;
+            PointBuilder pb = new PointBuilder(-100, 45);
+            GeoPointFieldMapper pointMapper = (GeoPointFieldMapper) latLonPointBuilder.build(context);
+        private final BooleanFieldMapper.Builder boolBuilder = new BooleanFieldMapper.Builder(Names.FIELD_BOOL);
+        public Builder(String name, String generatedValue, String mapperName) {
+import org.opensearch.search.lookup.SearchLookup;
+ */
+        // Let's add a Dummy Point
+        private final Mapper.Builder<?> stringBuilder;
+        this.generatedValue = generatedValue;
+        AbstractShapeGeometryFieldMapper<?, ?> shapeMapper,
+    private final BooleanFieldMapper boolMapper;
+        return mapperName;
+        @Override
+                boolMapper,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            BooleanFieldMapper boolMapper = boolBuilder.build(context);
+        throw new UnsupportedOperationException();
+        FieldMapper stringMapper,
+                buildFullName(context),
+                copyTo.build()
+ */
+ * .point GeoPoint type
+        }
+public class ExternalMapper extends ParametrizedFieldMapper {
+        public static final String FIELD_BIN = "bin";
+        double lng = 51.0;
+ * ownership. Elasticsearch licenses this file to you under
+ * under the License.
+import java.util.Arrays;
+        public static final String FIELD_SHAPE = "shape";
+    @Override
+        ArrayList<GeoPoint> points = new ArrayList<>();
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {
+/*
+        String mapperName,
         // Let's add a Original String
-        stringMapper.parse(context);
-
+        GeoPointFieldMapper pointMapper,
+import org.opensearch.index.analysis.AnalyzerScope;
+        @Override
+        this.mapperName = mapperName;
+        BinaryFieldMapper binMapper,
+    public Iterator<Mapper> iterator() {
+    );
+    private static final IndexAnalyzers INDEX_ANALYZERS = new IndexAnalyzers(
+    }
+        BooleanFieldMapper boolMapper,
+        private ExternalFieldType(String name, boolean indexed, boolean stored, boolean hasDocValues) {
+ * compatible open source license.
+        super(simpleName, new ExternalFieldType(contextName, true, true, false), multiFields, copyTo);
+    }
+        Collections.emptyMap()
+    }
+        }
+    private final FieldMapper stringMapper;
+import org.opensearch.common.collect.Iterators;
+import java.util.List;
+            this.mapperName = mapperName;
+        MultiFields multiFields,
+        @Override
+            AbstractShapeGeometryFieldMapper<?, ?> shapeMapper = shapeBuilder.build(context);
+        boolMapper.parse(context.createExternalValueContext(true));
+        private final LegacyGeoShapeFieldMapper.Builder legacyShapeBuilder = new LegacyGeoShapeFieldMapper.Builder(Names.FIELD_SHAPE);
+                shapeMapper,
+ * not use this file except in compliance with the License.
+    private final AbstractShapeGeometryFieldMapper<?, ?> shapeMapper;
+        public String typeName() {
+    public static TypeParser parser(String mapperName, String generatedValue) {
+    public void parse(ParseContext context) throws IOException {
+ * the Apache License, Version 2.0 (the "License"); you may
+ * license agreements. See the NOTICE file distributed with
+        String contextName,
+                mapperName,
+import org.opensearch.index.analysis.NamedAnalyzer;
+            shapeMapper.parse(context.createExternalValueContext(new Point(-100, 45)));
+import java.io.IOException;
+    protected String contentType() {
+        } else {
+ * this file be licensed under the Apache-2.0 license or a
+        this.shapeMapper = shapeMapper;
+        this.pointMapper = pointMapper;
+ * specific language governing permissions and limitations
+        Collections.singletonMap("default", new NamedAnalyzer("default", AnalyzerScope.INDEX, new StandardAnalyzer())),
+    @Override
+        }
+                generatedValue,
+    static class ExternalFieldType extends TermBasedFieldType {
+                pointMapper,
+            FieldMapper stringMapper = (FieldMapper) stringBuilder.build(context);
+import java.nio.charset.Charset;
+            super(name);
+ *
+ */
+import org.opensearch.index.query.QueryShardContext;
+import java.util.Collections;
+ * .shape GeoShape type
+            return "faketype";
+    @Override
+        double lat = 42.0;
+    public static class Builder extends ParametrizedFieldMapper.Builder {
+    }
+ *
+        return new Builder(simpleName(), generatedValue, mapperName);
+        private final BinaryFieldMapper.Builder binBuilder = new BinaryFieldMapper.Builder(Names.FIELD_BIN);
+        CopyTo copyTo
+            this.stringBuilder = new TextFieldMapper.Builder(name, INDEX_ANALYZERS).store(false);
+            super(name, indexed, stored, hasDocValues, TextSearchInfo.SIMPLE_MATCH_ONLY, Collections.emptyMap());
+        this.boolMapper = boolMapper;
+    public ParametrizedFieldMapper.Builder getMergeBuilder() {
+                multiFieldsBuilder.build(this, context),
+        @Override
+import org.opensearch.geometry.Point;
+        points.add(new GeoPoint(lat, lng));
+}
+            return Collections.emptyList();
+        this.stringMapper = stringMapper;
+            BinaryFieldMapper binMapper = binBuilder.build(context);
+ * Licensed to Elasticsearch under one or more contributor
+        }
+        binMapper.parse(context.createExternalValueContext(bytes));
+/**
+        private final GeoPointFieldMapper.Builder latLonPointBuilder = new GeoPointFieldMapper.Builder(Names.FIELD_POINT);
+    ) {
+    @Override
+    }
+    private final String mapperName;
+    private final GeoPointFieldMapper pointMapper;
+import org.opensearch.index.analysis.IndexAnalyzers;
+ * KIND, either express or implied.  See the License for the
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+            );
+        public static final String FIELD_POINT = "point";
+import org.opensearch.common.geo.GeoPoint;
+        return new TypeParser((n, c) -> new Builder(n, generatedValue, mapperName));
+    protected void parseCreateFieldForPluggableFormat(ParseContext context) {
+ * SPDX-License-Identifier: Apache-2.0
+    public static class Names {
+        public ExternalMapper build(BuilderContext context) {
+ * .bool Boolean type
+import org.opensearch.common.geo.builders.PointBuilder;
+package org.opensearch.index.mapper;
+        throw new UnsupportedOperationException();
+            shapeMapper.parse(context.createExternalValueContext(pb.buildS4J()));
+/*
+    }
+ * This mapper add a new sub fields
+        byte[] bytes = "Hello world".getBytes(Charset.defaultCharset());
+    @Override
+ * software distributed under the License is distributed on an
+        }
+    }
+    @Override
+        }
+        this.binMapper = binMapper;
+    public ExternalMapper(
+ * You may obtain a copy of the License at
+    }
+        return Iterators.concat(super.iterator(), Arrays.asList(binMapper, boolMapper, pointMapper, shapeMapper, stringMapper).iterator());
+            context.path().remove();
+        String simpleName,
         multiFields.parse(this, context);
     }
-
-    @Override
-    protected void parseCreateField(ParseContext context) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    protected void parseCreateFieldForPluggableFormat(ParseContext context) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Iterator<Mapper> iterator() {
-        return Iterators.concat(super.iterator(), Arrays.asList(binMapper, boolMapper, pointMapper, shapeMapper, stringMapper).iterator());
-    }
-
-    @Override
-    public ParametrizedFieldMapper.Builder getMergeBuilder() {
-        return new Builder(simpleName(), generatedValue, mapperName);
-    }
-
-    @Override
-    protected String contentType() {
-        return mapperName;
-    }
-}
+        stringMapper.parse(context);
+        pointMapper.parse(context.createExternalValueContext(points));
+        protected List<Parameter<?>> getParameters() {
+        private final String mapperName;
+ * Modifications Copyright OpenSearch Contributors. See
+                stringMapper,
+        String generatedValue,
+                binMapper,
+            context.path().add(name);
+        private final GeoShapeFieldMapper.Builder shapeBuilder = new GeoShapeFieldMapper.Builder(Names.FIELD_SHAPE);

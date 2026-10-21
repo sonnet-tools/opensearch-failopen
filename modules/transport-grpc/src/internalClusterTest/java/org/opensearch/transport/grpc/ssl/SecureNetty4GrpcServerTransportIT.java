@@ -1,222 +1,186 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.transport.grpc.ssl;
-
-import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
-import org.opensearch.cluster.health.ClusterHealthStatus;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.plugins.NetworkPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.SecureAuxTransportSettingsProvider;
-import org.opensearch.plugins.SecureHttpTransportSettingsProvider;
-import org.opensearch.plugins.SecureSettingsFactory;
-import org.opensearch.plugins.SecureTransportSettingsProvider;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.transport.grpc.GrpcPlugin;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
-
-import io.grpc.health.v1.HealthCheckResponse;
-
-import static org.opensearch.transport.AuxTransport.AUX_TRANSPORT_TYPES_KEY;
-import static org.opensearch.transport.grpc.ssl.SecureNetty4GrpcServerTransport.GRPC_SECURE_TRANSPORT_SETTING_KEY;
-import static org.opensearch.transport.grpc.ssl.SecureSettingsHelpers.getServerClientAuthNone;
-import static org.opensearch.transport.grpc.ssl.SecureSettingsHelpers.getServerClientAuthOptional;
-import static org.opensearch.transport.grpc.ssl.SecureSettingsHelpers.getServerClientAuthRequired;
-
-public abstract class SecureNetty4GrpcServerTransportIT extends OpenSearchIntegTestCase {
-
-    public static class MockSecurityPlugin extends Plugin implements NetworkPlugin {
-        public MockSecurityPlugin() {}
-
-        static class MockSecureSettingsFactory implements SecureSettingsFactory {
-            @Override
-            public Optional<SecureTransportSettingsProvider> getSecureTransportSettingsProvider(Settings settings) {
-                return Optional.empty();
-            }
-
-            @Override
-            public Optional<SecureHttpTransportSettingsProvider> getSecureHttpTransportSettingsProvider(Settings settings) {
-                return Optional.empty();
-            }
-
-            @Override
-            public Optional<SecureAuxTransportSettingsProvider> getSecureAuxTransportSettingsProvider(Settings settings) {
-                return Optional.empty();
-            }
         }
-    }
-
-    protected TransportAddress randomNetty4GrpcServerTransportAddr() {
-        List<TransportAddress> addresses = new ArrayList<>();
-        for (SecureNetty4GrpcServerTransport transport : internalCluster().getInstances(SecureNetty4GrpcServerTransport.class)) {
-            TransportAddress tAddr = new TransportAddress(transport.getBoundAddress().publishAddress().address());
-            addresses.add(tAddr);
         }
-        return randomFrom(addresses);
-    }
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(AUX_TRANSPORT_TYPES_KEY, GRPC_SECURE_TRANSPORT_SETTING_KEY)
-            .build();
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(GrpcPlugin.class, MockSecurityPlugin.class);
-    }
-
-    private SecureSettingsHelpers.ConnectExceptions tryConnectClient(NettyGrpcClient client) {
-        try {
-            HealthCheckResponse.ServingStatus status = client.checkHealth();
-            if (status == HealthCheckResponse.ServingStatus.SERVING) {
-                return SecureSettingsHelpers.ConnectExceptions.NONE;
-            } else {
-                throw new RuntimeException("Illegal state - unexpected server status: " + status.toString());
-            }
-        } catch (Exception e) {
+                    public Optional<SecureAuxTransportSettingsProvider> getSecureAuxTransportSettingsProvider(Settings settings) {
+        try (
             return SecureSettingsHelpers.ConnectExceptions.get(e);
-        }
-    }
-
-    protected SecureSettingsHelpers.ConnectExceptions plaintextClientConnect() throws Exception {
-        try (NettyGrpcClient client = new NettyGrpcClient.Builder().setAddress(randomNetty4GrpcServerTransportAddr()).build()) {
-            return tryConnectClient(client);
-        }
-    }
-
-    protected SecureSettingsHelpers.ConnectExceptions insecureClientConnect() throws Exception {
-        try (
-            NettyGrpcClient client = new NettyGrpcClient.Builder().setAddress(randomNetty4GrpcServerTransportAddr()).insecure(true).build()
-        ) {
-            return tryConnectClient(client);
-        }
-    }
-
-    protected SecureSettingsHelpers.ConnectExceptions trustedCertClientConnect() throws Exception {
-        try (
-            NettyGrpcClient client = new NettyGrpcClient.Builder().setAddress(randomNetty4GrpcServerTransportAddr())
-                .clientAuth(true)
-                .build()
-        ) {
-            return tryConnectClient(client);
-        }
-    }
-
-    public void testClusterHealth() {
-        ClusterHealthResponse healthResponse = client().admin().cluster().prepareHealth().get();
-        assertEquals(ClusterHealthStatus.GREEN, healthResponse.getStatus());
-    }
-
-    public static class SecureNetty4GrpcServerTransportNoAuthIT extends SecureNetty4GrpcServerTransportIT {
-        public static class NoAuthMockSecurityPlugin extends MockSecurityPlugin {
-            public NoAuthMockSecurityPlugin() {}
-
-            @Override
-            public Optional<SecureSettingsFactory> getSecureSettingFactory(Settings settings) {
-                return Optional.of(new MockSecureSettingsFactory() {
-                    @Override
-                    public Optional<SecureAuxTransportSettingsProvider> getSecureAuxTransportSettingsProvider(Settings settings) {
-                        return Optional.of(getServerClientAuthNone());
-                    }
-                });
-            }
-        }
-
-        @Override
-        protected Collection<Class<? extends Plugin>> nodePlugins() {
-            return List.of(GrpcPlugin.class, NoAuthMockSecurityPlugin.class);
-        }
-
-        public void testPlaintextClientConnect() throws Exception {
-            assertEquals(plaintextClientConnect(), SecureSettingsHelpers.ConnectExceptions.UNAVAILABLE);
-        }
-
-        public void testInsecureClientConnect() throws Exception {
-            assertEquals(insecureClientConnect(), SecureSettingsHelpers.ConnectExceptions.NONE);
-        }
-
+    @Override
+ * SPDX-License-Identifier: Apache-2.0
         public void testTrustedClientConnect() throws Exception {
+        }
+        ) {
+            .put(AUX_TRANSPORT_TYPES_KEY, GRPC_SECURE_TRANSPORT_SETTING_KEY)
+            if (status == HealthCheckResponse.ServingStatus.SERVING) {
+            @Override
+            addresses.add(tAddr);
+            public Optional<SecureSettingsFactory> getSecureSettingFactory(Settings settings) {
+package org.opensearch.transport.grpc.ssl;
+        }
+import static org.opensearch.transport.grpc.ssl.SecureNetty4GrpcServerTransport.GRPC_SECURE_TRANSPORT_SETTING_KEY;
+        }
+        public void testPlaintextClientConnect() throws Exception {
+            }
+    }
+                return Optional.empty();
+                    public Optional<SecureAuxTransportSettingsProvider> getSecureAuxTransportSettingsProvider(Settings settings) {
+        }
+            .build();
+            @Override
             assertEquals(trustedCertClientConnect(), SecureSettingsHelpers.ConnectExceptions.NONE);
+import java.util.List;
         }
     }
-
-    public static class SecureNetty4GrpcServerTransportOptionalAuthIT extends SecureNetty4GrpcServerTransportIT {
-        public static class OptAuthMockSecurityPlugin extends MockSecurityPlugin {
+import org.opensearch.plugins.NetworkPlugin;
             public OptAuthMockSecurityPlugin() {}
-
-            @Override
-            public Optional<SecureSettingsFactory> getSecureSettingFactory(Settings settings) {
-                return Optional.of(new MockSecureSettingsFactory() {
+        public static class NoAuthMockSecurityPlugin extends MockSecurityPlugin {
                     @Override
-                    public Optional<SecureAuxTransportSettingsProvider> getSecureAuxTransportSettingsProvider(Settings settings) {
-                        return Optional.of(getServerClientAuthOptional());
-                    }
-                });
-            }
-        }
-
-        @Override
-        protected Collection<Class<? extends Plugin>> nodePlugins() {
-            return List.of(GrpcPlugin.class, OptAuthMockSecurityPlugin.class);
-        }
-
-        public void testPlaintextClientConnect() throws Exception {
-            assertEquals(plaintextClientConnect(), SecureSettingsHelpers.ConnectExceptions.UNAVAILABLE);
-        }
-
-        public void testInsecureClientConnect() throws Exception {
-            assertEquals(insecureClientConnect(), SecureSettingsHelpers.ConnectExceptions.NONE);
-        }
-
-        public void testTrustedClientConnect() throws Exception {
-            assertEquals(trustedCertClientConnect(), SecureSettingsHelpers.ConnectExceptions.NONE);
-        }
+                    @Override
+            public Optional<SecureSettingsFactory> getSecureSettingFactory(Settings settings) {
+                return Optional.empty();
+            .put(super.nodeSettings(nodeOrdinal))
     }
-
-    public static class SecureNetty4GrpcServerTransportRequiredAuthIT extends SecureNetty4GrpcServerTransportIT {
-        public static class RequireAuthMockSecurityPlugin extends MockSecurityPlugin {
-            public RequireAuthMockSecurityPlugin() {}
-
-            @Override
-            public Optional<SecureSettingsFactory> getSecureSettingFactory(Settings settings) {
-                return Optional.of(new MockSecureSettingsFactory() {
-                    @Override
-                    public Optional<SecureAuxTransportSettingsProvider> getSecureAuxTransportSettingsProvider(Settings settings) {
-                        return Optional.of(getServerClientAuthRequired());
-                    }
-                });
+        public static class OptAuthMockSecurityPlugin extends MockSecurityPlugin {
+    }
+            assertEquals(plaintextClientConnect(), SecureSettingsHelpers.ConnectExceptions.UNAVAILABLE);
+            }
             }
         }
-
-        @Override
-        protected Collection<Class<? extends Plugin>> nodePlugins() {
-            return List.of(GrpcPlugin.class, RequireAuthMockSecurityPlugin.class);
+        List<TransportAddress> addresses = new ArrayList<>();
+ */
         }
-
-        public void testPlaintextClientConnect() throws Exception {
-            assertEquals(plaintextClientConnect(), SecureSettingsHelpers.ConnectExceptions.UNAVAILABLE);
-        }
-
-        public void testInsecureClientConnect() throws Exception {
-            assertEquals(insecureClientConnect(), SecureSettingsHelpers.ConnectExceptions.BAD_CERT);
-        }
-
-        public void testTrustedClientConnect() throws Exception {
-            assertEquals(trustedCertClientConnect(), SecureSettingsHelpers.ConnectExceptions.NONE);
-        }
+            }
+            }
     }
 }
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+    }
+        }
+            @Override
+        }
+            public Optional<SecureAuxTransportSettingsProvider> getSecureAuxTransportSettingsProvider(Settings settings) {
+                return Optional.of(new MockSecureSettingsFactory() {
+import org.opensearch.test.OpenSearchIntegTestCase;
+        public void testInsecureClientConnect() throws Exception {
+            assertEquals(insecureClientConnect(), SecureSettingsHelpers.ConnectExceptions.BAD_CERT);
+            }
+    public static class SecureNetty4GrpcServerTransportOptionalAuthIT extends SecureNetty4GrpcServerTransportIT {
+        return Settings.builder()
+                .clientAuth(true)
+                return Optional.of(new MockSecureSettingsFactory() {
+import org.opensearch.core.common.transport.TransportAddress;
+import static org.opensearch.transport.grpc.ssl.SecureSettingsHelpers.getServerClientAuthRequired;
+            public Optional<SecureSettingsFactory> getSecureSettingFactory(Settings settings) {
+import java.util.Collection;
+        }
+import org.opensearch.plugins.SecureTransportSettingsProvider;
+                });
+import static org.opensearch.transport.AuxTransport.AUX_TRANSPORT_TYPES_KEY;
+    }
+            return List.of(GrpcPlugin.class, RequireAuthMockSecurityPlugin.class);
+import org.opensearch.common.settings.Settings;
+    protected SecureSettingsHelpers.ConnectExceptions plaintextClientConnect() throws Exception {
+        }
+                        return Optional.of(getServerClientAuthRequired());
+        for (SecureNetty4GrpcServerTransport transport : internalCluster().getInstances(SecureNetty4GrpcServerTransport.class)) {
+        }
+        public void testPlaintextClientConnect() throws Exception {
+    public static class SecureNetty4GrpcServerTransportNoAuthIT extends SecureNetty4GrpcServerTransportIT {
+import org.opensearch.plugins.SecureAuxTransportSettingsProvider;
+        }
+        }
+import org.opensearch.plugins.SecureSettingsFactory;
+            } else {
+    }
+                throw new RuntimeException("Illegal state - unexpected server status: " + status.toString());
+    protected TransportAddress randomNetty4GrpcServerTransportAddr() {
+            public NoAuthMockSecurityPlugin() {}
+    }
+        return List.of(GrpcPlugin.class, MockSecurityPlugin.class);
+            NettyGrpcClient client = new NettyGrpcClient.Builder().setAddress(randomNetty4GrpcServerTransportAddr()).insecure(true).build()
+        protected Collection<Class<? extends Plugin>> nodePlugins() {
+        }
+    protected SecureSettingsHelpers.ConnectExceptions insecureClientConnect() throws Exception {
+    public static class MockSecurityPlugin extends Plugin implements NetworkPlugin {
+            public Optional<SecureHttpTransportSettingsProvider> getSecureHttpTransportSettingsProvider(Settings settings) {
+        public MockSecurityPlugin() {}
+        try (NettyGrpcClient client = new NettyGrpcClient.Builder().setAddress(randomNetty4GrpcServerTransportAddr()).build()) {
+            assertEquals(trustedCertClientConnect(), SecureSettingsHelpers.ConnectExceptions.NONE);
+            return List.of(GrpcPlugin.class, NoAuthMockSecurityPlugin.class);
+                return Optional.empty();
+                        return Optional.of(getServerClientAuthNone());
+        ) {
+    protected Settings nodeSettings(int nodeOrdinal) {
+                        return Optional.of(getServerClientAuthOptional());
+            @Override
+            NettyGrpcClient client = new NettyGrpcClient.Builder().setAddress(randomNetty4GrpcServerTransportAddr())
+            assertEquals(plaintextClientConnect(), SecureSettingsHelpers.ConnectExceptions.UNAVAILABLE);
+            assertEquals(plaintextClientConnect(), SecureSettingsHelpers.ConnectExceptions.UNAVAILABLE);
+        try {
+            assertEquals(insecureClientConnect(), SecureSettingsHelpers.ConnectExceptions.NONE);
+    }
+                return Optional.of(new MockSecureSettingsFactory() {
+ *
+                });
+            return tryConnectClient(client);
+            @Override
+        return randomFrom(addresses);
+            public Optional<SecureTransportSettingsProvider> getSecureTransportSettingsProvider(Settings settings) {
+import static org.opensearch.transport.grpc.ssl.SecureSettingsHelpers.getServerClientAuthNone;
+                });
+ * compatible open source license.
+        }
+        ClusterHealthResponse healthResponse = client().admin().cluster().prepareHealth().get();
+import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
+            assertEquals(trustedCertClientConnect(), SecureSettingsHelpers.ConnectExceptions.NONE);
+/*
+        }
+            return List.of(GrpcPlugin.class, OptAuthMockSecurityPlugin.class);
+        @Override
+                .build()
+            assertEquals(insecureClientConnect(), SecureSettingsHelpers.ConnectExceptions.NONE);
+                    }
+        assertEquals(ClusterHealthStatus.GREEN, healthResponse.getStatus());
+    public void testClusterHealth() {
+        public void testInsecureClientConnect() throws Exception {
+            return tryConnectClient(client);
+        }
+        protected Collection<Class<? extends Plugin>> nodePlugins() {
+ * The OpenSearch Contributors require contributions made to
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        @Override
+            return tryConnectClient(client);
+import org.opensearch.plugins.Plugin;
+    }
+        public void testInsecureClientConnect() throws Exception {
+    private SecureSettingsHelpers.ConnectExceptions tryConnectClient(NettyGrpcClient client) {
+        public static class RequireAuthMockSecurityPlugin extends MockSecurityPlugin {
+        @Override
+        try (
+import java.util.Optional;
+import org.opensearch.transport.grpc.GrpcPlugin;
+public abstract class SecureNetty4GrpcServerTransportIT extends OpenSearchIntegTestCase {
+        static class MockSecureSettingsFactory implements SecureSettingsFactory {
+import java.util.ArrayList;
+        public void testTrustedClientConnect() throws Exception {
+            }
+            @Override
+                    @Override
+                    }
+                return SecureSettingsHelpers.ConnectExceptions.NONE;
+        public void testPlaintextClientConnect() throws Exception {
+            HealthCheckResponse.ServingStatus status = client.checkHealth();
+import io.grpc.health.v1.HealthCheckResponse;
+            public RequireAuthMockSecurityPlugin() {}
+        public void testTrustedClientConnect() throws Exception {
+    protected SecureSettingsHelpers.ConnectExceptions trustedCertClientConnect() throws Exception {
+        }
+            TransportAddress tAddr = new TransportAddress(transport.getBoundAddress().publishAddress().address());
+                    public Optional<SecureAuxTransportSettingsProvider> getSecureAuxTransportSettingsProvider(Settings settings) {
+        } catch (Exception e) {
+import static org.opensearch.transport.grpc.ssl.SecureSettingsHelpers.getServerClientAuthOptional;
+import org.opensearch.cluster.health.ClusterHealthStatus;
+                    }
+import org.opensearch.plugins.SecureHttpTransportSettingsProvider;
+        protected Collection<Class<? extends Plugin>> nodePlugins() {
+    @Override
+    public static class SecureNetty4GrpcServerTransportRequiredAuthIT extends SecureNetty4GrpcServerTransportIT {

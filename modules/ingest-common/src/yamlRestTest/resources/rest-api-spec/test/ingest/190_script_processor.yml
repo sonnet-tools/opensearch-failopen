@@ -1,355 +1,327 @@
----
-teardown:
-  - do:
-      ingest.delete_pipeline:
-        id: "my_pipeline"
-        ignore: 404
-
----
-"Test invoke bytes processor":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "script" : {
-                  "lang": "painless",
-                  "source" : "ctx.target_field = Processors.bytes(ctx.source_field)"
-                }
-              }
             ]
-          }
-  - match: { acknowledged: true }
-
+              },
+      ingest.put_pipeline:
+                "script" : {
+                "script" : {
+      index:
+              {
+      ingest.put_pipeline:
+        id: 1
+              {
+  - match: { _source.source_field: "1kb" }
+      index:
+      ingest.put_pipeline:
+---
+        index: test
+                }
+        index: test
   - do:
       index:
-        index: test
+                  "source" : "ctx.target_field = Processors.urlDecode(ctx.source_field)"
         id: 1
-        pipeline: "my_pipeline"
-        body: {source_field: "1kb"}
-
+  - match: { _source.boolean: true }
+"Test painless data types":
+        id: "my_pipeline"
+                }
+        body: {source_field: "{\"foo\":\"bar\"}"}
   - do:
+        id: 1
+          {
+                "script" : {
+          }
+            "processors": [
+      get:
+            ]
+      ingest.put_pipeline:
+      ingest.put_pipeline:
+        body: {source_field: "fooBar", foo: {foo: "bar"}}
+          }
+            "description": "_description",
+          {
+                }
+  - do:
+              {
+        body:  >
+---
+                  "lang": "painless",
+            "description": "_description",
+        body:  >
+            "processors": [
+                  "lang": "painless",
+              {
+---
+      ingest.put_pipeline:
+                  "ignore_failure": true
+        index: test
+  - do:
+"Test invoke uppercase processor":
+      ingest.put_pipeline:
       get:
         index: test
-        id: 1
-  - match: { _source.source_field: "1kb" }
-  - match: { _source.target_field: 1024 }
-
----
-"Test invoke lowercase processor":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
+  - match: { acknowledged: true }
+  - gt: { _source.float: 0.0 }
+  - lt: { _source.double: 0.2 }
+        pipeline: "my_pipeline"
+        index: test
             "description": "_description",
+        index: test
+---
+            ]
+  - do:
+  - match: { _source.source_field: "FooBar" }
+        id: "my_pipeline"
             "processors": [
+        id: "my_pipeline"
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+  - match: { _source.target_field: "FOOBAR"}
+        index: test
+  - match: { _source.foo: "bar" }
+          }
+      catch: bad_request
+          }
+        body:  >
+                  "source" : "ctx.target_field = Processors.uppercase(ctx.source_field)"
+                  "source" : "ctx.target_field = Processors.uppercase(ctx.source_field)"
               {
+            ]
+  - match: { acknowledged: true }
+              },
+  - do:
+              }
+  - do:
+  - match: { _source.int: 2147483647 }
+        id: 1
                 "script" : {
+          }
+  - do:
+  - match: { acknowledged: true }
+                }
+              {
+            "description": "_description",
+              },
+              }
+              }
+  - match: { _source.target_field.foo: "bar" }
+            "processors": [
                   "lang": "painless",
                   "source" : "ctx.target_field = Processors.lowercase(ctx.source_field)"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
       index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {source_field: "FooBar"}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.source_field: "FooBar" }
-  - match: { _source.target_field: "foobar" }
-
----
-"Test invoke uppercase processor":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
             "processors": [
-              {
-                "script" : {
-                  "lang": "painless",
-                  "source" : "ctx.target_field = Processors.uppercase(ctx.source_field)"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
         pipeline: "my_pipeline"
+  - do:
+  - match: { acknowledged: true }
         body: {source_field: "FooBar"}
-
-  - do:
-      get:
-        index: test
         id: 1
-  - match: { _source.source_field: "FooBar" }
-  - match: { _source.target_field: "FOOBAR" }
-
----
-"Test invoke json processor, assign to field":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "script" : {
-                  "lang": "painless",
-                  "source" : "ctx.target_field = Processors.json(ctx.source_field)"
-                }
-              }
-            ]
           }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
+                "script" : {
+          {
+                }
+          {
+                  "lang": "painless",
+              {
         id: 1
-        pipeline: "my_pipeline"
-        body: {source_field: "{\"foo\":\"bar\"}"}
-
   - do:
-      get:
-        index: test
-        id: 1
+  - do:
   - match: { _source.source_field: "{\"foo\":\"bar\"}" }
-  - match: { _source.target_field.foo: "bar" }
-
----
-"Test invoke json processor, assign to root":
+        body: {source_field: "{\"foo\":\"bar\"}"}
+      index:
+        index: test
+          }
   - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
             "processors": [
+              }
+        id: 1
+        pipeline: "my_pipeline"
+  - do:
+        index: test
+        id: 1
+                }
+            "description": "_description",
+                "script" : {
+  - do:
+  - match: { acknowledged: true }
+  - do:
+            "description": "_description",
+---
+  - do:
+        id: "my_pipeline"
+  - match: { acknowledged: true }
+              {
+            "description": "_description",
+          {
+"Test char type fails":
+  - match: { acknowledged: true }
+          }
+  - do:
+        pipeline: "my_pipeline"
+                  "source" : "ctx.other_field = 'other_field'"
+      index:
+        body: {source_field: "foo%20bar"}
+        body:  >
+        id: 1
+  - do:
+---
+        id: "my_pipeline"
+  - do:
+            "description": "_description",
+"Test self referencing source with ignore failure":
+---
+                }
+      get:
+        index: test
+                "script" : {
+        id: 1
+        id: "my_pipeline"
+      index:
+"Test invoke json processor, assign to root":
+        body: {source_field: "FooBar"}
+                }
+        body:  >
+                "script" : {
+  - match: { _source.byte: 127 }
+"Test invoke bytes processor":
+---
+            ]
               {
                 "script" : {
+      index:
                   "lang": "painless",
+                  "source" : "ctx.target_field = Processors.bytes(ctx.source_field)"
+        id: "my_pipeline"
+          }
+  - do:
+              }
+                "script" : {
+        index: test
+        body:  >
+  - match: { _source.source_field: "fooBar" }
+        id: 1
+  - match: { _source.target_field: "foobar" }
+  - match: { _source.long: 9223372036854775807 }
+            "processors": [
+          {
+              {
+        index: test
+      get:
+              }
+                  "lang": "painless",
+        id: 1
+            ]
+            ]
+          {
+          {
+        ignore: 404
+        index: test
+  - match: { _source.target_field: "FOOBAR" }
+              {
+                  "lang": "painless",
+              }
+            "processors": [
+              }
+            "description": "_description",
+                }
+  - match: { _source.target_field: "foo bar" }
                   "source" : "Processors.json(ctx, 'source_field')"
                 }
-              }
-            ]
+                  "lang": "painless",
           }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
         pipeline: "my_pipeline"
-        body: {source_field: "{\"foo\":\"bar\"}"}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.source_field: "{\"foo\":\"bar\"}" }
-  - match: { _source.foo: "bar" }
-
 ---
-"Test invoke urlDecode processor":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "script" : {
-                  "lang": "painless",
-                  "source" : "ctx.target_field = Processors.urlDecode(ctx.source_field)"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {source_field: "foo%20bar"}
-
-  - do:
       get:
-        index: test
-        id: 1
-  - match: { _source.source_field: "foo%20bar" }
-  - match: { _source.target_field: "foo bar" }
-
----
-"Test self referencing source with ignore failure":
-  - do:
       ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "script" : {
-                  "lang": "painless",
-                  "source" : "ctx.foo['foo']=ctx.foo;ctx['test-field']='test-value'",
-                  "ignore_failure": true
-                }
-              },
-              {
-                "script" : {
-                  "lang": "painless",
-                  "source" : "ctx.target_field = Processors.uppercase(ctx.source_field)"
-                }
-              }
-            ]
-          }
+        index: test
   - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {source_field: "fooBar", foo: {foo: "bar"}}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.source_field: "fooBar" }
-  - match: { _source.target_field: "FOOBAR"}
+              {
   - match: { _source.test-field: null}
-
----
-"Test self referencing source without ignoring failure":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "script" : {
-                  "lang": "painless",
-                  "source" : "ctx.foo['foo']=ctx.foo;ctx['test-field']='test-value'"
-                }
-              },
-              {
-                "script" : {
-                  "lang": "painless",
-                  "source" : "ctx.target_field = Processors.uppercase(ctx.source_field)"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      catch: bad_request
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {source_field: "fooBar", foo: {foo: "bar"}}
-  - match: { error.root_cause.0.type: "illegal_argument_exception" }
-  - match: { error.root_cause.0.reason: "Iterable object is self-referencing itself (ingest script)" }
-
----
-"Test painless data types":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "script" : {
-                  "source" : "ctx.byte = (byte)127;ctx.short = (short)32767;ctx.int = (int)2147483647;ctx.long = (long)9223372036854775807L;ctx.float = (float)0.1;ctx.double = (double)0.1;ctx.boolean = (boolean)true"
-                }
-              },
-              {
-                "script" : {
-                  "source" : "ctx.other_field = 'other_field'"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {source_field: "FooBar"}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.byte: 127 }
-  - match: { _source.int: 2147483647 }
-  - match: { _source.long: 9223372036854775807 }
-  - gt: { _source.float: 0.0 }
-  - lt: { _source.float: 0.2 }
-  - gt: { _source.double: 0.0 }
-  - lt: { _source.double: 0.2 }
-  - match: { _source.boolean: true }
-
----
-"Test char type fails":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "script" : {
                   "source" : "ctx.char = (char)'a'"
-                }
               },
-              {
+                  "source" : "ctx.foo['foo']=ctx.foo;ctx['test-field']='test-value'"
+      get:
                 "script" : {
-                  "source" : "ctx.other_field = 'other_field'"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      catch: bad_request
-      index:
         index: test
-        id: 1
-        pipeline: "my_pipeline"
+        body:  >
+                "script" : {
+                }
+  - do:
+                  "source" : "ctx.target_field = Processors.uppercase(ctx.source_field)"
         body: {source_field: "FooBar"}
+            ]
+  - match: { _source.source_field: "foo%20bar" }
+        body:  >
+                  "source" : "ctx.byte = (byte)127;ctx.short = (short)32767;ctx.int = (int)2147483647;ctx.long = (long)9223372036854775807L;ctx.float = (float)0.1;ctx.double = (double)0.1;ctx.boolean = (boolean)true"
+  - do:
+                "script" : {
+"Test invoke lowercase processor":
+"Test invoke json processor, assign to field":
+  - gt: { _source.double: 0.0 }
+  - match: { _source.source_field: "{\"foo\":\"bar\"}" }
+"Test invoke urlDecode processor":
+        body: {source_field: "1kb"}
+teardown:
+  - do:
+              }
+      get:
+                "script" : {
+  - match: { acknowledged: true }
+        body: {source_field: "FooBar"}
+        id: "my_pipeline"
+      ingest.put_pipeline:
+      ingest.put_pipeline:
+              {
+            ]
   - match: { error.root_cause.0.type: "illegal_argument_exception" }
+        pipeline: "my_pipeline"
+---
+            "processors": [
+        pipeline: "my_pipeline"
+  - match: { error.root_cause.0.reason: "Iterable object is self-referencing itself (ingest script)" }
+        id: 1
+        id: 1
+      catch: bad_request
+        index: test
+"Test self referencing source without ignoring failure":
+            "description": "_description",
+                }
+        id: "my_pipeline"
+        id: 1
+              {
+          {
+  - do:
+      index:
+        pipeline: "my_pipeline"
+      ingest.delete_pipeline:
+  - lt: { _source.float: 0.2 }
+        pipeline: "my_pipeline"
+                }
+        body:  >
+                  "lang": "painless",
+        id: 1
+  - do:
+      index:
+                  "source" : "ctx.other_field = 'other_field'"
+        id: 1
+          {
+        body: {source_field: "fooBar", foo: {foo: "bar"}}
+        index: test
+            ]
+            "processors": [
+              }
+        index: test
+  - do:
+  - do:
+                  "lang": "painless",
+        body:  >
+  - match: { acknowledged: true }
+        id: 1
+  - do:
+---
+  - match: { _source.target_field: 1024 }
+        id: "my_pipeline"
+      get:
+                  "source" : "ctx.foo['foo']=ctx.foo;ctx['test-field']='test-value'",
+                  "source" : "ctx.target_field = Processors.json(ctx.source_field)"
+                }
+        pipeline: "my_pipeline"
+  - match: { _source.source_field: "FooBar" }
+        id: "my_pipeline"
+  - do:

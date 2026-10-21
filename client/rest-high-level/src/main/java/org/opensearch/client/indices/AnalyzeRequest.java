@@ -1,353 +1,298 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.client.indices;
-
-import org.opensearch.client.Validatable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * A request to analyze text
- */
-public class AnalyzeRequest implements Validatable, ToXContentObject {
-
-    private String index;
-
-    private String[] text;
-
     private String analyzer;
-
-    private NameOrDefinition tokenizer;
-
-    private final List<NameOrDefinition> tokenFilters = new ArrayList<>();
-
-    private final List<NameOrDefinition> charFilters = new ArrayList<>();
-
-    private String field;
-
-    private boolean explain = false;
-
-    private String[] attributes = Strings.EMPTY_ARRAY;
-
-    private String normalizer;
-
-    /**
-     * Analyzes text using a global analyzer
-     */
-    public static AnalyzeRequest withGlobalAnalyzer(String analyzer, String... text) {
-        return new AnalyzeRequest(null, analyzer, null, null, text);
+        this.normalizer = null;
+    public static CustomAnalyzerBuilder buildCustomNormalizer(String index) {
     }
-
     /**
-     * Analyzes text using a custom analyzer built from global components
      */
-    public static CustomAnalyzerBuilder buildCustomAnalyzer(String tokenizer) {
-        return new CustomAnalyzerBuilder(null, new NameOrDefinition(tokenizer));
+        }
+import org.opensearch.common.settings.Settings;
     }
-
-    /**
-     * Analyzes text using a custom analyzer built from global components
-     */
+            return builder;
+     * Analyzes text using a custom analyzer built from components defined on an index
+                return builder.value(name);
+    }
+        }
+    public static CustomAnalyzerBuilder buildCustomNormalizer() {
+ * the Apache License, Version 2.0 (the "License"); you may
+    public static AnalyzeRequest withNormalizer(String index, String normalizer, String... text) {
+    public String index() {
+        CustomAnalyzerBuilder(String index, NameOrDefinition tokenizer) {
+        String... text
+ * A request to analyze text
+ * software distributed under the License is distributed on an
+            builder.endObject();
+     * Analyzes text using a custom normalizer built from components defined on an index
+     * Analyzes text using a custom analyzer built from components defined on an index
+/**
+        return this.field;
     public static CustomAnalyzerBuilder buildCustomAnalyzer(Map<String, Object> tokenizerSettings) {
+            return this;
+        return new AnalyzeRequest(null, analyzer, null, null, text);
+        }
+ * Licensed to Elasticsearch under one or more contributor
+        return new CustomAnalyzerBuilder(null, new NameOrDefinition(tokenizer));
+        List<NameOrDefinition> tokenFilters,
+    @Override
+            builder.field("analyzer", analyzer);
         return new CustomAnalyzerBuilder(null, new NameOrDefinition(tokenizerSettings));
-    }
-
-    /**
-     * Analyzes text using a custom analyzer built from components defined on an index
+    public static class CustomAnalyzerBuilder {
+ * this work for additional information regarding copyright
+    static class NameOrDefinition implements ToXContentFragment {
      */
+ * Unless required by applicable law or agreed to in writing,
+        if (attributes == null) {
+            return this;
+ * under the License.
+    public static AnalyzeRequest withField(String index, String field, String... text) {
+/*
+        public CustomAnalyzerBuilder addCharFilter(String name) {
+        return this.analyzer;
+    /**
+    }
+        final NameOrDefinition tokenizer;
+    public AnalyzeRequest explain(boolean explain) {
+     * Analyzes text using a global analyzer
+    /**
+            this.index = index;
+ * Modifications Copyright OpenSearch Contributors. See
+            this.tokenizer = tokenizer;
+     * Analyzes text using the analyzer defined on a specific field within an index
+    }
+            this.name = null;
+        }
+            builder.field("attributes", attributes);
+     * Returns the custom token filters used for analysis, if defined
+    }
+            this.name = null;
+    /**
+    private NameOrDefinition tokenizer;
+import java.io.IOException;
+            this.definition = Objects.requireNonNull(settings);
+    }
+        this.analyzer = null;
+ */
+     * Analyzes text using a custom normalizer built from global components
+    public String[] text() {
+     */
+ * not use this file except in compliance with the License.
+     */
+ * ownership. Elasticsearch licenses this file to you under
+        }
+            this.name = Objects.requireNonNull(name);
+    public String analyzer() {
+    public static CustomAnalyzerBuilder buildCustomAnalyzer(String tokenizer) {
+    public String field() {
+    ) {
+    }
+        public CustomAnalyzerBuilder addCharFilter(Map<String, Object> settings) {
+    public String[] attributes() {
+            builder.field("tokenizer", tokenizer);
+    public AnalyzeRequest attributes(String... attributes) {
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    }
+        if (explain) {
+        if (attributes.length > 0) {
+    public String normalizer() {
+import org.opensearch.core.xcontent.XContentBuilder;
+        return this.explain;
     public static CustomAnalyzerBuilder buildCustomAnalyzer(String index, String tokenizer) {
-        return new CustomAnalyzerBuilder(index, new NameOrDefinition(tokenizer));
-    }
-
-    /**
-     * Analyzes text using a custom analyzer built from components defined on an index
-     */
-    public static CustomAnalyzerBuilder buildCustomAnalyzer(String index, Map<String, Object> tokenizerSettings) {
-        return new CustomAnalyzerBuilder(index, new NameOrDefinition(tokenizerSettings));
-    }
-
+        }
+        }
+        }
     /**
      * Analyzes text using a named analyzer on an index
-     */
-    public static AnalyzeRequest withIndexAnalyzer(String index, String analyzer, String... text) {
-        return new AnalyzeRequest(index, analyzer, null, null, text);
-    }
-
+ * license agreements. See the NOTICE file distributed with
     /**
-     * Analyzes text using the analyzer defined on a specific field within an index
+     * Analyzes text using a custom analyzer built from global components
      */
-    public static AnalyzeRequest withField(String index, String field, String... text) {
-        return new AnalyzeRequest(index, null, null, field, text);
-    }
-
     /**
-     * Analyzes text using a named normalizer on an index
-     */
-    public static AnalyzeRequest withNormalizer(String index, String normalizer, String... text) {
-        return new AnalyzeRequest(index, null, normalizer, null, text);
-    }
-
-    /**
-     * Analyzes text using a custom normalizer built from global components
-     */
-    public static CustomAnalyzerBuilder buildCustomNormalizer() {
-        return new CustomAnalyzerBuilder(null, null);
-    }
-
-    /**
-     * Analyzes text using a custom normalizer built from components defined on an index
-     */
-    public static CustomAnalyzerBuilder buildCustomNormalizer(String index) {
-        return new CustomAnalyzerBuilder(index, null);
-    }
-
-    /**
-     * Helper class to build custom analyzer definitions
-     */
-    public static class CustomAnalyzerBuilder {
-
-        final NameOrDefinition tokenizer;
-        final String index;
-        List<NameOrDefinition> charFilters = new ArrayList<>();
-        List<NameOrDefinition> tokenFilters = new ArrayList<>();
-
-        CustomAnalyzerBuilder(String index, NameOrDefinition tokenizer) {
-            this.tokenizer = tokenizer;
-            this.index = index;
-        }
-
-        public CustomAnalyzerBuilder addCharFilter(String name) {
-            charFilters.add(new NameOrDefinition(name));
-            return this;
-        }
-
-        public CustomAnalyzerBuilder addCharFilter(Map<String, Object> settings) {
-            charFilters.add(new NameOrDefinition(settings));
-            return this;
-        }
-
-        public CustomAnalyzerBuilder addTokenFilter(String name) {
-            tokenFilters.add(new NameOrDefinition(name));
-            return this;
-        }
-
-        public CustomAnalyzerBuilder addTokenFilter(Map<String, Object> settings) {
-            tokenFilters.add(new NameOrDefinition(settings));
-            return this;
-        }
-
-        public AnalyzeRequest build(String... text) {
-            return new AnalyzeRequest(index, tokenizer, charFilters, tokenFilters, text);
-        }
-    }
-
-    private AnalyzeRequest(String index, String analyzer, String normalizer, String field, String... text) {
-        this.index = index;
-        this.analyzer = analyzer;
-        this.normalizer = normalizer;
-        this.field = field;
-        this.text = text;
-    }
-
-    private AnalyzeRequest(
-        String index,
-        NameOrDefinition tokenizer,
-        List<NameOrDefinition> charFilters,
-        List<NameOrDefinition> tokenFilters,
-        String... text
-    ) {
-        this.index = index;
-        this.analyzer = null;
-        this.normalizer = null;
-        this.field = null;
-        this.tokenizer = tokenizer;
-        this.charFilters.addAll(charFilters);
-        this.tokenFilters.addAll(tokenFilters);
-        this.text = text;
-    }
-
-    static class NameOrDefinition implements ToXContentFragment {
-        // exactly one of these two members is not null
-        public final String name;
-        public final Settings definition;
-
-        NameOrDefinition(String name) {
-            this.name = Objects.requireNonNull(name);
-            this.definition = null;
-        }
-
-        NameOrDefinition(Settings settings) {
-            this.name = null;
-            this.definition = Objects.requireNonNull(settings);
-        }
-
-        NameOrDefinition(Map<String, ?> definition) {
-            this.name = null;
-            Objects.requireNonNull(definition);
-            this.definition = Settings.builder().loadFromMap(definition).build();
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            if (definition == null) {
-                return builder.value(name);
-            }
-            builder.startObject();
-            definition.toXContent(builder, params);
-            builder.endObject();
-            return builder;
-        }
-
-    }
-
-    /**
-     * Returns the index that the request should be executed against, or {@code null} if
-     * no index is specified
-     */
-    public String index() {
-        return this.index;
-    }
-
-    /**
-     * Returns the text to be analyzed
-     */
-    public String[] text() {
-        return this.text;
-    }
-
-    /**
-     * Returns the named analyzer used for analysis, if defined
-     */
-    public String analyzer() {
-        return this.analyzer;
-    }
-
-    /**
-     * Returns the named tokenizer used for analysis, if defined
-     */
-    public String normalizer() {
-        return this.normalizer;
-    }
-
-    /**
-     * Returns a custom Tokenizer used for analysis, if defined
-     */
-    public NameOrDefinition tokenizer() {
-        return this.tokenizer;
-    }
-
-    /**
-     * Returns the custom token filters used for analysis, if defined
-     */
-    public List<NameOrDefinition> tokenFilters() {
-        return this.tokenFilters;
-    }
-
-    /**
-     * Returns the custom character filters used for analysis, if defined
-     */
-    public List<NameOrDefinition> charFilters() {
-        return this.charFilters;
-    }
-
-    /**
-     * Returns the field to take an Analyzer from, if defined
-     */
-    public String field() {
-        return this.field;
-    }
-
-    /**
-     * Set whether or not detailed explanations of analysis should be returned
-     */
-    public AnalyzeRequest explain(boolean explain) {
-        this.explain = explain;
-        return this;
-    }
-
-    public boolean explain() {
-        return this.explain;
-    }
-
-    public AnalyzeRequest attributes(String... attributes) {
-        if (attributes == null) {
-            throw new IllegalArgumentException("attributes must not be null");
-        }
-        this.attributes = attributes;
-        return this;
-    }
-
-    public String[] attributes() {
-        return this.attributes;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.field("text", text);
-        if (Strings.isNullOrEmpty(analyzer) == false) {
-            builder.field("analyzer", analyzer);
-        }
-        if (tokenizer != null) {
-            builder.field("tokenizer", tokenizer);
-        }
-        if (tokenFilters.size() > 0) {
-            builder.field("filter", tokenFilters);
-        }
         if (charFilters.size() > 0) {
-            builder.field("char_filter", charFilters);
+    }
+     * Returns the named tokenizer used for analysis, if defined
+        if (tokenizer != null) {
+        // exactly one of these two members is not null
+ * this file be licensed under the Apache-2.0 license or a
+ * KIND, either express or implied.  See the License for the
+    private AnalyzeRequest(
+        NameOrDefinition(Settings settings) {
+ * specific language governing permissions and limitations
         }
-        if (Strings.isNullOrEmpty(field) == false) {
-            builder.field("field", field);
+    private final List<NameOrDefinition> charFilters = new ArrayList<>();
+        return this.charFilters;
+    public NameOrDefinition tokenizer() {
         }
-        if (explain) {
-            builder.field("explain", true);
+        builder.startObject();
+import org.opensearch.client.Validatable;
+     * Analyzes text using a custom analyzer built from global components
+     */
+ * You may obtain a copy of the License at
+import org.opensearch.core.xcontent.ToXContentObject;
+    }
+    }
+        return new AnalyzeRequest(index, null, null, field, text);
+    private final List<NameOrDefinition> tokenFilters = new ArrayList<>();
+        return builder.endObject();
+        return this.index;
+            return new AnalyzeRequest(index, tokenizer, charFilters, tokenFilters, text);
+            charFilters.add(new NameOrDefinition(name));
+        this.field = field;
+    }
+ * GitHub history for details.
+     */
+     */
+    /**
         }
-        if (attributes.length > 0) {
-            builder.field("attributes", attributes);
-        }
-        if (Strings.isNullOrEmpty(normalizer) == false) {
+    }
+        public final Settings definition;
+    /**
+    }
+        this.analyzer = analyzer;
+    public static AnalyzeRequest withGlobalAnalyzer(String analyzer, String... text) {
+import java.util.Objects;
+import org.opensearch.core.xcontent.ToXContentFragment;
+    }
+        this.charFilters.addAll(charFilters);
+     */
             builder.field("normalizer", normalizer);
         }
-        return builder.endObject();
-    }
+import org.opensearch.core.common.Strings;
+        String index,
+    private String field;
+import java.util.List;
+package org.opensearch.client.indices;
+        NameOrDefinition tokenizer,
+    private String[] attributes = Strings.EMPTY_ARRAY;
 }
+        List<NameOrDefinition> charFilters = new ArrayList<>();
+        return this.normalizer;
+     * Set whether or not detailed explanations of analysis should be returned
+     * Returns the text to be analyzed
+        }
+        return new CustomAnalyzerBuilder(null, null);
+        if (Strings.isNullOrEmpty(analyzer) == false) {
+/*
+        if (tokenFilters.size() > 0) {
+ */
+        this.index = index;
+        return new CustomAnalyzerBuilder(index, null);
+        this.tokenizer = tokenizer;
+            builder.field("explain", true);
+     */
+     */
+        }
+     * Returns the named analyzer used for analysis, if defined
+    /**
+            return this;
+        this.attributes = attributes;
+        }
+     */
+        return this.tokenizer;
+     */
+        return new AnalyzeRequest(index, null, normalizer, null, text);
+     * Returns the index that the request should be executed against, or {@code null} if
+    private boolean explain = false;
+            builder.field("char_filter", charFilters);
+    }
+        final String index;
+    public static AnalyzeRequest withIndexAnalyzer(String index, String analyzer, String... text) {
+        this.text = text;
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        List<NameOrDefinition> charFilters,
+        return this.text;
+            return this;
+            this.definition = Settings.builder().loadFromMap(definition).build();
+     */
+            definition.toXContent(builder, params);
+    /**
+    public static CustomAnalyzerBuilder buildCustomAnalyzer(String index, Map<String, Object> tokenizerSettings) {
+     */
+    public List<NameOrDefinition> tokenFilters() {
+            throw new IllegalArgumentException("attributes must not be null");
+        public AnalyzeRequest build(String... text) {
+            builder.field("field", field);
+     */
+    public boolean explain() {
+        NameOrDefinition(String name) {
+     */
+        public final String name;
+ * compatible open source license.
+    /**
+        public CustomAnalyzerBuilder addTokenFilter(String name) {
+        return new AnalyzeRequest(index, analyzer, null, null, text);
+ */
+        if (Strings.isNullOrEmpty(normalizer) == false) {
+     * Helper class to build custom analyzer definitions
+     * Analyzes text using a named normalizer on an index
+        }
+     * no index is specified
+    }
+            Objects.requireNonNull(definition);
+import java.util.Map;
+        NameOrDefinition(Map<String, ?> definition) {
+        return this;
+     */
+            builder.field("filter", tokenFilters);
+        if (Strings.isNullOrEmpty(field) == false) {
+        return new CustomAnalyzerBuilder(index, new NameOrDefinition(tokenizerSettings));
+    /**
+        return this;
+ */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        return new CustomAnalyzerBuilder(index, new NameOrDefinition(tokenizer));
+    /**
+        List<NameOrDefinition> tokenFilters = new ArrayList<>();
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    }
+    public List<NameOrDefinition> charFilters() {
+    }
+import java.util.ArrayList;
+ *
+        this.text = text;
+        return this.tokenFilters;
+    }
+    }
+     * Returns the field to take an Analyzer from, if defined
+    private String normalizer;
+    /**
+            builder.startObject();
+    }
+    }
+     */
+        }
+        this.normalizer = normalizer;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            tokenFilters.add(new NameOrDefinition(name));
+    private String index;
+    /**
+     * Returns the custom character filters used for analysis, if defined
+    }
+        }
+    private String[] text;
+            }
+            tokenFilters.add(new NameOrDefinition(settings));
+    /**
+     * Returns a custom Tokenizer used for analysis, if defined
+    /**
+        this.index = index;
+        public CustomAnalyzerBuilder addTokenFilter(Map<String, Object> settings) {
+            this.definition = null;
+    /**
+            if (definition == null) {
+ *
+        return this.attributes;
+ * The OpenSearch Contributors require contributions made to
+            charFilters.add(new NameOrDefinition(settings));
+        builder.field("text", text);
+     */
+    /**
+    private AnalyzeRequest(String index, String analyzer, String normalizer, String field, String... text) {
+/*
+public class AnalyzeRequest implements Validatable, ToXContentObject {
+        this.field = null;
+ *
+        this.explain = explain;
+        this.tokenFilters.addAll(tokenFilters);
+        @Override
+    }
+        }

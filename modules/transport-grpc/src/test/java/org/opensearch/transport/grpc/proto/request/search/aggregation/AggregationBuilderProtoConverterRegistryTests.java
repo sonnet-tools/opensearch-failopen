@@ -1,290 +1,242 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-package org.opensearch.transport.grpc.proto.request.search.aggregation;
-
-import org.opensearch.protobufs.AggregationContainer;
-import org.opensearch.protobufs.MaxAggregation;
-import org.opensearch.protobufs.MinAggregation;
-import org.opensearch.protobufs.ObjectMap;
-import org.opensearch.protobufs.TermsAggregation;
-import org.opensearch.protobufs.TermsAggregationFields;
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
-import org.opensearch.search.aggregations.metrics.MaxAggregationBuilder;
-import org.opensearch.search.aggregations.metrics.MinAggregationBuilder;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.grpc.spi.AggregationBuilderProtoConverter;
-
-import java.util.HashMap;
-import java.util.Map;
-
 /**
- * Tests for {@link AggregationBuilderProtoConverterRegistryImpl}.
- * Verifies converter registration, lookup, metadata handling, and basic aggregation conversion.
- */
-public class AggregationBuilderProtoConverterRegistryTests extends OpenSearchTestCase {
-
-    /**
-     * Test that built-in converters (Min, Max) are registered by default.
-     */
-    public void testBuiltInConvertersRegistered() {
-        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
-
-        // Verify Min converter is registered
-        AggregationContainer minContainer = AggregationContainer.newBuilder()
-            .setMin(MinAggregation.newBuilder().setField("price").build())
-            .build();
-        AggregationBuilder minBuilder = registry.fromProto("min_price", minContainer);
-        assertNotNull("Min aggregation should be converted", minBuilder);
+        );
+    public void testExternalConverterRegistration() {
         assertTrue("Should be MinAggregationBuilder", minBuilder instanceof MinAggregationBuilder);
         assertEquals("Aggregation name should match", "min_price", minBuilder.getName());
-
-        // Verify Max converter is registered
+ */
+        );
+            .build();
+        AggregationBuilder builder = registry.fromProto("min_price", container);
+        AggregationContainer container = AggregationContainer.newBuilder()
+import java.util.HashMap;
         AggregationContainer maxContainer = AggregationContainer.newBuilder()
-            .setMax(MaxAggregation.newBuilder().setField("price").build())
-            .build();
-        AggregationBuilder maxBuilder = registry.fromProto("max_price", maxContainer);
-        assertNotNull("Max aggregation should be converted", maxBuilder);
-        assertTrue("Should be MaxAggregationBuilder", maxBuilder instanceof MaxAggregationBuilder);
-        assertEquals("Aggregation name should match", "max_price", maxBuilder.getName());
-    }
-
-    /**
-     * Test that external converters can be registered.
-     * Note: Duplicate registrations are allowed and replace the existing converter with a warning.
-     */
-    public void testExternalConverterRegistration() {
-        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
-
-        // Create a mock converter that replaces the built-in Min converter
-        AggregationBuilderProtoConverter mockConverter = new AggregationBuilderProtoConverter() {
-            @Override
-            public AggregationContainer.AggregationContainerCase getHandledAggregationCase() {
-                return AggregationContainer.AggregationContainerCase.MIN;
-            }
-
-            @Override
             public AggregationBuilder fromProto(String name, AggregationContainer container) {
-                return new MinAggregationBuilder("external_" + name);
-            }
-        };
-
-        // Registering duplicate converter should succeed (replaces with warning)
-        registry.registerConverter(mockConverter);
-        registry.updateRegistryOnAllConverters();
-
-        // Verify that the new converter is used
-        AggregationContainer container = AggregationContainer.newBuilder()
-            .setMin(MinAggregation.newBuilder().setField("price").build())
-            .build();
-        AggregationBuilder builder = registry.fromProto("test", container);
-        assertEquals("Should use external converter name", "external_test", builder.getName());
-    }
-
-    /**
-     * Test that unsupported aggregation types throw appropriate exception.
-     */
-    public void testUnsupportedAggregationType() {
-        AggregationBuilderProtoConverterSpiRegistry emptyRegistry = new AggregationBuilderProtoConverterSpiRegistry();
-
-        AggregationContainer container = AggregationContainer.newBuilder()
-            .setMin(MinAggregation.newBuilder().setField("price").build())
-            .build();
-
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> emptyRegistry.fromProto("min_price", container)
-        );
-        assertTrue(
-            "Exception should mention unsupported aggregation type",
-            exception.getMessage().contains("Unsupported aggregation type")
-        );
-    }
-
-    /**
-     * Test that metadata is applied at the container level.
-     */
-    public void testMetadataHandling() {
         AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
-
-        // Create metadata
-        Map<String, Object> expectedMetadata = new HashMap<>();
-        expectedMetadata.put("key1", "value1");
-        expectedMetadata.put("key2", 42L);
-
-        ObjectMap.Builder metaBuilder = ObjectMap.newBuilder();
-        metaBuilder.putFields("key1", ObjectMap.Value.newBuilder().setString("value1").build());
-        metaBuilder.putFields("key2", ObjectMap.Value.newBuilder().setInt64(42L).build());
-
+        assertTrue("Exception should mention invalid aggregation name", ex1.getMessage().contains("Invalid aggregation name"));
+        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
+import org.opensearch.search.aggregations.metrics.MinAggregationBuilder;
+        assertNotNull("Max aggregation should be converted", maxBuilder);
+        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
+        assertEquals("Aggregation name should match", "max_price", maxBuilder.getName());
+            .setMin(MinAggregation.newBuilder().setField("price").build())
         // Create aggregation with metadata
-        AggregationContainer container = AggregationContainer.newBuilder()
-            .setMin(MinAggregation.newBuilder().setField("price").build())
-            .setMeta(metaBuilder.build())
-            .build();
-
-        AggregationBuilder builder = registry.fromProto("min_price", container);
-        assertNotNull("Aggregation should have metadata", builder.getMetadata());
-        assertEquals("Metadata should match", expectedMetadata, builder.getMetadata());
-    }
-
-    /**
-     * Test that null aggregation name throws exception.
-     */
-    public void testNullAggregationName() {
-        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
-
-        AggregationContainer container = AggregationContainer.newBuilder()
-            .setMin(MinAggregation.newBuilder().setField("price").build())
-            .build();
-
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> registry.fromProto(null, container));
-        assertTrue("Exception should mention null or empty name", exception.getMessage().contains("cannot be null or empty"));
-    }
-
-    /**
-     * Test that empty aggregation name throws exception.
-     */
-    public void testEmptyAggregationName() {
-        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
-
-        AggregationContainer container = AggregationContainer.newBuilder()
-            .setMin(MinAggregation.newBuilder().setField("price").build())
-            .build();
-
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> registry.fromProto("", container));
-        assertTrue("Exception should mention null or empty name", exception.getMessage().contains("cannot be null or empty"));
-    }
-
-    /**
-     * Test that null aggregation container throws exception.
-     */
-    public void testNullAggregationContainer() {
-        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
-
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> registry.fromProto("test_agg", null));
-        assertTrue("Exception should mention null container", exception.getMessage().contains("cannot be null"));
-    }
-
-    /**
-     * Test that aggregation container with no type set throws exception.
-     */
-    public void testAggregationContainerNotSet() {
-        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
-
-        AggregationContainer emptyContainer = AggregationContainer.newBuilder().build();
-
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> registry.fromProto("test_agg", emptyContainer)
-        );
-        assertTrue(
-            "Exception should mention unsupported aggregation type",
-            exception.getMessage().contains("Unsupported aggregation type")
-        );
-    }
-
-    /**
-     * Test that Min aggregation conversion works correctly.
-     */
-    public void testMinAggregationConversion() {
-        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
-
-        AggregationContainer container = AggregationContainer.newBuilder()
-            .setMin(MinAggregation.newBuilder().setField("price").build())
-            .build();
-
-        AggregationBuilder builder = registry.fromProto("min_price", container);
-        assertNotNull("Aggregation builder should not be null", builder);
-        assertTrue("Should be MinAggregationBuilder", builder instanceof MinAggregationBuilder);
-        assertEquals("Name should match", "min_price", builder.getName());
-
-        MinAggregationBuilder minBuilder = (MinAggregationBuilder) builder;
-        assertEquals("Field should match", "price", minBuilder.field());
-    }
-
-    /**
-     * Test that Max aggregation conversion works correctly.
-     */
-    public void testMaxAggregationConversion() {
-        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
-
-        AggregationContainer container = AggregationContainer.newBuilder()
-            .setMax(MaxAggregation.newBuilder().setField("price").build())
-            .build();
-
-        AggregationBuilder builder = registry.fromProto("max_price", container);
-        assertNotNull("Aggregation builder should not be null", builder);
-        assertTrue("Should be MaxAggregationBuilder", builder instanceof MaxAggregationBuilder);
-        assertEquals("Name should match", "max_price", builder.getName());
-
-        MaxAggregationBuilder maxBuilder = (MaxAggregationBuilder) builder;
-        assertEquals("Field should match", "price", maxBuilder.field());
-    }
-
-    /**
-     * Test nested aggregations via a terms aggregation with a max sub-aggregation.
-     */
-    public void testNestedAggregationsInfrastructure() {
-        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
-
-        AggregationContainer subAgg = AggregationContainer.newBuilder()
-            .setMax(MaxAggregation.newBuilder().setField("price").build())
-            .build();
-
-        AggregationContainer container = AggregationContainer.newBuilder()
-            .setTermsAggregation(
-                TermsAggregation.newBuilder()
                     .setTerms(TermsAggregationFields.newBuilder().setField("category").build())
                     .putAggregations("max_price", subAgg)
-                    .build()
-            )
-            .build();
-
-        AggregationBuilder builder = registry.fromProto("by_category", container);
-        assertTrue(builder instanceof TermsAggregationBuilder);
-        assertEquals("by_category", builder.getName());
-        assertEquals("category", ((TermsAggregationBuilder) builder).field());
-
-        assertEquals(1, builder.getSubAggregations().size());
-        AggregationBuilder subBuilder = builder.getSubAggregations().iterator().next();
-        assertTrue(subBuilder instanceof MaxAggregationBuilder);
-        assertEquals("max_price", subBuilder.getName());
-        assertEquals("price", ((MaxAggregationBuilder) subBuilder).field());
-    }
-
-    /**
-     * Test that invalid aggregation names are rejected.
-     * Verifies that aggregation name validation matches REST API behavior.
-     * See {@link AggregatorFactories#parseAggregators}.
-     */
-    public void testInvalidAggregationNames() {
+     * Test that built-in converters (Min, Max) are registered by default.
+        // Test name with '[' character
         AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
+            () -> emptyRegistry.fromProto("min_price", container)
+        // Verify that the new converter is used
+        AggregationContainer container = AggregationContainer.newBuilder()
+        assertTrue("Exception should mention forbidden characters", ex1.getMessage().contains("'[', ']', and '>'"));
+import org.opensearch.search.aggregations.metrics.MaxAggregationBuilder;
+            .setTermsAggregation(
+        assertTrue("Exception should mention null or empty name", exception.getMessage().contains("cannot be null or empty"));
+        assertTrue("Exception should mention null container", exception.getMessage().contains("cannot be null"));
+     * Verifies that aggregation name validation matches REST API behavior.
+        IllegalArgumentException ex1 = expectThrows(IllegalArgumentException.class, () -> registry.fromProto("invalid[name", container));
+            .build();
+            }
+            .build();
+        AggregationContainer container = AggregationContainer.newBuilder()
+    /**
+        assertEquals("max_price", subBuilder.getName());
+        assertEquals("Field should match", "price", minBuilder.field());
+    /**
+            .setMin(MinAggregation.newBuilder().setField("price").build())
+    public void testEmptyAggregationName() {
+    public void testAggregationContainerNotSet() {
+        AggregationContainer subAgg = AggregationContainer.newBuilder()
+     */
+ * Tests for {@link AggregationBuilderProtoConverterRegistryImpl}.
+public class AggregationBuilderProtoConverterRegistryTests extends OpenSearchTestCase {
+            .setMin(MinAggregation.newBuilder().setField("price").build())
+        assertNotNull("Valid aggregation name should be accepted", validBuilder);
+            .setMin(MinAggregation.newBuilder().setField("price").build())
+        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
+    /**
+ * compatible open source license.
+     */
+        assertTrue(
+        assertNotNull("Min aggregation should be converted", minBuilder);
+    public void testBuiltInConvertersRegistered() {
+        AggregationContainer minContainer = AggregationContainer.newBuilder()
+     * Test that metadata is applied at the container level.
+package org.opensearch.transport.grpc.proto.request.search.aggregation;
+    /**
+ * SPDX-License-Identifier: Apache-2.0
+                return AggregationContainer.AggregationContainerCase.MIN;
+    public void testUnsupportedAggregationType() {
+import org.opensearch.transport.grpc.spi.AggregationBuilderProtoConverter;
+            .setMin(MinAggregation.newBuilder().setField("price").build())
+        metaBuilder.putFields("key1", ObjectMap.Value.newBuilder().setString("value1").build());
+    /**
+        };
+        // Create a mock converter that replaces the built-in Min converter
+     * Test that empty aggregation name throws exception.
+            exception.getMessage().contains("Unsupported aggregation type")
+     * Test that unsupported aggregation types throw appropriate exception.
+        assertEquals(1, builder.getSubAggregations().size());
+        // Verify Min converter is registered
+     */
+            .setMin(MinAggregation.newBuilder().setField("price").build())
+    }
+     * Test nested aggregations via a terms aggregation with a max sub-aggregation.
+    public void testMinAggregationConversion() {
+            )
+        expectedMetadata.put("key1", "value1");
+            .build();
+        assertEquals("valid_name-with.dots:and_more", validBuilder.getName());
         AggregationContainer container = AggregationContainer.newBuilder()
             .setMin(MinAggregation.newBuilder().setField("price").build())
-            .build();
-
-        // Test name with '[' character
-        IllegalArgumentException ex1 = expectThrows(IllegalArgumentException.class, () -> registry.fromProto("invalid[name", container));
-        assertTrue("Exception should mention invalid aggregation name", ex1.getMessage().contains("Invalid aggregation name"));
-        assertTrue("Exception should mention forbidden characters", ex1.getMessage().contains("'[', ']', and '>'"));
-
-        // Test name with ']' character
-        IllegalArgumentException ex2 = expectThrows(IllegalArgumentException.class, () -> registry.fromProto("invalid]name", container));
-        assertTrue("Exception should mention invalid aggregation name", ex2.getMessage().contains("Invalid aggregation name"));
-
-        // Test name with '>' character
-        IllegalArgumentException ex3 = expectThrows(IllegalArgumentException.class, () -> registry.fromProto("invalid>name", container));
-        assertTrue("Exception should mention invalid aggregation name", ex3.getMessage().contains("Invalid aggregation name"));
-
-        // Test that valid names work fine
-        AggregationBuilder validBuilder = registry.fromProto("valid_name-with.dots:and_more", container);
-        assertNotNull("Valid aggregation name should be accepted", validBuilder);
-        assertEquals("valid_name-with.dots:and_more", validBuilder.getName());
+     * Test that null aggregation container throws exception.
+     * Test that Max aggregation conversion works correctly.
+        assertEquals("category", ((TermsAggregationBuilder) builder).field());
     }
+        AggregationContainer container = AggregationContainer.newBuilder()
+        assertTrue("Should be MaxAggregationBuilder", builder instanceof MaxAggregationBuilder);
+            .setMin(MinAggregation.newBuilder().setField("price").build())
+     */
+        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
+    }
+        AggregationBuilder subBuilder = builder.getSubAggregations().iterator().next();
+        AggregationContainer container = AggregationContainer.newBuilder()
+        // Registering duplicate converter should succeed (replaces with warning)
+        assertNotNull("Aggregation builder should not be null", builder);
+        MaxAggregationBuilder maxBuilder = (MaxAggregationBuilder) builder;
+        assertEquals("Should use external converter name", "external_test", builder.getName());
+    }
+        metaBuilder.putFields("key2", ObjectMap.Value.newBuilder().setInt64(42L).build());
+import org.opensearch.protobufs.TermsAggregation;
+        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
+import org.opensearch.search.aggregations.AggregationBuilder;
+        AggregationBuilder builder = registry.fromProto("max_price", container);
+        IllegalArgumentException ex2 = expectThrows(IllegalArgumentException.class, () -> registry.fromProto("invalid]name", container));
+                    .build()
+        AggregationBuilder minBuilder = registry.fromProto("min_price", minContainer);
+            IllegalArgumentException.class,
+    /**
+        AggregationContainer container = AggregationContainer.newBuilder()
+import java.util.Map;
+     * Test that external converters can be registered.
+            exception.getMessage().contains("Unsupported aggregation type")
+    }
+        assertTrue("Should be MaxAggregationBuilder", maxBuilder instanceof MaxAggregationBuilder);
+            @Override
+import org.opensearch.protobufs.ObjectMap;
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> registry.fromProto("", container));
+            .setMax(MaxAggregation.newBuilder().setField("price").build())
+     * Note: Duplicate registrations are allowed and replace the existing converter with a warning.
+        // Test name with ']' character
+            "Exception should mention unsupported aggregation type",
+            .build();
+        MinAggregationBuilder minBuilder = (MinAggregationBuilder) builder;
+        registry.registerConverter(mockConverter);
+import org.opensearch.protobufs.TermsAggregationFields;
+        );
+        AggregationBuilder builder = registry.fromProto("min_price", container);
+     * Test that null aggregation name throws exception.
+    public void testMaxAggregationConversion() {
+        // Test that valid names work fine
+        assertEquals("Name should match", "max_price", builder.getName());
+            "Exception should mention unsupported aggregation type",
+            .build();
+            @Override
+        assertEquals("price", ((MaxAggregationBuilder) subBuilder).field());
+                TermsAggregation.newBuilder()
+    /**
+            .build();
+     * See {@link AggregatorFactories#parseAggregators}.
+        AggregationContainer container = AggregationContainer.newBuilder()
+        assertEquals("by_category", builder.getName());
+import org.opensearch.test.OpenSearchTestCase;
+        AggregationContainer emptyContainer = AggregationContainer.newBuilder().build();
+            .setMax(MaxAggregation.newBuilder().setField("price").build())
+     */
+        assertTrue(subBuilder instanceof MaxAggregationBuilder);
+            .setMeta(metaBuilder.build())
+     */
+        assertNotNull("Aggregation builder should not be null", builder);
+     * Test that aggregation container with no type set throws exception.
+            () -> registry.fromProto("test_agg", emptyContainer)
+        // Test name with '>' character
+    }
+     */
+        AggregationBuilderProtoConverter mockConverter = new AggregationBuilderProtoConverter() {
+            public AggregationContainer.AggregationContainerCase getHandledAggregationCase() {
+     */
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
+        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
+            .build();
+    /**
+import org.opensearch.protobufs.MaxAggregation;
+    /**
+    public void testNullAggregationContainer() {
+                return new MinAggregationBuilder("external_" + name);
+        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
+        assertEquals("Name should match", "min_price", builder.getName());
+            }
+        AggregationBuilder validBuilder = registry.fromProto("valid_name-with.dots:and_more", container);
+        AggregationBuilder builder = registry.fromProto("by_category", container);
+        AggregationContainer container = AggregationContainer.newBuilder()
+        // Create metadata
+ * The OpenSearch Contributors require contributions made to
+    public void testMetadataHandling() {
+        IllegalArgumentException exception = expectThrows(
+        ObjectMap.Builder metaBuilder = ObjectMap.newBuilder();
+ * Verifies converter registration, lookup, metadata handling, and basic aggregation conversion.
+ */
+    }
+        IllegalArgumentException exception = expectThrows(
+    }
+    }
+        // Verify Max converter is registered
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> registry.fromProto(null, container));
+            IllegalArgumentException.class,
+ * this file be licensed under the Apache-2.0 license or a
+            .setMax(MaxAggregation.newBuilder().setField("price").build())
+    public void testNullAggregationName() {
+    /**
+        Map<String, Object> expectedMetadata = new HashMap<>();
+        assertTrue("Should be MinAggregationBuilder", builder instanceof MinAggregationBuilder);
+        assertTrue("Exception should mention invalid aggregation name", ex2.getMessage().contains("Invalid aggregation name"));
+        expectedMetadata.put("key2", 42L);
+            .build();
 }
+/*
+    }
+    public void testInvalidAggregationNames() {
+    /**
+        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
+     * Test that invalid aggregation names are rejected.
+        registry.updateRegistryOnAllConverters();
+    /**
+        assertEquals("Metadata should match", expectedMetadata, builder.getMetadata());
+        IllegalArgumentException ex3 = expectThrows(IllegalArgumentException.class, () -> registry.fromProto("invalid>name", container));
+    }
+        AggregationBuilderProtoConverterRegistryImpl registry = new AggregationBuilderProtoConverterRegistryImpl();
+            .build();
+            .build();
+        assertTrue("Exception should mention invalid aggregation name", ex3.getMessage().contains("Invalid aggregation name"));
+        AggregationBuilderProtoConverterSpiRegistry emptyRegistry = new AggregationBuilderProtoConverterSpiRegistry();
+        AggregationBuilder builder = registry.fromProto("test", container);
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> registry.fromProto("test_agg", null));
+            .build();
+        AggregationBuilder maxBuilder = registry.fromProto("max_price", maxContainer);
+    public void testNestedAggregationsInfrastructure() {
+     */
+     */
+        assertTrue(builder instanceof TermsAggregationBuilder);
+ *
+    }
+import org.opensearch.search.aggregations.AggregatorFactories;
+import org.opensearch.protobufs.AggregationContainer;
+        assertTrue("Exception should mention null or empty name", exception.getMessage().contains("cannot be null or empty"));
+import org.opensearch.protobufs.MinAggregation;
+     * Test that Min aggregation conversion works correctly.
+        );
+        assertNotNull("Aggregation should have metadata", builder.getMetadata());
+     */
+        assertEquals("Field should match", "price", maxBuilder.field());
+        assertTrue(
+     */

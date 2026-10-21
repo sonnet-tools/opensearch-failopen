@@ -1,205 +1,155 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.mapper.extrasource;
-
-import org.apache.lucene.util.BytesRef;
+        for (double value : vals) {
 import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.is;
-
-public class ExtraFieldValueTests extends OpenSearchTestCase {
-
-    public void testBytesValueWriteReadRoundTrip() throws Exception {
-        BytesValue v = new BytesValue(new BytesArray(new byte[] { 1, 2, 3, 4 }));
-
-        BytesStreamOutput out = new BytesStreamOutput();
-        v.writeTo(out);
-
-        StreamInput in = out.bytes().streamInput();
         ExtraFieldValue read = ExtraFieldValue.readFrom(in);
-
-        assertThat(read, instanceOf(BytesValue.class));
-        BytesValue bv = (BytesValue) read;
-        assertThat(bv.type(), is(ExtraFieldValue.Type.BYTES));
-        assertThat(bv.size(), is(4));
-        BytesRef bytesRef = bv.bytes().toBytesRef();
-        assertThat(bytesRef.length, is(4));
-        assertThat(bytesRef.bytes[bytesRef.offset], is((byte) 1));
-    }
-
-    public void testFloatArrayWriteReadRoundTrip() throws Exception {
-        FloatArrayValue v = FloatArrayValue.fromFloatArray(new float[] { 10.5f, -2.25f });
-
-        BytesStreamOutput out = new BytesStreamOutput();
-        v.writeTo(out);
-
-        StreamInput in = out.bytes().streamInput();
-        ExtraFieldValue read = ExtraFieldValue.readFrom(in);
-
-        assertThat(read, instanceOf(FloatArrayValue.class));
-        FloatArrayValue fav = (FloatArrayValue) read;
-
-        assertThat(fav.type(), is(ExtraFieldValue.Type.FLOAT_ARRAY));
-        assertThat(fav.dimension(), is(2));
-        assertEquals(10.5f, fav.get(0), 0.0f);
-        assertEquals(-2.25f, fav.get(1), 0.0f);
-    }
-
-    public void testIntArrayWriteReadRoundTrip() throws Exception {
-        IntArrayValue v = IntArrayValue.fromIntArray(new int[] { 10, -2 });
-
-        BytesStreamOutput out = new BytesStreamOutput();
-        v.writeTo(out);
-
-        StreamInput in = out.bytes().streamInput();
-        ExtraFieldValue read = ExtraFieldValue.readFrom(in);
-
-        assertThat(read, instanceOf(IntArrayValue.class));
-        IntArrayValue iav = (IntArrayValue) read;
-
-        assertThat(iav.type(), is(ExtraFieldValue.Type.INT_ARRAY));
-        assertThat(iav.dimension(), is(2));
-        assertThat(iav.get(0), is(10));
-        assertThat(iav.get(1), is(-2));
-    }
-
-    public void testLongArrayWriteReadRoundTrip() throws Exception {
-        LongArrayValue v = LongArrayValue.fromLongArray(new long[] { 10L, -2L });
-
-        BytesStreamOutput out = new BytesStreamOutput();
-        v.writeTo(out);
-
-        StreamInput in = out.bytes().streamInput();
-        ExtraFieldValue read = ExtraFieldValue.readFrom(in);
-
-        assertThat(read, instanceOf(LongArrayValue.class));
-        LongArrayValue lav = (LongArrayValue) read;
-
-        assertThat(lav.type(), is(ExtraFieldValue.Type.LONG_ARRAY));
-        assertThat(lav.dimension(), is(2));
-        assertThat(lav.get(0), is(10L));
-        assertThat(lav.get(1), is(-2L));
-    }
-
-    public void testDoubleArrayWriteReadRoundTrip() throws Exception {
-        DoubleArrayValue v = DoubleArrayValue.fromDoubleArray(new double[] { 10.5d, -2.25d });
-
-        BytesStreamOutput out = new BytesStreamOutput();
-        v.writeTo(out);
-
-        StreamInput in = out.bytes().streamInput();
-        ExtraFieldValue read = ExtraFieldValue.readFrom(in);
-
-        assertThat(read, instanceOf(DoubleArrayValue.class));
-        DoubleArrayValue dav = (DoubleArrayValue) read;
-
-        assertThat(dav.type(), is(ExtraFieldValue.Type.DOUBLE_ARRAY));
         assertThat(dav.dimension(), is(2));
-        assertEquals(10.5d, dav.get(0), 0.0d);
+        assertThat(read, instanceOf(DoubleArrayValue.class));
+ * The OpenSearch Contributors require contributions made to
+        StreamInput in = out.bytes().streamInput();
+        for (long value : vals) {
         assertEquals(-2.25d, dav.get(1), 0.0d);
-    }
-
-    public void testPackedIntArrayWriteReadRoundTrip() throws Exception {
-        int[] vals = new int[] { 10, -2 };
-        IntArrayValue v = IntArrayValue.fromPackedArray(packIntLE(vals), vals.length);
-
-        BytesStreamOutput out = new BytesStreamOutput();
+/*
         v.writeTo(out);
-
-        StreamInput in = out.bytes().streamInput();
-        ExtraFieldValue read = ExtraFieldValue.readFrom(in);
-
+        BytesStreamOutput out = new BytesStreamOutput();
         assertThat(read, instanceOf(IntArrayValue.class));
-        IntArrayValue iav = (IntArrayValue) read;
-
-        assertThat(iav.type(), is(ExtraFieldValue.Type.INT_ARRAY));
-        assertThat(iav.isPackedLE(), is(true));
-        assertArrayEquals(vals, iav.asIntArray());
-    }
-
-    public void testPackedLongArrayWriteReadRoundTrip() throws Exception {
-        long[] vals = new long[] { 10L, -2L };
-        LongArrayValue v = LongArrayValue.fromPackedArray(packLongLE(vals), vals.length);
-
-        BytesStreamOutput out = new BytesStreamOutput();
         v.writeTo(out);
-
+        v.writeTo(out);
         StreamInput in = out.bytes().streamInput();
-        ExtraFieldValue read = ExtraFieldValue.readFrom(in);
-
-        assertThat(read, instanceOf(LongArrayValue.class));
-        LongArrayValue lav = (LongArrayValue) read;
-
-        assertThat(lav.type(), is(ExtraFieldValue.Type.LONG_ARRAY));
-        assertThat(lav.isPackedLE(), is(true));
         assertArrayEquals(vals, lav.asLongArray());
     }
-
-    public void testPackedDoubleArrayWriteReadRoundTrip() throws Exception {
-        double[] vals = new double[] { 10.5d, -2.25d };
+        LongArrayValue v = LongArrayValue.fromLongArray(new long[] { 10L, -2L });
+        assertThat(bytesRef.bytes[bytesRef.offset], is((byte) 1));
+        StreamInput in = out.bytes().streamInput();
+    }
         DoubleArrayValue v = DoubleArrayValue.fromPackedArray(packDoubleLE(vals), vals.length);
-
-        BytesStreamOutput out = new BytesStreamOutput();
-        v.writeTo(out);
-
-        StreamInput in = out.bytes().streamInput();
-        ExtraFieldValue read = ExtraFieldValue.readFrom(in);
-
-        assertThat(read, instanceOf(DoubleArrayValue.class));
-        DoubleArrayValue dav = (DoubleArrayValue) read;
-
         assertThat(dav.type(), is(ExtraFieldValue.Type.DOUBLE_ARRAY));
-        assertThat(dav.isPackedLE(), is(true));
-        assertArrayEquals(vals, dav.asDoubleArray(), 0.0d);
-    }
-
-    public void testUnknownTypeIdThrows() throws Exception {
+        LongArrayValue lav = (LongArrayValue) read;
         BytesStreamOutput out = new BytesStreamOutput();
-
         // write unknown type id, then some junk body
-        out.writeByte((byte) 42);
-        out.writeVInt(0);
-
         StreamInput in = out.bytes().streamInput();
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> ExtraFieldValue.readFrom(in));
-        assertThat(e.getMessage(), containsString("Unknown ExtraFieldValue.Type id"));
-    }
-
-    private static byte[] packIntLE(int[] vals) {
-        ByteBuffer buffer = ByteBuffer.allocate(vals.length * Integer.BYTES).order(ByteOrder.LITTLE_ENDIAN);
-        for (int value : vals) {
+        return buffer.array();
+        IntArrayValue v = IntArrayValue.fromIntArray(new int[] { 10, -2 });
             buffer.putInt(value);
-        }
-        return buffer.array();
+        ByteBuffer buffer = ByteBuffer.allocate(vals.length * Integer.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+    public void testDoubleArrayWriteReadRoundTrip() throws Exception {
+    private static byte[] packIntLE(int[] vals) {
+        v.writeTo(out);
+public class ExtraFieldValueTests extends OpenSearchTestCase {
     }
-
-    private static byte[] packLongLE(long[] vals) {
+        int[] vals = new int[] { 10, -2 };
+    public void testPackedIntArrayWriteReadRoundTrip() throws Exception {
+import org.opensearch.core.common.bytes.BytesArray;
+        BytesStreamOutput out = new BytesStreamOutput();
+        assertThat(e.getMessage(), containsString("Unknown ExtraFieldValue.Type id"));
+        ExtraFieldValue read = ExtraFieldValue.readFrom(in);
+    }
+        assertThat(iav.isPackedLE(), is(true));
+        IntArrayValue iav = (IntArrayValue) read;
+    }
+        StreamInput in = out.bytes().streamInput();
+        long[] vals = new long[] { 10L, -2L };
+ * SPDX-License-Identifier: Apache-2.0
+        IntArrayValue v = IntArrayValue.fromPackedArray(packIntLE(vals), vals.length);
+        assertThat(lav.isPackedLE(), is(true));
         ByteBuffer buffer = ByteBuffer.allocate(vals.length * Long.BYTES).order(ByteOrder.LITTLE_ENDIAN);
-        for (long value : vals) {
-            buffer.putLong(value);
-        }
+        assertEquals(10.5d, dav.get(0), 0.0d);
+        FloatArrayValue fav = (FloatArrayValue) read;
+import java.nio.ByteBuffer;
+        assertThat(read, instanceOf(IntArrayValue.class));
+        BytesValue v = new BytesValue(new BytesArray(new byte[] { 1, 2, 3, 4 }));
+        v.writeTo(out);
         return buffer.array();
-    }
-
-    private static byte[] packDoubleLE(double[] vals) {
-        ByteBuffer buffer = ByteBuffer.allocate(vals.length * Double.BYTES).order(ByteOrder.LITTLE_ENDIAN);
-        for (double value : vals) {
+        LongArrayValue lav = (LongArrayValue) read;
+import java.nio.ByteOrder;
+        assertThat(iav.get(0), is(10));
+import static org.hamcrest.Matchers.is;
+        FloatArrayValue v = FloatArrayValue.fromFloatArray(new float[] { 10.5f, -2.25f });
+        BytesStreamOutput out = new BytesStreamOutput();
             buffer.putDouble(value);
-        }
-        return buffer.array();
+        DoubleArrayValue v = DoubleArrayValue.fromDoubleArray(new double[] { 10.5d, -2.25d });
+ * compatible open source license.
+    public void testIntArrayWriteReadRoundTrip() throws Exception {
     }
+        assertEquals(10.5f, fav.get(0), 0.0f);
+        BytesStreamOutput out = new BytesStreamOutput();
+        DoubleArrayValue dav = (DoubleArrayValue) read;
+        assertThat(iav.dimension(), is(2));
+    public void testPackedLongArrayWriteReadRoundTrip() throws Exception {
+        assertThat(read, instanceOf(LongArrayValue.class));
+    }
+        DoubleArrayValue dav = (DoubleArrayValue) read;
+        BytesValue bv = (BytesValue) read;
+        assertArrayEquals(vals, iav.asIntArray());
+        assertThat(fav.dimension(), is(2));
+ * this file be licensed under the Apache-2.0 license or a
+    private static byte[] packDoubleLE(double[] vals) {
+        assertArrayEquals(vals, dav.asDoubleArray(), 0.0d);
+        assertThat(bv.type(), is(ExtraFieldValue.Type.BYTES));
+    }
+        assertThat(bv.size(), is(4));
+        }
+        StreamInput in = out.bytes().streamInput();
+        assertThat(iav.type(), is(ExtraFieldValue.Type.INT_ARRAY));
+    public void testPackedDoubleArrayWriteReadRoundTrip() throws Exception {
+import static org.hamcrest.Matchers.instanceOf;
+        v.writeTo(out);
+ *
+    public void testUnknownTypeIdThrows() throws Exception {
+import org.apache.lucene.util.BytesRef;
+        BytesStreamOutput out = new BytesStreamOutput();
+        ExtraFieldValue read = ExtraFieldValue.readFrom(in);
+        assertThat(bytesRef.length, is(4));
+        BytesStreamOutput out = new BytesStreamOutput();
+        }
+import static org.hamcrest.Matchers.containsString;
+        BytesStreamOutput out = new BytesStreamOutput();
+        assertThat(read, instanceOf(DoubleArrayValue.class));
+        ExtraFieldValue read = ExtraFieldValue.readFrom(in);
+    public void testFloatArrayWriteReadRoundTrip() throws Exception {
+    public void testBytesValueWriteReadRoundTrip() throws Exception {
+        v.writeTo(out);
+        assertThat(lav.get(1), is(-2L));
+        ExtraFieldValue read = ExtraFieldValue.readFrom(in);
+    private static byte[] packLongLE(long[] vals) {
 }
+    }
+        assertThat(fav.type(), is(ExtraFieldValue.Type.FLOAT_ARRAY));
+        ExtraFieldValue read = ExtraFieldValue.readFrom(in);
+        double[] vals = new double[] { 10.5d, -2.25d };
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.core.common.io.stream.StreamInput;
+        assertThat(read, instanceOf(LongArrayValue.class));
+        assertThat(iav.type(), is(ExtraFieldValue.Type.INT_ARRAY));
+        v.writeTo(out);
+        assertThat(dav.isPackedLE(), is(true));
+        BytesStreamOutput out = new BytesStreamOutput();
+        assertThat(lav.dimension(), is(2));
+        StreamInput in = out.bytes().streamInput();
+        BytesRef bytesRef = bv.bytes().toBytesRef();
+        }
+        ExtraFieldValue read = ExtraFieldValue.readFrom(in);
+    }
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> ExtraFieldValue.readFrom(in));
+package org.opensearch.index.mapper.extrasource;
+        ExtraFieldValue read = ExtraFieldValue.readFrom(in);
+        ByteBuffer buffer = ByteBuffer.allocate(vals.length * Double.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+        LongArrayValue v = LongArrayValue.fromPackedArray(packLongLE(vals), vals.length);
+ */
+        out.writeVInt(0);
+        assertEquals(-2.25f, fav.get(1), 0.0f);
+        IntArrayValue iav = (IntArrayValue) read;
+        assertThat(lav.type(), is(ExtraFieldValue.Type.LONG_ARRAY));
+        assertThat(dav.type(), is(ExtraFieldValue.Type.DOUBLE_ARRAY));
+        for (int value : vals) {
+    }
+        assertThat(lav.get(0), is(10L));
+        assertThat(read, instanceOf(FloatArrayValue.class));
+        return buffer.array();
+        StreamInput in = out.bytes().streamInput();
+    public void testLongArrayWriteReadRoundTrip() throws Exception {
+        assertThat(iav.get(1), is(-2));
+            buffer.putLong(value);
+        assertThat(lav.type(), is(ExtraFieldValue.Type.LONG_ARRAY));
+        assertThat(read, instanceOf(BytesValue.class));
+        StreamInput in = out.bytes().streamInput();
+    }
+        out.writeByte((byte) 42);

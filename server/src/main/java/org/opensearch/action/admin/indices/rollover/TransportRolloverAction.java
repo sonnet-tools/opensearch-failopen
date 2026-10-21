@@ -1,329 +1,304 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.rollover;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.action.admin.indices.create.CreateIndexAction;
-import org.opensearch.action.admin.indices.stats.IndicesStatsAction;
-import org.opensearch.action.admin.indices.stats.IndicesStatsRequest;
-import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.ActiveShardsObserver;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.TransportIndicesResolvingAction;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateUpdateTask;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.cluster.metadata.IndexAbstraction;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.metadata.ResolvedIndices;
-import org.opensearch.cluster.service.ClusterManagerTaskThrottler;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.index.shard.DocsStats;
-import org.opensearch.tasks.Task;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.Client;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
-
-import static org.opensearch.cluster.service.ClusterManagerTask.ROLLOVER_INDEX;
-
-/**
- * Main class to swap the index pointed to by an alias, given some conditions
- *
- * @opensearch.internal
- */
-public class TransportRolloverAction extends TransportClusterManagerNodeAction<RolloverRequest, RolloverResponse>
-    implements
-        TransportIndicesResolvingAction<RolloverRequest> {
-
-    private final MetadataRolloverService rolloverService;
-    private final ActiveShardsObserver activeShardsObserver;
-    private final Client client;
-    private final ClusterManagerTaskThrottler.ThrottlingKey rolloverIndexTaskKey;
-
-    @Inject
-    public TransportRolloverAction(
-        TransportService transportService,
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        MetadataRolloverService rolloverService,
-        Client client
-    ) {
-        super(
-            RolloverAction.NAME,
-            transportService,
-            clusterService,
-            threadPool,
-            actionFilters,
-            RolloverRequest::new,
-            indexNameExpressionResolver
-        );
+                            @Override
+                                if (rolloverResult.sourceIndexName.equals(sourceIndexName) == false) {
+        IndexAbstraction indexAbstraction = state.metadata().getIndicesLookup().get(request.getRolloverTarget());
         this.rolloverService = rolloverService;
-        this.client = client;
-        this.activeShardsObserver = new ActiveShardsObserver(clusterService, threadPool);
-        // Task is onboarded for throttling, it will get retried from associated TransportClusterManagerNodeAction.
-        rolloverIndexTaskKey = clusterService.registerClusterManagerTask(ROLLOVER_INDEX, true);
-    }
-
+                                );
+                                    currentState,
+                                    metConditions,
+ *
+ * ownership. Elasticsearch licenses this file to you under
     @Override
-    protected String executor() {
-        // we go async right away
-        return ThreadPool.Names.SAME;
+        // Task is onboarded for throttling, it will get retried from associated TransportClusterManagerNodeAction.
+                                    rolloverRequest.getNewIndexName(),
+    @Inject
+        } else {
+        Client client
     }
-
+        String rolloverIndexName = preResult.rolloverIndexName;
+    @Override
+        ClusterService clusterService,
+                                        new String[] { rolloverIndexName },
+                .withLocalSubActions(CreateIndexAction.INSTANCE, ResolvedIndices.Local.of(preResult.rolloverIndexName));
+import org.opensearch.cluster.ClusterState;
+                listener.onFailure(e);
+                    );
+    private final ActiveShardsObserver activeShardsObserver;
+/*
+            true,
+                                                true,
+    static Map<String, Boolean> evaluateConditions(
+import org.opensearch.cluster.metadata.ResolvedIndices;
+ * SPDX-License-Identifier: Apache-2.0
+                List<Condition<?>> metConditions = rolloverRequest.getConditions()
+ */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.opensearch.cluster.block.ClusterBlocks;
+        TransportService transportService,
+import org.opensearch.cluster.service.ClusterManagerTaskThrottler;
+                                    activeShardsObserver.waitForActiveShards(
+            clusterService,
+import org.opensearch.threadpool.ThreadPool;
+        rolloverIndexTaskKey = clusterService.registerClusterManagerTask(ROLLOVER_INDEX, true);
+            return null;
+                true,
+                    metadata.index(sourceIndexName),
+            // the clusterManagerOperation() that should report these failures.
+        IndexNameExpressionResolver indexNameExpressionResolver,
+        throws Exception {
+import org.opensearch.common.inject.Inject;
+        if (writeIndex == null) {
+        MetadataRolloverService.RolloverResult preResult = rolloverService.rolloverClusterState(
+                                                sourceIndexName,
+                            @Override
+            .build();
+        return ThreadPool.Names.SAME;
+ * Modifications Copyright OpenSearch Contributors. See
+            actionFilters,
+                                        rolloverRequest.getRolloverTarget()
+ */
+ * GitHub history for details.
+        client.execute(IndicesStatsAction.INSTANCE, statsRequest, new ActionListener<IndicesStatsResponse>() {
+        final long indexSize = docsStats == null ? 0 : docsStats.getTotalSizeInBytes();
+                        new RolloverResponse(sourceIndexName, rolloverIndexName, conditionResults, false, false, false, false)
+}
+import java.util.Optional;
+                }
+        ThreadPool threadPool,
+import org.opensearch.cluster.ClusterStateUpdateTask;
+                        }
+    @Override
+        return conditions.stream()
+                return ResolvedIndices.of(rolloverRequest.getRolloverTarget());
+import org.opensearch.core.common.unit.ByteSizeValue;
     @Override
     protected RolloverResponse read(StreamInput in) throws IOException {
-        return new RolloverResponse(in);
-    }
-
-    @Override
-    protected ClusterBlockException checkBlock(RolloverRequest request, ClusterState state) {
-        IndexAbstraction indexAbstraction = state.metadata().getIndicesLookup().get(request.getRolloverTarget());
-        if (indexAbstraction == null) {
-            return null;
+import org.opensearch.index.shard.DocsStats;
+import java.util.stream.Collectors;
         }
-        IndexMetadata writeIndex = indexAbstraction.getWriteIndex();
-        if (writeIndex == null) {
-            return null;
-        }
-        return ClusterBlocks.indicesWithRemoteSnapshotBlockedException(Collections.singletonList(writeIndex.getIndex().getName()), state);
-    }
-
     @Override
-    protected void clusterManagerOperation(RolloverRequest request, ClusterState state, ActionListener<RolloverResponse> listener)
-        throws Exception {
-        throw new UnsupportedOperationException("The task parameter is required");
-    }
-
-    @Override
-    protected void clusterManagerOperation(
-        Task task,
-        final RolloverRequest rolloverRequest,
-        final ClusterState state,
-        final ActionListener<RolloverResponse> listener
-    ) throws Exception {
-
-        MetadataRolloverService.RolloverResult preResult = rolloverService.rolloverClusterState(
-            state,
-            rolloverRequest.getRolloverTarget(),
-            rolloverRequest.getNewIndexName(),
-            rolloverRequest.getCreateIndexRequest(),
-            Collections.emptyList(),
-            true,
-            true
-        );
-        Metadata metadata = state.metadata();
-        String sourceIndexName = preResult.sourceIndexName;
-        String rolloverIndexName = preResult.rolloverIndexName;
-        IndicesStatsRequest statsRequest = new IndicesStatsRequest().indices(rolloverRequest.getRolloverTarget())
-            .clear()
-            .indicesOptions(IndicesOptions.fromOptions(true, false, true, true))
-            .docs(true);
-        statsRequest.setParentTask(clusterService.localNode().getId(), task.getId());
-        client.execute(IndicesStatsAction.INSTANCE, statsRequest, new ActionListener<IndicesStatsResponse>() {
-            @Override
-            public void onResponse(IndicesStatsResponse statsResponse) {
-                final Map<String, Boolean> conditionResults = evaluateConditions(
-                    rolloverRequest.getConditions().values(),
-                    metadata.index(sourceIndexName),
-                    statsResponse
-                );
-
-                if (rolloverRequest.isDryRun()) {
-                    listener.onResponse(
-                        new RolloverResponse(sourceIndexName, rolloverIndexName, conditionResults, true, false, false, false)
-                    );
-                    return;
-                }
-                List<Condition<?>> metConditions = rolloverRequest.getConditions()
-                    .values()
-                    .stream()
-                    .filter(condition -> conditionResults.get(condition.toString()))
-                    .collect(Collectors.toList());
-                if (conditionResults.size() == 0 || metConditions.size() > 0) {
-                    clusterService.submitStateUpdateTask(
-                        "rollover_index source [" + sourceIndexName + "] to target [" + rolloverIndexName + "]",
-                        new ClusterStateUpdateTask() {
-                            @Override
-                            public ClusterState execute(ClusterState currentState) throws Exception {
-                                MetadataRolloverService.RolloverResult rolloverResult = rolloverService.rolloverClusterState(
-                                    currentState,
-                                    rolloverRequest.getRolloverTarget(),
-                                    rolloverRequest.getNewIndexName(),
-                                    rolloverRequest.getCreateIndexRequest(),
-                                    metConditions,
-                                    false,
-                                    false
-                                );
-                                if (rolloverResult.sourceIndexName.equals(sourceIndexName) == false) {
-                                    throw new OpenSearchException(
-                                        "Concurrent modification of alias [{}] during rollover",
-                                        rolloverRequest.getRolloverTarget()
-                                    );
-                                }
-                                return rolloverResult.clusterState;
-                            }
-
-                            @Override
-                            public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {
                                 return rolloverIndexTaskKey;
+        final Collection<Condition<?>> conditions,
+    private final ClusterManagerTaskThrottler.ThrottlingKey rolloverIndexTaskKey;
+import org.opensearch.action.support.TransportIndicesResolvingAction;
+                                                false,
+ * under the License.
+                                        isShardsAcknowledged -> listener.onResponse(
+    }
+                rolloverRequest.getNewIndexName(),
+        MetadataRolloverService rolloverService,
+ * this file be licensed under the Apache-2.0 license or a
+                    listener.onResponse(
+            true
+        final ClusterState state,
+ * this work for additional information regarding copyright
+            // Exceptions are mostly occurring due to validation errors (e.g. non-existing indices).
+ *
+    protected void clusterManagerOperation(RolloverRequest request, ClusterState state, ActionListener<RolloverResponse> listener)
+import org.opensearch.cluster.metadata.IndexAbstraction;
+                    listener.onResponse(
+ * software distributed under the License is distributed on an
+                            public ClusterState execute(ClusterState currentState) throws Exception {
+            }
+        statsRequest.setParentTask(clusterService.localNode().getId(), task.getId());
+                                }
+ */
+import org.opensearch.action.admin.indices.stats.IndicesStatsRequest;
+                                    );
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.action.admin.indices.stats.IndicesStatsAction;
+                                    false,
+import static org.opensearch.cluster.service.ClusterManagerTask.ROLLOVER_INDEX;
+                                    throw new OpenSearchException(
+            final DocsStats docsStats = Optional.ofNullable(statsResponse)
+ * Unless required by applicable law or agreed to in writing,
+        if (indexAbstraction == null) {
+            @Override
+        @Nullable final IndexMetadata metadata,
                             }
-
-                            @Override
+        super(
+            public void onResponse(IndicesStatsResponse statsResponse) {
+                                        listener::onFailure
+ * The OpenSearch Contributors require contributions made to
+            indexNameExpressionResolver
+/*
+                    );
+                                    false
+                );
+    ) throws Exception {
+        // we go async right away
+                Collections.emptyList(),
+import java.io.IOException;
+        );
+        IndexMetadata writeIndex = indexAbstraction.getWriteIndex();
+        if (metadata == null) {
                             public void onFailure(String source, Exception e) {
+            } else {
+    ) {
+    implements
+                true
+        return new RolloverResponse(in);
+    public TransportRolloverAction(
+ * not use this file except in compliance with the License.
+        return ClusterBlocks.indicesWithRemoteSnapshotBlockedException(Collections.singletonList(writeIndex.getIndex().getName()), state);
+        final RolloverRequest rolloverRequest,
+                if (rolloverRequest.isDryRun()) {
+                                        "Concurrent modification of alias [{}] during rollover",
+    ) {
+                rolloverRequest.getRolloverTarget(),
+        @Nullable final IndexMetadata metadata
+        });
+            return conditions.stream().collect(Collectors.toMap(Condition::toString, cond -> false));
+            return conditions.stream().collect(Collectors.toMap(Condition::toString, cond -> false));
+                            }
+                clusterService.state(),
+        try {
+        final Condition.Stats stats = new Condition.Stats.Builder().numDocs(numDocs)
+                                                true,
+import org.opensearch.action.support.ActionFilters;
+            .map(condition -> condition.evaluate(stats))
+        this.client = client;
+import org.opensearch.common.Nullable;
+            }
+            @Override
+            .collect(Collectors.toMap(result -> result.condition.toString(), result -> result.matched));
+                .map(stats -> stats.getIndex(metadata.getIndex().getName()))
+        Task task,
+                }
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.tasks.Task;
+                } else {
+                        "rollover_index source [" + sourceIndexName + "] to target [" + rolloverIndexName + "]",
+ * Main class to swap the index pointed to by an alias, given some conditions
+        ActionFilters actionFilters,
+        IndicesStatsRequest statsRequest = new IndicesStatsRequest().indices(rolloverRequest.getRolloverTarget())
+        @Nullable final DocsStats docsStats,
+    protected ClusterBlockException checkBlock(RolloverRequest request, ClusterState state) {
+                            public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {
+import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
+import org.opensearch.cluster.service.ClusterService;
+ *
+            return null;
+import org.opensearch.action.admin.indices.create.CreateIndexAction;
+                .map(indexStats -> indexStats.getPrimaries().getDocs())
+                                return rolloverResult.clusterState;
+    static Map<String, Boolean> evaluateConditions(
+        );
+                    .values()
+            }
+        this.activeShardsObserver = new ActiveShardsObserver(clusterService, threadPool);
+    }
+            Collections.emptyList(),
+import org.opensearch.transport.client.Client;
+                            @Override
+                                        ),
+                                                isShardsAcknowledged
+                if (conditionResults.size() == 0 || metConditions.size() > 0) {
+        final Collection<Condition<?>> conditions,
+                            }
+                            @Override
+                                                rolloverIndexName,
+ */
+ * You may obtain a copy of the License at
+                                        rolloverRequest.clusterManagerNodeTimeout(),
+            return ResolvedIndices.of(rolloverRequest.getRolloverTarget())
+        final ActionListener<RolloverResponse> listener
+                                        rolloverRequest.getCreateIndexRequest().waitForActiveShards(),
+    }
+                        new ClusterStateUpdateTask() {
+            .docs(true);
+import org.opensearch.core.action.ActionListener;
+            if (rolloverRequest.getNewIndexName() != null) {
+                    return;
+                                    rolloverRequest.getCreateIndexRequest(),
+        }
+                return ResolvedIndices.of(rolloverRequest.getRolloverTarget())
+            );
+    public ResolvedIndices resolveIndices(RolloverRequest rolloverRequest) {
+                    .filter(condition -> conditionResults.get(condition.toString()))
+    protected void clusterManagerOperation(
+            return evaluateConditions(conditions, docsStats, metadata);
+            state,
+            .indexSize(new ByteSizeValue(indexSize))
+                    statsResponse
+import java.util.Collection;
+/**
+                                }
+ * specific language governing permissions and limitations
+                                            new RolloverResponse(
+            .indicesOptions(IndicesOptions.fromOptions(true, false, true, true))
+import java.util.Map;
+            threadPool,
+        TransportIndicesResolvingAction<RolloverRequest> {
+            // Instead, we return a basic result which still allows privilege evaluation.
+ *
+            rolloverRequest.getCreateIndexRequest(),
+                    // conditions not met
+    }
+ * @opensearch.internal
+        String sourceIndexName = preResult.sourceIndexName;
+        @Nullable final IndicesStatsResponse statsResponse
+            RolloverAction.NAME,
+        Metadata metadata = state.metadata();
+            rolloverRequest.getNewIndexName(),
+            // These are not propagated to the caller because it should be still
+        }
+ * Licensed to Elasticsearch under one or more contributor
+            rolloverRequest.getRolloverTarget(),
+                        new RolloverResponse(sourceIndexName, rolloverIndexName, conditionResults, true, false, false, false)
+    }
+                    .stream()
+    }
+            MetadataRolloverService.RolloverResult preResult = rolloverService.rolloverClusterState(
+import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.block.ClusterBlockException;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+package org.opensearch.action.admin.indices.rollover;
+    protected String executor() {
+                                                conditionResults,
+/*
+        final long numDocs = docsStats == null ? 0 : docsStats.getCount();
+import java.util.List;
+import org.opensearch.action.support.ActiveShardsObserver;
+public class TransportRolloverAction extends TransportClusterManagerNodeAction<RolloverRequest, RolloverResponse>
+import org.opensearch.core.common.io.stream.StreamInput;
+        } catch (Exception e) {
+                            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
+    private final MetadataRolloverService rolloverService;
+                    .withLocalSubActions(CreateIndexAction.INSTANCE, ResolvedIndices.Local.of(rolloverRequest.getNewIndexName()));
+                final Map<String, Boolean> conditionResults = evaluateConditions(
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
+            RolloverRequest::new,
+            .clear()
+                    .collect(Collectors.toList());
+                                            )
+                                    rolloverRequest.getRolloverTarget(),
+import java.util.Collections;
+            .indexCreated(metadata.getCreationDate())
+    @Override
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * compatible open source license.
+            public void onFailure(Exception e) {
+        }
+ * KIND, either express or implied.  See the License for the
+        if (metadata == null) {
+    }
+                    );
+import org.opensearch.action.support.IndicesOptions;
+    }
+        throw new UnsupportedOperationException("The task parameter is required");
+                .orElse(null);
+                    clusterService.submitStateUpdateTask(
+    ) {
+ * the Apache License, Version 2.0 (the "License"); you may
+                                    );
+        }
                                 listener.onFailure(e);
                             }
-
-                            @Override
-                            public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                                if (newState.equals(oldState) == false) {
-                                    activeShardsObserver.waitForActiveShards(
-                                        new String[] { rolloverIndexName },
-                                        rolloverRequest.getCreateIndexRequest().waitForActiveShards(),
-                                        rolloverRequest.clusterManagerNodeTimeout(),
-                                        isShardsAcknowledged -> listener.onResponse(
-                                            new RolloverResponse(
-                                                sourceIndexName,
-                                                rolloverIndexName,
-                                                conditionResults,
-                                                false,
-                                                true,
-                                                true,
-                                                isShardsAcknowledged
-                                            )
-                                        ),
-                                        listener::onFailure
-                                    );
-                                }
-                            }
-                        }
-                    );
-                } else {
-                    // conditions not met
-                    listener.onResponse(
-                        new RolloverResponse(sourceIndexName, rolloverIndexName, conditionResults, false, false, false, false)
-                    );
-                }
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                listener.onFailure(e);
-            }
-        });
-    }
-
-    @Override
-    public ResolvedIndices resolveIndices(RolloverRequest rolloverRequest) {
-        try {
-            MetadataRolloverService.RolloverResult preResult = rolloverService.rolloverClusterState(
-                clusterService.state(),
-                rolloverRequest.getRolloverTarget(),
-                rolloverRequest.getNewIndexName(),
+            transportService,
+import org.opensearch.transport.TransportService;
+                    rolloverRequest.getConditions().values(),
+                                MetadataRolloverService.RolloverResult rolloverResult = rolloverService.rolloverClusterState(
                 rolloverRequest.getCreateIndexRequest(),
-                Collections.emptyList(),
-                true,
-                true
-            );
-
-            return ResolvedIndices.of(rolloverRequest.getRolloverTarget())
-                .withLocalSubActions(CreateIndexAction.INSTANCE, ResolvedIndices.Local.of(preResult.rolloverIndexName));
-        } catch (Exception e) {
-            // Exceptions are mostly occurring due to validation errors (e.g. non-existing indices).
-            // These are not propagated to the caller because it should be still
-            // the clusterManagerOperation() that should report these failures.
-            // Instead, we return a basic result which still allows privilege evaluation.
-            if (rolloverRequest.getNewIndexName() != null) {
-                return ResolvedIndices.of(rolloverRequest.getRolloverTarget())
-                    .withLocalSubActions(CreateIndexAction.INSTANCE, ResolvedIndices.Local.of(rolloverRequest.getNewIndexName()));
-            } else {
-                return ResolvedIndices.of(rolloverRequest.getRolloverTarget());
-            }
-        }
-    }
-
-    static Map<String, Boolean> evaluateConditions(
-        final Collection<Condition<?>> conditions,
-        @Nullable final DocsStats docsStats,
-        @Nullable final IndexMetadata metadata
-    ) {
-        if (metadata == null) {
-            return conditions.stream().collect(Collectors.toMap(Condition::toString, cond -> false));
-        }
-        final long numDocs = docsStats == null ? 0 : docsStats.getCount();
-        final long indexSize = docsStats == null ? 0 : docsStats.getTotalSizeInBytes();
-        final Condition.Stats stats = new Condition.Stats.Builder().numDocs(numDocs)
-            .indexCreated(metadata.getCreationDate())
-            .indexSize(new ByteSizeValue(indexSize))
-            .build();
-        return conditions.stream()
-            .map(condition -> condition.evaluate(stats))
-            .collect(Collectors.toMap(result -> result.condition.toString(), result -> result.matched));
-    }
-
-    static Map<String, Boolean> evaluateConditions(
-        final Collection<Condition<?>> conditions,
-        @Nullable final IndexMetadata metadata,
-        @Nullable final IndicesStatsResponse statsResponse
-    ) {
-        if (metadata == null) {
-            return conditions.stream().collect(Collectors.toMap(Condition::toString, cond -> false));
-        } else {
-            final DocsStats docsStats = Optional.ofNullable(statsResponse)
-                .map(stats -> stats.getIndex(metadata.getIndex().getName()))
-                .map(indexStats -> indexStats.getPrimaries().getDocs())
-                .orElse(null);
-            return evaluateConditions(conditions, docsStats, metadata);
-        }
-    }
-
-}
+    private final Client client;
+                                if (newState.equals(oldState) == false) {
+import org.opensearch.OpenSearchException;

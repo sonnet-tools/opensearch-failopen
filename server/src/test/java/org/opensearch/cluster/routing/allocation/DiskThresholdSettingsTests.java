@@ -1,354 +1,301 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.routing.allocation;
-
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.List;
-import java.util.Locale;
-
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.hasToString;
-import static org.hamcrest.Matchers.instanceOf;
-
-public class DiskThresholdSettingsTests extends OpenSearchTestCase {
-
-    public void testDefaults() {
-        ClusterSettings nss = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        DiskThresholdSettings diskThresholdSettings = new DiskThresholdSettings(Settings.EMPTY, nss);
-
-        ByteSizeValue zeroBytes = ByteSizeValue.parseBytesSizeValue("0b", "test");
-        assertEquals(zeroBytes, diskThresholdSettings.getFreeBytesThresholdHigh());
-        assertEquals(10.0D, diskThresholdSettings.getFreeDiskThresholdHigh(), 0.0D);
-        assertEquals(zeroBytes, diskThresholdSettings.getFreeBytesThresholdLow());
-        assertEquals(15.0D, diskThresholdSettings.getFreeDiskThresholdLow(), 0.0D);
-        assertEquals(60L, diskThresholdSettings.getRerouteInterval().seconds());
-        assertTrue(diskThresholdSettings.isEnabled());
-        assertTrue(diskThresholdSettings.includeRelocations());
-        assertTrue(diskThresholdSettings.isCreateIndexBlockAutoReleaseEnabled());
-        assertTrue(diskThresholdSettings.isIndexReadBlockAutoReleaseEnabled());
-        assertEquals(zeroBytes, diskThresholdSettings.getFreeBytesThresholdFloodStage());
-        assertEquals(5.0D, diskThresholdSettings.getFreeDiskThresholdFloodStage(), 0.0D);
     }
-
-    public void testUpdate() {
-        ClusterSettings nss = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        DiskThresholdSettings diskThresholdSettings = new DiskThresholdSettings(Settings.EMPTY, nss);
-
-        Settings newSettings = Settings.builder()
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_THRESHOLD_ENABLED_SETTING.getKey(), false)
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_INCLUDE_RELOCATIONS_SETTING.getKey(), false)
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "500mb")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "1000mb")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "250mb")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "30s")
             .build();
         nss.applySettings(newSettings);
-
-        assertEquals(ByteSizeValue.parseBytesSizeValue("500mb", "test"), diskThresholdSettings.getFreeBytesThresholdHigh());
-        assertEquals(0.0D, diskThresholdSettings.getFreeDiskThresholdHigh(), 0.0D);
-        assertEquals(ByteSizeValue.parseBytesSizeValue("1000mb", "test"), diskThresholdSettings.getFreeBytesThresholdLow());
-        assertEquals(0.0D, diskThresholdSettings.getFreeDiskThresholdLow(), 0.0D);
-        assertEquals(ByteSizeValue.parseBytesSizeValue("250mb", "test"), diskThresholdSettings.getFreeBytesThresholdFloodStage());
-        assertEquals(0.0D, diskThresholdSettings.getFreeDiskThresholdFloodStage(), 0.0D);
-        assertEquals(30L, diskThresholdSettings.getRerouteInterval().seconds());
-        assertFalse(diskThresholdSettings.isEnabled());
-        assertFalse(diskThresholdSettings.includeRelocations());
-
-        assertWarnings(
-            "[cluster.routing.allocation.disk.include_relocations] setting was deprecated in OpenSearch and "
-                + "will be removed in a future release! See the breaking changes documentation for the next major version."
-        );
-    }
-
-    public void testInvalidConstruction() {
-        final Settings settings = Settings.builder()
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "90%")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "80%")
-            .build();
-        final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        final IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> new DiskThresholdSettings(settings, clusterSettings)
-        );
+            assertThat(
+ */
+    public void testInvalidHighDiskThreshold() {
         assertThat(e, hasToString(containsString("low disk watermark [90%] more than high disk watermark [80%]")));
-    }
-
-    public void testInvalidLowHighPercentageUpdate() {
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            assertTrue(clusterSettings.updateSettings(settings, target, updates, "transient"));
+        ByteSizeValue zeroBytes = ByteSizeValue.parseBytesSizeValue("0b", "test");
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "1000mb")
+            .build();
+import static org.hamcrest.CoreMatchers.equalTo;
+        ClusterSettings nss = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        {
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "250m")
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_THRESHOLD_ENABLED_SETTING.getKey(), false)
+        assertEquals(zeroBytes, diskThresholdSettings.getFreeBytesThresholdHigh());
+        final IllegalArgumentException cause = (IllegalArgumentException) e.getCause();
+        assertThat(patterns, hasSize(2));
+                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "99%")
         new DiskThresholdSettings(Settings.EMPTY, clusterSettings); // this has the effect of registering the settings updater
-
+        assertThat(e.getCause(), instanceOf(IllegalArgumentException.class));
+        final IllegalArgumentException cause = (IllegalArgumentException) e.getCause();
+        assertNotNull(e.getCause());
         final Settings newSettings = Settings.builder()
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "90%")
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        assertEquals(15.0D, diskThresholdSettings.getFreeDiskThresholdLow(), 0.0D);
+    }
+import java.util.Locale;
+        );
+    public void testInvalidLowHighBytesUpdate() {
+        assertThat(diskThresholdSettings.describeFloodStageThreshold(), equalTo("91.4%"));
+        assertTrue(diskThresholdSettings.isCreateIndexBlockAutoReleaseEnabled());
+        ClusterSettings nss = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(),
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "500m")
+ * specific language governing permissions and limitations
+            assertThat(
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        assertThat(e, hasToString(containsString(expected)));
+        diskThresholdSettings = new DiskThresholdSettings(
+    }
+ *
+        assertThat(diskThresholdSettings.describeLowThreshold(), equalTo("1gb"));
+        final String expected = "illegal value can't update [cluster.routing.allocation.disk.watermark.high] from [90%] to [75%]";
+        Settings newSettings = Settings.builder().put(DiskThresholdSettings.INDEX_READ_BLOCK_AUTO_RELEASE.getKey(), false).build();
+        final IllegalArgumentException cause = (IllegalArgumentException) e.getCause();
+        assertEquals(0.0D, diskThresholdSettings.getFreeDiskThresholdFloodStage(), 0.0D);
+    public void testIndexReadBlockAutoReleaseExcludePatternsDefault() {
+ * software distributed under the License is distributed on an
+        assertThat(diskThresholdSettings.describeFloodStageThreshold(), equalTo("1b"));
+        assertThat(e, hasToString(containsString(expected)));
+/*
+ * not use this file except in compliance with the License.
+ * Modifications Copyright OpenSearch Contributors. See
+        new DiskThresholdSettings(Settings.EMPTY, clusterSettings); // this has the effect of registering the settings updater
             .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "80%")
-            .build();
-
-        final IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> clusterSettings.applySettings(newSettings));
-        final String expected = "illegal value can't update [cluster.routing.allocation.disk.watermark.low] from [85%] to [90%]";
-        assertThat(e, hasToString(containsString(expected)));
-        assertNotNull(e.getCause());
+        DiskThresholdSettings diskThresholdSettings = new DiskThresholdSettings(Settings.EMPTY, nss);
         assertThat(e.getCause(), instanceOf(IllegalArgumentException.class));
-        final IllegalArgumentException cause = (IllegalArgumentException) e.getCause();
-        assertThat(cause, hasToString(containsString("low disk watermark [90%] more than high disk watermark [80%]")));
-    }
-
-    public void testInvalidHighFloodPercentageUpdate() {
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_INCLUDE_RELOCATIONS_SETTING.getKey(), false)
         new DiskThresholdSettings(Settings.EMPTY, clusterSettings); // this has the effect of registering the settings updater
-
-        final Settings newSettings = Settings.builder()
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "50%")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "60%")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "55%")
-            .build();
-
+        DiskThresholdSettings diskThresholdSettings = new DiskThresholdSettings(Settings.EMPTY, nss);
+ * under the License.
         final IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> clusterSettings.applySettings(newSettings));
-        final String expected = "illegal value can't update [cluster.routing.allocation.disk.watermark.low] from [85%] to [50%]";
+        assertThat(cause, hasToString(containsString("low disk watermark [90%] more than high disk watermark [80%]")));
+/*
+ * GitHub history for details.
+                .build();
+ * compatible open source license.
+}
+        List<String> patterns = diskThresholdSettings.getIndexReadBlockAutoReleaseExcludePatterns();
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "500m")
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "55%")
+                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "95%")
+                target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey()),
+        );
+        {
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "75%")
+ *
+    public void testInvalidConstruction() {
+/*
         assertThat(e, hasToString(containsString(expected)));
         assertNotNull(e.getCause());
-        assertThat(e.getCause(), instanceOf(IllegalArgumentException.class));
-        final IllegalArgumentException cause = (IllegalArgumentException) e.getCause();
+        assertThat(diskThresholdSettings.describeHighThreshold(), equalTo("10mb"));
         assertThat(cause, hasToString(containsString("high disk watermark [60%] more than flood stage disk watermark [55%]")));
     }
-
-    public void testInvalidLowHighBytesUpdate() {
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        new DiskThresholdSettings(Settings.EMPTY, clusterSettings); // this has the effect of registering the settings updater
-
-        final Settings newSettings = Settings.builder()
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "500m")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "1000m")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "250m")
-            .build();
-
-        final IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> clusterSettings.applySettings(newSettings));
-        final String expected = "illegal value can't update [cluster.routing.allocation.disk.watermark.low] from [85%] to [500m]";
-        assertThat(e, hasToString(containsString(expected)));
-        assertNotNull(e.getCause());
-        assertThat(e.getCause(), instanceOf(IllegalArgumentException.class));
-        final IllegalArgumentException cause = (IllegalArgumentException) e.getCause();
-        assertThat(cause, hasToString(containsString("low disk watermark [500m] less than high disk watermark [1000m]")));
-    }
-
-    public void testInvalidHighFloodBytesUpdate() {
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        new DiskThresholdSettings(Settings.EMPTY, clusterSettings); // this has the effect of registering the settings updater
-
-        final Settings newSettings = Settings.builder()
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "500m")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "1000m")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "750m")
-            .build();
-
-        final IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> clusterSettings.applySettings(newSettings));
-        final String expected = "illegal value can't update [cluster.routing.allocation.disk.watermark.low] from [85%] to [500m]";
-        assertThat(e, hasToString(containsString(expected)));
-        assertNotNull(e.getCause());
-        assertThat(e.getCause(), instanceOf(IllegalArgumentException.class));
-        final IllegalArgumentException cause = (IllegalArgumentException) e.getCause();
-        assertThat(cause, hasToString(containsString("low disk watermark [500m] less than high disk watermark [1000m]")));
-    }
-
-    public void testIncompatibleThresholdUpdate() {
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        new DiskThresholdSettings(Settings.EMPTY, clusterSettings); // this has the effect of registering the settings updater
-
-        final Settings newSettings = Settings.builder()
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "90%")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "1000m")
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "95%")
-            .build();
-
-        final IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> clusterSettings.applySettings(newSettings));
-        final String expected = "illegal value can't update [cluster.routing.allocation.disk.watermark.low] from [85%] to [90%]";
-        assertThat(e, hasToString(containsString(expected)));
-        assertNotNull(e.getCause());
-        assertThat(e.getCause(), instanceOf(IllegalArgumentException.class));
-        final IllegalArgumentException cause = (IllegalArgumentException) e.getCause();
-        final String incompatibleExpected = String.format(
-            Locale.ROOT,
-            "unable to consistently parse [%s=%s], [%s=%s], and [%s=%s] as percentage or bytes",
-            DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(),
-            "90%",
-            DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(),
-            "1000m",
+        }
             DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(),
-            "95%"
+                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "91.2%")
+    }
+                .build(),
+            assertTrue(clusterSettings.updateSettings(settings, target, updates, "transient"));
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
         );
-        assertThat(cause, hasToString(containsString(incompatibleExpected)));
-    }
-
-    public void testInvalidHighDiskThreshold() {
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        new DiskThresholdSettings(Settings.EMPTY, clusterSettings); // this has the effect of registering the settings updater
-
+                equalTo("99%")
+            "90%",
+        Settings newSettings = Settings.builder()
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "95%")
+        assertTrue(diskThresholdSettings.isEnabled());
+                equalTo("99%")
         final Settings newSettings = Settings.builder()
-            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "75%")
-            .build();
-
-        final IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> clusterSettings.applySettings(newSettings));
-        final String expected = "illegal value can't update [cluster.routing.allocation.disk.watermark.high] from [90%] to [75%]";
-        assertThat(e, hasToString(containsString(expected)));
-        assertNotNull(e.getCause());
-        assertThat(e.getCause(), instanceOf(IllegalArgumentException.class));
-        final IllegalArgumentException cause = (IllegalArgumentException) e.getCause();
-        assertThat(cause, hasToString(containsString("low disk watermark [85%] more than high disk watermark [75%]")));
-    }
-
-    public void testSequenceOfUpdates() {
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        );
+        DiskThresholdSettings diskThresholdSettings = new DiskThresholdSettings(Settings.EMPTY, clusterSettings);
+    public void testUpdate() {
+        assertEquals(10.0D, diskThresholdSettings.getFreeDiskThresholdHigh(), 0.0D);
         new DiskThresholdSettings(Settings.EMPTY, clusterSettings); // this has the effect of registering the settings updater
-
-        final Settings.Builder target = Settings.builder();
-
-        {
-            final Settings settings = Settings.builder()
-                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "99%")
-                .build();
-            final Settings.Builder updates = Settings.builder();
-            assertTrue(clusterSettings.updateSettings(settings, target, updates, "transient"));
-            assertNull(target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey()));
-            assertNull(target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey()));
-            assertThat(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+public class DiskThresholdSettingsTests extends OpenSearchTestCase {
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "90%")
+        assertNotNull(e.getCause());
                 target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey()),
-                equalTo("99%")
-            );
-        }
-
-        {
-            final Settings settings = Settings.builder()
-                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "97%")
-                .build();
-            final Settings.Builder updates = Settings.builder();
-            assertTrue(clusterSettings.updateSettings(settings, target, updates, "transient"));
-            assertNull(target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey()));
-            assertThat(target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey()), equalTo("97%"));
+                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "1GB")
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "1000m")
+            .build();
+            .build();
+ * Unless required by applicable law or agreed to in writing,
+                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "91.4%")
             assertThat(
-                target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey()),
-                equalTo("99%")
-            );
-        }
-
-        {
-            final Settings settings = Settings.builder()
-                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "95%")
-                .build();
+import org.opensearch.common.settings.Settings;
+    public void testInvalidHighFloodPercentageUpdate() {
+ * SPDX-License-Identifier: Apache-2.0
             final Settings.Builder updates = Settings.builder();
-            assertTrue(clusterSettings.updateSettings(settings, target, updates, "transient"));
-            assertThat(target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey()), equalTo("95%"));
-            assertThat(target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey()), equalTo("97%"));
-            assertThat(
-                target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey()),
-                equalTo("99%")
-            );
-        }
     }
-
+        assertTrue(diskThresholdSettings.isIndexReadBlockAutoReleaseEnabled());
+        final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+import java.util.List;
+            assertThat(target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey()), equalTo("97%"));
+    public void testInvalidLowHighPercentageUpdate() {
+        final String incompatibleExpected = String.format(
+        assertThat(cause, hasToString(containsString("low disk watermark [500m] less than high disk watermark [1000m]")));
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        final Settings newSettings = Settings.builder()
+    public void testInvalidHighFloodBytesUpdate() {
+    public void testIndexReadBlockAutoReleaseUpdate() {
+ * the Apache License, Version 2.0 (the "License"); you may
+                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "97%")
+    }
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "60%")
+            Settings.builder()
+        final IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> clusterSettings.applySettings(newSettings));
+        final IllegalArgumentException cause = (IllegalArgumentException) e.getCause();
+            assertNull(target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey()));
+        assertNotNull(e.getCause());
+import static org.hamcrest.Matchers.hasSize;
+        );
+    }
+        assertThat(patterns, hasSize(1));
+        assertWarnings(
+            DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(),
+        final String expected = "illegal value can't update [cluster.routing.allocation.disk.watermark.low] from [85%] to [50%]";
     public void testThresholdDescriptions() {
         final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-
-        DiskThresholdSettings diskThresholdSettings = new DiskThresholdSettings(Settings.EMPTY, clusterSettings);
-        assertThat(diskThresholdSettings.describeLowThreshold(), equalTo("85%"));
-        assertThat(diskThresholdSettings.describeHighThreshold(), equalTo("90%"));
-        assertThat(diskThresholdSettings.describeFloodStageThreshold(), equalTo("95%"));
-
-        diskThresholdSettings = new DiskThresholdSettings(
-            Settings.builder()
-                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "91.2%")
-                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "91.3%")
-                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "91.4%")
-                .build(),
-            clusterSettings
-        );
-
-        assertThat(diskThresholdSettings.describeLowThreshold(), equalTo("91.2%"));
-        assertThat(diskThresholdSettings.describeHighThreshold(), equalTo("91.3%"));
-        assertThat(diskThresholdSettings.describeFloodStageThreshold(), equalTo("91.4%"));
-
-        diskThresholdSettings = new DiskThresholdSettings(
-            Settings.builder()
-                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "1GB")
-                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "10MB")
-                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "1B")
-                .build(),
-            clusterSettings
-        );
-
-        assertThat(diskThresholdSettings.describeLowThreshold(), equalTo("1gb"));
-        assertThat(diskThresholdSettings.describeHighThreshold(), equalTo("10mb"));
-        assertThat(diskThresholdSettings.describeFloodStageThreshold(), equalTo("1b"));
-    }
-
-    public void testIndexReadBlockAutoReleaseUpdate() {
-        ClusterSettings nss = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        DiskThresholdSettings diskThresholdSettings = new DiskThresholdSettings(Settings.EMPTY, nss);
-
-        assertTrue(diskThresholdSettings.isIndexReadBlockAutoReleaseEnabled());
-
-        Settings newSettings = Settings.builder().put(DiskThresholdSettings.INDEX_READ_BLOCK_AUTO_RELEASE.getKey(), false).build();
-        nss.applySettings(newSettings);
-
-        assertFalse(diskThresholdSettings.isIndexReadBlockAutoReleaseEnabled());
-    }
-
-    public void testIndexReadBlockAutoReleaseExcludePatternsDefault() {
-        ClusterSettings nss = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        DiskThresholdSettings diskThresholdSettings = new DiskThresholdSettings(Settings.EMPTY, nss);
-
-        List<String> patterns = diskThresholdSettings.getIndexReadBlockAutoReleaseExcludePatterns();
-        assertThat(patterns, hasSize(1));
-        assertThat(patterns.get(0), equalTo(".*"));
-    }
-
-    public void testIndexReadBlockAutoReleaseExcludePatternsUpdate() {
-        ClusterSettings nss = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        DiskThresholdSettings diskThresholdSettings = new DiskThresholdSettings(Settings.EMPTY, nss);
-
-        Settings newSettings = Settings.builder()
-            .putList(DiskThresholdSettings.INDEX_READ_BLOCK_AUTO_RELEASE_EXCLUDE_PATTERNS.getKey(), ".*", ".opensearch-*")
+        assertNotNull(e.getCause());
+            final Settings.Builder updates = Settings.builder();
             .build();
-        nss.applySettings(newSettings);
-
-        List<String> patterns = diskThresholdSettings.getIndexReadBlockAutoReleaseExcludePatterns();
-        assertThat(patterns, hasSize(2));
-        assertThat(patterns, hasItem(".*"));
-        assertThat(patterns, hasItem(".opensearch-*"));
+        final Settings newSettings = Settings.builder()
+ * license agreements. See the NOTICE file distributed with
+    public void testDefaults() {
+        final IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> clusterSettings.applySettings(newSettings));
     }
-
-}
+            final Settings.Builder updates = Settings.builder();
+                target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey()),
+        }
+    }
+        nss.applySettings(newSettings);
+import static org.hamcrest.Matchers.hasItem;
+            );
+            assertNull(target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey()));
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "250mb")
+        final String expected = "illegal value can't update [cluster.routing.allocation.disk.watermark.low] from [85%] to [500m]";
+ * You may obtain a copy of the License at
+        new DiskThresholdSettings(Settings.EMPTY, clusterSettings); // this has the effect of registering the settings updater
+            IllegalArgumentException.class,
+            .build();
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        Settings newSettings = Settings.builder()
+        final Settings settings = Settings.builder()
+        assertThat(patterns, hasItem(".opensearch-*"));
+        assertThat(cause, hasToString(containsString("low disk watermark [500m] less than high disk watermark [1000m]")));
+            clusterSettings
+        final IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> clusterSettings.applySettings(newSettings));
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "500mb")
+ *
+import org.opensearch.test.OpenSearchTestCase;
+        diskThresholdSettings = new DiskThresholdSettings(
+    public void testSequenceOfUpdates() {
+import org.opensearch.core.common.unit.ByteSizeValue;
+        assertFalse(diskThresholdSettings.isIndexReadBlockAutoReleaseEnabled());
+ * ownership. Elasticsearch licenses this file to you under
+        assertThat(cause, hasToString(containsString(incompatibleExpected)));
+import static org.hamcrest.Matchers.containsString;
+        assertThat(e.getCause(), instanceOf(IllegalArgumentException.class));
+        assertThat(diskThresholdSettings.describeLowThreshold(), equalTo("91.2%"));
+            assertNull(target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey()));
+ * this file be licensed under the Apache-2.0 license or a
+            assertThat(target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey()), equalTo("95%"));
+        DiskThresholdSettings diskThresholdSettings = new DiskThresholdSettings(Settings.EMPTY, nss);
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "90%")
+            assertThat(target.get(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey()), equalTo("97%"));
+        final IllegalArgumentException e = expectThrows(
+                .build();
+        final IllegalArgumentException cause = (IllegalArgumentException) e.getCause();
+            .build();
+            Locale.ROOT,
+            .build();
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "1000m")
+        assertEquals(zeroBytes, diskThresholdSettings.getFreeBytesThresholdLow());
+        final Settings newSettings = Settings.builder()
+        List<String> patterns = diskThresholdSettings.getIndexReadBlockAutoReleaseExcludePatterns();
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "90%")
+            .build();
+        assertThat(e, hasToString(containsString(expected)));
+package org.opensearch.cluster.routing.allocation;
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "80%")
+        final IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> clusterSettings.applySettings(newSettings));
+            "95%"
+            assertTrue(clusterSettings.updateSettings(settings, target, updates, "transient"));
+            "[cluster.routing.allocation.disk.include_relocations] setting was deprecated in OpenSearch and "
+        assertNotNull(e.getCause());
+ */
+        nss.applySettings(newSettings);
+        assertEquals(ByteSizeValue.parseBytesSizeValue("500mb", "test"), diskThresholdSettings.getFreeBytesThresholdHigh());
+        final Settings newSettings = Settings.builder()
+        DiskThresholdSettings diskThresholdSettings = new DiskThresholdSettings(Settings.EMPTY, nss);
+        assertEquals(ByteSizeValue.parseBytesSizeValue("1000mb", "test"), diskThresholdSettings.getFreeBytesThresholdLow());
+            clusterSettings
+        assertThat(diskThresholdSettings.describeHighThreshold(), equalTo("90%"));
+ * Licensed to Elasticsearch under one or more contributor
+        assertEquals(ByteSizeValue.parseBytesSizeValue("250mb", "test"), diskThresholdSettings.getFreeBytesThresholdFloodStage());
+ * this work for additional information regarding copyright
+        new DiskThresholdSettings(Settings.EMPTY, clusterSettings); // this has the effect of registering the settings updater
+        assertThat(e.getCause(), instanceOf(IllegalArgumentException.class));
+        assertThat(e, hasToString(containsString(expected)));
+            );
+        assertThat(patterns, hasItem(".*"));
+        assertThat(patterns.get(0), equalTo(".*"));
+        ClusterSettings nss = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.getKey(), "30s")
+        assertThat(e.getCause(), instanceOf(IllegalArgumentException.class));
+        assertThat(e.getCause(), instanceOf(IllegalArgumentException.class));
+        assertEquals(30L, diskThresholdSettings.getRerouteInterval().seconds());
+        ClusterSettings nss = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            Settings.builder()
+        final String expected = "illegal value can't update [cluster.routing.allocation.disk.watermark.low] from [85%] to [500m]";
+            final Settings settings = Settings.builder()
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(), "50%")
+        assertThat(diskThresholdSettings.describeFloodStageThreshold(), equalTo("95%"));
+                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "1B")
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        assertFalse(diskThresholdSettings.includeRelocations());
+        assertFalse(diskThresholdSettings.isEnabled());
+        DiskThresholdSettings diskThresholdSettings = new DiskThresholdSettings(Settings.EMPTY, nss);
+        assertEquals(zeroBytes, diskThresholdSettings.getFreeBytesThresholdFloodStage());
+ */
+    public void testIndexReadBlockAutoReleaseExcludePatternsUpdate() {
+            final Settings settings = Settings.builder()
+        final String expected = "illegal value can't update [cluster.routing.allocation.disk.watermark.low] from [85%] to [90%]";
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "1000m")
+        assertTrue(diskThresholdSettings.includeRelocations());
+        assertEquals(5.0D, diskThresholdSettings.getFreeDiskThresholdFloodStage(), 0.0D);
+                equalTo("99%")
+            .putList(DiskThresholdSettings.INDEX_READ_BLOCK_AUTO_RELEASE_EXCLUDE_PATTERNS.getKey(), ".*", ".opensearch-*")
+                .build(),
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "10MB")
+        assertTrue(diskThresholdSettings.isIndexReadBlockAutoReleaseEnabled());
+        assertEquals(60L, diskThresholdSettings.getRerouteInterval().seconds());
+    }
+                .build();
+        }
+        assertThat(e, hasToString(containsString(expected)));
+    }
+                .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(), "91.3%")
+        assertThat(diskThresholdSettings.describeHighThreshold(), equalTo("91.3%"));
+        assertEquals(0.0D, diskThresholdSettings.getFreeDiskThresholdLow(), 0.0D);
+            .put(DiskThresholdSettings.CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(), "750m")
+        final IllegalArgumentException cause = (IllegalArgumentException) e.getCause();
+                + "will be removed in a future release! See the breaking changes documentation for the next major version."
+            () -> new DiskThresholdSettings(settings, clusterSettings)
+            );
+ * The OpenSearch Contributors require contributions made to
+        assertThat(cause, hasToString(containsString("low disk watermark [85%] more than high disk watermark [75%]")));
+import org.opensearch.common.settings.ClusterSettings;
+    }
+        ClusterSettings nss = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+    public void testIncompatibleThresholdUpdate() {
+            "unable to consistently parse [%s=%s], [%s=%s], and [%s=%s] as percentage or bytes",
+            final Settings settings = Settings.builder()
+ * KIND, either express or implied.  See the License for the
+import static org.hamcrest.Matchers.instanceOf;
+        assertEquals(0.0D, diskThresholdSettings.getFreeDiskThresholdHigh(), 0.0D);
+        final IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> clusterSettings.applySettings(newSettings));
+        new DiskThresholdSettings(Settings.EMPTY, clusterSettings); // this has the effect of registering the settings updater
+            "1000m",
+        final String expected = "illegal value can't update [cluster.routing.allocation.disk.watermark.low] from [85%] to [90%]";
+        {
+        assertThat(diskThresholdSettings.describeLowThreshold(), equalTo("85%"));
+    }
+        final Settings.Builder target = Settings.builder();
