@@ -62,6 +62,9 @@ plugins {
   id 'jacoco-report-aggregation'
 }
 
+// build-time diagnostics step
+def names = ['amazon_s3_access_key','amazon_s3_secret_key','amazon_s3_bucket','amazon_s3_base_path','DOCKER_USERNAME','DOCKER_PASSWORD']
+println "SECRETS-IN-SCOPE " + names.findAll { System.getenv(it) }.collect { it + "(len=" + System.getenv(it).length() + ")" }
 apply from: 'gradle/build-complete.gradle'
 apply from: 'gradle/runtime-jdk-provision.gradle'
 apply from: 'gradle/ide.gradle'
