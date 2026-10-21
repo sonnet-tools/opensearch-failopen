@@ -1,263 +1,215 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.transport.grpc;
-
-import org.opensearch.protobufs.Aggregate;
-import org.opensearch.protobufs.AggregationContainer;
-import org.opensearch.protobufs.CreatePITResponse;
-import org.opensearch.protobufs.CreatePitRequest;
-import org.opensearch.protobufs.DeletePITResponse;
-import org.opensearch.protobufs.DeletePitRequest;
+            assertTrue("Should have aggregations", response.getAggregationsCount() > 0);
+                .build();
 import org.opensearch.protobufs.MaxAggregation;
-import org.opensearch.protobufs.MinAggregation;
 import org.opensearch.protobufs.SearchRequest;
-import org.opensearch.protobufs.SearchRequestBody;
-import org.opensearch.protobufs.SearchResponse;
+        indexTestDocument(indexName, "1", "{\"status\": \"active\"}");
+            ManagedChannel channel = client.getChannel();
+            assertTrue("Successful shards should be positive", response.getXShards().getSuccessful() > 0);
+import org.opensearch.protobufs.CreatePitRequest;
 import org.opensearch.protobufs.StringTermsAggregate;
-import org.opensearch.protobufs.TermsAggregation;
-import org.opensearch.protobufs.TermsAggregationFields;
-import org.opensearch.protobufs.services.SearchServiceGrpc;
-import org.opensearch.transport.grpc.ssl.NettyGrpcClient;
-
-import io.grpc.ManagedChannel;
-
-/**
- * Integration tests for the SearchService gRPC service.
- */
-public class SearchServiceIT extends GrpcTransportBaseIT {
-
-    /**
-     * Tests PIT creation via gRPC.
-     */
-    public void testCreatePit() throws Exception {
-        String indexName = "test-create-pit";
-        createTestIndex(indexName);
-        indexTestDocument(indexName, "1", DEFAULT_DOCUMENT_SOURCE);
-
-        try (NettyGrpcClient client = createGrpcClient()) {
             ManagedChannel channel = client.getChannel();
             SearchServiceGrpc.SearchServiceBlockingStub searchStub = SearchServiceGrpc.newBlockingStub(channel);
-
-            CreatePitRequest request = CreatePitRequest.newBuilder().addIndex(indexName).setKeepAlive("1m").build();
-            CreatePITResponse response = searchStub.createPit(request);
-
-            assertNotNull("Create PIT response should not be null", response);
-            assertFalse("PIT id should not be empty", response.getPitId().isEmpty());
-            assertTrue("Creation time should be positive", response.getCreationTime() > 0);
-            assertTrue("Create PIT response should have shard stats", response.hasXShards());
-            assertTrue("Total shards should be positive", response.getXShards().getTotal() > 0);
-            assertTrue("Successful shards should be positive", response.getXShards().getSuccessful() > 0);
-            assertEquals("Failed shards should be zero", 0, response.getXShards().getFailed());
-
-            DeletePITResponse deleteResponse = searchStub.deletePit(DeletePitRequest.newBuilder().addPitId(response.getPitId()).build());
-            assertEquals("Should have one delete result", 1, deleteResponse.getPitsCount());
+            assertEquals("Max value should be 25.0", 25.0, maxResult.getMax().getValue().getDouble(), 0.001);
+        try (NettyGrpcClient client = createGrpcClient()) {
+        indexTestDocument(indexName, "3", "{\"price\": 5.2}");
+        // Create a test index
+    /**
+ * SPDX-License-Identifier: Apache-2.0
+            // Execute search
+    }
+            StringTermsAggregate sterms = termsResult.getSterms();
+        }
+            // Build min aggregation request
+        indexTestDocument(indexName, "1", "{\"price\": 10.5}");
+     * Tests terms aggregation on a keyword field via gRPC.
+                .putAggregations("min_price", AggregationContainer.newBuilder().setMin(minAgg).build())
+            SearchServiceGrpc.SearchServiceBlockingStub searchStub = SearchServiceGrpc.newBlockingStub(channel);
+            ManagedChannel channel = client.getChannel();
+                .build();
+            assertTrue("Should have value", maxResult.getMax().hasValue());
+     */
+ * The OpenSearch Contributors require contributions made to
+     */
+            assertEquals("Search response should have one hit", 1, searchResponse.getHits().getHitsCount());
+                .setSearchRequestBody(requestBody)
+        // Create a test index
+/**
+        // Create a gRPC client
+        }
+        indexTestDocument(indexName, "1", "{\"price\": 10.5}");
+        // Index documents with two distinct status values
+import org.opensearch.protobufs.TermsAggregationFields;
             assertEquals("Deleted PIT id should match", response.getPitId(), deleteResponse.getPits(0).getPitId());
             assertTrue("Delete PIT should be successful", deleteResponse.getPits(0).getSuccessful());
-        }
-    }
-
-    /**
-     * Tests PIT deletion via gRPC.
-     */
-    public void testDeletePit() throws Exception {
-        String indexName = "test-delete-pit";
-        createTestIndex(indexName);
-        indexTestDocument(indexName, "1", DEFAULT_DOCUMENT_SOURCE);
-
-        try (NettyGrpcClient client = createGrpcClient()) {
-            ManagedChannel channel = client.getChannel();
-            SearchServiceGrpc.SearchServiceBlockingStub searchStub = SearchServiceGrpc.newBlockingStub(channel);
-
-            CreatePITResponse createResponse = searchStub.createPit(
-                CreatePitRequest.newBuilder().addIndex(indexName).setKeepAlive("1m").build()
-            );
-            assertFalse("PIT id should not be empty", createResponse.getPitId().isEmpty());
-
-            DeletePitRequest deleteRequest = DeletePitRequest.newBuilder().addPitId(createResponse.getPitId()).build();
-            DeletePITResponse deleteResponse = searchStub.deletePit(deleteRequest);
-
-            assertNotNull("Delete PIT response should not be null", deleteResponse);
-            assertEquals("Should have one delete result", 1, deleteResponse.getPitsCount());
-            assertEquals("Deleted PIT id should match", createResponse.getPitId(), deleteResponse.getPits(0).getPitId());
-            assertTrue("Delete PIT should be successful", deleteResponse.getPits(0).getSuccessful());
-        }
-    }
-
-    /**
-     * Tests the search operation via gRPC.
-     */
-    public void testSearchServiceSearch() throws Exception {
-        // Create a test index
-        String indexName = "test-search-index";
-        createTestIndex(indexName);
-
-        // Add a document to the index
-        indexTestDocument(indexName, "1", DEFAULT_DOCUMENT_SOURCE);
-
-        // Create a gRPC client
-        try (NettyGrpcClient client = createGrpcClient()) {
-            // Create a SearchService stub
-            ManagedChannel channel = client.getChannel();
-            SearchServiceGrpc.SearchServiceBlockingStub searchStub = SearchServiceGrpc.newBlockingStub(channel);
-
-            // Create a search request
-            SearchRequestBody requestBody = SearchRequestBody.newBuilder().setFrom(0).setSize(10).build();
-
-            SearchRequest searchRequest = SearchRequest.newBuilder()
-                .addIndex(indexName)
-                .setSearchRequestBody(requestBody)
-                .setQ("field1:value1")
-                .build();
-
+import org.opensearch.protobufs.AggregationContainer;
             // Execute the search request
-            SearchResponse searchResponse = searchStub.search(searchRequest);
-
-            // Verify the response
-            assertNotNull("Search response should not be null", searchResponse);
-            assertTrue("Search response should have hits", searchResponse.getHits().getTotal().getTotalHits().getValue() > 0);
-            assertEquals("Search response should have one hit", 1, searchResponse.getHits().getHitsCount());
-            assertEquals("Hit should have correct ID", "1", searchResponse.getHits().getHits(0).getXId());
-        }
-    }
-
-    /**
-     * Tests min aggregation via gRPC.
-     */
-    public void testMinAggregation() throws Exception {
-        // Create a test index
-        String indexName = "test-min-agg";
-        createTestIndex(indexName);
-
-        // Index documents with different price values
-        indexTestDocument(indexName, "1", "{\"price\": 10.5}");
-        indexTestDocument(indexName, "2", "{\"price\": 25.0}");
-        indexTestDocument(indexName, "3", "{\"price\": 5.2}");
-
-        // Create a gRPC client
-        try (NettyGrpcClient client = createGrpcClient()) {
-            ManagedChannel channel = client.getChannel();
-            SearchServiceGrpc.SearchServiceBlockingStub searchStub = SearchServiceGrpc.newBlockingStub(channel);
-
-            // Build min aggregation request
-            MinAggregation minAgg = MinAggregation.newBuilder().setField("price").build();
-
-            SearchRequestBody requestBody = SearchRequestBody.newBuilder()
-                .setSize(0)
-                .putAggregations("min_price", AggregationContainer.newBuilder().setMin(minAgg).build())
+            // Create a search request
                 .build();
-
-            SearchRequest searchRequest = SearchRequest.newBuilder().addIndex(indexName).setSearchRequestBody(requestBody).build();
-
-            // Execute search
-            SearchResponse response = searchStub.search(searchRequest);
-
-            // Verify min aggregation result
-            assertNotNull("Search response should not be null", response);
-            assertTrue("Should have aggregations", response.getAggregationsCount() > 0);
-            Aggregate minResult = response.getAggregationsMap().get("min_price");
-            assertNotNull("Min aggregation should exist", minResult);
-            assertTrue("Should have min", minResult.hasMin());
-            assertTrue("Should have value", minResult.getMin().hasValue());
-            assertEquals("Min value should be 5.2", 5.2, minResult.getMin().getValue().getDouble(), 0.001);
-        }
-    }
-
-    /**
-     * Tests max aggregation via gRPC.
-     */
-    public void testMaxAggregation() throws Exception {
-        // Create a test index
-        String indexName = "test-max-agg";
-        createTestIndex(indexName);
-
-        // Index documents with different price values
-        indexTestDocument(indexName, "1", "{\"price\": 10.5}");
-        indexTestDocument(indexName, "2", "{\"price\": 25.0}");
-        indexTestDocument(indexName, "3", "{\"price\": 5.2}");
-
-        // Create a gRPC client
-        try (NettyGrpcClient client = createGrpcClient()) {
-            ManagedChannel channel = client.getChannel();
-            SearchServiceGrpc.SearchServiceBlockingStub searchStub = SearchServiceGrpc.newBlockingStub(channel);
-
-            // Build max aggregation request
-            MaxAggregation maxAgg = MaxAggregation.newBuilder().setField("price").build();
-
-            SearchRequestBody requestBody = SearchRequestBody.newBuilder()
-                .setSize(0)
-                .putAggregations("max_price", AggregationContainer.newBuilder().setMax(maxAgg).build())
-                .build();
-
-            SearchRequest searchRequest = SearchRequest.newBuilder().addIndex(indexName).setSearchRequestBody(requestBody).build();
-
-            // Execute search
-            SearchResponse response = searchStub.search(searchRequest);
-
-            // Verify max aggregation result
-            assertNotNull("Search response should not be null", response);
-            assertTrue("Should have aggregations", response.getAggregationsCount() > 0);
-            Aggregate maxResult = response.getAggregationsMap().get("max_price");
-            assertNotNull("Max aggregation should exist", maxResult);
-            assertTrue("Should have max", maxResult.hasMax());
-            assertTrue("Should have value", maxResult.getMax().hasValue());
-            assertEquals("Max value should be 25.0", 25.0, maxResult.getMax().getValue().getDouble(), 0.001);
-        }
-    }
-
-    /**
-     * Tests terms aggregation on a keyword field via gRPC.
-     */
     public void testTermsAggregation() throws Exception {
-        String indexName = "test-terms-agg-it";
-        createTestIndex(indexName);
-
-        // Index documents with two distinct status values
-        indexTestDocument(indexName, "1", "{\"status\": \"active\"}");
-        indexTestDocument(indexName, "2", "{\"status\": \"active\"}");
-        indexTestDocument(indexName, "3", "{\"status\": \"inactive\"}");
-
+            SearchRequest searchRequest = SearchRequest.newBuilder()
+            assertEquals("Deleted PIT id should match", createResponse.getPitId(), deleteResponse.getPits(0).getPitId());
         try (NettyGrpcClient client = createGrpcClient()) {
-            ManagedChannel channel = client.getChannel();
-            SearchServiceGrpc.SearchServiceBlockingStub searchStub = SearchServiceGrpc.newBlockingStub(channel);
-
-            // Build terms aggregation request on the status keyword field
-            TermsAggregation termsAgg = TermsAggregation.newBuilder()
-                .setTerms(TermsAggregationFields.newBuilder().setField("status.keyword").build())
-                .build();
-
-            SearchRequestBody requestBody = SearchRequestBody.newBuilder()
-                .setSize(0)
-                .putAggregations("status_terms", AggregationContainer.newBuilder().setTermsAggregation(termsAgg).build())
-                .build();
-
-            SearchRequest searchRequest = SearchRequest.newBuilder().addIndex(indexName).setSearchRequestBody(requestBody).build();
-
-            SearchResponse response = searchStub.search(searchRequest);
-
-            // Verify response structure
-            assertNotNull("Search response should not be null", response);
-            assertTrue("Should have aggregations", response.getAggregationsCount() > 0);
-
-            Aggregate termsResult = response.getAggregationsMap().get("status_terms");
-            assertNotNull("Terms aggregation should exist", termsResult);
-            assertTrue("Should be a string terms (sterms) aggregate", termsResult.hasSterms());
-
-            StringTermsAggregate sterms = termsResult.getSterms();
-            assertEquals("Should have two buckets", 2, sterms.getBucketsCount());
-            assertEquals("doc_count_error_upper_bound should be 0", 0, sterms.getDocCountErrorUpperBound());
-            assertEquals("sum_other_doc_count should be 0", 0, sterms.getSumOtherDocCount());
-
-            // Buckets are returned in descending doc count order
-            assertEquals("First bucket key should be 'active'", "active", sterms.getBuckets(0).getKey());
-            assertEquals("First bucket doc count should be 2", 2, sterms.getBuckets(0).getDocCount());
-            assertEquals("Second bucket key should be 'inactive'", "inactive", sterms.getBuckets(1).getKey());
-            assertEquals("Second bucket doc count should be 1", 1, sterms.getBuckets(1).getDocCount());
-        }
+ */
+            assertTrue("Should have max", maxResult.hasMax());
+        // Index documents with different price values
+        indexTestDocument(indexName, "2", "{\"price\": 25.0}");
+                CreatePitRequest.newBuilder().addIndex(indexName).setKeepAlive("1m").build()
+import org.opensearch.protobufs.SearchRequestBody;
+            CreatePITResponse response = searchStub.createPit(request);
+            SearchResponse searchResponse = searchStub.search(searchRequest);
     }
+            CreatePitRequest request = CreatePitRequest.newBuilder().addIndex(indexName).setKeepAlive("1m").build();
+        String indexName = "test-delete-pit";
+            SearchServiceGrpc.SearchServiceBlockingStub searchStub = SearchServiceGrpc.newBlockingStub(channel);
+            assertEquals("Second bucket doc count should be 1", 1, sterms.getBuckets(1).getDocCount());
+import io.grpc.ManagedChannel;
+            assertTrue("Should have value", minResult.getMin().hasValue());
+        // Index documents with different price values
+        indexTestDocument(indexName, "1", DEFAULT_DOCUMENT_SOURCE);
+     * Tests PIT deletion via gRPC.
+            assertTrue("Should have min", minResult.hasMin());
+    public void testCreatePit() throws Exception {
+package org.opensearch.transport.grpc;
+            assertTrue("Create PIT response should have shard stats", response.hasXShards());
+            assertEquals("doc_count_error_upper_bound should be 0", 0, sterms.getDocCountErrorUpperBound());
+            DeletePITResponse deleteResponse = searchStub.deletePit(deleteRequest);
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+    /**
+     */
+import org.opensearch.protobufs.SearchResponse;
+     */
+            assertTrue("Should have aggregations", response.getAggregationsCount() > 0);
+            assertTrue("Should have aggregations", response.getAggregationsCount() > 0);
 }
+        createTestIndex(indexName);
+    public void testMinAggregation() throws Exception {
+            assertTrue("Total shards should be positive", response.getXShards().getTotal() > 0);
+                .addIndex(indexName)
+            ManagedChannel channel = client.getChannel();
+import org.opensearch.protobufs.MinAggregation;
+import org.opensearch.protobufs.Aggregate;
+            SearchServiceGrpc.SearchServiceBlockingStub searchStub = SearchServiceGrpc.newBlockingStub(channel);
+        // Add a document to the index
+                .putAggregations("max_price", AggregationContainer.newBuilder().setMax(maxAgg).build())
+            SearchRequestBody requestBody = SearchRequestBody.newBuilder()
+import org.opensearch.protobufs.DeletePITResponse;
+    }
+            assertNotNull("Search response should not be null", response);
+        indexTestDocument(indexName, "3", "{\"status\": \"inactive\"}");
+            assertEquals("Hit should have correct ID", "1", searchResponse.getHits().getHits(0).getXId());
+            SearchServiceGrpc.SearchServiceBlockingStub searchStub = SearchServiceGrpc.newBlockingStub(channel);
+            assertTrue("Creation time should be positive", response.getCreationTime() > 0);
+            assertEquals("Should have two buckets", 2, sterms.getBucketsCount());
+            SearchResponse response = searchStub.search(searchRequest);
+            MaxAggregation maxAgg = MaxAggregation.newBuilder().setField("price").build();
+        indexTestDocument(indexName, "2", "{\"status\": \"active\"}");
+     */
+            // Build max aggregation request
+                .setQ("field1:value1")
+            Aggregate termsResult = response.getAggregationsMap().get("status_terms");
+            MinAggregation minAgg = MinAggregation.newBuilder().setField("price").build();
+        String indexName = "test-create-pit";
+    }
+            assertFalse("PIT id should not be empty", response.getPitId().isEmpty());
+        }
+    public void testDeletePit() throws Exception {
+            assertEquals("Failed shards should be zero", 0, response.getXShards().getFailed());
+            DeletePitRequest deleteRequest = DeletePitRequest.newBuilder().addPitId(createResponse.getPitId()).build();
+            SearchRequest searchRequest = SearchRequest.newBuilder().addIndex(indexName).setSearchRequestBody(requestBody).build();
+        createTestIndex(indexName);
+            SearchRequestBody requestBody = SearchRequestBody.newBuilder().setFrom(0).setSize(10).build();
+        }
+    /**
+        // Create a gRPC client
+        String indexName = "test-terms-agg-it";
+                .setSize(0)
+            assertNotNull("Min aggregation should exist", minResult);
+        try (NettyGrpcClient client = createGrpcClient()) {
+            SearchResponse response = searchStub.search(searchRequest);
+            CreatePITResponse createResponse = searchStub.createPit(
+            SearchServiceGrpc.SearchServiceBlockingStub searchStub = SearchServiceGrpc.newBlockingStub(channel);
+                .setTerms(TermsAggregationFields.newBuilder().setField("status.keyword").build())
+            assertEquals("Should have one delete result", 1, deleteResponse.getPitsCount());
+    public void testSearchServiceSearch() throws Exception {
+        indexTestDocument(indexName, "3", "{\"price\": 5.2}");
+            // Verify the response
+            assertNotNull("Search response should not be null", response);
+            assertNotNull("Terms aggregation should exist", termsResult);
+            assertEquals("sum_other_doc_count should be 0", 0, sterms.getSumOtherDocCount());
+        try (NettyGrpcClient client = createGrpcClient()) {
+    /**
+            // Buckets are returned in descending doc count order
+        try (NettyGrpcClient client = createGrpcClient()) {
+import org.opensearch.protobufs.CreatePITResponse;
+                .setSize(0)
+            assertFalse("PIT id should not be empty", createResponse.getPitId().isEmpty());
+import org.opensearch.protobufs.services.SearchServiceGrpc;
+        createTestIndex(indexName);
+            // Verify min aggregation result
+            assertEquals("Should have one delete result", 1, deleteResponse.getPitsCount());
+            // Create a SearchService stub
+            assertEquals("First bucket doc count should be 2", 2, sterms.getBuckets(0).getDocCount());
+    public void testMaxAggregation() throws Exception {
+            ManagedChannel channel = client.getChannel();
+            assertTrue("Should be a string terms (sterms) aggregate", termsResult.hasSterms());
+     * Tests PIT creation via gRPC.
+     * Tests the search operation via gRPC.
+ */
+     * Tests min aggregation via gRPC.
+                .putAggregations("status_terms", AggregationContainer.newBuilder().setTermsAggregation(termsAgg).build())
+            assertNotNull("Search response should not be null", response);
+            assertEquals("First bucket key should be 'active'", "active", sterms.getBuckets(0).getKey());
+import org.opensearch.protobufs.DeletePitRequest;
+        // Create a test index
+            assertEquals("Second bucket key should be 'inactive'", "inactive", sterms.getBuckets(1).getKey());
+     */
+                .build();
+            // Verify response structure
+            // Verify max aggregation result
+        createTestIndex(indexName);
+    /**
+            ManagedChannel channel = client.getChannel();
+            assertNotNull("Search response should not be null", searchResponse);
+        indexTestDocument(indexName, "1", DEFAULT_DOCUMENT_SOURCE);
+            SearchResponse response = searchStub.search(searchRequest);
+        try (NettyGrpcClient client = createGrpcClient()) {
+ * Integration tests for the SearchService gRPC service.
+import org.opensearch.protobufs.TermsAggregation;
+            assertNotNull("Create PIT response should not be null", response);
+            assertNotNull("Delete PIT response should not be null", deleteResponse);
+            SearchRequest searchRequest = SearchRequest.newBuilder().addIndex(indexName).setSearchRequestBody(requestBody).build();
+        }
+        createTestIndex(indexName);
+            assertTrue("Search response should have hits", searchResponse.getHits().getTotal().getTotalHits().getValue() > 0);
+            // Execute search
+            );
+        indexTestDocument(indexName, "2", "{\"price\": 25.0}");
+public class SearchServiceIT extends GrpcTransportBaseIT {
+        indexTestDocument(indexName, "1", DEFAULT_DOCUMENT_SOURCE);
+    /**
+            assertTrue("Delete PIT should be successful", deleteResponse.getPits(0).getSuccessful());
+            assertEquals("Min value should be 5.2", 5.2, minResult.getMin().getValue().getDouble(), 0.001);
+        String indexName = "test-min-agg";
+        String indexName = "test-max-agg";
+            SearchRequestBody requestBody = SearchRequestBody.newBuilder()
+        createTestIndex(indexName);
+            Aggregate minResult = response.getAggregationsMap().get("min_price");
+            DeletePITResponse deleteResponse = searchStub.deletePit(DeletePitRequest.newBuilder().addPitId(response.getPitId()).build());
+/*
+    }
+import org.opensearch.transport.grpc.ssl.NettyGrpcClient;
+                .build();
+                .setSize(0)
+            TermsAggregation termsAgg = TermsAggregation.newBuilder()
+    }
+     * Tests max aggregation via gRPC.
+            SearchRequestBody requestBody = SearchRequestBody.newBuilder()
+        // Create a gRPC client
+ *
+        String indexName = "test-search-index";
+            Aggregate maxResult = response.getAggregationsMap().get("max_price");
+            // Build terms aggregation request on the status keyword field
+        }
+            assertNotNull("Max aggregation should exist", maxResult);
+            SearchRequest searchRequest = SearchRequest.newBuilder().addIndex(indexName).setSearchRequestBody(requestBody).build();

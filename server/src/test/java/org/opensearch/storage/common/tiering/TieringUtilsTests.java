@@ -1,305 +1,253 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.storage.common.tiering;
-
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.Index;
-import org.opensearch.index.IndexModule;
-import org.opensearch.storage.action.tiering.IndexTieringRequest;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Map;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class TieringUtilsTests extends OpenSearchTestCase {
-
-    public void testGetTierPairForTargetTier_Warm() {
-        String[] tiers = TieringUtils.getTierPairForTargetTier(IndexModule.TieringState.WARM);
-        assertEquals("HOT", tiers[0]);
-        assertEquals("WARM", tiers[1]);
-    }
-
-    public void testGetTierPairForTargetTier_Hot() {
-        String[] tiers = TieringUtils.getTierPairForTargetTier(IndexModule.TieringState.HOT);
-        assertEquals("WARM", tiers[0]);
-        assertEquals("HOT", tiers[1]);
-    }
-
-    public void testGetTierPairForTargetTier_Invalid() {
-        expectThrows(IllegalArgumentException.class, () -> TieringUtils.getTierPairForTargetTier(IndexModule.TieringState.HOT_TO_WARM));
-    }
-
-    public void testGetTieringStartTime() {
-        Index index = new Index("test-index", "uuid");
-        ClusterState clusterState = mock(ClusterState.class);
-        Metadata metadata = mock(Metadata.class);
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-
-        when(clusterState.getMetadata()).thenReturn(metadata);
-        when(metadata.getIndexSafe(index)).thenReturn(indexMetadata);
-        when(indexMetadata.getCustomData("tiering")).thenReturn(Map.of("h2w_start_time", "12345"));
-
-        long startTime = TieringUtils.getTieringStartTime(clusterState, index, "h2w_start_time");
-        assertEquals(12345L, startTime);
-    }
-
-    public void testGetTieringStartTime_NullCustomData() {
-        Index index = new Index("test-index", "uuid");
-        ClusterState clusterState = mock(ClusterState.class);
-        Metadata metadata = mock(Metadata.class);
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-
-        when(clusterState.getMetadata()).thenReturn(metadata);
-        when(metadata.getIndexSafe(index)).thenReturn(indexMetadata);
-        when(indexMetadata.getCustomData("tiering")).thenReturn(null);
-
-        expectThrows(IllegalStateException.class, () -> TieringUtils.getTieringStartTime(clusterState, index, "h2w_start_time"));
-    }
-
-    public void testIsTerminalTier_Hot() {
-        assertTrue(TieringUtils.isTerminalTier("HOT"));
-        assertTrue(TieringUtils.isTerminalTier("hot"));
-    }
-
-    public void testIsTerminalTier_Warm() {
-        assertTrue(TieringUtils.isTerminalTier("WARM"));
-        assertTrue(TieringUtils.isTerminalTier("warm"));
-    }
-
-    public void testIsTerminalTier_Invalid() {
-        assertFalse(TieringUtils.isTerminalTier("HOT_TO_WARM"));
-        assertFalse(TieringUtils.isTerminalTier("random"));
-    }
-
-    public void testGetTieringStatefromTargetTier_Hot() {
-        assertEquals(IndexModule.TieringState.WARM_TO_HOT, TieringUtils.getTieringStatefromTargetTier("HOT"));
-    }
-
-    public void testGetTieringStatefromTargetTier_Warm() {
-        assertEquals(IndexModule.TieringState.HOT_TO_WARM, TieringUtils.getTieringStatefromTargetTier("WARM"));
-    }
-
-    public void testGetTieringStatefromTargetTier_Invalid() {
-        expectThrows(IllegalArgumentException.class, () -> TieringUtils.getTieringStatefromTargetTier("HOT_TO_WARM"));
-    }
-
-    public void testGetTieringStatefromIndexSettings_HotToWarm() {
-        org.opensearch.common.settings.Settings settings = org.opensearch.common.settings.Settings.builder()
-            .put(IndexModule.INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT_TO_WARM.toString())
-            .build();
-        assertEquals(IndexModule.TieringState.HOT_TO_WARM, TieringUtils.getTieringStatefromIndexSettings(settings));
-    }
-
-    public void testGetTieringStatefromIndexSettings_WarmToHot() {
-        org.opensearch.common.settings.Settings settings = org.opensearch.common.settings.Settings.builder()
-            .put(IndexModule.INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM_TO_HOT.toString())
-            .build();
-        assertEquals(IndexModule.TieringState.WARM_TO_HOT, TieringUtils.getTieringStatefromIndexSettings(settings));
-    }
-
-    public void testGetTieringStatefromIndexSettings_Warm() {
-        org.opensearch.common.settings.Settings settings = org.opensearch.common.settings.Settings.builder()
-            .put(IndexModule.INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM.toString())
-            .build();
-        assertEquals(IndexModule.TieringState.HOT_TO_WARM, TieringUtils.getTieringStatefromIndexSettings(settings));
-    }
-
-    public void testGetTieringStatefromIndexSettings_Default() {
-        org.opensearch.common.settings.Settings settings = org.opensearch.common.settings.Settings.EMPTY;
-        assertEquals(IndexModule.TieringState.WARM_TO_HOT, TieringUtils.getTieringStatefromIndexSettings(settings));
-    }
-
-    public void testIsMigrationAllowed_AllowlistedIndices() {
-        assertTrue(TieringUtils.isMigrationAllowed(".ds-my-data-stream-2023"));
-        assertTrue(TieringUtils.isMigrationAllowed("my-index"));
-    }
-
-    public void testIsMigrationAllowed_BlocklistedIndices() {
-        assertFalse(TieringUtils.isMigrationAllowed(".system-index"));
-        assertFalse(TieringUtils.isMigrationAllowed(".kibana"));
-    }
-
-    public void testIsMigrationAllowed_InvalidInputs() {
-        expectThrows(IllegalArgumentException.class, () -> TieringUtils.isMigrationAllowed(null));
-        expectThrows(IllegalArgumentException.class, () -> TieringUtils.isMigrationAllowed(""));
-        expectThrows(IllegalArgumentException.class, () -> TieringUtils.isMigrationAllowed(" "));
-    }
-
-    public void testGetTieringSourceType_FromRequest() {
-        IndexTieringRequest warmRequest = new IndexTieringRequest("WARM", "test-index");
-        assertEquals(TieringUtils.H2W_TIERING_TYPE_KEY, TieringUtils.getTieringSourceType(warmRequest));
-
-        IndexTieringRequest hotRequest = new IndexTieringRequest("HOT", "test-index");
-        assertEquals(TieringUtils.W2H_TIERING_TYPE_KEY, TieringUtils.getTieringSourceType(hotRequest));
-    }
-
-    public void testGetTieringSourceType_NullRequest() {
-        expectThrows(IllegalArgumentException.class, () -> TieringUtils.getTieringSourceType((IndexTieringRequest) null));
-    }
-
-    public void testGetTieringSourceType_FromTieringState() {
-        assertEquals(TieringUtils.H2W_TIERING_TYPE_KEY, TieringUtils.getTieringSourceType(IndexModule.TieringState.WARM));
-        assertEquals(TieringUtils.W2H_TIERING_TYPE_KEY, TieringUtils.getTieringSourceType(IndexModule.TieringState.HOT));
-    }
-
-    public void testIsShardStateValidForTier_UnassignedReplica() {
-        ShardRouting shard = mock(ShardRouting.class);
-        ClusterState state = mock(ClusterState.class);
-        when(shard.unassigned()).thenReturn(true);
-        when(shard.primary()).thenReturn(false);
-        assertTrue(TieringUtils.isShardStateValidForTier(shard, state, IndexModule.TieringState.WARM));
-    }
-
-    public void testIsShardStateValidForTier_UnassignedPrimary() {
-        ShardRouting shard = mock(ShardRouting.class);
-        ClusterState state = mock(ClusterState.class);
-        when(shard.unassigned()).thenReturn(true);
-        when(shard.primary()).thenReturn(true);
-        assertFalse(TieringUtils.isShardStateValidForTier(shard, state, IndexModule.TieringState.WARM));
-    }
-
-    public void testIsShardStateValidForTier_StartedOnWarmNode_TargetWarm() {
-        ShardRouting shard = mock(ShardRouting.class);
-        ClusterState state = mock(ClusterState.class);
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        DiscoveryNode node = mock(DiscoveryNode.class);
-
-        when(shard.unassigned()).thenReturn(false);
-        when(shard.started()).thenReturn(true);
-        when(shard.currentNodeId()).thenReturn("node1");
-        when(state.getNodes()).thenReturn(nodes);
-        when(nodes.get("node1")).thenReturn(node);
-        when(node.isWarmNode()).thenReturn(true);
-
-        assertTrue(TieringUtils.isShardStateValidForTier(shard, state, IndexModule.TieringState.WARM));
-    }
-
-    public void testIsShardStateValidForTier_StartedOnHotNode_TargetHot() {
-        ShardRouting shard = mock(ShardRouting.class);
-        ClusterState state = mock(ClusterState.class);
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        DiscoveryNode node = mock(DiscoveryNode.class);
-
-        when(shard.unassigned()).thenReturn(false);
-        when(shard.started()).thenReturn(true);
-        when(shard.currentNodeId()).thenReturn("node1");
-        when(state.getNodes()).thenReturn(nodes);
-        when(nodes.get("node1")).thenReturn(node);
-        when(node.isWarmNode()).thenReturn(false);
-
-        assertTrue(TieringUtils.isShardStateValidForTier(shard, state, IndexModule.TieringState.HOT));
-    }
-
-    public void testIsShardStateValidForTier_InvalidTargetTier() {
-        ShardRouting shard = mock(ShardRouting.class);
-        ClusterState state = mock(ClusterState.class);
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        DiscoveryNode node = mock(DiscoveryNode.class);
-
-        when(shard.unassigned()).thenReturn(false);
-        when(shard.started()).thenReturn(true);
-        when(shard.currentNodeId()).thenReturn("node1");
-        when(state.getNodes()).thenReturn(nodes);
-        when(nodes.get("node1")).thenReturn(node);
-        when(node.isWarmNode()).thenReturn(false);
-
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> TieringUtils.isShardStateValidForTier(shard, state, IndexModule.TieringState.HOT_TO_WARM)
-        );
-    }
-
-    public void testIsCCRFollowerIndex() {
-        Settings ccrSettings = Settings.builder().put("index.plugins.replication.follower.leader_index", "leader-index").build();
-        assertTrue(TieringUtils.isCCRFollowerIndex(ccrSettings));
-
-        Settings nonCcrSettings = Settings.builder().build();
-        assertFalse(TieringUtils.isCCRFollowerIndex(nonCcrSettings));
-    }
-
-    public void testTierValue() {
-        assertEquals("hot", TieringUtils.Tier.HOT.value());
-        assertEquals("warm", TieringUtils.Tier.WARM.value());
-    }
-
-    public void testTierFromString() {
-        assertEquals(TieringUtils.Tier.HOT, TieringUtils.Tier.fromString("HOT"));
-        assertEquals(TieringUtils.Tier.WARM, TieringUtils.Tier.fromString("warm"));
-        expectThrows(IllegalArgumentException.class, () -> TieringUtils.Tier.fromString("invalid"));
-        expectThrows(IllegalArgumentException.class, () -> TieringUtils.Tier.fromString(null));
-    }
-
-    // ── isDfaIndex tests ──────────────────────────────────────────────────────
-
-    public void testIsDfaIndex_NullMetadata_ReturnsFalse() {
-        assertFalse("isDfaIndex(null) must return false", TieringUtils.isDfaIndex((IndexMetadata) null));
-    }
-
-    public void testIsDfaIndex_SettingAbsent_ReturnsFalse() {
-        IndexMetadata meta = IndexMetadata.builder("idx")
-            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT))
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
-        assertFalse("isDfaIndex must return false when PLUGGABLE_DATAFORMAT_ENABLED is absent", TieringUtils.isDfaIndex(meta));
-    }
-
-    public void testIsDfaIndex_SettingFalse_ReturnsFalse() {
-        IndexMetadata meta = IndexMetadata.builder("idx")
-            .settings(
-                Settings.builder()
-                    .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
-                    .put(org.opensearch.index.IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), false)
-            )
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
-        assertFalse("isDfaIndex must return false when setting is explicitly false", TieringUtils.isDfaIndex(meta));
-    }
-
-    public void testIsDfaIndex_SettingTrue_ReturnsTrue() {
-        IndexMetadata meta = IndexMetadata.builder("idx")
-            .settings(
-                Settings.builder()
-                    .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
-                    .put(org.opensearch.index.IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            )
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
-        assertTrue("isDfaIndex must return true when PLUGGABLE_DATAFORMAT_ENABLED is true", TieringUtils.isDfaIndex(meta));
-    }
-
-    public void testIsDfaIndex_ViaClusterState_DfaIndex_ReturnsTrue() {
-        IndexMetadata meta = IndexMetadata.builder("dfa-idx")
-            .settings(
-                Settings.builder()
-                    .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
-                    .put(org.opensearch.index.IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            )
-            .numberOfShards(1)
-            .numberOfReplicas(0)
-            .build();
         org.opensearch.cluster.ClusterState state = org.opensearch.cluster.ClusterState.builder(org.opensearch.cluster.ClusterName.DEFAULT)
-            .metadata(org.opensearch.cluster.metadata.Metadata.builder().put(meta, false).build())
-            .build();
-        assertTrue(
-            "isDfaIndex via ClusterState must return true for DFA index",
-            TieringUtils.isDfaIndex(state.getMetadata().index("dfa-idx"))
-        );
     }
+        assertEquals("HOT", tiers[1]);
+        assertEquals(TieringUtils.H2W_TIERING_TYPE_KEY, TieringUtils.getTieringSourceType(warmRequest));
+        when(shard.started()).thenReturn(true);
+    }
+    }
+public class TieringUtilsTests extends OpenSearchTestCase {
+        assertTrue(TieringUtils.isTerminalTier("warm"));
+        ClusterState state = mock(ClusterState.class);
+    }
+        assertFalse(TieringUtils.isCCRFollowerIndex(nonCcrSettings));
+        when(state.getNodes()).thenReturn(nodes);
+        expectThrows(IllegalArgumentException.class, () -> TieringUtils.isMigrationAllowed(null));
+        org.opensearch.common.settings.Settings settings = org.opensearch.common.settings.Settings.EMPTY;
+import org.opensearch.cluster.ClusterState;
+    }
+                    .put(org.opensearch.index.IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+        assertFalse(TieringUtils.isMigrationAllowed(".system-index"));
+    public void testGetTieringStartTime_NullCustomData() {
+    }
+            .numberOfShards(1)
+    public void testIsShardStateValidForTier_StartedOnHotNode_TargetHot() {
+        assertEquals(TieringUtils.Tier.WARM, TieringUtils.Tier.fromString("warm"));
+        assertEquals("WARM", tiers[0]);
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.common.settings.Settings;
+    public void testGetTieringStatefromIndexSettings_WarmToHot() {
+        assertEquals(12345L, startTime);
+        when(nodes.get("node1")).thenReturn(node);
+        ClusterState state = mock(ClusterState.class);
+        ShardRouting shard = mock(ShardRouting.class);
+            TieringUtils.isDfaIndex(state.getMetadata().index("dfa-idx"))
+    public void testGetTieringStartTime() {
+        when(node.isWarmNode()).thenReturn(false);
+        when(shard.primary()).thenReturn(true);
+import org.opensearch.storage.action.tiering.IndexTieringRequest;
+    }
+        IndexMetadata indexMetadata = mock(IndexMetadata.class);
+                    .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+                Settings.builder()
+        assertTrue(TieringUtils.isCCRFollowerIndex(ccrSettings));
+    }
+        Metadata metadata = mock(Metadata.class);
+    }
+            .build();
+        ShardRouting shard = mock(ShardRouting.class);
+            .numberOfReplicas(0)
+    }
+        assertEquals(IndexModule.TieringState.HOT_TO_WARM, TieringUtils.getTieringStatefromIndexSettings(settings));
+            .numberOfReplicas(0)
+        IndexTieringRequest warmRequest = new IndexTieringRequest("WARM", "test-index");
+        expectThrows(IllegalArgumentException.class, () -> TieringUtils.Tier.fromString("invalid"));
+        ClusterState clusterState = mock(ClusterState.class);
+            .build();
+    }
+        expectThrows(IllegalArgumentException.class, () -> TieringUtils.isMigrationAllowed(""));
+        assertFalse(TieringUtils.isMigrationAllowed(".kibana"));
+            IllegalArgumentException.class,
+        when(indexMetadata.getCustomData("tiering")).thenReturn(Map.of("h2w_start_time", "12345"));
+            .build();
+            () -> TieringUtils.isShardStateValidForTier(shard, state, IndexModule.TieringState.HOT_TO_WARM)
+    public void testIsMigrationAllowed_InvalidInputs() {
+        Metadata metadata = mock(Metadata.class);
+        expectThrows(IllegalArgumentException.class, () -> TieringUtils.Tier.fromString(null));
+        String[] tiers = TieringUtils.getTierPairForTargetTier(IndexModule.TieringState.WARM);
+        when(clusterState.getMetadata()).thenReturn(metadata);
+import org.opensearch.cluster.node.DiscoveryNode;
+        IndexMetadata meta = IndexMetadata.builder("idx")
+    }
+            .settings(
+ *
+        assertTrue(TieringUtils.isShardStateValidForTier(shard, state, IndexModule.TieringState.WARM));
+        expectThrows(IllegalArgumentException.class, () -> TieringUtils.getTieringStatefromTargetTier("HOT_TO_WARM"));
+    public void testGetTieringStatefromIndexSettings_Default() {
+    }
+import static org.mockito.Mockito.mock;
+                    .put(org.opensearch.index.IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+        when(nodes.get("node1")).thenReturn(node);
+        assertEquals(TieringUtils.Tier.HOT, TieringUtils.Tier.fromString("HOT"));
+    }
+        when(shard.primary()).thenReturn(false);
+        IndexMetadata meta = IndexMetadata.builder("dfa-idx")
+        ShardRouting shard = mock(ShardRouting.class);
+                Settings.builder()
+                    .put(org.opensearch.index.IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), false)
+    public void testTierFromString() {
+            .numberOfReplicas(0)
+        assertEquals("warm", TieringUtils.Tier.WARM.value());
+        assertTrue(TieringUtils.isTerminalTier("hot"));
+        expectThrows(IllegalArgumentException.class, () -> TieringUtils.getTieringSourceType((IndexTieringRequest) null));
+            .put(IndexModule.INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM_TO_HOT.toString())
+    public void testGetTieringSourceType_FromTieringState() {
+        Settings nonCcrSettings = Settings.builder().build();
+import org.opensearch.cluster.metadata.IndexMetadata;
+            .build();
+            .numberOfShards(1)
+        when(shard.started()).thenReturn(true);
+        IndexTieringRequest hotRequest = new IndexTieringRequest("HOT", "test-index");
+                    .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+    }
+package org.opensearch.storage.common.tiering;
+    // ── isDfaIndex tests ──────────────────────────────────────────────────────
+ * SPDX-License-Identifier: Apache-2.0
+        when(metadata.getIndexSafe(index)).thenReturn(indexMetadata);
+    public void testGetTieringStatefromTargetTier_Hot() {
+    public void testIsMigrationAllowed_BlocklistedIndices() {
+    }
+            .put(IndexModule.INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.WARM.toString())
+import org.opensearch.cluster.metadata.Metadata;
+    }
+        when(indexMetadata.getCustomData("tiering")).thenReturn(null);
+    }
+        assertEquals("hot", TieringUtils.Tier.HOT.value());
+    public void testIsDfaIndex_SettingAbsent_ReturnsFalse() {
+    public void testIsCCRFollowerIndex() {
+    public void testIsTerminalTier_Hot() {
+        assertFalse("isDfaIndex must return false when setting is explicitly false", TieringUtils.isDfaIndex(meta));
+ * The OpenSearch Contributors require contributions made to
+        assertTrue(TieringUtils.isMigrationAllowed(".ds-my-data-stream-2023"));
+        assertTrue(TieringUtils.isShardStateValidForTier(shard, state, IndexModule.TieringState.WARM));
+                Settings.builder()
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+        );
+        ShardRouting shard = mock(ShardRouting.class);
+    }
+        expectThrows(IllegalArgumentException.class, () -> TieringUtils.getTierPairForTargetTier(IndexModule.TieringState.HOT_TO_WARM));
+    public void testIsMigrationAllowed_AllowlistedIndices() {
+        DiscoveryNode node = mock(DiscoveryNode.class);
+        );
+        assertTrue(TieringUtils.isTerminalTier("HOT"));
+        when(state.getNodes()).thenReturn(nodes);
+    public void testIsShardStateValidForTier_UnassignedPrimary() {
+    }
+        assertTrue(TieringUtils.isMigrationAllowed("my-index"));
+            .numberOfShards(1)
+        assertFalse(TieringUtils.isTerminalTier("random"));
+        assertFalse(TieringUtils.isTerminalTier("HOT_TO_WARM"));
+    }
+    public void testIsDfaIndex_ViaClusterState_DfaIndex_ReturnsTrue() {
+        assertEquals(TieringUtils.W2H_TIERING_TYPE_KEY, TieringUtils.getTieringSourceType(hotRequest));
+        expectThrows(IllegalStateException.class, () -> TieringUtils.getTieringStartTime(clusterState, index, "h2w_start_time"));
+            )
+        Index index = new Index("test-index", "uuid");
+        when(shard.unassigned()).thenReturn(true);
+        assertTrue(TieringUtils.isTerminalTier("WARM"));
+            )
+        assertEquals(IndexModule.TieringState.HOT_TO_WARM, TieringUtils.getTieringStatefromTargetTier("WARM"));
+            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT))
+    }
+import org.opensearch.cluster.routing.ShardRouting;
+    public void testIsShardStateValidForTier_InvalidTargetTier() {
+        when(shard.unassigned()).thenReturn(true);
+import org.opensearch.index.IndexModule;
+    public void testGetTieringStatefromTargetTier_Invalid() {
+            .settings(
+        when(metadata.getIndexSafe(index)).thenReturn(indexMetadata);
+        Settings ccrSettings = Settings.builder().put("index.plugins.replication.follower.leader_index", "leader-index").build();
 }
+        IndexMetadata meta = IndexMetadata.builder("idx")
+        org.opensearch.common.settings.Settings settings = org.opensearch.common.settings.Settings.builder()
+        org.opensearch.common.settings.Settings settings = org.opensearch.common.settings.Settings.builder()
+        ShardRouting shard = mock(ShardRouting.class);
+        IndexMetadata meta = IndexMetadata.builder("idx")
+    public void testGetTierPairForTargetTier_Hot() {
+    public void testIsDfaIndex_NullMetadata_ReturnsFalse() {
+    public void testGetTierPairForTargetTier_Warm() {
+    public void testGetTieringStatefromIndexSettings_Warm() {
+    }
+        DiscoveryNode node = mock(DiscoveryNode.class);
+        when(clusterState.getMetadata()).thenReturn(metadata);
+        ClusterState state = mock(ClusterState.class);
+        IndexMetadata indexMetadata = mock(IndexMetadata.class);
+    }
+            .settings(
+        when(shard.currentNodeId()).thenReturn("node1");
+        ClusterState state = mock(ClusterState.class);
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+    public void testGetTieringStatefromIndexSettings_HotToWarm() {
+    }
+    public void testGetTieringSourceType_NullRequest() {
+    public void testIsShardStateValidForTier_UnassignedReplica() {
+        when(shard.started()).thenReturn(true);
+    }
+import java.util.Map;
+        assertEquals("WARM", tiers[1]);
+        expectThrows(
+    }
+            .build();
+        assertFalse(TieringUtils.isShardStateValidForTier(shard, state, IndexModule.TieringState.WARM));
+import org.opensearch.core.index.Index;
+ */
+        when(shard.unassigned()).thenReturn(false);
+ * compatible open source license.
+        org.opensearch.common.settings.Settings settings = org.opensearch.common.settings.Settings.builder()
+        Index index = new Index("test-index", "uuid");
+        assertEquals(IndexModule.TieringState.WARM_TO_HOT, TieringUtils.getTieringStatefromTargetTier("HOT"));
+        assertEquals(IndexModule.TieringState.WARM_TO_HOT, TieringUtils.getTieringStatefromIndexSettings(settings));
+import static org.mockito.Mockito.when;
+    public void testIsDfaIndex_SettingTrue_ReturnsTrue() {
+            .put(IndexModule.INDEX_TIERING_STATE.getKey(), IndexModule.TieringState.HOT_TO_WARM.toString())
+    }
+        String[] tiers = TieringUtils.getTierPairForTargetTier(IndexModule.TieringState.HOT);
+        DiscoveryNode node = mock(DiscoveryNode.class);
+    public void testTierValue() {
+        when(state.getNodes()).thenReturn(nodes);
+            .build();
+        when(shard.unassigned()).thenReturn(false);
+            .build();
+        long startTime = TieringUtils.getTieringStartTime(clusterState, index, "h2w_start_time");
+    }
+                    .put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT)
+        assertTrue(TieringUtils.isShardStateValidForTier(shard, state, IndexModule.TieringState.HOT));
+    public void testGetTierPairForTargetTier_Invalid() {
+        ClusterState state = mock(ClusterState.class);
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+            .numberOfReplicas(0)
+        assertEquals(TieringUtils.W2H_TIERING_TYPE_KEY, TieringUtils.getTieringSourceType(IndexModule.TieringState.HOT));
+        when(nodes.get("node1")).thenReturn(node);
+    public void testIsDfaIndex_SettingFalse_ReturnsFalse() {
+            .metadata(org.opensearch.cluster.metadata.Metadata.builder().put(meta, false).build())
+        assertFalse("isDfaIndex must return false when PLUGGABLE_DATAFORMAT_ENABLED is absent", TieringUtils.isDfaIndex(meta));
+        expectThrows(IllegalArgumentException.class, () -> TieringUtils.isMigrationAllowed(" "));
+        when(shard.unassigned()).thenReturn(false);
+        assertEquals(IndexModule.TieringState.WARM_TO_HOT, TieringUtils.getTieringStatefromIndexSettings(settings));
+        assertEquals("HOT", tiers[0]);
+        when(node.isWarmNode()).thenReturn(true);
+    public void testGetTieringSourceType_FromRequest() {
+    }
+        when(node.isWarmNode()).thenReturn(false);
+            "isDfaIndex via ClusterState must return true for DFA index",
+            .build();
+/*
+    }
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        ClusterState clusterState = mock(ClusterState.class);
+            )
+    public void testIsTerminalTier_Warm() {
+        assertEquals(TieringUtils.H2W_TIERING_TYPE_KEY, TieringUtils.getTieringSourceType(IndexModule.TieringState.WARM));
+    public void testIsShardStateValidForTier_StartedOnWarmNode_TargetWarm() {
+        when(shard.currentNodeId()).thenReturn("node1");
+    }
+        when(shard.currentNodeId()).thenReturn("node1");
+import org.opensearch.cluster.node.DiscoveryNodes;
+    public void testGetTieringStatefromTargetTier_Warm() {
+    }
+        assertTrue("isDfaIndex must return true when PLUGGABLE_DATAFORMAT_ENABLED is true", TieringUtils.isDfaIndex(meta));
+        assertFalse("isDfaIndex(null) must return false", TieringUtils.isDfaIndex((IndexMetadata) null));
+        assertTrue(
+    public void testIsTerminalTier_Invalid() {
+        assertEquals(IndexModule.TieringState.HOT_TO_WARM, TieringUtils.getTieringStatefromIndexSettings(settings));
+            .numberOfShards(1)

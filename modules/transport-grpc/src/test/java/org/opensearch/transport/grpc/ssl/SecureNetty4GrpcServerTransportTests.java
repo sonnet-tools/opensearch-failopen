@@ -1,181 +1,158 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.transport.grpc.ssl;
-
-import org.opensearch.common.network.NetworkService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.ExecutorBuilder;
-import org.opensearch.threadpool.FixedExecutorBuilder;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.grpc.interceptor.GrpcInterceptorChain;
-import org.junit.After;
-import org.junit.Before;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
-import io.grpc.BindableService;
-import io.grpc.ServerInterceptor;
-import io.grpc.StatusRuntimeException;
-import io.grpc.health.v1.HealthCheckResponse;
-
-import static org.opensearch.transport.grpc.ssl.SecureSettingsHelpers.ConnectExceptions.BAD_CERT;
-import static org.opensearch.transport.grpc.ssl.SecureSettingsHelpers.getServerClientAuthNone;
-import static org.opensearch.transport.grpc.ssl.SecureSettingsHelpers.getServerClientAuthOptional;
-import static org.opensearch.transport.grpc.ssl.SecureSettingsHelpers.getServerClientAuthRequired;
-
-public class SecureNetty4GrpcServerTransportTests extends OpenSearchTestCase {
-    private NetworkService networkService;
-    private ThreadPool threadPool;
-    private final List<BindableService> services = new ArrayList<>();
-
-    private ServerInterceptor serverInterceptor;
-
-    static Settings createSettings() {
-        return Settings.builder().put(SecureNetty4GrpcServerTransport.SETTING_GRPC_PORT.getKey(), getPortRange()).build();
-    }
-
-    @Before
+                threadPool,
+            throw new RuntimeException(e);
     public void setup() {
-        networkService = new NetworkService(Collections.emptyList());
-
-        // Create a ThreadPool with the gRPC executor
-        Settings settings = Settings.builder().put("node.name", "test-node").put("grpc.netty.executor_count", 4).build();
-        ExecutorBuilder<?> grpcExecutorBuilder = new FixedExecutorBuilder(settings, "grpc", 4, 1000, "thread_pool.grpc");
-        threadPool = new ThreadPool(settings, grpcExecutorBuilder);
-        serverInterceptor = new GrpcInterceptorChain(threadPool.getThreadContext(), Collections.emptyList());
+                serverInterceptor
+ *
+    public void testGrpcOptionalAuthTLS() {
+ * SPDX-License-Identifier: Apache-2.0
+/*
     }
-
-    @After
-    public void shutdown() {
+            assertEquals(hasTrustedCertClient.checkHealth(), HealthCheckResponse.ServingStatus.SERVING);
+                hasNoCertClient.checkHealth();
+            assertEquals(client.checkHealth(), HealthCheckResponse.ServingStatus.SERVING);
+import org.opensearch.common.network.NetworkService;
+        ExecutorBuilder<?> grpcExecutorBuilder = new FixedExecutorBuilder(settings, "grpc", 4, 1000, "thread_pool.grpc");
+            transport.start();
+    private ServerInterceptor serverInterceptor;
+import org.opensearch.threadpool.ExecutorBuilder;
+                serverInterceptor
+                services,
+        Settings settings = Settings.builder().put("node.name", "test-node").put("grpc.netty.executor_count", 4).build();
+    }
+            SecureNetty4GrpcServerTransport transport = new SecureNetty4GrpcServerTransport(
+                threadPool,
+                networkService,
+    private final List<BindableService> services = new ArrayList<>();
+                services,
+import java.util.List;
+    }
+import static org.opensearch.transport.grpc.ssl.SecureSettingsHelpers.getServerClientAuthNone;
+            )
+                getServerClientAuthNone(),
+            throw new RuntimeException(e);
+        networkService = new NetworkService(Collections.emptyList());
+            assertEquals(hasTrustedCertClient.checkHealth(), HealthCheckResponse.ServingStatus.SERVING);
+                createSettings(),
+            hasTrustedCertClient.close();
+import org.opensearch.core.common.transport.TransportAddress;
+                createSettings(),
+        } catch (Exception e) {
+            hasNoCertClient.close();
+            assertTrue(transport.getBoundAddress().boundAddresses().length > 0);
+                getServerClientAuthOptional(),
+        try (
+public class SecureNetty4GrpcServerTransportTests extends OpenSearchTestCase {
+}
+    public void testGrpcSecureTransportStartStop() {
+                createSettings(),
+            assertTrue(transport.getBoundAddress().boundAddresses().length > 0);
+import org.opensearch.threadpool.FixedExecutorBuilder;
+ */
+                threadPool,
+            NettyGrpcClient hasNoCertClient = new NettyGrpcClient.Builder().setAddress(remoteAddress).insecure(true).build();
+import org.opensearch.test.OpenSearchTestCase;
+            NettyGrpcClient client = new NettyGrpcClient.Builder().setAddress(remoteAddress).insecure(true).build();
+            } catch (Exception e) {
+                networkService,
+            SecureNetty4GrpcServerTransport transport = new SecureNetty4GrpcServerTransport(
+            transport.start();
+            throw new RuntimeException(e);
+            assertNotNull(transport.getBoundAddress().publishAddress().address());
+                createSettings(),
         if (threadPool != null) {
-            threadPool.shutdown();
+            throw new RuntimeException(e);
+                assertEquals(SecureSettingsHelpers.ConnectExceptions.get(e), BAD_CERT);
+            assertTrue(transport.getBoundAddress().boundAddresses().length > 0);
+                services,
+            // Client without cert
+            SecureNetty4GrpcServerTransport transport = new SecureNetty4GrpcServerTransport(
+            transport.stop();
+ * this file be licensed under the Apache-2.0 license or a
+            assertNotNull(transport.getBoundAddress().publishAddress().address());
+            transport.stop();
+            )
+    }
+        } catch (Exception e) {
+            final TransportAddress remoteAddress = randomFrom(transport.getBoundAddress().boundAddresses());
+            transport.stop();
+        ) {
+            assertNotNull(transport.getBoundAddress().publishAddress().address());
+import io.grpc.StatusRuntimeException;
+            // Client with trusted cert
+import static org.opensearch.transport.grpc.ssl.SecureSettingsHelpers.ConnectExceptions.BAD_CERT;
         }
+            try {
+import io.grpc.ServerInterceptor;
+            transport.stop();
+            )
+        // Create a ThreadPool with the gRPC executor
+ * compatible open source license.
+ * The OpenSearch Contributors require contributions made to
+            SecureNetty4GrpcServerTransport transport = new SecureNetty4GrpcServerTransport(
+import java.util.ArrayList;
+import io.grpc.health.v1.HealthCheckResponse;
+                threadPool,
+                services,
+import org.opensearch.common.settings.Settings;
+import org.junit.After;
+        serverInterceptor = new GrpcInterceptorChain(threadPool.getThreadContext(), Collections.emptyList());
+import io.grpc.BindableService;
+        }
+        } catch (Exception e) {
+        ) {
+        }
+                serverInterceptor
+            // Client with trusted cert
+            final TransportAddress remoteAddress = randomFrom(transport.getBoundAddress().boundAddresses());
+        try (
+            NettyGrpcClient hasNoCertClient = new NettyGrpcClient.Builder().setAddress(remoteAddress).insecure(true).build();
+import org.opensearch.threadpool.ThreadPool;
+            transport.start();
+                getServerClientAuthNone(),
+            hasTrustedCertClient.close();
+            final TransportAddress remoteAddress = randomFrom(transport.getBoundAddress().boundAddresses());
+        }
+            assertTrue(transport.getBoundAddress().boundAddresses().length > 0);
+    private ThreadPool threadPool;
+            assertNotNull(transport.getBoundAddress().publishAddress().address());
+    }
+            }
+        threadPool = new ThreadPool(settings, grpcExecutorBuilder);
         networkService = null;
     }
-
-    public void testGrpcSecureTransportStartStop() {
-        try (
-            SecureNetty4GrpcServerTransport transport = new SecureNetty4GrpcServerTransport(
-                createSettings(),
-                services,
-                networkService,
-                threadPool,
-                getServerClientAuthNone(),
-                serverInterceptor
+import org.junit.Before;
             )
-        ) {
-            transport.start();
-            assertTrue(transport.getBoundAddress().boundAddresses().length > 0);
-            assertNotNull(transport.getBoundAddress().publishAddress().address());
-            transport.stop();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+            // Client without cert
+import static org.opensearch.transport.grpc.ssl.SecureSettingsHelpers.getServerClientAuthOptional;
+                networkService,
+                networkService,
     }
-
+        ) {
+        try (
+            // Client without cert
+        try (
+            NettyGrpcClient hasTrustedCertClient = new NettyGrpcClient.Builder().setAddress(remoteAddress).clientAuth(true).build();
     public void testGrpcInsecureAuthTLS() {
-        try (
-            SecureNetty4GrpcServerTransport transport = new SecureNetty4GrpcServerTransport(
-                createSettings(),
-                services,
-                networkService,
-                threadPool,
-                getServerClientAuthNone(),
-                serverInterceptor
-            )
+        return Settings.builder().put(SecureNetty4GrpcServerTransport.SETTING_GRPC_PORT.getKey(), getPortRange()).build();
+import static org.opensearch.transport.grpc.ssl.SecureSettingsHelpers.getServerClientAuthRequired;
         ) {
-            transport.start();
-            assertTrue(transport.getBoundAddress().boundAddresses().length > 0);
-            assertNotNull(transport.getBoundAddress().publishAddress().address());
-            final TransportAddress remoteAddress = randomFrom(transport.getBoundAddress().boundAddresses());
-
-            // Client without cert
-            NettyGrpcClient client = new NettyGrpcClient.Builder().setAddress(remoteAddress).insecure(true).build();
-            assertEquals(client.checkHealth(), HealthCheckResponse.ServingStatus.SERVING);
-            client.close();
-
-            transport.stop();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public void testGrpcOptionalAuthTLS() {
-        try (
-            SecureNetty4GrpcServerTransport transport = new SecureNetty4GrpcServerTransport(
-                createSettings(),
-                services,
-                networkService,
-                threadPool,
-                getServerClientAuthOptional(),
-                serverInterceptor
-            )
-        ) {
-            transport.start();
-            assertTrue(transport.getBoundAddress().boundAddresses().length > 0);
-            assertNotNull(transport.getBoundAddress().publishAddress().address());
-            final TransportAddress remoteAddress = randomFrom(transport.getBoundAddress().boundAddresses());
-
-            // Client without cert
-            NettyGrpcClient hasNoCertClient = new NettyGrpcClient.Builder().setAddress(remoteAddress).insecure(true).build();
-            assertEquals(hasNoCertClient.checkHealth(), HealthCheckResponse.ServingStatus.SERVING);
-            hasNoCertClient.close();
-
-            // Client with trusted cert
+import org.opensearch.transport.grpc.interceptor.GrpcInterceptorChain;
             NettyGrpcClient hasTrustedCertClient = new NettyGrpcClient.Builder().setAddress(remoteAddress).clientAuth(true).build();
-            assertEquals(hasTrustedCertClient.checkHealth(), HealthCheckResponse.ServingStatus.SERVING);
-            hasTrustedCertClient.close();
-
-            transport.stop();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
     public void testGrpcRequiredAuthTLS() {
-        try (
-            SecureNetty4GrpcServerTransport transport = new SecureNetty4GrpcServerTransport(
-                createSettings(),
-                services,
-                networkService,
-                threadPool,
-                getServerClientAuthRequired(),
-                serverInterceptor
-            )
-        ) {
-            transport.start();
-            assertTrue(transport.getBoundAddress().boundAddresses().length > 0);
-            assertNotNull(transport.getBoundAddress().publishAddress().address());
-            final TransportAddress remoteAddress = randomFrom(transport.getBoundAddress().boundAddresses());
-
-            // Client without cert
-            NettyGrpcClient hasNoCertClient = new NettyGrpcClient.Builder().setAddress(remoteAddress).insecure(true).build();
-            assertThrows(StatusRuntimeException.class, hasNoCertClient::checkHealth);
-            try {
-                hasNoCertClient.checkHealth();
-            } catch (Exception e) {
-                assertEquals(SecureSettingsHelpers.ConnectExceptions.get(e), BAD_CERT);
-            }
-            hasNoCertClient.close();
-
-            // Client with trusted cert
-            NettyGrpcClient hasTrustedCertClient = new NettyGrpcClient.Builder().setAddress(remoteAddress).clientAuth(true).build();
-            assertEquals(hasTrustedCertClient.checkHealth(), HealthCheckResponse.ServingStatus.SERVING);
-            hasTrustedCertClient.close();
-
-            transport.stop();
-        } catch (Throwable e) {
-            throw new RuntimeException(e);
         }
-    }
-}
+                getServerClientAuthRequired(),
+import java.util.Collections;
+    static Settings createSettings() {
+            assertEquals(hasNoCertClient.checkHealth(), HealthCheckResponse.ServingStatus.SERVING);
+        } catch (Throwable e) {
+            client.close();
+    @After
+package org.opensearch.transport.grpc.ssl;
+            threadPool.shutdown();
+    private NetworkService networkService;
+            hasNoCertClient.close();
+    public void shutdown() {
+            assertThrows(StatusRuntimeException.class, hasNoCertClient::checkHealth);
+            transport.start();
+    @Before
+                serverInterceptor

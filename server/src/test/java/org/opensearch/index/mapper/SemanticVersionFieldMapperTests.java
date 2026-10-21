@@ -1,859 +1,718 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.document.KeywordField;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.DocValuesType;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.index.MultiReader;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.IndexOrDocValuesQuery;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MultiTermQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermRangeQuery;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.store.ByteBuffersDirectory;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.util.automaton.Operations;
+        IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig());
 import org.apache.lucene.util.automaton.RegExp;
-import org.opensearch.common.geo.ShapeRelation;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.Fuzziness;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.QueryShardException;
-import org.opensearch.search.lookup.SearchLookup;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
-
-import static org.hamcrest.Matchers.arrayWithSize;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.mockito.Mockito.mock;
-
-/**
- * Field mapper for OpenSearch semantic version field type
- */
-public class SemanticVersionFieldMapperTests extends MapperTestCase {
-
-    @Override
-    protected void minimalMapping(XContentBuilder b) throws IOException {
-        b.field("type", "version");
-        b.field("store", true);
-        b.field("index", true);
-    }
-
-    @Override
-    protected void registerParameters(ParameterChecker checker) {
-        // No additional parameters to register for version field type
-    }
-
-    @Override
-    protected void metaMapping(XContentBuilder b) throws IOException {
-        minimalMapping(b);
-    }
-
-    @Override
-    protected void writeFieldValue(XContentBuilder builder) throws IOException {
-        builder.value("1.0.0");
-    }
-
-    public void testDefaults() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1.0.0")));
-
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        assertThat(fields.length, greaterThanOrEqualTo(2));
-
-        boolean hasDocValues = false;
-        boolean hasStoredField = false;
-        for (IndexableField field : fields) {
-            if (field.fieldType().docValuesType() == DocValuesType.SORTED_SET) {
-                hasDocValues = true;
-            }
-            if (field.fieldType().stored()) {
-                hasStoredField = true;
-            }
-        }
-
-        assertTrue("Field should have doc values", hasDocValues);
-        assertTrue("Field should be stored", hasStoredField);
-    }
-
-    public void testValidVersionValues() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-
-        // Test regular version
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1.2.3")));
-        IndexableField field = doc.rootDoc().getField("field");
-        assertThat(field.stringValue(), equalTo("1.2.3"));
-
-        // Test version with pre-release
-        doc = mapper.parse(source(b -> b.field("field", "1.2.3-alpha")));
-        field = doc.rootDoc().getField("field");
-        assertThat(field.stringValue(), equalTo("1.2.3-alpha"));
-
-        // Test version with build metadata
-        doc = mapper.parse(source(b -> b.field("field", "1.2.3+build.123")));
-        field = doc.rootDoc().getField("field");
-        assertThat(field.stringValue(), equalTo("1.2.3+build.123"));
-
-        // Test version with both pre-release and build metadata
-        doc = mapper.parse(source(b -> b.field("field", "1.2.3-alpha+build.123")));
-        field = doc.rootDoc().getField("field");
-        assertThat(field.stringValue(), equalTo("1.2.3-alpha+build.123"));
-    }
-
-    public void testStoredValues() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-
-        // Test storing different version formats
-        List<String> versions = Arrays.asList(
-            "1.0.0",
-            "1.0.0-alpha",
-            "1.0.0-alpha.1",
-            "1.0.0+build.123",
-            "1.0.0-beta+build.123",
-            "999999999.999999999.999999999"
-        );
-
-        for (String version : versions) {
-            ParsedDocument doc = mapper.parse(source(b -> b.field("field", version)));
-            IndexableField storedField = doc.rootDoc().getField("field");
-            assertNotNull("Stored field should exist for " + version, storedField);
-            assertEquals("Stored value should match input for " + version, version, storedField.stringValue());
-        }
-    }
-
-    public void testDocValuesSorting() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1.0.0")));
-
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        boolean hasDocValues = false;
-        for (IndexableField field : fields) {
-            if (field.fieldType().docValuesType() == DocValuesType.SORTED_SET) {
-                hasDocValues = true;
-                assertEquals(DocValuesType.SORTED_SET, field.fieldType().docValuesType());
-            }
-        }
-        assertTrue("Field should have sorted doc values", hasDocValues);
-    }
-
-    public void testNullHandling() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-
-        // Test null value
-        ParsedDocument doc = mapper.parse(source(b -> b.nullField("field")));
-        assertThat(doc.rootDoc().getFields("field"), arrayWithSize(0));
-
-        // Test missing field
-        doc = mapper.parse(source(b -> {}));
-        assertThat(doc.rootDoc().getFields("field"), arrayWithSize(0));
-    }
-
-    public void testMalformedVersions() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-
-        // Test various malformed versions
-        List<String> malformedVersions = Arrays.asList(
-            "1",
-            "1.0",
-            "v1.0.0",
-            "1.0.0.0",
-            "-1.0.0",
-            "1.0.0-",
-            "1.0.0+",
-            "01.0.0",
-            "1.0.0@invalid"
-        );
-
-        for (String malformed : malformedVersions) {
-            MapperParsingException e = expectThrows(
-                MapperParsingException.class,
-                () -> mapper.parse(source(b -> b.field("field", malformed)))
-            );
-            assertTrue(e.getCause().getMessage().contains("Invalid semantic version format"));
-        }
-    }
-
-    public void testMetadataFields() throws Exception {
-        XContentBuilder mapping = fieldMapping(this::minimalMapping);
-        DocumentMapper mapper = createDocumentMapper(mapping);
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1.0.0")));
-
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        boolean hasDocValues = false;
-        for (IndexableField field : fields) {
-            if (field.fieldType().docValuesType() == DocValuesType.SORTED_SET) {
-                hasDocValues = true;
-                break;
-            }
-        }
-        assertTrue("Field should have doc values", hasDocValues);
-    }
-
-    public void testToXContent() throws IOException {
-        XContentBuilder mapping = fieldMapping(this::minimalMapping);
-        DocumentMapper mapper = createDocumentMapper(mapping);
-
-        XContentBuilder builder = XContentFactory.jsonBuilder();
-        builder.startObject();
-        mapper.mapping().toXContent(builder, ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-
-        String mappingString = builder.toString();
-        assertTrue(mappingString.contains("\"type\":\"version\""));
-    }
-
-    public void testMultipleVersionFields() throws Exception {
-        XContentBuilder mapping = mapping(b -> {
-            b.startObject("version1").field("type", "version").field("store", true).endObject();
-            b.startObject("version2").field("type", "version").field("store", true).endObject();
-        });
-
-        DocumentMapper mapper = createDocumentMapper(mapping);
-        ParsedDocument doc = mapper.parse(source(b -> {
-            b.field("version1", "1.0.0");
-            b.field("version2", "2.0.0");
-        }));
-
-        assertNotNull(doc.rootDoc().getField("version1"));
-        assertNotNull(doc.rootDoc().getField("version2"));
-        assertNotEquals(doc.rootDoc().getField("version1").stringValue(), doc.rootDoc().getField("version2").stringValue());
-    }
-
-    public void testMajorVersionComparison() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-
-        ParsedDocument doc1 = mapper.parse(source(b -> b.field("field", "2.0.0")));
-        ParsedDocument doc2 = mapper.parse(source(b -> b.field("field", "1.9.9")));
-
-        SemanticVersion v1 = SemanticVersion.parse(doc1.rootDoc().getField("field").stringValue());
-        SemanticVersion v2 = SemanticVersion.parse(doc2.rootDoc().getField("field").stringValue());
-
-        assertTrue("Major version comparison failed", v1.compareTo(v2) > 0);
-    }
-
-    public void testComplexPreReleaseComparison() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-
-        List<String> versions = Arrays.asList(
-            "1.0.0-alpha.beta",
-            "1.0.0-alpha.1",
-            "1.0.0-alpha",
-            "1.0.0-alpha.beta.2",
-            "1.0.0-beta",
-            "1.0.0-alpha.12",
-            "1.0.0-beta.2",
-            "1.0.0"
-        );
-
-        List<String> expected = Arrays.asList(
-            "1.0.0-alpha",
-            "1.0.0-alpha.1",
-            "1.0.0-alpha.12",
-            "1.0.0-alpha.beta",
-            "1.0.0-alpha.beta.2",
-            "1.0.0-beta",
-            "1.0.0-beta.2",
-            "1.0.0"
-        );
-
-        testVersionSorting(mapper, versions, expected);
-    }
-
-    public void testBuildMetadataEquality() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-
-        ParsedDocument doc1 = mapper.parse(source(b -> b.field("field", "1.0.0+build.1")));
-        ParsedDocument doc2 = mapper.parse(source(b -> b.field("field", "1.0.0+build.2")));
-
-        SemanticVersion v1 = SemanticVersion.parse(doc1.rootDoc().getField("field").stringValue());
-        SemanticVersion v2 = SemanticVersion.parse(doc2.rootDoc().getField("field").stringValue());
-
-        assertEquals("Build metadata should not affect equality", 0, v1.compareTo(v2));
-    }
-
-    public void testMultipleFieldsInDocument() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(mapping(b -> {
-            b.startObject("version1").field("type", "version").field("store", true).endObject();
-            b.startObject("version2").field("type", "version").field("store", true).endObject();
-        }));
-
-        ParsedDocument doc = mapper.parse(source(b -> {
-            b.field("version1", "1.0.0");
-            b.field("version2", "2.0.0");
-        }));
-
-        assertNotNull(doc.rootDoc().getField("version1"));
-        assertNotNull(doc.rootDoc().getField("version2"));
-        assertNotEquals(doc.rootDoc().getField("version1").stringValue(), doc.rootDoc().getField("version2").stringValue());
-    }
-
-    public void testExtremeVersionNumbers() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-
-        // Test very large version numbers
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "999999999.999999999.999999999")));
-        assertNotNull(doc.rootDoc().getField("field"));
-
-        // Test version with many pre-release parts
-        doc = mapper.parse(source(b -> b.field("field", "1.0.0-alpha.beta.gamma.delta.epsilon")));
-        assertNotNull(doc.rootDoc().getField("field"));
-
-        // Test version with many build metadata parts
-        doc = mapper.parse(source(b -> b.field("field", "1.0.0+build.123.456.789.abc.def")));
-        assertNotNull(doc.rootDoc().getField("field"));
-    }
-
-    public void testMoreInvalidVersions() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-
-        // Test empty string
-        expectThrows(MapperParsingException.class, () -> mapper.parse(source(b -> b.field("field", ""))));
-
-        // Test only dots
-        expectThrows(MapperParsingException.class, () -> mapper.parse(source(b -> b.field("field", "..."))));
-
-        // Test invalid characters
-        expectThrows(MapperParsingException.class, () -> mapper.parse(source(b -> b.field("field", "1.0.0@"))));
-
-        // Test leading zeros
-        expectThrows(MapperParsingException.class, () -> mapper.parse(source(b -> b.field("field", "01.2.3"))));
-    }
-
-    private void testVersionSorting(DocumentMapper mapper, List<String> input, List<String> expected) throws Exception {
-        List<String> actual = input.stream().map(v -> {
-            try {
-                ParsedDocument doc = mapper.parse(source(b -> b.field("field", v)));
-                return doc.rootDoc().getField("field").stringValue();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }).sorted((v1, v2) -> {
-            SemanticVersion sv1 = SemanticVersion.parse(v1);
-            SemanticVersion sv2 = SemanticVersion.parse(v2);
-            return sv1.compareTo(sv2);
-        }).collect(Collectors.toList());
-
-        assertThat(actual, contains(expected.toArray()));
-    }
-
-    public void testInvalidVersionValues() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-
-        // Test invalid version format
-        MapperParsingException e = expectThrows(MapperParsingException.class, () -> mapper.parse(source(b -> b.field("field", "1.2"))));
-        assertTrue(e.getCause().getMessage().contains("Invalid semantic version format"));
-
-        // Test negative version numbers
-        e = expectThrows(MapperParsingException.class, () -> mapper.parse(source(b -> b.field("field", "-1.2.3"))));
-        assertTrue(e.getCause().getMessage().contains("Invalid semantic version format"));
-
-        // Test invalid pre-release format
-        e = expectThrows(MapperParsingException.class, () -> mapper.parse(source(b -> b.field("field", "1.2.3-"))));
-        assertTrue(e.getCause().getMessage().contains("Invalid semantic version format"));
-    }
-
-    public void testVersionSorting() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-
-        // Create a list of versions in random order
-        List<String> versions = Arrays.asList(
-            "1.0.0",
-            "1.10.0",
-            "1.2.0",
-            "1.0.0-alpha",
-            "1.0.0-alpha.1",
-            "1.0.0-beta",
-            "1.0.0-beta.2",
-            "1.0.0-beta.11",
-            "1.0.0-rc.1",
-            "1.0.0+build.123"
-        );
-        Collections.shuffle(versions, random());
-
-        // Store documents with versions
-        List<ParsedDocument> docs = new ArrayList<>();
-        for (String version : versions) {
-            ParsedDocument doc = mapper.parse(source(b -> b.field("field", version)));
-            docs.add(doc);
-        }
-
-        // Extract and sort versions
-        List<String> sortedVersions = docs.stream().map(doc -> {
-            for (IndexableField field : doc.rootDoc().getFields("field")) {
-                if (field.fieldType().stored()) {
-                    return field.stringValue();
-                }
-            }
-            return null;
-        }).filter(Objects::nonNull).sorted((v1, v2) -> {
-            SemanticVersion sv1 = SemanticVersion.parse(v1);
-            SemanticVersion sv2 = SemanticVersion.parse(v2);
-            return sv1.compareTo(sv2);
-        }).map(v -> {
-            // Normalize version by removing build metadata
-            SemanticVersion sv = SemanticVersion.parse(v);
-            return new SemanticVersion(sv.getMajor(), sv.getMinor(), sv.getPatch(), sv.getPreRelease(), null).toString();
-        }).collect(Collectors.toList());
-
-        // Verify each version individually
-        assertEquals("Wrong number of versions", 10, sortedVersions.size());
-        assertEquals("1.0.0-alpha", sortedVersions.get(0));
-        assertEquals("1.0.0-alpha.1", sortedVersions.get(1));
-        assertEquals("1.0.0-beta", sortedVersions.get(2));
-        assertEquals("1.0.0-beta.2", sortedVersions.get(3));
-        assertEquals("1.0.0-beta.11", sortedVersions.get(4));
-        assertEquals("1.0.0-rc.1", sortedVersions.get(5));
-        assertEquals("1.0.0", sortedVersions.get(6));
-        assertEquals("1.0.0", sortedVersions.get(7)); // build.123 is stripped
-        assertEquals("1.2.0", sortedVersions.get(8));
-        assertEquals("1.10.0", sortedVersions.get(9));
-    }
-
-    public void testDocValues() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1.0.0")));
-
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        boolean hasDocValues = false;
-        for (IndexableField field : fields) {
-            if (field.fieldType().docValuesType() == DocValuesType.SORTED_SET) {
-                hasDocValues = true;
-                break;
-            }
-        }
-        assertTrue("Field should have doc values", hasDocValues);
-    }
-
-    public void testTermQuery() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1.0.0")));
-
-        IndexableField[] fields = doc.rootDoc().getFields("field");
-        boolean hasTermField = false;
-        for (IndexableField field : fields) {
-            if (field instanceof KeywordField) {
-                hasTermField = true;
-                break;
-            }
-        }
-        assertTrue("Field should have keyword term field", hasTermField);
-    }
-
-    public void testNullValue() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        ParsedDocument doc = mapper.parse(source(b -> b.nullField("field")));
-        assertThat(doc.rootDoc().getFields("field"), arrayWithSize(0));
-    }
-
-    public void testRangeQueries() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        MappedFieldType fieldType = ((FieldMapper) mapper.mappers().getMapper("field")).fieldType();
-
-        // Test various range scenarios
-        Query rangeQuery1 = fieldType.rangeQuery("1.0.0", "2.0.0", true, true, ShapeRelation.INTERSECTS, null, null, null);
-        assertTrue(
-            rangeQuery1 instanceof TermRangeQuery
-                || (rangeQuery1 instanceof IndexOrDocValuesQuery
-                    && ((IndexOrDocValuesQuery) rangeQuery1).getIndexQuery() instanceof TermRangeQuery)
-        );
-
-        Query rangeQuery2 = fieldType.rangeQuery("1.0.0-alpha", "1.0.0", true, true, ShapeRelation.INTERSECTS, null, null, null);
-        assertTrue(
-            rangeQuery2 instanceof TermRangeQuery
-                || (rangeQuery2 instanceof IndexOrDocValuesQuery
-                    && ((IndexOrDocValuesQuery) rangeQuery2).getIndexQuery() instanceof TermRangeQuery)
-        );
-
-        // Test null bounds
-        Query rangeQuery3 = fieldType.rangeQuery(null, "2.0.0", true, true, ShapeRelation.INTERSECTS, null, null, null);
-        assertTrue(
-            rangeQuery3 instanceof TermRangeQuery
-                || (rangeQuery3 instanceof IndexOrDocValuesQuery
-                    && ((IndexOrDocValuesQuery) rangeQuery3).getIndexQuery() instanceof TermRangeQuery)
-        );
-
-        Query rangeQuery4 = fieldType.rangeQuery("1.0.0", null, true, true, ShapeRelation.INTERSECTS, null, null, null);
-        assertTrue(
-            rangeQuery4 instanceof TermRangeQuery
-                || (rangeQuery4 instanceof IndexOrDocValuesQuery
-                    && ((IndexOrDocValuesQuery) rangeQuery4).getIndexQuery() instanceof TermRangeQuery)
-        );
-
-        // Test actual document matching
-        ParsedDocument doc1 = mapper.parse(source(b -> b.field("field", "1.5.0")));
-        ParsedDocument doc2 = mapper.parse(source(b -> b.field("field", "2.5.0")));
-
-        // Should match doc1 but not doc2
-        Query rangeQuery = fieldType.rangeQuery("1.0.0", "2.0.0", true, true, ShapeRelation.INTERSECTS, null, null, null);
-
-        // Create readers and searcher
-        Directory dir1 = new ByteBuffersDirectory();
-        Directory dir2 = new ByteBuffersDirectory();
-
-        // Index first document
-        IndexWriter writer1 = new IndexWriter(dir1, new IndexWriterConfig());
-        writer1.addDocument(doc1.rootDoc());
-        writer1.close();
-
-        // Index second document
-        IndexWriter writer2 = new IndexWriter(dir2, new IndexWriterConfig());
-        writer2.addDocument(doc2.rootDoc());
-        writer2.close();
-
-        // Create readers
-        IndexReader reader1 = DirectoryReader.open(dir1);
-        IndexReader reader2 = DirectoryReader.open(dir2);
-
-        // Create MultiReader with array of readers
-        IndexReader[] readers = new IndexReader[] { reader1, reader2 };
-        MultiReader multiReader = new MultiReader(readers, true);
-
-        IndexSearcher searcher = new IndexSearcher(multiReader);
-        TopDocs hits = searcher.search(rangeQuery, 10);
-
-        // Clean up
-        multiReader.close();
-        dir1.close();
-        dir2.close();
-    }
-
-    private IndexSearcher setupSearcher(DocumentMapper mapper) throws IOException {
-        List<ParsedDocument> docs = Arrays.asList(
-            mapper.parse(source(b -> b.field("field", "1.0.0"))),
-            mapper.parse(source(b -> b.field("field", "1.0.1"))),
-            mapper.parse(source(b -> b.field("field", "1.1.0"))),
-            mapper.parse(source(b -> b.field("field", "2.0.0"))),
-            mapper.parse(source(b -> b.field("field", "1.0.0-alpha"))),
-            mapper.parse(source(b -> b.field("field", "1.0.0-beta"))),
-            mapper.parse(source(b -> b.field("field", "1.0.0+build.123")))
-        );
-
-        Directory dir = new ByteBuffersDirectory();
-        IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig());
-        for (ParsedDocument doc : docs) {
-            writer.addDocument(doc.rootDoc());
-        }
-        writer.close();
-
-        return new IndexSearcher(DirectoryReader.open(dir));
-    }
-
-    public void testPrefixQuery() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        MappedFieldType fieldType = ((FieldMapper) mapper.mappers().getMapper("field")).fieldType();
-        IndexSearcher searcher = setupSearcher(mapper);
-
-        Query prefixQuery = fieldType.prefixQuery(
-            "1.0",
-            MultiTermQuery.CONSTANT_SCORE_REWRITE,  // Specify rewrite method
-            false,
-            null
-        );
-
-        assertThat("Should match 1.0.0, 1.0.1, 1.0.0-alpha, 1.0.0-beta, 1.0.0+build.123", searcher.count(prefixQuery), equalTo(5));
-
-        // Test different prefix patterns
-        Query majorVersionPrefix = fieldType.prefixQuery("1.", MultiTermQuery.CONSTANT_SCORE_REWRITE, false, null);
-        assertThat("Should match all version 1.x.x", searcher.count(majorVersionPrefix), equalTo(6));
-
-        // Test case sensitivity
-        Query caseInsensitivePrefix = fieldType.prefixQuery("1.0", MultiTermQuery.CONSTANT_SCORE_REWRITE, true, null);
-        assertThat("Should match same as case sensitive", searcher.count(caseInsensitivePrefix), equalTo(5));
-    }
-
-    public void testWildcardQuery() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        MappedFieldType fieldType = ((FieldMapper) mapper.mappers().getMapper("field")).fieldType();
-
-        // Create test documents with specific versions
-        List<ParsedDocument> docs = Arrays.asList(
-            mapper.parse(source(b -> b.field("field", "1.0.0"))),
-            mapper.parse(source(b -> b.field("field", "1.1.0"))),
-            mapper.parse(source(b -> b.field("field", "2.1.0")))
-        );
-
-        Directory dir = new ByteBuffersDirectory();
-        IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig());
-        for (ParsedDocument doc : docs) {
-            writer.addDocument(doc.rootDoc());
-        }
-        writer.close();
-
-        IndexSearcher searcher = new IndexSearcher(DirectoryReader.open(dir));
-
-        Query wildcardQuery = fieldType.wildcardQuery("1.*.0", MultiTermQuery.CONSTANT_SCORE_REWRITE, false, null);
-        assertThat("Should match 1.0.0 and 1.1.0", searcher.count(wildcardQuery), equalTo(2));
-
-        dir.close();
-    }
-
-    public void testRegexpQuery() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        MappedFieldType fieldType = ((FieldMapper) mapper.mappers().getMapper("field")).fieldType();
-        IndexSearcher searcher = setupSearcher(mapper);
-
-        Query regexpQuery = fieldType.regexpQuery(
-            "1\\.0\\.0-.*",
-            RegExp.ALL,
-            0,
-            Operations.DEFAULT_DETERMINIZE_WORK_LIMIT,
-            MultiTermQuery.CONSTANT_SCORE_REWRITE,
-            null
-        );
-        assertThat("Should match 1.0.0-alpha and 1.0.0-beta", searcher.count(regexpQuery), equalTo(2));
-    }
-
-    public void testFuzzyQuery() throws Exception {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        MappedFieldType fieldType = ((FieldMapper) mapper.mappers().getMapper("field")).fieldType();
-
-        // Create simple test documents
-        List<ParsedDocument> docs = Arrays.asList(
-            mapper.parse(source(b -> b.field("field", "1.0.0"))),
-            mapper.parse(source(b -> b.field("field", "1.0.1")))
-        );
-
-        Directory dir = new ByteBuffersDirectory();
-        IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig());
-        for (ParsedDocument doc : docs) {
-            writer.addDocument(doc.rootDoc());
-        }
-        writer.close();
-
-        IndexSearcher searcher = new IndexSearcher(DirectoryReader.open(dir));
-
-        // Test fuzzy query
-        Query fuzzyQuery = fieldType.fuzzyQuery(
-            "1.0.0",
-            Fuzziness.ONE,
-            0,  // No prefix requirement
-            50,
-            true,
-            MultiTermQuery.CONSTANT_SCORE_REWRITE,
-            null
-        );
-
-        assertThat(
-            "Fuzzy match should find similar versions",
-            searcher.count(fuzzyQuery),
-            equalTo(2)  // Should match 1.0.0 and 1.0.1
-        );
-
-        dir.close();
-    }
-
-    public void testComplexQuery() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
-        MappedFieldType fieldType = ((FieldMapper) mapper.mappers().getMapper("field")).fieldType();
-        IndexSearcher searcher = setupSearcher(mapper);
-
-        Query complexQuery = new BooleanQuery.Builder().add(
-            fieldType.prefixQuery("1.", MultiTermQuery.CONSTANT_SCORE_REWRITE, false, null),
-            BooleanClause.Occur.MUST
-        )
-            .add(
-                fieldType.regexpQuery(
-                    ".*-.*",
-                    RegExp.ALL,
-                    0,
-                    Operations.DEFAULT_DETERMINIZE_WORK_LIMIT,
-                    MultiTermQuery.CONSTANT_SCORE_REWRITE,
-                    null
-                ),
-                BooleanClause.Occur.MUST_NOT
-            )
-            .build();
-
-        assertThat("Should match 1.0.0, 1.0.1, 1.1.0, 1.0.0+build.123", searcher.count(complexQuery), equalTo(4));
-    }
-
-    /**
-     * Test to cover error cases in SemanticVersionFieldType
-     */
-    public void testFieldTypeErrorCases() {
-        // Create a mock QueryShardContext
-        QueryShardContext mockContext = mock(QueryShardContext.class);
-
-        // Create a field type with various configurations to test error paths
-        SemanticVersionFieldMapper.SemanticVersionFieldType fieldType = new SemanticVersionFieldMapper.SemanticVersionFieldType(
-            "test_field",
-            new HashMap<>(),
-            true,  // isSearchable
             true,  // hasDocValues
-            false  // isStored
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
         );
-
-        // Test termQuery with null value (should throw exception)
-        IllegalArgumentException nullValueException = expectThrows(
-            IllegalArgumentException.class,
-            () -> fieldType.termQuery(null, mockContext)
-        );
-        assertEquals("Cannot search for null value", nullValueException.getMessage());
-
-        // Create a field type that is not searchable but has doc values
-        SemanticVersionFieldMapper.SemanticVersionFieldType docValuesOnlyFieldType =
-            new SemanticVersionFieldMapper.SemanticVersionFieldType(
-                "docvalues_only",
-                new HashMap<>(),
-                false,  // isSearchable
-                true,   // hasDocValues
-                false   // isStored
-            );
-
-        // Test termQuery - should use doc values query only
-        Query docValuesQuery = docValuesOnlyFieldType.termQuery("1.0.0", mockContext);
-        assertNotNull(docValuesQuery);
-
-        // Create a field type that is searchable but has no doc values
-        SemanticVersionFieldMapper.SemanticVersionFieldType searchOnlyFieldType = new SemanticVersionFieldMapper.SemanticVersionFieldType(
-            "search_only",
-            new HashMap<>(),
-            true,   // isSearchable
-            false,  // hasDocValues
-            false   // isStored
-        );
-
-        // Test termQuery - should use index query only
-        Query indexQuery = searchOnlyFieldType.termQuery("1.0.0", mockContext);
-        assertNotNull(indexQuery);
-
-        // Create a field type that is neither searchable nor has doc values
-        SemanticVersionFieldMapper.SemanticVersionFieldType invalidFieldType = new SemanticVersionFieldMapper.SemanticVersionFieldType(
-            "invalid_field",
-            new HashMap<>(),
-            false,  // isSearchable
-            false,  // hasDocValues
-            false   // isStored
-        );
-
-        // Test termQuery - should throw exception
-        IllegalArgumentException invalidFieldException = expectThrows(
-            IllegalArgumentException.class,
-            () -> invalidFieldType.termQuery("1.0.0", mockContext)
-        );
-        assertThat(invalidFieldException.getMessage(), containsString("is neither indexed nor has doc_values enabled"));
-
-        // Test rangeQuery with invalid version format - should throw QueryShardException
-        QueryShardException rangeException = expectThrows(
-            QueryShardException.class,
-            () -> fieldType.rangeQuery("invalid-version", "2.0.0", true, true, null, null, null, mockContext)
-        );
-        assertThat(rangeException.getMessage(), containsString("Failed to create range query for field"));
-
-        // Test termsQuery with different field configurations
-        List<String> terms = Arrays.asList("1.0.0", "2.0.0", "3.0.0");
-
-        // Test with searchable field
-        Query termsQuery = searchOnlyFieldType.termsQuery(terms, mockContext);
-        assertNotNull(termsQuery);
-
-        // Test with doc values only field
-        Query docValuesTermsQuery = docValuesOnlyFieldType.termsQuery(terms, mockContext);
-        assertNotNull(docValuesTermsQuery);
-
-        // Test with invalid field
-        IllegalArgumentException termsException = expectThrows(
-            IllegalArgumentException.class,
-            () -> invalidFieldType.termsQuery(terms, mockContext)
-        );
-        assertThat(termsException.getMessage(), containsString("is neither indexed nor has doc_values enabled"));
-
-        // Test regexpQuery with non-searchable field
-        IllegalArgumentException regexpException = expectThrows(
-            IllegalArgumentException.class,
-            () -> docValuesOnlyFieldType.regexpQuery("1\\.0\\..*", 0, 0, 10, MultiTermQuery.CONSTANT_SCORE_REWRITE, mockContext)
-        );
-        assertEquals("Regexp queries require the field to be indexed", regexpException.getMessage());
-
-        // Test wildcardQuery with case insensitivity
-        Query wildcardQuery = fieldType.wildcardQuery(
-            "1.0.*",
-            MultiTermQuery.CONSTANT_SCORE_REWRITE,
-            true,  // case insensitive
-            mockContext
-        );
-        assertNotNull(wildcardQuery);
-
-        // Test wildcardQuery with non-searchable field
-        IllegalArgumentException wildcardException = expectThrows(
-            IllegalArgumentException.class,
-            () -> docValuesOnlyFieldType.wildcardQuery("1.0.*", MultiTermQuery.CONSTANT_SCORE_REWRITE, false, mockContext)
-        );
-        assertEquals("Wildcard queries require the field to be indexed", wildcardException.getMessage());
-
         // Test prefixQuery with non-searchable field
-        IllegalArgumentException prefixException = expectThrows(
-            IllegalArgumentException.class,
-            () -> docValuesOnlyFieldType.prefixQuery("1.0", MultiTermQuery.CONSTANT_SCORE_REWRITE, false, mockContext)
-        );
-        assertEquals("Prefix queries require the field to be indexed", prefixException.getMessage());
-
-        // Test fuzzyQuery with null rewrite method (should use default)
-        Query fuzzyQuery = fieldType.fuzzyQuery(
-            "1.0.0",
-            Fuzziness.ONE,
-            0,
-            50,
-            true,
-            null,  // null rewrite method
-            mockContext
-        );
-        assertNotNull(fuzzyQuery);
-
-        // Test fuzzyQuery with non-searchable field
-        IllegalArgumentException fuzzyException = expectThrows(
-            IllegalArgumentException.class,
-            () -> docValuesOnlyFieldType.fuzzyQuery("1.0.0", Fuzziness.ONE, 0, 50, true, MultiTermQuery.CONSTANT_SCORE_REWRITE, mockContext)
-        );
-        assertEquals("Fuzzy queries require the field to be indexed", fuzzyException.getMessage());
-
-        // Test valueFetcher with format parameter
-        SearchLookup mockLookup = mock(SearchLookup.class);
-        IllegalArgumentException formatException = expectThrows(
-            IllegalArgumentException.class,
-            () -> fieldType.valueFetcher(mockContext, mockLookup, "some_format")
-        );
-        assertThat(formatException.getMessage(), containsString("doesn't support formats"));
-
-        // Test valueFetcher without format parameter
-        assertNotNull(fieldType.valueFetcher(mockContext, mockLookup, null));
-
-        // Test fielddataBuilder with doc_values disabled
-        IllegalArgumentException fieldDataException = expectThrows(
-            IllegalArgumentException.class,
-            () -> searchOnlyFieldType.fielddataBuilder("test_index", null)
         );
         assertThat(fieldDataException.getMessage(), containsString("does not have doc_values enabled"));
+        for (String version : versions) {
+            null
+            () -> docValuesOnlyFieldType.wildcardQuery("1.0.*", MultiTermQuery.CONSTANT_SCORE_REWRITE, false, mockContext)
     }
-
+        );
+        // Test invalid pre-release format
+            return sv1.compareTo(sv2);
+            for (IndexableField field : doc.rootDoc().getFields("field")) {
+        ParsedDocument doc = mapper.parse(source(b -> b.nullField("field")));
+        // Create MultiReader with array of readers
+ * this file be licensed under the Apache-2.0 license or a
+        IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig());
+        assertEquals("1.0.0-alpha", sortedVersions.get(0));
+        SearchLookup mockLookup = mock(SearchLookup.class);
+            "1.0.*",
+    }
+            mapper.parse(source(b -> b.field("field", "1.1.0"))),
+        Query rangeQuery4 = fieldType.rangeQuery("1.0.0", null, true, true, ShapeRelation.INTERSECTS, null, null, null);
+            mapper.parse(source(b -> b.field("field", "1.0.1")))
+            IllegalArgumentException.class,
+    }
+            mockContext
+            "1.0.0",
+        // Test version with pre-release
+        assertThat(rangeException.getMessage(), containsString("Failed to create range query for field"));
+    public void testInvalidVersionValues() throws IOException {
+import org.apache.lucene.store.Directory;
+                || (rangeQuery3 instanceof IndexOrDocValuesQuery
+import org.apache.lucene.index.IndexWriter;
+        assertEquals("Fuzzy queries require the field to be indexed", fuzzyException.getMessage());
+        XContentBuilder mapping = fieldMapping(this::minimalMapping);
+            () -> fieldType.termQuery(null, mockContext)
+    }
+            return sv1.compareTo(sv2);
+    }
+            false,  // hasDocValues
+        doc = mapper.parse(source(b -> b.field("field", "1.0.0+build.123.456.789.abc.def")));
+            b.startObject("version2").field("type", "version").field("store", true).endObject();
+        // Test rangeQuery with invalid version format - should throw QueryShardException
+        }
+            "1.0.0-beta",
+            false,  // isSearchable
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1.0.0")));
+                hasStoredField = true;
+        IndexSearcher searcher = new IndexSearcher(DirectoryReader.open(dir));
+        Query majorVersionPrefix = fieldType.prefixQuery("1.", MultiTermQuery.CONSTANT_SCORE_REWRITE, false, null);
+            "1.0.0"
+        for (String malformed : malformedVersions) {
+        assertThat(termsException.getMessage(), containsString("is neither indexed nor has doc_values enabled"));
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+        );
+        assertEquals("1.0.0-beta.2", sortedVersions.get(3));
+/**
+            "1.0.0",
+        );
+                return doc.rootDoc().getField("field").stringValue();
+        // Test valueFetcher with format parameter
+        IllegalArgumentException invalidFieldException = expectThrows(
+    }
+        }
+        );
+            "invalid_field",
+            false,
+        );
+            "01.0.0",
+            b.startObject("version2").field("type", "version").field("store", true).endObject();
+        List<ParsedDocument> docs = Arrays.asList(
+        Query docValuesQuery = docValuesOnlyFieldType.termQuery("1.0.0", mockContext);
+        writer.close();
+        assertNotEquals(doc.rootDoc().getField("version1").stringValue(), doc.rootDoc().getField("version2").stringValue());
+    }
+        }));
+import org.apache.lucene.search.BooleanQuery;
+        Query rangeQuery2 = fieldType.rangeQuery("1.0.0-alpha", "1.0.0", true, true, ShapeRelation.INTERSECTS, null, null, null);
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+        for (ParsedDocument doc : docs) {
+            0,
+    }
+        assertTrue(
+            assertEquals("Stored value should match input for " + version, version, storedField.stringValue());
+        List<String> versions = Arrays.asList(
+            }
+            "1.0",
+    @Override
+        // Test with doc values only field
+        // Test termQuery - should throw exception
+            50,
+        // Test empty string
+        // Create test documents with specific versions
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+            Operations.DEFAULT_DETERMINIZE_WORK_LIMIT,
+            null,  // null rewrite method
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        // Test wildcardQuery with case insensitivity
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        // Test fuzzyQuery with non-searchable field
+        // Verify each version individually
+            equalTo(2)  // Should match 1.0.0 and 1.0.1
+    }
+        // Index first document
+        Directory dir = new ByteBuffersDirectory();
+    }
+import org.apache.lucene.store.ByteBuffersDirectory;
+            mapper.parse(source(b -> b.field("field", "1.0.1"))),
+    public void testWildcardQuery() throws Exception {
+            IndexableField storedField = doc.rootDoc().getField("field");
+                    MultiTermQuery.CONSTANT_SCORE_REWRITE,
+    }
+            false   // isStored
+        assertEquals("Cannot search for null value", nullValueException.getMessage());
+    }
+        boolean hasStoredField = false;
+        // Test version with many pre-release parts
+        SemanticVersionFieldMapper.SemanticVersionFieldType docValuesOnlyFieldType =
+        doc = mapper.parse(source(b -> {}));
+    }
+        assertEquals("Build metadata should not affect equality", 0, v1.compareTo(v2));
+ *
+        IndexSearcher searcher = setupSearcher(mapper);
+        }));
+        // Create simple test documents
+            MultiTermQuery.CONSTANT_SCORE_REWRITE,
+package org.opensearch.index.mapper;
+        Query fuzzyQuery = fieldType.fuzzyQuery(
+        }
+import static org.mockito.Mockito.mock;
+        }).sorted((v1, v2) -> {
+        assertEquals("Wildcard queries require the field to be indexed", wildcardException.getMessage());
+            true,   // isSearchable
+        SemanticVersionFieldMapper.SemanticVersionFieldType invalidFieldType = new SemanticVersionFieldMapper.SemanticVersionFieldType(
+            "1.0.0-beta.2",
+        doc = mapper.parse(source(b -> b.field("field", "1.2.3-alpha+build.123")));
+        IndexReader[] readers = new IndexReader[] { reader1, reader2 };
+            "1.0.0+",
+        writer.close();
+            "1.0.0-alpha",
+        // Test different prefix patterns
+                    && ((IndexOrDocValuesQuery) rangeQuery3).getIndexQuery() instanceof TermRangeQuery)
+        writer2.close();
+        writer2.addDocument(doc2.rootDoc());
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        for (IndexableField field : fields) {
+        assertNotEquals(doc.rootDoc().getField("version1").stringValue(), doc.rootDoc().getField("version2").stringValue());
+ * Field mapper for OpenSearch semantic version field type
+        assertEquals("1.2.0", sortedVersions.get(8));
+        QueryShardContext mockContext = mock(QueryShardContext.class);
+import org.apache.lucene.index.IndexReader;
+        );
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+            mapper.parse(source(b -> b.field("field", "1.0.0"))),
+        assertThat("Should match 1.0.0, 1.0.1, 1.0.0-alpha, 1.0.0-beta, 1.0.0+build.123", searcher.count(prefixQuery), equalTo(5));
+        b.field("type", "version");
+import org.opensearch.common.unit.Fuzziness;
+            "1.0.0"
+            return new SemanticVersion(sv.getMajor(), sv.getMinor(), sv.getPatch(), sv.getPreRelease(), null).toString();
+            if (field.fieldType().docValuesType() == DocValuesType.SORTED_SET) {
+                fieldType.regexpQuery(
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        field = doc.rootDoc().getField("field");
+        IllegalArgumentException regexpException = expectThrows(
+        );
+            true,
+    public void testDocValuesSorting() throws Exception {
+                BooleanClause.Occur.MUST_NOT
+            .add(
+                    Operations.DEFAULT_DETERMINIZE_WORK_LIMIT,
+        Directory dir1 = new ByteBuffersDirectory();
+    public void testFieldTypeErrorCases() {
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        MappedFieldType fieldType = ((FieldMapper) mapper.mappers().getMapper("field")).fieldType();
+            } catch (IOException e) {
+        ParsedDocument doc = mapper.parse(source(b -> {
+        ParsedDocument doc2 = mapper.parse(source(b -> b.field("field", "2.5.0")));
+        SemanticVersionFieldMapper.SemanticVersionFieldType searchOnlyFieldType = new SemanticVersionFieldMapper.SemanticVersionFieldType(
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1.2.3")));
+    }
+            IllegalArgumentException.class,
+        builder.value("1.0.0");
+        for (String version : versions) {
+    public void testMultipleVersionFields() throws Exception {
+            "1.0.0-alpha.1",
+import java.util.Arrays;
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1.0.0")));
+            MapperParsingException e = expectThrows(
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+    public void testPrefixQuery() throws Exception {
+            "1.0.0-alpha.1",
+        assertThat(
+            searcher.count(fuzzyQuery),
+        assertNotNull(doc.rootDoc().getField("version2"));
+        );
+            "1.0.0-alpha.beta.2",
+    public void testNullValue() throws Exception {
+    public void testMetadataFields() throws Exception {
+        assertNotNull(wildcardQuery);
+        for (IndexableField field : fields) {
+        assertTrue("Field should be stored", hasStoredField);
+ * The OpenSearch Contributors require contributions made to
+        // Test leading zeros
+        Directory dir = new ByteBuffersDirectory();
+import org.opensearch.common.xcontent.XContentFactory;
+                assertEquals(DocValuesType.SORTED_SET, field.fieldType().docValuesType());
+        for (IndexableField field : fields) {
+import static org.hamcrest.Matchers.containsString;
+            mockContext
+        SemanticVersionFieldMapper.SemanticVersionFieldType fieldType = new SemanticVersionFieldMapper.SemanticVersionFieldType(
+            new SemanticVersionFieldMapper.SemanticVersionFieldType(
+        // Create readers and searcher
+            null
+        e = expectThrows(MapperParsingException.class, () -> mapper.parse(source(b -> b.field("field", "1.2.3-"))));
+            rangeQuery3 instanceof TermRangeQuery
+                || (rangeQuery4 instanceof IndexOrDocValuesQuery
+     * Test to cover error cases in SemanticVersionFieldType
+        assertNotNull(doc.rootDoc().getField("field"));
+            }
+        assertEquals("1.0.0", sortedVersions.get(7)); // build.123 is stripped
+                () -> mapper.parse(source(b -> b.field("field", malformed)))
+        writer.close();
+        );
+    }
+        // Create readers
+        List<ParsedDocument> docs = new ArrayList<>();
+    }
+    }
+            new HashMap<>(),
+        // Test actual document matching
+        Collections.shuffle(versions, random());
+        // Test null value
+import org.opensearch.search.lookup.SearchLookup;
+        MappedFieldType fieldType = ((FieldMapper) mapper.mappers().getMapper("field")).fieldType();
+        for (IndexableField field : fields) {
+            "1.0.0-",
+        SemanticVersion v1 = SemanticVersion.parse(doc1.rootDoc().getField("field").stringValue());
+        IndexSearcher searcher = setupSearcher(mapper);
+        assertThat(doc.rootDoc().getFields("field"), arrayWithSize(0));
+            50,
+        assertThat(field.stringValue(), equalTo("1.2.3"));
+        Directory dir2 = new ByteBuffersDirectory();
+        // Test very large version numbers
+        );
+        assertThat("Should match 1.0.0-alpha and 1.0.0-beta", searcher.count(regexpQuery), equalTo(2));
+        expectThrows(MapperParsingException.class, () -> mapper.parse(source(b -> b.field("field", "..."))));
+    protected void writeFieldValue(XContentBuilder builder) throws IOException {
+        }).filter(Objects::nonNull).sorted((v1, v2) -> {
+import org.apache.lucene.index.DirectoryReader;
+        ParsedDocument doc1 = mapper.parse(source(b -> b.field("field", "2.0.0")));
+        QueryShardException rangeException = expectThrows(
+            false,  // hasDocValues
+        doc = mapper.parse(source(b -> b.field("field", "1.2.3+build.123")));
+        assertTrue("Field should have doc values", hasDocValues);
+        assertThat(field.stringValue(), equalTo("1.2.3-alpha+build.123"));
+        // Test fielddataBuilder with doc_values disabled
+            IllegalArgumentException.class,
+        Query rangeQuery = fieldType.rangeQuery("1.0.0", "2.0.0", true, true, ShapeRelation.INTERSECTS, null, null, null);
+        ParsedDocument doc2 = mapper.parse(source(b -> b.field("field", "1.9.9")));
+        // Test termQuery with null value (should throw exception)
+        assertEquals("Wrong number of versions", 10, sortedVersions.size());
+            "1.0.0-alpha",
+        // Test negative version numbers
+            () -> invalidFieldType.termsQuery(terms, mockContext)
+            MultiTermQuery.CONSTANT_SCORE_REWRITE,
+        expectThrows(MapperParsingException.class, () -> mapper.parse(source(b -> b.field("field", "1.0.0@"))));
+            "1.2.0",
+            SemanticVersion sv1 = SemanticVersion.parse(v1);
+        }
+            "1.0.0.0",
+            ParsedDocument doc = mapper.parse(source(b -> b.field("field", version)));
+        boolean hasDocValues = false;
+        for (ParsedDocument doc : docs) {
+            BooleanClause.Occur.MUST
+        assertThat(doc.rootDoc().getFields("field"), arrayWithSize(0));
+        assertTrue(e.getCause().getMessage().contains("Invalid semantic version format"));
+import org.opensearch.index.query.QueryShardContext;
+        IndexReader reader1 = DirectoryReader.open(dir1);
+        }).collect(Collectors.toList());
+        boolean hasTermField = false;
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "999999999.999999999.999999999")));
+import org.apache.lucene.search.BooleanClause;
+            IllegalArgumentException.class,
+            "1.0.0@invalid"
+import org.apache.lucene.search.Query;
+            rangeQuery1 instanceof TermRangeQuery
+        );
+            "1.0.0-alpha.beta",
+    protected void registerParameters(ParameterChecker checker) {
+import static org.hamcrest.Matchers.arrayWithSize;
+        }
+        // Test regexpQuery with non-searchable field
+        );
+            IllegalArgumentException.class,
+        boolean hasDocValues = false;
+import org.opensearch.core.xcontent.XContentBuilder;
+            "1.0.0-alpha.1",
+    public void testRangeQueries() throws Exception {
+        List<String> malformedVersions = Arrays.asList(
+ * SPDX-License-Identifier: Apache-2.0
+    @Override
+        );
+            () -> fieldType.rangeQuery("invalid-version", "2.0.0", true, true, null, null, null, mockContext)
+        mapper.mapping().toXContent(builder, ToXContent.EMPTY_PARAMS);
+        );
+            0,  // No prefix requirement
+    public void testFuzzyQuery() throws Exception {
+import org.apache.lucene.search.IndexOrDocValuesQuery;
+    @Override
+    }
+                hasDocValues = true;
+        assertTrue("Field should have keyword term field", hasTermField);
+        assertTrue("Field should have doc values", hasDocValues);
+    public void testMoreInvalidVersions() throws Exception {
+                }
+                break;
+                hasDocValues = true;
+            mapper.parse(source(b -> b.field("field", "1.0.0"))),
+                "docvalues_only",
+        }));
+        // Test various malformed versions
+        assertNotNull(doc.rootDoc().getField("version1"));
+    }
+    }
+        )
+            b.field("version2", "2.0.0");
+        Query wildcardQuery = fieldType.wildcardQuery(
+                    0,
+import org.apache.lucene.search.IndexSearcher;
+        dir.close();
+        }
+        assertEquals("1.0.0", sortedVersions.get(6));
+        expectThrows(MapperParsingException.class, () -> mapper.parse(source(b -> b.field("field", ""))));
+        );
+            false  // isStored
+        dir1.close();
+    }
+            "1.0.0-beta+build.123",
+    }
+        // Test invalid characters
+        // Test only dots
+            b.startObject("version1").field("type", "version").field("store", true).endObject();
+import java.util.Objects;
+        List<String> expected = Arrays.asList(
+            new HashMap<>(),
+            b.field("version1", "1.0.0");
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        assertTrue(mappingString.contains("\"type\":\"version\""));
+        assertThat("Should match 1.0.0 and 1.1.0", searcher.count(wildcardQuery), equalTo(2));
+import java.io.IOException;
+            RegExp.ALL,
+        assertNotNull(doc.rootDoc().getField("field"));
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+    public void testDocValues() throws Exception {
+            IllegalArgumentException.class,
+            SemanticVersion sv2 = SemanticVersion.parse(v2);
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        testVersionSorting(mapper, versions, expected);
+        // Test missing field
+        assertThat(formatException.getMessage(), containsString("doesn't support formats"));
+        writer1.addDocument(doc1.rootDoc());
+                true,   // hasDocValues
+        assertTrue(e.getCause().getMessage().contains("Invalid semantic version format"));
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+            writer.addDocument(doc.rootDoc());
+        // Test termsQuery with different field configurations
+        assertTrue("Field should have doc values", hasDocValues);
+    public void testStoredValues() throws Exception {
+        // Extract and sort versions
+            "search_only",
+            true,
+        // Test regular version
+            () -> docValuesOnlyFieldType.prefixQuery("1.0", MultiTermQuery.CONSTANT_SCORE_REWRITE, false, mockContext)
+        Query caseInsensitivePrefix = fieldType.prefixQuery("1.0", MultiTermQuery.CONSTANT_SCORE_REWRITE, true, null);
+            "1.0.0-alpha.beta",
+        assertThat("Should match same as case sensitive", searcher.count(caseInsensitivePrefix), equalTo(5));
+        XContentBuilder mapping = mapping(b -> {
+        // Test invalid version format
+    public void testTermQuery() throws Exception {
+        IndexSearcher searcher = new IndexSearcher(multiReader);
+        assertEquals("1.0.0-beta.11", sortedVersions.get(4));
+            () -> docValuesOnlyFieldType.fuzzyQuery("1.0.0", Fuzziness.ONE, 0, 50, true, MultiTermQuery.CONSTANT_SCORE_REWRITE, mockContext)
+/*
+    }
+            rangeQuery4 instanceof TermRangeQuery
+            "1.0.0-alpha",
+                hasTermField = true;
+        List<ParsedDocument> docs = Arrays.asList(
+                    && ((IndexOrDocValuesQuery) rangeQuery4).getIndexQuery() instanceof TermRangeQuery)
+        List<String> actual = input.stream().map(v -> {
+    protected void metaMapping(XContentBuilder b) throws IOException {
+            );
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1.0.0")));
+        // Create a field type with various configurations to test error paths
+        // Test termQuery - should use index query only
+                break;
+        assertEquals("1.0.0-beta", sortedVersions.get(2));
+            }
+            SemanticVersion sv2 = SemanticVersion.parse(v2);
+            QueryShardException.class,
+            0,
+        assertThat(invalidFieldException.getMessage(), containsString("is neither indexed nor has doc_values enabled"));
+        for (ParsedDocument doc : docs) {
+            try {
+        }
+        b.field("store", true);
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        Query fuzzyQuery = fieldType.fuzzyQuery(
+        );
+                    RegExp.ALL,
+            assertTrue(e.getCause().getMessage().contains("Invalid semantic version format"));
+        assertTrue("Field should have sorted doc values", hasDocValues);
+        );
+    }
+            }
+            "1.0.0-alpha.beta.2",
+        Query rangeQuery3 = fieldType.rangeQuery(null, "2.0.0", true, true, ShapeRelation.INTERSECTS, null, null, null);
+        }).map(v -> {
+        List<String> versions = Arrays.asList(
+            "-1.0.0",
+        assertNotNull(termsQuery);
+            if (field instanceof KeywordField) {
+        );
+    }
+        IndexSearcher searcher = new IndexSearcher(DirectoryReader.open(dir));
+        dir.close();
+            "1.0.0-alpha.12",
+        // Store documents with versions
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1.0.0")));
+        MappedFieldType fieldType = ((FieldMapper) mapper.mappers().getMapper("field")).fieldType();
+            "1.0.0-alpha.1",
+        String mappingString = builder.toString();
+import org.apache.lucene.search.TermRangeQuery;
+            Fuzziness.ONE,
+        minimalMapping(b);
+        // Clean up
+     */
+        field = doc.rootDoc().getField("field");
+        // Test null bounds
+        );
+import java.util.List;
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+        assertThat(actual, contains(expected.toArray()));
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        assertThat("Should match all version 1.x.x", searcher.count(majorVersionPrefix), equalTo(6));
+        }).collect(Collectors.toList());
+        // Create a field type that is not searchable but has doc values
+        );
+import org.opensearch.index.query.QueryShardException;
+        DocumentMapper mapper = createDocumentMapper(mapping);
+import org.apache.lucene.search.MultiTermQuery;
+            if (field.fieldType().docValuesType() == DocValuesType.SORTED_SET) {
+    /**
+            false   // isStored
+        assertNotNull(fieldType.valueFetcher(mockContext, mockLookup, null));
+    public void testMajorVersionComparison() throws Exception {
+        assertEquals("Prefix queries require the field to be indexed", prefixException.getMessage());
+            }
+            }
+import static org.hamcrest.Matchers.equalTo;
+                ),
+        );
+        builder.startObject();
+        ParsedDocument doc2 = mapper.parse(source(b -> b.field("field", "1.0.0+build.2")));
+        assertNotNull(doc.rootDoc().getField("version2"));
+        Query regexpQuery = fieldType.regexpQuery(
+            "1.0.0-alpha",
+            if (field.fieldType().docValuesType() == DocValuesType.SORTED_SET) {
+            IllegalArgumentException.class,
+        );
+        assertNotNull(doc.rootDoc().getField("version1"));
+        assertNotNull(docValuesQuery);
+        }
+            true,  // case insensitive
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+            "1.0.0-beta",
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        });
+            "1.0",
+        for (IndexableField field : fields) {
+    protected void minimalMapping(XContentBuilder b) throws IOException {
+        );
+            docs.add(doc);
+        MultiReader multiReader = new MultiReader(readers, true);
+            b.field("version1", "1.0.0");
+    public void testBuildMetadataEquality() throws Exception {
+        expectThrows(MapperParsingException.class, () -> mapper.parse(source(b -> b.field("field", "01.2.3"))));
+        // Test version with both pre-release and build metadata
+            );
+            () -> fieldType.valueFetcher(mockContext, mockLookup, "some_format")
     private Settings pluggableSettings() {
-        return Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+        // Test fuzzyQuery with null rewrite method (should use default)
+        // Test valueFetcher without format parameter
+        // Create a field type that is searchable but has no doc values
+            IllegalArgumentException.class,
+            "Fuzzy match should find similar versions",
+            "1.0.0",
+import org.apache.lucene.util.automaton.Operations;
+            if (field.fieldType().docValuesType() == DocValuesType.SORTED_SET) {
+public class SemanticVersionFieldMapperTests extends MapperTestCase {
+        );
+        List<String> versions = Arrays.asList(
+import org.opensearch.common.geo.ShapeRelation;
+                throw new RuntimeException(e);
+        ParsedDocument doc = mapper.parse(source(b -> b.nullField("field")));
+        assertNotNull(docValuesTermsQuery);
+    private IndexSearcher setupSearcher(DocumentMapper mapper) throws IOException {
+            MultiTermQuery.CONSTANT_SCORE_REWRITE,
+        SemanticVersion v1 = SemanticVersion.parse(doc1.rootDoc().getField("field").stringValue());
+        IndexableField field = doc.rootDoc().getField("field");
+        IndexWriter writer2 = new IndexWriter(dir2, new IndexWriterConfig());
+        assertTrue(
+            if (field.fieldType().stored()) {
+        b.field("index", true);
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
     }
+    public void testToXContent() throws IOException {
+import java.util.Collections;
+        IllegalArgumentException prefixException = expectThrows(
+            Fuzziness.ONE,
+        Query docValuesTermsQuery = docValuesOnlyFieldType.termsQuery(terms, mockContext);
+        IllegalArgumentException formatException = expectThrows(
+            "1",
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        MappedFieldType fieldType = ((FieldMapper) mapper.mappers().getMapper("field")).fieldType();
+                    && ((IndexOrDocValuesQuery) rangeQuery2).getIndexQuery() instanceof TermRangeQuery)
+        assertThat(field.stringValue(), equalTo("1.2.3+build.123"));
+            "1.0.0-alpha.12",
+            true,  // isSearchable
+        List<String> terms = Arrays.asList("1.0.0", "2.0.0", "3.0.0");
+        }
+            "1.0.0-beta.2",
+            // Normalize version by removing build metadata
+        builder.endObject();
+        assertThat(field.stringValue(), equalTo("1.2.3-alpha"));
+        SemanticVersion v2 = SemanticVersion.parse(doc2.rootDoc().getField("field").stringValue());
+        Query indexQuery = searchOnlyFieldType.termQuery("1.0.0", mockContext);
+            "1.0.0-beta",
+            MultiTermQuery.CONSTANT_SCORE_REWRITE,  // Specify rewrite method
+        boolean hasDocValues = false;
+        // Create a field type that is neither searchable nor has doc values
+        DocumentMapper mapper = createDocumentMapper(mapping);
+                if (field.fieldType().stored()) {
+            "1.0.0-beta.2",
+        IllegalArgumentException nullValueException = expectThrows(
+        }
+            "999999999.999999999.999999999"
+        SemanticVersion v2 = SemanticVersion.parse(doc2.rootDoc().getField("field").stringValue());
+        assertTrue(
+        IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig());
+        Query rangeQuery1 = fieldType.rangeQuery("1.0.0", "2.0.0", true, true, ShapeRelation.INTERSECTS, null, null, null);
+        // Index second document
+                break;
+    public void testMultipleFieldsInDocument() throws Exception {
+        );
+        MapperParsingException e = expectThrows(MapperParsingException.class, () -> mapper.parse(source(b -> b.field("field", "1.2"))));
+    public void testNullHandling() throws Exception {
+        e = expectThrows(MapperParsingException.class, () -> mapper.parse(source(b -> b.field("field", "-1.2.3"))));
+    public void testExtremeVersionNumbers() throws Exception {
+                ParsedDocument doc = mapper.parse(source(b -> b.field("field", v)));
+        IllegalArgumentException wildcardException = expectThrows(
+        assertTrue(e.getCause().getMessage().contains("Invalid semantic version format"));
+            "1.0.0",
+        // Test wildcardQuery with non-searchable field
+    public void testVersionSorting() throws Exception {
+                    ".*-.*",
+                    return field.stringValue();
+            () -> docValuesOnlyFieldType.regexpQuery("1\\.0\\..*", 0, 0, 10, MultiTermQuery.CONSTANT_SCORE_REWRITE, mockContext)
+        IndexReader reader2 = DirectoryReader.open(dir2);
+                || (rangeQuery1 instanceof IndexOrDocValuesQuery
+        assertEquals("Regexp queries require the field to be indexed", regexpException.getMessage());
+        XContentBuilder mapping = fieldMapping(this::minimalMapping);
+        );
+            new HashMap<>(),
+            () -> invalidFieldType.termQuery("1.0.0", mockContext)
+        IllegalArgumentException fuzzyException = expectThrows(
+        // Test version with many build metadata parts
+                || (rangeQuery2 instanceof IndexOrDocValuesQuery
+        MappedFieldType fieldType = ((FieldMapper) mapper.mappers().getMapper("field")).fieldType();
+        // Create a list of versions in random order
+            .build();
+    @Override
+            mapper.parse(source(b -> b.field("field", "2.1.0")))
+        assertThat(doc.rootDoc().getFields("field"), arrayWithSize(0));
+    }
+        doc = mapper.parse(source(b -> b.field("field", "1.0.0-alpha.beta.gamma.delta.epsilon")));
+        return Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+        // Should match doc1 but not doc2
+        // Test case sensitivity
+        IndexSearcher searcher = setupSearcher(mapper);
+            "v1.0.0",
+        Query wildcardQuery = fieldType.wildcardQuery("1.*.0", MultiTermQuery.CONSTANT_SCORE_REWRITE, false, null);
+import org.apache.lucene.document.KeywordField;
+        ParsedDocument doc1 = mapper.parse(source(b -> b.field("field", "1.0.0+build.1")));
+                false,  // isSearchable
+import org.apache.lucene.index.IndexableField;
+        // Test version with build metadata
+    private void testVersionSorting(DocumentMapper mapper, List<String> input, List<String> expected) throws Exception {
+        );
+        assertTrue("Major version comparison failed", v1.compareTo(v2) > 0);
+    }
+            IllegalArgumentException.class,
+        Query termsQuery = searchOnlyFieldType.termsQuery(terms, mockContext);
+        DocumentMapper mapper = createDocumentMapper(mapping(b -> {
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+                hasDocValues = true;
+        // Test with invalid field
+        ParsedDocument doc = mapper.parse(source(b -> b.field("field", "1.0.0")));
+        IllegalArgumentException termsException = expectThrows(
+                    && ((IndexOrDocValuesQuery) rangeQuery1).getIndexQuery() instanceof TermRangeQuery)
+        Query complexQuery = new BooleanQuery.Builder().add(
+            ParsedDocument doc = mapper.parse(source(b -> b.field("field", version)));
+        List<ParsedDocument> docs = Arrays.asList(
+        assertThat(fields.length, greaterThanOrEqualTo(2));
+            fieldType.prefixQuery("1.", MultiTermQuery.CONSTANT_SCORE_REWRITE, false, null),
+        // Test with searchable field
+            mapper.parse(source(b -> b.field("field", "1.0.0"))),
+        assertEquals("1.10.0", sortedVersions.get(9));
+        }
+import java.util.stream.Collectors;
+        assertThat("Should match 1.0.0, 1.0.1, 1.1.0, 1.0.0+build.123", searcher.count(complexQuery), equalTo(4));
+        IndexWriter writer1 = new IndexWriter(dir1, new IndexWriterConfig());
+            "1.0.0+build.123",
+                MapperParsingException.class,
+        // Test termQuery - should use doc values query only
+                new HashMap<>(),
+        );
+        // Test storing different version formats
+                false   // isStored
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+            b.field("version2", "2.0.0");
+        return new IndexSearcher(DirectoryReader.open(dir));
+    public void testComplexPreReleaseComparison() throws Exception {
+        Query prefixQuery = fieldType.prefixQuery(
+            "1.0.0-beta.11",
+        assertEquals("1.0.0-rc.1", sortedVersions.get(5));
+        MappedFieldType fieldType = ((FieldMapper) mapper.mappers().getMapper("field")).fieldType();
+        DocumentMapper mapper = createDocumentMapper(mapping);
+        assertNotNull(indexQuery);
+            writer.addDocument(doc.rootDoc());
 }
+        ParsedDocument doc = mapper.parse(source(b -> {
+                hasDocValues = true;
+            mapper.parse(source(b -> b.field("field", "1.0.0-beta"))),
+                    null
+        );
+ */
+        // Test fuzzy query
+            }
+            "1.10.0",
+import org.opensearch.core.xcontent.ToXContent;
+            mapper.parse(source(b -> b.field("field", "2.0.0"))),
+        Directory dir = new ByteBuffersDirectory();
+    public void testMalformedVersions() throws Exception {
+        assertNotNull(fuzzyQuery);
+            mapper.parse(source(b -> b.field("field", "1.1.0"))),
+    public void testComplexQuery() throws IOException {
+ * compatible open source license.
+            }
+            "1\\.0\\.0-.*",
+        dir2.close();
+        TopDocs hits = searcher.search(rangeQuery, 10);
+            SemanticVersion sv1 = SemanticVersion.parse(v1);
+            return null;
+        List<String> sortedVersions = docs.stream().map(doc -> {
+        IllegalArgumentException fieldDataException = expectThrows(
+    }
+    }
+    }
+        field = doc.rootDoc().getField("field");
+            mapper.parse(source(b -> b.field("field", "1.0.0-alpha"))),
+import static org.hamcrest.Matchers.contains;
+            assertNotNull("Stored field should exist for " + version, storedField);
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+        IndexableField[] fields = doc.rootDoc().getFields("field");
+    public void testRegexpQuery() throws Exception {
+            null
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+        multiReader.close();
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+            rangeQuery2 instanceof TermRangeQuery
+        // Create a mock QueryShardContext
+            "1.0.0-rc.1",
+import org.opensearch.common.settings.Settings;
+import org.apache.lucene.index.DocValuesType;
+        // No additional parameters to register for version field type
+        DocumentMapper mapper = createDocumentMapper(fieldMapping(this::minimalMapping));
+            writer.addDocument(doc.rootDoc());
+        assertEquals("1.0.0-alpha.1", sortedVersions.get(1));
+            b.startObject("version1").field("type", "version").field("store", true).endObject();
+import org.apache.lucene.search.TopDocs;
+        assertTrue(
+    }
+import java.util.HashMap;
+    }
+            )
+            "test_field",
+            mapper.parse(source(b -> b.field("field", "1.0.0+build.123")))
+            "1.0.0+build.123"
+    public void testDefaults() throws Exception {
+    public void testValidVersionValues() throws Exception {
+        writer1.close();
+ */
+import org.apache.lucene.index.IndexWriterConfig;
+            () -> searchOnlyFieldType.fielddataBuilder("test_index", null)
+        ParsedDocument doc1 = mapper.parse(source(b -> b.field("field", "1.5.0")));
+        assertNotNull(doc.rootDoc().getField("field"));
+import org.apache.lucene.index.MultiReader;
+            SemanticVersion sv = SemanticVersion.parse(v);
+    }
+        boolean hasDocValues = false;
+        doc = mapper.parse(source(b -> b.field("field", "1.2.3-alpha")));
+import java.util.ArrayList;
+        // Test various range scenarios

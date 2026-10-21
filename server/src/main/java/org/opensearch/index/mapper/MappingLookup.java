@@ -1,333 +1,298 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
+import java.util.ArrayList;
+        }
+ */
+        this.fieldMappers = Collections.unmodifiableMap(fieldMappers);
+        return objectMappers;
+            newFieldAliasMappers,
+ * Looks up a mapping for a field
+    public Mapper getMapper(String field) {
+import org.apache.lucene.analysis.Analyzer;
+                if (name.length() > limit) {
+            newObjectMappers,
+                throw new MapperParsingException("Alias [" + aliasMapper.name() + "] is defined both as an alias and a concrete field");
+        this.hasNested = hasNested;
+                newFieldMappers.add(metadataMapper);
  *
  * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.analysis.Analyzer;
-import org.opensearch.cluster.metadata.DataStream;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.FieldNameAnalyzer;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Stream;
-
-/**
- * Looks up a mapping for a field
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public final class MappingLookup implements Iterable<Mapper> {
-
-    /** Full field name to mapper */
-    private final Map<String, Mapper> fieldMappers;
-    private final Map<String, ObjectMapper> objectMappers;
-    private final boolean hasNested;
-    private final boolean rootDisableObjects;
-    private final FieldTypeLookup fieldTypeLookup;
-    private final int metadataFieldCount;
-    private final FieldNameAnalyzer indexAnalyzer;
-
-    private static void put(Map<String, Analyzer> analyzers, String key, Analyzer value, Analyzer defaultValue) {
-        if (value == null) {
-            value = defaultValue;
-        }
-        analyzers.put(key, value);
-    }
-
-    /**
-     * Builds a lookup from a mapping, resolving dynamic_property patterns for {@link MappedFieldType} when needed.
-     * Fields resolved only via dynamic_property patterns are not added to the serialized mapping; see
-     * {@link DynamicProperty} for implications on hooks tied to mapping updates.
-     */
-    public static MappingLookup fromMapping(Mapping mapping, Analyzer defaultIndex, DocumentMapperParser documentMapperParser) {
-        List<ObjectMapper> newObjectMappers = new ArrayList<>();
-        List<FieldMapper> newFieldMappers = new ArrayList<>();
-        List<FieldAliasMapper> newFieldAliasMappers = new ArrayList<>();
-        for (MetadataFieldMapper metadataMapper : mapping.metadataMappers) {
-            if (metadataMapper != null) {
-                newFieldMappers.add(metadataMapper);
-            }
-        }
-        collect(mapping.root, newObjectMappers, newFieldMappers, newFieldAliasMappers);
-        DynamicPropertyFieldTypeResolver dynamicResolver = null;
-        if (documentMapperParser != null && mapping.root().dynamicProperties().length > 0) {
-            dynamicResolver = new DynamicPropertyFieldTypeResolver(mapping.root(), documentMapperParser);
-        }
-        return new MappingLookup(
-            newFieldMappers,
-            newObjectMappers,
-            newFieldAliasMappers,
-            mapping.metadataMappers.length,
-            defaultIndex,
-            dynamicResolver,
-            mapping.root().disableObjects()
-        );
-    }
-
-    public static MappingLookup fromMapping(Mapping mapping, Analyzer defaultIndex) {
-        return fromMapping(mapping, defaultIndex, null);
-    }
-
-    private static void collect(
-        Mapper mapper,
-        Collection<ObjectMapper> objectMappers,
-        Collection<FieldMapper> fieldMappers,
-        Collection<FieldAliasMapper> fieldAliasMappers
-    ) {
-        if (mapper instanceof RootObjectMapper) {
-            // root mapper isn't really an object mapper
-        } else if (mapper instanceof ObjectMapper) {
-            objectMappers.add((ObjectMapper) mapper);
-        } else if (mapper instanceof FieldMapper) {
-            fieldMappers.add((FieldMapper) mapper);
-        } else if (mapper instanceof FieldAliasMapper) {
-            fieldAliasMappers.add((FieldAliasMapper) mapper);
-        } else {
-            throw new IllegalStateException("Unrecognized mapper type [" + mapper.getClass().getSimpleName() + "].");
-        }
-
-        for (Mapper child : mapper) {
-            collect(child, objectMappers, fieldMappers, fieldAliasMappers);
-        }
-    }
-
-    public MappingLookup(
-        Collection<FieldMapper> mappers,
-        Collection<ObjectMapper> objectMappers,
-        Collection<FieldAliasMapper> aliasMappers,
-        int metadataFieldCount,
-        Analyzer defaultIndex
-    ) {
-        this(mappers, objectMappers, aliasMappers, metadataFieldCount, defaultIndex, null, false);
-    }
-
-    MappingLookup(
-        Collection<FieldMapper> mappers,
-        Collection<ObjectMapper> objectMappers,
-        Collection<FieldAliasMapper> aliasMappers,
-        int metadataFieldCount,
-        Analyzer defaultIndex,
-        DynamicPropertyFieldTypeResolver dynamicPropertyFieldTypes,
-        boolean rootDisableObjects
-    ) {
-        Map<String, Mapper> fieldMappers = new HashMap<>();
-        Map<String, Analyzer> indexAnalyzers = new HashMap<>();
-        Map<String, ObjectMapper> objects = new HashMap<>();
-
-        boolean hasNested = false;
-        for (ObjectMapper mapper : objectMappers) {
-            if (objects.put(mapper.fullPath(), mapper) != null) {
-                throw new MapperParsingException("Object mapper [" + mapper.fullPath() + "] is defined more than once");
-            }
-            if (mapper.nested().isNested()) {
-                hasNested = true;
-            }
-        }
-        this.hasNested = hasNested;
-        this.rootDisableObjects = rootDisableObjects;
-
-        for (FieldMapper mapper : mappers) {
-            if (objects.containsKey(mapper.name())) {
-                throw new MapperParsingException("Field [" + mapper.name() + "] is defined both as an object and a field");
-            }
-            if (fieldMappers.put(mapper.name(), mapper) != null) {
-                throw new MapperParsingException("Field [" + mapper.name() + "] is defined more than once");
-            }
-            MappedFieldType fieldType = mapper.fieldType();
-            put(indexAnalyzers, fieldType.name(), fieldType.indexAnalyzer(), defaultIndex);
-        }
-        this.metadataFieldCount = metadataFieldCount;
-
-        for (FieldAliasMapper aliasMapper : aliasMappers) {
-            if (objects.containsKey(aliasMapper.name())) {
-                throw new MapperParsingException("Alias [" + aliasMapper.name() + "] is defined both as an object and an alias");
-            }
-            if (fieldMappers.put(aliasMapper.name(), aliasMapper) != null) {
-                throw new MapperParsingException("Alias [" + aliasMapper.name() + "] is defined both as an alias and a concrete field");
-            }
-        }
-
-        this.fieldTypeLookup = new FieldTypeLookup(mappers, aliasMappers, dynamicPropertyFieldTypes);
-
-        this.fieldMappers = Collections.unmodifiableMap(fieldMappers);
-        this.indexAnalyzer = new FieldNameAnalyzer(indexAnalyzers);
-        this.objectMappers = Collections.unmodifiableMap(objects);
-    }
-
-    /**
-     * Returns the leaf mapper associated with this field name. Note that the returned mapper
-     * could be either a concrete {@link FieldMapper}, or a {@link FieldAliasMapper}.
-     * <p>
-     * To access a field's type information, {@link MapperService#fieldType} should be used instead.
-     */
-    public Mapper getMapper(String field) {
-        return fieldMappers.get(field);
-    }
-
-    FieldTypeLookup fieldTypes() {
-        return fieldTypeLookup;
-    }
-
-    /**
      * A smart analyzer used for indexing that takes into account specific analyzers configured
-     * per {@link FieldMapper}.
-     */
-    public Analyzer indexAnalyzer() {
-        return this.indexAnalyzer;
-    }
-
-    @Override
-    public Iterator<Mapper> iterator() {
-        return fieldMappers.values().iterator();
-    }
-
-    public void checkLimits(IndexSettings settings) {
-        checkFieldLimit(settings.getMappingTotalFieldsLimit());
-        checkObjectDepthLimit(settings.getMappingDepthLimit());
-        checkFieldNameLengthLimit(settings.getMappingFieldNameLengthLimit());
-        checkNestedLimit(settings.getMappingNestedFieldsLimit());
-    }
-
-    private void checkFieldLimit(long limit) {
-        if (fieldMappers.size() + objectMappers.size() - metadataFieldCount > limit) {
-            throw new IllegalArgumentException("Limit of total fields [" + limit + "] has been exceeded");
-        }
-    }
-
-    private void checkObjectDepthLimit(long limit) {
-        for (String objectPath : objectMappers.keySet()) {
-            int numDots = 0;
-            for (int i = 0; i < objectPath.length(); ++i) {
-                if (objectPath.charAt(i) == '.') {
-                    numDots += 1;
-                }
-            }
-            final int depth = numDots + 2;
-            if (depth > limit) {
-                throw new IllegalArgumentException(
-                    "Limit of mapping depth [" + limit + "] has been exceeded due to object field [" + objectPath + "]"
-                );
-            }
-        }
-    }
-
-    private void checkFieldNameLengthLimit(long limit) {
-        Stream.of(objectMappers.values().stream(), fieldMappers.values().stream())
-            .reduce(Stream::concat)
-            .orElseGet(Stream::empty)
-            .forEach(mapper -> {
-                String name = mapper.simpleName();
-                if (name.length() > limit) {
-                    throw new IllegalArgumentException("Field name [" + name + "] is longer than the limit of [" + limit + "] characters");
-                }
-            });
-    }
-
-    private void checkNestedLimit(long limit) {
-        long actualNestedFields = 0;
-        for (ObjectMapper objectMapper : objectMappers.values()) {
-            if (objectMapper.nested().isNested()) {
-                actualNestedFields++;
-            }
-        }
-        if (actualNestedFields > limit) {
-            throw new IllegalArgumentException("Limit of nested fields [" + limit + "] has been exceeded");
-        }
-    }
-
-    public boolean hasNested() {
-        return hasNested;
-    }
-
-    public Map<String, ObjectMapper> objectMappers() {
-        return objectMappers;
-    }
-
-    public boolean isMultiField(String field) {
-        String sourceParent = parentObject(field);
-        if (sourceParent == null || !fieldMappers.containsKey(sourceParent)) {
-            return false;
-        }
-        // When disable_objects is true, dotted fields are independent flat fields, not multi-fields.
-        // Check if the root or any ancestor ObjectMapper has disable_objects enabled.
-        if (rootDisableObjects) {
-            return false;
-        }
-        for (String ancestor = parentObject(field); ancestor != null; ancestor = parentObject(ancestor)) {
+        int metadataFieldCount,
             ObjectMapper objectMapper = objectMappers.get(ancestor);
+                throw new MapperParsingException("Field [" + mapper.name() + "] is defined both as an object and a field");
+ * GitHub history for details.
+    public void checkLimits(IndexSettings settings) {
+import java.util.stream.Stream;
+        Map<String, Mapper> fieldMappers = new HashMap<>();
+    public MappingLookup(
+            throw new IllegalArgumentException("Limit of total fields [" + limit + "] has been exceeded");
+    public static MappingLookup fromMapping(Mapping mapping, Analyzer defaultIndex) {
             if (objectMapper != null && objectMapper.disableObjects()) {
-                return false;
+            if (fieldMappers.put(aliasMapper.name(), aliasMapper) != null) {
+    public Analyzer indexAnalyzer() {
+     * <p>
+            }
+            }
+    }
+            newFieldMappers,
+            mapping.metadataMappers.length,
+    private final Map<String, ObjectMapper> objectMappers;
+        }
+        Collection<FieldAliasMapper> aliasMappers,
+        } else if (mapper instanceof ObjectMapper) {
+    public Map<String, ObjectMapper> objectMappers() {
+ */
+            .orElseGet(Stream::empty)
+    private static String parentObject(String field) {
+            mapping.root().disableObjects()
+     * Builds a lookup from a mapping, resolving dynamic_property patterns for {@link MappedFieldType} when needed.
+    }
+        if (lastDot == -1) {
+            if (objects.containsKey(aliasMapper.name())) {
+import java.util.Collections;
+    private void checkNestedLimit(long limit) {
+        this(mappers, objectMappers, aliasMappers, metadataFieldCount, defaultIndex, null, false);
+    public boolean containsTimeStampField() {
+        }
+            }
+    private void checkFieldNameLengthLimit(long limit) {
+    }
             }
         }
-        return true;
-    }
-
-    public boolean isObjectField(String field) {
-        return objectMappers.containsKey(field);
-    }
-
-    public String getNestedScope(String path) {
-        for (String parentPath = parentObject(path); parentPath != null; parentPath = parentObject(parentPath)) {
-            ObjectMapper objectMapper = objectMappers.get(parentPath);
-            if (objectMapper != null && objectMapper.nested().isNested()) {
-                return parentPath;
             }
-        }
-        return null;
-    }
-
-    /**
-     * If this index contains @timestamp field with Date type, it will return true
      * @return true or false based on above condition
      */
-    public boolean containsTimeStampField() {
-        MappedFieldType timeSeriesFieldType = this.fieldTypeLookup.get(DataStream.TIMESERIES_FIELDNAME);
-        return timeSeriesFieldType != null && timeSeriesFieldType.unwrap() instanceof DateFieldMapper.DateFieldType; // has to be Date field
-                                                                                                                     // type
+                    numDots += 1;
+        for (MetadataFieldMapper metadataMapper : mapping.metadataMappers) {
+    @Override
+public final class MappingLookup implements Iterable<Mapper> {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        for (String parentPath = parentObject(path); parentPath != null; parentPath = parentObject(parentPath)) {
+        long actualNestedFields = 0;
+        boolean hasNested = false;
+            }
+    ) {
+            if (objects.containsKey(mapper.name())) {
+                return parentPath;
+            fieldMappers.add((FieldMapper) mapper);
+        return fromMapping(mapping, defaultIndex, null);
+            .reduce(Stream::concat)
+    FieldTypeLookup fieldTypes() {
+ */
+            MappedFieldType fieldType = mapper.fieldType();
     }
-
-    private static String parentObject(String field) {
+        Collection<FieldAliasMapper> aliasMappers,
+            }
+        for (ObjectMapper mapper : objectMappers) {
+                                                                                                                     // type
+ * the Apache License, Version 2.0 (the "License"); you may
+        // When disable_objects is true, dotted fields are independent flat fields, not multi-fields.
+        }
+        }
+                );
+        return fieldMappers.values().iterator();
+    MappingLookup(
+            value = defaultValue;
+        return this.indexAnalyzer;
+        MappedFieldType timeSeriesFieldType = this.fieldTypeLookup.get(DataStream.TIMESERIES_FIELDNAME);
+        return fieldTypeLookup;
+    /** Full field name to mapper */
+    }
+     * Fields resolved only via dynamic_property patterns are not added to the serialized mapping; see
+        checkFieldNameLengthLimit(settings.getMappingFieldNameLengthLimit());
+/*
+            ObjectMapper objectMapper = objectMappers.get(parentPath);
+        List<ObjectMapper> newObjectMappers = new ArrayList<>();
+        if (fieldMappers.size() + objectMappers.size() - metadataFieldCount > limit) {
+ *
+ * Licensed to Elasticsearch under one or more contributor
+    }
+        for (FieldMapper mapper : mappers) {
+import org.opensearch.index.IndexSettings;
+        }
         int lastDot = field.lastIndexOf('.');
-        if (lastDot == -1) {
-            return null;
+ * You may obtain a copy of the License at
+    private void checkFieldLimit(long limit) {
+        this.indexAnalyzer = new FieldNameAnalyzer(indexAnalyzers);
+import org.opensearch.cluster.metadata.DataStream;
+    public String getNestedScope(String path) {
+    private final boolean hasNested;
+        // Check if the root or any ancestor ObjectMapper has disable_objects enabled.
+import java.util.Map;
+     */
+ */
+            if (fieldMappers.put(mapper.name(), mapper) != null) {
+@PublicApi(since = "1.0.0")
+        return hasNested;
+    /**
+import java.util.Iterator;
+ * specific language governing permissions and limitations
+    }
+                throw new IllegalArgumentException(
+        }
+    private final int metadataFieldCount;
+        if (mapper instanceof RootObjectMapper) {
+    public static MappingLookup fromMapping(Mapping mapping, Analyzer defaultIndex, DocumentMapperParser documentMapperParser) {
+        for (Mapper child : mapper) {
+            if (objectMapper != null && objectMapper.nested().isNested()) {
+import org.opensearch.index.analysis.FieldNameAnalyzer;
+        Map<String, Analyzer> indexAnalyzers = new HashMap<>();
         }
         return field.substring(0, lastDot);
+        boolean rootDisableObjects
+        }
+     */
+            throw new IllegalStateException("Unrecognized mapper type [" + mapper.getClass().getSimpleName() + "].");
+    private final boolean rootDisableObjects;
+        Mapper mapper,
+    private final FieldNameAnalyzer indexAnalyzer;
+            for (int i = 0; i < objectPath.length(); ++i) {
+/*
+        return true;
+     * To access a field's type information, {@link MapperService#fieldType} should be used instead.
+     * {@link DynamicProperty} for implications on hooks tied to mapping updates.
+        if (value == null) {
+        for (FieldAliasMapper aliasMapper : aliasMappers) {
     }
+     * per {@link FieldMapper}.
+ * not use this file except in compliance with the License.
+    private final FieldTypeLookup fieldTypeLookup;
+        Collection<ObjectMapper> objectMappers,
+        Map<String, ObjectMapper> objects = new HashMap<>();
+                throw new MapperParsingException("Object mapper [" + mapper.fullPath() + "] is defined more than once");
+                throw new MapperParsingException("Alias [" + aliasMapper.name() + "] is defined both as an object and an alias");
+    }
+        return objectMappers.containsKey(field);
+    }
+        DynamicPropertyFieldTypeResolver dynamicResolver = null;
+    }
+            .forEach(mapper -> {
+            dynamicResolver,
+                actualNestedFields++;
+        return fieldMappers.get(field);
+ * @opensearch.api
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.annotation.PublicApi;
+    public boolean isObjectField(String field) {
+/**
+                }
+package org.opensearch.index.mapper;
+        return timeSeriesFieldType != null && timeSeriesFieldType.unwrap() instanceof DateFieldMapper.DateFieldType; // has to be Date field
+        int metadataFieldCount,
+ * ownership. Elasticsearch licenses this file to you under
+ * this work for additional information regarding copyright
+            }
+ * software distributed under the License is distributed on an
+    }
+    private final Map<String, Mapper> fieldMappers;
+        Collection<ObjectMapper> objectMappers,
+    }
+import java.util.Collection;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+            int numDots = 0;
+ *
+    }
+        Collection<FieldMapper> mappers,
 }
+ * KIND, either express or implied.  See the License for the
+    public Iterator<Mapper> iterator() {
+import java.util.List;
+        List<FieldMapper> newFieldMappers = new ArrayList<>();
+        collect(mapping.root, newObjectMappers, newFieldMappers, newFieldAliasMappers);
+    private void checkObjectDepthLimit(long limit) {
+        if (actualNestedFields > limit) {
+    public boolean isMultiField(String field) {
+        }
+            dynamicResolver = new DynamicPropertyFieldTypeResolver(mapping.root(), documentMapperParser);
+     * If this index contains @timestamp field with Date type, it will return true
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+ * compatible open source license.
+            throw new IllegalArgumentException("Limit of nested fields [" + limit + "] has been exceeded");
+            fieldAliasMappers.add((FieldAliasMapper) mapper);
+import java.util.HashMap;
+        analyzers.put(key, value);
+    public boolean hasNested() {
+    ) {
+            }
+        if (documentMapperParser != null && mapping.root().dynamicProperties().length > 0) {
+    }
+                throw new MapperParsingException("Field [" + mapper.name() + "] is defined more than once");
+            }
+        } else if (mapper instanceof FieldMapper) {
+    /**
+        if (sourceParent == null || !fieldMappers.containsKey(sourceParent)) {
+        Collection<FieldMapper> fieldMappers,
+        } else {
+            });
+        Collection<FieldAliasMapper> fieldAliasMappers
+    ) {
+            // root mapper isn't really an object mapper
+                    "Limit of mapping depth [" + limit + "] has been exceeded due to object field [" + objectPath + "]"
+        }
+        for (ObjectMapper objectMapper : objectMappers.values()) {
+            return false;
+                if (objectPath.charAt(i) == '.') {
+            if (depth > limit) {
+        checkObjectDepthLimit(settings.getMappingDepthLimit());
+        }
+        }
+            collect(child, objectMappers, fieldMappers, fieldAliasMappers);
+     * could be either a concrete {@link FieldMapper}, or a {@link FieldAliasMapper}.
+        return null;
+        for (String ancestor = parentObject(field); ancestor != null; ancestor = parentObject(ancestor)) {
+    }
+    }
+            objectMappers.add((ObjectMapper) mapper);
+            final int depth = numDots + 2;
+        Stream.of(objectMappers.values().stream(), fieldMappers.values().stream())
+        this.metadataFieldCount = metadataFieldCount;
+ * under the License.
+        }
+        if (rootDisableObjects) {
+        checkNestedLimit(settings.getMappingNestedFieldsLimit());
+        Collection<FieldMapper> mappers,
+    /**
+/*
+    /**
+        Analyzer defaultIndex,
+    }
+                }
+                hasNested = true;
+            if (objectMapper.nested().isNested()) {
+        this.objectMappers = Collections.unmodifiableMap(objects);
+            }
+                return false;
+            defaultIndex,
+ * Unless required by applicable law or agreed to in writing,
+        );
+        this.fieldTypeLookup = new FieldTypeLookup(mappers, aliasMappers, dynamicPropertyFieldTypes);
+            if (mapper.nested().isNested()) {
+            if (objects.put(mapper.fullPath(), mapper) != null) {
+        }
+        this.rootDisableObjects = rootDisableObjects;
+        DynamicPropertyFieldTypeResolver dynamicPropertyFieldTypes,
+            return null;
+        return new MappingLookup(
+     * Returns the leaf mapper associated with this field name. Note that the returned mapper
+            if (metadataMapper != null) {
+        List<FieldAliasMapper> newFieldAliasMappers = new ArrayList<>();
+    private static void collect(
+ * license agreements. See the NOTICE file distributed with
+                String name = mapper.simpleName();
+        for (String objectPath : objectMappers.keySet()) {
+    }
+            }
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        Collection<ObjectMapper> objectMappers,
+            return false;
+    private static void put(Map<String, Analyzer> analyzers, String key, Analyzer value, Analyzer defaultValue) {
+        Analyzer defaultIndex
+    }
+        checkFieldLimit(settings.getMappingTotalFieldsLimit());
+            put(indexAnalyzers, fieldType.name(), fieldType.indexAnalyzer(), defaultIndex);
+     */
+ *
+        } else if (mapper instanceof FieldAliasMapper) {
+        String sourceParent = parentObject(field);
+                    throw new IllegalArgumentException("Field name [" + name + "] is longer than the limit of [" + limit + "] characters");

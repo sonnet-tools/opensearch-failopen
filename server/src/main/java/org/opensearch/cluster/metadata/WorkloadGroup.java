@@ -1,418 +1,368 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.cluster.metadata;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.AbstractDiffable;
-import org.opensearch.cluster.Diff;
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.wlm.MutableWorkloadGroupFragment;
-import org.opensearch.wlm.MutableWorkloadGroupFragment.ResiliencyMode;
-import org.opensearch.wlm.ResourceType;
-import org.opensearch.wlm.WorkloadGroupThrottleSettings;
-import org.joda.time.Instant;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-
-/**
- * Class to define the WorkloadGroup schema
- * {
- *              "_id": "fafjafjkaf9ag8a9ga9g7ag0aagaga",
- *              "resource_limits": {
- *                  "memory": 0.4,
- *                  "cpu": 0.2
- *              },
- *              "resiliency_mode": "enforced",
- *              "name": "analytics",
- *              "updated_at": 4513232415
- * }
- */
-@PublicApi(since = "2.18.0")
-public class WorkloadGroup extends AbstractDiffable<WorkloadGroup> implements ToXContentObject {
-
-    private static final Logger logger = LogManager.getLogger(WorkloadGroup.class);
-
-    public static final String _ID_STRING = "_id";
-    public static final String NAME_STRING = "name";
-    public static final String UPDATED_AT_STRING = "updated_at";
-    private static final int MAX_CHARS_ALLOWED_IN_NAME = 50;
-    private final String name;
-    private final String _id;
-    // It is an epoch in millis
-    private final long updatedAtInMillis;
-    private final MutableWorkloadGroupFragment mutableWorkloadGroupFragment;
-
-    public WorkloadGroup(String name, MutableWorkloadGroupFragment mutableWorkloadGroupFragment) {
-        this(name, UUIDs.randomBase64UUID(), mutableWorkloadGroupFragment, Instant.now().getMillis());
+                } else if (token == XContentParser.Token.START_OBJECT) {
     }
-
-    public WorkloadGroup(String name, String _id, MutableWorkloadGroupFragment mutableWorkloadGroupFragment, long updatedAt) {
-        this(name, _id, mutableWorkloadGroupFragment, updatedAt, false);
-    }
-
-    private WorkloadGroup(
-        String name,
-        String _id,
-        MutableWorkloadGroupFragment mutableWorkloadGroupFragment,
-        long updatedAt,
-        boolean deserializing
-    ) {
-        Objects.requireNonNull(name, "WorkloadGroup.name can't be null");
-        Objects.requireNonNull(mutableWorkloadGroupFragment.getResourceLimits(), "WorkloadGroup.resourceLimits can't be null");
-        Objects.requireNonNull(mutableWorkloadGroupFragment.getResiliencyMode(), "WorkloadGroup.resiliencyMode can't be null");
-        Objects.requireNonNull(_id, "WorkloadGroup._id can't be null");
-        validateName(name);
-
-        if (mutableWorkloadGroupFragment.getResourceLimits().isEmpty()) {
-            throw new IllegalArgumentException("WorkloadGroup.resourceLimits should at least have 1 resource limit");
-        }
-        if (updatedAt <= 0L) {
-            throw new IllegalArgumentException("WorkloadGroup.updatedAtInMillis is not a valid epoch");
-        }
-
-        // Drop null clear-markers; they only mean something during an update merge.
-        Settings normalizedSettings = stripClearMarkers(mutableWorkloadGroupFragment.getSettings());
-        Settings normalizedThrottling = stripClearMarkers(mutableWorkloadGroupFragment.getThrottling());
-        if (normalizedSettings.equals(mutableWorkloadGroupFragment.getSettings()) == false
-            || normalizedThrottling.equals(mutableWorkloadGroupFragment.getThrottling()) == false) {
-            // Skip re-validation here; validateMergedConfig below decides strict vs. lenient.
-            mutableWorkloadGroupFragment = new MutableWorkloadGroupFragment(
-                mutableWorkloadGroupFragment.getResiliencyMode(),
-                mutableWorkloadGroupFragment.getResourceLimits(),
-                normalizedSettings,
-                normalizedThrottling,
-                false
-            );
-        }
-
-        // Cross-field checks. Advisory on deserialization, since throwing while applying cluster state wedges the node.
-        if (deserializing) {
-            try {
-                WorkloadGroupThrottleSettings.validateMergedConfig(mutableWorkloadGroupFragment.getThrottling());
-            } catch (IllegalArgumentException e) {
-                logger.warn(
-                    "Accepting workload group [{}] with a throttling config this node considers invalid ({}); "
-                        + "throttling will not be enforced for it here",
-                    name,
-                    e.getMessage()
-                );
-            }
         } else {
-            WorkloadGroupThrottleSettings.validateMergedConfig(mutableWorkloadGroupFragment.getThrottling());
-        }
-
-        this.name = name;
-        this._id = _id;
-        this.mutableWorkloadGroupFragment = mutableWorkloadGroupFragment;
-        this.updatedAtInMillis = updatedAt;
+            this.mutableWorkloadGroupFragment = mutableWorkloadGroupFragment;
+         * @param deserializing {@code true} on the deserialization path (wire and on-disk gateway read), where merged
+                false
+ * }
+        );
+     * with 3.6.x clients and will be removed in a future major version.
+    public String get_id() {
+                    }
     }
-
-    public static boolean isValid(long updatedAt) {
-        long minValidTimestamp = Instant.ofEpochMilli(0L).getMillis();
-
-        // Use Instant.now() to get the current time in seconds since epoch
-        long currentSeconds = Instant.now().getMillis();
-
-        // Check if the timestamp is within a reasonable range
-        return minValidTimestamp <= updatedAt && updatedAt <= currentSeconds;
     }
-
-    public WorkloadGroup(StreamInput in) throws IOException {
-        this(in.readString(), in.readString(), new MutableWorkloadGroupFragment(in), in.readLong(), true);
-    }
-
-    public static WorkloadGroup updateExistingWorkloadGroup(
-        WorkloadGroup existingGroup,
-        MutableWorkloadGroupFragment mutableWorkloadGroupFragment
+                normalizedThrottling,
+        public static Builder fromXContent(XContentParser parser) throws IOException {
+                }
+ *                  "memory": 0.4,
+        validateName(name);
+         *                      throttle validation is advisory (accept-with-warning) so a config a newer peer wrote cannot
     ) {
-        final Map<ResourceType, Double> updatedResourceLimits = new HashMap<>(existingGroup.getResourceLimits());
-        final Map<ResourceType, Double> mutableFragmentResourceLimits = mutableWorkloadGroupFragment.getResourceLimits();
-        if (mutableFragmentResourceLimits != null && !mutableFragmentResourceLimits.isEmpty()) {
+    public static class Builder {
+        final ResiliencyMode mode = Optional.ofNullable(mutableWorkloadGroupFragment.getResiliencyMode())
+            Instant.now().getMillis()
+    }
+     * @return the merged settings
+     * @param existing the currently stored settings
+        }
+                    }
+import org.opensearch.core.common.io.stream.StreamInput;
+            }
+     * null sent on create where there is nothing to clear, are dropped so stored config never contains a null value.
+            if (token != XContentParser.Token.START_OBJECT) {
+     */
+        // Check if the timestamp is within a reasonable range
+        }
+            throw new IllegalArgumentException("WorkloadGroup.updatedAtInMillis is not a valid epoch");
+        WorkloadGroup existingGroup,
+                builder.remove(key);
+                    } else {
+ * The OpenSearch Contributors require contributions made to
+    public long getUpdatedAtInMillis() {
+                );
+import org.opensearch.cluster.Diff;
+            return this;
+                    e.getMessage()
+        return new Builder();
+                    "Accepting workload group [{}] with a throttling config this node considers invalid ({}); "
+            new MutableWorkloadGroupFragment(mode, updatedResourceLimits, updatedSettings, updatedThrottling),
+        for (String key : s.keySet()) {
+        this.name = name;
+                    } else if (fieldName.equals(UPDATED_AT_STRING)) {
             updatedResourceLimits.putAll(mutableFragmentResourceLimits);
         }
-        final ResiliencyMode mode = Optional.ofNullable(mutableWorkloadGroupFragment.getResiliencyMode())
-            .orElse(existingGroup.getResiliencyMode());
-        final Settings updatedSettings = mergeSettings(existingGroup.getSettings(), mutableWorkloadGroupFragment.getSettings());
-        final Settings updatedThrottling = mergeSettings(
-            existingGroup.getMutableWorkloadGroupFragment().getThrottling(),
-            mutableWorkloadGroupFragment.getThrottling()
-        );
-        return new WorkloadGroup(
-            existingGroup.getName(),
-            existingGroup.get_id(),
-            new MutableWorkloadGroupFragment(mode, updatedResourceLimits, updatedSettings, updatedThrottling),
-            Instant.now().getMillis()
-        );
-    }
-
-    /**
-     * Drops null-valued keys from a settings bag before storage. A null value is the API gesture for "clear this key",
-     * which only carries meaning during an update merge (which consumes it); any that reach a persisted group, e.g. a
-     * null sent on create where there is nothing to clear, are dropped so stored config never contains a null value.
-     *
-     * @param s the settings to normalize (may be null)
-     * @return the settings with all null-valued keys removed, or empty if {@code s} is null
-     */
-    private static Settings stripClearMarkers(Settings s) {
-        if (s == null) {
-            return Settings.EMPTY;
-        }
-        Settings.Builder builder = Settings.builder();
-        for (String key : s.keySet()) {
+        Settings normalizedThrottling = stripClearMarkers(mutableWorkloadGroupFragment.getThrottling());
+            return new WorkloadGroup(name, _id, mutableWorkloadGroupFragment, updatedAt, deserializing);
+            );
+        private String _id;
             String value = s.get(key);
-            if (value != null) {
-                builder.put(key, value);
-            }
-        }
-        return builder.build();
+     * @param s the settings to normalize (may be null)
+        return getMutableWorkloadGroupFragment().getResiliencyMode();
+        String name,
+ */
+        return new WorkloadGroup(
+    public static final String NAME_STRING = "name";
+         */
+     * which only carries meaning during an update merge (which consumes it); any that reach a persisted group, e.g. a
     }
-
-    /**
-     * Merges an incoming settings bag from an update request onto the existing one:
-     * a null incoming bag (field absent) keeps existing, an empty incoming bag clears all, and a non-empty bag overlays
-     * its values with a per-key null value clearing that key.
-     *
-     * @param existing the currently stored settings
-     * @param incoming the settings from the update request (may be null)
-     * @return the merged settings
+    public int hashCode() {
+            existingGroup.get_id(),
+        return _id;
+        }
+            return this;
+        String _id,
      */
-    private static Settings mergeSettings(Settings existing, Settings incoming) {
-        if (incoming == null) {
-            return Settings.builder().put(existing).build();
-        }
-        if (incoming.isEmpty()) {
-            return Settings.EMPTY;
-        }
-        Settings.Builder builder = Settings.builder().put(existing);
-        for (String key : incoming.keySet()) {
-            String value = incoming.get(key);
-            if (value == null) {
-                builder.remove(key);
-            } else {
-                builder.put(key, value);
-            }
-        }
-        return builder.build();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(name);
-        out.writeString(_id);
-        mutableWorkloadGroupFragment.writeTo(out);
-        out.writeLong(updatedAtInMillis);
-    }
-
+        this(name, _id, mutableWorkloadGroupFragment, updatedAt, false);
+        if (o == null || getClass() != o.getClass()) return false;
+     * @return the settings with all null-valued keys removed, or empty if {@code s} is null
     public static void validateName(String name) {
-        if (name == null || name.isEmpty() || name.length() > MAX_CHARS_ALLOWED_IN_NAME) {
-            throw new IllegalArgumentException("WorkloadGroup.name shouldn't be null, empty or more than 50 chars long");
-        }
-    }
-
-    @Override
     public XContentBuilder toXContent(final XContentBuilder builder, final Params params) throws IOException {
-        builder.startObject();
-        builder.field(_ID_STRING, _id);
-        builder.field(NAME_STRING, name);
-        for (String fieldName : MutableWorkloadGroupFragment.acceptedFieldNames) {
-            mutableWorkloadGroupFragment.writeField(builder, fieldName);
-        }
-        builder.field(UPDATED_AT_STRING, updatedAtInMillis);
-        builder.endObject();
-        return builder;
+            MutableWorkloadGroupFragment mutableWorkloadGroupFragment1 = new MutableWorkloadGroupFragment();
+public class WorkloadGroup extends AbstractDiffable<WorkloadGroup> implements ToXContentObject {
+    @Deprecated
     }
-
+import org.opensearch.core.xcontent.XContentBuilder;
+    }
+    public static final String _ID_STRING = "_id";
+        // Drop null clear-markers; they only mean something during an update merge.
+        public Builder mutableWorkloadGroupFragment(MutableWorkloadGroupFragment mutableWorkloadGroupFragment) {
+            && Objects.equals(_id, that._id)
+    public MutableWorkloadGroupFragment getMutableWorkloadGroupFragment() {
+     * @deprecated Use {@link #getSettings()} instead. This method exists only for binary compatibility
+        private String name;
+        }
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.cluster.AbstractDiffable;
+import org.opensearch.wlm.ResourceType;
+            } else {
+ *
+    }
+        /**
+                } else if (token.isValue()) {
     /**
-     * Deserializes a workload group from XContent. This is the on-disk gateway read of persisted cluster state at startup
-     * ({@code WorkloadGroupMetadata#context()} == ALL_CONTEXTS), so it builds leniently. The create/update API path parses
+        MutableWorkloadGroupFragment mutableWorkloadGroupFragment
+    }
+                logger.warn(
+     */
+            || normalizedThrottling.equals(mutableWorkloadGroupFragment.getThrottling()) == false) {
+    /**
+            return builder.mutableWorkloadGroupFragment(mutableWorkloadGroupFragment1);
+        // Use Instant.now() to get the current time in seconds since epoch
+    }
+    }
+    }
+                    if (!MutableWorkloadGroupFragment.shouldParse(fieldName)) {
      * via {@link Builder#fromXContent} and calls the strict {@link Builder#build()}, so it is unaffected.
      */
-    public static WorkloadGroup fromXContent(final XContentParser parser) throws IOException {
-        return Builder.fromXContent(parser).build(true);
-    }
-
-    public static Diff<WorkloadGroup> readDiff(final StreamInput in) throws IOException {
-        return readDiffFrom(WorkloadGroup::new, in);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        WorkloadGroup that = (WorkloadGroup) o;
-        return Objects.equals(name, that.name)
-            && Objects.equals(mutableWorkloadGroupFragment, that.mutableWorkloadGroupFragment)
-            && Objects.equals(_id, that._id)
-            && updatedAtInMillis == that.updatedAtInMillis;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(name, mutableWorkloadGroupFragment, updatedAtInMillis, _id);
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public MutableWorkloadGroupFragment getMutableWorkloadGroupFragment() {
-        return mutableWorkloadGroupFragment;
-    }
-
-    public ResiliencyMode getResiliencyMode() {
-        return getMutableWorkloadGroupFragment().getResiliencyMode();
-    }
-
-    public Map<ResourceType, Double> getResourceLimits() {
-        return getMutableWorkloadGroupFragment().getResourceLimits();
-    }
-
-    @ExperimentalApi
-    public Settings getSettings() {
-        return getMutableWorkloadGroupFragment().getSettings();
-    }
-
-    /**
-     * @deprecated Use {@link #getSettings()} instead. This method exists only for binary compatibility
-     * with 3.6.x clients and will be removed in a future major version.
-     */
-    @Deprecated
-    public Map<String, String> getSearchSettings() {
-        Settings s = getSettings();
-        Map<String, String> map = new HashMap<>();
-        for (String key : s.keySet()) {
-            map.put(key, s.get(key));
+        Objects.requireNonNull(mutableWorkloadGroupFragment.getResourceLimits(), "WorkloadGroup.resourceLimits can't be null");
         }
-        return map;
-    }
-
-    public String get_id() {
-        return _id;
-    }
-
-    public long getUpdatedAtInMillis() {
-        return updatedAtInMillis;
-    }
-
-    /**
-     * builder method for the {@link WorkloadGroup}
-     * @return Builder object
-     */
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    /**
-     * Builder class for {@link WorkloadGroup}
-     */
-    @ExperimentalApi
-    public static class Builder {
-        private String name;
-        private String _id;
-        private MutableWorkloadGroupFragment mutableWorkloadGroupFragment;
-        private long updatedAt;
-
-        private Builder() {}
-
-        public static Builder fromXContent(XContentParser parser) throws IOException {
-            if (parser.currentToken() == null) { // fresh parser? move to the first token
-                parser.nextToken();
-            }
-
-            Builder builder = builder();
-
-            XContentParser.Token token = parser.currentToken();
-
-            if (token != XContentParser.Token.START_OBJECT) {
-                throw new IllegalArgumentException("Expected START_OBJECT token but found [" + parser.currentName() + "]");
-            }
-
-            String fieldName = "";
-            MutableWorkloadGroupFragment mutableWorkloadGroupFragment1 = new MutableWorkloadGroupFragment();
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                if (token == XContentParser.Token.FIELD_NAME) {
-                    fieldName = parser.currentName();
-                } else if (token.isValue()) {
-                    if (fieldName.equals(_ID_STRING)) {
-                        builder._id(parser.text());
-                    } else if (fieldName.equals(NAME_STRING)) {
-                        builder.name(parser.text());
-                    } else if (MutableWorkloadGroupFragment.shouldParse(fieldName)) {
-                        mutableWorkloadGroupFragment1.parseField(parser, fieldName);
-                    } else if (fieldName.equals(UPDATED_AT_STRING)) {
-                        builder.updatedAt(parser.longValue());
-                    } else {
-                        throw new IllegalArgumentException(fieldName + " is not a valid field in WorkloadGroup");
-                    }
-                } else if (token == XContentParser.Token.START_OBJECT) {
-                    if (!MutableWorkloadGroupFragment.shouldParse(fieldName)) {
-                        throw new IllegalArgumentException(fieldName + " is not a valid object in WorkloadGroup");
-                    }
-                    mutableWorkloadGroupFragment1.parseField(parser, fieldName);
-                } else if (token == XContentParser.Token.VALUE_NULL) {
-                    if (fieldName.equals(MutableWorkloadGroupFragment.SETTINGS_STRING)
-                        || fieldName.equals(MutableWorkloadGroupFragment.THROTTLING_STRING)) {
-                        mutableWorkloadGroupFragment1.parseField(parser, fieldName);
-                    }
-                }
-            }
-            return builder.mutableWorkloadGroupFragment(mutableWorkloadGroupFragment1);
-        }
-
-        public Builder name(String name) {
-            this.name = name;
-            return this;
-        }
-
         public Builder _id(String _id) {
+        Settings.Builder builder = Settings.builder();
+        return updatedAtInMillis;
+        }
+import org.opensearch.common.annotation.ExperimentalApi;
+    @ExperimentalApi
+        }
+        this(name, UUIDs.randomBase64UUID(), mutableWorkloadGroupFragment, Instant.now().getMillis());
+                        builder._id(parser.text());
+            WorkloadGroupThrottleSettings.validateMergedConfig(mutableWorkloadGroupFragment.getThrottling());
+                normalizedSettings,
+        }
+    public static final String UPDATED_AT_STRING = "updated_at";
+            mutableWorkloadGroupFragment.getThrottling()
+     */
+            this.name = name;
+import org.opensearch.core.common.io.stream.StreamOutput;
+import java.util.Objects;
+                throw new IllegalArgumentException("Expected START_OBJECT token but found [" + parser.currentName() + "]");
+        Settings normalizedSettings = stripClearMarkers(mutableWorkloadGroupFragment.getSettings());
+    /**
+            String value = incoming.get(key);
+                mutableWorkloadGroupFragment.getResourceLimits(),
+        final Settings updatedThrottling = mergeSettings(
+import org.opensearch.common.settings.Settings;
+        if (name == null || name.isEmpty() || name.length() > MAX_CHARS_ALLOWED_IN_NAME) {
+            if (value != null) {
+        }
             this._id = _id;
-            return this;
-        }
-
-        public Builder mutableWorkloadGroupFragment(MutableWorkloadGroupFragment mutableWorkloadGroupFragment) {
-            this.mutableWorkloadGroupFragment = mutableWorkloadGroupFragment;
-            return this;
-        }
-
-        public Builder updatedAt(long updatedAt) {
-            this.updatedAt = updatedAt;
-            return this;
-        }
-
-        public WorkloadGroup build() {
-            return build(false);
-        }
-
-        /**
-         * @param deserializing {@code true} on the deserialization path (wire and on-disk gateway read), where merged
-         *                      throttle validation is advisory (accept-with-warning) so a config a newer peer wrote cannot
-         *                      wedge this node; {@code false} on create/update, which rejects an invalid config outright.
-         */
-        public WorkloadGroup build(boolean deserializing) {
-            return new WorkloadGroup(name, _id, mutableWorkloadGroupFragment, updatedAt, deserializing);
-        }
-
-        public MutableWorkloadGroupFragment getMutableWorkloadGroupFragment() {
-            return mutableWorkloadGroupFragment;
-        }
+    private static final Logger logger = LogManager.getLogger(WorkloadGroup.class);
+            }
+    public static WorkloadGroup updateExistingWorkloadGroup(
+ */
+                        mutableWorkloadGroupFragment1.parseField(parser, fieldName);
     }
+        mutableWorkloadGroupFragment.writeTo(out);
+import org.opensearch.common.annotation.PublicApi;
+ * compatible open source license.
+    }
+        Objects.requireNonNull(name, "WorkloadGroup.name can't be null");
+     * a null incoming bag (field absent) keeps existing, an empty incoming bag clears all, and a non-empty bag overlays
+import org.opensearch.core.xcontent.ToXContentObject;
+     * its values with a per-key null value clearing that key.
+                builder.put(key, value);
+        this.updatedAtInMillis = updatedAt;
+        if (deserializing) {
+            XContentParser.Token token = parser.currentToken();
+        }
+            } catch (IllegalArgumentException e) {
+            mutableWorkloadGroupFragment.writeField(builder, fieldName);
+     *
+        Objects.requireNonNull(_id, "WorkloadGroup._id can't be null");
+    private static Settings stripClearMarkers(Settings s) {
+        for (String key : s.keySet()) {
+        if (mutableWorkloadGroupFragment.getResourceLimits().isEmpty()) {
+    }
+        private Builder() {}
+import org.opensearch.core.xcontent.XContentParser;
+            if (parser.currentToken() == null) { // fresh parser? move to the first token
+        return name;
+ *              "_id": "fafjafjkaf9ag8a9ga9g7ag0aagaga",
+ * Class to define the WorkloadGroup schema
+            mutableWorkloadGroupFragment = new MutableWorkloadGroupFragment(
+import org.apache.logging.log4j.Logger;
+            map.put(key, s.get(key));
+    @ExperimentalApi
+        if (this == o) return true;
+        public Builder name(String name) {
+            .orElse(existingGroup.getResiliencyMode());
+            throw new IllegalArgumentException("WorkloadGroup.resourceLimits should at least have 1 resource limit");
+    public static boolean isValid(long updatedAt) {
+ * {
+        return getMutableWorkloadGroupFragment().getSettings();
+        final Settings updatedSettings = mergeSettings(existingGroup.getSettings(), mutableWorkloadGroupFragment.getSettings());
+        }
+        return Objects.equals(name, that.name)
+        if (incoming.isEmpty()) {
+            return Settings.builder().put(existing).build();
+            existingGroup.getMutableWorkloadGroupFragment().getThrottling(),
+    @Override
+    @Override
+            && Objects.equals(mutableWorkloadGroupFragment, that.mutableWorkloadGroupFragment)
+                    }
+                        throw new IllegalArgumentException(fieldName + " is not a valid object in WorkloadGroup");
+        long updatedAt,
+    private final MutableWorkloadGroupFragment mutableWorkloadGroupFragment;
+ *              "resource_limits": {
+        boolean deserializing
+        return mutableWorkloadGroupFragment;
+        Map<String, String> map = new HashMap<>();
+        private long updatedAt;
+        final Map<ResourceType, Double> updatedResourceLimits = new HashMap<>(existingGroup.getResourceLimits());
+    /**
+    @Override
+            return this;
+        return map;
+     * Builder class for {@link WorkloadGroup}
+                    } else if (MutableWorkloadGroupFragment.shouldParse(fieldName)) {
+        return Objects.hash(name, mutableWorkloadGroupFragment, updatedAtInMillis, _id);
+        public WorkloadGroup build() {
+ *              "updated_at": 4513232415
+    public ResiliencyMode getResiliencyMode() {
+        }
+            return Settings.EMPTY;
+    private static Settings mergeSettings(Settings existing, Settings incoming) {
+        return builder;
+import org.apache.logging.log4j.LogManager;
+import org.opensearch.common.UUIDs;
+        for (String key : incoming.keySet()) {
+        // Cross-field checks. Advisory on deserialization, since throwing while applying cluster state wedges the node.
+        }
+                        builder.name(parser.text());
+        private MutableWorkloadGroupFragment mutableWorkloadGroupFragment;
+        }
+                        + "throttling will not be enforced for it here",
+        }
+            }
+        for (String fieldName : MutableWorkloadGroupFragment.acceptedFieldNames) {
+            && updatedAtInMillis == that.updatedAtInMillis;
+     * builder method for the {@link WorkloadGroup}
+    }
+            }
+        if (normalizedSettings.equals(mutableWorkloadGroupFragment.getSettings()) == false
+     * Merges an incoming settings bag from an update request onto the existing one:
+        Objects.requireNonNull(mutableWorkloadGroupFragment.getResiliencyMode(), "WorkloadGroup.resiliencyMode can't be null");
+    /**
+        public WorkloadGroup build(boolean deserializing) {
+/*
+                    if (fieldName.equals(MutableWorkloadGroupFragment.SETTINGS_STRING)
+    }
+     * @param incoming the settings from the update request (may be null)
+    public boolean equals(Object o) {
+            return this;
+    }
+            if (value == null) {
+                    fieldName = parser.currentName();
+        return builder.build();
+    ) {
+                mutableWorkloadGroupFragment.getResiliencyMode(),
+        return builder.build();
+                if (token == XContentParser.Token.FIELD_NAME) {
+import org.opensearch.wlm.MutableWorkloadGroupFragment;
+ *              },
+    public Map<ResourceType, Double> getResourceLimits() {
+ *                  "cpu": 0.2
+                        builder.updatedAt(parser.longValue());
+        builder.startObject();
+    public String getName() {
+                        || fieldName.equals(MutableWorkloadGroupFragment.THROTTLING_STRING)) {
+                WorkloadGroupThrottleSettings.validateMergedConfig(mutableWorkloadGroupFragment.getThrottling());
+import org.opensearch.wlm.WorkloadGroupThrottleSettings;
+        }
+    private static final int MAX_CHARS_ALLOWED_IN_NAME = 50;
+    public static Diff<WorkloadGroup> readDiff(final StreamInput in) throws IOException {
+                        mutableWorkloadGroupFragment1.parseField(parser, fieldName);
+                builder.put(key, value);
+        return readDiffFrom(WorkloadGroup::new, in);
+            existingGroup.getName(),
+     * Drops null-valued keys from a settings bag before storage. A null value is the API gesture for "clear this key",
+        return getMutableWorkloadGroupFragment().getResourceLimits();
+            }
+        }
+            // Skip re-validation here; validateMergedConfig below decides strict vs. lenient.
+        Settings.Builder builder = Settings.builder().put(existing);
+package org.opensearch.cluster.metadata;
+    public WorkloadGroup(StreamInput in) throws IOException {
+        final Map<ResourceType, Double> mutableFragmentResourceLimits = mutableWorkloadGroupFragment.getResourceLimits();
+    }
+            String fieldName = "";
+        }
+        );
+        builder.field(NAME_STRING, name);
+            }
+    }
+        return minValidTimestamp <= updatedAt && updatedAt <= currentSeconds;
+            throw new IllegalArgumentException("WorkloadGroup.name shouldn't be null, empty or more than 50 chars long");
+        public MutableWorkloadGroupFragment getMutableWorkloadGroupFragment() {
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+    public Settings getSettings() {
+import org.opensearch.wlm.MutableWorkloadGroupFragment.ResiliencyMode;
+    private final long updatedAtInMillis;
+@PublicApi(since = "2.18.0")
+    }
+     * ({@code WorkloadGroupMetadata#context()} == ALL_CONTEXTS), so it builds leniently. The create/update API path parses
+    public WorkloadGroup(String name, MutableWorkloadGroupFragment mutableWorkloadGroupFragment) {
+                    } else if (fieldName.equals(NAME_STRING)) {
+     *
+        long currentSeconds = Instant.now().getMillis();
+        }
+    /**
+    public static WorkloadGroup fromXContent(final XContentParser parser) throws IOException {
+     * Deserializes a workload group from XContent. This is the on-disk gateway read of persisted cluster state at startup
+        return Builder.fromXContent(parser).build(true);
+import java.util.HashMap;
 }
+     */
+/**
+                } else if (token == XContentParser.Token.VALUE_NULL) {
+     * @return Builder object
+        }
+    public static Builder builder() {
+        public Builder updatedAt(long updatedAt) {
+            return mutableWorkloadGroupFragment;
+        Settings s = getSettings();
+import java.util.Optional;
+            return Settings.EMPTY;
+        if (s == null) {
+    public WorkloadGroup(String name, String _id, MutableWorkloadGroupFragment mutableWorkloadGroupFragment, long updatedAt) {
+        this._id = _id;
+ *              "resiliency_mode": "enforced",
+import org.joda.time.Instant;
+    }
+        MutableWorkloadGroupFragment mutableWorkloadGroupFragment,
+import java.util.Map;
+        if (incoming == null) {
+    public Map<String, String> getSearchSettings() {
+            this.updatedAt = updatedAt;
+        this(in.readString(), in.readString(), new MutableWorkloadGroupFragment(in), in.readLong(), true);
+    private final String _id;
+                        throw new IllegalArgumentException(fieldName + " is not a valid field in WorkloadGroup");
+ * this file be licensed under the Apache-2.0 license or a
+import java.io.IOException;
+                    if (fieldName.equals(_ID_STRING)) {
+    private WorkloadGroup(
+    }
+         *                      wedge this node; {@code false} on create/update, which rejects an invalid config outright.
+        if (mutableFragmentResourceLimits != null && !mutableFragmentResourceLimits.isEmpty()) {
+    private final String name;
+            try {
+ *              "name": "analytics",
+            Builder builder = builder();
+                    name,
+        out.writeLong(updatedAtInMillis);
+                    mutableWorkloadGroupFragment1.parseField(parser, fieldName);
+        out.writeString(_id);
+        this.mutableWorkloadGroupFragment = mutableWorkloadGroupFragment;
+    }
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+    // It is an epoch in millis
+            return build(false);
+    }
+        long minValidTimestamp = Instant.ofEpochMilli(0L).getMillis();
+        WorkloadGroup that = (WorkloadGroup) o;
+        builder.field(UPDATED_AT_STRING, updatedAtInMillis);
+        out.writeString(name);
+        builder.endObject();
+        builder.field(_ID_STRING, _id);
+        if (updatedAt <= 0L) {
+                parser.nextToken();

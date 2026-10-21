@@ -1,483 +1,428 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * Calculate a triple exponential weighted moving average
- *
- * @opensearch.internal
- */
-public class HoltWintersModel extends MovAvgModel {
-    public static final String NAME = "holt_winters";
-
-    private static final double DEFAULT_ALPHA = 0.3;
-    private static final double DEFAULT_BETA = 0.1;
-    private static final double DEFAULT_GAMMA = 0.3;
-    private static final int DEFAULT_PERIOD = 1;
-    private static final SeasonalityType DEFAULT_SEASONALITY_TYPE = SeasonalityType.ADDITIVE;
-    private static final boolean DEFAULT_PAD = false;
-
-    /**
-     * The seasonality type
-     *
-     * @opensearch.internal
-     */
-    public enum SeasonalityType {
-        ADDITIVE((byte) 0, "add"),
-        MULTIPLICATIVE((byte) 1, "mult");
-
-        /**
-         * Parse a string SeasonalityType into the byte enum
-         *
-         * @param text                SeasonalityType in string format (e.g. "add")
-         * @return                    SeasonalityType enum
-         */
-        @Nullable
-        public static SeasonalityType parse(String text) {
-            if (text == null) {
-                return null;
-            }
-            SeasonalityType result = null;
-            for (SeasonalityType policy : values()) {
-                if (policy.parseField.match(text, LoggingDeprecationHandler.INSTANCE)) {
-                    result = policy;
-                    break;
-                }
-            }
-            if (result == null) {
-                final List<String> validNames = new ArrayList<>();
-                for (SeasonalityType policy : values()) {
-                    validNames.add(policy.getName());
-                }
-                throw new OpenSearchParseException("failed to parse seasonality type [{}]. accepted values are [{}]", text, validNames);
-            }
-            return result;
-        }
-
-        private final byte id;
-        private final ParseField parseField;
-
-        SeasonalityType(byte id, String name) {
-            this.id = id;
-            this.parseField = new ParseField(name);
-        }
-
-        /**
-         * Serialize the SeasonalityType to the output stream
-         */
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeByte(id);
-        }
-
-        /**
-         * Deserialize the SeasonalityType from the input stream
-         *
-         * @param in  the input stream
-         * @return    SeasonalityType Enum
-         */
-        public static SeasonalityType readFrom(StreamInput in) throws IOException {
-            byte id = in.readByte();
-            for (SeasonalityType seasonalityType : values()) {
-                if (id == seasonalityType.id) {
-                    return seasonalityType;
-                }
-            }
-            throw new IllegalStateException("Unknown Seasonality Type with id [" + id + "]");
-        }
-
-        /**
-         * Return the english-formatted name of the SeasonalityType
-         *
-         * @return English representation of SeasonalityType
-         */
-        public String getName() {
-            return parseField.getPreferredName();
-        }
-    }
-
-    /**
-     * Controls smoothing of data.  Also known as "level" value.
-     * Alpha = 1 retains no memory of past values
-     * (e.g. random walk), while alpha = 0 retains infinite memory of past values (e.g.
-     * mean of the series).
-     */
-    private final double alpha;
-
-    /**
-     * Controls smoothing of trend.
-     * Beta = 1 retains no memory of past values
-     * (e.g. random walk), while alpha = 0 retains infinite memory of past values (e.g.
-     * mean of the series).
-     */
-    private final double beta;
-
-    /**
-     * Controls smoothing of seasonality.
-     * Gamma = 1 retains no memory of past values
-     * (e.g. random walk), while alpha = 0 retains infinite memory of past values (e.g.
-     * mean of the series).
-     */
-    private final double gamma;
-
-    /**
-     * Periodicity of the data
-     */
-    private final int period;
-
-    /**
-     * Whether this is a multiplicative or additive HW
-     */
-    private final SeasonalityType seasonalityType;
-
-    /**
-     * Padding is used to add a very small amount to values, so that zeroes do not interfere
-     * with multiplicative seasonality math (e.g. division by zero)
-     */
-    private final boolean pad;
-    private final double padding;
-
-    public HoltWintersModel() {
-        this(DEFAULT_ALPHA, DEFAULT_BETA, DEFAULT_GAMMA, DEFAULT_PERIOD, DEFAULT_SEASONALITY_TYPE, DEFAULT_PAD);
-    }
-
-    public HoltWintersModel(double alpha, double beta, double gamma, int period, SeasonalityType seasonalityType, boolean pad) {
-        this.alpha = alpha;
-        this.beta = beta;
-        this.gamma = gamma;
-        this.period = period;
-        this.seasonalityType = seasonalityType;
-        this.pad = pad;
-        this.padding = inferPadding();
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public HoltWintersModel(StreamInput in) throws IOException {
-        alpha = in.readDouble();
-        beta = in.readDouble();
-        gamma = in.readDouble();
-        period = in.readVInt();
-        seasonalityType = SeasonalityType.readFrom(in);
-        pad = in.readBoolean();
-        this.padding = inferPadding();
-    }
-
-    /**
-     * Only pad if we are multiplicative and padding is enabled. the padding amount is not currently user-configurable.
-     */
-    private double inferPadding() {
-        return seasonalityType.equals(SeasonalityType.MULTIPLICATIVE) && pad ? 0.0000000001 : 0;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeDouble(alpha);
-        out.writeDouble(beta);
-        out.writeDouble(gamma);
-        out.writeVInt(period);
-        seasonalityType.writeTo(out);
-        out.writeBoolean(pad);
-    }
-
-    @Override
-    public String getWriteableName() {
-        return NAME;
-    }
-
-    @Override
-    public boolean minimizeByDefault() {
-        return true;
-    }
-
-    @Override
-    public boolean canBeMinimized() {
-        return true;
-    }
-
-    @Override
-    public MovAvgModel neighboringModel() {
-        double newValue = Math.random();
-        switch ((int) (Math.random() * 3)) {
-            case 0:
-                return new HoltWintersModel(newValue, beta, gamma, period, seasonalityType, pad);
-            case 1:
-                return new HoltWintersModel(alpha, newValue, gamma, period, seasonalityType, pad);
-            case 2:
-                return new HoltWintersModel(alpha, beta, newValue, period, seasonalityType, pad);
-            default:
-                assert (false) : "Random value fell outside of range [0-2]";
-                return new HoltWintersModel(newValue, beta, gamma, period, seasonalityType, pad); // This should never technically happen...
-        }
-    }
-
-    @Override
-    public MovAvgModel clone() {
-        return new HoltWintersModel(alpha, beta, gamma, period, seasonalityType, pad);
-    }
-
-    @Override
-    public boolean hasValue(int valuesAvailable) {
-        // We need at least (period * 2) data-points (e.g. two "seasons")
-        return valuesAvailable >= period * 2;
-    }
-
-    /**
-     * Predicts the next `n` values in the series, using the smoothing model to generate new values.
-     * Unlike the other moving averages, HoltWinters has forecasting/prediction built into the algorithm.
-     * Prediction is more than simply adding the next prediction to the window and repeating.  HoltWinters
-     * will extrapolate into the future by applying the trend and seasonal information to the smoothed data.
-     *
-     * @param values            Collection of numerics to movingAvg, usually windowed
-     * @param numPredictions    Number of newly generated predictions to return
-     * @return                  Returns an array of doubles, since most smoothing methods operate on floating points
-     */
-    @Override
-    protected double[] doPredict(Collection<Double> values, int numPredictions) {
-        return next(values, numPredictions);
-    }
-
-    @Override
-    public double next(Collection<Double> values) {
-        return next(values, 1)[0];
-    }
-
-    /**
-     * Calculate a doubly exponential weighted moving average
-     *
-     * @param values Collection of values to calculate avg for
-     * @param numForecasts number of forecasts into the future to return
-     *
-     * @return       Returns a Double containing the moving avg for the window
-     */
-    public double[] next(Collection<Double> values, int numForecasts) {
-        return MovingFunctions.holtWintersForecast(
-            values.stream().mapToDouble(Double::doubleValue).toArray(),
-            alpha,
-            beta,
-            gamma,
-            period,
-            padding,
-            seasonalityType.equals(SeasonalityType.MULTIPLICATIVE),
-            numForecasts
-        );
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field(MovAvgPipelineAggregationBuilder.MODEL.getPreferredName(), NAME);
-        builder.startObject(MovAvgPipelineAggregationBuilder.SETTINGS.getPreferredName());
-        builder.field("alpha", alpha);
-        builder.field("beta", beta);
-        builder.field("gamma", gamma);
-        builder.field("period", period);
-        builder.field("pad", pad);
         builder.field("type", seasonalityType.getName());
-        builder.endObject();
-        return builder;
-    }
-
-    public static final AbstractModelParser PARSER = new AbstractModelParser() {
-        @Override
-        public MovAvgModel parse(@Nullable Map<String, Object> settings, String pipelineName, int windowSize) throws ParseException {
-
-            double alpha = parseDoubleParam(settings, "alpha", DEFAULT_ALPHA);
-            double beta = parseDoubleParam(settings, "beta", DEFAULT_BETA);
-            double gamma = parseDoubleParam(settings, "gamma", DEFAULT_GAMMA);
-            int period = parseIntegerParam(settings, "period", DEFAULT_PERIOD);
-
-            SeasonalityType seasonalityType = DEFAULT_SEASONALITY_TYPE;
-
-            if (settings != null) {
-                Object value = settings.get("type");
-                if (value != null) {
-                    if (value instanceof String) {
-                        seasonalityType = SeasonalityType.parse((String) value);
-                        settings.remove("type");
-                    } else {
-                        throw new ParseException(
-                            "Parameter [type] must be a String, type `" + value.getClass().getSimpleName() + "` provided instead",
-                            0
-                        );
-                    }
-                }
-            }
-
-            boolean pad = parseBoolParam(settings, "pad", seasonalityType.equals(SeasonalityType.MULTIPLICATIVE));
-
-            checkUnrecognizedParams(settings);
-            return new HoltWintersModel(alpha, beta, gamma, period, seasonalityType, pad);
+                return new HoltWintersModel(newValue, beta, gamma, period, seasonalityType, pad); // This should never technically happen...
+ * KIND, either express or implied.  See the License for the
+            builder.field("alpha", alpha);
+import org.opensearch.core.ParseField;
+    @Override
+     * Only pad if we are multiplicative and padding is enabled. the padding amount is not currently user-configurable.
         }
-    };
-
-    /**
-     * If the model is a HoltWinters, we need to ensure the window and period are compatible.
-     * This is verified in the XContent parsing, but transport clients need these checks since they
-     * skirt XContent parsing
+ */
+    public boolean minimizeByDefault() {
+     * mean of the series).
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        builder.field("pad", pad);
+            return this;
+         * @param in  the input stream
+        public HoltWintersModelBuilder gamma(double gamma) {
+    public int hashCode() {
+    public String getWriteableName() {
+            out.writeByte(id);
+            this.id = id;
+            throw new IllegalStateException("Unknown Seasonality Type with id [" + id + "]");
+ * compatible open source license.
+         * Deserialize the SeasonalityType from the input stream
+        this.alpha = alpha;
+            boolean pad = parseBoolParam(settings, "pad", seasonalityType.equals(SeasonalityType.MULTIPLICATIVE));
+     * Controls smoothing of data.  Also known as "level" value.
+     * Predicts the next `n` values in the series, using the smoothing model to generate new values.
+            builder.field("period", period);
+ * Calculate a triple exponential weighted moving average
+    public HoltWintersModel(double alpha, double beta, double gamma, int period, SeasonalityType seasonalityType, boolean pad) {
+    private final boolean pad;
+         * Serialize the SeasonalityType to the output stream
      */
+        @Override
+                    result = policy;
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+     * @param values Collection of values to calculate avg for
+     * Controls smoothing of trend.
+        public String getName() {
+            return false;
+    private final double beta;
+     * This is verified in the XContent parsing, but transport clients need these checks since they
+    /**
+            int period = parseIntegerParam(settings, "period", DEFAULT_PERIOD);
+    @Override
+    }
+     * Periodicity of the data
+         *
+    /**
+            if (text == null) {
+            builder.field("beta", beta);
+import java.util.Map;
+        builder.startObject(MovAvgPipelineAggregationBuilder.SETTINGS.getPreferredName());
+        public HoltWintersModelBuilder alpha(double alpha) {
+        public MovAvgModel build() {
+        builder.endObject();
+            checkUnrecognizedParams(settings);
+            values.stream().mapToDouble(Double::doubleValue).toArray(),
+     * @param numForecasts number of forecasts into the future to return
+     * @opensearch.internal
+                builder.field("pad", pad);
+     * with multiplicative seasonality math (e.g. division by zero)
+    /**
+        public MovAvgModel parse(@Nullable Map<String, Object> settings, String pipelineName, int windowSize) throws ParseException {
+            builder.endObject();
+                return null;
+                    + "using Holt-Winters.  Value provided was ["
+    private static final double DEFAULT_BETA = 0.1;
+                    + window
+        builder.field("gamma", gamma);
+        builder.field("beta", beta);
+        }
+        this.beta = beta;
+    public static final String NAME = "holt_winters";
+         *
+     */
+            }
+        public HoltWintersModelBuilder beta(double beta) {
+     * will extrapolate into the future by applying the trend and seasonal information to the smoothed data.
+        }
+         * Parse a string SeasonalityType into the byte enum
+                return new HoltWintersModel(newValue, beta, gamma, period, seasonalityType, pad);
+    public static final AbstractModelParser PARSER = new AbstractModelParser() {
+    public double next(Collection<Double> values) {
+    }
+     * Unlike the other moving averages, HoltWinters has forecasting/prediction built into the algorithm.
+        private Boolean pad = null;
+            numForecasts
+    };
+                "Field [window] must be at least twice as large as the period when "
+            && Objects.equals(pad, other.pad);
+        @Override
+import java.text.ParseException;
+        return Objects.hash(alpha, beta, gamma, period, seasonalityType, pad);
+     */
+import org.opensearch.core.common.io.stream.StreamInput;
+                        settings.remove("type");
+     * Builder for the holt winters model
+            boolean pad = this.pad == null ? (seasonalityType == SeasonalityType.MULTIPLICATIVE) : this.pad;
+    public enum SeasonalityType {
+            double beta = parseDoubleParam(settings, "beta", DEFAULT_BETA);
+/**
+    public MovAvgModel clone() {
+     */
+    public boolean canBeMinimized() {
+         */
+         * the series mean).  Useful values are somewhere in between.  Defaults to 0.5.
+     */
+        gamma = in.readDouble();
+     * Prediction is more than simply adding the next prediction to the window and repeating.  HoltWinters
+            beta,
+        out.writeDouble(alpha);
+     * @return                  Returns an array of doubles, since most smoothing methods operate on floating points
+ *
+public class HoltWintersModel extends MovAvgModel {
+    }
+    @Override
+            period,
+            double alpha = parseDoubleParam(settings, "alpha", DEFAULT_ALPHA);
+    private final SeasonalityType seasonalityType;
+            default:
+         *
+        private final ParseField parseField;
+            builder.field("type", seasonalityType.getName());
+        /**
+    }
+    /**
+    /**
+    public static class HoltWintersModelBuilder implements MovAvgModelBuilder {
+    }
+            return new HoltWintersModel(alpha, beta, gamma, period, seasonalityType, pad);
+         *
+    public void writeTo(StreamOutput out) throws IOException {
+        this.gamma = gamma;
+            return new HoltWintersModel(alpha, beta, gamma, period, seasonalityType, pad);
+                }
+            this.alpha = alpha;
+        out.writeVInt(period);
+                    } else {
+    /**
+     */
+    }
+                throw new OpenSearchParseException("failed to parse seasonality type [{}]. accepted values are [{}]", text, validNames);
+        private int period = DEFAULT_PERIOD;
+    private final double gamma;
+            case 0:
+                return new HoltWintersModel(alpha, newValue, gamma, period, seasonalityType, pad);
+                    if (value instanceof String) {
+        out.writeDouble(gamma);
+        }
+            gamma,
+                    }
+        private final byte id;
+        }
+    @Override
+     *
+    private static final boolean DEFAULT_PAD = false;
+ *
+        public static SeasonalityType readFrom(StreamInput in) throws IOException {
+                    validNames.add(policy.getName());
+        if (window < 2 * period) {
+        return valuesAvailable >= period * 2;
+ * SPDX-License-Identifier: Apache-2.0
+     * (e.g. random walk), while alpha = 0 retains infinite memory of past values (e.g.
+        return builder;
+        private double beta = DEFAULT_BETA;
+    public double[] next(Collection<Double> values, int numForecasts) {
+        }
+         * Return the english-formatted name of the SeasonalityType
+    private static final double DEFAULT_GAMMA = 0.3;
+            byte id = in.readByte();
+        return NAME;
+/*
+     * Padding is used to add a very small amount to values, so that zeroes do not interfere
+        private SeasonalityType seasonalityType = DEFAULT_SEASONALITY_TYPE;
+            this.pad = pad;
+        super.validate(window, aggregationName);
+    /**
+        );
+        }
+     * (e.g. random walk), while alpha = 0 retains infinite memory of past values (e.g.
+            for (SeasonalityType policy : values()) {
+        }
+import org.opensearch.common.Nullable;
+     * @opensearch.internal
+    }
+import java.io.IOException;
+ * specific language governing permissions and limitations
+            return this;
+    /**
+                            0
+        public HoltWintersModelBuilder period(int period) {
+     * (e.g. random walk), while alpha = 0 retains infinite memory of past values (e.g.
+            this.period = period;
+    private double inferPadding() {
+     */
+        if (obj == null) {
+    }
+         * @return The builder to continue chaining
+ * this file be licensed under the Apache-2.0 license or a
+ * Unless required by applicable law or agreed to in writing,
+    }
+import java.util.List;
+    @Override
+        @Nullable
+    @Override
+                }
+ * You may obtain a copy of the License at
+    private static final double DEFAULT_ALPHA = 0.3;
+        }
+        this(DEFAULT_ALPHA, DEFAULT_BETA, DEFAULT_GAMMA, DEFAULT_PERIOD, DEFAULT_SEASONALITY_TYPE, DEFAULT_PAD);
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.OpenSearchParseException;
+                        );
+        }
+                        throw new ParseException(
+    public boolean equals(Object obj) {
+         *
+import org.opensearch.core.xcontent.XContentBuilder;
+            throw new IllegalArgumentException(
+         * @param text                SeasonalityType in string format (e.g. "add")
+            return this;
+         * (e.g. a random walk), while alpha = 0 retains infinite memory of past values (e.g.
+        return next(values, numPredictions);
+ * @opensearch.internal
+            return parseField.getPreferredName();
+            );
+            return result;
+ * ownership. Elasticsearch licenses this file to you under
+ * Licensed to Elasticsearch under one or more contributor
+                            "Parameter [type] must be a String, type `" + value.getClass().getSimpleName() + "` provided instead",
+            builder.field(MovAvgPipelineAggregationBuilder.MODEL.getPreferredName(), NAME);
+        this.padding = inferPadding();
+/*
+         * @return English representation of SeasonalityType
+            seasonalityType.equals(SeasonalityType.MULTIPLICATIVE),
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            return this;
+    }
+         *
+        this.seasonalityType = seasonalityType;
+/*
+    }
+            }
+            this.seasonalityType = type;
+    public HoltWintersModel(StreamInput in) throws IOException {
+        public void writeTo(StreamOutput out) throws IOException {
+    /**
+ * software distributed under the License is distributed on an
+ *
+        @Override
+        private double alpha = DEFAULT_ALPHA;
+        switch ((int) (Math.random() * 3)) {
+     * mean of the series).
+     * mean of the series).
+     */
+            for (SeasonalityType seasonalityType : values()) {
+            alpha,
+            && Objects.equals(gamma, other.gamma)
+     * Whether this is a multiplicative or additive HW
+        }
+            builder.startObject(MovAvgPipelineAggregationBuilder.SETTINGS.getPreferredName());
+    }
+            case 2:
+        builder.field("alpha", alpha);
+            return this;
+     *
+            SeasonalityType seasonalityType = DEFAULT_SEASONALITY_TYPE;
+    private final double alpha;
+    public boolean hasValue(int valuesAvailable) {
+        HoltWintersModel other = (HoltWintersModel) obj;
+ * not use this file except in compliance with the License.
+ * under the License.
+                final List<String> validNames = new ArrayList<>();
+    }
+        /**
+        /**
+        }
+import org.opensearch.core.common.io.stream.StreamOutput;
+            this.beta = beta;
+        return seasonalityType.equals(SeasonalityType.MULTIPLICATIVE) && pad ? 0.0000000001 : 0;
+        return true;
+    private static final int DEFAULT_PERIOD = 1;
+ * license agreements. See the NOTICE file distributed with
+    private static final SeasonalityType DEFAULT_SEASONALITY_TYPE = SeasonalityType.ADDITIVE;
+        SeasonalityType(byte id, String name) {
+     * If the model is a HoltWinters, we need to ensure the window and period are compatible.
+        public HoltWintersModelBuilder seasonalityType(SeasonalityType type) {
+        this.period = period;
+     *
+         */
+        /**
+        seasonalityType = SeasonalityType.readFrom(in);
+     * Beta = 1 retains no memory of past values
+                if (id == seasonalityType.id) {
+    protected double[] doPredict(Collection<Double> values, int numPredictions) {
+            double gamma = parseDoubleParam(settings, "gamma", DEFAULT_GAMMA);
+                    return seasonalityType;
+                    + "], which is less than (2*period) == "
+    }
+        }
+        builder.field(MovAvgPipelineAggregationBuilder.MODEL.getPreferredName(), NAME);
+     */
+            }
+    /**
+        return new HoltWintersModel(alpha, beta, gamma, period, seasonalityType, pad);
+            && Objects.equals(period, other.period)
+     * @param values            Collection of numerics to movingAvg, usually windowed
+     *
+         * @return    SeasonalityType Enum
+         * @param alpha A double between 0-1 inclusive, controls data smoothing
+         */
+                }
+                        seasonalityType = SeasonalityType.parse((String) value);
+        beta = in.readDouble();
+                if (policy.parseField.match(text, LoggingDeprecationHandler.INSTANCE)) {
+     * Calculate a doubly exponential weighted moving average
+            if (result == null) {
+        alpha = in.readDouble();
+         *
+package org.opensearch.search.aggregations.pipeline;
+        public static SeasonalityType parse(String text) {
+     */
+ */
+                if (value != null) {
+ *
+        }
+import java.util.Collection;
+     * Alpha = 1 retains no memory of past values
+            && Objects.equals(seasonalityType, other.seasonalityType)
+    /**
+            SeasonalityType result = null;
+        this.pad = pad;
+                Object value = settings.get("type");
+         * @param beta a double between 0-1 inclusive, controls trend smoothing
+    @Override
+        return MovingFunctions.holtWintersForecast(
+import java.util.Objects;
+        if (getClass() != obj.getClass()) {
+     * Read from a stream.
+        return true;
+    /**
+            return builder;
+                assert (false) : "Random value fell outside of range [0-2]";
+     * @param numPredictions    Number of newly generated predictions to return
+ * this work for additional information regarding copyright
+     *
+            && Objects.equals(beta, other.beta)
+                return new HoltWintersModel(alpha, beta, newValue, period, seasonalityType, pad);
+    /**
+        period = in.readVInt();
+            case 1:
+        }
+        MULTIPLICATIVE((byte) 1, "mult");
+        out.writeDouble(beta);
+    @Override
+        }
+            }
+    @Override
+        pad = in.readBoolean();
+    @Override
+    }
     @Override
     protected void validate(long window, String aggregationName) {
-        super.validate(window, aggregationName);
-        if (window < 2 * period) {
-            throw new IllegalArgumentException(
-                "Field [window] must be at least twice as large as the period when "
-                    + "using Holt-Winters.  Value provided was ["
-                    + window
-                    + "], which is less than (2*period) == "
                     + (2 * period)
-            );
-        }
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(alpha, beta, gamma, period, seasonalityType, pad);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (obj == null) {
             return false;
-        }
-        if (getClass() != obj.getClass()) {
-            return false;
-        }
-        HoltWintersModel other = (HoltWintersModel) obj;
-        return Objects.equals(alpha, other.alpha)
-            && Objects.equals(beta, other.beta)
-            && Objects.equals(gamma, other.gamma)
-            && Objects.equals(period, other.period)
-            && Objects.equals(seasonalityType, other.seasonalityType)
-            && Objects.equals(pad, other.pad);
-    }
-
-    /**
-     * Builder for the holt winters model
-     *
-     * @opensearch.internal
-     */
-    public static class HoltWintersModelBuilder implements MovAvgModelBuilder {
-
-        private double alpha = DEFAULT_ALPHA;
-        private double beta = DEFAULT_BETA;
-        private double gamma = DEFAULT_GAMMA;
-        private int period = DEFAULT_PERIOD;
-        private SeasonalityType seasonalityType = DEFAULT_SEASONALITY_TYPE;
-        private Boolean pad = null;
-
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
         /**
-         * Alpha controls the smoothing of the data.  Alpha = 1 retains no memory of past values
-         * (e.g. a random walk), while alpha = 0 retains infinite memory of past values (e.g.
-         * the series mean).  Useful values are somewhere in between.  Defaults to 0.5.
-         *
-         * @param alpha A double between 0-1 inclusive, controls data smoothing
-         *
-         * @return The builder to continue chaining
-         */
-        public HoltWintersModelBuilder alpha(double alpha) {
-            this.alpha = alpha;
-            return this;
-        }
-
-        /**
-         * Equivalent to <code>alpha</code>, but controls the smoothing of the trend instead of the data
-         *
-         * @param beta a double between 0-1 inclusive, controls trend smoothing
-         *
-         * @return The builder to continue chaining
-         */
-        public HoltWintersModelBuilder beta(double beta) {
-            this.beta = beta;
-            return this;
-        }
-
-        public HoltWintersModelBuilder gamma(double gamma) {
-            this.gamma = gamma;
-            return this;
-        }
-
-        public HoltWintersModelBuilder period(int period) {
-            this.period = period;
-            return this;
-        }
-
-        public HoltWintersModelBuilder seasonalityType(SeasonalityType type) {
-            this.seasonalityType = type;
-            return this;
-        }
-
-        public HoltWintersModelBuilder pad(boolean pad) {
-            this.pad = pad;
-            return this;
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.field(MovAvgPipelineAggregationBuilder.MODEL.getPreferredName(), NAME);
-            builder.startObject(MovAvgPipelineAggregationBuilder.SETTINGS.getPreferredName());
-            builder.field("alpha", alpha);
-            builder.field("beta", beta);
-            builder.field("gamma", gamma);
-            builder.field("period", period);
-            if (pad != null) {
-                builder.field("pad", pad);
-            }
-            builder.field("type", seasonalityType.getName());
-
-            builder.endObject();
-            return builder;
-        }
-
-        @Override
-        public MovAvgModel build() {
-            boolean pad = this.pad == null ? (seasonalityType == SeasonalityType.MULTIPLICATIVE) : this.pad;
-            return new HoltWintersModel(alpha, beta, gamma, period, seasonalityType, pad);
-        }
-    }
 }
+        seasonalityType.writeTo(out);
+            }
+         */
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+     * skirt XContent parsing
+ */
+         * @return                    SeasonalityType enum
+    }
+    }
+ * GitHub history for details.
+    private final int period;
+            this.gamma = gamma;
+            if (settings != null) {
+            builder.field("gamma", gamma);
+        builder.field("period", period);
+                for (SeasonalityType policy : values()) {
+        out.writeBoolean(pad);
+    public HoltWintersModel() {
+     * The seasonality type
+    public MovAvgModel neighboringModel() {
+        return next(values, 1)[0];
+            if (pad != null) {
+        }
+         */
+         */
+ *    http://www.apache.org/licenses/LICENSE-2.0
+         * @return The builder to continue chaining
+    }
+            padding,
+         * Alpha controls the smoothing of the data.  Alpha = 1 retains no memory of past values
+        ADDITIVE((byte) 0, "add"),
+        // We need at least (period * 2) data-points (e.g. two "seasons")
+        this.padding = inferPadding();
+import java.util.ArrayList;
+                    break;
+     * Controls smoothing of seasonality.
+     * @return       Returns a Double containing the moving avg for the window
+            this.parseField = new ParseField(name);
+        double newValue = Math.random();
+         * Equivalent to <code>alpha</code>, but controls the smoothing of the trend instead of the data
+                }
+        /**
+    private final double padding;
+        public HoltWintersModelBuilder pad(boolean pad) {
+    @Override
+     */
+ * The OpenSearch Contributors require contributions made to
+     */
+            return this;
+    }
+    }
+        return Objects.equals(alpha, other.alpha)
+     * Gamma = 1 retains no memory of past values
+    @Override
+        private double gamma = DEFAULT_GAMMA;
+     */
+            }

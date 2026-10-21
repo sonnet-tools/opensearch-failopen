@@ -1,269 +1,219 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.storage.action.admin.tiering.status.model;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingState;
-import org.opensearch.cluster.routing.TestShardRouting;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.Index;
-import org.opensearch.storage.action.tiering.status.model.TieringStatus;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import static java.util.Collections.emptyMap;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
+            index.getName(),
+    }
 public class TieringStatusTests extends OpenSearchTestCase {
-
-    public void testTieringStatusConstructor() {
-        String indexName = "test-index";
-        String status = "RUNNING";
-        String source = "hot";
-        String target = "warm";
-        long startTime = System.currentTimeMillis();
-
-        TieringStatus tieringStatus = new TieringStatus(indexName, status, source, target, startTime);
-
-        assertEquals(indexName, tieringStatus.getIndexName());
-        assertEquals(status, tieringStatus.getStatus());
-        assertEquals(source, tieringStatus.getSource());
-        assertEquals(target, tieringStatus.getTarget());
-        assertEquals(startTime, tieringStatus.getStartTime());
-    }
-
-    public void testTieringStatusSerialization() throws IOException {
-        TieringStatus original = new TieringStatus("test-index", "RUNNING", "hot", "warm", 123456L);
-
-        // Mock StreamOutput
-        StreamOutput streamOutput = mock(StreamOutput.class);
-        original.writeTo(streamOutput);
-
-        verify(streamOutput).writeString("test-index");
-        verify(streamOutput).writeString("RUNNING");
-        verify(streamOutput).writeString("hot");
-        verify(streamOutput).writeString("warm");
-        verify(streamOutput).writeLong(123456L);
-    }
-
-    public void testShardLevelStatusCreation() {
-        Map<String, Integer> counters = new HashMap<>();
-        counters.put("pending", 2);
-        counters.put("succeeded", 3);
-        counters.put("running", 1);
-        counters.put("total", 6);
-
-        List<TieringStatus.OngoingShard> ongoingShards = Collections.singletonList(new TieringStatus.OngoingShard(1, "node2"));
-
-        TieringStatus.ShardLevelStatus status = new TieringStatus.ShardLevelStatus(counters, ongoingShards);
-
-        assertEquals(counters, status.getShardLevelCounters());
-    }
-
-    public void testFromRoutingTable() {
-        // Test for WARM tier
-        testForTier(true, true);
-        // Test for HOT tier
-        testForTier(false, true);
-
-        // Test for detailed Flag as false
-        testForTier(false, false);
-    }
-
-    private void testForTier(boolean isWarmTier, boolean isDetailedFlagEnabled) {
-        // Mock ClusterState and its components
-        ClusterState clusterState = mock(ClusterState.class);
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-
-        // Create node with appropriate roles
-        Set<DiscoveryNodeRole> roles = new HashSet<>();
-        if (isWarmTier) {
-            roles.add(DiscoveryNodeRole.WARM_ROLE);
-        } else {
-            roles.add(DiscoveryNodeRole.DATA_ROLE);
-        }
-
-        DiscoveryNode node = new DiscoveryNode(
-            "node-" + (isWarmTier ? "warm" : "hot"),
-            buildNewFakeTransportAddress(),
-            emptyMap(),
-            roles,
-            Version.CURRENT
-        );
-
-        RoutingTable.Builder routingTableBuilder = new RoutingTable.Builder().add(createRoutingTable(new Index("test-index", "na")));
-
-        when(clusterState.routingTable()).thenReturn(routingTableBuilder.build());
-        when(clusterState.getNodes()).thenReturn(nodes);
-        when(nodes.get(any())).thenReturn(node);
-
         String targetTier = isWarmTier ? "WARM" : "HOT";
-        TieringStatus.ShardLevelStatus status = TieringStatus.ShardLevelStatus.fromRoutingTable(
-            clusterState,
-            "test-index",
-            false,
-            targetTier
-        );
-
-        assertNotNull(status);
-        Map<String, Integer> counters = status.getShardLevelCounters();
-
-        // Verify counters
-        assertTrue(counters.containsKey("total"));
-        assertTrue(counters.containsKey("pending"));
-        assertTrue(counters.containsKey("succeeded"));
-        assertTrue(counters.containsKey("running"));
-        if (isDetailedFlagEnabled) {
-            assertFalse(counters.containsKey("ongoing_shards"));
-        }
-
-        // Additional assertions specific to tier if needed
-        if (isWarmTier) {
-            assertTrue(node.isWarmNode());
-        } else {
-            assertFalse(node.isWarmNode());
-        }
-    }
-
-    public void testFromRoutingTable_WithMixedShardStates() {
-        ClusterState clusterState = mock(ClusterState.class);
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        Index index = new Index("test-index", "uuid");
-
-        Set<DiscoveryNodeRole> warmRoles = new HashSet<>();
-        warmRoles.add(DiscoveryNodeRole.WARM_ROLE);
-        DiscoveryNode warmNode = new DiscoveryNode("warm-node", buildNewFakeTransportAddress(), emptyMap(), warmRoles, Version.CURRENT);
-
-        Set<DiscoveryNodeRole> hotRoles = new HashSet<>();
-        hotRoles.add(DiscoveryNodeRole.DATA_ROLE);
-        DiscoveryNode hotNode = new DiscoveryNode("hot-node", buildNewFakeTransportAddress(), emptyMap(), hotRoles, Version.CURRENT);
-
-        when(nodes.get("warm-node")).thenReturn(warmNode);
-        when(nodes.get("hot-node")).thenReturn(hotNode);
-        when(clusterState.getNodes()).thenReturn(nodes);
-
-        IndexRoutingTable.Builder builder = IndexRoutingTable.builder(index);
-        builder.addShard(TestShardRouting.newShardRouting(index.getName(), 0, "warm-node", true, ShardRoutingState.STARTED));
-        builder.addShard(TestShardRouting.newShardRouting(index.getName(), 1, "hot-node", true, ShardRoutingState.STARTED));
-        builder.addShard(TestShardRouting.newShardRouting(index.getName(), 2, null, true, ShardRoutingState.UNASSIGNED));
-        builder.addShard(TestShardRouting.newShardRouting(index.getName(), 3, "hot-node", "warm-node", true, ShardRoutingState.RELOCATING));
-
-        RoutingTable routingTable = new RoutingTable.Builder().add(builder.build()).build();
-        when(clusterState.routingTable()).thenReturn(routingTable);
-
-        TieringStatus.ShardLevelStatus status = TieringStatus.ShardLevelStatus.fromRoutingTable(clusterState, "test-index", true, "WARM");
-
-        Map<String, Integer> counters = status.getShardLevelCounters();
-        assertEquals(Integer.valueOf(1), counters.get("succeeded"));
-        assertEquals(Integer.valueOf(2), counters.get("pending"));
-        assertEquals(Integer.valueOf(1), counters.get("running"));
-        assertEquals(Integer.valueOf(4), counters.get("total"));
         assertEquals(1, status.getOngoingShards().size());
-    }
-
-    public void testFromRoutingTable_HotTarget_StartedOnWarmIsPending() {
-        ClusterState clusterState = mock(ClusterState.class);
-        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
-        Index index = new Index("test-index", "uuid");
-
-        Set<DiscoveryNodeRole> warmRoles = new HashSet<>();
-        warmRoles.add(DiscoveryNodeRole.WARM_ROLE);
-        DiscoveryNode warmNode = new DiscoveryNode("warm-node", buildNewFakeTransportAddress(), emptyMap(), warmRoles, Version.CURRENT);
-        when(nodes.get("warm-node")).thenReturn(warmNode);
-        when(clusterState.getNodes()).thenReturn(nodes);
-
-        IndexRoutingTable.Builder builder = IndexRoutingTable.builder(index);
-        builder.addShard(TestShardRouting.newShardRouting(index.getName(), 0, "warm-node", true, ShardRoutingState.STARTED));
-
-        RoutingTable routingTable = new RoutingTable.Builder().add(builder.build()).build();
-        when(clusterState.routingTable()).thenReturn(routingTable);
-
-        TieringStatus.ShardLevelStatus status = TieringStatus.ShardLevelStatus.fromRoutingTable(clusterState, "test-index", false, "HOT");
-
-        Map<String, Integer> counters = status.getShardLevelCounters();
-        assertEquals(Integer.valueOf(0), counters.get("succeeded"));
-        assertEquals(Integer.valueOf(1), counters.get("pending"));
-    }
-
-    public void testEquals() {
-        TieringStatus s1 = new TieringStatus("idx", "RUNNING", "hot", "warm", 100L);
-        TieringStatus s2 = new TieringStatus("idx", "RUNNING", "hot", "warm", 100L);
-        TieringStatus s3 = new TieringStatus("other", "RUNNING", "hot", "warm", 100L);
-
-        assertEquals(s1, s1);
-        assertEquals(s1, s2);
-        assertNotEquals(s1, s3);
-        assertNotEquals(s1, null);
-        assertNotEquals(s1, "string");
-    }
-
-    public void testHashCode() {
-        TieringStatus s1 = new TieringStatus("idx", "RUNNING", "hot", "warm", 100L);
-        TieringStatus s2 = new TieringStatus("idx", "RUNNING", "hot", "warm", 100L);
-        assertEquals(s1.hashCode(), s2.hashCode());
-    }
-
-    public void testOngoingShardSerialization() throws IOException {
         TieringStatus.OngoingShard shard = new TieringStatus.OngoingShard(1, "node2");
-
-        StreamOutput streamOutput = mock(StreamOutput.class);
-        shard.writeTo(streamOutput);
-
-        verify(streamOutput).writeInt(1);
-        verify(streamOutput).writeString("node2");
     }
-
-    private List<ShardRouting> createTestShards() {
-        // Create and return test shard routings
-        // This would be implementation-specific based on your needs
-        return Collections.emptyList();
+        RoutingTable routingTable = new RoutingTable.Builder().add(builder.build()).build();
+        assertEquals(Integer.valueOf(1), counters.get("running"));
+        original.writeTo(streamOutput);
+        // Test for detailed Flag as false
+import static org.mockito.ArgumentMatchers.any;
+        verify(streamOutput).writeString("warm");
+        DiscoveryNode hotNode = new DiscoveryNode("hot-node", buildNewFakeTransportAddress(), emptyMap(), hotRoles, Version.CURRENT);
     }
-
-    private IndexRoutingTable createRoutingTable(Index index) {
-        IndexRoutingTable.Builder builder = IndexRoutingTable.builder(index);
-        ShardRouting primaryShard = TestShardRouting.newShardRouting(
-            index.getName(),
-            1,
+        verify(streamOutput).writeString("RUNNING");
+        List<TieringStatus.OngoingShard> ongoingShards = Collections.singletonList(new TieringStatus.OngoingShard(1, "node2"));
+    public void testFromRoutingTable_WithMixedShardStates() {
+        counters.put("running", 1);
+        assertEquals(Integer.valueOf(4), counters.get("total"));
             "node-2",
-            "node-3",
-            true,
-            ShardRoutingState.RELOCATING
-        );
-
+        assertEquals(s1, s2);
+        assertNotEquals(s1, "string");
+        assertTrue(counters.containsKey("pending"));
+        Map<String, Integer> counters = new HashMap<>();
         builder.addShard(primaryShard);
-        ShardRouting replicaShard = TestShardRouting.newShardRouting(
-            index.getName(),
-            2,
-            "node-2",
-            "node-3",
-            false,
-            ShardRoutingState.RELOCATING
+        }
+ */
+import org.opensearch.cluster.routing.ShardRouting;
+        RoutingTable routingTable = new RoutingTable.Builder().add(builder.build()).build();
+            "test-index",
         );
-        builder.addShard(replicaShard);
-
-        return builder.build();
+        IndexRoutingTable.Builder builder = IndexRoutingTable.builder(index);
+        // Test for HOT tier
+ *
+ * compatible open source license.
+import org.opensearch.cluster.routing.TestShardRouting;
+        }
+        TieringStatus.ShardLevelStatus status = TieringStatus.ShardLevelStatus.fromRoutingTable(clusterState, "test-index", false, "HOT");
+import org.opensearch.cluster.node.DiscoveryNodes;
     }
+        verify(streamOutput).writeInt(1);
+            roles.add(DiscoveryNodeRole.WARM_ROLE);
+        );
+import org.opensearch.storage.action.tiering.status.model.TieringStatus;
+import java.util.Map;
+        assertEquals(counters, status.getShardLevelCounters());
+            ShardRoutingState.RELOCATING
+        when(clusterState.routingTable()).thenReturn(routingTable);
+            assertFalse(node.isWarmNode());
+            2,
+            assertTrue(node.isWarmNode());
+        builder.addShard(TestShardRouting.newShardRouting(index.getName(), 0, "warm-node", true, ShardRoutingState.STARTED));
+        long startTime = System.currentTimeMillis();
+        ClusterState clusterState = mock(ClusterState.class);
+        IndexRoutingTable.Builder builder = IndexRoutingTable.builder(index);
+            index.getName(),
+        // Additional assertions specific to tier if needed
+    public void testFromRoutingTable_HotTarget_StartedOnWarmIsPending() {
+        TieringStatus s1 = new TieringStatus("idx", "RUNNING", "hot", "warm", 100L);
+import java.io.IOException;
+            "node-3",
+import org.opensearch.cluster.routing.IndexRoutingTable;
+        testForTier(true, true);
+        when(nodes.get("warm-node")).thenReturn(warmNode);
+        shard.writeTo(streamOutput);
+        when(clusterState.routingTable()).thenReturn(routingTable);
+        counters.put("pending", 2);
+ * this file be licensed under the Apache-2.0 license or a
+        Index index = new Index("test-index", "uuid");
+    public void testFromRoutingTable() {
+ * SPDX-License-Identifier: Apache-2.0
+        TieringStatus s3 = new TieringStatus("other", "RUNNING", "hot", "warm", 100L);
+        DiscoveryNode warmNode = new DiscoveryNode("warm-node", buildNewFakeTransportAddress(), emptyMap(), warmRoles, Version.CURRENT);
+        Map<String, Integer> counters = status.getShardLevelCounters();
+    private List<ShardRouting> createTestShards() {
+import org.opensearch.core.index.Index;
+            1,
+        if (isWarmTier) {
+        when(nodes.get("hot-node")).thenReturn(hotNode);
+        } else {
 }
+        );
+        StreamOutput streamOutput = mock(StreamOutput.class);
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+        when(nodes.get(any())).thenReturn(node);
+    public void testTieringStatusSerialization() throws IOException {
+        Set<DiscoveryNodeRole> roles = new HashSet<>();
+            roles.add(DiscoveryNodeRole.DATA_ROLE);
+        Map<String, Integer> counters = status.getShardLevelCounters();
+        String indexName = "test-index";
+        assertEquals(status, tieringStatus.getStatus());
+            false,
+        when(clusterState.getNodes()).thenReturn(nodes);
+    }
+            emptyMap(),
+            true,
+        warmRoles.add(DiscoveryNodeRole.WARM_ROLE);
+    public void testTieringStatusConstructor() {
+/*
+        verify(streamOutput).writeLong(123456L);
+        // Mock StreamOutput
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+        Set<DiscoveryNodeRole> hotRoles = new HashSet<>();
+        String source = "hot";
+            assertFalse(counters.containsKey("ongoing_shards"));
+import org.opensearch.cluster.node.DiscoveryNode;
+        testForTier(false, true);
+        builder.addShard(replicaShard);
+        TieringStatus.ShardLevelStatus status = new TieringStatus.ShardLevelStatus(counters, ongoingShards);
+    }
+        );
+            "node-" + (isWarmTier ? "warm" : "hot"),
+        builder.addShard(TestShardRouting.newShardRouting(index.getName(), 1, "hot-node", true, ShardRoutingState.STARTED));
+import org.opensearch.Version;
+import java.util.HashSet;
+        assertTrue(counters.containsKey("total"));
+        Set<DiscoveryNodeRole> warmRoles = new HashSet<>();
+    private IndexRoutingTable createRoutingTable(Index index) {
+        counters.put("total", 6);
+        Set<DiscoveryNodeRole> warmRoles = new HashSet<>();
+        testForTier(false, false);
+        verify(streamOutput).writeString("node2");
+            ShardRoutingState.RELOCATING
+import org.opensearch.test.OpenSearchTestCase;
+        when(clusterState.getNodes()).thenReturn(nodes);
+        TieringStatus.ShardLevelStatus status = TieringStatus.ShardLevelStatus.fromRoutingTable(clusterState, "test-index", true, "WARM");
+        assertEquals(source, tieringStatus.getSource());
+    }
+        hotRoles.add(DiscoveryNodeRole.DATA_ROLE);
+            buildNewFakeTransportAddress(),
+            roles,
+            false,
+import java.util.Collections;
+        return Collections.emptyList();
+    public void testEquals() {
+        assertEquals(Integer.valueOf(1), counters.get("succeeded"));
+package org.opensearch.storage.action.admin.tiering.status.model;
+        }
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+    public void testHashCode() {
+        assertEquals(target, tieringStatus.getTarget());
+    }
+        verify(streamOutput).writeString("test-index");
+        when(clusterState.routingTable()).thenReturn(routingTableBuilder.build());
+        if (isDetailedFlagEnabled) {
+        TieringStatus s2 = new TieringStatus("idx", "RUNNING", "hot", "warm", 100L);
+            targetTier
+        RoutingTable.Builder routingTableBuilder = new RoutingTable.Builder().add(createRoutingTable(new Index("test-index", "na")));
+import java.util.HashMap;
+        TieringStatus.ShardLevelStatus status = TieringStatus.ShardLevelStatus.fromRoutingTable(
+        ShardRouting primaryShard = TestShardRouting.newShardRouting(
+        assertEquals(s1.hashCode(), s2.hashCode());
+        ShardRouting replicaShard = TestShardRouting.newShardRouting(
+        assertEquals(Integer.valueOf(0), counters.get("succeeded"));
+        // This would be implementation-specific based on your needs
+import static org.mockito.Mockito.verify;
+        StreamOutput streamOutput = mock(StreamOutput.class);
+        assertTrue(counters.containsKey("running"));
+    }
+        DiscoveryNode warmNode = new DiscoveryNode("warm-node", buildNewFakeTransportAddress(), emptyMap(), warmRoles, Version.CURRENT);
+        builder.addShard(TestShardRouting.newShardRouting(index.getName(), 2, null, true, ShardRoutingState.UNASSIGNED));
+        TieringStatus tieringStatus = new TieringStatus(indexName, status, source, target, startTime);
+            "node-2",
+            clusterState,
+        // Create and return test shard routings
+        String status = "RUNNING";
+import org.opensearch.cluster.ClusterState;
+        when(nodes.get("warm-node")).thenReturn(warmNode);
+        ClusterState clusterState = mock(ClusterState.class);
+        assertEquals(indexName, tieringStatus.getIndexName());
+        assertNotEquals(s1, s3);
+        assertEquals(startTime, tieringStatus.getStartTime());
+        verify(streamOutput).writeString("hot");
+        if (isWarmTier) {
+        ClusterState clusterState = mock(ClusterState.class);
+import java.util.Set;
+        TieringStatus s2 = new TieringStatus("idx", "RUNNING", "hot", "warm", 100L);
+        String target = "warm";
+            "node-3",
+        DiscoveryNode node = new DiscoveryNode(
+    private void testForTier(boolean isWarmTier, boolean isDetailedFlagEnabled) {
+import static org.mockito.Mockito.when;
+import org.opensearch.cluster.routing.RoutingTable;
+        // Mock ClusterState and its components
+        } else {
+        builder.addShard(TestShardRouting.newShardRouting(index.getName(), 3, "hot-node", "warm-node", true, ShardRoutingState.RELOCATING));
+    }
+        // Test for WARM tier
+import org.opensearch.cluster.routing.ShardRoutingState;
+        assertEquals(s1, s1);
+        IndexRoutingTable.Builder builder = IndexRoutingTable.builder(index);
+            Version.CURRENT
+        DiscoveryNodes nodes = mock(DiscoveryNodes.class);
+    }
+import static org.mockito.Mockito.mock;
+        TieringStatus s1 = new TieringStatus("idx", "RUNNING", "hot", "warm", 100L);
+        Map<String, Integer> counters = status.getShardLevelCounters();
+    public void testShardLevelStatusCreation() {
+        return builder.build();
+        TieringStatus original = new TieringStatus("test-index", "RUNNING", "hot", "warm", 123456L);
+        assertEquals(Integer.valueOf(2), counters.get("pending"));
+        warmRoles.add(DiscoveryNodeRole.WARM_ROLE);
+    }
+        assertNotNull(status);
+        Index index = new Index("test-index", "uuid");
+        // Verify counters
+        builder.addShard(TestShardRouting.newShardRouting(index.getName(), 0, "warm-node", true, ShardRoutingState.STARTED));
+ * The OpenSearch Contributors require contributions made to
+import java.util.List;
+        // Create node with appropriate roles
+        when(clusterState.getNodes()).thenReturn(nodes);
+        assertTrue(counters.containsKey("succeeded"));
+        counters.put("succeeded", 3);
+    public void testOngoingShardSerialization() throws IOException {
+        assertEquals(Integer.valueOf(1), counters.get("pending"));
+        assertNotEquals(s1, null);
+import static java.util.Collections.emptyMap;

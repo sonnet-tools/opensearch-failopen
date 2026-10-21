@@ -1,595 +1,528 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
+        return new IllegalArgumentException("Date histogram bucket key overflow for key [" + key + "] and offset [" + offset + "]", cause);
+            builder.startArray(CommonFields.BUCKETS.getPreferredName());
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.histogram;
-
-import org.apache.lucene.util.CollectionUtil;
-import org.apache.lucene.util.PriorityQueue;
-import org.opensearch.common.Rounding;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.Aggregations;
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
-import org.opensearch.search.aggregations.InternalOrder;
-import org.opensearch.search.aggregations.KeyComparable;
-import org.opensearch.search.aggregations.bucket.IteratorAndCurrent;
-import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation;
-
-import java.io.IOException;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.ListIterator;
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * Implementation of {@link Histogram}.
- *
- * @opensearch.internal
- */
-public final class InternalDateHistogram extends InternalMultiBucketAggregation<InternalDateHistogram, InternalDateHistogram.Bucket>
-    implements
-        Histogram,
-        HistogramFactory {
-
-    /**
-     * Bucket for an internal date histogram agg
-     *
-     * @opensearch.internal
-     */
-    public static class Bucket extends InternalMultiBucketAggregation.InternalBucket implements Histogram.Bucket, KeyComparable<Bucket> {
-
-        final long key;
-        final long docCount;
-        final InternalAggregations aggregations;
-        private final transient boolean keyed;
-        protected final transient DocValueFormat format;
-
-        public Bucket(long key, long docCount, boolean keyed, DocValueFormat format, InternalAggregations aggregations) {
-            this.format = format;
-            this.keyed = keyed;
-            this.key = key;
-            this.docCount = docCount;
-            this.aggregations = aggregations;
-        }
-
-        /**
-         * Read from a stream.
-         */
-        public Bucket(StreamInput in, boolean keyed, DocValueFormat format) throws IOException {
-            this.format = format;
-            this.keyed = keyed;
-            key = in.readLong();
-            docCount = in.readVLong();
-            aggregations = InternalAggregations.readFrom(in);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null || obj.getClass() != InternalDateHistogram.Bucket.class) {
-                return false;
-            }
-            InternalDateHistogram.Bucket that = (InternalDateHistogram.Bucket) obj;
-            // No need to take the keyed and format parameters into account,
-            // they are already stored and tested on the InternalDateHistogram object
-            return key == that.key && docCount == that.docCount && Objects.equals(aggregations, that.aggregations);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(getClass(), key, docCount, aggregations);
-        }
-
-        @Override
         public void writeTo(StreamOutput out) throws IOException {
-            out.writeLong(key);
-            out.writeVLong(docCount);
-            aggregations.writeTo(out);
+    @Override
+                    }
         }
-
-        @Override
-        public String getKeyAsString() {
-            return format.format(key).toString();
-        }
-
-        @Override
-        public Object getKey() {
-            return Instant.ofEpochMilli(key).atZone(ZoneOffset.UTC);
-        }
-
-        @Override
-        public long getDocCount() {
-            return docCount;
-        }
-
-        @Override
-        public Aggregations getAggregations() {
-            return aggregations;
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            String keyAsString = format.format(key).toString();
-            if (keyed) {
-                builder.startObject(keyAsString);
-            } else {
-                builder.startObject();
             }
-            if (format != DocValueFormat.RAW) {
-                builder.field(CommonFields.KEY_AS_STRING.getPreferredName(), keyAsString);
-            }
-            builder.field(CommonFields.KEY.getPreferredName(), key);
-            builder.field(CommonFields.DOC_COUNT.getPreferredName(), docCount);
-            aggregations.toXContentInternal(builder, params);
-            builder.endObject();
-            return builder;
-        }
-
+        final long docCount;
+                    pq.updateTop();
         @Override
-        public int compareKey(Bucket other) {
-            return Long.compare(key, other.key);
-        }
-
-        public DocValueFormat getFormatter() {
-            return format;
-        }
-
-        public boolean getKeyed() {
-            return keyed;
-        }
-    }
-
-    /**
-     * Information about an empty bucket
-     *
-     * @opensearch.internal
-     */
-    static class EmptyBucketInfo {
-
+                while (key <= max) {
         final Rounding rounding;
-        final InternalAggregations subAggregations;
-        final LongBounds bounds;
-
-        EmptyBucketInfo(Rounding rounding, InternalAggregations subAggregations) {
-            this(rounding, subAggregations, null);
-        }
-
-        EmptyBucketInfo(Rounding rounding, InternalAggregations subAggregations, LongBounds bounds) {
-            this.rounding = rounding;
-            this.subAggregations = subAggregations;
-            this.bounds = bounds;
-        }
-
-        EmptyBucketInfo(StreamInput in) throws IOException {
-            rounding = Rounding.read(in);
-            subAggregations = InternalAggregations.readFrom(in);
-            bounds = in.readOptionalWriteable(LongBounds::new);
-        }
-
-        void writeTo(StreamOutput out) throws IOException {
-            rounding.writeTo(out);
-            subAggregations.writeTo(out);
-            out.writeOptionalWriteable(bounds);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null || getClass() != obj.getClass()) {
-                return false;
-            }
-            EmptyBucketInfo that = (EmptyBucketInfo) obj;
-            return Objects.equals(rounding, that.rounding)
-                && Objects.equals(bounds, that.bounds)
-                && Objects.equals(subAggregations, that.subAggregations);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(getClass(), rounding, bounds, subAggregations);
-        }
+     * @opensearch.internal
+        this.offset = offset;
+        this.emptyBucketInfo = emptyBucketInfo;
     }
-
-    private final List<Bucket> buckets;
-    private final BucketOrder order;
-    private final DocValueFormat format;
-    private final boolean keyed;
-    private final long minDocCount;
-    private final long offset;
-    final EmptyBucketInfo emptyBucketInfo;
-
-    InternalDateHistogram(
-        String name,
-        List<Bucket> buckets,
-        BucketOrder order,
-        long minDocCount,
-        long offset,
-        EmptyBucketInfo emptyBucketInfo,
-        DocValueFormat formatter,
-        boolean keyed,
-        Map<String, Object> metadata
-    ) {
-        super(name, metadata);
+        } catch (ArithmeticException e) {
+            }
+ * specific language governing permissions and limitations
+                    addEmptyBucket(iter, key, reducedEmptySubAggs, reduceContext);
+            builder.endArray();
+    }
+ * this work for additional information regarding copyright
+            double key = pq.top().current().key;
+        } else {
+        reduceContext.consumeBucketsAndMaybeBreak(reducedBuckets.size());
+                final Bucket reduced = reduceBucket(currentBuckets, reduceContext);
+                builder.field(CommonFields.KEY_AS_STRING.getPreferredName(), keyAsString);
+            emptyBucketInfo.writeTo(out);
         this.buckets = buckets;
         this.order = order;
-        this.offset = offset;
-        assert (minDocCount == 0) == (emptyBucketInfo != null);
-        this.minDocCount = minDocCount;
-        this.emptyBucketInfo = emptyBucketInfo;
-        this.format = formatter;
-        this.keyed = keyed;
-    }
-
-    /**
-     * Stream from a stream.
-     */
-    public InternalDateHistogram(StreamInput in) throws IOException {
-        super(in);
-        order = InternalOrder.Streams.readHistogramOrder(in, false);
-        minDocCount = in.readVLong();
-        if (minDocCount == 0) {
-            emptyBucketInfo = new EmptyBucketInfo(in);
-        } else {
-            emptyBucketInfo = null;
-        }
-        offset = in.readLong();
-        format = in.readNamedWriteable(DocValueFormat.class);
-        keyed = in.readBoolean();
-        buckets = in.readList(stream -> new Bucket(stream, keyed, format));
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        InternalOrder.Streams.writeHistogramOrder(order, out, false);
-        out.writeVLong(minDocCount);
-        if (minDocCount == 0) {
-            emptyBucketInfo.writeTo(out);
-        }
-        out.writeLong(offset);
-        out.writeNamedWriteable(format);
-        out.writeBoolean(keyed);
-        out.writeList(buckets);
-    }
-
-    @Override
-    public String getWriteableName() {
-        return DateHistogramAggregationBuilder.NAME;
-    }
-
-    @Override
-    public List<InternalDateHistogram.Bucket> getBuckets() {
-        return Collections.unmodifiableList(buckets);
-    }
-
-    DocValueFormat getFormatter() {
-        return format;
-    }
-
-    long getMinDocCount() {
-        return minDocCount;
-    }
-
-    long getOffset() {
-        return offset;
-    }
-
-    BucketOrder getOrder() {
-        return order;
-    }
-
-    @Override
-    public InternalDateHistogram create(List<Bucket> buckets) {
-        return new InternalDateHistogram(name, buckets, order, minDocCount, offset, emptyBucketInfo, format, keyed, metadata);
-    }
-
-    @Override
-    public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
-        return new Bucket(prototype.key, prototype.docCount, prototype.keyed, prototype.format, aggregations);
-    }
-
-    private List<Bucket> reduceBuckets(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-        final PriorityQueue<IteratorAndCurrent<Bucket>> pq = new PriorityQueue<IteratorAndCurrent<Bucket>>(aggregations.size()) {
-            @Override
-            protected boolean lessThan(IteratorAndCurrent<Bucket> a, IteratorAndCurrent<Bucket> b) {
-                return a.current().key < b.current().key;
-            }
-        };
-        for (InternalAggregation aggregation : aggregations) {
-            InternalDateHistogram histogram = (InternalDateHistogram) aggregation;
-            if (histogram.buckets.isEmpty() == false) {
-                pq.add(new IteratorAndCurrent(histogram.buckets.iterator()));
-            }
-        }
-
-        List<Bucket> reducedBuckets = new ArrayList<>();
-        if (pq.size() > 0) {
-            // list of buckets coming from different shards that have the same key
-            List<Bucket> currentBuckets = new ArrayList<>();
-            double key = pq.top().current().key;
-
-            do {
-                final IteratorAndCurrent<Bucket> top = pq.top();
-
-                if (top.current().key != key) {
-                    // the key changes, reduce what we already buffered and reset the buffer for current buckets
-                    final Bucket reduced = reduceBucket(currentBuckets, reduceContext);
-                    if (reduced.getDocCount() >= minDocCount || reduceContext.isFinalReduce() == false) {
-                        reducedBuckets.add(reduced);
-                    }
-                    currentBuckets.clear();
-                    key = top.current().key;
-                }
-
-                currentBuckets.add(top.current());
-
-                if (top.hasNext()) {
-                    top.next();
-                    assert top.current().key > key : "shards must return data sorted by key";
-                    pq.updateTop();
-                } else {
-                    pq.pop();
-                }
-            } while (pq.size() > 0);
-
-            if (currentBuckets.isEmpty() == false) {
-                final Bucket reduced = reduceBucket(currentBuckets, reduceContext);
-                if (reduced.getDocCount() >= minDocCount || reduceContext.isFinalReduce() == false) {
-                    reducedBuckets.add(reduced);
-                }
-            }
-        }
-
-        return reducedBuckets;
-    }
-
-    /**
-     * Reduce a list of same-keyed buckets (from multiple shards) to a single bucket. This
-     * requires all buckets to have the same key.
-     */
-    @Override
-    protected Bucket reduceBucket(List<Bucket> buckets, ReduceContext context) {
-        assert buckets.size() > 0;
-        List<InternalAggregations> aggregations = new ArrayList<>(buckets.size());
-        long docCount = 0;
-        for (Bucket bucket : buckets) {
-            docCount += bucket.docCount;
-            aggregations.add((InternalAggregations) bucket.getAggregations());
-        }
+}
         InternalAggregations aggs = InternalAggregations.reduce(aggregations, context);
-        return createBucket(buckets.get(0).key, docCount, aggs);
-    }
-
-    private long addOffset(long key) {
-        try {
-            return Math.addExact(key, offset);
-        } catch (ArithmeticException e) {
-            throw keyOverflow(key, e);
         }
-    }
-
-    private long nextKey(long key) {
-        final long nextKey;
-        try {
-            nextKey = Math.addExact(emptyBucketInfo.rounding.nextRoundingValue(Math.subtractExact(key, offset)), offset);
-        } catch (ArithmeticException e) {
-            throw keyOverflow(key, e);
-        }
-        if (nextKey <= key) {
-            throw new IllegalArgumentException("Failed to advance date histogram bucket key [" + key + "]");
-        }
-        return nextKey;
-    }
-
-    private IllegalArgumentException keyOverflow(long key, ArithmeticException cause) {
-        return new IllegalArgumentException("Date histogram bucket key overflow for key [" + key + "] and offset [" + offset + "]", cause);
-    }
-
-    private void addEmptyBucket(
-        ListIterator<Bucket> iterator,
-        long key,
-        InternalAggregations reducedEmptySubAggregations,
-        ReduceContext reduceContext
-    ) {
+            emptyBucketInfo = null;
+        final LongBounds bounds;
         reduceContext.consumeBucketsAndMaybeBreak(1);
-        iterator.add(new InternalDateHistogram.Bucket(key, 0, keyed, format, reducedEmptySubAggregations));
-    }
-
-    private void addEmptyBuckets(List<Bucket> list, ReduceContext reduceContext) {
-        Bucket lastBucket = null;
-        LongBounds bounds = emptyBucketInfo.bounds;
-        ListIterator<Bucket> iter = list.listIterator();
-
-        // first adding all the empty buckets *before* the actual data (based on the extended_bounds.min the user requested)
-        InternalAggregations reducedEmptySubAggs = InternalAggregations.reduce(
-            Collections.singletonList(emptyBucketInfo.subAggregations),
-            reduceContext
-        );
-        if (bounds != null) {
-            Bucket firstBucket = iter.hasNext() ? list.get(iter.nextIndex()) : null;
-            if (firstBucket == null) {
-                if (bounds.getMin() != null && bounds.getMax() != null) {
-                    long key = addOffset(bounds.getMin());
-                    long max = addOffset(bounds.getMax());
-                    while (key <= max) {
-                        addEmptyBucket(iter, key, reducedEmptySubAggs, reduceContext);
-                        if (key == max) {
-                            break;
-                        }
-                        key = nextKey(key);
-                    }
-                }
-            } else if (bounds.getMin() != null) {
-                long key = addOffset(bounds.getMin());
-                while (key < firstBucket.key) {
-                    addEmptyBucket(iter, key, reducedEmptySubAggs, reduceContext);
-                    key = nextKey(key);
-                }
+        public Object getKey() {
             }
-        }
-
-        // now adding the empty buckets within the actual data,
-        // e.g. if the data series is [1,2,3,7] there are 3 empty buckets that will be created for 4,5,6
-        while (iter.hasNext()) {
-            Bucket nextBucket = list.get(iter.nextIndex());
-            if (lastBucket != null) {
-                long key = nextKey(lastBucket.key);
-                while (key < nextBucket.key) {
-                    addEmptyBucket(iter, key, reducedEmptySubAggs, reduceContext);
-                    key = nextKey(key);
-                }
-                assert key == nextBucket.key : "key: " + key + ", nextBucket.key: " + nextBucket.key;
-            }
-            lastBucket = iter.next();
-        }
-
-        // finally, adding the empty buckets *after* the actual data (based on the extended_bounds.max requested by the user)
-        if (bounds != null && lastBucket != null && bounds.getMax() != null) {
-            long max = addOffset(bounds.getMax());
-            if (max > lastBucket.key) {
-                long key = nextKey(lastBucket.key);
-                while (key <= max) {
-                    addEmptyBucket(iter, key, reducedEmptySubAggs, reduceContext);
-                    if (key == max) {
-                        break;
-                    }
-                    key = nextKey(key);
-                }
-            }
-        }
-    }
-
-    @Override
-    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-        List<Bucket> reducedBuckets = reduceBuckets(aggregations, reduceContext);
-        reduceContext.consumeBucketsAndMaybeBreak(reducedBuckets.size());
-        if (reduceContext.isFinalReduce()) {
-            if (minDocCount == 0) {
-                addEmptyBuckets(reducedBuckets, reduceContext);
-            }
-            if (InternalOrder.isKeyDesc(order)) {
-                // we just need to reverse here...
-                List<Bucket> reverse = new ArrayList<>(reducedBuckets);
-                Collections.reverse(reverse);
-                reducedBuckets = reverse;
-            } else if (InternalOrder.isKeyAsc(order) == false) {
-                // nothing to do when sorting by key ascending, as data is already sorted since shards return
-                // sorted buckets and the merge-sort performed by reduceBuckets maintains order.
-                // otherwise, sorted by compound order or sub-aggregation, we need to fall back to a costly n*log(n) sort
-                CollectionUtil.introSort(reducedBuckets, order.comparator());
-            }
-        }
-        return new InternalDateHistogram(
-            getName(),
-            reducedBuckets,
-            order,
-            minDocCount,
-            offset,
+     * requires all buckets to have the same key.
             emptyBucketInfo,
-            format,
-            keyed,
-            getMetadata()
-        );
-    }
-
-    @Override
+        // e.g. if the data series is [1,2,3,7] there are 3 empty buckets that will be created for 4,5,6
+    public InternalDateHistogram(StreamInput in) throws IOException {
+import org.opensearch.search.DocValueFormat;
+        EmptyBucketInfo(Rounding rounding, InternalAggregations subAggregations) {
+                builder.startObject();
+                    currentBuckets.clear();
+        @Override
+        }
+     */
+        if (bounds != null && lastBucket != null && bounds.getMax() != null) {
+ *
+            return Objects.hash(getClass(), rounding, bounds, subAggregations);
+        }
+import org.opensearch.search.aggregations.Aggregations;
+        List<Bucket> buckets,
+            if (keyed) {
+                && Objects.equals(bounds, that.bounds)
+        }
+            builder.endObject();
+    private IllegalArgumentException keyOverflow(long key, ArithmeticException cause) {
+            if (InternalOrder.isKeyDesc(order)) {
+            }
+                reducedBuckets = reverse;
+    // HistogramFactory method impls
+                long key = addOffset(bounds.getMin());
+        public boolean getKeyed() {
+import java.io.IOException;
+        public Aggregations getAggregations() {
+            bucket.toXContent(builder, params);
+        return DateHistogramAggregationBuilder.NAME;
     public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        if (keyed) {
+        final long nextKey;
+        minDocCount = in.readVLong();
+        boolean keyed,
+            reduceContext
+    }
+        return order;
+            if (max > lastBucket.key) {
+        EmptyBucketInfo(Rounding rounding, InternalAggregations subAggregations, LongBounds bounds) {
+                // we just need to reverse here...
+        super(name, metadata);
+        @Override
+import java.util.ArrayList;
+    private List<Bucket> reduceBuckets(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
+        return nextKey;
+            key = in.readLong();
+        }
+        final InternalAggregations subAggregations;
+        InternalOrder.Streams.writeHistogramOrder(order, out, false);
+        ListIterator<Bucket> iterator,
+    public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
+            }
+    private final List<Bucket> buckets;
+    protected Bucket reduceBucket(List<Bucket> buckets, ReduceContext context) {
+            InternalDateHistogram.Bucket that = (InternalDateHistogram.Bucket) obj;
+        }
+            minDocCount,
+        if (obj == null || getClass() != obj.getClass()) return false;
+                        }
+        // finally, adding the empty buckets *after* the actual data (based on the extended_bounds.max requested by the user)
+    public InternalDateHistogram create(List<Bucket> buckets) {
+        out.writeNamedWriteable(format);
+            order,
+    /**
+            && Objects.equals(offset, that.offset)
+    }
+        }
+            offset,
+            return docCount;
+    InternalDateHistogram(
+import java.util.List;
+    @Override
+            if (lastBucket != null) {
+        Histogram,
+        if (minDocCount == 0) {
+        InternalDateHistogram that = (InternalDateHistogram) obj;
+                } else {
+            out.writeVLong(docCount);
+/*
+ *
+        @Override
+        return offset;
+        }
+            Collections.singletonList(emptyBucketInfo.subAggregations),
+        }
+            throw keyOverflow(key, e);
+                }
+            out.writeOptionalWriteable(bounds);
+    public static class Bucket extends InternalMultiBucketAggregation.InternalBucket implements Histogram.Bucket, KeyComparable<Bucket> {
+            rounding.writeTo(out);
+ * software distributed under the License is distributed on an
+     *
+        HistogramFactory {
+import org.apache.lucene.util.PriorityQueue;
+            }
+            return format;
+    public String getWriteableName() {
+ * KIND, either express or implied.  See the License for the
+        long docCount = 0;
+        void writeTo(StreamOutput out) throws IOException {
+    @Override
             builder.startObject(CommonFields.BUCKETS.getPreferredName());
         } else {
-            builder.startArray(CommonFields.BUCKETS.getPreferredName());
+         * Read from a stream.
+                    addEmptyBucket(iter, key, reducedEmptySubAggs, reduceContext);
+                if (bounds.getMin() != null && bounds.getMax() != null) {
+    }
+                // otherwise, sorted by compound order or sub-aggregation, we need to fall back to a costly n*log(n) sort
+    @Override
+import org.opensearch.common.Rounding;
+            this.format = format;
+        order = InternalOrder.Streams.readHistogramOrder(in, false);
+ * Implementation of {@link Histogram}.
+        public int hashCode() {
+                    reducedBuckets.add(reduced);
+    private long addOffset(long key) {
+        }
+                    key = top.current().key;
+                }
+    private final long minDocCount;
+        }
+        ReduceContext reduceContext
+    }
         }
         for (Bucket bucket : buckets) {
-            bucket.toXContent(builder, params);
+        super(in);
+            if (currentBuckets.isEmpty() == false) {
+            InternalDateHistogram histogram = (InternalDateHistogram) aggregation;
+            return Instant.ofEpochMilli(key).atZone(ZoneOffset.UTC);
+        public boolean equals(Object obj) {
+            }
+        // now adding the empty buckets within the actual data,
+        public String getKeyAsString() {
+            return Objects.equals(rounding, that.rounding)
+            throw keyOverflow(key, e);
+        // first adding all the empty buckets *before* the actual data (based on the extended_bounds.min the user requested)
+            List<Bucket> currentBuckets = new ArrayList<>();
+import java.util.Objects;
+            return builder;
+        return Collections.unmodifiableList(buckets);
+            }
+                    // the key changes, reduce what we already buffered and reset the buffer for current buckets
+        while (iter.hasNext()) {
+                        break;
+            return Long.compare(key, other.key);
+            String keyAsString = format.format(key).toString();
+        out.writeBoolean(keyed);
+        } else {
+            builder.endObject();
+        }
+        @Override
+        try {
+    }
+            buckets2.add((Bucket) b);
+            && Objects.equals(keyed, that.keyed)
+    }
+        InternalAggregations reducedEmptySubAggregations,
+        List<Bucket> reducedBuckets = reduceBuckets(aggregations, reduceContext);
+        }
+                currentBuckets.add(top.current());
+        @Override
+            && Objects.equals(format, that.format)
+    }
+            } else {
+    }
+    }
+        assert buckets.size() > 0;
+            aggregations = InternalAggregations.readFrom(in);
+                builder.startObject(keyAsString);
+                        reducedBuckets.add(reduced);
+     * @opensearch.internal
+    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
+            // No need to take the keyed and format parameters into account,
+    }
+        }
+import java.time.ZoneOffset;
+        iterator.add(new InternalDateHistogram.Bucket(key, 0, keyed, format, reducedEmptySubAggregations));
+        return ((Bucket) bucket).key;
+        if (pq.size() > 0) {
+    public boolean equals(Object obj) {
+            return aggregations;
+            keyed,
+    private long nextKey(long key) {
+import org.opensearch.search.aggregations.KeyComparable;
+                return false;
+        public int compareKey(Bucket other) {
+        return format;
+    private final long offset;
+        }
+    @Override
+        }
+import org.apache.lucene.util.CollectionUtil;
+                CollectionUtil.introSort(reducedBuckets, order.comparator());
+                }
+        };
+import java.util.Map;
+        DocValueFormat formatter,
+        return createBucket(buckets.get(0).key, docCount, aggs);
+    @Override
+            EmptyBucketInfo that = (EmptyBucketInfo) obj;
+            this.key = key;
+    }
+        /**
+        @Override
+        }
+                // sorted buckets and the merge-sort performed by reduceBuckets maintains order.
+            && Objects.equals(minDocCount, that.minDocCount)
+     * Bucket for an internal date histogram agg
+import org.opensearch.core.common.io.stream.StreamInput;
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.search.aggregations.InternalAggregation;
+        ListIterator<Bucket> iter = list.listIterator();
+import org.opensearch.search.aggregations.bucket.IteratorAndCurrent;
+        public boolean equals(Object obj) {
+                            break;
+                    long key = addOffset(bounds.getMin());
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            } while (pq.size() > 0);
+     */
+        buckets = in.readList(stream -> new Bucket(stream, keyed, format));
+    protected void doWriteTo(StreamOutput out) throws IOException {
+        }
+            Bucket firstBucket = iter.hasNext() ? list.get(iter.nextIndex()) : null;
+            if (histogram.buckets.isEmpty() == false) {
+        Map<String, Object> metadata
+ */
+        return builder;
+                }
+                if (reduced.getDocCount() >= minDocCount || reduceContext.isFinalReduce() == false) {
+                    while (key <= max) {
+                List<Bucket> reverse = new ArrayList<>(reducedBuckets);
+        }
+            }
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+            docCount = in.readVLong();
+                    long max = addOffset(bounds.getMax());
+            docCount += bucket.docCount;
+            long max = addOffset(bounds.getMax());
+        return Objects.hash(super.hashCode(), buckets, order, format, keyed, minDocCount, offset, emptyBucketInfo);
+    @Override
+    long getOffset() {
+                        key = nextKey(key);
+ * You may obtain a copy of the License at
+    /**
+            aggregations.add((InternalAggregations) bucket.getAggregations());
+ */
+    private final boolean keyed;
+        }
+            do {
+            }
+    }
+        if (this == obj) return true;
+                        if (key == max) {
+        );
+            out.writeLong(key);
+ * ownership. Elasticsearch licenses this file to you under
+                assert key == nextBucket.key : "key: " + key + ", nextBucket.key: " + nextBucket.key;
+        protected final transient DocValueFormat format;
+            if (firstBucket == null) {
+                    key = nextKey(key);
+        } catch (ArithmeticException e) {
+            Bucket nextBucket = list.get(iter.nextIndex());
+ * license agreements. See the NOTICE file distributed with
+                long key = nextKey(lastBucket.key);
+            && Objects.equals(emptyBucketInfo, that.emptyBucketInfo);
+        public long getDocCount() {
+/*
+            getName(),
+        out.writeLong(offset);
+                    final Bucket reduced = reduceBucket(currentBuckets, reduceContext);
+        if (super.equals(obj) == false) return false;
+            return format.format(key).toString();
+    }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            }
+ * this file be licensed under the Apache-2.0 license or a
+        long offset,
+        out.writeList(buckets);
+    @Override
+        public DocValueFormat getFormatter() {
+    }
+            this.bounds = bounds;
+            rounding = Rounding.read(in);
+        long key,
+        offset = in.readLong();
+import java.util.Collections;
+    DocValueFormat getFormatter() {
+ * Unless required by applicable law or agreed to in writing,
+        return new InternalDateHistogram(name, buckets2, order, minDocCount, offset, emptyBucketInfo, format, keyed, getMetadata());
+ * not use this file except in compliance with the License.
+    }
+            getMetadata()
+            this.rounding = rounding;
+            return Objects.hash(getClass(), key, docCount, aggregations);
+            if (format != DocValueFormat.RAW) {
+            if (minDocCount == 0) {
+            protected boolean lessThan(IteratorAndCurrent<Bucket> a, IteratorAndCurrent<Bucket> b) {
+    public Number getKey(MultiBucketsAggregation.Bucket bucket) {
+            }
+    }
+        try {
+        @Override
+        List<Bucket> reducedBuckets = new ArrayList<>();
+        EmptyBucketInfo emptyBucketInfo,
+    implements
+                    }
+                    key = nextKey(key);
+            aggregations.toXContentInternal(builder, params);
+        }
+ * Licensed to Elasticsearch under one or more contributor
+            format,
+        keyed = in.readBoolean();
+        for (Bucket bucket : buckets) {
+            throw new IllegalArgumentException("Failed to advance date histogram bucket key [" + key + "]");
+            // list of buckets coming from different shards that have the same key
+        }
+        this.format = formatter;
+            subAggregations.writeTo(out);
+    }
+/**
+    }
+         */
+            this(rounding, subAggregations, null);
+ * under the License.
+    @Override
+        if (bounds != null) {
+            this.format = format;
+ * compatible open source license.
+    public int hashCode() {
+        return new Bucket(key.longValue(), docCount, keyed, format, aggregations);
+import org.opensearch.search.aggregations.BucketOrder;
+        return new InternalDateHistogram(
+                if (top.hasNext()) {
+    }
+        List<InternalAggregations> aggregations = new ArrayList<>(buckets.size());
+    }
+        }
+                final IteratorAndCurrent<Bucket> top = pq.top();
+            @Override
+                Collections.reverse(reverse);
+        assert (minDocCount == 0) == (emptyBucketInfo != null);
+        this.keyed = keyed;
+                && Objects.equals(subAggregations, that.subAggregations);
+                }
+ * SPDX-License-Identifier: Apache-2.0
+ * the Apache License, Version 2.0 (the "License"); you may
+    public Number nextKey(Number key) {
+    /**
+            this.docCount = docCount;
+ * @opensearch.internal
+import org.opensearch.core.xcontent.XContentBuilder;
+    }
+            this.keyed = keyed;
+    @Override
+    static class EmptyBucketInfo {
+                if (top.current().key != key) {
+            this.subAggregations = subAggregations;
+public final class InternalDateHistogram extends InternalMultiBucketAggregation<InternalDateHistogram, InternalDateHistogram.Bucket>
+    ) {
+            && Objects.equals(order, that.order)
+                    key = nextKey(key);
+import org.opensearch.search.aggregations.InternalOrder;
+/*
+ *
+        LongBounds bounds = emptyBucketInfo.bounds;
+        for (Object b : buckets) {
+            this.keyed = keyed;
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        public Bucket(StreamInput in, boolean keyed, DocValueFormat format) throws IOException {
+                return false;
+                }
+            lastBucket = iter.next();
+        out.writeVLong(minDocCount);
+        }
+            return key == that.key && docCount == that.docCount && Objects.equals(aggregations, that.aggregations);
+    }
+            subAggregations = InternalAggregations.readFrom(in);
+import org.opensearch.search.aggregations.InternalAggregations;
+    public Bucket createBucket(Number key, long docCount, InternalAggregations aggregations) {
+            } else if (bounds.getMin() != null) {
+    ) {
+        EmptyBucketInfo(StreamInput in) throws IOException {
+                    assert top.current().key > key : "shards must return data sorted by key";
+    public List<InternalDateHistogram.Bucket> getBuckets() {
+        @Override
+        if (nextKey <= key) {
+                // nothing to do when sorting by key ascending, as data is already sorted since shards return
+    }
+    private final DocValueFormat format;
+            aggregations.writeTo(out);
+        return nextKey(key.longValue());
+            return Math.addExact(key, offset);
+        }
+                addEmptyBuckets(reducedBuckets, reduceContext);
+import java.util.ListIterator;
+        }
+        return Objects.equals(buckets, that.buckets)
+    BucketOrder getOrder() {
+        BucketOrder order,
+    long getMinDocCount() {
+            builder.field(CommonFields.DOC_COUNT.getPreferredName(), docCount);
+        );
+ */
+        long minDocCount,
+                return a.current().key < b.current().key;
+     */
+        return reducedBuckets;
+            } else if (InternalOrder.isKeyAsc(order) == false) {
+        Bucket lastBucket = null;
+        final long key;
+     * Information about an empty bucket
+                    pq.pop();
+            emptyBucketInfo = new EmptyBucketInfo(in);
+                    if (reduced.getDocCount() >= minDocCount || reduceContext.isFinalReduce() == false) {
+        private final transient boolean keyed;
+        }
+     * Stream from a stream.
+                    }
+    final EmptyBucketInfo emptyBucketInfo;
+        if (minDocCount == 0) {
+        String name,
+ * GitHub history for details.
+package org.opensearch.search.aggregations.bucket.histogram;
+    }
+    private void addEmptyBucket(
+                while (key < firstBucket.key) {
+            // they are already stored and tested on the InternalDateHistogram object
+        }
+            if (obj == null || getClass() != obj.getClass()) {
+        }
+        }
+        public Bucket(long key, long docCount, boolean keyed, DocValueFormat format, InternalAggregations aggregations) {
+                        addEmptyBucket(iter, key, reducedEmptySubAggs, reduceContext);
+    @Override
+import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
+    }
+            this.aggregations = aggregations;
+        public int hashCode() {
+        format = in.readNamedWriteable(DocValueFormat.class);
+            reducedBuckets,
+        @Override
+    @Override
+import java.time.Instant;
+                    top.next();
+    public InternalAggregation createAggregation(List<MultiBucketsAggregation.Bucket> buckets) {
+                pq.add(new IteratorAndCurrent(histogram.buckets.iterator()));
+            builder.field(CommonFields.KEY.getPreferredName(), key);
+import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation;
+        this.minDocCount = minDocCount;
+            return keyed;
+        @Override
+     *
+        return new Bucket(prototype.key, prototype.docCount, prototype.keyed, prototype.format, aggregations);
+    private void addEmptyBuckets(List<Bucket> list, ReduceContext reduceContext) {
+                    addEmptyBucket(iter, key, reducedEmptySubAggs, reduceContext);
+        if (reduceContext.isFinalReduce()) {
+        InternalAggregations reducedEmptySubAggs = InternalAggregations.reduce(
+        for (InternalAggregation aggregation : aggregations) {
+        // convert buckets to the right type
+        return new InternalDateHistogram(name, buckets, order, minDocCount, offset, emptyBucketInfo, format, keyed, metadata);
+        }
+    @Override
+    private final BucketOrder order;
+    /**
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
+     */
+            bounds = in.readOptionalWriteable(LongBounds::new);
         }
         if (keyed) {
-            builder.endObject();
-        } else {
-            builder.endArray();
-        }
-        return builder;
-    }
-
-    // HistogramFactory method impls
-
     @Override
-    public Number getKey(MultiBucketsAggregation.Bucket bucket) {
-        return ((Bucket) bucket).key;
-    }
-
-    @Override
-    public Number nextKey(Number key) {
-        return nextKey(key.longValue());
-    }
-
-    @Override
-    public InternalAggregation createAggregation(List<MultiBucketsAggregation.Bucket> buckets) {
-        // convert buckets to the right type
-        List<Bucket> buckets2 = new ArrayList<>(buckets.size());
-        for (Object b : buckets) {
-            buckets2.add((Bucket) b);
-        }
+        if (keyed) {
+     * Reduce a list of same-keyed buckets (from multiple shards) to a single bucket. This
+                    if (key == max) {
+                }
+            nextKey = Math.addExact(emptyBucketInfo.rounding.nextRoundingValue(Math.subtractExact(key, offset)), offset);
+                long key = nextKey(lastBucket.key);
         buckets2 = Collections.unmodifiableList(buckets2);
-        return new InternalDateHistogram(name, buckets2, order, minDocCount, offset, emptyBucketInfo, format, keyed, getMetadata());
-    }
-
-    @Override
-    public Bucket createBucket(Number key, long docCount, InternalAggregations aggregations) {
-        return new Bucket(key.longValue(), docCount, keyed, format, aggregations);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;
-
-        InternalDateHistogram that = (InternalDateHistogram) obj;
-        return Objects.equals(buckets, that.buckets)
-            && Objects.equals(order, that.order)
-            && Objects.equals(format, that.format)
-            && Objects.equals(keyed, that.keyed)
-            && Objects.equals(minDocCount, that.minDocCount)
-            && Objects.equals(offset, that.offset)
-            && Objects.equals(emptyBucketInfo, that.emptyBucketInfo);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), buckets, order, format, keyed, minDocCount, offset, emptyBucketInfo);
-    }
-}
+            if (obj == null || obj.getClass() != InternalDateHistogram.Bucket.class) {
+                while (key < nextBucket.key) {
+        return minDocCount;
+        final InternalAggregations aggregations;
+        final PriorityQueue<IteratorAndCurrent<Bucket>> pq = new PriorityQueue<IteratorAndCurrent<Bucket>>(aggregations.size()) {
+        List<Bucket> buckets2 = new ArrayList<>(buckets.size());
+        }

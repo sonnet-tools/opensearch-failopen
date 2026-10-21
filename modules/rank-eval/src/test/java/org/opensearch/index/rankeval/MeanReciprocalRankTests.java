@@ -1,263 +1,231 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.rankeval;
-
-import org.opensearch.action.OriginalIndices;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParseException;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.SearchHit;
-import org.opensearch.search.SearchShardTarget;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-
-import static org.opensearch.test.EqualsHashCodeTestUtils.checkEqualsAndHashCode;
-import static org.opensearch.test.XContentTestUtils.insertRandomFields;
-import static org.hamcrest.CoreMatchers.containsString;
-
-public class MeanReciprocalRankTests extends OpenSearchTestCase {
-
-    private static final int IRRELEVANT_RATING_0 = 0;
-    private static final int RELEVANT_RATING_1 = 1;
-
-    public void testParseFromXContent() throws IOException {
-        String xContent = "{ }";
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, xContent)) {
-            MeanReciprocalRank mrr = MeanReciprocalRank.fromXContent(parser);
-            assertEquals(1, mrr.getRelevantRatingThreshold());
-            assertEquals(10, mrr.getK());
-        }
-
-        xContent = "{ \"relevant_rating_threshold\": 2 }";
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, xContent)) {
-            MeanReciprocalRank mrr = MeanReciprocalRank.fromXContent(parser);
-            assertEquals(2, mrr.getRelevantRatingThreshold());
-            assertEquals(10, mrr.getK());
-        }
-
-        xContent = "{ \"relevant_rating_threshold\": 2, \"k\" : 15 }";
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, xContent)) {
-            MeanReciprocalRank mrr = MeanReciprocalRank.fromXContent(parser);
-            assertEquals(2, mrr.getRelevantRatingThreshold());
-            assertEquals(15, mrr.getK());
-        }
-
-        xContent = "{ \"k\" : 15 }";
-        try (XContentParser parser = createParser(JsonXContent.jsonXContent, xContent)) {
-            MeanReciprocalRank mrr = MeanReciprocalRank.fromXContent(parser);
-            assertEquals(1, mrr.getRelevantRatingThreshold());
-            assertEquals(15, mrr.getK());
-        }
-    }
-
-    public void testMaxAcceptableRank() {
-        MeanReciprocalRank reciprocalRank = new MeanReciprocalRank();
-        int searchHits = randomIntBetween(1, 50);
-        SearchHit[] hits = createSearchHits(0, searchHits, "test");
-        List<RatedDocument> ratedDocs = new ArrayList<>();
-        int relevantAt = randomIntBetween(0, searchHits);
-        for (int i = 0; i <= searchHits; i++) {
-            if (i == relevantAt) {
-                ratedDocs.add(new RatedDocument("test", Integer.toString(i), RELEVANT_RATING_1));
-            } else {
-                ratedDocs.add(new RatedDocument("test", Integer.toString(i), IRRELEVANT_RATING_0));
-            }
-        }
-
-        int rankAtFirstRelevant = relevantAt + 1;
         EvalQueryQuality evaluation = reciprocalRank.evaluate("id", hits, ratedDocs);
-        assertEquals(1.0 / rankAtFirstRelevant, evaluation.metricScore(), Double.MIN_VALUE);
-        assertEquals(rankAtFirstRelevant, ((MeanReciprocalRank.Detail) evaluation.getMetricDetails()).getFirstRelevantRank());
-
-        // check that if we have fewer search hits than relevant doc position,
-        // we don't find any result and get 0.0 score
-        reciprocalRank = new MeanReciprocalRank();
-        evaluation = reciprocalRank.evaluate("id", Arrays.copyOfRange(hits, 0, relevantAt), ratedDocs);
-        assertEquals(0.0, evaluation.metricScore(), Double.MIN_VALUE);
-    }
-
-    public void testEvaluationOneRelevantInResults() {
-        MeanReciprocalRank reciprocalRank = new MeanReciprocalRank();
-        SearchHit[] hits = createSearchHits(0, 9, "test");
-        List<RatedDocument> ratedDocs = new ArrayList<>();
-        // mark one of the ten docs relevant
-        int relevantAt = randomIntBetween(0, 9);
-        for (int i = 0; i <= 20; i++) {
-            if (i == relevantAt) {
-                ratedDocs.add(new RatedDocument("test", Integer.toString(i), RELEVANT_RATING_1));
-            } else {
-                ratedDocs.add(new RatedDocument("test", Integer.toString(i), IRRELEVANT_RATING_0));
-            }
-        }
-
-        EvalQueryQuality evaluation = reciprocalRank.evaluate("id", hits, ratedDocs);
-        assertEquals(1.0 / (relevantAt + 1), evaluation.metricScore(), Double.MIN_VALUE);
-        assertEquals(relevantAt + 1, ((MeanReciprocalRank.Detail) evaluation.getMetricDetails()).getFirstRelevantRank());
-    }
-
-    /**
-     * test that the relevant rating threshold can be set to something larger than
-     * 1. e.g. we set it to 2 here and expect dics 0-2 to be not relevant, so first
-     * relevant doc has third ranking position, so RR should be 1/3
-     */
-    public void testPrecisionAtFiveRelevanceThreshold() {
-        List<RatedDocument> rated = new ArrayList<>();
-        rated.add(new RatedDocument("test", "0", 0));
-        rated.add(new RatedDocument("test", "1", 1));
-        rated.add(new RatedDocument("test", "2", 2));
-        rated.add(new RatedDocument("test", "3", 3));
-        rated.add(new RatedDocument("test", "4", 4));
-        SearchHit[] hits = createSearchHits(0, 5, "test");
-
-        MeanReciprocalRank reciprocalRank = new MeanReciprocalRank(2, 10);
-        EvalQueryQuality evaluation = reciprocalRank.evaluate("id", hits, rated);
         assertEquals((double) 1 / 3, evaluation.metricScore(), 0.00001);
-        assertEquals(3, ((MeanReciprocalRank.Detail) evaluation.getMetricDetails()).getFirstRelevantRank());
-    }
-
-    public void testCombine() {
-        MeanReciprocalRank reciprocalRank = new MeanReciprocalRank();
-        List<EvalQueryQuality> partialResults = new ArrayList<>(3);
-        partialResults.add(new EvalQueryQuality("id1", 0.5));
-        partialResults.add(new EvalQueryQuality("id2", 1.0));
-        partialResults.add(new EvalQueryQuality("id3", 0.75));
-        assertEquals(0.75, reciprocalRank.combine(partialResults), Double.MIN_VALUE);
-    }
-
-    public void testEvaluationNoRelevantInResults() {
-        MeanReciprocalRank reciprocalRank = new MeanReciprocalRank();
-        SearchHit[] hits = createSearchHits(0, 9, "test");
-        List<RatedDocument> ratedDocs = new ArrayList<>();
+            itemParser.nextToken();
+        rated.add(new RatedDocument("test", "0", 0));
+        MeanReciprocalRank reciprocalRank = new MeanReciprocalRank(2, 10);
+ * compatible open source license.
         EvalQueryQuality evaluation = reciprocalRank.evaluate("id", hits, ratedDocs);
-        assertEquals(0.0, evaluation.metricScore(), Double.MIN_VALUE);
+ * Modifications Copyright OpenSearch Contributors. See
     }
-
-    public void testNoResults() throws Exception {
-        SearchHit[] hits = new SearchHit[0];
-        EvalQueryQuality evaluated = (new MeanReciprocalRank()).evaluate("id", hits, Collections.emptyList());
-        assertEquals(0.0d, evaluated.metricScore(), 0.00001);
-        assertEquals(-1, ((MeanReciprocalRank.Detail) evaluated.getMetricDetails()).getFirstRelevantRank());
-    }
-
-    public void testXContentRoundtrip() throws IOException {
-        MeanReciprocalRank testItem = createTestItem();
-        XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));
-        XContentBuilder shuffled = shuffleXContent(testItem.toXContent(builder, ToXContent.EMPTY_PARAMS));
-        try (XContentParser itemParser = createParser(shuffled)) {
-            itemParser.nextToken();
-            itemParser.nextToken();
-            MeanReciprocalRank parsedItem = MeanReciprocalRank.fromXContent(itemParser);
-            assertNotSame(testItem, parsedItem);
-            assertEquals(testItem, parsedItem);
-            assertEquals(testItem.hashCode(), parsedItem.hashCode());
-        }
-    }
-
     public void testXContentParsingIsNotLenient() throws IOException {
-        MeanReciprocalRank testItem = createTestItem();
-        XContentType xContentType = randomFrom(XContentType.values());
-        BytesReference originalBytes = toShuffledXContent(testItem, xContentType, ToXContent.EMPTY_PARAMS, randomBoolean());
-        BytesReference withRandomFields = insertRandomFields(xContentType, originalBytes, null, random());
-        try (XContentParser parser = createParser(xContentType.xContent(), withRandomFields)) {
-            parser.nextToken();
-            parser.nextToken();
-            XContentParseException exception = expectThrows(XContentParseException.class, () -> MeanReciprocalRank.fromXContent(parser));
-            assertThat(exception.getMessage(), containsString("[reciprocal_rank] unknown field"));
         }
-    }
-
-    /**
-     * Create SearchHits for testing, starting from dociId 'from' up to docId 'to'.
-     * The search hits index also need to be provided
-     */
-    private static SearchHit[] createSearchHits(int from, int to, String index) {
-        SearchHit[] hits = new SearchHit[to + 1 - from];
-        for (int i = from; i <= to; i++) {
-            hits[i] = new SearchHit(i, i + "", Collections.emptyMap(), Collections.emptyMap());
-            hits[i].shard(new SearchShardTarget("testnode", new ShardId(index, "uuid", 0), null, OriginalIndices.NONE));
+            if (i == relevantAt) {
+        int rankAtFirstRelevant = relevantAt + 1;
         }
-        return hits;
+        xContent = "{ \"relevant_rating_threshold\": 2, \"k\" : 15 }";
     }
-
-    static MeanReciprocalRank createTestItem() {
-        return new MeanReciprocalRank(randomIntBetween(0, 20), randomIntBetween(1, 20));
-    }
-
-    public void testSerialization() throws IOException {
-        MeanReciprocalRank original = createTestItem();
-        MeanReciprocalRank deserialized = OpenSearchTestCase.copyWriteable(
-            original,
-            new NamedWriteableRegistry(Collections.emptyList()),
-            MeanReciprocalRank::new
-        );
-        assertEquals(deserialized, original);
-        assertEquals(deserialized.hashCode(), original.hashCode());
-        assertNotSame(deserialized, original);
-    }
-
-    public void testEqualsAndHash() throws IOException {
-        checkEqualsAndHashCode(createTestItem(), MeanReciprocalRankTests::copy, MeanReciprocalRankTests::mutate);
-    }
-
-    private static MeanReciprocalRank copy(MeanReciprocalRank testItem) {
-        return new MeanReciprocalRank(testItem.getRelevantRatingThreshold(), testItem.getK());
-    }
-
-    private static MeanReciprocalRank mutate(MeanReciprocalRank testItem) {
-        if (randomBoolean()) {
-            return new MeanReciprocalRank(testItem.getRelevantRatingThreshold() + 1, testItem.getK());
-        } else {
-            return new MeanReciprocalRank(testItem.getRelevantRatingThreshold(), testItem.getK() + 1);
-        }
-    }
-
-    public void testInvalidRelevantThreshold() {
-        expectThrows(IllegalArgumentException.class, () -> new MeanReciprocalRank(-1, 1));
-    }
-
+    public void testEvaluationNoRelevantInResults() {
+        EvalQueryQuality evaluation = reciprocalRank.evaluate("id", hits, ratedDocs);
+     * test that the relevant rating threshold can be set to something larger than
     public void testInvalidK() {
-        expectThrows(IllegalArgumentException.class, () -> new MeanReciprocalRank(1, -1));
+import org.opensearch.core.xcontent.XContentParser;
+import java.util.Arrays;
+        }
+        // check that if we have fewer search hits than relevant doc position,
+        MeanReciprocalRank deserialized = OpenSearchTestCase.copyWriteable(
+     */
+ * not use this file except in compliance with the License.
+/*
+        // we don't find any result and get 0.0 score
     }
+        try (XContentParser parser = createParser(xContentType.xContent(), withRandomFields)) {
+    public void testNoResults() throws Exception {
+        EvalQueryQuality evaluation = reciprocalRank.evaluate("id", hits, rated);
+            XContentParseException exception = expectThrows(XContentParseException.class, () -> MeanReciprocalRank.fromXContent(parser));
+        xContent = "{ \"relevant_rating_threshold\": 2 }";
+            hits[i].shard(new SearchShardTarget("testnode", new ShardId(index, "uuid", 0), null, OriginalIndices.NONE));
+            assertNotSame(testItem, parsedItem);
+        List<RatedDocument> rated = new ArrayList<>();
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+     * Create SearchHits for testing, starting from dociId 'from' up to docId 'to'.
+ *
+            itemParser.nextToken();
+            assertEquals(1, mrr.getRelevantRatingThreshold());
+    }
+            assertEquals(2, mrr.getRelevantRatingThreshold());
+ */
+        // mark one of the ten docs relevant
+        for (int i = from; i <= to; i++) {
+import org.opensearch.search.SearchShardTarget;
+        rated.add(new RatedDocument("test", "1", 1));
+     */
+        partialResults.add(new EvalQueryQuality("id3", 0.75));
+        List<RatedDocument> ratedDocs = new ArrayList<>();
+import java.util.Collections;
+            if (i == relevantAt) {
+ * software distributed under the License is distributed on an
+        return new MeanReciprocalRank(testItem.getRelevantRatingThreshold(), testItem.getK());
+    public void testPrecisionAtFiveRelevanceThreshold() {
+    private static final int IRRELEVANT_RATING_0 = 0;
+ *
+        XContentBuilder shuffled = shuffleXContent(testItem.toXContent(builder, ToXContent.EMPTY_PARAMS));
+        }
+            MeanReciprocalRank mrr = MeanReciprocalRank.fromXContent(parser);
+    public void testSerialization() throws IOException {
+import org.opensearch.search.SearchHit;
+        MeanReciprocalRank testItem = createTestItem();
+            assertEquals(10, mrr.getK());
+    public void testParseFromXContent() throws IOException {
+    /**
+            assertEquals(testItem.hashCode(), parsedItem.hashCode());
+import java.io.IOException;
+import org.opensearch.core.index.shard.ShardId;
+            assertEquals(1, mrr.getRelevantRatingThreshold());
+import static org.hamcrest.CoreMatchers.containsString;
+    public void testEvaluationOneRelevantInResults() {
+    /**
+        MeanReciprocalRank reciprocalRank = new MeanReciprocalRank();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            parser.nextToken();
+    }
+ */
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, xContent)) {
+    }
+            assertThat(exception.getMessage(), containsString("[reciprocal_rank] unknown field"));
+        int relevantAt = randomIntBetween(0, 9);
+ * license agreements. See the NOTICE file distributed with
+        String xContent = "{ }";
+                ratedDocs.add(new RatedDocument("test", Integer.toString(i), RELEVANT_RATING_1));
+        SearchHit[] hits = createSearchHits(0, 9, "test");
+            new NamedWriteableRegistry(Collections.emptyList()),
+        assertEquals(1.0 / rankAtFirstRelevant, evaluation.metricScore(), Double.MIN_VALUE);
+        MeanReciprocalRank reciprocalRank = new MeanReciprocalRank();
+    }
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, xContent)) {
+        try (XContentParser itemParser = createParser(shuffled)) {
+        assertEquals(3, ((MeanReciprocalRank.Detail) evaluation.getMetricDetails()).getFirstRelevantRank());
+ * the Apache License, Version 2.0 (the "License"); you may
+        );
+    public void testEqualsAndHash() throws IOException {
+/*
+ * The OpenSearch Contributors require contributions made to
+            MeanReciprocalRank parsedItem = MeanReciprocalRank.fromXContent(itemParser);
+ * Unless required by applicable law or agreed to in writing,
+    }
+    }
+        List<EvalQueryQuality> partialResults = new ArrayList<>(3);
+    }
+    }
+            return new MeanReciprocalRank(testItem.getRelevantRatingThreshold() + 1, testItem.getK());
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, xContent)) {
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.action.OriginalIndices;
+     * 1. e.g. we set it to 2 here and expect dics 0-2 to be not relevant, so first
+        xContent = "{ \"k\" : 15 }";
+            assertEquals(testItem, parsedItem);
+        rated.add(new RatedDocument("test", "4", 4));
 }
+        assertEquals(relevantAt + 1, ((MeanReciprocalRank.Detail) evaluation.getMetricDetails()).getFirstRelevantRank());
+        reciprocalRank = new MeanReciprocalRank();
+        }
+ * this file be licensed under the Apache-2.0 license or a
+            assertEquals(15, mrr.getK());
+        if (randomBoolean()) {
+ * this work for additional information regarding copyright
+        }
+        SearchHit[] hits = new SearchHit[to + 1 - from];
+        int searchHits = randomIntBetween(1, 50);
+        SearchHit[] hits = createSearchHits(0, 9, "test");
+    public void testMaxAcceptableRank() {
+        List<RatedDocument> ratedDocs = new ArrayList<>();
+import org.opensearch.common.xcontent.json.JsonXContent;
+            return new MeanReciprocalRank(testItem.getRelevantRatingThreshold(), testItem.getK() + 1);
+            original,
+    }
+import java.util.List;
+public class MeanReciprocalRankTests extends OpenSearchTestCase {
+        MeanReciprocalRank reciprocalRank = new MeanReciprocalRank();
+    }
+            }
+        for (int i = 0; i <= 20; i++) {
+ * Licensed to Elasticsearch under one or more contributor
+ */
+        XContentType xContentType = randomFrom(XContentType.values());
+        EvalQueryQuality evaluated = (new MeanReciprocalRank()).evaluate("id", hits, Collections.emptyList());
+        assertEquals(deserialized.hashCode(), original.hashCode());
+import static org.opensearch.test.XContentTestUtils.insertRandomFields;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        assertNotSame(deserialized, original);
+ * specific language governing permissions and limitations
+            assertEquals(10, mrr.getK());
+        }
+        assertEquals(deserialized, original);
+        assertEquals(0.0d, evaluated.metricScore(), 0.00001);
+        return hits;
+            hits[i] = new SearchHit(i, i + "", Collections.emptyMap(), Collections.emptyMap());
+    }
+    private static MeanReciprocalRank mutate(MeanReciprocalRank testItem) {
+    public void testXContentRoundtrip() throws IOException {
+    }
+import java.util.ArrayList;
+        SearchHit[] hits = createSearchHits(0, 5, "test");
+            MeanReciprocalRank mrr = MeanReciprocalRank.fromXContent(parser);
+        assertEquals(-1, ((MeanReciprocalRank.Detail) evaluated.getMetricDetails()).getFirstRelevantRank());
+        XContentBuilder builder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));
+                ratedDocs.add(new RatedDocument("test", Integer.toString(i), IRRELEVANT_RATING_0));
+        assertEquals(0.0, evaluation.metricScore(), Double.MIN_VALUE);
+ * GitHub history for details.
+        assertEquals(rankAtFirstRelevant, ((MeanReciprocalRank.Detail) evaluation.getMetricDetails()).getFirstRelevantRank());
+    private static final int RELEVANT_RATING_1 = 1;
+        partialResults.add(new EvalQueryQuality("id2", 1.0));
+        assertEquals(0.0, evaluation.metricScore(), Double.MIN_VALUE);
+            MeanReciprocalRank mrr = MeanReciprocalRank.fromXContent(parser);
+        assertEquals(0.75, reciprocalRank.combine(partialResults), Double.MIN_VALUE);
+import org.opensearch.core.xcontent.XContentBuilder;
+     * The search hits index also need to be provided
+        rated.add(new RatedDocument("test", "2", 2));
+        partialResults.add(new EvalQueryQuality("id1", 0.5));
+        BytesReference originalBytes = toShuffledXContent(testItem, xContentType, ToXContent.EMPTY_PARAMS, randomBoolean());
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import static org.opensearch.test.EqualsHashCodeTestUtils.checkEqualsAndHashCode;
+        return new MeanReciprocalRank(randomIntBetween(0, 20), randomIntBetween(1, 20));
+        } else {
+        MeanReciprocalRank testItem = createTestItem();
+import org.opensearch.common.xcontent.XContentType;
+    private static SearchHit[] createSearchHits(int from, int to, String index) {
+        expectThrows(IllegalArgumentException.class, () -> new MeanReciprocalRank(1, -1));
+import org.opensearch.core.xcontent.ToXContent;
+        for (int i = 0; i <= searchHits; i++) {
+        assertEquals(1.0 / (relevantAt + 1), evaluation.metricScore(), Double.MIN_VALUE);
+        SearchHit[] hits = new SearchHit[0];
+        }
+        expectThrows(IllegalArgumentException.class, () -> new MeanReciprocalRank(-1, 1));
+            }
+    }
+package org.opensearch.index.rankeval;
+    private static MeanReciprocalRank copy(MeanReciprocalRank testItem) {
+            assertEquals(2, mrr.getRelevantRatingThreshold());
+        MeanReciprocalRank original = createTestItem();
+            } else {
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.test.OpenSearchTestCase;
+            assertEquals(15, mrr.getK());
+            MeanReciprocalRank mrr = MeanReciprocalRank.fromXContent(parser);
+        }
+                ratedDocs.add(new RatedDocument("test", Integer.toString(i), IRRELEVANT_RATING_0));
+        List<RatedDocument> ratedDocs = new ArrayList<>();
+            } else {
+    }
+ * ownership. Elasticsearch licenses this file to you under
+        BytesReference withRandomFields = insertRandomFields(xContentType, originalBytes, null, random());
+    static MeanReciprocalRank createTestItem() {
+import org.opensearch.core.xcontent.XContentParseException;
+        checkEqualsAndHashCode(createTestItem(), MeanReciprocalRankTests::copy, MeanReciprocalRankTests::mutate);
+ * under the License.
+        MeanReciprocalRank reciprocalRank = new MeanReciprocalRank();
+                ratedDocs.add(new RatedDocument("test", Integer.toString(i), RELEVANT_RATING_1));
+        SearchHit[] hits = createSearchHits(0, searchHits, "test");
+/*
+        evaluation = reciprocalRank.evaluate("id", Arrays.copyOfRange(hits, 0, relevantAt), ratedDocs);
+        int relevantAt = randomIntBetween(0, searchHits);
+ * You may obtain a copy of the License at
+            parser.nextToken();
+        rated.add(new RatedDocument("test", "3", 3));
+import org.opensearch.core.common.bytes.BytesReference;
+        }
+    public void testInvalidRelevantThreshold() {
+    public void testCombine() {
+            MeanReciprocalRank::new
+        try (XContentParser parser = createParser(JsonXContent.jsonXContent, xContent)) {
+ *
+     * relevant doc has third ranking position, so RR should be 1/3

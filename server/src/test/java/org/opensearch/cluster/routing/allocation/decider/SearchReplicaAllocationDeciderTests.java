@@ -1,360 +1,322 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.cluster.routing.allocation.decider;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.EmptyClusterInfoService;
-import org.opensearch.cluster.OpenSearchAllocationTestCase;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.RecoverySource;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardRoutingHelper;
-import org.opensearch.cluster.routing.UnassignedInfo;
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.cluster.routing.allocation.RoutingAllocation;
-import org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator;
-import org.opensearch.cluster.routing.allocation.command.AllocationCommands;
+        AllocationService strategy = createAllocationService(Settings.EMPTY, gatewayAllocator);
+        Decision decision = throttlingDecisionForSearchReplicaMoveWithoutPrimary(
+                REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY,
+        );
+                REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY,
+                assertEquals(Decision.Type.NO, decision.type());
+        TestGatewayAllocator gatewayAllocator,
+        assertEquals("Remote based search replica below incoming recovery limit: [0 < 2]", decision.getExplanation());
 import org.opensearch.cluster.routing.allocation.command.MoveAllocationCommand;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.snapshots.EmptySnapshotsInfoService;
-import org.opensearch.test.gateway.TestGatewayAllocator;
-
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-
-import static org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING;
-import static org.opensearch.cluster.routing.ShardRoutingState.STARTED;
-import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY;
-import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY;
+import org.opensearch.cluster.node.DiscoveryNodes;
+            EmptyClusterInfoService.INSTANCE,
+        clusterState = strategy.disassociateDeadNodes(
+            name,
+        );
+            false,
 import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_TRANSLOG_REPOSITORY_NAME_ATTRIBUTE_KEY;
-
-public class SearchReplicaAllocationDeciderTests extends OpenSearchAllocationTestCase {
-
-    public void testSearchReplicaRoutingDedicatedIncludes() {
-        Set<Setting<?>> settings = new HashSet<>(ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        ClusterSettings clusterSettings = new ClusterSettings(Settings.builder().build(), settings);
-        SearchReplicaAllocationDecider filterAllocationDecider = new SearchReplicaAllocationDecider();
-        AllocationDeciders allocationDeciders = new AllocationDeciders(
-            Arrays.asList(
-                filterAllocationDecider,
+            if (decision.label().equals(ThrottlingAllocationDecider.NAME)) {
+        return newNode(
+        routingTableBuilder.addAsRecovery(indexMetadata);
+     * store, so it must keep the same exemption a full remote store node gets.
+        for (Decision decision : commandsResult.explanations().explanations().get(0).decisions().getDecisions()) {
                 new SameShardAllocationDecider(Settings.EMPTY, clusterSettings),
-                new ReplicaAfterPrimaryActiveAllocationDecider()
+        assertEquals(decision.toString(), Decision.Type.NO, decision.type());
+            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newSearchNode("node2")))
+        clusterState = strategy.reroute(clusterState, "reroute");
+                "cluster-repo",
+     * A {@code segments_only} node has no translog repository, but a search replica recovers from the remote segment
+    }
+        }
+        Metadata.Builder metadataBuilder = new Metadata.Builder(metadata);
+        // start a third node, we will try and move the SR to this node
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        decision = (Decision.Single) filterAllocationDecider.canRemain(regularReplica, state.getRoutingNodes().node("node2"), allocation);
+                assertEquals("primary shard for this replica is not yet active", decision.getExplanation());
+            new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, "test")
+import org.opensearch.common.settings.Setting;
+        AllocationService.CommandsResult commandsResult = strategy.reroute(
+import org.opensearch.cluster.routing.allocation.RoutingAllocation;
+                isCorrectNoDecision = true;
+        Metadata metadata,
+        AllocationService.CommandsResult commandsResult = strategy.reroute(
+    private Decision throttlingDecisionForSearchReplicaMoveWithoutPrimary(
+        );
+import org.opensearch.cluster.routing.ShardRoutingHelper;
+        );
+    private static DiscoveryNode newSegmentsOnlySearchNode(String name) {
+            "test"
+        Set<Setting<?>> settings = new HashSet<>(ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+                    .numberOfSearchReplicas(1)
+                "segment-repo",
+            allocation
+    /**
+                "translog-repo"
+        metadataBuilder.put(indexMetadata, false);
             )
+    private void initializePrimaryAndMarkInSync(
+        assertEquals(Decision.Type.YES, decision.type());
+                filterAllocationDecider,
+        assertEquals(commandsResult.explanations().explanations().get(0).decisions().type(), Decision.Type.NO);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+        assertEquals("Remote based search replica below incoming recovery limit: [0 < 2]", decision.getExplanation());
+        );
+            "test"
+        // Tests for canRemain
+        clusterState = strategy.reroute(clusterState, "reroute");
+            )
+                "translog-repo"
+        assertEquals(commandsResult.explanations().explanations().size(), 1);
+import org.opensearch.cluster.routing.ShardRouting;
+        decision = (Decision.Single) filterAllocationDecider.canRemain(primary, state.getRoutingNodes().node("node1"), allocation);
+        assertEquals(commandsResult.explanations().explanations().size(), 1);
+import org.opensearch.cluster.routing.allocation.command.AllocationCommands;
+            )
+        return newNode(name, name, Map.of(REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY, "segment-repo"));
+            true,
+            newRemoteNode("node3")
+        assertEquals(clusterState.getRoutingNodes().getOutgoingRecoveries("node1"), 0);
+        decision = (Decision.Single) filterAllocationDecider.canRemain(searchReplica, state.getRoutingNodes().node("node1"), allocation);
+        assertEquals(2, clusterState.routingTable().shardsWithState(STARTED).size());
+            name,
+        // Cannot allocate primary on search node
+        RoutingTable routingTable = state.routingTable();
+            .routingTable(routingTable)
+            )
+        ClusterState state = FilterAllocationDeciderTests.createInitialClusterState(service, Settings.EMPTY, Settings.EMPTY);
+import java.util.HashSet;
+        return newSearchNode(name, name, Map.of(REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY, "segment-repo"));
+        );
+ */
+        final ShardRouting unassigned = ShardRouting.newUnassigned(
+        DiscoveryNode targetNode
+            true,
+            .build();
+            .put(
+        decision = (Decision.Single) filterAllocationDecider.canRemain(regularReplica, state.getRoutingNodes().node("node1"), allocation);
+            searchReplica,
+        clusterState = strategy.reroute(clusterState, "reroute");
+        assertEquals(decision.toString(), Decision.Type.YES, decision.type());
+import org.opensearch.cluster.metadata.IndexMetadata;
+                new ReplicaAfterPrimaryActiveAllocationDecider()
+        decision = (Decision.Single) filterAllocationDecider.canAllocate(primary, state.getRoutingNodes().node("node1"), allocation);
+import org.opensearch.cluster.EmptyClusterInfoService;
+        assertEquals(decision.toString(), Decision.Type.YES, decision.type());
+    }
+    }
+    private static DiscoveryNode newRemoteSearchNode(String name) {
+            routingTable.index("sourceIndex").shard(0).shardId(),
+                REMOTE_STORE_TRANSLOG_REPOSITORY_NAME_ATTRIBUTE_KEY,
+        IndexMetadata indexMetadata = metadata.index("test");
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY;
+        assertEquals(decision.toString(), Decision.Type.YES, decision.type());
+        clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder(clusterState.nodes()).add(searchNode)).build();
+            true,
+                REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY,
+        DiscoveryNode primaryNode,
+import org.opensearch.cluster.routing.allocation.allocator.BalancedShardsAllocator;
+import java.util.Map;
+import org.opensearch.cluster.OpenSearchAllocationTestCase;
+            newSegmentsOnlyNode("node1"),
+            newRemoteNode("node1"),
+    }
+        RoutingAllocation allocation = new RoutingAllocation(allocationDeciders, state.getRoutingNodes(), state, null, null, 0);
+        for (Decision decision : commandsResult.explanations().explanations().get(0).decisions().getDecisions()) {
+}
+            Map.of(
+     * asks to move the search replica to {@code targetNode} and returns the throttling decider's decision.
+        clusterState = strategy.reroute(clusterState, "reroute");
+import org.opensearch.cluster.routing.UnassignedInfo;
+        initializePrimaryAndMarkInSync(indexMetadata.getIndex(), indexMetadataBuilder, gatewayAllocator, primaryNode);
+        clusterState = strategy.reroute(clusterState, "reroute");
+            false,
+        // regular replicas would get promoted to primary before the CanMoveAway call.
+            newSegmentsOnlyNode("node3")
+            name,
+            false,
+            .build();
+        }
+                "cluster-repo",
+                IndexMetadata.builder("test")
+            newRemoteSearchNode("node2"),
+        AllocationDeciders allocationDeciders = new AllocationDeciders(
+        ShardRouting primary = ShardRouting.newUnassigned(
+import java.util.Arrays;
+            new BalancedShardsAllocator(Settings.EMPTY),
+            .metadata(metadataBuilder.build())
+        Decision decision = throttlingDecisionForSearchReplicaMoveWithoutPrimary(
+        );
+public class SearchReplicaAllocationDeciderTests extends OpenSearchAllocationTestCase {
+     * Starts the primary on {@code primaryNode} and the search replica on {@code searchNode}, kills the primary, then
+        );
+        ShardRouting searchReplica = ShardRouting.newUnassigned(
+ * The OpenSearch Contributors require contributions made to
+            if (decision.label().equals(ThrottlingAllocationDecider.NAME)) {
+        Index index,
+                    .numberOfReplicas(0)
         );
         AllocationService service = new AllocationService(
-            allocationDeciders,
-            new TestGatewayAllocator(),
-            new BalancedShardsAllocator(Settings.EMPTY),
-            EmptyClusterInfoService.INSTANCE,
-            EmptySnapshotsInfoService.INSTANCE
-        );
-        ClusterState state = FilterAllocationDeciderTests.createInitialClusterState(service, Settings.EMPTY, Settings.EMPTY);
-        RoutingTable routingTable = state.routingTable();
-        RoutingAllocation allocation = new RoutingAllocation(allocationDeciders, state.getRoutingNodes(), state, null, null, 0);
-        allocation.debugDecision(true);
-
-        ShardRouting searchReplica = ShardRouting.newUnassigned(
+package org.opensearch.cluster.routing.allocation.decider;
             routingTable.index("sourceIndex").shard(0).shardId(),
-            false,
-            true,
-            RecoverySource.PeerRecoverySource.INSTANCE,
-            new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, "")
-        );
-
-        ShardRouting regularReplica = ShardRouting.newUnassigned(
-            routingTable.index("sourceIndex").shard(0).shardId(),
-            false,
-            false,
-            RecoverySource.PeerRecoverySource.INSTANCE,
-            new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, "")
-        );
-
-        ShardRouting primary = ShardRouting.newUnassigned(
-            routingTable.index("sourceIndex").shard(0).shardId(),
-            true,
-            false,
-            RecoverySource.PeerRecoverySource.INSTANCE,
-            new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, "")
-        );
-
-        // Tests for canAllocate
-        // Can allocate searchReplica on search node
-        Decision.Single decision = (Decision.Single) filterAllocationDecider.canAllocate(
-            searchReplica,
-            state.getRoutingNodes().node("node2"),
-            allocation
-        );
-        assertEquals(decision.toString(), Decision.Type.YES, decision.type());
-
-        // Cannot allocate searchReplica on data node
-        decision = (Decision.Single) filterAllocationDecider.canAllocate(searchReplica, state.getRoutingNodes().node("node1"), allocation);
-        assertEquals(decision.toString(), Decision.Type.NO, decision.type());
-
-        // Cannot allocate regularReplica on search node
-        decision = (Decision.Single) filterAllocationDecider.canAllocate(regularReplica, state.getRoutingNodes().node("node2"), allocation);
-        assertEquals(decision.toString(), Decision.Type.NO, decision.type());
-
-        // Can allocate regularReplica on data node
-        decision = (Decision.Single) filterAllocationDecider.canAllocate(regularReplica, state.getRoutingNodes().node("node1"), allocation);
-        assertEquals(decision.toString(), Decision.Type.YES, decision.type());
-
-        // Can allocate primary on data node
-        decision = (Decision.Single) filterAllocationDecider.canAllocate(primary, state.getRoutingNodes().node("node1"), allocation);
-        assertEquals(decision.toString(), Decision.Type.YES, decision.type());
-
-        // Cannot allocate primary on search node
-        decision = (Decision.Single) filterAllocationDecider.canAllocate(primary, state.getRoutingNodes().node("node2"), allocation);
-        assertEquals(decision.toString(), Decision.Type.NO, decision.type());
-
-        // Tests for canRemain
-        decision = (Decision.Single) filterAllocationDecider.canRemain(searchReplica, state.getRoutingNodes().node("node2"), allocation);
-        assertEquals(decision.toString(), Decision.Type.YES, decision.type());
-
-        decision = (Decision.Single) filterAllocationDecider.canRemain(searchReplica, state.getRoutingNodes().node("node1"), allocation);
-        assertEquals(decision.toString(), Decision.Type.NO, decision.type());
-
-        decision = (Decision.Single) filterAllocationDecider.canRemain(regularReplica, state.getRoutingNodes().node("node2"), allocation);
-        assertEquals(decision.toString(), Decision.Type.NO, decision.type());
-
-        decision = (Decision.Single) filterAllocationDecider.canRemain(regularReplica, state.getRoutingNodes().node("node1"), allocation);
-        assertEquals(decision.toString(), Decision.Type.YES, decision.type());
-
-        decision = (Decision.Single) filterAllocationDecider.canRemain(primary, state.getRoutingNodes().node("node1"), allocation);
-        assertEquals(decision.toString(), Decision.Type.YES, decision.type());
-
-        decision = (Decision.Single) filterAllocationDecider.canRemain(primary, state.getRoutingNodes().node("node2"), allocation);
-        assertEquals(decision.toString(), Decision.Type.NO, decision.type());
-    }
-
-    public void testSearchReplicaWithThrottlingDecider_PrimaryBasedReplication() {
-        TestGatewayAllocator gatewayAllocator = new TestGatewayAllocator();
-        // throttle outgoing on primary
-        AllocationService strategy = createAllocationService(Settings.EMPTY, gatewayAllocator);
-        Metadata metadata = Metadata.builder()
-            .put(
-                IndexMetadata.builder("test")
-                    .settings(settings(Version.CURRENT))
-                    .numberOfShards(1)
-                    .numberOfReplicas(0)
-                    .numberOfSearchReplicas(1)
-            )
-            .build();
-
-        ClusterState clusterState = initializeClusterStateWithSingleIndexAndShard(newNode("node1"), metadata, gatewayAllocator);
-        clusterState = strategy.reroute(clusterState, "reroute");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
         clusterState = ClusterState.builder(clusterState)
-            .nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newSearchNode("node2")))
-            .build();
-        clusterState = strategy.reroute(clusterState, "reroute");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
-        assertEquals(2, clusterState.routingTable().shardsWithState(STARTED).size());
-        assertEquals(clusterState.getRoutingNodes().getOutgoingRecoveries("node1"), 0);
-        // start a third node, we will try and move the SR to this node
-        clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node3"))).build();
-        clusterState = strategy.reroute(clusterState, "reroute");
         // remove the primary and reroute - this would throw an NPE for search replicas but *not* regular.
-        // regular replicas would get promoted to primary before the CanMoveAway call.
-        clusterState = strategy.disassociateDeadNodes(
-            ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder(clusterState.nodes()).remove("node1")).build(),
-            true,
-            "test"
-        );
-
-        // attempt to move the replica
-        AllocationService.CommandsResult commandsResult = strategy.reroute(
-            clusterState,
-            new AllocationCommands(new MoveAllocationCommand("test", 0, "node2", "node3")),
-            true,
-            false
-        );
-
-        assertEquals(commandsResult.explanations().explanations().size(), 1);
-        assertEquals(commandsResult.explanations().explanations().get(0).decisions().type(), Decision.Type.NO);
-        boolean isCorrectNoDecision = false;
-        for (Decision decision : commandsResult.explanations().explanations().get(0).decisions().getDecisions()) {
-            if (decision.label().equals(ThrottlingAllocationDecider.NAME)) {
-                assertEquals("primary shard for this replica is not yet active", decision.getExplanation());
-                assertEquals(Decision.Type.NO, decision.type());
-                isCorrectNoDecision = true;
-            }
-        }
-        assertTrue(isCorrectNoDecision);
-    }
-
-    public void testSearchReplicaWithThrottlingDeciderWithoutPrimary_RemoteStoreEnabled() {
-        Decision decision = throttlingDecisionForSearchReplicaMoveWithoutPrimary(
-            newRemoteNode("node1"),
-            newRemoteSearchNode("node2"),
-            newRemoteNode("node3")
-        );
-        assertEquals("Remote based search replica below incoming recovery limit: [0 < 2]", decision.getExplanation());
-        assertEquals(Decision.Type.YES, decision.type());
-    }
-
-    /**
-     * A {@code segments_only} node has no translog repository, but a search replica recovers from the remote segment
-     * store, so it must keep the same exemption a full remote store node gets.
-     */
-    public void testSearchReplicaWithThrottlingDeciderWithoutPrimary_SegmentsOnly() {
-        Decision decision = throttlingDecisionForSearchReplicaMoveWithoutPrimary(
-            newSegmentsOnlyNode("node1"),
-            newSegmentsOnlySearchNode("node2"),
-            newSegmentsOnlyNode("node3")
-        );
-        assertEquals("Remote based search replica below incoming recovery limit: [0 < 2]", decision.getExplanation());
-        assertEquals(Decision.Type.YES, decision.type());
-    }
-
-    /**
-     * Starts the primary on {@code primaryNode} and the search replica on {@code searchNode}, kills the primary, then
-     * asks to move the search replica to {@code targetNode} and returns the throttling decider's decision.
-     */
-    private Decision throttlingDecisionForSearchReplicaMoveWithoutPrimary(
+        // Can allocate regularReplica on data node
         DiscoveryNode primaryNode,
-        DiscoveryNode searchNode,
-        DiscoveryNode targetNode
-    ) {
-        TestGatewayAllocator gatewayAllocator = new TestGatewayAllocator();
+        // Can allocate searchReplica on search node
         AllocationService strategy = createAllocationService(Settings.EMPTY, gatewayAllocator);
-        Metadata metadata = Metadata.builder()
-            .put(
-                IndexMetadata.builder("test")
-                    .settings(settings(Version.CURRENT))
-                    .numberOfShards(1)
-                    .numberOfReplicas(0)
-                    .numberOfSearchReplicas(1)
-            )
-            .build();
-
-        ClusterState clusterState = initializeClusterStateWithSingleIndexAndShard(primaryNode, metadata, gatewayAllocator);
-
-        clusterState = strategy.reroute(clusterState, "reroute");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
-        clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder(clusterState.nodes()).add(searchNode)).build();
-        clusterState = strategy.reroute(clusterState, "reroute");
-        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
-        assertEquals(2, clusterState.routingTable().shardsWithState(STARTED).size());
-        assertEquals(clusterState.getRoutingNodes().getOutgoingRecoveries(primaryNode.getId()), 0);
-        // start a third node, we will try and move the SR to this node
-        clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder(clusterState.nodes()).add(targetNode)).build();
-        clusterState = strategy.reroute(clusterState, "reroute");
-        // remove the primary and reroute - this would throw an NPE for search replicas but *not* regular.
-        // regular replicas would get promoted to primary before the CanMoveAway call.
-        clusterState = strategy.disassociateDeadNodes(
-            ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder(clusterState.nodes()).remove(primaryNode.getId())).build(),
-            true,
-            "test"
-        );
-
+                REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY,
+        SearchReplicaAllocationDecider filterAllocationDecider = new SearchReplicaAllocationDecider();
+import java.util.Set;
+import org.opensearch.core.index.Index;
         // attempt to move the replica
-        AllocationService.CommandsResult commandsResult = strategy.reroute(
-            clusterState,
+                    .settings(settings(Version.CURRENT))
+        ShardRouting regularReplica = ShardRouting.newUnassigned(
+            ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder(clusterState.nodes()).remove(primaryNode.getId())).build(),
+        // Cannot allocate searchReplica on data node
+    }
+            true,
+                    .numberOfReplicas(0)
+        assertEquals(decision.toString(), Decision.Type.NO, decision.type());
+import org.opensearch.cluster.routing.RecoverySource;
+            RecoverySource.PeerRecoverySource.INSTANCE,
+    public void testSearchReplicaWithThrottlingDeciderWithoutPrimary_SegmentsOnly() {
+    private static DiscoveryNode newRemoteNode(String name) {
+        assertEquals(decision.toString(), Decision.Type.YES, decision.type());
+    ) {
+import org.opensearch.Version;
+                    .numberOfShards(1)
+            false
+        boolean isCorrectNoDecision = false;
+        // remove the primary and reroute - this would throw an NPE for search replicas but *not* regular.
+        // throttle outgoing on primary
+import org.opensearch.cluster.metadata.Metadata;
+        decision = (Decision.Single) filterAllocationDecider.canRemain(searchReplica, state.getRoutingNodes().node("node2"), allocation);
+    ) {
+        decision = (Decision.Single) filterAllocationDecider.canAllocate(searchReplica, state.getRoutingNodes().node("node1"), allocation);
+        );
+        assertEquals(Decision.Type.YES, decision.type());
+        // Can allocate primary on data node
+        // Tests for canAllocate
             new AllocationCommands(new MoveAllocationCommand("test", 0, searchNode.getId(), targetNode.getId())),
             true,
-            false
+        assertTrue(isCorrectNoDecision);
         );
-
-        assertEquals(commandsResult.explanations().explanations().size(), 1);
-        assertEquals(commandsResult.explanations().explanations().get(0).decisions().type(), Decision.Type.NO);
-        for (Decision decision : commandsResult.explanations().explanations().get(0).decisions().getDecisions()) {
-            if (decision.label().equals(ThrottlingAllocationDecider.NAME)) {
-                return decision;
-            }
-        }
-        throw new AssertionError("no " + ThrottlingAllocationDecider.NAME + " decision was returned");
+import static org.opensearch.cluster.routing.ShardRoutingState.STARTED;
+    private static DiscoveryNode newSegmentsOnlyNode(String name) {
+import org.opensearch.cluster.ClusterState;
+            state.getRoutingNodes().node("node2"),
+/*
+                    .numberOfSearchReplicas(1)
     }
-
-    private ClusterState initializeClusterStateWithSingleIndexAndShard(
-        DiscoveryNode primaryNode,
-        Metadata metadata,
-        TestGatewayAllocator gatewayAllocator
-    ) {
-        Metadata.Builder metadataBuilder = new Metadata.Builder(metadata);
         RoutingTable.Builder routingTableBuilder = RoutingTable.builder();
-        IndexMetadata indexMetadata = metadata.index("test");
-        IndexMetadata.Builder indexMetadataBuilder = IndexMetadata.builder(indexMetadata);
-        initializePrimaryAndMarkInSync(indexMetadata.getIndex(), indexMetadataBuilder, gatewayAllocator, primaryNode);
-        routingTableBuilder.addAsRecovery(indexMetadata);
-        metadataBuilder.put(indexMetadata, false);
-        RoutingTable routingTable = routingTableBuilder.build();
-        return ClusterState.builder(CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
-            .nodes(DiscoveryNodes.builder().add(primaryNode))
-            .metadata(metadataBuilder.build())
-            .routingTable(routingTable)
+            new UnassignedInfo(UnassignedInfo.Reason.NODE_LEFT, "")
+        assertEquals(decision.toString(), Decision.Type.NO, decision.type());
+        Decision.Single decision = (Decision.Single) filterAllocationDecider.canAllocate(
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.common.settings.ClusterSettings;
+        decision = (Decision.Single) filterAllocationDecider.canRemain(primary, state.getRoutingNodes().node("node2"), allocation);
             .build();
-    }
-
-    private void initializePrimaryAndMarkInSync(
-        Index index,
-        IndexMetadata.Builder indexMetadata,
-        TestGatewayAllocator gatewayAllocator,
-        DiscoveryNode primaryNode
-    ) {
-        final ShardRouting unassigned = ShardRouting.newUnassigned(
-            new ShardId(index, 0),
+import java.util.Collections;
+            }
+        decision = (Decision.Single) filterAllocationDecider.canAllocate(regularReplica, state.getRoutingNodes().node("node1"), allocation);
+        ClusterState clusterState = initializeClusterStateWithSingleIndexAndShard(primaryNode, metadata, gatewayAllocator);
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+import static org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING;
+ * this file be licensed under the Apache-2.0 license or a
+        return newSearchNode(
+        clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder(clusterState.nodes()).add(newNode("node3"))).build();
+            name,
             true,
             RecoverySource.EmptyStoreRecoverySource.INSTANCE,
-            new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, "test")
-        );
-        ShardRouting started = ShardRoutingHelper.moveToStarted(ShardRoutingHelper.initialize(unassigned, primaryNode.getId()));
-        indexMetadata.putInSyncAllocationIds(0, Collections.singleton(started.allocationId().getId()));
+        assertEquals(decision.toString(), Decision.Type.YES, decision.type());
+        clusterState = ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder(clusterState.nodes()).add(targetNode)).build();
+        clusterState = startInitializingShardsAndReroute(strategy, clusterState);
+            true,
+    }
+    }
+import org.opensearch.cluster.node.DiscoveryNode;
+            false
+        TestGatewayAllocator gatewayAllocator = new TestGatewayAllocator();
+    /**
+            false,
+    }
+        DiscoveryNode searchNode,
+            new AllocationCommands(new MoveAllocationCommand("test", 0, "node2", "node3")),
+            clusterState,
         gatewayAllocator.addKnownAllocation(started);
-    }
-
-    private static DiscoveryNode newRemoteNode(String name) {
-        return newNode(
-            name,
-            name,
-            Map.of(
-                REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY,
-                "cluster-repo",
-                REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY,
-                "segment-repo",
-                REMOTE_STORE_TRANSLOG_REPOSITORY_NAME_ATTRIBUTE_KEY,
-                "translog-repo"
-            )
+        IndexMetadata.Builder indexMetadata,
         );
-    }
-
-    private static DiscoveryNode newRemoteSearchNode(String name) {
-        return newSearchNode(
-            name,
-            name,
-            Map.of(
-                REMOTE_STORE_CLUSTER_STATE_REPOSITORY_NAME_ATTRIBUTE_KEY,
-                "cluster-repo",
-                REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY,
-                "segment-repo",
-                REMOTE_STORE_TRANSLOG_REPOSITORY_NAME_ATTRIBUTE_KEY,
-                "translog-repo"
-            )
+import org.opensearch.cluster.routing.allocation.AllocationService;
+            .build();
+import org.opensearch.cluster.routing.RoutingTable;
+import org.opensearch.test.gateway.TestGatewayAllocator;
+        DiscoveryNode primaryNode
+                    .settings(settings(Version.CURRENT))
+        RoutingTable routingTable = routingTableBuilder.build();
+        indexMetadata.putInSyncAllocationIds(0, Collections.singleton(started.allocationId().getId()));
+            }
+            new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, "")
+    private ClusterState initializeClusterStateWithSingleIndexAndShard(
         );
+        // attempt to move the replica
     }
-
-    private static DiscoveryNode newSegmentsOnlyNode(String name) {
-        return newNode(name, name, Map.of(REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY, "segment-repo"));
+            new TestGatewayAllocator(),
+        );
+        assertEquals(decision.toString(), Decision.Type.NO, decision.type());
+            EmptySnapshotsInfoService.INSTANCE
+        Metadata metadata = Metadata.builder()
+     */
+     */
+ * compatible open source license.
+            clusterState,
+        return ClusterState.builder(CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
+            .put(
+        decision = (Decision.Single) filterAllocationDecider.canAllocate(regularReplica, state.getRoutingNodes().node("node2"), allocation);
+        assertEquals(2, clusterState.routingTable().shardsWithState(STARTED).size());
+ *
+            routingTable.index("sourceIndex").shard(0).shardId(),
+import org.opensearch.common.settings.Settings;
+        assertEquals(commandsResult.explanations().explanations().get(0).decisions().type(), Decision.Type.NO);
     }
-
-    private static DiscoveryNode newSegmentsOnlySearchNode(String name) {
-        return newSearchNode(name, name, Map.of(REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY, "segment-repo"));
-    }
-}
+    public void testSearchReplicaWithThrottlingDecider_PrimaryBasedReplication() {
+ * SPDX-License-Identifier: Apache-2.0
+        TestGatewayAllocator gatewayAllocator
+import org.opensearch.snapshots.EmptySnapshotsInfoService;
+        ClusterSettings clusterSettings = new ClusterSettings(Settings.builder().build(), settings);
+        // regular replicas would get promoted to primary before the CanMoveAway call.
+            ClusterState.builder(clusterState).nodes(DiscoveryNodes.builder(clusterState.nodes()).remove("node1")).build(),
+            newSegmentsOnlySearchNode("node2"),
+        // start a third node, we will try and move the SR to this node
+import static org.opensearch.node.remotestore.RemoteStoreNodeAttribute.REMOTE_STORE_SEGMENT_REPOSITORY_NAME_ATTRIBUTE_KEY;
+            new ShardId(index, 0),
+    public void testSearchReplicaWithThrottlingDeciderWithoutPrimary_RemoteStoreEnabled() {
+        throw new AssertionError("no " + ThrottlingAllocationDecider.NAME + " decision was returned");
+            .nodes(DiscoveryNodes.builder().add(primaryNode))
+        assertEquals(clusterState.getRoutingNodes().getOutgoingRecoveries(primaryNode.getId()), 0);
+            new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, "")
+        Metadata metadata = Metadata.builder()
+        ClusterState clusterState = initializeClusterStateWithSingleIndexAndShard(newNode("node1"), metadata, gatewayAllocator);
+            RecoverySource.PeerRecoverySource.INSTANCE,
+            )
+        IndexMetadata.Builder indexMetadataBuilder = IndexMetadata.builder(indexMetadata);
+                    .numberOfShards(1)
+        ShardRouting started = ShardRoutingHelper.moveToStarted(ShardRoutingHelper.initialize(unassigned, primaryNode.getId()));
+        TestGatewayAllocator gatewayAllocator = new TestGatewayAllocator();
+    public void testSearchReplicaRoutingDedicatedIncludes() {
+            allocationDeciders,
+        clusterState = strategy.disassociateDeadNodes(
+        assertEquals(decision.toString(), Decision.Type.NO, decision.type());
+        assertEquals(decision.toString(), Decision.Type.YES, decision.type());
+                return decision;
+                REMOTE_STORE_TRANSLOG_REPOSITORY_NAME_ATTRIBUTE_KEY,
+                IndexMetadata.builder("test")
+            Arrays.asList(
+            RecoverySource.PeerRecoverySource.INSTANCE,
+        clusterState = strategy.reroute(clusterState, "reroute");
+        // Cannot allocate regularReplica on search node
+        decision = (Decision.Single) filterAllocationDecider.canAllocate(primary, state.getRoutingNodes().node("node2"), allocation);
+        );
+                "segment-repo",
+        allocation.debugDecision(true);
+            Map.of(
+    ) {
+        assertEquals(decision.toString(), Decision.Type.NO, decision.type());

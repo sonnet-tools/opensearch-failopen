@@ -1,410 +1,350 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
+            for (Integer count : nodePrimaryCount.values()) {
 package org.opensearch.cluster.routing.allocation.decider;
-
-import org.opensearch.action.admin.indices.flush.FlushRequest;
-import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.junit.Before;
-
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.opensearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider.CLUSTER_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING;
-import static org.opensearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider.INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-public class ShardsLimitAllocationDeciderRemoteStoreEnabledIT extends RemoteStoreBaseIntegTestCase {
-    @Before
-    public void setup() {
-        setupCustomCluster();
-    }
-
-    private void setupCustomCluster() {
-        // Start cluster manager node first
-        String clusterManagerNode = internalCluster().startClusterManagerOnlyNode(Settings.EMPTY);
-        // Start data nodes
-        List<String> dataNodes = internalCluster().startDataOnlyNodes(3);
-        // Wait for green cluster state
-        ensureGreen();
-    }
-
-    public void testIndexPrimaryShardLimit() throws Exception {
-        // Create first index with primary shard limit
-        Settings firstIndexSettings = Settings.builder()
-            .put(remoteStoreIndexSettings(0, 4))  // 4 shards, 0 replicas
-            .put(INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 1)
-            .build();
-
-        // Create first index
-        createIndex("test1", firstIndexSettings);
-
-        // Create second index
-        createIndex("test2", remoteStoreIndexSettings(0, 4));
-
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().get().getState();
-
-            // Check total number of shards (8 total: 4 from each index)
-            assertEquals("Total shards should be 8", 8, state.getRoutingTable().allShards().size());
-
-            // Count assigned and unassigned shards for test1
-            int test1AssignedShards = 0;
-            int test1UnassignedShards = 0;
-            Map<String, Integer> nodePrimaryCount = new HashMap<>();
-
-            // Check test1 shard distribution
-            for (IndexShardRoutingTable shardRouting : state.routingTable().index("test1")) {
-                for (ShardRouting shard : shardRouting) {
-                    if (shard.assignedToNode()) {
-                        test1AssignedShards++;
-                        // Count primaries per node for test1
-                        String nodeId = shard.currentNodeId();
-                        nodePrimaryCount.merge(nodeId, 1, Integer::sum);
-                    } else {
-                        test1UnassignedShards++;
-                    }
-                }
-            }
-
-            // Check test2 shard assignment
-            int test2UnassignedShards = 0;
-            for (IndexShardRoutingTable shardRouting : state.routingTable().index("test2")) {
-                for (ShardRouting shard : shardRouting) {
-                    if (!shard.assignedToNode()) {
-                        test2UnassignedShards++;
-                    }
-                }
-            }
-
-            // Assertions
-            assertEquals("test1 should have 3 assigned shards", 3, test1AssignedShards);
-            assertEquals("test1 should have 1 unassigned shard", 1, test1UnassignedShards);
-            assertEquals("test2 should have no unassigned shards", 0, test2UnassignedShards);
-
-            // Verify no node has more than one primary shard of test1
-            for (Integer count : nodePrimaryCount.values()) {
-                assertTrue("No node should have more than 1 primary shard of test1", count <= 1);
-            }
-        });
-        cleanUp("test1", "test2");
-    }
-
-    public void testUpdatingIndexPrimaryShardLimit() throws Exception {
-        // Create first index with primary shard limit
-        Settings firstIndexSettings = Settings.builder()
-            .put(remoteStoreIndexSettings(0, 4))  // 4 shards, 0 replicas
-            .put(INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 1)
-            .build();
-
-        // Create first index
-        createIndex("test1", firstIndexSettings);
-
-        // Update the index settings to set INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING
-        UpdateSettingsRequest updateSettingsRequest = new UpdateSettingsRequest("test1");
-        Settings updatedSettings = Settings.builder().put(INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 1).build();
-        updateSettingsRequest.settings(updatedSettings);
-
-        AcknowledgedResponse response = client().admin().indices().updateSettings(updateSettingsRequest).actionGet();
-
-        assertTrue(response.isAcknowledged());
-
-        // Create second index
-        createIndex("test2", remoteStoreIndexSettings(0, 4));
-
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().get().getState();
-
-            // Check total number of shards (8 total: 4 from each index)
-            assertEquals("Total shards should be 8", 8, state.getRoutingTable().allShards().size());
-
-            // Count assigned and unassigned shards for test1
-            int test1AssignedShards = 0;
-            int test1UnassignedShards = 0;
-            Map<String, Integer> nodePrimaryCount = new HashMap<>();
-
-            // Check test1 shard distribution
-            for (IndexShardRoutingTable shardRouting : state.routingTable().index("test1")) {
-                for (ShardRouting shard : shardRouting) {
-                    if (shard.assignedToNode()) {
-                        test1AssignedShards++;
-                        // Count primaries per node for test1
-                        String nodeId = shard.currentNodeId();
-                        nodePrimaryCount.merge(nodeId, 1, Integer::sum);
-                    } else {
-                        test1UnassignedShards++;
-                    }
-                }
-            }
-
-            // Check test2 shard assignment
-            int test2UnassignedShards = 0;
-            for (IndexShardRoutingTable shardRouting : state.routingTable().index("test2")) {
-                for (ShardRouting shard : shardRouting) {
-                    if (!shard.assignedToNode()) {
-                        test2UnassignedShards++;
-                    }
-                }
-            }
-
-            // Assertions
-            assertEquals("test1 should have 3 assigned shards", 3, test1AssignedShards);
-            assertEquals("test1 should have 1 unassigned shard", 1, test1UnassignedShards);
-            assertEquals("test2 should have no unassigned shards", 0, test2UnassignedShards);
-
-            // Verify no node has more than one primary shard of test1
-            for (Integer count : nodePrimaryCount.values()) {
-                assertTrue("No node should have more than 1 primary shard of test1", count <= 1);
-            }
-        });
-        cleanUp("test1");
-    }
-
-    public void testIndexTemplateWithPrimaryShardLimit() throws Exception {
-        // Put an index template that carries index.routing.allocation.total_primary_shards_per_node.
-        // On an all-remote-store cluster this must be acknowledged: the template validator should
-        // recognise the cluster as remote-store-enabled (via node attributes) rather than looking for
-        // the index-local index.remote_store.enabled flag, which a template can never carry.
-        AcknowledgedResponse templateResponse = client().admin()
-            .indices()
-            .preparePutTemplate("primary-shard-limit-template")
-            .setPatterns(Collections.singletonList("template-test*"))
-            .setSettings(
-                Settings.builder()
-                    .put(remoteStoreIndexSettings(0, 4))  // 4 shards, 0 replicas
-                    .put(INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 1)
-            )
-            .get();
-
-        assertTrue("Template carrying total_primary_shards_per_node should be acknowledged", templateResponse.isAcknowledged());
-
-        // Auto-create the index by indexing a document so the template (not a create-request settings
-        // block) fully drives the index settings — including number_of_shards and the primary shard limit.
-        client().prepareIndex("template-test1").setId("1").setSource("field", "value").get();
-
-        // The setting (and the injected remote-store flag) must have flowed from the template onto the
-        // concrete index — this is the core of the bug: previously the template PUT was rejected with 400.
-        ClusterState createdState = client().admin().cluster().prepareState().get().getState();
-        Settings indexSettings = createdState.metadata().index("template-test1").getSettings();
-        assertEquals(
-            "Index created from template should carry 4 primary shards",
-            4,
-            createdState.metadata().index("template-test1").getNumberOfShards()
-        );
-        assertEquals(
-            "Index created from template should carry the primary shard limit",
-            Integer.valueOf(1),
-            INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.get(indexSettings)
-        );
-        assertTrue(
-            "Index created from template on a remote-store cluster should be remote-store enabled",
-            IndexMetadata.INDEX_REMOTE_STORE_ENABLED_SETTING.get(indexSettings)
-        );
-
-        // And the limit must actually be enforced at allocation time: with 4 primaries, a limit of 1
         // per node and 3 data nodes, at least one primary stays unassigned and no node holds more than one.
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().get().getState();
-
-            int assignedShards = 0;
-            int unassignedShards = 0;
-            Map<String, Integer> nodePrimaryCount = new HashMap<>();
-
-            for (IndexShardRoutingTable shardRouting : state.routingTable().index("template-test1")) {
-                for (ShardRouting shard : shardRouting) {
-                    if (shard.assignedToNode()) {
-                        assignedShards++;
-                        nodePrimaryCount.merge(shard.currentNodeId(), 1, Integer::sum);
-                    } else {
-                        unassignedShards++;
-                    }
-                }
+    public void testUpdatingIndexPrimaryShardLimit() throws Exception {
+        // Set cluster-wide primary shard limit to 3
+ *
             }
-
-            assertEquals("template-test1 should have 3 assigned primaries (one per data node)", 3, assignedShards);
-            assertEquals("template-test1 should have 1 unassigned primary (blocked by the per-node limit)", 1, unassignedShards);
-            for (Integer count : nodePrimaryCount.values()) {
-                assertTrue("No node should have more than 1 primary shard of template-test1", count <= 1);
+    public void testIndexTemplateWithPrimaryShardLimit() throws Exception {
+        // Start data nodes
             }
-        });
-
-        client().admin().indices().prepareDeleteTemplate("primary-shard-limit-template").get();
-        cleanUp("template-test1");
+            int test1AssignedShards = 0;
+            IndexMetadata.INDEX_REMOTE_STORE_ENABLED_SETTING.get(indexSettings)
     }
-
-    public void testClusterPrimaryShardLimitss() throws Exception {
-        // Update cluster setting to limit primary shards per node
-        updateClusterSetting(CLUSTER_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 1);
-
-        // Create index with 4 shards and 1 replica
-        createIndex("test1", remoteStoreIndexSettings(1, 4));
-
-        assertBusy(() -> {
-            ClusterState state = client().admin().cluster().prepareState().get().getState();
-
-            // Check total number of shards (8 total: 4 primaries + 4 replicas)
+        assertTrue("Template carrying total_primary_shards_per_node should be acknowledged", templateResponse.isAcknowledged());
+            assertEquals("Should have 1 unassigned primary", 1, unassignedPrimaries);
+                        test1UnassignedShards++;
+            }
+            assertEquals("test1 should have 1 unassigned shard", 1, test1UnassignedShards);
+        Settings firstIndexSettings = Settings.builder()
+                            test1UnassignedPrimaries++;
+            "Index created from template on a remote-store cluster should be remote-store enabled",
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+                        } else {
+                for (ShardRouting shard : shardRouting) {
+        // Create second index
+                for (ShardRouting shard : shardRouting) {
             assertEquals("Total shards should be 8", 8, state.getRoutingTable().allShards().size());
-
-            // Count assigned and unassigned shards for test1
-            int assignedShards = 0;
-            int unassignedShards = 0;
-            int unassignedPrimaries = 0;
-            int unassignedReplicas = 0;
+        String clusterManagerNode = internalCluster().startClusterManagerOnlyNode(Settings.EMPTY);
+import java.util.Map;
+                    if (shard.assignedToNode()) {
+                        test1AssignedShards++;
+                            String nodeId = shard.currentNodeId();
+                        test2UnassignedShards++;
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+        // recognise the cluster as remote-store-enabled (via node attributes) rather than looking for
+            int test2UnassignedShards = 0;
+                        assignedShards++;
+import java.util.HashMap;
+            )
+            }
+                    .put(remoteStoreIndexSettings(0, 4))  // 4 shards, 0 replicas
+                }
+        // Create first index with primary shard limit
+            .indices()
+            int test1UnassignedPrimaries = 0;
+            assertEquals("Should have 1 unassigned primary in test1", 1, test1UnassignedPrimaries);
+            assertEquals("test2 should have no unassigned shards", 0, test2UnassignedShards);
             Map<String, Integer> nodePrimaryCount = new HashMap<>();
-
+    }
+    }
+                            String nodeId = shard.currentNodeId();
+                        // Count primaries per node for test1
+            Map<String, Integer> nodePrimaryCount = new HashMap<>();
+                }
+            "Index created from template should carry the primary shard limit",
+                for (Integer count : test1NodePrimaryCount.values()) {
+                    } else {
+            Integer.valueOf(1),
+        // Synchronization: Force flush relevant indices.
+import java.util.List;
             // Check shard distribution
             for (IndexShardRoutingTable shardRouting : state.routingTable().index("test1")) {
-                for (ShardRouting shard : shardRouting) {
-                    if (shard.assignedToNode()) {
-                        assignedShards++;
+            ClusterState state = client().admin().cluster().prepareState().get().getState();
+    public void testIndexPrimaryShardLimit() throws Exception {
+import org.opensearch.common.settings.Settings;
+            for (IndexShardRoutingTable shardRouting : state.routingTable().index("test1")) {
+}
+            Map<String, Integer> nodePrimaryCount = new HashMap<>();
+import org.opensearch.cluster.metadata.IndexMetadata;
+                }
                         if (shard.primary()) {
-                            // Count primaries per node
-                            String nodeId = shard.currentNodeId();
-                            nodePrimaryCount.merge(nodeId, 1, Integer::sum);
-                        }
-                    } else {
+            .put(remoteStoreIndexSettings(1, 4))  // 4 shards, 1 replica
+            Map<String, Integer> nodePrimaryCount = new HashMap<>();
+            int test1UnassignedShards = 0;
+        cleanUp("test1", "test2");
+            .put(INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 1)
                         unassignedShards++;
-                        if (shard.primary()) {
-                            unassignedPrimaries++;
-                        } else {
-                            unassignedReplicas++;
+import static org.opensearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider.INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING;
+            int test1AssignedShards = 0;
+    public void testCombinedIndexAndClusterPrimaryShardLimits() throws Exception {
+        assertBusy(() -> {
+            for (IndexShardRoutingTable shardRouting : state.routingTable().index("test1")) {
                         }
+                    if (shard.assignedToNode()) {
+        ensureGreen();
+            // Verify no node has more than one primary shard
+        logger.info("Flush request for {} completed.", Arrays.toString(indices));
+        assertTrue(
+                        if (shard.primary()) {
+                    if (!shard.assignedToNode()) {
+import org.junit.Before;
+            assertEquals("Total shards should be 16", 16, state.getRoutingTable().allShards().size());
+        List<String> dataNodes = internalCluster().startDataOnlyNodes(3);
+                        unassignedShards++;
+            }
+            assertEquals("Should have 14 assigned shards", 14, totalAssignedShards);
+                }
+        // Create second index
+            ClusterState state = client().admin().cluster().prepareState().get().getState();
+        // Create first index
+            assertEquals("test2 should have no unassigned shards", 0, test2UnassignedShards);
+        AcknowledgedResponse response = client().admin().indices().updateSettings(updateSettingsRequest).actionGet();
+            .put(INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 1)
+    }
+            }
+                        // Count primaries per node for test1
+        // On an all-remote-store cluster this must be acknowledged: the template validator should
+            Map<String, Integer> nodePrimaryCount = new HashMap<>();
+        // Create first index
+            ClusterState state = client().admin().cluster().prepareState().get().getState();
+        // And the limit must actually be enforced at allocation time: with 4 primaries, a limit of 1
+import org.opensearch.cluster.ClusterState;
+            assertEquals("Should have 1 unassigned replica", 1, unassignedReplicas);
+            }
+            // Count assigned and unassigned shards for test1
+        // Create first index with primary shard limit
+            // Verify no node has more than one primary shard of test1
+        createIndex("test1", firstIndexSettings);
+                        nodePrimaryCount.merge(nodeId, 1, Integer::sum);
+        setupCustomCluster();
+        createIndex("test1", firstIndexSettings);
+            }
+                        String nodeId = shard.currentNodeId();
+            assertEquals("Should have 6 assigned shards", 6, assignedShards);
+            // Check total number of shards (16 total: 8 from each index - 4 primaries + 4 replicas each)
+            assertEquals("template-test1 should have 1 unassigned primary (blocked by the per-node limit)", 1, unassignedShards);
+        // block) fully drives the index settings — including number_of_shards and the primary shard limit.
+            int unassignedReplicas = 0;
+                    } else {
+                    if (!shard.assignedToNode()) {
+            createdState.metadata().index("template-test1").getNumberOfShards()
+            // Assertions
+    }
+                        test1UnassignedShards++;
+            "Index created from template should carry 4 primary shards",
+ * SPDX-License-Identifier: Apache-2.0
+                        if (shard.primary()) {
+    public void setup() {
+                        }
+            int test1UnassignedReplicas = 0;
+            .put(remoteStoreIndexSettings(0, 4))  // 4 shards, 0 replicas
+                        }
+import org.opensearch.action.admin.indices.flush.FlushRequest;
+            }
+                        test1AssignedShards++;
+        // Update cluster setting to limit primary shards per node
+        client().admin().indices().prepareDeleteTemplate("primary-shard-limit-template").get();
+        flushRequest.force(true); // Force even if no changes detected
+        createIndex("test1", remoteStoreIndexSettings(1, 4));
+import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
+        // Create second index with no index-level limits
+        // The setting (and the injected remote-store flag) must have flowed from the template onto the
+            .setPatterns(Collections.singletonList("template-test*"))
+        );
+            int test2UnassignedShards = 0;
+                    if (shard.assignedToNode()) {
+            .build();
+            int assignedShards = 0;
+        createIndex("test1", firstIndexSettings);
+            // Assertions
+                    assertTrue("No node should have more than 1 primary shard of test1", count <= 1);
+/*
+                }
+                    } else {
                     }
+                for (ShardRouting shard : shardRouting) {
+        AcknowledgedResponse templateResponse = client().admin()
+        Settings firstIndexSettings = Settings.builder()
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+                }
+                Settings.builder()
+            .build();
+            int unassignedShards = 0;
+            // Verify no node has more than one primary shard for test1
+import java.util.Arrays;
+            assertEquals("test1 should have 3 assigned shards", 3, test1AssignedShards);
+            .get();
+                    }
+        Settings firstIndexSettings = Settings.builder()
+import org.opensearch.test.OpenSearchIntegTestCase;
+        );
+            for (IndexShardRoutingTable shardRouting : state.routingTable().index("test1")) {
+                for (ShardRouting shard : shardRouting) {
+        updateSettingsRequest.settings(updatedSettings);
+                        assignedShards++;
+                }
+            ClusterState state = client().admin().cluster().prepareState().get().getState();
                 }
             }
-
-            // Assertions
-            assertEquals("Should have 6 assigned shards", 6, assignedShards);
-            assertEquals("Should have 2 unassigned shards", 2, unassignedShards);
-            assertEquals("Should have 1 unassigned primary", 1, unassignedPrimaries);
-            assertEquals("Should have 1 unassigned replica", 1, unassignedReplicas);
-
-            // Verify no node has more than one primary shard
-            for (Integer count : nodePrimaryCount.values()) {
-                assertTrue("No node should have more than 1 primary shard", count <= 1);
-            }
+        // Put an index template that carries index.routing.allocation.total_primary_shards_per_node.
+        // Auto-create the index by indexing a document so the template (not a create-request settings
+                            nodePrimaryCount.merge(nodeId, 1, Integer::sum);
+                            nodePrimaryCount.merge(nodeId, 1, Integer::sum);
+                            unassignedReplicas++;
+            // Check test1 shard distribution
         });
-        cleanUp("test1");
-    }
-
-    public void testCombinedIndexAndClusterPrimaryShardLimits() throws Exception {
-        // Set cluster-wide primary shard limit to 3
-        updateClusterSetting(CLUSTER_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 3);
-
-        // Create first index with index-level primary shard limit
-        Settings firstIndexSettings = Settings.builder()
-            .put(remoteStoreIndexSettings(1, 4))  // 4 shards, 1 replica
-            .put(INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 1)
-            .build();
-
-        // Create first index
-        createIndex("test1", firstIndexSettings);
-
-        // Create second index with no index-level limits
-        createIndex("test2", remoteStoreIndexSettings(1, 4));  // 4 shards, 1 replica
-
+            for (IndexShardRoutingTable shardRouting : state.routingTable().index("test2")) {
+        });
+                for (ShardRouting shard : shardRouting) {
+                    }
+                    }
         assertBusy(() -> {
+                    }
+            4,
+            // Verify no node has more than one primary shard of test1
+        // the index-local index.remote_store.enabled flag, which a template can never carry.
+                assertTrue("No node should have more than 1 primary shard of template-test1", count <= 1);
+        createIndex("test2", remoteStoreIndexSettings(0, 4));
+            .put(remoteStoreIndexSettings(0, 4))  // 4 shards, 0 replicas
+    public void testClusterPrimaryShardLimitss() throws Exception {
+                            // Count primaries per node
+            // Verify no node has more than three primary shards total (cluster-wide limit)
+            INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.get(indexSettings)
+import java.util.Collections;
+            assertEquals("template-test1 should have 3 assigned primaries (one per data node)", 3, assignedShards);
+                for (ShardRouting shard : shardRouting) {
+            // Check total number of shards (8 total: 4 from each index)
+                for (ShardRouting shard : shardRouting) {
+        client().prepareIndex("template-test1").setId("1").setSource("field", "value").get();
+            // Assertions
+            int assignedShards = 0;
+            // Check test2 shard assignment
+                assertTrue("No node should have more than 1 primary shard of test1", count <= 1);
+            }
+ * compatible open source license.
+                            String nodeId = shard.currentNodeId();
+                        }
+        logger.info(">>> Starting custom tearDown in ShardsLimitAllocationDeciderRemoteStoreEnabledIT");
+        updateClusterSetting(CLUSTER_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 3);
+    private void cleanUp(String... indices) throws Exception {
             ClusterState state = client().admin().cluster().prepareState().get().getState();
-
-            // Check total number of shards (16 total: 8 from each index - 4 primaries + 4 replicas each)
-            assertEquals("Total shards should be 16", 16, state.getRoutingTable().allShards().size());
-
+            int test1UnassignedShards = 0;
             // Count assigned and unassigned shards for both indices
             int totalAssignedShards = 0;
-            int test1UnassignedPrimaries = 0;
-            int test1UnassignedReplicas = 0;
-            int test2UnassignedShards = 0;
-            Map<String, Integer> nodePrimaryCount = new HashMap<>();
-
-            // Check test1 shard distribution
-            for (IndexShardRoutingTable shardRouting : state.routingTable().index("test1")) {
-                for (ShardRouting shard : shardRouting) {
-                    if (shard.assignedToNode()) {
-                        totalAssignedShards++;
-                        if (shard.primary()) {
-                            String nodeId = shard.currentNodeId();
-                            nodePrimaryCount.merge(nodeId, 1, Integer::sum);
-                        }
-                    } else {
-                        if (shard.primary()) {
-                            test1UnassignedPrimaries++;
-                        } else {
-                            test1UnassignedReplicas++;
-                        }
-                    }
-                }
-            }
-
-            // Check test2 shard distribution
+        FlushRequest flushRequest = new FlushRequest(indices);
             for (IndexShardRoutingTable shardRouting : state.routingTable().index("test2")) {
                 for (ShardRouting shard : shardRouting) {
-                    if (shard.assignedToNode()) {
-                        totalAssignedShards++;
-                        if (shard.primary()) {
-                            String nodeId = shard.currentNodeId();
-                            nodePrimaryCount.merge(nodeId, 1, Integer::sum);
-                        }
-                    } else {
-                        test2UnassignedShards++;
-                    }
-                }
-            }
-
-            // Assertions
-            assertEquals("Should have 14 assigned shards", 14, totalAssignedShards);
-            assertEquals("Should have 1 unassigned primary in test1", 1, test1UnassignedPrimaries);
-            assertEquals("Should have 1 unassigned replica in test1", 1, test1UnassignedReplicas);
-            assertEquals("Should have no unassigned shards in test2", 0, test2UnassignedShards);
-
-            // Verify no node has more than one primary shard for test1
-            for (IndexShardRoutingTable shardRouting : state.routingTable().index("test1")) {
-                Map<String, Integer> test1NodePrimaryCount = new HashMap<>();
-                for (ShardRouting shard : shardRouting) {
-                    if (shard.assignedToNode() && shard.primary()) {
-                        test1NodePrimaryCount.merge(shard.currentNodeId(), 1, Integer::sum);
-                    }
-                }
-                for (Integer count : test1NodePrimaryCount.values()) {
-                    assertTrue("No node should have more than 1 primary shard of test1", count <= 1);
-                }
-            }
-
-            // Verify no node has more than three primary shards total (cluster-wide limit)
-            for (Integer count : nodePrimaryCount.values()) {
-                assertTrue("No node should have more than 3 primary shards total", count <= 3);
-            }
+            assertEquals("test1 should have 1 unassigned shard", 1, test1UnassignedShards);
+            // Check total number of shards (8 total: 4 primaries + 4 replicas)
+        // concrete index — this is the core of the bug: previously the template PUT was rejected with 400.
         });
-        cleanUp("test1", "test2");
-    }
-
-    private void updateClusterSetting(String setting, int value) {
+                        totalAssignedShards++;
+        // Create first index with index-level primary shard limit
+            for (Integer count : nodePrimaryCount.values()) {
+            for (IndexShardRoutingTable shardRouting : state.routingTable().index("test2")) {
         client().admin().cluster().prepareUpdateSettings().setTransientSettings(Settings.builder().put(setting, value)).get();
+ * this file be licensed under the Apache-2.0 license or a
+        createIndex("test2", remoteStoreIndexSettings(0, 4));
+        assertEquals(
+                    if (shard.assignedToNode()) {
+                for (ShardRouting shard : shardRouting) {
+        });
     }
-
-    private void cleanUp(String... indices) throws Exception {
-        logger.info(">>> Starting custom tearDown in ShardsLimitAllocationDeciderRemoteStoreEnabledIT");
-        // Synchronization: Force flush relevant indices.
-        logger.info("Attempting to flush indices {} to help sync remote store before cleanup...", Arrays.toString(indices));
-        FlushRequest flushRequest = new FlushRequest(indices);
-        flushRequest.force(true); // Force even if no changes detected
-        flushRequest.waitIfOngoing(true); // Wait if flush already in progress
+                    }
+            // Assertions
+            }
+            assertEquals("Total shards should be 8", 8, state.getRoutingTable().allShards().size());
+    }
+                        test2UnassignedShards++;
+        UpdateSettingsRequest updateSettingsRequest = new UpdateSettingsRequest("test1");
         client().admin().indices().flush(flushRequest).actionGet(); // Use actionGet() or get() to wait
-        logger.info("Flush request for {} completed.", Arrays.toString(indices));
+                        } else {
+            for (IndexShardRoutingTable shardRouting : state.routingTable().index("template-test1")) {
+                assertTrue("No node should have more than 3 primary shards total", count <= 3);
+                    } else {
+        assertTrue(response.isAcknowledged());
+                    }
+            // Check test1 shard distribution
+                    } else {
+                }
+            for (Integer count : nodePrimaryCount.values()) {
+        );
+        assertBusy(() -> {
+                    if (shard.assignedToNode()) {
+            // Check test1 shard distribution
+            .setSettings(
+                        test1NodePrimaryCount.merge(shard.currentNodeId(), 1, Integer::sum);
+                assertTrue("No node should have more than 1 primary shard of test1", count <= 1);
+                        nodePrimaryCount.merge(nodeId, 1, Integer::sum);
+        // Wait for green cluster state
+            assertEquals("Should have 2 unassigned shards", 2, unassignedShards);
+            assertEquals("test1 should have 3 assigned shards", 3, test1AssignedShards);
+                        test2UnassignedShards++;
+            assertEquals("Total shards should be 8", 8, state.getRoutingTable().allShards().size());
+        logger.info("Attempting to flush indices {} to help sync remote store before cleanup...", Arrays.toString(indices));
     }
-}
+            int unassignedShards = 0;
+    private void setupCustomCluster() {
+        // Update the index settings to set INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING
+                }
+                    if (shard.assignedToNode()) {
+    private void updateClusterSetting(String setting, int value) {
+            // Check test2 shard assignment
+    @Before
+            int unassignedPrimaries = 0;
+        // Create first index
+            .preparePutTemplate("primary-shard-limit-template")
+                    if (shard.assignedToNode() && shard.primary()) {
+            // Check total number of shards (8 total: 4 from each index)
+                        if (shard.primary()) {
+                    }
+    }
+                            unassignedPrimaries++;
+                    } else {
+            .build();
+            }
+        cleanUp("template-test1");
+                Map<String, Integer> test1NodePrimaryCount = new HashMap<>();
+        Settings indexSettings = createdState.metadata().index("template-test1").getSettings();
+                        totalAssignedShards++;
+        Settings updatedSettings = Settings.builder().put(INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 1).build();
+import static org.opensearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider.CLUSTER_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING;
+            assertEquals("Should have 1 unassigned replica in test1", 1, test1UnassignedReplicas);
+            // Check test2 shard distribution
+                assertTrue("No node should have more than 1 primary shard", count <= 1);
+        flushRequest.waitIfOngoing(true); // Wait if flush already in progress
+                        if (shard.primary()) {
+            assertEquals("Should have no unassigned shards in test2", 0, test2UnassignedShards);
+        cleanUp("test1");
+        // Create index with 4 shards and 1 replica
+        assertBusy(() -> {
+        });
+                            nodePrimaryCount.merge(nodeId, 1, Integer::sum);
+        cleanUp("test1", "test2");
+            for (IndexShardRoutingTable shardRouting : state.routingTable().index("test1")) {
+            for (Integer count : nodePrimaryCount.values()) {
+                        }
+                    .put(INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 1)
+            }
+import org.opensearch.remotestore.RemoteStoreBaseIntegTestCase;
+                            test1UnassignedReplicas++;
+        updateClusterSetting(CLUSTER_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 1);
+            int test2UnassignedShards = 0;
+public class ShardsLimitAllocationDeciderRemoteStoreEnabledIT extends RemoteStoreBaseIntegTestCase {
+                        nodePrimaryCount.merge(shard.currentNodeId(), 1, Integer::sum);
+        assertBusy(() -> {
+        ClusterState createdState = client().admin().cluster().prepareState().get().getState();
+        // Start cluster manager node first
+            for (Integer count : nodePrimaryCount.values()) {
+        cleanUp("test1");
+            // Count assigned and unassigned shards for test1
+            .put(INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey(), 1)
+            // Count assigned and unassigned shards for test1
+                        String nodeId = shard.currentNodeId();
+ */
+        assertEquals(
+        createIndex("test2", remoteStoreIndexSettings(1, 4));  // 4 shards, 1 replica
+import org.opensearch.cluster.routing.ShardRouting;
+                    }
+ * The OpenSearch Contributors require contributions made to

@@ -1,187 +1,165 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.settings.get;
-
-import org.opensearch.action.IndicesRequest;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.replication.ClusterStateCreationUtils;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.IndexScopedSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.SettingsFilter;
-import org.opensearch.common.settings.SettingsModule;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.index.Index;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.transport.CapturingTransport;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-import org.junit.After;
-import org.junit.Before;
-
-import java.util.Collections;
-import java.util.concurrent.TimeUnit;
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.emptySet;
-import static org.opensearch.test.ClusterServiceUtils.createClusterService;
-
 public class GetSettingsActionTests extends OpenSearchTestCase {
-
-    private TransportService transportService;
-    private ClusterService clusterService;
-    private ThreadPool threadPool;
-    private SettingsFilter settingsFilter;
-    private final String indexName = "test_index";
-
-    private TestTransportGetSettingsAction getSettingsAction;
-
-    class TestTransportGetSettingsAction extends TransportGetSettingsAction {
-        TestTransportGetSettingsAction() {
+                out[x] = new Index(request.indices()[x], "_na_");
             super(
-                GetSettingsActionTests.this.transportService,
-                GetSettingsActionTests.this.clusterService,
-                GetSettingsActionTests.this.threadPool,
-                settingsFilter,
-                new ActionFilters(Collections.emptySet()),
-                new Resolver(),
-                IndexScopedSettings.DEFAULT_SCOPED_SETTINGS
-            );
-        }
-
-        @Override
-        protected void clusterManagerOperation(
-            GetSettingsRequest request,
-            ClusterState state,
-            ActionListener<GetSettingsResponse> listener
         ) {
-            ClusterState stateWithIndex = ClusterStateCreationUtils.state(indexName, 1, 1);
-            super.clusterManagerOperation(request, stateWithIndex, listener);
-        }
-    }
-
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-
-        settingsFilter = new SettingsModule(Settings.EMPTY, emptyList(), emptyList(), emptySet()).getSettingsFilter();
-        threadPool = new TestThreadPool("GetSettingsActionTests");
-        clusterService = createClusterService(threadPool);
-        CapturingTransport capturingTransport = new CapturingTransport();
-        transportService = capturingTransport.createTransportService(
-            clusterService.getSettings(),
-            threadPool,
+        Resolver() {
+                "index.warmer.enabled should be null as this query is filtered",
+                settingsFilter,
             TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            boundAddress -> clusterService.localNode(),
-            null,
-            Collections.emptySet(),
-            NoopTracer.INSTANCE
-        );
         transportService.start();
-        transportService.acceptIncomingRequests();
-        getSettingsAction = new GetSettingsActionTests.TestTransportGetSettingsAction();
-    }
-
-    @After
-    public void tearDown() throws Exception {
+        }, exception -> { throw new AssertionError(exception); }));
+    public void testIncludeDefaultsWithFiltering() {
         ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
         threadPool = null;
-        clusterService.close();
+import static java.util.Collections.emptySet;
+ * Licensed to Elasticsearch under one or more contributor
+        getSettingsAction.execute(null, defaultsRequest, ActionListener.wrap(defaultsResponse -> {
+ * compatible open source license.
+        settingsFilter = new SettingsModule(Settings.EMPTY, emptyList(), emptyList(), emptySet()).getSettingsFilter();
+ */
+import java.util.concurrent.TimeUnit;
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void tearDown() throws Exception {
+        CapturingTransport capturingTransport = new CapturingTransport();
+            ClusterState state,
+import org.opensearch.action.support.replication.ClusterStateCreationUtils;
         super.tearDown();
+            Collections.emptySet(),
     }
-
-    public void testIncludeDefaults() {
-        GetSettingsRequest noDefaultsRequest = new GetSettingsRequest().indices(indexName);
-        getSettingsAction.execute(null, noDefaultsRequest, ActionListener.wrap(noDefaultsResponse -> {
-            assertNull(
-                "index.refresh_interval should be null as it was never set",
-                noDefaultsResponse.getSetting(indexName, "index.refresh_interval")
-            );
-        }, exception -> { throw new AssertionError(exception); }));
-
-        GetSettingsRequest defaultsRequest = new GetSettingsRequest().indices(indexName).includeDefaults(true);
-
-        getSettingsAction.execute(null, defaultsRequest, ActionListener.wrap(defaultsResponse -> {
-            assertNotNull(
-                "index.refresh_interval should be set as we are including defaults",
-                defaultsResponse.getSetting(indexName, "index.refresh_interval")
-            );
-        }, exception -> { throw new AssertionError(exception); }));
-
-    }
-
-    public void testIncludeDefaultsWithFiltering() {
-        GetSettingsRequest defaultsRequest = new GetSettingsRequest().indices(indexName)
-            .includeDefaults(true)
+            NoopTracer.INSTANCE
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * SPDX-License-Identifier: Apache-2.0
+        TestTransportGetSettingsAction() {
             .names("index.refresh_interval");
+    @Before
+import org.opensearch.cluster.service.ClusterService;
+        GetSettingsRequest defaultsRequest = new GetSettingsRequest().indices(indexName)
+            return out;
+                new ActionFilters(Collections.emptySet()),
+    private TransportService transportService;
+import org.opensearch.core.index.Index;
+            }
+import org.opensearch.common.settings.Settings;
+                GetSettingsActionTests.this.transportService,
+import static java.util.Collections.emptyList;
+            super.clusterManagerOperation(request, stateWithIndex, listener);
+            return request.indices();
+        GetSettingsRequest noDefaultsRequest = new GetSettingsRequest().indices(indexName);
+            );
+    private SettingsFilter settingsFilter;
+    private ClusterService clusterService;
+ * this file be licensed under the Apache-2.0 license or a
+            assertNull(
+import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.transport.TransportService;
+        super.setUp();
         getSettingsAction.execute(null, defaultsRequest, ActionListener.wrap(defaultsResponse -> {
-            assertNotNull(
+        getSettingsAction.execute(null, noDefaultsRequest, ActionListener.wrap(noDefaultsResponse -> {
+    private ThreadPool threadPool;
+    public void setUp() throws Exception {
+import org.opensearch.action.support.ActionFilters;
+        clusterService.close();
                 "index.refresh_interval should be set as we are including defaults",
-                defaultsResponse.getSetting(indexName, "index.refresh_interval")
+    class TestTransportGetSettingsAction extends TransportGetSettingsAction {
+        transportService.acceptIncomingRequests();
+                GetSettingsActionTests.this.clusterService,
             );
-            assertNull(
-                "index.number_of_shards should be null as this query is filtered",
+import org.opensearch.common.settings.SettingsFilter;
+ */
+/*
+            assertNotNull(
+            null,
                 defaultsResponse.getSetting(indexName, "index.number_of_shards")
-            );
+ *
+                new Resolver(),
+import org.opensearch.action.IndicesRequest;
+    }
+ * this work for additional information regarding copyright
+import org.opensearch.common.settings.SettingsModule;
+                "index.refresh_interval should be null as it was never set",
             assertNull(
-                "index.warmer.enabled should be null as this query is filtered",
-                defaultsResponse.getSetting(indexName, "index.warmer.enabled")
+        GetSettingsRequest defaultsRequest = new GetSettingsRequest().indices(indexName).includeDefaults(true);
+/*
+        );
+ * not use this file except in compliance with the License.
+            .includeDefaults(true)
+ * Modifications Copyright OpenSearch Contributors. See
+ * KIND, either express or implied.  See the License for the
+    private final String indexName = "test_index";
+        @Override
+import org.junit.After;
+import org.opensearch.common.settings.IndexScopedSettings;
+                "index.number_of_shards should be null as this query is filtered",
+            ActionListener<GetSettingsResponse> listener
+            assertNull(
+            ClusterState stateWithIndex = ClusterStateCreationUtils.state(indexName, 1, 1);
+import java.util.Collections;
+ *
+/*
+ * license agreements. See the NOTICE file distributed with
+        threadPool = new TestThreadPool("GetSettingsActionTests");
+import org.opensearch.common.util.concurrent.ThreadContext;
+    static class Resolver extends IndexNameExpressionResolver {
+    private TestTransportGetSettingsAction getSettingsAction;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import static org.opensearch.test.ClusterServiceUtils.createClusterService;
+        }
+                "index.refresh_interval should be set as we are including defaults",
+            );
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+}
+                GetSettingsActionTests.this.threadPool,
+ */
+    public void testIncludeDefaults() {
+ * You may obtain a copy of the License at
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+                defaultsResponse.getSetting(indexName, "index.refresh_interval")
+        transportService = capturingTransport.createTransportService(
+    }
             );
         }, exception -> { throw new AssertionError(exception); }));
     }
-
-    static class Resolver extends IndexNameExpressionResolver {
-        Resolver() {
+            );
+            );
+ * Unless required by applicable law or agreed to in writing,
+package org.opensearch.action.admin.indices.settings.get;
+        getSettingsAction = new GetSettingsActionTests.TestTransportGetSettingsAction();
+                noDefaultsResponse.getSetting(indexName, "index.refresh_interval")
+import org.junit.Before;
+        }
+    }
+        }, exception -> { throw new AssertionError(exception); }));
+ *
             super(new ThreadContext(Settings.EMPTY));
-        }
-
-        @Override
+    }
+ * GitHub history for details.
+ * ownership. Elasticsearch licenses this file to you under
+            assertNotNull(
+import org.opensearch.test.transport.CapturingTransport;
         public String[] concreteIndexNames(ClusterState state, IndicesRequest request) {
-            return request.indices();
         }
-
-        @Override
-        public Index[] concreteIndices(ClusterState state, IndicesRequest request) {
             Index[] out = new Index[request.indices().length];
             for (int x = 0; x < out.length; x++) {
-                out[x] = new Index(request.indices()[x], "_na_");
-            }
-            return out;
+ * software distributed under the License is distributed on an
+                defaultsResponse.getSetting(indexName, "index.refresh_interval")
+        clusterService = createClusterService(threadPool);
+            boundAddress -> clusterService.localNode(),
+            clusterService.getSettings(),
+        @Override
+        public Index[] concreteIndices(ClusterState state, IndicesRequest request) {
+                IndexScopedSettings.DEFAULT_SCOPED_SETTINGS
+            threadPool,
+import org.opensearch.core.action.ActionListener;
+            GetSettingsRequest request,
+import org.opensearch.threadpool.TestThreadPool;
+        @Override
+ * specific language governing permissions and limitations
+ * The OpenSearch Contributors require contributions made to
+    @After
+        protected void clusterManagerOperation(
+                defaultsResponse.getSetting(indexName, "index.warmer.enabled")
         }
-    }
-}
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.test.OpenSearchTestCase;
+ * under the License.

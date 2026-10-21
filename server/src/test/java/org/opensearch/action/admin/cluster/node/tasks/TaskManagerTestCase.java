@@ -1,317 +1,286 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.cluster.node.tasks;
-
-import org.opensearch.Version;
-import org.opensearch.action.FailedNodeException;
-import org.opensearch.action.admin.cluster.node.tasks.cancel.TransportCancelTasksAction;
-import org.opensearch.action.admin.cluster.node.tasks.get.TransportGetTaskAction;
-import org.opensearch.action.admin.cluster.node.tasks.list.TransportListTasksAction;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.nodes.BaseNodeResponse;
-import org.opensearch.action.support.nodes.BaseNodesRequest;
-import org.opensearch.action.support.nodes.BaseNodesResponse;
-import org.opensearch.action.support.nodes.TransportNodesAction;
-import org.opensearch.action.support.replication.ClusterStateCreationUtils;
-import org.opensearch.cluster.ClusterModule;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.network.NetworkService;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.PageCacheRecycler;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.common.transport.BoundTransportAddress;
-import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.tasks.TaskCancellationService;
-import org.opensearch.tasks.TaskManager;
-import org.opensearch.tasks.TaskResourceTrackingService;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.tasks.MockTaskManager;
-import org.opensearch.threadpool.RunnableTaskExecutionListener;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.Client;
-import org.opensearch.transport.nio.MockNioTransport;
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;
-import static org.opensearch.test.ClusterServiceUtils.createClusterService;
-import static org.opensearch.test.ClusterServiceUtils.setState;
-import static org.mockito.Mockito.mock;
-
-/**
- * The test case for unit testing task manager and related transport actions
- */
-public abstract class TaskManagerTestCase extends OpenSearchTestCase {
-
-    protected ThreadPool threadPool;
-    protected TestNode[] testNodes;
-    protected int nodesCount;
-    protected AtomicReference<RunnableTaskExecutionListener> runnableTaskListener;
-
-    @Before
-    public void setupThreadPool() {
-        runnableTaskListener = new AtomicReference<>();
-        threadPool = new TestThreadPool(TransportTasksActionTests.class.getSimpleName(), runnableTaskListener);
-    }
-
-    public void setupTestNodes(Settings settings) {
-        nodesCount = randomIntBetween(2, 10);
-        testNodes = new TestNode[nodesCount];
-        for (int i = 0; i < testNodes.length; i++) {
-            testNodes[i] = new TestNode("node" + i, threadPool, settings);
-        }
-    }
-
-    @After
-    public final void shutdownTestNodes() throws Exception {
-        if (testNodes != null) {
-            for (TestNode testNode : testNodes) {
-                testNode.close();
-            }
-            testNodes = null;
-        }
-        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
-        threadPool = null;
-    }
-
-    static class NodeResponse extends BaseNodeResponse {
-
-        protected NodeResponse(StreamInput in) throws IOException {
-            super(in);
-        }
-
-        protected NodeResponse(DiscoveryNode node) {
-            super(node);
-        }
-    }
-
-    static class NodesResponse extends BaseNodesResponse<NodeResponse> {
-
-        protected NodesResponse(ClusterName clusterName, List<NodeResponse> nodes, List<FailedNodeException> failures) {
-            super(clusterName, nodes, failures);
-        }
-
-        @Override
-        protected List<NodeResponse> readNodesFrom(StreamInput in) throws IOException {
-            return in.readList(NodeResponse::new);
-        }
-
-        @Override
-        protected void writeNodesTo(StreamOutput out, List<NodeResponse> nodes) throws IOException {
-            out.writeList(nodes);
-        }
-
-        public int failureCount() {
-            return failures().size();
-        }
-    }
-
-    /**
-     * Simulates node-based task that can be used to block node tasks so they are guaranteed to be registered by task manager
-     */
-    abstract class AbstractTestNodesAction<NodesRequest extends BaseNodesRequest<NodesRequest>, NodeRequest extends TransportRequest>
-        extends TransportNodesAction<NodesRequest, NodesResponse, NodeRequest, NodeResponse> {
-
-        AbstractTestNodesAction(
-            String actionName,
-            ThreadPool threadPool,
-            ClusterService clusterService,
-            TransportService transportService,
-            Writeable.Reader<NodesRequest> request,
-            Writeable.Reader<NodeRequest> nodeRequest
-        ) {
-            super(
-                actionName,
-                threadPool,
-                clusterService,
-                transportService,
-                new ActionFilters(new HashSet<>()),
-                request,
-                nodeRequest,
-                ThreadPool.Names.GENERIC,
-                NodeResponse.class
-            );
-        }
-
-        @Override
-        protected NodesResponse newResponse(NodesRequest request, List<NodeResponse> responses, List<FailedNodeException> failures) {
-            return new NodesResponse(clusterService.getClusterName(), responses, failures);
-        }
-
-        @Override
-        protected NodeResponse newNodeResponse(StreamInput in) throws IOException {
-            return new NodeResponse(in);
-        }
-
-        @Override
-        protected abstract NodeResponse nodeOperation(NodeRequest request);
-
-    }
-
-    public static class TestNode implements Releasable {
-        public TestNode(String name, ThreadPool threadPool, Settings settings) {
-            final Function<BoundTransportAddress, DiscoveryNode> boundTransportAddressDiscoveryNodeFunction = address -> {
-                discoveryNode.set(new DiscoveryNode(name, address.publishAddress(), emptyMap(), emptySet(), Version.CURRENT));
-                return discoveryNode.get();
-            };
-            transportService = new TransportService(
-                settings,
-                new MockNioTransport(
-                    settings,
-                    Version.CURRENT,
-                    threadPool,
-                    new NetworkService(Collections.emptyList()),
-                    PageCacheRecycler.NON_RECYCLING_INSTANCE,
-                    new NamedWriteableRegistry(ClusterModule.getNamedWriteables()),
-                    new NoneCircuitBreakerService(),
-                    NoopTracer.INSTANCE
-                ),
-                threadPool,
-                TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-                boundTransportAddressDiscoveryNodeFunction,
-                null,
-                Collections.emptySet(),
-                NoopTracer.INSTANCE
-            ) {
-                @Override
-                protected TaskManager createTaskManager(
-                    Settings settings,
-                    ClusterSettings clusterSettings,
-                    ThreadPool threadPool,
-                    Set<String> taskHeaders
-                ) {
-                    if (MockTaskManager.USE_MOCK_TASK_MANAGER_SETTING.get(settings)) {
-                        return new MockTaskManager(settings, threadPool, taskHeaders);
-                    } else {
-                        return super.createTaskManager(settings, clusterSettings, threadPool, taskHeaders);
                     }
-                }
-            };
-            transportService.getTaskManager().setTaskCancellationService(new TaskCancellationService(transportService));
-            transportService.start();
-            clusterService = createClusterService(threadPool, discoveryNode.get());
-            clusterService.addStateApplier(transportService.getTaskManager());
-            taskResourceTrackingService = new TaskResourceTrackingService(settings, clusterService.getClusterSettings(), threadPool);
-            transportService.getTaskManager().setTaskResourceTrackingService(taskResourceTrackingService);
+        }
+import org.opensearch.core.common.io.stream.StreamInput;
+ * You may obtain a copy of the License at
+import java.util.HashSet;
+        threadPool = new TestThreadPool(TransportTasksActionTests.class.getSimpleName(), runnableTaskListener);
+            ) {
             ActionFilters actionFilters = new ActionFilters(emptySet());
-            transportListTasksAction = new TransportListTasksAction(
-                clusterService,
-                transportService,
-                actionFilters,
-                taskResourceTrackingService
-            );
-            transportCancelTasksAction = new TransportCancelTasksAction(clusterService, transportService, actionFilters);
-            Client mockClient = mock(Client.class);
-            NamedXContentRegistry namedXContentRegistry = mock(NamedXContentRegistry.class);
-            transportGetTaskAction = new TransportGetTaskAction(
-                threadPool,
-                transportService,
-                actionFilters,
-                clusterService,
-                mockClient,
-                namedXContentRegistry,
-                taskResourceTrackingService
-            );
-            transportService.acceptIncomingRequests();
+import org.opensearch.core.common.io.stream.Writeable;
+            transportService = new TransportService(
+import static org.opensearch.test.ClusterServiceUtils.createClusterService;
+    public static RecordingTaskManagerListener[] setupListeners(TestNode[] nodes, String... actionMasks) {
         }
-
-        public final ClusterService clusterService;
-        public final TransportService transportService;
-        public final TaskResourceTrackingService taskResourceTrackingService;
-        private final SetOnce<DiscoveryNode> discoveryNode = new SetOnce<>();
-        public final TransportListTasksAction transportListTasksAction;
-        public final TransportCancelTasksAction transportCancelTasksAction;
-        public final TransportGetTaskAction transportGetTaskAction;
-
-        @Override
-        public void close() {
-            clusterService.close();
-            transportService.close();
-        }
-
-        public String getNodeId() {
-            return discoveryNode().getId();
-        }
-
-        public DiscoveryNode discoveryNode() {
-            return discoveryNode.get();
-        }
+/**
+                        return new MockTaskManager(settings, threadPool, taskHeaders);
     }
-
-    public static void connectNodes(TestNode... nodes) {
-        DiscoveryNode[] discoveryNodes = new DiscoveryNode[nodes.length];
+import org.opensearch.Version;
+                threadPool,
+                request,
+                    settings,
+import org.opensearch.action.support.nodes.BaseNodesResponse;
         for (int i = 0; i < nodes.length; i++) {
-            discoveryNodes[i] = nodes[i].discoveryNode();
+        protected NodeResponse(StreamInput in) throws IOException {
+        }
+            String actionName,
+import org.opensearch.cluster.service.ClusterService;
+                threadPool,
+ * this work for additional information regarding copyright
+            testNodes = null;
+import org.opensearch.tasks.TaskResourceTrackingService;
+        protected void writeNodesTo(StreamOutput out, List<NodeResponse> nodes) throws IOException {
+        for (TestNode node : nodes) {
+        }
+        protected List<NodeResponse> readNodesFrom(StreamInput in) throws IOException {
+        @Override
+        runnableTaskListener = new AtomicReference<>();
+                    Settings settings,
+            transportService.getTaskManager().setTaskCancellationService(new TaskCancellationService(transportService));
+        public final TransportGetTaskAction transportGetTaskAction;
+                nodeA.transportService.connectToNode(nodeB.discoveryNode());
+    public final void shutdownTestNodes() throws Exception {
+                actionFilters,
+            transportService.start();
+            Writeable.Reader<NodesRequest> request,
+ */
+                actionName,
+        }
+    protected TestNode[] testNodes;
+                taskResourceTrackingService
+ * software distributed under the License is distributed on an
+            Client mockClient = mock(Client.class);
+    }
+            super(clusterName, nodes, failures);
+    }
+import org.opensearch.action.support.ActionFilters;
+import static org.opensearch.test.ClusterServiceUtils.setState;
+ *
+                mockClient,
+        for (int i = 0; i < testNodes.length; i++) {
+        for (TestNode nodeA : nodes) {
+                    new NoneCircuitBreakerService(),
+            };
+            NamedXContentRegistry namedXContentRegistry = mock(NamedXContentRegistry.class);
+                    Set<String> taskHeaders
+        protected NodesResponse newResponse(NodesRequest request, List<NodeResponse> responses, List<FailedNodeException> failures) {
+            testNodes[i] = new TestNode("node" + i, threadPool, settings);
+import org.opensearch.threadpool.RunnableTaskExecutionListener;
+        AbstractTestNodesAction(
+    }
+            };
+     */
+            transportService.acceptIncomingRequests();
+            transportService.close();
+            clusterService.close();
+        }
+    protected ThreadPool threadPool;
+            final Function<BoundTransportAddress, DiscoveryNode> boundTransportAddressDiscoveryNodeFunction = address -> {
+        if (testNodes != null) {
+import org.opensearch.cluster.ClusterModule;
+            taskResourceTrackingService = new TaskResourceTrackingService(settings, clusterService.getClusterSettings(), threadPool);
+            return discoveryNode().getId();
+                threadPool,
+/*
+        }
+import org.opensearch.tasks.TaskCancellationService;
+                ) {
+ */
+                TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+            setState(node.clusterService, ClusterStateCreationUtils.state(node.discoveryNode(), clusterManager, discoveryNodes));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
+        }
+import java.util.List;
+ * Unless required by applicable law or agreed to in writing,
+ * the Apache License, Version 2.0 (the "License"); you may
+            TransportService transportService,
+                @Override
+        public void close() {
+                    new NetworkService(Collections.emptyList()),
+        return listeners;
+        extends TransportNodesAction<NodesRequest, NodesResponse, NodeRequest, NodeResponse> {
+            transportListTasksAction = new TransportListTasksAction(
+import org.opensearch.action.support.nodes.BaseNodesRequest;
+import org.opensearch.test.OpenSearchTestCase;
+import static java.util.Collections.emptySet;
+package org.opensearch.action.admin.cluster.node.tasks;
+        }
+            clusterService = createClusterService(threadPool, discoveryNode.get());
+        public DiscoveryNode discoveryNode() {
+import java.util.concurrent.TimeUnit;
+            );
+    public static void connectNodes(TestNode... nodes) {
+     * Simulates node-based task that can be used to block node tasks so they are guaranteed to be registered by task manager
+                clusterService,
+                transportService,
+        @Override
+import org.opensearch.common.util.PageCacheRecycler;
+import org.opensearch.core.indices.breaker.NoneCircuitBreakerService;
+ *
+        @Override
+        nodesCount = randomIntBetween(2, 10);
+            super(
+        @Override
+ * Modifications Copyright OpenSearch Contributors. See
         }
         DiscoveryNode clusterManager = discoveryNodes[0];
-        for (TestNode node : nodes) {
-            setState(node.clusterService, ClusterStateCreationUtils.state(node.discoveryNode(), clusterManager, discoveryNodes));
+import static java.util.Collections.emptyMap;
+                    } else {
+        protected NodeResponse(DiscoveryNode node) {
         }
-        for (TestNode nodeA : nodes) {
-            for (TestNode nodeB : nodes) {
-                nodeA.transportService.connectToNode(nodeB.discoveryNode());
-            }
+    static class NodeResponse extends BaseNodeResponse {
+                    PageCacheRecycler.NON_RECYCLING_INSTANCE,
+            return new NodesResponse(clusterService.getClusterName(), responses, failures);
+ * SPDX-License-Identifier: Apache-2.0
         }
+    protected int nodesCount;
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+                NoopTracer.INSTANCE
+        protected NodeResponse newNodeResponse(StreamInput in) throws IOException {
+import org.opensearch.core.xcontent.NamedXContentRegistry;
     }
-
-    public static RecordingTaskManagerListener[] setupListeners(TestNode[] nodes, String... actionMasks) {
-        RecordingTaskManagerListener[] listeners = new RecordingTaskManagerListener[nodes.length];
-        for (int i = 0; i < nodes.length; i++) {
-            listeners[i] = new RecordingTaskManagerListener(nodes[i].getNodeId(), actionMasks);
-            ((MockTaskManager) (nodes[i].transportService.getTaskManager())).addListener(listeners[i]);
-        }
-        return listeners;
-    }
+import java.util.concurrent.atomic.AtomicReference;
+                settings,
+                    NoopTracer.INSTANCE
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        public final TransportListTasksAction transportListTasksAction;
+import org.opensearch.common.settings.ClusterSettings;
+                null,
+                actionFilters,
+ * Licensed to Elasticsearch under one or more contributor
+import org.opensearch.common.SetOnce;
+    /**
+import java.io.IOException;
+                ThreadPool.Names.GENERIC,
+                boundTransportAddressDiscoveryNodeFunction,
+                testNode.close();
 }
+ * compatible open source license.
+    }
+                        return super.createTaskManager(settings, clusterSettings, threadPool, taskHeaders);
+                nodeRequest,
+import org.opensearch.cluster.node.DiscoveryNode;
+            );
+        public final ClusterService clusterService;
+            return new NodeResponse(in);
+        }
+                    threadPool,
+        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
+                protected TaskManager createTaskManager(
+        public final TransportService transportService;
+            return failures().size();
+        testNodes = new TestNode[nodesCount];
+import org.opensearch.cluster.ClusterName;
+    static class NodesResponse extends BaseNodesResponse<NodeResponse> {
+        @Override
+    public void setupThreadPool() {
+            super(in);
+            ClusterService clusterService,
+                clusterService,
+    @Before
+                taskResourceTrackingService
+                clusterService,
+        public int failureCount() {
+public abstract class TaskManagerTestCase extends OpenSearchTestCase {
+        public final TransportCancelTasksAction transportCancelTasksAction;
+            }
+            );
+                ),
+import org.opensearch.tasks.TaskManager;
+                namedXContentRegistry,
+import org.opensearch.action.FailedNodeException;
+import org.opensearch.test.tasks.MockTaskManager;
+        }
+import org.opensearch.core.common.transport.BoundTransportAddress;
+import org.opensearch.threadpool.ThreadPool;
+            listeners[i] = new RecordingTaskManagerListener(nodes[i].getNodeId(), actionMasks);
+    @After
+import org.opensearch.common.lease.Releasable;
+                new ActionFilters(new HashSet<>()),
+        }
+import java.util.Set;
+import static org.mockito.Mockito.mock;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.action.support.nodes.TransportNodesAction;
+            ThreadPool threadPool,
+ * not use this file except in compliance with the License.
+            Writeable.Reader<NodeRequest> nodeRequest
+ * GitHub history for details.
+        private final SetOnce<DiscoveryNode> discoveryNode = new SetOnce<>();
+import org.junit.Before;
+            for (TestNode nodeB : nodes) {
+            ((MockTaskManager) (nodes[i].transportService.getTaskManager())).addListener(listeners[i]);
+        public TestNode(String name, ThreadPool threadPool, Settings settings) {
+    }
+    protected AtomicReference<RunnableTaskExecutionListener> runnableTaskListener;
+import java.util.function.Function;
+ * license agreements. See the NOTICE file distributed with
+        ) {
+            transportGetTaskAction = new TransportGetTaskAction(
+import java.util.Collections;
+            out.writeList(nodes);
+        public final TaskResourceTrackingService taskResourceTrackingService;
+import org.junit.After;
+import org.opensearch.transport.TransportService;
+            transportService.getTaskManager().setTaskResourceTrackingService(taskResourceTrackingService);
+            clusterService.addStateApplier(transportService.getTaskManager());
+    }
+        }
+    abstract class AbstractTestNodesAction<NodesRequest extends BaseNodesRequest<NodesRequest>, NodeRequest extends TransportRequest>
+ */
+ */
+import org.opensearch.transport.TransportRequest;
+            transportCancelTasksAction = new TransportCancelTasksAction(clusterService, transportService, actionFilters);
+        }
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.common.network.NetworkService;
+        threadPool = null;
+            for (TestNode testNode : testNodes) {
+            discoveryNodes[i] = nodes[i].discoveryNode();
+                    ClusterSettings clusterSettings,
+import org.opensearch.transport.client.Client;
+        protected abstract NodeResponse nodeOperation(NodeRequest request);
+/*
+    public static class TestNode implements Releasable {
+                NodeResponse.class
+import org.opensearch.action.admin.cluster.node.tasks.cancel.TransportCancelTasksAction;
+ * specific language governing permissions and limitations
+                }
+import org.opensearch.action.admin.cluster.node.tasks.get.TransportGetTaskAction;
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.action.admin.cluster.node.tasks.list.TransportListTasksAction;
+            super(node);
+    public void setupTestNodes(Settings settings) {
+            }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                return discoveryNode.get();
+                    if (MockTaskManager.USE_MOCK_TASK_MANAGER_SETTING.get(settings)) {
+ * ownership. Elasticsearch licenses this file to you under
+        public String getNodeId() {
+        RecordingTaskManagerListener[] listeners = new RecordingTaskManagerListener[nodes.length];
+ * under the License.
+/*
+import org.opensearch.action.support.replication.ClusterStateCreationUtils;
+ *
+        for (int i = 0; i < nodes.length; i++) {
+            return in.readList(NodeResponse::new);
+ * The test case for unit testing task manager and related transport actions
+import org.opensearch.core.common.io.stream.StreamOutput;
+                transportService,
+                Collections.emptySet(),
+                new MockNioTransport(
+                discoveryNode.set(new DiscoveryNode(name, address.publishAddress(), emptyMap(), emptySet(), Version.CURRENT));
+        @Override
+        protected NodesResponse(ClusterName clusterName, List<NodeResponse> nodes, List<FailedNodeException> failures) {
+    }
+ * this file be licensed under the Apache-2.0 license or a
+                    ThreadPool threadPool,
+import org.opensearch.transport.nio.MockNioTransport;
+                    Version.CURRENT,
+import org.opensearch.action.support.nodes.BaseNodeResponse;
+import org.opensearch.threadpool.TestThreadPool;
+                    new NamedWriteableRegistry(ClusterModule.getNamedWriteables()),
+            return discoveryNode.get();
+        DiscoveryNode[] discoveryNodes = new DiscoveryNode[nodes.length];
+                transportService,
+        }

@@ -1,308 +1,280 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.storage.action.tiering;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.admin.indices.flush.FlushRequest;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.action.support.broadcast.BroadcastResponse;
-import org.opensearch.action.support.broadcast.node.TransportBroadcastByNodeAction;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardsIterator;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardState;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.storage.common.tiering.TieringUtils;
-import org.opensearch.threadpool.Scheduler;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-/**
- * Transport action that prepares DFA indices for tiering by performing
- * sync, flush, refresh, and remote store sync on primary shards.
- * <p>
- * This action is a single broadcast RPC to all nodes with primary shards,
- * executing operations in parallel across nodes. The total time equals the
- * slowest shard's upload time.
- * <p>
- * Registered as internal action: {@code internal:admin/indices/prepare_tiering}
- *
- * @opensearch.internal
- */
-public class TransportPrepareTieringAction extends TransportBroadcastByNodeAction<
-    PrepareTieringRequest,
-    BroadcastResponse,
-    TransportBroadcastByNodeAction.EmptyResult> {
-
-    private static final Logger logger = LogManager.getLogger(TransportPrepareTieringAction.class);
-    private static final TimeValue PERMITS_ACQUIRE_TIMEOUT = TimeValue.timeValueSeconds(30);
-
-    private final IndicesService indicesService;
-    private final ThreadPool threadPool;
-    private volatile TimeValue prepareTieringTimeout;
-    private volatile TimeValue replicaSyncTimeout;
-
-    /**
-     * Constructs a TransportPrepareTieringAction.
-     *
-     * @param clusterService the cluster service
-     * @param transportService the transport service
-     * @param indicesService the indices service
-     * @param actionFilters the action filters
-     * @param indexNameExpressionResolver the index name expression resolver
-     */
-    @Inject
-    public TransportPrepareTieringAction(
-        ClusterService clusterService,
-        TransportService transportService,
-        IndicesService indicesService,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver
-    ) {
-        super(
-            PrepareTieringAction.NAME,
-            clusterService,
-            transportService,
-            actionFilters,
-            indexNameExpressionResolver,
-            PrepareTieringRequest::new,
-            ThreadPool.Names.GENERIC
-        );
-        this.indicesService = indicesService;
-        this.threadPool = transportService.getThreadPool();
-        this.prepareTieringTimeout = TieringUtils.PREPARE_TIERING_TIMEOUT.get(clusterService.getSettings());
-        clusterService.getClusterSettings().addSettingsUpdateConsumer(TieringUtils.PREPARE_TIERING_TIMEOUT, this::setPrepareTieringTimeout);
-        this.replicaSyncTimeout = TieringUtils.REPLICA_SYNC_TIMEOUT_SETTING.get(clusterService.getSettings());
-        clusterService.getClusterSettings()
-            .addSettingsUpdateConsumer(TieringUtils.REPLICA_SYNC_TIMEOUT_SETTING, this::setReplicaSyncTimeout);
-    }
-
-    private void setPrepareTieringTimeout(TimeValue timeout) {
-        this.prepareTieringTimeout = timeout;
-        logger.info("Updated prepare tiering timeout to [{}]", timeout);
-    }
-
-    private void setReplicaSyncTimeout(TimeValue timeout) {
-        this.replicaSyncTimeout = timeout;
-        logger.info("Updated replica sync timeout to [{}]", timeout);
-    }
-
-    /**
-     * Opt-in to async shard operation execution. Each shard's syncAndFlush is dispatched
      * to the thread pool in parallel, and the transport response is sent only after
-     * all shards complete. This prevents long-running flush + remote sync from blocking
-     * the thread that received the transport request.
+    private final IndicesService indicesService;
      */
+     */
+import org.opensearch.cluster.block.ClusterBlockException;
     @Override
-    protected boolean isAsyncShardOperation() {
-        return true;
+        // Flush before refresh: committed segments_N must exist before waitForRemoteStoreSync uploads them.
+    BroadcastResponse,
+                    listener.onFailure(e);
+        // invoke us more than once under a narrow scheduler race, and `completed` ensures the body
+     * Constructs a TransportPrepareTieringAction.
+import org.opensearch.threadpool.ThreadPool;
+ */
+    private Releasable acquirePrimaryPermits(IndexShard indexShard, ShardRouting shardRouting) throws IOException {
+                    listener.onFailure(
+        this.indicesService = indicesService;
+            actionFilters,
+    protected ClusterBlockException checkRequestBlock(ClusterState state, PrepareTieringRequest request, String[] concreteIndices) {
+        // Timeout: use 80% of the transport timeout so we fail with a meaningful message
+    @Override
+        // Wait for replicas to apply the latest checkpoint before relocation.
+                    permit.close();
+     * Non-blocking async shard operation. Registers a merge drain listener instead of
+                        + indexShard.state()
+import java.util.concurrent.atomic.AtomicBoolean;
     }
-
-    @Override
-    protected EmptyResult readShardResult(StreamInput in) throws IOException {
-        return EmptyResult.readEmptyResultFrom(in);
-    }
-
-    @Override
-    protected BroadcastResponse newResponse(
-        PrepareTieringRequest request,
-        int totalShards,
-        int successfulShards,
-        int failedShards,
-        List<EmptyResult> responses,
-        List<DefaultShardOperationFailedException> shardFailures,
-        ClusterState clusterState
     ) {
-        return new BroadcastResponse(totalShards, successfulShards, failedShards, shardFailures);
+    protected boolean isAsyncShardOperation() {
     }
-
-    @Override
+     * @param indicesService the indices service
+ * <p>
+     * @param indexNameExpressionResolver the index name expression resolver
+            if (completed.compareAndSet(false, true)) {
+        indexShard.flush(new FlushRequest().force(true).waitIfOngoing(true));
+     */
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;
+        super(
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, PrepareTieringRequest request) {
+        } catch (Exception e) {
+     * @param transportService the transport service
+import org.opensearch.cluster.service.ClusterService;
     protected PrepareTieringRequest readRequestFrom(StreamInput in) throws IOException {
-        return new PrepareTieringRequest(in);
     }
-
+            clusterService,
+            PrepareTieringAction.NAME,
+    protected void shardOperationAsync(PrepareTieringRequest request, ShardRouting shardRouting, ActionListener<EmptyResult> listener) {
+        // before the transport channel times out with a generic error. This allows the caller to retry.
+     * Called after merges have drained (either via blocking wait or async listener).
+            );
+ *
+    ) {
+    private void setPrepareTieringTimeout(TimeValue timeout) {
+                        + "). Cannot prepare for tiering — will retry."
+     * @param clusterService the cluster service
     /**
      * Sync fallback — required by the abstract contract but never called because
-     * {@link #isAsyncShardOperation()} returns true and we override
-     * {@link #shardOperationAsync}. Throws unconditionally to catch misuse.
-     */
-    @Override
-    protected EmptyResult shardOperation(PrepareTieringRequest request, ShardRouting shardRouting) throws IOException {
-        throw new UnsupportedOperationException(
-            "TransportPrepareTieringAction uses shardOperationAsync exclusively; sync path should never be called"
-        );
-    }
-
-    /**
-     * Non-blocking async shard operation. Registers a merge drain listener instead of
-     * blocking a thread waiting for merges. Uses AtomicBoolean to ensure only one path
      * (merge callback OR timeout) completes the operation.
+            listener.onFailure(e);
+public class TransportPrepareTieringAction extends TransportBroadcastByNodeAction<
+ * slowest shard's upload time.
+        PrepareTieringRequest request,
      */
-    @Override
-    protected void shardOperationAsync(PrepareTieringRequest request, ShardRouting shardRouting, ActionListener<EmptyResult> listener) {
-        IndexShard indexShard = indicesService.indexServiceSafe(shardRouting.shardId().getIndex()).getShard(shardRouting.shardId().id());
-        logger.debug("Preparing shard [{}] for tiering (async path)", shardRouting.shardId());
-
-        // Fail fast if shard is not fully started
-        if (indexShard.state() != IndexShardState.STARTED) {
-            listener.onFailure(
+import org.opensearch.action.support.broadcast.BroadcastResponse;
+    protected EmptyResult shardOperation(PrepareTieringRequest request, ShardRouting shardRouting) throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+ * <p>
                 new IOException(
-                    "Shard ["
-                        + shardRouting.shardId()
+ *
+     * Performs the final sync, flush, refresh, remote store sync, and verification.
+        TimeValue effectiveTimeout = TimeValue.timeValueMillis(mergeTimeoutMillis);
+        IndexShard indexShard = indicesService.indexServiceSafe(shardRouting.shardId().getIndex()).getShard(shardRouting.shardId().id());
+            "TransportPrepareTieringAction uses shardOperationAsync exclusively; sync path should never be called"
+    protected ShardsIterator shards(ClusterState clusterState, PrepareTieringRequest request, String[] concreteIndices) {
+        // add a write block on the index. That block includes METADATA_WRITE level,
+                } finally {
                         + "] is not in STARTED state (current: "
-                        + indexShard.state()
-                        + "). Cannot prepare for tiering — will retry."
-                )
-            );
-            return;
         }
-
-        Releasable permit;
+ * Transport action that prepares DFA indices for tiering by performing
+    /**
+import org.opensearch.cluster.block.ClusterBlockLevel;
+import org.opensearch.index.shard.IndexShardState;
+    PrepareTieringRequest,
+        // Schedule timeout — fires before transport timeout with diagnostic info about pending merges
+                } finally {
+        int successfulShards,
+        logger.debug("Shard [{}] prepared for tiering successfully", shardRouting.shardId());
+        logger.info("Updated prepare tiering timeout to [{}]", timeout);
+    @Inject
+        // which would reject this action. Since this is an internal operation that runs after the block
+        return EmptyResult.readEmptyResultFrom(in);
+    private void completeSyncAndFlush(IndexShard indexShard, ShardRouting shardRouting) throws IOException {
+ * @opensearch.internal
+import org.opensearch.storage.common.tiering.TieringUtils;
+     * @param actionFilters the action filters
+import org.apache.logging.log4j.Logger;
+        ClusterState clusterState
+        return new BroadcastResponse(totalShards, successfulShards, failedShards, shardFailures);
+    @Override
+import org.opensearch.cluster.routing.ShardsIterator;
+                () -> "Failed to acquire primary permits for shard [" + shardRouting.shardId() + "] during tiering prepare — will retry",
+/*
+import org.opensearch.index.shard.IndexShard;
+        // Do not check index-level blocks here. This action is called internally after we intentionally
+    TransportBroadcastByNodeAction.EmptyResult> {
+                "Shard [" + shardRouting.shardId() + "] still has " + uncommitted + " uncommitted translog ops after flush"
+                }
+     */
+    private volatile TimeValue replicaSyncTimeout;
+    @Override
+    private static final Logger logger = LogManager.getLogger(TransportPrepareTieringAction.class);
+        this.replicaSyncTimeout = timeout;
+import org.opensearch.action.support.ActionFilters;
+    private void verifyNoUncommittedOps(IndexShard indexShard, ShardRouting shardRouting) throws IOException {
+    }
+     * Blocks until all currently executing operations complete (up to 30s timeout).
+        if (indexShard.state() != IndexShardState.STARTED) {
+     */
+    /**
+    /**
+        long mergeTimeoutMillis = (long) (mergeTimeout.millis() * 0.8);
+import org.opensearch.common.inject.Inject;
+import org.opensearch.action.support.PlainActionFuture;
+    /**
+    }
+                    "Shard ["
+ * compatible open source license.
+        );
+    /**
+        clusterService.getClusterSettings()
+            }
+            indexNameExpressionResolver,
+        indexShard.refresh("prepare_tiering");
+            transportService,
+        // "prepare_tiering" source bypasses the freeze guard — this is the last refresh ever.
+    }
+        IndexNameExpressionResolver indexNameExpressionResolver
+        logger.debug("Preparing shard [{}] for tiering (async path)", shardRouting.shardId());
+        int failedShards,
+        return new PrepareTieringRequest(in);
+            listener.onFailure(
+        int totalShards,
+import org.opensearch.core.action.ActionListener;
+        return true;
+        indexShard.onMergesDrained(() -> {
+    protected EmptyResult readShardResult(StreamInput in) throws IOException {
+    @Override
+    private final ThreadPool threadPool;
+        // Thread returns immediately — not blocked!
+import org.opensearch.threadpool.Scheduler;
+        }, effectiveTimeout, ThreadPool.Names.GENERIC);
+import org.opensearch.cluster.routing.ShardRouting;
+        }
+    }
+import org.apache.logging.log4j.LogManager;
+        ActionFilters actionFilters,
+            );
+            indexShard.acquireAllPrimaryOperationsPermits(permitFuture, PERMITS_ACQUIRE_TIMEOUT);
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
+        int uncommitted = indexShard.translogStats().getUncommittedOperations();
+                    );
+        this.prepareTieringTimeout = timeout;
+ */
+    public TransportPrepareTieringAction(
+        this.prepareTieringTimeout = TieringUtils.PREPARE_TIERING_TIMEOUT.get(clusterService.getSettings());
         try {
             permit = acquirePrimaryPermits(indexShard, shardRouting);
-        } catch (IOException e) {
-            logger.debug(
-                () -> "Failed to acquire primary permits for shard [" + shardRouting.shardId() + "] during tiering prepare — will retry",
-                e
-            );
-            listener.onFailure(e);
+        indexShard.waitForReplicaSync(replicaSyncTimeout);
+        TransportService transportService,
+        logger.trace("Completing sync and flush for shard [{}]", shardRouting.shardId());
             return;
-        }
-
-        indexShard.freezeForTiering();
-
-        // Timeout: use 80% of the transport timeout so we fail with a meaningful message
-        // before the transport channel times out with a generic error. This allows the caller to retry.
-        TimeValue mergeTimeout = request.timeout() != null ? request.timeout() : prepareTieringTimeout;
-        long mergeTimeoutMillis = (long) (mergeTimeout.millis() * 0.8);
-        TimeValue effectiveTimeout = TimeValue.timeValueMillis(mergeTimeoutMillis);
+    private volatile TimeValue prepareTieringTimeout;
+        if (uncommitted > 0) {
+ * Registered as internal action: {@code internal:admin/indices/prepare_tiering}
+            }
+        // force=true bypasses the freeze guard — this is the last flush ever for this engine.
         AtomicBoolean completed = new AtomicBoolean(false);
-
-        // Schedule timeout — fires before transport timeout with diagnostic info about pending merges
+        List<DefaultShardOperationFailedException> shardFailures,
+            .addSettingsUpdateConsumer(TieringUtils.REPLICA_SYNC_TIMEOUT_SETTING, this::setReplicaSyncTimeout);
+        return null;
+                try {
+        Releasable permit;
+     * {@link #shardOperationAsync}. Throws unconditionally to catch misuse.
+        verifyNoUncommittedOps(indexShard, shardRouting);
+    @Override
+            logger.debug(
+    }
+        // This ensures replicas have downloaded the merged segment(s) from remote store.
+                }
+    private void setReplicaSyncTimeout(TimeValue timeout) {
+import java.io.IOException;
+     */
+import org.opensearch.indices.IndicesService;
+            PrepareTieringRequest::new,
         Scheduler.ScheduledCancellable timeout = threadPool.schedule(() -> {
             if (completed.compareAndSet(false, true)) {
-                int activeMerges = indexShard.getActiveMergeCount();
-                boolean hasPendingMerges = indexShard.hasPendingMerges();
-                try {
-                    listener.onFailure(
-                        new MergeDrainTimeoutException(shardRouting.shardId(), activeMerges, hasPendingMerges, mergeTimeout.toString())
-                    );
-                } finally {
-                    permit.close();
-                }
-            }
-        }, effectiveTimeout, ThreadPool.Names.GENERIC);
-
-        // Non-blocking merge wait. The CAS makes this listener idempotent — onMergesDrained may
-        // invoke us more than once under a narrow scheduler race, and `completed` ensures the body
-        // (sync/flush, listener.onResponse, permit.close) runs at most once.
-        indexShard.onMergesDrained(() -> {
-            if (completed.compareAndSet(false, true)) {
-                timeout.cancel();
-                try {
-                    completeSyncAndFlush(indexShard, shardRouting);
-                    listener.onResponse(EmptyResult.INSTANCE);
-                } catch (Exception e) {
-                    listener.onFailure(e);
-                } finally {
-                    permit.close();
-                }
-            }
-        });
-        // Thread returns immediately — not blocked!
+    @Override
+import org.opensearch.common.unit.TimeValue;
     }
-
-    /**
-     * Acquires all primary operation permits to drain in-flight indexing operations.
-     * Blocks until all currently executing operations complete (up to 30s timeout).
-     * While permits are held, no new indexing operations can start on this shard.
-     */
-    private Releasable acquirePrimaryPermits(IndexShard indexShard, ShardRouting shardRouting) throws IOException {
-        try {
-            PlainActionFuture<Releasable> permitFuture = new PlainActionFuture<>();
-            indexShard.acquireAllPrimaryOperationsPermits(permitFuture, PERMITS_ACQUIRE_TIMEOUT);
-            return permitFuture.actionGet();
-        } catch (Exception e) {
-            throw new IOException("Failed to acquire primary operation permits for shard [" + shardRouting.shardId() + "]", e);
-        }
-    }
-
-    /**
-     * Performs the final sync, flush, refresh, remote store sync, and verification.
-     * Called after merges have drained (either via blocking wait or async listener).
-     */
-    private void completeSyncAndFlush(IndexShard indexShard, ShardRouting shardRouting) throws IOException {
-        logger.trace("Completing sync and flush for shard [{}]", shardRouting.shardId());
+     * the thread that received the transport request.
+ * sync, flush, refresh, and remote store sync on primary shards.
         indexShard.sync();
-        // Flush before refresh: committed segments_N must exist before waitForRemoteStoreSync uploads them.
-        // force=true bypasses the freeze guard — this is the last flush ever for this engine.
-        indexShard.flush(new FlushRequest().force(true).waitIfOngoing(true));
-        // "prepare_tiering" source bypasses the freeze guard — this is the last refresh ever.
-        indexShard.refresh("prepare_tiering");
-        indexShard.waitForRemoteStoreSync();
-        // Wait for replicas to apply the latest checkpoint before relocation.
-        // This ensures replicas have downloaded the merged segment(s) from remote store.
-        indexShard.waitForReplicaSync(replicaSyncTimeout);
-        verifyNoUncommittedOps(indexShard, shardRouting);
-
-        logger.debug("Shard [{}] prepared for tiering successfully", shardRouting.shardId());
-    }
-
+                    completeSyncAndFlush(indexShard, shardRouting);
+     *
+                e
+            throw new IOException("Failed to acquire primary operation permits for shard [" + shardRouting.shardId() + "]", e);
+    protected BroadcastResponse newResponse(
     /**
-     * Verifies that no uncommitted translog operations remain after flush.
+        clusterService.getClusterSettings().addSettingsUpdateConsumer(TieringUtils.PREPARE_TIERING_TIMEOUT, this::setPrepareTieringTimeout);
+                boolean hasPendingMerges = indexShard.hasPendingMerges();
+        // (sync/flush, listener.onResponse, permit.close) runs at most once.
      * This is a defensive check — with read-only block + force flush, uncommitted should always be 0.
      */
-    private void verifyNoUncommittedOps(IndexShard indexShard, ShardRouting shardRouting) throws IOException {
-        int uncommitted = indexShard.translogStats().getUncommittedOperations();
-        if (uncommitted > 0) {
-            throw new IOException(
-                "Shard [" + shardRouting.shardId() + "] still has " + uncommitted + " uncommitted translog ops after flush"
-            );
-        }
+ * This action is a single broadcast RPC to all nodes with primary shards,
+package org.opensearch.storage.action.tiering;
+ * The OpenSearch Contributors require contributions made to
+        });
+            ThreadPool.Names.GENERIC
+        ClusterService clusterService,
+        // Non-blocking merge wait. The CAS makes this listener idempotent — onMergesDrained may
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+        List<EmptyResult> responses,
+                } catch (Exception e) {
+     * blocking a thread waiting for merges. Uses AtomicBoolean to ensure only one path
+        try {
+     * all shards complete. This prevents long-running flush + remote sync from blocking
+ * this file be licensed under the Apache-2.0 license or a
     }
-
-    /**
+            return;
+        indexShard.freezeForTiering();
+        throw new UnsupportedOperationException(
+                int activeMerges = indexShard.getActiveMergeCount();
      * Targets primary shards only. Replicas get data via segment replication from primary.
-     */
     @Override
-    protected ShardsIterator shards(ClusterState clusterState, PrepareTieringRequest request, String[] concreteIndices) {
+     * While permits are held, no new indexing operations can start on this shard.
+    }
+    }
+        }
+    private static final TimeValue PERMITS_ACQUIRE_TIMEOUT = TimeValue.timeValueSeconds(30);
+        );
+            );
         return clusterState.routingTable().allShardsSatisfyingPredicate(concreteIndices, ShardRouting::primary);
-    }
-
+    /**
     @Override
-    protected ClusterBlockException checkGlobalBlock(ClusterState state, PrepareTieringRequest request) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
+     * Verifies that no uncommitted translog operations remain after flush.
+        indexShard.waitForRemoteStoreSync();
+        IndicesService indicesService,
+import org.opensearch.transport.TransportService;
     }
-
-    @Override
-    protected ClusterBlockException checkRequestBlock(ClusterState state, PrepareTieringRequest request, String[] concreteIndices) {
-        // Do not check index-level blocks here. This action is called internally after we intentionally
-        // add a write block on the index. That block includes METADATA_WRITE level,
-        // which would reject this action. Since this is an internal operation that runs after the block
+import org.opensearch.common.lease.Releasable;
+     * Opt-in to async shard operation execution. Each shard's syncAndFlush is dispatched
+ * executing operations in parallel across nodes. The total time equals the
+     * {@link #isAsyncShardOperation()} returns true and we override
+        this.threadPool = transportService.getThreadPool();
+import java.util.List;
+            return permitFuture.actionGet();
+import org.opensearch.cluster.ClusterState;
+        TimeValue mergeTimeout = request.timeout() != null ? request.timeout() : prepareTieringTimeout;
         // is deliberately set, we skip the index-level block check.
-        return null;
-    }
+            PlainActionFuture<Releasable> permitFuture = new PlainActionFuture<>();
+     * Acquires all primary operation permits to drain in-flight indexing operations.
+import org.opensearch.action.support.broadcast.node.TransportBroadcastByNodeAction;
+                try {
+/**
+        logger.info("Updated replica sync timeout to [{}]", timeout);
+        this.replicaSyncTimeout = TieringUtils.REPLICA_SYNC_TIMEOUT_SETTING.get(clusterService.getSettings());
+        }
+                    listener.onResponse(EmptyResult.INSTANCE);
+                    permit.close();
 }
+    }
+                        new MergeDrainTimeoutException(shardRouting.shardId(), activeMerges, hasPendingMerges, mergeTimeout.toString())
+                )
+            throw new IOException(
+                timeout.cancel();
+                        + shardRouting.shardId()
+        // Fail fast if shard is not fully started
+    }
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.action.admin.indices.flush.FlushRequest;
+        } catch (IOException e) {

@@ -1,633 +1,579 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.search;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.search.TopDocs;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
-import org.opensearch.common.util.concurrent.AbstractRunnable;
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.breaker.CircuitBreakingException;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.tasks.TaskCancelledException;
-import org.opensearch.search.SearchPhaseResult;
-import org.opensearch.search.SearchShardTarget;
-import org.opensearch.search.aggregations.InternalAggregation.ReduceContextBuilder;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.search.query.QuerySearchResult;
-
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
-
-/**
- * A {@link ArraySearchPhaseResults} implementation that incrementally reduces aggregation results
- * as shard results are consumed.
- * This implementation adds the memory that it used to save and reduce the results of shard aggregations
- * in the {@link CircuitBreaker#REQUEST} circuit breaker. Before any partial or final reduce, the memory
- * needed to reduce the aggregations is estimated and a {@link CircuitBreakingException} is handled if it
- * exceeds the maximum memory allowed in this breaker.
- *
- * @opensearch.internal
- */
-public class QueryPhaseResultConsumer extends ArraySearchPhaseResults<SearchPhaseResult> implements Releasable {
-    private static final Logger logger = LogManager.getLogger(QueryPhaseResultConsumer.class);
-
-    private final Executor executor;
-    private final CircuitBreaker circuitBreaker;
-    private final SearchPhaseController controller;
-    private final SearchProgressListener progressListener;
-    private final ReduceContextBuilder aggReduceContextBuilder;
-    private final NamedWriteableRegistry namedWriteableRegistry;
-
-    private final int topNSize;
-    private final boolean hasTopDocs;
-    private final boolean hasAggs;
-    private final boolean performFinalReduce;
-
-    final PendingReduces pendingReduces;
-    private final Consumer<Exception> cancelTaskOnFailure;
-    private final BooleanSupplier isTaskCancelled;
-
-    public QueryPhaseResultConsumer(
-        SearchRequest request,
-        Executor executor,
-        CircuitBreaker circuitBreaker,
-        SearchPhaseController controller,
-        SearchProgressListener progressListener,
-        NamedWriteableRegistry namedWriteableRegistry,
-        int expectedResultSize,
-        Consumer<Exception> cancelTaskOnFailure
-    ) {
-        this(
-            request,
-            executor,
-            circuitBreaker,
-            controller,
-            progressListener,
-            namedWriteableRegistry,
-            expectedResultSize,
-            cancelTaskOnFailure,
-            () -> false
-        );
-    }
-
-    /**
-     * Creates a {@link QueryPhaseResultConsumer} that incrementally reduces aggregation results
-     * as shard results are consumed.
-     */
-    public QueryPhaseResultConsumer(
-        SearchRequest request,
-        Executor executor,
-        CircuitBreaker circuitBreaker,
-        SearchPhaseController controller,
-        SearchProgressListener progressListener,
-        NamedWriteableRegistry namedWriteableRegistry,
-        int expectedResultSize,
-        Consumer<Exception> cancelTaskOnFailure,
-        BooleanSupplier isTaskCancelled
-    ) {
-        super(expectedResultSize);
-        this.executor = executor;
-        this.circuitBreaker = circuitBreaker;
-        this.controller = controller;
-        this.progressListener = progressListener;
-        this.aggReduceContextBuilder = controller.getReduceContext(request);
-        this.namedWriteableRegistry = namedWriteableRegistry;
-        this.topNSize = SearchPhaseController.getTopDocsSize(request);
-        this.performFinalReduce = request.isFinalReduce();
-        this.cancelTaskOnFailure = cancelTaskOnFailure;
-
-        SearchSourceBuilder source = request.source();
-        this.hasTopDocs = source == null || source.size() != 0;
-        this.hasAggs = source != null && source.aggregations() != null;
-        int batchReduceSize = getBatchReduceSize(request.getBatchedReduceSize(), expectedResultSize);
-        this.pendingReduces = new PendingReduces(batchReduceSize, request.resolveTrackTotalHitsUpTo());
-        this.isTaskCancelled = isTaskCancelled;
-    }
-
-    int getBatchReduceSize(int requestBatchedReduceSize, int minBatchReduceSize) {
-        return (hasAggs || hasTopDocs) ? Math.min(requestBatchedReduceSize, minBatchReduceSize) : minBatchReduceSize;
-    }
-
-    @Override
-    public void close() {
-        Releasables.close(pendingReduces);
-    }
-
-    @Override
-    public void consumeResult(SearchPhaseResult result, Runnable next) {
-        super.consumeResult(result, () -> {});
-        QuerySearchResult querySearchResult = result.queryResult();
-        progressListener.notifyQueryResult(querySearchResult.getShardIndex());
-        pendingReduces.consume(querySearchResult, next);
-    }
-
-    @Override
-    public SearchPhaseController.ReducedQueryPhase reduce() throws Exception {
-        if (pendingReduces.hasPendingReduceTask()) {
-            throw new AssertionError("partial reduce in-flight");
-        }
-        checkCancellation();
-        if (pendingReduces.hasFailure()) {
-            throw pendingReduces.failure.get();
-        }
-
-        // ensure consistent ordering
-        pendingReduces.sortBuffer();
-        final SearchPhaseController.TopDocsStats topDocsStats = pendingReduces.consumeTopDocsStats();
-        final List<TopDocs> topDocsList = pendingReduces.consumeTopDocs();
-        final List<InternalAggregations> aggsList = pendingReduces.consumeAggs();
-        long breakerSize = pendingReduces.circuitBreakerBytes;
-        if (hasAggs) {
-            // Add an estimate of the final reduce size
-            breakerSize = pendingReduces.addEstimateAndMaybeBreak(pendingReduces.estimateRamBytesUsedForReduce(breakerSize));
-        }
-        SearchPhaseController.ReducedQueryPhase reducePhase = controller.reducedQueryPhase(
-            results.asList(),
-            aggsList,
-            topDocsList,
-            topDocsStats,
-            pendingReduces.numReducePhases,
-            false,
-            aggReduceContextBuilder,
-            performFinalReduce
-        );
-        if (hasAggs && reducePhase.aggregations != null) {
-            // Update the circuit breaker to replace the estimation with the serialized size of the newly reduced result
-            long finalSize = reducePhase.aggregations.getSerializedSize() - breakerSize;
-            pendingReduces.addWithoutBreaking(finalSize);
-            logger.trace(
-                "aggs final reduction [{}] max [{}]",
-                pendingReduces.aggsCurrentBufferSize,
-                pendingReduces.maxAggsCurrentBufferSize
-            );
-        }
-        progressListener.notifyFinalReduce(
-            SearchProgressListener.buildSearchShards(results.asList()),
-            reducePhase.totalHits,
-            reducePhase.aggregations,
-            reducePhase.numReducePhases
-        );
-        return reducePhase;
-    }
-
-    private ReduceResult partialReduce(
-        QuerySearchResult[] toConsume,
-        List<SearchShard> emptyResults,
-        SearchPhaseController.TopDocsStats topDocsStats,
-        ReduceResult lastReduceResult,
-        int numReducePhases
-    ) {
-        checkCancellation();
-        if (pendingReduces.hasFailure()) {
-            return lastReduceResult;
-        }
-        // ensure consistent ordering
-        Arrays.sort(toConsume, Comparator.comparingInt(QuerySearchResult::getShardIndex));
-
-        for (QuerySearchResult result : toConsume) {
-            topDocsStats.add(result.topDocs(), result.searchTimedOut(), result.terminatedEarly());
-        }
-
-        final TopDocs newTopDocs;
-        if (hasTopDocs) {
-            List<TopDocs> topDocsList = new ArrayList<>();
-            if (lastReduceResult != null) {
-                topDocsList.add(lastReduceResult.reducedTopDocs);
-            }
-            for (QuerySearchResult result : toConsume) {
-                TopDocsAndMaxScore topDocs = result.consumeTopDocs();
-                SearchPhaseController.setShardIndex(topDocs.topDocs, result.getShardIndex());
-                topDocsList.add(topDocs.topDocs);
-            }
-            newTopDocs = SearchPhaseController.mergeTopDocs(
-                topDocsList,
-                // we have to merge here in the same way we collect on a shard
-                topNSize,
-                0
-            );
-        } else {
-            newTopDocs = null;
-        }
-
-        final InternalAggregations newAggs;
-        if (hasAggs) {
-            List<InternalAggregations> aggsList = new ArrayList<>();
-            if (lastReduceResult != null) {
-                aggsList.add(lastReduceResult.reducedAggs);
-            }
-            for (QuerySearchResult result : toConsume) {
-                aggsList.add(result.consumeAggs().expand());
-            }
-            newAggs = InternalAggregations.topLevelReduce(aggsList, aggReduceContextBuilder.forPartialReduction());
-        } else {
-            newAggs = null;
-        }
-        List<SearchShard> processedShards = new ArrayList<>(emptyResults);
-        if (lastReduceResult != null) {
-            processedShards.addAll(lastReduceResult.processedShards);
-        }
-        for (QuerySearchResult result : toConsume) {
-            SearchShardTarget target = result.getSearchShardTarget();
-            processedShards.add(new SearchShard(target.getClusterAlias(), target.getShardId()));
-        }
-        progressListener.notifyPartialReduce(processedShards, topDocsStats.getTotalHits(), newAggs, numReducePhases);
-        // we leave the results un-serialized because serializing is slow but we compute the serialized
-        // size as an estimate of the memory used by the newly reduced aggregations.
-        long serializedSize = hasAggs ? newAggs.getSerializedSize() : 0;
-        return new ReduceResult(processedShards, newTopDocs, newAggs, hasAggs ? serializedSize : 0);
-    }
-
-    private void checkCancellation() {
-        if (isTaskCancelled.getAsBoolean()) {
-            pendingReduces.onFailure(new TaskCancelledException("request has been terminated"));
-        }
-    }
-
-    public int getNumReducePhases() {
-        return pendingReduces.numReducePhases;
-    }
-
-    /**
-     * Manages incremental query result reduction by buffering incoming results and
-     * triggering partial reduce operations when the threshold is reached.
-     * <ul>
-     * <li>Handles circuit breaker memory accounting</li>
-     * <li>Coordinates reduce task execution to be one at a time</li>
-     * <li>Provides thread-safe failure handling with cleanup</li>
-     * </ul>
-     *
-     * @opensearch.internal
-     */
-    class PendingReduces implements Releasable {
-        private final int batchReduceSize;
-        private final List<QuerySearchResult> buffer = new ArrayList<>();
-        private final List<SearchShard> emptyResults = new ArrayList<>();
-        // the memory that is accounted in the circuit breaker for this consumer
-        private volatile long circuitBreakerBytes;
-        // the memory that is currently used in the buffer
-        private volatile long aggsCurrentBufferSize;
-        private volatile long maxAggsCurrentBufferSize = 0;
-
-        private final ArrayDeque<ReduceTask> queue = new ArrayDeque<>();
-        private final AtomicReference<ReduceTask> runningTask = new AtomicReference<>(); // ensure only one task is running
-        private final AtomicReference<Exception> failure = new AtomicReference<>();
-
-        private final SearchPhaseController.TopDocsStats topDocsStats;
-        private volatile ReduceResult reduceResult;
-        private volatile boolean hasPartialReduce;
-        private volatile int numReducePhases;
-
-        PendingReduces(int batchReduceSize, int trackTotalHitsUpTo) {
-            this.batchReduceSize = batchReduceSize;
-            this.topDocsStats = new SearchPhaseController.TopDocsStats(trackTotalHitsUpTo);
-        }
-
-        @Override
-        public synchronized void close() {
-            assert hasPendingReduceTask() == false : "cannot close with partial reduce in-flight";
-            if (hasFailure()) {
-                assert circuitBreakerBytes == 0;
-                return;
-            }
-            assert circuitBreakerBytes >= 0;
-            circuitBreaker.addWithoutBreaking(-circuitBreakerBytes);
-            circuitBreakerBytes = 0;
-        }
-
-        private boolean hasFailure() {
-            return failure.get() != null;
-        }
-
-        private boolean hasPendingReduceTask() {
-            return queue.isEmpty() == false || runningTask.get() != null;
-        }
-
-        private void sortBuffer() {
-            if (buffer.size() > 0) {
-                Collections.sort(buffer, Comparator.comparingInt(QuerySearchResult::getShardIndex));
-            }
-        }
-
-        private synchronized long addWithoutBreaking(long size) {
-            if (hasFailure()) {
-                return circuitBreakerBytes;
-            }
-            circuitBreaker.addWithoutBreaking(size);
-            circuitBreakerBytes += size;
-            maxAggsCurrentBufferSize = Math.max(maxAggsCurrentBufferSize, circuitBreakerBytes);
-            return circuitBreakerBytes;
-        }
-
-        private synchronized long addEstimateAndMaybeBreak(long estimatedSize) {
-            if (hasFailure()) {
-                return circuitBreakerBytes;
-            }
-            circuitBreaker.addEstimateBytesAndMaybeBreak(estimatedSize, "<reduce_aggs>");
-            circuitBreakerBytes += estimatedSize;
-            maxAggsCurrentBufferSize = Math.max(maxAggsCurrentBufferSize, circuitBreakerBytes);
-            return circuitBreakerBytes;
-        }
-
-        private synchronized void resetCircuitBreaker() {
-            if (circuitBreakerBytes > 0) {
-                circuitBreaker.addWithoutBreaking(-circuitBreakerBytes);
-                circuitBreakerBytes = 0;
-            }
-        }
-
-        /**
-         * Returns the size of the serialized aggregation that is contained in the
-         * provided {@link QuerySearchResult}.
-         */
-        private long ramBytesUsedQueryResult(QuerySearchResult result) {
-            if (hasAggs == false) {
-                return 0;
-            }
-            return result.aggregations().asSerialized(InternalAggregations::readFrom, namedWriteableRegistry).ramBytesUsed();
-        }
-
-        /**
-         * Returns an estimation of the size that a reduce of the provided size
-         * would take on memory.
-         * This size is estimated as roughly 1.5 times the size of the serialized
-         * aggregations that need to be reduced. This estimation can be completely
-         * off for some aggregations but it is corrected with the real size after
-         * the reduce completes.
-         */
-        private long estimateRamBytesUsedForReduce(long size) {
-            return Math.round(0.5d * size);
-        }
-
-        void consume(QuerySearchResult result, Runnable callback) {
-            checkCancellation();
-
-            if (consumeResult(result, callback)) {
-                callback.run();
-            }
-        }
-
-        private synchronized boolean consumeResult(QuerySearchResult result, Runnable callback) {
-            if (hasFailure()) {
-                result.consumeAll(); // release memory
-                return true;
-            }
-            if (result.isNull()) {
-                SearchShardTarget target = result.getSearchShardTarget();
-                emptyResults.add(new SearchShard(target.getClusterAlias(), target.getShardId()));
-                return true;
-            }
-            // Check circuit breaker before consuming
-            if (hasAggs) {
-                long aggsSize = ramBytesUsedQueryResult(result);
-                try {
-                    addEstimateAndMaybeBreak(aggsSize);
-                    aggsCurrentBufferSize += aggsSize;
-                } catch (CircuitBreakingException e) {
-                    onFailure(e);
-                    return true;
-                }
-            }
-            // Process non-empty results
-            int size = buffer.size() + (hasPartialReduce ? 1 : 0);
-            if (size >= batchReduceSize) {
-                hasPartialReduce = true;
-                // the callback must wait for the new reduce task to complete to maintain proper result processing order
-                QuerySearchResult[] clone = buffer.toArray(QuerySearchResult[]::new);
-                ReduceTask task = new ReduceTask(clone, aggsCurrentBufferSize, new ArrayList<>(emptyResults), callback);
-                aggsCurrentBufferSize = 0;
-                buffer.clear();
-                emptyResults.clear();
-                queue.add(task);
-                tryExecuteNext();
-                buffer.add(result);
-                return false; // callback will be run by reduce task
-            }
-            buffer.add(result);
-            return true;
-        }
-
-        private void tryExecuteNext() {
-            final ReduceTask task;
-            synchronized (this) {
-                if (hasFailure()) {
-                    return;
-                }
-                if (queue.isEmpty() || runningTask.get() != null) {
-                    return;
-                }
-                task = queue.poll();
-                runningTask.compareAndSet(null, task);
-            }
-
-            executor.execute(new AbstractRunnable() {
-                @Override
                 protected void doRun() {
-                    final ReduceResult thisReduceResult = reduceResult;
-                    long estimatedTotalSize = (thisReduceResult != null ? thisReduceResult.estimatedSize : 0) + task.aggsBufferSize;
-                    final ReduceResult newReduceResult;
-                    try {
-                        final QuerySearchResult[] toConsume = task.consumeBuffer();
-                        if (toConsume == null) {
-                            onAfterReduce(task, null, 0);
-                            return;
-                        }
-                        long estimateRamBytesUsedForReduce = estimateRamBytesUsedForReduce(estimatedTotalSize);
-                        addEstimateAndMaybeBreak(estimateRamBytesUsedForReduce);
-                        estimatedTotalSize += estimateRamBytesUsedForReduce;
-                        ++numReducePhases;
-                        newReduceResult = partialReduce(toConsume, task.emptyResults, topDocsStats, thisReduceResult, numReducePhases);
-                    } catch (Exception t) {
-                        PendingReduces.this.onFailure(t);
-                        return;
-                    }
-                    onAfterReduce(task, newReduceResult, estimatedTotalSize);
-                }
-
-                @Override
-                public void onFailure(Exception exc) {
-                    PendingReduces.this.onFailure(exc);
-                }
-            });
-        }
-
-        private void onAfterReduce(ReduceTask task, ReduceResult newResult, long estimatedSize) {
-            if (newResult != null) {
-                synchronized (this) {
-                    if (hasFailure()) {
-                        return;
-                    }
-                    runningTask.compareAndSet(task, null);
-                    reduceResult = newResult;
-                    if (hasAggs) {
-                        // Update the circuit breaker to remove the size of the source aggregations
-                        // and replace the estimation with the serialized size of the newly reduced result.
-                        long newSize = reduceResult.estimatedSize - estimatedSize;
-                        addWithoutBreaking(newSize);
-                        logger.trace(
-                            "aggs partial reduction [{}->{}] max [{}]",
-                            estimatedSize,
-                            reduceResult.estimatedSize,
-                            maxAggsCurrentBufferSize
-                        );
-                    }
-                }
-            }
-            task.consumeListener();
-            executor.execute(this::tryExecuteNext);
-        }
-
-        // Idempotent and thread-safe failure handling
-        private synchronized void onFailure(Exception exc) {
-            if (hasFailure()) {
-                assert circuitBreakerBytes == 0;
-                return;
-            }
-            assert circuitBreakerBytes >= 0;
-            resetCircuitBreaker();
-            failure.compareAndSet(null, exc);
-            clearReduceTaskQueue();
-            cancelTaskOnFailure.accept(exc);
-        }
-
-        private synchronized void clearReduceTaskQueue() {
-            ReduceTask task = runningTask.get();
-            runningTask.compareAndSet(task, null);
-            List<ReduceTask> toCancels = new ArrayList<>();
-            if (task != null) {
-                toCancels.add(task);
-            }
-            toCancels.addAll(queue);
-            queue.clear();
-            reduceResult = null;
-            for (ReduceTask toCancel : toCancels) {
-                toCancel.cancel();
-            }
-        }
-
-        private synchronized SearchPhaseController.TopDocsStats consumeTopDocsStats() {
-            for (QuerySearchResult result : buffer) {
-                topDocsStats.add(result.topDocs(), result.searchTimedOut(), result.terminatedEarly());
-            }
-            return topDocsStats;
-        }
-
-        private synchronized List<TopDocs> consumeTopDocs() {
-            if (hasTopDocs == false) {
+}
+     * Immutable container holding the outcome of a partial reduce operation
+import org.opensearch.search.query.QuerySearchResult;
+                topDocsList.add(reduceResult.reducedTopDocs);
+            return circuitBreakerBytes;
                 return Collections.emptyList();
             }
-            List<TopDocs> topDocsList = new ArrayList<>();
-            if (reduceResult != null) {
-                topDocsList.add(reduceResult.reducedTopDocs);
-            }
-            for (QuerySearchResult result : buffer) {
-                TopDocsAndMaxScore topDocs = result.consumeTopDocs();
-                SearchPhaseController.setShardIndex(topDocs.topDocs, result.getShardIndex());
-                topDocsList.add(topDocs.topDocs);
-            }
+        SearchPhaseController.ReducedQueryPhase reducePhase = controller.reducedQueryPhase(
+        }
+                QuerySearchResult[] clone = buffer.toArray(QuerySearchResult[]::new);
+     * @opensearch.internal
+            newTopDocs = null;
+        SearchPhaseController controller,
+        final InternalAggregations newAggs;
+            if (hasAggs == false) {
             return topDocsList;
         }
-
+            topDocsList,
+ * in the {@link CircuitBreaker#REQUEST} circuit breaker. Before any partial or final reduce, the memory
+            pendingReduces.numReducePhases,
+        }
+            for (ReduceTask toCancel : toCancels) {
+        this.hasTopDocs = source == null || source.size() != 0;
+                        // Update the circuit breaker to remove the size of the source aggregations
+        return pendingReduces.numReducePhases;
+                return;
+            newAggs = null;
+        this.progressListener = progressListener;
+                        // and replace the estimation with the serialized size of the newly reduced result.
+            }
+ * Unless required by applicable law or agreed to in writing,
+        checkCancellation();
+                callback.run();
+    /**
+                aggsList.add(lastReduceResult.reducedAggs);
+    int getBatchReduceSize(int requestBatchedReduceSize, int minBatchReduceSize) {
+        if (isTaskCancelled.getAsBoolean()) {
+        if (hasAggs && reducePhase.aggregations != null) {
+ * exceeds the maximum memory allowed in this breaker.
+            );
         private synchronized List<InternalAggregations> consumeAggs() {
-            if (hasAggs == false) {
-                return Collections.emptyList();
-            }
+        NamedWriteableRegistry namedWriteableRegistry,
+        final List<TopDocs> topDocsList = pendingReduces.consumeTopDocs();
+                SearchShardTarget target = result.getSearchShardTarget();
+        private QuerySearchResult[] buffer;
+import org.opensearch.common.lease.Releasables;
+            return topDocsStats;
+                    }
+     * <li>Provides thread-safe failure handling with cleanup</li>
+ * Modifications Copyright OpenSearch Contributors. See
+         * Returns the size of the serialized aggregation that is contained in the
+            pendingReduces.onFailure(new TaskCancelledException("request has been terminated"));
+            reduceResult = null;
+        private final List<SearchShard> emptyResults = new ArrayList<>();
+                return;
+            consumeListener();
+        this.executor = executor;
+            this.emptyResults = emptyResults;
+            final ReduceTask task;
+        NamedWriteableRegistry namedWriteableRegistry,
+import java.util.Arrays;
+        Arrays.sort(toConsume, Comparator.comparingInt(QuerySearchResult::getShardIndex));
+    }
+        final TopDocs newTopDocs;
+            if (newResult != null) {
+import org.opensearch.common.util.concurrent.AbstractRunnable;
             List<InternalAggregations> aggsList = new ArrayList<>();
-            if (reduceResult != null) {
-                aggsList.add(reduceResult.reducedAggs);
+        return (hasAggs || hasTopDocs) ? Math.min(requestBatchedReduceSize, minBatchReduceSize) : minBatchReduceSize;
+import java.util.List;
+        } else {
+ * GitHub history for details.
+ * This implementation adds the memory that it used to save and reduce the results of shard aggregations
+            );
+                        final QuerySearchResult[] toConsume = task.consumeBuffer();
+        }
+            List<TopDocs> topDocsList = new ArrayList<>();
+        private volatile long maxAggsCurrentBufferSize = 0;
+                try {
+     * <li>Coordinates reduce task execution to be one at a time</li>
+                    if (hasFailure()) {
+        public synchronized void cancel() {
+     */
+     */
+        SearchPhaseController.TopDocsStats topDocsStats,
+     * <li>Handles circuit breaker memory accounting</li>
+        super(expectedResultSize);
+        SearchProgressListener progressListener,
+        }
+import java.util.ArrayDeque;
+    @Override
+        }
+            aggsList,
+                return false; // callback will be run by reduce task
+import org.opensearch.common.lease.Releasable;
+package org.opensearch.action.search;
+    private final BooleanSupplier isTaskCancelled;
             }
-            for (QuerySearchResult result : buffer) {
-                aggsList.add(result.consumeAggs().expand());
+        pendingReduces.consume(querySearchResult, next);
+        this.isTaskCancelled = isTaskCancelled;
+    }
+    }
+                        return;
+                }
+            newAggs = InternalAggregations.topLevelReduce(aggsList, aggReduceContextBuilder.forPartialReduction());
+                    onFailure(e);
+        }
+                }
+        int expectedResultSize,
+    ) {
             }
+     * ReduceTask is created to reduce buffered query results when buffer size hits threshold
+            queue.clear();
+        private void sortBuffer() {
+            performFinalReduce
+            }
+                TopDocsAndMaxScore topDocs = result.consumeTopDocs();
             return aggsList;
         }
+            circuitBreakerBytes = 0;
+        int expectedResultSize,
+                        if (toConsume == null) {
+        private final ArrayDeque<ReduceTask> queue = new ArrayDeque<>();
+        }
+            topDocsStats,
+                    runningTask.compareAndSet(task, null);
+        this(
+ * A {@link ArraySearchPhaseResults} implementation that incrementally reduces aggregation results
+import org.opensearch.core.tasks.TaskCancelledException;
+                    aggsCurrentBufferSize += aggsSize;
+import org.apache.logging.log4j.Logger;
+                return circuitBreakerBytes;
+            if (hasFailure()) {
+        PendingReduces(int batchReduceSize, int trackTotalHitsUpTo) {
+        SearchRequest request,
+        this.topNSize = SearchPhaseController.getTopDocsSize(request);
+        }
+        progressListener.notifyQueryResult(querySearchResult.getShardIndex());
+            return failure.get() != null;
+        private final int batchReduceSize;
+            }
+        private long ramBytesUsedQueryResult(QuerySearchResult result) {
+        if (pendingReduces.hasFailure()) {
     }
-
-    /**
-     * Immutable container holding the outcome of a partial reduce operation
-     *
-     * @opensearch.internal
-     */
-    private record ReduceResult(List<SearchShard> processedShards, TopDocs reducedTopDocs, InternalAggregations reducedAggs,
-        long estimatedSize) {
-    }
-
-    /**
-     * ReduceTask is created to reduce buffered query results when buffer size hits threshold
-     *
-     * @opensearch.internal
-     */
-    private static class ReduceTask {
-        private final List<SearchShard> emptyResults;
-        private QuerySearchResult[] buffer;
-        private final long aggsBufferSize;
-        private Runnable next;
-
-        private ReduceTask(QuerySearchResult[] buffer, long aggsBufferSize, List<SearchShard> emptyResults, Runnable next) {
             this.buffer = buffer;
-            this.aggsBufferSize = aggsBufferSize;
-            this.emptyResults = emptyResults;
-            this.next = next;
+import org.opensearch.search.SearchShardTarget;
+        private synchronized List<TopDocs> consumeTopDocs() {
+    public void close() {
+import org.opensearch.search.builder.SearchSourceBuilder;
+ * specific language governing permissions and limitations
+            assert circuitBreakerBytes >= 0;
+ *
+    private void checkCancellation() {
+ *
+            controller,
+        if (hasTopDocs) {
+            results.asList(),
+    private final NamedWriteableRegistry namedWriteableRegistry;
+                            "aggs partial reduction [{}->{}] max [{}]",
+            maxAggsCurrentBufferSize = Math.max(maxAggsCurrentBufferSize, circuitBreakerBytes);
+    @Override
+            processedShards.addAll(lastReduceResult.processedShards);
+            // Check circuit breaker before consuming
+                            reduceResult.estimatedSize,
+            logger.trace(
+     */
+        private final List<SearchShard> emptyResults;
+        if (pendingReduces.hasFailure()) {
         }
-
-        public synchronized QuerySearchResult[] consumeBuffer() {
-            QuerySearchResult[] toRet = buffer;
-            buffer = null;
-            return toRet;
+                runningTask.compareAndSet(null, task);
+                topDocsList.add(topDocs.topDocs);
+                Collections.sort(buffer, Comparator.comparingInt(QuerySearchResult::getShardIndex));
+        final List<InternalAggregations> aggsList = pendingReduces.consumeAggs();
+        private final long aggsBufferSize;
+     * @opensearch.internal
+    /**
+            List<ReduceTask> toCancels = new ArrayList<>();
+    /**
+            for (QuerySearchResult result : toConsume) {
+        for (QuerySearchResult result : toConsume) {
+                return circuitBreakerBytes;
         }
-
-        public void consumeListener() {
-            if (next != null) {
-                next.run();
-                next = null;
+                topDocsList,
+                SearchPhaseController.setShardIndex(topDocs.topDocs, result.getShardIndex());
+                        );
+        }
+            if (reduceResult != null) {
+         * Returns an estimation of the size that a reduce of the provided size
+            request,
+                pendingReduces.maxAggsCurrentBufferSize
+        private volatile boolean hasPartialReduce;
+        private final SearchPhaseController.TopDocsStats topDocsStats;
+                if (queue.isEmpty() || runningTask.get() != null) {
+ * license agreements. See the NOTICE file distributed with
+        private volatile int numReducePhases;
+        }
+                synchronized (this) {
+            runningTask.compareAndSet(task, null);
+            if (hasAggs == false) {
+                TopDocsAndMaxScore topDocs = result.consumeTopDocs();
+            reducePhase.totalHits,
+    public QueryPhaseResultConsumer(
+                            estimatedSize,
+        }
+        // the memory that is currently used in the buffer
+        this.pendingReduces = new PendingReduces(batchReduceSize, request.resolveTrackTotalHitsUpTo());
+            // Process non-empty results
+    private record ReduceResult(List<SearchShard> processedShards, TopDocs reducedTopDocs, InternalAggregations reducedAggs,
+                    long estimatedTotalSize = (thisReduceResult != null ? thisReduceResult.estimatedSize : 0) + task.aggsBufferSize;
+        List<SearchShard> emptyResults,
+                topDocsList.add(topDocs.topDocs);
+        SearchProgressListener progressListener,
+         * would take on memory.
+                "aggs final reduction [{}] max [{}]",
+import java.util.Collections;
+            return circuitBreakerBytes;
+        // ensure consistent ordering
+                    try {
+        progressListener.notifyFinalReduce(
+import org.opensearch.search.SearchPhaseResult;
+            if (lastReduceResult != null) {
+                // the callback must wait for the new reduce task to complete to maintain proper result processing order
+                tryExecuteNext();
+            namedWriteableRegistry,
+import org.opensearch.core.common.breaker.CircuitBreaker;
+                public void onFailure(Exception exc) {
+            }
+    private ReduceResult partialReduce(
+        final SearchPhaseController.TopDocsStats topDocsStats = pendingReduces.consumeTopDocsStats();
+                        estimatedTotalSize += estimateRamBytesUsedForReduce;
+            buffer.add(result);
+                            maxAggsCurrentBufferSize
+                0
+            if (hasFailure()) {
+                assert circuitBreakerBytes == 0;
+            toCancels.addAll(queue);
+                aggsList.add(result.consumeAggs().expand());
+     * Manages incremental query result reduction by buffering incoming results and
+                    return;
+                ReduceTask task = new ReduceTask(clone, aggsCurrentBufferSize, new ArrayList<>(emptyResults), callback);
+        if (hasAggs) {
+            return true;
+            if (circuitBreakerBytes > 0) {
+        }
+                hasPartialReduce = true;
+ * SPDX-License-Identifier: Apache-2.0
+        @Override
+            cancelTaskOnFailure,
+            circuitBreaker.addEstimateBytesAndMaybeBreak(estimatedSize, "<reduce_aggs>");
+        // Idempotent and thread-safe failure handling
+        }
+        for (QuerySearchResult result : toConsume) {
+import org.apache.lucene.search.TopDocs;
+                    if (hasAggs) {
+/**
+        }
+    private final SearchPhaseController controller;
+        }
+ *
+            throw new AssertionError("partial reduce in-flight");
+                aggsList.add(reduceResult.reducedAggs);
+                emptyResults.clear();
+                topNSize,
+            for (QuerySearchResult result : buffer) {
+        private void tryExecuteNext() {
+        SearchRequest request,
+        private final AtomicReference<ReduceTask> runningTask = new AtomicReference<>(); // ensure only one task is running
+            }
+                result.consumeAll(); // release memory
+            maxAggsCurrentBufferSize = Math.max(maxAggsCurrentBufferSize, circuitBreakerBytes);
+            executor.execute(new AbstractRunnable() {
+                topDocsStats.add(result.topDocs(), result.searchTimedOut(), result.terminatedEarly());
+        this.aggReduceContextBuilder = controller.getReduceContext(request);
+                }
+        );
+                queue.add(task);
+        long estimatedSize) {
+        int numReducePhases
+        Executor executor,
+                buffer.clear();
+                long aggsSize = ramBytesUsedQueryResult(result);
+                        addEstimateAndMaybeBreak(estimateRamBytesUsedForReduce);
+        this.hasAggs = source != null && source.aggregations() != null;
+ * @opensearch.internal
+         */
+                    }
+            }
+import java.util.concurrent.Executor;
+     * @opensearch.internal
+    public SearchPhaseController.ReducedQueryPhase reduce() throws Exception {
+        private boolean hasFailure() {
+     * triggering partial reduce operations when the threshold is reached.
+        private final List<QuerySearchResult> buffer = new ArrayList<>();
             }
         }
-
-        public synchronized void cancel() {
-            consumeBuffer();
-            consumeListener();
         }
+ * this work for additional information regarding copyright
+            SearchProgressListener.buildSearchShards(results.asList()),
+            if (next != null) {
+        checkCancellation();
+        private long estimateRamBytesUsedForReduce(long size) {
+        this.namedWriteableRegistry = namedWriteableRegistry;
+                    addEstimateAndMaybeBreak(aggsSize);
+            circuitBreakerBytes += size;
+                return 0;
+            return queue.isEmpty() == false || runningTask.get() != null;
+import java.util.function.Consumer;
+            if (result.isNull()) {
+                return true;
+                        PendingReduces.this.onFailure(t);
     }
-}
+        /**
+        super.consumeResult(result, () -> {});
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            circuitBreakerBytes += estimatedSize;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+            }
+                    return true;
+import org.opensearch.search.aggregations.InternalAggregations;
+    private final boolean hasAggs;
+        void consume(QuerySearchResult result, Runnable callback) {
+                pendingReduces.aggsCurrentBufferSize,
+         * aggregations that need to be reduced. This estimation can be completely
+    }
+        private synchronized void resetCircuitBreaker() {
+        // ensure consistent ordering
+                toCancel.cancel();
+        }
+            if (hasTopDocs == false) {
+    private final Executor executor;
+                        ++numReducePhases;
+            assert circuitBreakerBytes >= 0;
+                circuitBreaker.addWithoutBreaking(-circuitBreakerBytes);
+ * under the License.
+import java.util.Comparator;
+                @Override
+            this.topDocsStats = new SearchPhaseController.TopDocsStats(trackTotalHitsUpTo);
+        private void onAfterReduce(ReduceTask task, ReduceResult newResult, long estimatedSize) {
+     * </ul>
+     * <ul>
+    private final ReduceContextBuilder aggReduceContextBuilder;
+                        return;
+    ) {
+            this.batchReduceSize = batchReduceSize;
+    }
+            }
+            // Add an estimate of the final reduce size
+        pendingReduces.sortBuffer();
+        private volatile long aggsCurrentBufferSize;
+                        long newSize = reduceResult.estimatedSize - estimatedSize;
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+                        addWithoutBreaking(newSize);
+        if (lastReduceResult != null) {
+    private static final Logger logger = LogManager.getLogger(QueryPhaseResultConsumer.class);
+        ReduceResult lastReduceResult,
+            }
+ * needed to reduce the aggregations is estimated and a {@link CircuitBreakingException} is handled if it
+            }
+/*
+    }
+ */
+            }
+                task = queue.poll();
+    public QueryPhaseResultConsumer(
+                    return;
+                    }
+            aggReduceContextBuilder,
+        private Runnable next;
+        private synchronized long addEstimateAndMaybeBreak(long estimatedSize) {
+                buffer.add(result);
+                }
+    private final CircuitBreaker circuitBreaker;
+/*
+                SearchPhaseController.setShardIndex(topDocs.topDocs, result.getShardIndex());
+    public int getNumReducePhases() {
+                            return;
+        }
+        // we leave the results un-serialized because serializing is slow but we compute the serialized
+                    final ReduceResult newReduceResult;
+                }
+            circuitBreaker.addWithoutBreaking(-circuitBreakerBytes);
+            this.next = next;
+            if (consumeResult(result, callback)) {
+            buffer = null;
+            throw pendingReduces.failure.get();
+        }
+ * as shard results are consumed.
+                        }
+ *
+            for (QuerySearchResult result : toConsume) {
+        if (pendingReduces.hasPendingReduceTask()) {
+                toCancels.add(task);
+ * You may obtain a copy of the License at
+            if (hasFailure()) {
+            }
+                    reduceResult = newResult;
+ */
+        private volatile ReduceResult reduceResult;
+        int batchReduceSize = getBatchReduceSize(request.getBatchedReduceSize(), expectedResultSize);
+            circuitBreaker.addWithoutBreaking(size);
+            }
+            SearchShardTarget target = result.getSearchShardTarget();
+        public synchronized void close() {
+    private static class ReduceTask {
+            expectedResultSize,
+public class QueryPhaseResultConsumer extends ArraySearchPhaseResults<SearchPhaseResult> implements Releasable {
+         */
+import org.opensearch.core.common.breaker.CircuitBreakingException;
+    private final boolean hasTopDocs;
+    /**
+        this.circuitBreaker = circuitBreaker;
+    }
+            task.consumeListener();
+                next = null;
+            if (lastReduceResult != null) {
+    }
+                return true;
+        this.controller = controller;
+         * the reduce completes.
+        private ReduceTask(QuerySearchResult[] buffer, long aggsBufferSize, List<SearchShard> emptyResults, Runnable next) {
+                @Override
+            }
+                next.run();
+            if (hasAggs) {
+        // the memory that is accounted in the circuit breaker for this consumer
+ * KIND, either express or implied.  See the License for the
+ */
+import java.util.ArrayList;
+    private final SearchProgressListener progressListener;
+            return toRet;
+        }
+            QuerySearchResult[] toRet = buffer;
+            false,
+     * as shard results are consumed.
+            pendingReduces.addWithoutBreaking(finalSize);
+            if (task != null) {
+            return result.aggregations().asSerialized(InternalAggregations::readFrom, namedWriteableRegistry).ramBytesUsed();
+     */
+                    final ReduceResult thisReduceResult = reduceResult;
+            List<InternalAggregations> aggsList = new ArrayList<>();
+ * Licensed to Elasticsearch under one or more contributor
+            this.aggsBufferSize = aggsBufferSize;
+ * The OpenSearch Contributors require contributions made to
+                } catch (CircuitBreakingException e) {
+        }
+            // Update the circuit breaker to replace the estimation with the serialized size of the newly reduced result
+import java.util.function.BooleanSupplier;
+                // we have to merge here in the same way we collect on a shard
+            if (hasFailure()) {
+        QuerySearchResult[] toConsume,
+        CircuitBreaker circuitBreaker,
+/*
+            reducePhase.aggregations,
+    private final boolean performFinalReduce;
+        long serializedSize = hasAggs ? newAggs.getSerializedSize() : 0;
+        }
+            return Math.round(0.5d * size);
+            topDocsStats.add(result.topDocs(), result.searchTimedOut(), result.terminatedEarly());
+            }
+            }
+    }
+     * Creates a {@link QueryPhaseResultConsumer} that incrementally reduces aggregation results
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * compatible open source license.
+            if (reduceResult != null) {
+            progressListener,
+        if (hasAggs) {
+            clearReduceTaskQueue();
+    private final int topNSize;
+        }
+        SearchSourceBuilder source = request.source();
+            for (QuerySearchResult result : buffer) {
+         * off for some aggregations but it is corrected with the real size after
+            failure.compareAndSet(null, exc);
+                            onAfterReduce(task, null, 0);
+        private synchronized SearchPhaseController.TopDocsStats consumeTopDocsStats() {
+                        newReduceResult = partialReduce(toConsume, task.emptyResults, topDocsStats, thisReduceResult, numReducePhases);
+                return Collections.emptyList();
+        this.performFinalReduce = request.isFinalReduce();
+        public void consumeListener() {
+        /**
+        return new ReduceResult(processedShards, newTopDocs, newAggs, hasAggs ? serializedSize : 0);
+            if (size >= batchReduceSize) {
+            }
+                    PendingReduces.this.onFailure(exc);
+            }
+    private final Consumer<Exception> cancelTaskOnFailure;
+        private synchronized boolean consumeResult(QuerySearchResult result, Runnable callback) {
+        private volatile long circuitBreakerBytes;
+import org.opensearch.search.aggregations.InternalAggregation.ReduceContextBuilder;
+            reducePhase.numReducePhases
+            checkCancellation();
+            consumeBuffer();
+            () -> false
+        long breakerSize = pendingReduces.circuitBreakerBytes;
+        );
+    public void consumeResult(SearchPhaseResult result, Runnable next) {
+        Releasables.close(pendingReduces);
+        }
+         * provided {@link QuerySearchResult}.
+            cancelTaskOnFailure.accept(exc);
+    @Override
+        this.cancelTaskOnFailure = cancelTaskOnFailure;
+ * ownership. Elasticsearch licenses this file to you under
+        BooleanSupplier isTaskCancelled
+        // size as an estimate of the memory used by the newly reduced aggregations.
+                    } catch (Exception t) {
+        }
+ * this file be licensed under the Apache-2.0 license or a
+        SearchPhaseController controller,
+            resetCircuitBreaker();
+     *
+ * not use this file except in compliance with the License.
+            int size = buffer.size() + (hasPartialReduce ? 1 : 0);
+        private synchronized void onFailure(Exception exc) {
+import org.apache.logging.log4j.LogManager;
+        );
+            newTopDocs = SearchPhaseController.mergeTopDocs(
+        progressListener.notifyPartialReduce(processedShards, topDocsStats.getTotalHits(), newAggs, numReducePhases);
+                }
+        CircuitBreaker circuitBreaker,
+            }
+            breakerSize = pendingReduces.addEstimateAndMaybeBreak(pendingReduces.estimateRamBytesUsedForReduce(breakerSize));
+    ) {
+            }
+         * This size is estimated as roughly 1.5 times the size of the serialized
+            synchronized (this) {
+        public synchronized QuerySearchResult[] consumeBuffer() {
+            }
+        Consumer<Exception> cancelTaskOnFailure,
+    }
+        List<SearchShard> processedShards = new ArrayList<>(emptyResults);
+     *
+            List<TopDocs> topDocsList = new ArrayList<>();
+            circuitBreaker,
+        }
+            executor,
+                    onAfterReduce(task, newReduceResult, estimatedTotalSize);
+            }
+     *
+        private synchronized void clearReduceTaskQueue() {
+                aggsList.add(result.consumeAggs().expand());
+                        logger.trace(
+                if (hasFailure()) {
+        }
+    class PendingReduces implements Releasable {
+            });
+            if (hasFailure()) {
+import java.util.concurrent.atomic.AtomicReference;
+            return lastReduceResult;
+                emptyResults.add(new SearchShard(target.getClusterAlias(), target.getShardId()));
+        Consumer<Exception> cancelTaskOnFailure
+            for (QuerySearchResult result : buffer) {
+        return reducePhase;
+                        long estimateRamBytesUsedForReduce = estimateRamBytesUsedForReduce(estimatedTotalSize);
+        Executor executor,
+            }
+            if (buffer.size() > 0) {
+ * software distributed under the License is distributed on an
+        QuerySearchResult querySearchResult = result.queryResult();
+                circuitBreakerBytes = 0;
+            processedShards.add(new SearchShard(target.getClusterAlias(), target.getShardId()));
+                assert circuitBreakerBytes == 0;
+            executor.execute(this::tryExecuteNext);
+        private boolean hasPendingReduceTask() {
+            long finalSize = reducePhase.aggregations.getSerializedSize() - breakerSize;
+ */
+                topDocsList.add(lastReduceResult.reducedTopDocs);
+        }
+        private synchronized long addWithoutBreaking(long size) {
+            assert hasPendingReduceTask() == false : "cannot close with partial reduce in-flight";
+            }
+    final PendingReduces pendingReduces;
+import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+                aggsCurrentBufferSize = 0;
+            ReduceTask task = runningTask.get();
+        private final AtomicReference<Exception> failure = new AtomicReference<>();
+        } else {

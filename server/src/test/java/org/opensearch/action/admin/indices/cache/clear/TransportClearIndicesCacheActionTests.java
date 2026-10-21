@@ -1,275 +1,237 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
+        final Settings settings = buildEnvSettings(Settings.EMPTY);
+        true,
 package org.opensearch.action.admin.indices.cache.clear;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.broadcast.node.TransportBroadcastByNodeAction;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlock;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.env.Environment;
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.env.TestEnvironment;
-import org.opensearch.index.shard.ShardPath;
-import org.opensearch.index.store.remote.filecache.FileCache;
-import org.opensearch.index.store.remote.filecache.FileCacheFactory;
-import org.opensearch.index.store.remote.filecache.FileCacheTests;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.node.Node;
-import org.opensearch.plugins.BlockCache;
-import org.opensearch.plugins.BlockCacheRegistry;
-import org.opensearch.plugins.BlockCacheStats;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class TransportClearIndicesCacheActionTests extends OpenSearchTestCase {
-
-    private final Node testNode = mock(Node.class);
-    private final TransportClearIndicesCacheAction action = new TransportClearIndicesCacheAction(
-        mock(ClusterService.class),
-        mock(TransportService.class),
-        mock(IndicesService.class),
-        testNode,
-        null,
-        mock(ActionFilters.class),
-        mock(IndexNameExpressionResolver.class)
-    );
-
-    private final ClusterBlock writeClusterBlock = new ClusterBlock(
-        1,
-        "uuid",
-        "",
-        true,
-        true,
-        true,
-        RestStatus.OK,
-        EnumSet.of(ClusterBlockLevel.METADATA_WRITE)
-    );
-
-    private final ClusterBlock readClusterBlock = new ClusterBlock(
-        1,
-        "uuid",
-        "",
-        true,
-        true,
-        true,
-        RestStatus.OK,
-        EnumSet.of(ClusterBlockLevel.METADATA_READ)
-    );
-
-    public void testOnShardOperation() throws IOException {
-        final String indexName = "test";
-        final Settings settings = buildEnvSettings(Settings.EMPTY);
-        final Environment environment = TestEnvironment.newEnvironment(settings);
-        try (final NodeEnvironment nodeEnvironment = new NodeEnvironment(settings, environment)) {
-            // Initialize necessary stubs for the filecache clear shard operation
-            final ShardId shardId = new ShardId(indexName, indexName, 1);
-            final ShardRouting shardRouting = mock(ShardRouting.class);
-            when(shardRouting.shardId()).thenReturn(shardId);
-            final ShardPath shardPath = ShardPath.loadFileCachePath(nodeEnvironment, shardId);
-            final Path cacheEntryPath = shardPath.getDataPath();
-            final FileCache fileCache = FileCacheFactory.createConcurrentLRUFileCache(1024 * 1024, 16);
-
-            when(testNode.fileCache()).thenReturn(fileCache);
-            when(testNode.getNodeEnvironment()).thenReturn(nodeEnvironment);
-
-            // Add an entry into the filecache and reduce the ref count
-            fileCache.put(cacheEntryPath, new FileCacheTests.StubCachedIndexInput(1));
-            fileCache.decRef(cacheEntryPath);
-
-            // Check if the entry exists and reduce the ref count to make it evictable
-            assertNotNull(fileCache.get(cacheEntryPath));
-            fileCache.decRef(cacheEntryPath);
-
-            ClearIndicesCacheRequest clearIndicesCacheRequest = new ClearIndicesCacheRequest();
-            clearIndicesCacheRequest.fileCache(true);
-            assertEquals(
-                TransportBroadcastByNodeAction.EmptyResult.INSTANCE,
-                action.shardOperation(clearIndicesCacheRequest, shardRouting)
-            );
-            assertNull(fileCache.get(cacheEntryPath));
-        }
-    }
-
-    public void testBlockCacheEvictedOnFileCacheClear() throws IOException {
-        final String indexName = "test";
-        final Settings settings = buildEnvSettings(Settings.EMPTY);
-        final Environment environment = TestEnvironment.newEnvironment(settings);
-        try (final NodeEnvironment nodeEnvironment = new NodeEnvironment(settings, environment)) {
-            final ShardId shardId = new ShardId(indexName, indexName, 1);
-            final ShardRouting shardRouting = mock(ShardRouting.class);
-            when(shardRouting.shardId()).thenReturn(shardId);
-            final ShardPath shardPath = ShardPath.loadFileCachePath(nodeEnvironment, shardId);
-
-            when(testNode.getNodeEnvironment()).thenReturn(nodeEnvironment);
-            when(testNode.fileCache()).thenReturn(null);
-
-            // Set up a mock BlockCache that records the evictPrefix call
-            AtomicReference<String> evictedPrefix = new AtomicReference<>();
-            BlockCache mockCache = new BlockCache() {
-                @Override
-                public String cacheName() {
-                    return "disk";
-                }
-
-                @Override
-                public BlockCacheStats stats() {
-                    return new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-                }
-
-                @Override
-                public boolean clear() {
-                    return true;
-                }
-
-                @Override
-                public void evictPrefix(String prefix) {
-                    evictedPrefix.set(prefix);
-                }
-
-                @Override
-                public void close() {}
-            };
-            BlockCacheRegistry registry = new BlockCacheRegistry() {
-                @Override
-                public java.util.Optional<BlockCache> get(String name) {
-                    return java.util.Optional.of(mockCache);
-                }
-
-                @Override
-                public List<BlockCache> all() {
-                    return List.of(mockCache);
-                }
-            };
-
-            TransportClearIndicesCacheAction actionWithRegistry = new TransportClearIndicesCacheAction(
-                mock(ClusterService.class),
-                mock(TransportService.class),
-                mock(IndicesService.class),
-                testNode,
-                registry,
-                mock(ActionFilters.class),
-                mock(IndexNameExpressionResolver.class)
-            );
-
-            ClearIndicesCacheRequest request = new ClearIndicesCacheRequest();
-            request.fileCache(true);
-            actionWithRegistry.shardOperation(request, shardRouting);
-
-            assertEquals(shardPath.getDataPath().toString(), evictedPrefix.get());
-        }
-    }
-
     public void testBlockCacheNotEvictedWhenFileCacheFalse() throws IOException {
-        final String indexName = "test";
-        final Settings settings = buildEnvSettings(Settings.EMPTY);
-        final Environment environment = TestEnvironment.newEnvironment(settings);
-        try (final NodeEnvironment nodeEnvironment = new NodeEnvironment(settings, environment)) {
-            final ShardId shardId = new ShardId(indexName, indexName, 1);
+import org.opensearch.env.TestEnvironment;
+            ClearIndicesCacheRequest request = new ClearIndicesCacheRequest();
+            // Check if the entry exists and reduce the ref count to make it evictable
             final ShardRouting shardRouting = mock(ShardRouting.class);
-            when(shardRouting.shardId()).thenReturn(shardId);
-            when(testNode.getNodeEnvironment()).thenReturn(nodeEnvironment);
-            when(testNode.fileCache()).thenReturn(null);
-
-            AtomicReference<String> evictedPrefix = new AtomicReference<>();
-            BlockCache mockCache = new BlockCache() {
-                @Override
-                public String cacheName() {
-                    return "disk";
+        final Environment environment = TestEnvironment.newEnvironment(settings);
+import org.opensearch.cluster.block.ClusterBlockLevel;
+        mock(IndexNameExpressionResolver.class)
+            TransportClearIndicesCacheAction actionWithRegistry = new TransportClearIndicesCacheAction(
+        testNode,
+        ClusterState metadataWriteBlockedState = ClusterState.builder(ClusterState.EMPTY_STATE).blocks(builder).build();
+        final Environment environment = TestEnvironment.newEnvironment(settings);
                 }
-
-                @Override
-                public BlockCacheStats stats() {
-                    return new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-                }
-
-                @Override
-                public boolean clear() {
-                    return true;
-                }
-
-                @Override
-                public void evictPrefix(String prefix) {
-                    evictedPrefix.set(prefix);
-                }
-
-                @Override
+import org.opensearch.index.store.remote.filecache.FileCacheTests;
+import org.opensearch.action.support.ActionFilters;
+                public java.util.Optional<BlockCache> get(String name) {
+            fileCache.decRef(cacheEntryPath);
+        builder.addIndexBlock(indexName, readClusterBlock);
+        try (final NodeEnvironment nodeEnvironment = new NodeEnvironment(settings, environment)) {
+import java.util.concurrent.atomic.AtomicReference;
+            );
+        "uuid",
                 public void close() {}
-            };
+        assertNull(action.checkGlobalBlock(metadataWriteBlockedState, new ClearIndicesCacheRequest()));
+                    return List.of(mockCache);
+import org.opensearch.core.index.shard.ShardId;
+            when(testNode.getNodeEnvironment()).thenReturn(nodeEnvironment);
+                @Override
+        true,
+        "",
+            clearIndicesCacheRequest.fileCache(true);
+import org.opensearch.action.support.broadcast.node.TransportBroadcastByNodeAction;
+        builder = ClusterBlocks.builder();
+                mock(ClusterService.class),
+import org.opensearch.env.NodeEnvironment;
+        final String indexName = "test";
+            when(shardRouting.shardId()).thenReturn(shardId);
+                @Override
+ */
+        assertNotNull(action.checkRequestBlock(metadataReadBlockedState, new ClearIndicesCacheRequest(), new String[] { indexName }));
+            assertEquals(shardPath.getDataPath().toString(), evictedPrefix.get());
+        ClusterBlocks.Builder builder = ClusterBlocks.builder();
+ *
+            final FileCache fileCache = FileCacheFactory.createConcurrentLRUFileCache(1024 * 1024, 16);
+                @Override
+                }
             BlockCacheRegistry registry = new BlockCacheRegistry() {
                 @Override
-                public java.util.Optional<BlockCache> get(String name) {
-                    return java.util.Optional.of(mockCache);
-                }
-
                 @Override
-                public List<BlockCache> all() {
-                    return List.of(mockCache);
-                }
             };
-
-            TransportClearIndicesCacheAction actionWithRegistry = new TransportClearIndicesCacheAction(
-                mock(ClusterService.class),
-                mock(TransportService.class),
-                mock(IndicesService.class),
-                testNode,
-                registry,
-                mock(ActionFilters.class),
-                mock(IndexNameExpressionResolver.class)
-            );
-
-            ClearIndicesCacheRequest request = new ClearIndicesCacheRequest();
-            request.fileCache(false);
-            actionWithRegistry.shardOperation(request, shardRouting);
-
-            assertNull("evictPrefix should not be called when fileCache=false", evictedPrefix.get());
-        }
-    }
-
     public void testGlobalBlockCheck() {
-        ClusterBlocks.Builder builder = ClusterBlocks.builder();
-        builder.addGlobalBlock(writeClusterBlock);
-        ClusterState metadataWriteBlockedState = ClusterState.builder(ClusterState.EMPTY_STATE).blocks(builder).build();
-        assertNull(action.checkGlobalBlock(metadataWriteBlockedState, new ClearIndicesCacheRequest()));
-
-        builder = ClusterBlocks.builder();
+/*
+            final ShardRouting shardRouting = mock(ShardRouting.class);
+                }
+import org.opensearch.index.shard.ShardPath;
+    private final TransportClearIndicesCacheAction action = new TransportClearIndicesCacheAction(
+            assertEquals(
+import java.io.IOException;
+    }
         builder.addGlobalBlock(readClusterBlock);
-        ClusterState metadataReadBlockedState = ClusterState.builder(ClusterState.EMPTY_STATE).blocks(builder).build();
-        assertNotNull(action.checkGlobalBlock(metadataReadBlockedState, new ClearIndicesCacheRequest()));
-    }
-
-    public void testIndexBlockCheck() {
-        String indexName = "test";
-        ClusterBlocks.Builder builder = ClusterBlocks.builder();
-        builder.addIndexBlock(indexName, writeClusterBlock);
-        ClusterState metadataWriteBlockedState = ClusterState.builder(ClusterState.EMPTY_STATE).blocks(builder).build();
-        assertNull(action.checkRequestBlock(metadataWriteBlockedState, new ClearIndicesCacheRequest(), new String[] { indexName }));
-
+                public BlockCacheStats stats() {
+            final ShardRouting shardRouting = mock(ShardRouting.class);
+            fileCache.decRef(cacheEntryPath);
+            final ShardPath shardPath = ShardPath.loadFileCachePath(nodeEnvironment, shardId);
+            when(shardRouting.shardId()).thenReturn(shardId);
+                }
+        EnumSet.of(ClusterBlockLevel.METADATA_WRITE)
+            when(testNode.getNodeEnvironment()).thenReturn(nodeEnvironment);
+                }
+                public void evictPrefix(String prefix) {
+            assertNull(fileCache.get(cacheEntryPath));
+            );
+                mock(ActionFilters.class),
+        final Settings settings = buildEnvSettings(Settings.EMPTY);
+                registry,
+        true,
+            // Add an entry into the filecache and reduce the ref count
+        mock(TransportService.class),
+                }
+            assertNotNull(fileCache.get(cacheEntryPath));
+                }
+    private final ClusterBlock readClusterBlock = new ClusterBlock(
+import org.opensearch.index.store.remote.filecache.FileCache;
+            };
         builder = ClusterBlocks.builder();
-        builder.addIndexBlock(indexName, readClusterBlock);
+            // Initialize necessary stubs for the filecache clear shard operation
+                mock(TransportService.class),
         ClusterState metadataReadBlockedState = ClusterState.builder(ClusterState.EMPTY_STATE).blocks(builder).build();
-        assertNotNull(action.checkRequestBlock(metadataReadBlockedState, new ClearIndicesCacheRequest(), new String[] { indexName }));
-    }
+                }
+import org.opensearch.cluster.block.ClusterBlock;
+import org.opensearch.node.Node;
+            assertNull("evictPrefix should not be called when fileCache=false", evictedPrefix.get());
+            actionWithRegistry.shardOperation(request, shardRouting);
+        final String indexName = "test";
+                @Override
+            BlockCache mockCache = new BlockCache() {
+        builder.addIndexBlock(indexName, writeClusterBlock);
+ * The OpenSearch Contributors require contributions made to
+        "uuid",
+                public void evictPrefix(String prefix) {
+                @Override
+        }
+                public BlockCacheStats stats() {
+        }
+                public String cacheName() {
 }
+                }
+    );
+import org.opensearch.cluster.service.ClusterService;
+                public boolean clear() {
+ * SPDX-License-Identifier: Apache-2.0
+            request.fileCache(false);
+            final ShardId shardId = new ShardId(indexName, indexName, 1);
+                public void close() {}
+                    return "disk";
+        mock(ClusterService.class),
+        "",
+                mock(TransportService.class),
+                    return "disk";
+                @Override
+                mock(ClusterService.class),
+        String indexName = "test";
+        ClusterState metadataWriteBlockedState = ClusterState.builder(ClusterState.EMPTY_STATE).blocks(builder).build();
+                TransportBroadcastByNodeAction.EmptyResult.INSTANCE,
+import org.opensearch.cluster.routing.ShardRouting;
+    private final Node testNode = mock(Node.class);
+    }
+            ClearIndicesCacheRequest clearIndicesCacheRequest = new ClearIndicesCacheRequest();
+import java.nio.file.Path;
+        true,
+                @Override
+            fileCache.put(cacheEntryPath, new FileCacheTests.StubCachedIndexInput(1));
+    );
+        final Settings settings = buildEnvSettings(Settings.EMPTY);
+                mock(IndicesService.class),
+    private final ClusterBlock writeClusterBlock = new ClusterBlock(
+import org.opensearch.plugins.BlockCacheStats;
+    );
+            BlockCacheRegistry registry = new BlockCacheRegistry() {
+                @Override
+            AtomicReference<String> evictedPrefix = new AtomicReference<>();
+import java.util.List;
+        mock(IndicesService.class),
+                public java.util.Optional<BlockCache> get(String name) {
+    }
+            // Set up a mock BlockCache that records the evictPrefix call
+                mock(ActionFilters.class),
+import org.opensearch.test.OpenSearchTestCase;
+                mock(IndexNameExpressionResolver.class)
+import org.opensearch.plugins.BlockCache;
+            when(testNode.fileCache()).thenReturn(fileCache);
+import org.opensearch.cluster.block.ClusterBlocks;
+                    evictedPrefix.set(prefix);
+        }
+import org.opensearch.env.Environment;
+        RestStatus.OK,
+import org.opensearch.core.rest.RestStatus;
+            TransportClearIndicesCacheAction actionWithRegistry = new TransportClearIndicesCacheAction(
+ * this file be licensed under the Apache-2.0 license or a
+            when(shardRouting.shardId()).thenReturn(shardId);
+    }
+        EnumSet.of(ClusterBlockLevel.METADATA_READ)
+        true,
+        RestStatus.OK,
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+            when(testNode.fileCache()).thenReturn(null);
+import org.opensearch.indices.IndicesService;
+                registry,
+import org.opensearch.transport.TransportService;
+        assertNull(action.checkRequestBlock(metadataWriteBlockedState, new ClearIndicesCacheRequest(), new String[] { indexName }));
+            when(testNode.fileCache()).thenReturn(null);
+        try (final NodeEnvironment nodeEnvironment = new NodeEnvironment(settings, environment)) {
+                @Override
+        ClusterState metadataReadBlockedState = ClusterState.builder(ClusterState.EMPTY_STATE).blocks(builder).build();
+        final String indexName = "test";
+    }
+                @Override
+            final Path cacheEntryPath = shardPath.getDataPath();
+                public List<BlockCache> all() {
+        mock(ActionFilters.class),
+                }
+import org.opensearch.plugins.BlockCacheRegistry;
+        final Environment environment = TestEnvironment.newEnvironment(settings);
+                    return new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                testNode,
+            actionWithRegistry.shardOperation(request, shardRouting);
+        try (final NodeEnvironment nodeEnvironment = new NodeEnvironment(settings, environment)) {
+        1,
+            };
+                public String cacheName() {
+                action.shardOperation(clearIndicesCacheRequest, shardRouting)
+            final ShardId shardId = new ShardId(indexName, indexName, 1);
+            request.fileCache(true);
+                @Override
+                    evictedPrefix.set(prefix);
+        assertNotNull(action.checkGlobalBlock(metadataReadBlockedState, new ClearIndicesCacheRequest()));
+import org.opensearch.common.settings.Settings;
+                    return true;
+        null,
+            BlockCache mockCache = new BlockCache() {
+import org.opensearch.cluster.ClusterState;
+                public boolean clear() {
+        builder.addGlobalBlock(writeClusterBlock);
+                    return java.util.Optional.of(mockCache);
+                    return true;
+            );
+            final ShardPath shardPath = ShardPath.loadFileCachePath(nodeEnvironment, shardId);
+ * compatible open source license.
+            AtomicReference<String> evictedPrefix = new AtomicReference<>();
+                mock(IndicesService.class),
+            ClearIndicesCacheRequest request = new ClearIndicesCacheRequest();
+import java.util.EnumSet;
+                    return List.of(mockCache);
+            when(testNode.getNodeEnvironment()).thenReturn(nodeEnvironment);
+                public List<BlockCache> all() {
+                    return java.util.Optional.of(mockCache);
+    public void testIndexBlockCheck() {
+import org.opensearch.index.store.remote.filecache.FileCacheFactory;
+                }
+    public void testOnShardOperation() throws IOException {
+                @Override
+                    return new BlockCacheStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                }
+        ClusterBlocks.Builder builder = ClusterBlocks.builder();
+                testNode,
+    public void testBlockCacheEvictedOnFileCacheClear() throws IOException {
+import static org.mockito.Mockito.mock;
+                mock(IndexNameExpressionResolver.class)
+public class TransportClearIndicesCacheActionTests extends OpenSearchTestCase {
+import static org.mockito.Mockito.when;
+        true,
+            final ShardId shardId = new ShardId(indexName, indexName, 1);
+            };
+        1,

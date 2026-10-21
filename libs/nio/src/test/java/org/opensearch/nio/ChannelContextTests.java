@@ -1,227 +1,188 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.nio;
-
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.net.SocketAddress;
-import java.net.SocketOption;
-import java.nio.channels.ClosedChannelException;
-import java.nio.channels.NetworkChannel;
-import java.nio.channels.SelectableChannel;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.spi.SelectorProvider;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-
-public class ChannelContextTests extends OpenSearchTestCase {
-
-    private TestChannelContext context;
-    private Consumer<Exception> exceptionHandler;
-
-    @SuppressWarnings("unchecked")
-    @Before
-    public void setup() throws Exception {
-        super.setUp();
-        exceptionHandler = mock(Consumer.class);
-    }
-
-    public void testCloseSuccess() throws IOException {
-        FakeRawChannel rawChannel = new FakeRawChannel(null);
-        context = new TestChannelContext(rawChannel, exceptionHandler);
-
-        AtomicBoolean listenerCalled = new AtomicBoolean(false);
-        context.addCloseListener((v, t) -> {
-            if (t == null) {
-                listenerCalled.compareAndSet(false, true);
-            } else {
-                throw new AssertionError("Close should not fail");
-            }
-        });
-
-        assertFalse(rawChannel.hasCloseBeenCalled());
-        assertTrue(context.isOpen());
-        assertFalse(listenerCalled.get());
-        context.closeFromSelector();
-        assertTrue(rawChannel.hasCloseBeenCalled());
-        assertFalse(context.isOpen());
-        assertTrue(listenerCalled.get());
-    }
-
-    public void testCloseException() throws IOException {
-        IOException ioException = new IOException("boom");
-        FakeRawChannel rawChannel = new FakeRawChannel(ioException);
-        context = new TestChannelContext(rawChannel, exceptionHandler);
-
-        AtomicReference<Exception> exception = new AtomicReference<>();
-        context.addCloseListener((v, t) -> {
-            if (t == null) {
-                throw new AssertionError("Close should not fail");
-            } else {
-                exception.set(t);
-            }
-        });
-
-        assertFalse(rawChannel.hasCloseBeenCalled());
-        assertTrue(context.isOpen());
         assertNull(exception.get());
-        expectThrows(IOException.class, context::closeFromSelector);
-        assertTrue(rawChannel.hasCloseBeenCalled());
-        assertFalse(context.isOpen());
-        assertSame(ioException, exception.get());
+ *
+        @Override
     }
-
-    public void testExceptionsAreDelegatedToHandler() {
-        context = new TestChannelContext(new FakeRawChannel(null), exceptionHandler);
-        IOException exception = new IOException();
-        context.handleException(exception);
-        verify(exceptionHandler).accept(exception);
-    }
-
-    private static class TestChannelContext extends ChannelContext<FakeRawChannel> {
-
-        private TestChannelContext(FakeRawChannel channel, Consumer<Exception> exceptionHandler) {
-            super(channel, exceptionHandler);
-        }
-
-        @Override
-        public void closeChannel() {
-            throw new UnsupportedOperationException("not implemented");
-        }
-
-        @Override
-        public NioSelector getSelector() {
-            throw new UnsupportedOperationException("not implemented");
-        }
-
-        @Override
-        public NioChannel getChannel() {
-            throw new UnsupportedOperationException("not implemented");
-        }
-    }
-
-    private class FakeRawChannel extends SelectableChannel implements NetworkChannel {
-
-        private final IOException exceptionOnClose;
-        private AtomicBoolean hasCloseBeenCalled = new AtomicBoolean(false);
-
-        private FakeRawChannel(IOException exceptionOnClose) {
-            this.exceptionOnClose = exceptionOnClose;
-        }
-
-        @Override
-        protected void implCloseChannel() throws IOException {
-            hasCloseBeenCalled.compareAndSet(false, true);
-            if (exceptionOnClose != null) {
+ * this file be licensed under the Apache-2.0 license or a
                 throw exceptionOnClose;
-            }
-        }
-
-        private boolean hasCloseBeenCalled() {
-            return hasCloseBeenCalled.get();
-        }
-
+            if (t == null) {
+public class ChannelContextTests extends OpenSearchTestCase {
         @Override
-        public NetworkChannel bind(SocketAddress local) throws IOException {
+        assertTrue(context.isOpen());
+import java.nio.channels.ClosedChannelException;
+import org.opensearch.test.OpenSearchTestCase;
             throw new UnsupportedOperationException("not implemented");
-        }
-
-        @Override
-        public SocketAddress getLocalAddress() throws IOException {
-            throw new UnsupportedOperationException("not implemented");
-        }
-
-        @Override
-        public <T> NetworkChannel setOption(SocketOption<T> name, T value) throws IOException {
-            throw new UnsupportedOperationException("not implemented");
-        }
-
-        @Override
+ * ownership. Elasticsearch licenses this file to you under
+    }
+import static org.mockito.Mockito.mock;
+    }
+ * license agreements. See the NOTICE file distributed with
+    private class FakeRawChannel extends SelectableChannel implements NetworkChannel {
         public <T> T getOption(SocketOption<T> name) throws IOException {
+        public NetworkChannel bind(SocketAddress local) throws IOException {
+        assertTrue(rawChannel.hasCloseBeenCalled());
+            throw new UnsupportedOperationException("not implemented");
+        @Override
+                throw new AssertionError("Close should not fail");
+        @Override
+import java.util.concurrent.atomic.AtomicBoolean;
+            } else {
+    public void testCloseSuccess() throws IOException {
+        exceptionHandler = mock(Consumer.class);
+            if (exceptionOnClose != null) {
+import java.nio.channels.Selector;
+ */
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import static org.mockito.Mockito.verify;
+/*
+        }
+import java.net.SocketAddress;
+            throw new UnsupportedOperationException("not implemented");
+ * this work for additional information regarding copyright
+            throw new UnsupportedOperationException("not implemented");
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import java.util.Set;
+        assertFalse(context.isOpen());
+ *
+            throw new UnsupportedOperationException("not implemented");
+        super.setUp();
+        context.closeFromSelector();
+        }
+ * KIND, either express or implied.  See the License for the
+            return hasCloseBeenCalled.get();
+    public void testCloseException() throws IOException {
+            super(channel, exceptionHandler);
+        });
+        @Override
+        verify(exceptionHandler).accept(exception);
+        }
+        @Override
+import java.nio.channels.NetworkChannel;
+        FakeRawChannel rawChannel = new FakeRawChannel(null);
+ * specific language governing permissions and limitations
+        }
+        IOException ioException = new IOException("boom");
+    private Consumer<Exception> exceptionHandler;
+        context.handleException(exception);
+}
+    public void testExceptionsAreDelegatedToHandler() {
+        @Override
+ * Unless required by applicable law or agreed to in writing,
             throw new UnsupportedOperationException("not implemented");
         }
-
+            hasCloseBeenCalled.compareAndSet(false, true);
+        }
+import java.nio.channels.SelectableChannel;
+ * Licensed to Elasticsearch under one or more contributor
+                throw new AssertionError("Close should not fail");
+        context = new TestChannelContext(new FakeRawChannel(null), exceptionHandler);
+        }
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+        AtomicBoolean listenerCalled = new AtomicBoolean(false);
+        assertFalse(listenerCalled.get());
+            if (t == null) {
+        @Override
+            throw new UnsupportedOperationException("not implemented");
+    }
+            throw new UnsupportedOperationException("not implemented");
+        public SelectionKey register(Selector sel, int ops, Object att) throws ClosedChannelException {
+        @Override
+        }
+ * SPDX-License-Identifier: Apache-2.0
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.Before;
+        IOException exception = new IOException();
+import java.io.IOException;
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+ */
+        private final IOException exceptionOnClose;
+        context = new TestChannelContext(rawChannel, exceptionHandler);
+        context.addCloseListener((v, t) -> {
+        public boolean isRegistered() {
+package org.opensearch.nio;
         @Override
         public Set<SocketOption<?>> supportedOptions() {
+            } else {
+import java.net.SocketOption;
+ */
             throw new UnsupportedOperationException("not implemented");
+        public NioSelector getSelector() {
+        assertSame(ioException, exception.get());
+            throw new UnsupportedOperationException("not implemented");
+                exception.set(t);
         }
-
-        @Override
         public SelectorProvider provider() {
-            throw new UnsupportedOperationException("not implemented");
-        }
-
         @Override
-        public int validOps() {
+        public SocketAddress getLocalAddress() throws IOException {
+        assertFalse(rawChannel.hasCloseBeenCalled());
+    private static class TestChannelContext extends ChannelContext<FakeRawChannel> {
+            }
             throw new UnsupportedOperationException("not implemented");
+        public <T> NetworkChannel setOption(SocketOption<T> name, T value) throws IOException {
+ * GitHub history for details.
         }
-
+    @Before
+        context = new TestChannelContext(rawChannel, exceptionHandler);
+ * not use this file except in compliance with the License.
+        }
+            }
         @Override
-        public boolean isRegistered() {
             throw new UnsupportedOperationException("not implemented");
-        }
-
         @Override
-        public SelectionKey keyFor(Selector sel) {
-            throw new UnsupportedOperationException("not implemented");
-        }
-
-        @Override
-        public SelectionKey register(Selector sel, int ops, Object att) throws ClosedChannelException {
-            throw new UnsupportedOperationException("not implemented");
-        }
-
-        @Override
-        public SelectableChannel configureBlocking(boolean block) throws IOException {
-            throw new UnsupportedOperationException("not implemented");
-        }
-
-        @Override
-        public boolean isBlocking() {
-            throw new UnsupportedOperationException("not implemented");
-        }
-
-        @Override
+    @SuppressWarnings("unchecked")
         public Object blockingLock() {
             throw new UnsupportedOperationException("not implemented");
+        private TestChannelContext(FakeRawChannel channel, Consumer<Exception> exceptionHandler) {
+        assertFalse(rawChannel.hasCloseBeenCalled());
+        public SelectionKey keyFor(Selector sel) {
+        public void closeChannel() {
         }
+        context.addCloseListener((v, t) -> {
+        @Override
+/*
+            throw new UnsupportedOperationException("not implemented");
+            }
+        private boolean hasCloseBeenCalled() {
+        assertTrue(listenerCalled.get());
+ * You may obtain a copy of the License at
+        }
+        public NioChannel getChannel() {
+/*
+        });
+        assertTrue(rawChannel.hasCloseBeenCalled());
+        private FakeRawChannel(IOException exceptionOnClose) {
+        public SelectableChannel configureBlocking(boolean block) throws IOException {
+        public int validOps() {
+        }
+        @Override
+        public boolean isBlocking() {
+import java.nio.channels.spi.SelectorProvider;
+        }
+    private TestChannelContext context;
+ * compatible open source license.
     }
-}
+        assertFalse(context.isOpen());
+ * under the License.
+        AtomicReference<Exception> exception = new AtomicReference<>();
+        }
+import java.nio.channels.SelectionKey;
+ * software distributed under the License is distributed on an
+ *
+        protected void implCloseChannel() throws IOException {
+ * The OpenSearch Contributors require contributions made to
+        expectThrows(IOException.class, context::closeFromSelector);
+        @Override
+        @Override
+        }
+            throw new UnsupportedOperationException("not implemented");
+        }
+        assertTrue(context.isOpen());
+import java.util.function.Consumer;
+    public void setup() throws Exception {
+                listenerCalled.compareAndSet(false, true);
+            this.exceptionOnClose = exceptionOnClose;
+        FakeRawChannel rawChannel = new FakeRawChannel(ioException);
+        private AtomicBoolean hasCloseBeenCalled = new AtomicBoolean(false);
+    }
+            throw new UnsupportedOperationException("not implemented");

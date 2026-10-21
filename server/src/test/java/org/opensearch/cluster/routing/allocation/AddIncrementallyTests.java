@@ -1,385 +1,325 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.routing.allocation;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.OpenSearchAllocationTestCase;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.RoutingNode;
-import org.opensearch.cluster.routing.RoutingNodes;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.allocation.decider.ClusterRebalanceAllocationDecider;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.util.CollectionUtils;
-import org.hamcrest.Matcher;
-import org.hamcrest.Matchers;
-
-import java.util.ArrayList;
-import java.util.Collections;
-
-import static org.opensearch.cluster.routing.ShardRoutingState.INITIALIZING;
-import static org.opensearch.cluster.routing.ShardRoutingState.STARTED;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.not;
-
-public class AddIncrementallyTests extends OpenSearchAllocationTestCase {
-    private final Logger logger = LogManager.getLogger(AddIncrementallyTests.class);
-
-    public void testAddNodesAndIndices() {
-        Settings.Builder settings = Settings.builder();
-        settings.put(
-            ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(),
-            ClusterRebalanceAllocationDecider.ClusterRebalanceType.ALWAYS.toString()
-        );
-        AllocationService service = createAllocationService(settings.build());
-
-        ClusterState clusterState = initCluster(service, 1, 3, 3, 1);
-        assertThat(clusterState.getRoutingNodes().node("node0").shardsWithState(STARTED).size(), equalTo(9));
-        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(9));
-        int nodeOffset = 1;
-        clusterState = addNodes(clusterState, service, 1, nodeOffset++);
-        assertThat(clusterState.getRoutingNodes().node("node0").shardsWithState(STARTED).size(), equalTo(9));
-        assertThat(clusterState.getRoutingNodes().node("node1").shardsWithState(STARTED).size(), equalTo(9));
-        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(0));
-        assertNumIndexShardsPerNode(clusterState, equalTo(3));
-        clusterState = addNodes(clusterState, service, 1, nodeOffset++);
-        assertNumIndexShardsPerNode(clusterState, equalTo(2));
-        clusterState = addNodes(clusterState, service, 1, nodeOffset++);
-        assertNumIndexShardsPerNode(clusterState, Matchers.lessThanOrEqualTo(2));
-        assertAtLeastOneIndexShardPerNode(clusterState);
-        clusterState = removeNodes(clusterState, service, 1);
-        assertNumIndexShardsPerNode(clusterState, equalTo(2));
-
-        clusterState = addIndex(clusterState, service, 3, 2, 3);
-        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(2));
-        assertNumIndexShardsPerNode(clusterState, "test3", equalTo(2));
-        assertNumIndexShardsPerNode(clusterState, Matchers.lessThanOrEqualTo(2));
-
-        clusterState = addIndex(clusterState, service, 4, 2, 3);
-        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(4));
-        assertNumIndexShardsPerNode(clusterState, "test4", equalTo(2));
-        assertNumIndexShardsPerNode(clusterState, Matchers.lessThanOrEqualTo(2));
-        clusterState = addNodes(clusterState, service, 1, nodeOffset++);
-        assertNumIndexShardsPerNode(clusterState, Matchers.lessThanOrEqualTo(2));
-        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(0));
-        clusterState = removeNodes(clusterState, service, 1);
-        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(4));
-        assertNumIndexShardsPerNode(clusterState, Matchers.lessThanOrEqualTo(2));
-        clusterState = addNodes(clusterState, service, 1, nodeOffset++);
-        assertNumIndexShardsPerNode(clusterState, Matchers.lessThanOrEqualTo(2));
-        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(0));
-        logger.debug("ClusterState: {}", clusterState.getRoutingNodes());
     }
-
-    public void testMinimalRelocations() {
-        Settings.Builder settings = Settings.builder();
-        settings.put(
-            ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(),
-            ClusterRebalanceAllocationDecider.ClusterRebalanceType.ALWAYS.toString()
-        ).put("cluster.routing.allocation.node_concurrent_recoveries", 2);
-        AllocationService service = createAllocationService(settings.build());
-
-        ClusterState clusterState = initCluster(service, 1, 3, 3, 1);
-        assertThat(clusterState.getRoutingNodes().node("node0").shardsWithState(STARTED).size(), equalTo(9));
-        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(9));
-        int nodeOffset = 1;
-        clusterState = addNodes(clusterState, service, 1, nodeOffset++);
-        assertThat(clusterState.getRoutingNodes().node("node0").shardsWithState(STARTED).size(), equalTo(9));
-        assertThat(clusterState.getRoutingNodes().node("node1").shardsWithState(STARTED).size(), equalTo(9));
-        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(0));
-        assertNumIndexShardsPerNode(clusterState, equalTo(3));
-
-        logger.info("now, start one more node, check that rebalancing will happen because we set it to always");
-        DiscoveryNodes.Builder nodes = DiscoveryNodes.builder(clusterState.nodes());
-        nodes.add(newNode("node2"));
-        clusterState = ClusterState.builder(clusterState).nodes(nodes.build()).build();
-
-        clusterState = service.reroute(clusterState, "reroute");
-        RoutingNodes routingNodes = clusterState.getRoutingNodes();
-
-        assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(2));
-        assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
-        assertThat(routingNodes.node("node1").shardsWithState(INITIALIZING).size(), equalTo(0));
-
-        ClusterState newState = startInitializingShardsAndReroute(service, clusterState);
-        assertThat(newState, not(equalTo(clusterState)));
-        clusterState = newState;
-        routingNodes = clusterState.getRoutingNodes();
-        assertThat(routingNodes.node("node2").shardsWithState(STARTED).size(), equalTo(2));
-        assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(2));
-        assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
-        assertThat(routingNodes.node("node1").shardsWithState(INITIALIZING).size(), equalTo(0));
-
-        newState = startInitializingShardsAndReroute(service, clusterState);
-        assertThat(newState, not(equalTo(clusterState)));
-        clusterState = newState;
-        routingNodes = clusterState.getRoutingNodes();
-        assertThat(routingNodes.node("node2").shardsWithState(STARTED).size(), equalTo(4));
-        assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(2));
-        assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
-        assertThat(routingNodes.node("node1").shardsWithState(INITIALIZING).size(), equalTo(0));
-
-        newState = startInitializingShardsAndReroute(service, clusterState);
-        assertThat(newState, not(equalTo(clusterState)));
-        clusterState = newState;
-        routingNodes = clusterState.getRoutingNodes();
-        assertThat(routingNodes.node("node2").shardsWithState(STARTED).size(), equalTo(6));
-        assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(0));
-        assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
-        assertThat(routingNodes.node("node1").shardsWithState(INITIALIZING).size(), equalTo(0));
-
-        newState = startInitializingShardsAndReroute(service, clusterState);
-        assertThat(newState, equalTo(clusterState));
-        assertNumIndexShardsPerNode(clusterState, equalTo(2));
-        logger.debug("ClusterState: {}", clusterState.getRoutingNodes());
-    }
-
     public void testMinimalRelocationsNoLimit() {
-        Settings.Builder settings = Settings.builder();
-        settings.put(
-            ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(),
-            ClusterRebalanceAllocationDecider.ClusterRebalanceType.ALWAYS.toString()
-        )
-            .put("cluster.routing.allocation.node_concurrent_recoveries", 100)
-            .put("cluster.routing.allocation.node_initial_primaries_recoveries", 100);
-        AllocationService service = createAllocationService(settings.build());
-
-        ClusterState clusterState = initCluster(service, 1, 3, 3, 1);
-        assertThat(clusterState.getRoutingNodes().node("node0").shardsWithState(STARTED).size(), equalTo(9));
-        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(9));
-        int nodeOffset = 1;
-        clusterState = addNodes(clusterState, service, 1, nodeOffset++);
-        assertThat(clusterState.getRoutingNodes().node("node0").shardsWithState(STARTED).size(), equalTo(9));
-        assertThat(clusterState.getRoutingNodes().node("node1").shardsWithState(STARTED).size(), equalTo(9));
-        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(0));
-        assertNumIndexShardsPerNode(clusterState, equalTo(3));
-
-        logger.info("now, start one more node, check that rebalancing will happen because we set it to always");
-        DiscoveryNodes.Builder nodes = DiscoveryNodes.builder(clusterState.nodes());
-        nodes.add(newNode("node2"));
+        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(2));
+        assertNumIndexShardsPerNode(clusterState, Matchers.lessThanOrEqualTo(2));
         clusterState = ClusterState.builder(clusterState).nodes(nodes.build()).build();
-
+        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(4));
+        }
         clusterState = service.reroute(clusterState, "reroute");
-        RoutingNodes routingNodes = clusterState.getRoutingNodes();
-
-        assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(2));
-        assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
+        clusterState = addNodes(clusterState, service, 1, nodeOffset++);
+        clusterState = addNodes(clusterState, service, 1, nodeOffset++);
+import org.opensearch.cluster.routing.allocation.decider.ClusterRebalanceAllocationDecider;
+import org.opensearch.cluster.metadata.IndexMetadata;
+        clusterState = startInitializingShardsAndReroute(service, clusterState);
+        assertThat(clusterState.getRoutingNodes().node("node1").shardsWithState(STARTED).size(), equalTo(9));
+import org.opensearch.common.settings.Settings;
+        clusterState = addNodes(clusterState, service, 1, nodeOffset++);
+    private void assertAtLeastOneIndexShardPerNode(ClusterState state) {
+            .routingTable(initialRoutingTable)
+            IndexMetadata.Builder index = IndexMetadata.builder("test" + i)
+        clusterState = service.reroute(clusterState, "reroute");
+        clusterState = startInitializingShardsAndReroute(service, clusterState);
         assertThat(routingNodes.node("node1").shardsWithState(INITIALIZING).size(), equalTo(0));
-
-        ClusterState newState = startInitializingShardsAndReroute(service, clusterState);
-        assertThat(newState, not(equalTo(clusterState)));
+        return clusterState;
+        AllocationService service = createAllocationService(settings.build());
+        assertThat(clusterState.getRoutingNodes().node("node0").shardsWithState(STARTED).size(), equalTo(9));
+        for (int i = 0; i < numberOfIndices; i++) {
+    ) {
+        int nodeOffset = 1;
+    public void testAddNodesAndIndices() {
+        logger.info("rebalancing");
+        for (int i = 0; i < numberOfNodes; i++) {
+        assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
+        newState = startInitializingShardsAndReroute(service, clusterState);
+        for (final IndexMetadata cursor : metadata.indices().values()) {
+        );
+            ClusterRebalanceAllocationDecider.ClusterRebalanceType.ALWAYS.toString()
+ */
+            if (numNodes <= 0) {
+        Settings.Builder settings = Settings.builder();
+        int numberOfReplicas
+        logger.info("Removing [{}] nodes", numNodes);
         clusterState = newState;
-        routingNodes = clusterState.getRoutingNodes();
+        int numberOfShards,
+        assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
+                .settings(settings(Version.CURRENT))
+        clusterState = applyStartedShardsUntilNoChange(clusterState, service);
+        clusterState = service.reroute(clusterState, "reroute");
+        assertNumIndexShardsPerNode(clusterState, equalTo(3));
+        assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(2));
         assertThat(routingNodes.node("node2").shardsWithState(STARTED).size(), equalTo(2));
+        ClusterState clusterState,
+        assertThat(clusterState.getRoutingNodes().node("node0").shardsWithState(STARTED).size(), equalTo(9));
         assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(2));
-        assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
         assertThat(routingNodes.node("node1").shardsWithState(INITIALIZING).size(), equalTo(0));
-
-        newState = startInitializingShardsAndReroute(service, clusterState);
-        assertThat(newState, not(equalTo(clusterState)));
-        clusterState = newState;
-        routingNodes = clusterState.getRoutingNodes();
-        assertThat(routingNodes.node("node2").shardsWithState(STARTED).size(), equalTo(4));
-        assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(2));
         assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
-        assertThat(routingNodes.node("node1").shardsWithState(INITIALIZING).size(), equalTo(0));
-
-        newState = startInitializingShardsAndReroute(service, clusterState);
-        assertThat(newState, not(equalTo(clusterState)));
-        clusterState = newState;
-        routingNodes = clusterState.getRoutingNodes();
+        int numberOfShards,
+    private ClusterState addNodes(ClusterState clusterState, AllocationService service, int numNodes, int nodeOffset) {
+        RoutingTable initialRoutingTable = routingTableBuilder.build();
         assertThat(routingNodes.node("node2").shardsWithState(STARTED).size(), equalTo(6));
-        assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(0));
-        assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
-        assertThat(routingNodes.node("node1").shardsWithState(INITIALIZING).size(), equalTo(0));
-
-        newState = startInitializingShardsAndReroute(service, clusterState);
-        assertThat(newState, equalTo(clusterState));
-        assertNumIndexShardsPerNode(clusterState, equalTo(2));
-        logger.debug("ClusterState: {}", clusterState.getRoutingNodes());
-    }
-
-    private void assertNumIndexShardsPerNode(ClusterState state, Matcher<Integer> matcher) {
-        for (final String index : state.routingTable().indicesRouting().keySet()) {
+    private ClusterState removeNodes(ClusterState clusterState, AllocationService service, int numNodes) {
             assertNumIndexShardsPerNode(state, index, matcher);
         }
+import org.opensearch.cluster.routing.RoutingNode;
+        ClusterState clusterState = initCluster(service, 1, 3, 3, 1);
+        assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(2));
+        routingNodes = clusterState.getRoutingNodes();
+ */
+        ClusterState newState = startInitializingShardsAndReroute(service, clusterState);
+        clusterState = startInitializingShardsAndReroute(service, clusterState);
+import org.opensearch.cluster.node.DiscoveryNodes;
     }
-
-    private void assertNumIndexShardsPerNode(ClusterState state, String index, Matcher<Integer> matcher) {
-        for (RoutingNode node : state.getRoutingNodes()) {
-            assertThat(node.shardsWithState(index, STARTED).size(), matcher);
-        }
-    }
-
-    private void assertAtLeastOneIndexShardPerNode(ClusterState state) {
-        for (final String index : state.routingTable().indicesRouting().keySet()) {
-
-            for (RoutingNode node : state.getRoutingNodes()) {
+        assertThat(routingNodes.node("node1").shardsWithState(INITIALIZING).size(), equalTo(0));
+        Metadata metadata = metadataBuilder.build();
+        nodes.add(newNode("node2"));
+        newState = startInitializingShardsAndReroute(service, clusterState);
                 assertThat(node.shardsWithState(index, STARTED).size(), Matchers.greaterThanOrEqualTo(1));
-            }
-        }
-
-    }
-
-    private ClusterState addNodes(ClusterState clusterState, AllocationService service, int numNodes, int nodeOffset) {
-        logger.info("now, start [{}] more node, check that rebalancing will happen because we set it to always", numNodes);
-        DiscoveryNodes.Builder nodes = DiscoveryNodes.builder(clusterState.nodes());
-        for (int i = 0; i < numNodes; i++) {
-            nodes.add(newNode("node" + (i + nodeOffset)));
-        }
-
-        clusterState = ClusterState.builder(clusterState).nodes(nodes.build()).build();
-
-        clusterState = service.reroute(clusterState, "reroute");
-
-        // move initializing to started
-        return applyStartedShardsUntilNoChange(clusterState, service);
-    }
-
-    private ClusterState initCluster(
-        AllocationService service,
-        int numberOfNodes,
-        int numberOfIndices,
-        int numberOfShards,
-        int numberOfReplicas
-    ) {
-        Metadata.Builder metadataBuilder = Metadata.builder();
-        RoutingTable.Builder routingTableBuilder = RoutingTable.builder();
-
-        for (int i = 0; i < numberOfIndices; i++) {
-            IndexMetadata.Builder index = IndexMetadata.builder("test" + i)
-                .settings(settings(Version.CURRENT))
-                .numberOfShards(numberOfShards)
-                .numberOfReplicas(numberOfReplicas);
-            metadataBuilder = metadataBuilder.put(index);
-        }
-
-        Metadata metadata = metadataBuilder.build();
-
-        for (final IndexMetadata cursor : metadata.indices().values()) {
-            routingTableBuilder.addAsNew(cursor);
-        }
-
-        RoutingTable initialRoutingTable = routingTableBuilder.build();
-
-        logger.info("start {} nodes", numberOfNodes);
-        DiscoveryNodes.Builder nodes = DiscoveryNodes.builder();
-        for (int i = 0; i < numberOfNodes; i++) {
-            nodes.add(newNode("node" + i));
-        }
-        ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
-            .nodes(nodes)
-            .metadata(metadata)
-            .routingTable(initialRoutingTable)
-            .build();
-        clusterState = service.reroute(clusterState, "reroute");
-
-        logger.info("restart all the primary shards, replicas will start initializing");
-        clusterState = startInitializingShardsAndReroute(service, clusterState);
-
-        logger.info("start the replica shards");
-        clusterState = startInitializingShardsAndReroute(service, clusterState);
-
-        logger.info("complete rebalancing");
-        return applyStartedShardsUntilNoChange(clusterState, service);
-    }
-
-    private ClusterState addIndex(
-        ClusterState clusterState,
-        AllocationService service,
-        int indexOrdinal,
-        int numberOfShards,
-        int numberOfReplicas
-    ) {
-        Metadata.Builder metadataBuilder = Metadata.builder(clusterState.getMetadata());
         RoutingTable.Builder routingTableBuilder = RoutingTable.builder(clusterState.routingTable());
-
-        IndexMetadata.Builder index = IndexMetadata.builder("test" + indexOrdinal)
-            .settings(settings(Version.CURRENT))
-            .numberOfShards(numberOfShards)
-            .numberOfReplicas(numberOfReplicas);
-        IndexMetadata imd = index.build();
-        metadataBuilder = metadataBuilder.put(imd, true);
-        routingTableBuilder.addAsNew(imd);
-
-        Metadata metadata = metadataBuilder.build();
-        clusterState = ClusterState.builder(clusterState).metadata(metadata).routingTable(routingTableBuilder.build()).build();
-        clusterState = service.reroute(clusterState, "reroute");
-
-        logger.info("restart all the primary shards, replicas will start initializing");
-        clusterState = startInitializingShardsAndReroute(service, clusterState);
-
-        logger.info("start the replica shards");
-        clusterState = startInitializingShardsAndReroute(service, clusterState);
-
-        logger.info("complete rebalancing");
+ * Unless required by applicable law or agreed to in writing,
+package org.opensearch.cluster.routing.allocation;
+    private ClusterState addIndex(
+        clusterState = newState;
         return applyStartedShardsUntilNoChange(clusterState, service);
-    }
-
-    private ClusterState removeNodes(ClusterState clusterState, AllocationService service, int numNodes) {
-        logger.info("Removing [{}] nodes", numNodes);
+        assertNumIndexShardsPerNode(clusterState, "test4", equalTo(2));
+            ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(),
+                .numberOfReplicas(numberOfReplicas);
+ * ownership. Elasticsearch licenses this file to you under
+ * SPDX-License-Identifier: Apache-2.0
         DiscoveryNodes.Builder nodes = DiscoveryNodes.builder(clusterState.nodes());
-        ArrayList<DiscoveryNode> discoveryNodes = CollectionUtils.iterableAsArrayList(clusterState.nodes());
-        Collections.shuffle(discoveryNodes, random());
-        for (DiscoveryNode node : discoveryNodes) {
-            nodes.remove(node.getId());
-            numNodes--;
-            if (numNodes <= 0) {
-                break;
-            }
-        }
-
-        clusterState = ClusterState.builder(clusterState).nodes(nodes.build()).build();
-        clusterState = service.disassociateDeadNodes(clusterState, true, "reroute");
-
-        logger.info("start all the primary shards, replicas will start initializing");
-        clusterState = startInitializingShardsAndReroute(service, clusterState);
-
-        logger.info("start the replica shards");
-        clusterState = startInitializingShardsAndReroute(service, clusterState);
-
-        logger.info("rebalancing");
-        clusterState = service.reroute(clusterState, "reroute");
-
-        logger.info("complete rebalancing");
-        clusterState = applyStartedShardsUntilNoChange(clusterState, service);
-
-        return clusterState;
+import java.util.Collections;
+        assertNumIndexShardsPerNode(clusterState, Matchers.lessThanOrEqualTo(2));
+        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(9));
+            nodes.add(newNode("node" + i));
+        for (RoutingNode node : state.getRoutingNodes()) {
     }
+        assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
+        logger.info("start the replica shards");
+        RoutingTable.Builder routingTableBuilder = RoutingTable.builder();
+        routingTableBuilder.addAsNew(imd);
+        clusterState = ClusterState.builder(clusterState).metadata(metadata).routingTable(routingTableBuilder.build()).build();
+        assertThat(newState, not(equalTo(clusterState)));
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+ * You may obtain a copy of the License at
+        assertThat(routingNodes.node("node1").shardsWithState(INITIALIZING).size(), equalTo(0));
+        clusterState = removeNodes(clusterState, service, 1);
+        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(9));
+        logger.info("start the replica shards");
+/*
+        assertThat(newState, not(equalTo(clusterState)));
+                break;
+        assertThat(newState, equalTo(clusterState));
+        assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
+            for (RoutingNode node : state.getRoutingNodes()) {
+        assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(0));
+        nodes.add(newNode("node2"));
+        assertNumIndexShardsPerNode(clusterState, Matchers.lessThanOrEqualTo(2));
+        assertNumIndexShardsPerNode(clusterState, equalTo(2));
+        DiscoveryNodes.Builder nodes = DiscoveryNodes.builder(clusterState.nodes());
+        clusterState = ClusterState.builder(clusterState).nodes(nodes.build()).build();
+        DiscoveryNodes.Builder nodes = DiscoveryNodes.builder(clusterState.nodes());
+            ClusterRebalanceAllocationDecider.ClusterRebalanceType.ALWAYS.toString()
+ * under the License.
+        assertThat(routingNodes.node("node1").shardsWithState(INITIALIZING).size(), equalTo(0));
+        clusterState = newState;
+import org.apache.logging.log4j.Logger;
+    private ClusterState initCluster(
+        assertThat(routingNodes.node("node2").shardsWithState(STARTED).size(), equalTo(6));
+            .put("cluster.routing.allocation.node_concurrent_recoveries", 100)
+        assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(2));
+        AllocationService service = createAllocationService(settings.build());
+        clusterState = addIndex(clusterState, service, 3, 2, 3);
+        newState = startInitializingShardsAndReroute(service, clusterState);
+        assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
+        routingNodes = clusterState.getRoutingNodes();
+        Metadata.Builder metadataBuilder = Metadata.builder(clusterState.getMetadata());
+        for (DiscoveryNode node : discoveryNodes) {
+    }
+        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(4));
+        RoutingNodes routingNodes = clusterState.getRoutingNodes();
+        AllocationService service,
+            .numberOfShards(numberOfShards)
+        clusterState = newState;
+        return applyStartedShardsUntilNoChange(clusterState, service);
+import static org.hamcrest.Matchers.not;
+        assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
+        logger.info("complete rebalancing");
+        logger.info("now, start one more node, check that rebalancing will happen because we set it to always");
+        Collections.shuffle(discoveryNodes, random());
+        assertNumIndexShardsPerNode(clusterState, equalTo(2));
+        assertThat(routingNodes.node("node1").shardsWithState(INITIALIZING).size(), equalTo(0));
+            assertThat(node.shardsWithState(index, STARTED).size(), matcher);
+        logger.info("now, start [{}] more node, check that rebalancing will happen because we set it to always", numNodes);
+    private void assertNumIndexShardsPerNode(ClusterState state, String index, Matcher<Integer> matcher) {
+    private final Logger logger = LogManager.getLogger(AddIncrementallyTests.class);
+        for (final String index : state.routingTable().indicesRouting().keySet()) {
+        assertThat(routingNodes.node("node1").shardsWithState(INITIALIZING).size(), equalTo(0));
+    }
+import org.opensearch.cluster.ClusterState;
+        clusterState = addNodes(clusterState, service, 1, nodeOffset++);
+        clusterState = newState;
+            numNodes--;
+        settings.put(
+        ).put("cluster.routing.allocation.node_concurrent_recoveries", 2);
+            .build();
+ * specific language governing permissions and limitations
+ *
+        newState = startInitializingShardsAndReroute(service, clusterState);
+        logger.info("restart all the primary shards, replicas will start initializing");
+    private void assertNumIndexShardsPerNode(ClusterState state, Matcher<Integer> matcher) {
+ * license agreements. See the NOTICE file distributed with
+        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(0));
+        Metadata.Builder metadataBuilder = Metadata.builder();
+    }
+        assertThat(routingNodes.node("node2").shardsWithState(STARTED).size(), equalTo(4));
+        for (final String index : state.routingTable().indicesRouting().keySet()) {
+ *
+        ClusterState newState = startInitializingShardsAndReroute(service, clusterState);
+import org.hamcrest.Matchers;
+        IndexMetadata.Builder index = IndexMetadata.builder("test" + indexOrdinal)
+        assertThat(newState, not(equalTo(clusterState)));
+            nodes.add(newNode("node" + (i + nodeOffset)));
+        DiscoveryNodes.Builder nodes = DiscoveryNodes.builder(clusterState.nodes());
+        clusterState = startInitializingShardsAndReroute(service, clusterState);
+        assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(2));
+        clusterState = addNodes(clusterState, service, 1, nodeOffset++);
+        clusterState = startInitializingShardsAndReroute(service, clusterState);
+        ClusterState clusterState = initCluster(service, 1, 3, 3, 1);
+ * not use this file except in compliance with the License.
+            .settings(settings(Version.CURRENT))
+        logger.info("complete rebalancing");
+import org.opensearch.cluster.routing.RoutingNodes;
+        clusterState = addNodes(clusterState, service, 1, nodeOffset++);
+        assertNumIndexShardsPerNode(clusterState, "test3", equalTo(2));
+        ClusterState clusterState = ClusterState.builder(org.opensearch.cluster.ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
+ * KIND, either express or implied.  See the License for the
+        AllocationService service = createAllocationService(settings.build());
+        AllocationService service,
+ * software distributed under the License is distributed on an
+        assertNumIndexShardsPerNode(clusterState, equalTo(2));
+import static org.hamcrest.Matchers.equalTo;
+        newState = startInitializingShardsAndReroute(service, clusterState);
+        int nodeOffset = 1;
+import org.opensearch.cluster.node.DiscoveryNode;
+        newState = startInitializingShardsAndReroute(service, clusterState);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        return applyStartedShardsUntilNoChange(clusterState, service);
+import org.opensearch.Version;
+            }
+        settings.put(
+            .put("cluster.routing.allocation.node_initial_primaries_recoveries", 100);
+        clusterState = ClusterState.builder(clusterState).nodes(nodes.build()).build();
+            .nodes(nodes)
+        logger.info("start the replica shards");
+        assertThat(routingNodes.node("node0").shardsWithState(INITIALIZING).size(), equalTo(0));
+            ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(),
+        clusterState = addIndex(clusterState, service, 4, 2, 3);
+        assertThat(routingNodes.node("node2").shardsWithState(STARTED).size(), equalTo(4));
+        assertNumIndexShardsPerNode(clusterState, equalTo(2));
+        logger.info("start all the primary shards, replicas will start initializing");
+        )
+            metadataBuilder = metadataBuilder.put(index);
+        assertThat(clusterState.getRoutingNodes().node("node0").shardsWithState(STARTED).size(), equalTo(9));
+        for (int i = 0; i < numNodes; i++) {
+ * Modifications Copyright OpenSearch Contributors. See
+        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(0));
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        clusterState = service.reroute(clusterState, "reroute");
+        assertThat(clusterState.getRoutingNodes().node("node0").shardsWithState(STARTED).size(), equalTo(9));
+import org.hamcrest.Matcher;
+        clusterState = ClusterState.builder(clusterState).nodes(nodes.build()).build();
+        }
+        int nodeOffset = 1;
+        int numberOfIndices,
+import org.opensearch.cluster.OpenSearchAllocationTestCase;
+        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(0));
+        logger.info("complete rebalancing");
+        logger.debug("ClusterState: {}", clusterState.getRoutingNodes());
+import org.opensearch.cluster.metadata.Metadata;
+        clusterState = service.disassociateDeadNodes(clusterState, true, "reroute");
+    public void testMinimalRelocations() {
+        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(0));
+ * compatible open source license.
+                .numberOfShards(numberOfShards)
+ * this work for additional information regarding copyright
+        DiscoveryNodes.Builder nodes = DiscoveryNodes.builder();
+        settings.put(
+            }
+        assertThat(newState, equalTo(clusterState));
+        routingNodes = clusterState.getRoutingNodes();
+    ) {
+        ArrayList<DiscoveryNode> discoveryNodes = CollectionUtils.iterableAsArrayList(clusterState.nodes());
+ *
+ */
+        metadataBuilder = metadataBuilder.put(imd, true);
+        int numberOfNodes,
+        // move initializing to started
+        assertNumIndexShardsPerNode(clusterState, Matchers.lessThanOrEqualTo(2));
+        Metadata metadata = metadataBuilder.build();
+        Settings.Builder settings = Settings.builder();
+        clusterState = newState;
+        assertThat(newState, not(equalTo(clusterState)));
+        }
+        ClusterState clusterState = initCluster(service, 1, 3, 3, 1);
+        assertThat(newState, not(equalTo(clusterState)));
+        int numberOfReplicas
+        Settings.Builder settings = Settings.builder();
+        assertThat(clusterState.getRoutingNodes().node("node1").shardsWithState(STARTED).size(), equalTo(9));
+        assertThat(clusterState.getRoutingNodes().node("node0").shardsWithState(STARTED).size(), equalTo(9));
+        assertThat(routingNodes.node("node2").shardsWithState(STARTED).size(), equalTo(2));
+    }
+            routingTableBuilder.addAsNew(cursor);
+        logger.debug("ClusterState: {}", clusterState.getRoutingNodes());
+        logger.info("now, start one more node, check that rebalancing will happen because we set it to always");
+        int indexOrdinal,
+        assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(2));
+        routingNodes = clusterState.getRoutingNodes();
+/*
+public class AddIncrementallyTests extends OpenSearchAllocationTestCase {
+        assertNumIndexShardsPerNode(clusterState, equalTo(3));
+        assertAtLeastOneIndexShardPerNode(clusterState);
+import org.opensearch.cluster.routing.RoutingTable;
+        assertNumIndexShardsPerNode(clusterState, Matchers.lessThanOrEqualTo(2));
+        assertThat(clusterState.getRoutingNodes().node("node1").shardsWithState(STARTED).size(), equalTo(9));
+        }
+        logger.debug("ClusterState: {}", clusterState.getRoutingNodes());
+        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(9));
+        routingNodes = clusterState.getRoutingNodes();
+        RoutingNodes routingNodes = clusterState.getRoutingNodes();
+        clusterState = startInitializingShardsAndReroute(service, clusterState);
+        clusterState = removeNodes(clusterState, service, 1);
+        assertNumIndexShardsPerNode(clusterState, Matchers.lessThanOrEqualTo(2));
+        assertThat(routingNodes.node("node1").shardsWithState(INITIALIZING).size(), equalTo(0));
+    }
+import org.apache.logging.log4j.LogManager;
+ * Licensed to Elasticsearch under one or more contributor
+        logger.info("start {} nodes", numberOfNodes);
+        assertThat(newState, not(equalTo(clusterState)));
+        logger.info("restart all the primary shards, replicas will start initializing");
+ * The OpenSearch Contributors require contributions made to
+        }
 }
+import static org.opensearch.cluster.routing.ShardRoutingState.STARTED;
+        assertThat(clusterState.getRoutingNodes().unassigned().size(), equalTo(0));
+        assertNumIndexShardsPerNode(clusterState, equalTo(3));
+        }
+ * GitHub history for details.
+        clusterState = service.reroute(clusterState, "reroute");
+            ClusterRebalanceAllocationDecider.ClusterRebalanceType.ALWAYS.toString()
+import org.opensearch.core.common.util.CollectionUtils;
+        routingNodes = clusterState.getRoutingNodes();
+import static org.opensearch.cluster.routing.ShardRoutingState.INITIALIZING;
+        clusterState = service.reroute(clusterState, "reroute");
+            .numberOfReplicas(numberOfReplicas);
+            nodes.remove(node.getId());
+        clusterState = addNodes(clusterState, service, 1, nodeOffset++);
+        assertThat(routingNodes.node("node2").shardsWithState(INITIALIZING).size(), equalTo(0));
+            ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(),
+import java.util.ArrayList;
+        assertThat(clusterState.getRoutingNodes().node("node0").shardsWithState(STARTED).size(), equalTo(9));
+/*
+        IndexMetadata imd = index.build();
+            .metadata(metadata)
+    }

@@ -1,219 +1,175 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.routing;
-
-import org.opensearch.common.annotation.PublicApi;
-
-/**
- * Records changes made to {@link RoutingNodes} during an allocation round.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public interface RoutingChangesObserver {
+            }
+        @Override
     /**
-     * Called when unassigned shard is initialized. Does not include initializing relocation target shards.
-     */
-    void shardInitialized(ShardRouting unassignedShard, ShardRouting initializedShard);
-
-    /**
-     * Called when an initializing shard is started.
-     */
-    void shardStarted(ShardRouting initializingShard, ShardRouting startedShard);
-
-    /**
-     * Called when relocation of a started shard is initiated.
-     */
-    void relocationStarted(ShardRouting startedShard, ShardRouting targetRelocatingShard);
-
-    /**
-     * Called when an unassigned shard's unassigned information was updated
-     */
-    void unassignedInfoUpdated(ShardRouting unassignedShard, UnassignedInfo newUnassignedInfo);
-
-    /**
-     * Called when a shard is failed or cancelled.
-     */
-    void shardFailed(ShardRouting failedShard, UnassignedInfo unassignedInfo);
-
-    /**
-     * Called on relocation source when relocation completes after relocation target is started.
-     */
-    void relocationCompleted(ShardRouting removedRelocationSource);
-
-    /**
-     * Called on replica relocation target when replica relocation source fails. Promotes the replica relocation target to ordinary
-     * initializing shard.
-     */
-    void relocationSourceRemoved(ShardRouting removedReplicaRelocationSource);
-
-    /**
-     * Called when started replica is promoted to primary.
-     */
-    void replicaPromoted(ShardRouting replicaShard);
-
-    /**
-     * Called when an initializing replica is reinitialized. This happens when a primary relocation completes, which
      * reinitializes all currently initializing replicas as their recovery source node changes
-     */
-    void initializedReplicaReinitialized(ShardRouting oldReplica, ShardRouting reinitializedReplica);
-
-    /**
-     * Abstract implementation of {@link RoutingChangesObserver} that does not take any action. Useful for subclasses that only override
-     * certain methods.
-     */
-    class AbstractRoutingChangesObserver implements RoutingChangesObserver {
-
-        @Override
-        public void shardInitialized(ShardRouting unassignedShard, ShardRouting initializedShard) {
-
-        }
-
-        @Override
+     * Called when an initializing replica is reinitialized. This happens when a primary relocation completes, which
+            }
         public void shardStarted(ShardRouting initializingShard, ShardRouting startedShard) {
-
-        }
-
-        @Override
-        public void relocationStarted(ShardRouting startedShard, ShardRouting targetRelocatingShard) {
-
-        }
-
-        @Override
-        public void unassignedInfoUpdated(ShardRouting unassignedShard, UnassignedInfo newUnassignedInfo) {
-
-        }
-
-        @Override
-        public void shardFailed(ShardRouting activeShard, UnassignedInfo unassignedInfo) {
-
-        }
-
-        @Override
-        public void relocationCompleted(ShardRouting removedRelocationSource) {
-
-        }
-
-        @Override
-        public void relocationSourceRemoved(ShardRouting removedReplicaRelocationSource) {
-
-        }
-
-        @Override
+    void shardStarted(ShardRouting initializingShard, ShardRouting startedShard);
         public void replicaPromoted(ShardRouting replicaShard) {
-
-        }
-
-        @Override
-        public void initializedReplicaReinitialized(ShardRouting oldReplica, ShardRouting reinitializedReplica) {
-
-        }
     }
-
     /**
-     * Observer of routing changes.
-     *
      * @opensearch.internal
-     */
-    class DelegatingRoutingChangesObserver implements RoutingChangesObserver {
-
-        private final RoutingChangesObserver[] routingChangesObservers;
-
-        public DelegatingRoutingChangesObserver(RoutingChangesObserver... routingChangesObservers) {
-            this.routingChangesObservers = routingChangesObservers;
         }
-
+ *
+        }
+        public void replicaPromoted(ShardRouting replicaShard) {
+/*
+ */
+        }
+            for (RoutingChangesObserver routingChangesObserver : routingChangesObservers) {
+    void shardInitialized(ShardRouting unassignedShard, ShardRouting initializedShard);
+     */
+        public void shardFailed(ShardRouting activeShard, UnassignedInfo unassignedInfo) {
+     */
+            }
+        }
         @Override
+        @Override
+    void replicaPromoted(ShardRouting replicaShard);
+    void relocationStarted(ShardRouting startedShard, ShardRouting targetRelocatingShard);
+    /**
+package org.opensearch.cluster.routing;
+        public void unassignedInfoUpdated(ShardRouting unassignedShard, UnassignedInfo newUnassignedInfo) {
+            for (RoutingChangesObserver routingChangesObserver : routingChangesObservers) {
+ * this file be licensed under the Apache-2.0 license or a
+    class DelegatingRoutingChangesObserver implements RoutingChangesObserver {
+ * ownership. Elasticsearch licenses this file to you under
         public void shardInitialized(ShardRouting unassignedShard, ShardRouting initializedShard) {
+/*
+        }
+        @Override
             for (RoutingChangesObserver routingChangesObserver : routingChangesObservers) {
                 routingChangesObserver.shardInitialized(unassignedShard, initializedShard);
-            }
-        }
-
-        @Override
         public void shardStarted(ShardRouting initializingShard, ShardRouting startedShard) {
-            for (RoutingChangesObserver routingChangesObserver : routingChangesObservers) {
-                routingChangesObserver.shardStarted(initializingShard, startedShard);
-            }
-        }
-
         @Override
-        public void relocationStarted(ShardRouting startedShard, ShardRouting targetRelocatingShard) {
-            for (RoutingChangesObserver routingChangesObserver : routingChangesObservers) {
+    /**
+        }
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+        public void shardFailed(ShardRouting activeShard, UnassignedInfo unassignedInfo) {
                 routingChangesObserver.relocationStarted(startedShard, targetRelocatingShard);
+ * software distributed under the License is distributed on an
+    /**
+     */
+ *
+     */
             }
+ * specific language governing permissions and limitations
+     * Called when unassigned shard is initialized. Does not include initializing relocation target shards.
+        public void relocationStarted(ShardRouting startedShard, ShardRouting targetRelocatingShard) {
+ * The OpenSearch Contributors require contributions made to
+                routingChangesObserver.shardFailed(activeShard, unassignedInfo);
+     * Called when an unassigned shard's unassigned information was updated
+     */
+     * Abstract implementation of {@link RoutingChangesObserver} that does not take any action. Useful for subclasses that only override
+ */
+     *
+     */
         }
-
-        @Override
-        public void unassignedInfoUpdated(ShardRouting unassignedShard, UnassignedInfo newUnassignedInfo) {
+public interface RoutingChangesObserver {
+ * Records changes made to {@link RoutingNodes} during an allocation round.
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        public void relocationCompleted(ShardRouting removedRelocationSource) {
+        }
             for (RoutingChangesObserver routingChangesObserver : routingChangesObservers) {
+        }
+     * certain methods.
                 routingChangesObserver.unassignedInfoUpdated(unassignedShard, newUnassignedInfo);
             }
-        }
-
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
         @Override
-        public void shardFailed(ShardRouting activeShard, UnassignedInfo unassignedInfo) {
             for (RoutingChangesObserver routingChangesObserver : routingChangesObservers) {
-                routingChangesObserver.shardFailed(activeShard, unassignedInfo);
+        public void shardInitialized(ShardRouting unassignedShard, ShardRouting initializedShard) {
+        private final RoutingChangesObserver[] routingChangesObservers;
+        @Override
             }
-        }
-
         @Override
-        public void relocationCompleted(ShardRouting removedRelocationSource) {
-            for (RoutingChangesObserver routingChangesObserver : routingChangesObservers) {
-                routingChangesObserver.relocationCompleted(removedRelocationSource);
-            }
+            this.routingChangesObservers = routingChangesObservers;
+     * initializing shard.
         }
-
-        @Override
-        public void relocationSourceRemoved(ShardRouting removedReplicaRelocationSource) {
             for (RoutingChangesObserver routingChangesObserver : routingChangesObservers) {
+            for (RoutingChangesObserver routingChangesObserver : routingChangesObservers) {
+     * Called when a shard is failed or cancelled.
+@PublicApi(since = "1.0.0")
+ */
+     * Called when started replica is promoted to primary.
                 routingChangesObserver.relocationSourceRemoved(removedReplicaRelocationSource);
-            }
-        }
-
+     */
+     * Called when an initializing shard is started.
+import org.opensearch.common.annotation.PublicApi;
+    void initializedReplicaReinitialized(ShardRouting oldReplica, ShardRouting reinitializedReplica);
+ * license agreements. See the NOTICE file distributed with
+ * KIND, either express or implied.  See the License for the
+     * Called on replica relocation target when replica relocation source fails. Promotes the replica relocation target to ordinary
         @Override
-        public void replicaPromoted(ShardRouting replicaShard) {
-            for (RoutingChangesObserver routingChangesObserver : routingChangesObservers) {
-                routingChangesObserver.replicaPromoted(replicaShard);
-            }
-        }
-
-        @Override
-        public void initializedReplicaReinitialized(ShardRouting oldReplica, ShardRouting reinitializedReplica) {
-            for (RoutingChangesObserver routingChangesObserver : routingChangesObservers) {
-                routingChangesObserver.initializedReplicaReinitialized(oldReplica, reinitializedReplica);
-            }
-        }
+ *
     }
 }
+        public void relocationSourceRemoved(ShardRouting removedReplicaRelocationSource) {
+                routingChangesObserver.shardStarted(initializingShard, startedShard);
+     * Observer of routing changes.
+        @Override
+                routingChangesObserver.replicaPromoted(replicaShard);
+    /**
+    void unassignedInfoUpdated(ShardRouting unassignedShard, UnassignedInfo newUnassignedInfo);
+            }
+        }
+ * this work for additional information regarding copyright
+    /**
+/**
+ */
+        @Override
+ * Unless required by applicable law or agreed to in writing,
+        }
+        public void initializedReplicaReinitialized(ShardRouting oldReplica, ShardRouting reinitializedReplica) {
+            for (RoutingChangesObserver routingChangesObserver : routingChangesObservers) {
+ * under the License.
+        @Override
+ * Licensed to Elasticsearch under one or more contributor
+        public void initializedReplicaReinitialized(ShardRouting oldReplica, ShardRouting reinitializedReplica) {
+ * the Apache License, Version 2.0 (the "License"); you may
+     */
+        public void unassignedInfoUpdated(ShardRouting unassignedShard, UnassignedInfo newUnassignedInfo) {
+ * You may obtain a copy of the License at
+ * not use this file except in compliance with the License.
+        public void relocationCompleted(ShardRouting removedRelocationSource) {
+    /**
+        public DelegatingRoutingChangesObserver(RoutingChangesObserver... routingChangesObservers) {
+ *
+        }
+ * @opensearch.api
+    /**
+        @Override
+    /**
+        }
+/*
+     * Called when relocation of a started shard is initiated.
+        }
+        }
+            }
+        }
+        }
+        public void relocationSourceRemoved(ShardRouting removedReplicaRelocationSource) {
+        @Override
+    void shardFailed(ShardRouting failedShard, UnassignedInfo unassignedInfo);
+     */
+        @Override
+        public void relocationStarted(ShardRouting startedShard, ShardRouting targetRelocatingShard) {
+                routingChangesObserver.initializedReplicaReinitialized(oldReplica, reinitializedReplica);
+     */
+            for (RoutingChangesObserver routingChangesObserver : routingChangesObservers) {
+        @Override
+                routingChangesObserver.relocationCompleted(removedRelocationSource);
+ * GitHub history for details.
+     */
+ * compatible open source license.
+    /**
+        @Override
+     * Called on relocation source when relocation completes after relocation target is started.
+    void relocationSourceRemoved(ShardRouting removedReplicaRelocationSource);
+            }
+        @Override
+    void relocationCompleted(ShardRouting removedRelocationSource);
+ * SPDX-License-Identifier: Apache-2.0
+    class AbstractRoutingChangesObserver implements RoutingChangesObserver {

@@ -1,204 +1,188 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.filter;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.index.RandomIndexWriter;
-import org.opensearch.index.mapper.KeywordFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.search.aggregations.AggregatorTestCase;
-import org.opensearch.search.aggregations.support.AggregationInspectionHelper;
-import org.junit.Before;
-
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
-public class FiltersAggregatorTests extends AggregatorTestCase {
-    private MappedFieldType fieldType;
-
-    @Before
-    public void setUpTest() throws Exception {
-        super.setUp();
-        fieldType = new KeywordFieldMapper.KeywordFieldType("field");
-    }
-
-    public void testEmpty() throws Exception {
-        Directory directory = newDirectory();
-        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
-        indexWriter.close();
-        IndexReader indexReader = DirectoryReader.open(directory);
-        IndexSearcher indexSearcher = newSearcher(indexReader, true, true);
-        int numFilters = randomIntBetween(1, 10);
-        QueryBuilder[] filters = new QueryBuilder[numFilters];
-        for (int i = 0; i < filters.length; i++) {
-            filters[i] = QueryBuilders.termQuery("field", randomAlphaOfLength(5));
-        }
-        FiltersAggregationBuilder builder = new FiltersAggregationBuilder("test", filters);
-        builder.otherBucketKey("other");
-        InternalFilters response = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), builder, fieldType);
-        assertEquals(response.getBuckets().size(), numFilters);
-        for (InternalFilters.InternalBucket filter : response.getBuckets()) {
-            assertEquals(filter.getDocCount(), 0);
-        }
-        assertFalse(AggregationInspectionHelper.hasValue(response));
-        indexReader.close();
-        directory.close();
-    }
-
-    public void testKeyedFilter() throws Exception {
-        Directory directory = newDirectory();
-        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
-        Document document = new Document();
-        document.add(new Field("field", "foo", KeywordFieldMapper.Defaults.FIELD_TYPE));
-        indexWriter.addDocument(document);
-        document.clear();
-        document.add(new Field("field", "else", KeywordFieldMapper.Defaults.FIELD_TYPE));
-        indexWriter.addDocument(document);
-        // make sure we have more than one segment to test the merge
-        indexWriter.commit();
-        document.add(new Field("field", "foo", KeywordFieldMapper.Defaults.FIELD_TYPE));
-        indexWriter.addDocument(document);
-        document.clear();
-        document.add(new Field("field", "bar", KeywordFieldMapper.Defaults.FIELD_TYPE));
-        indexWriter.addDocument(document);
-        document.clear();
-        document.add(new Field("field", "foobar", KeywordFieldMapper.Defaults.FIELD_TYPE));
-        indexWriter.addDocument(document);
-        indexWriter.commit();
-        document.clear();
         document.add(new Field("field", "something", KeywordFieldMapper.Defaults.FIELD_TYPE));
+import org.junit.Before;
+        directory.close();
+import org.opensearch.index.mapper.MappedFieldType;
+                int value = randomInt(maxTerm - 1);
+        // make sure we have more than one segment to test the merge
+ * specific language governing permissions and limitations
+        }
+            directory.close();
+import org.opensearch.index.query.QueryBuilder;
+        fieldType = new KeywordFieldMapper.KeywordFieldType("field");
+        builder.otherBucket(true);
         indexWriter.addDocument(document);
-        indexWriter.commit();
+            if (frequently()) {
+        keys[4] = new FiltersAggregator.KeyedFilter("same", QueryBuilders.termQuery("field", "foo"));
+                filterTerms[i] = value;
+            List<InternalFilters.InternalBucket> buckets = response.getBuckets();
+import org.opensearch.search.aggregations.support.AggregationInspectionHelper;
+ * software distributed under the License is distributed on an
+ * You may obtain a copy of the License at
+        Document document = new Document();
         document.clear();
-        document.add(new Field("field", "foobar", KeywordFieldMapper.Defaults.FIELD_TYPE));
+ * not use this file except in compliance with the License.
+        try {
+        }
+            int expectedOtherCount = numDocs;
         indexWriter.addDocument(document);
-        indexWriter.close();
-
+        document.add(new Field("field", "else", KeywordFieldMapper.Defaults.FIELD_TYPE));
+        } finally {
+        builder.otherBucketKey("other");
+    public void testKeyedFilter() throws Exception {
+            int numFilters = randomIntBetween(1, 10);
+            document.add(new Field("field", Integer.toString(value), KeywordFieldMapper.Defaults.FIELD_TYPE));
+ *
+            indexReader.close();
+        indexWriter.addDocument(document);
         IndexReader indexReader = DirectoryReader.open(directory);
-        IndexSearcher indexSearcher = newSearcher(indexReader, true, true);
-
+        int[] expectedBucketCount = new int[maxTerm];
+        document.add(new Field("field", "foobar", KeywordFieldMapper.Defaults.FIELD_TYPE));
+/*
+ */
+        indexWriter.addDocument(document);
+        assertEquals(filters.getBucketByKey("other").getDocCount(), 2);
+        }
+        super.setUp();
+import org.opensearch.index.mapper.KeywordFieldMapper;
+import org.apache.lucene.document.Document;
+ * Unless required by applicable law or agreed to in writing,
+        assertFalse(AggregationInspectionHelper.hasValue(response));
+        keys[5] = new FiltersAggregator.KeyedFilter("same", QueryBuilders.termQuery("field", "bar"));
+            QueryBuilder[] filters = new QueryBuilder[numFilters];
+import java.util.List;
+        indexWriter.addDocument(document);
+                    int index = Integer.parseInt(bucket.getKey());
+        indexWriter.commit();
+}
+        assertEquals(filters.getBuckets().size(), 7);
+/*
+                    expectedOtherCount -= expectedBucketCount[value];
+        int numDocs = randomIntBetween(100, 200);
+        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
+        indexReader.close();
+            assertEquals(filter.getDocCount(), 0);
+ * Licensed to Elasticsearch under one or more contributor
+    private MappedFieldType fieldType;
+        indexWriter.addDocument(document);
+import org.apache.lucene.index.DirectoryReader;
+    public void setUpTest() throws Exception {
+        FiltersAggregationBuilder builder = new FiltersAggregationBuilder("test", keys);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * this work for additional information regarding copyright
+            expectedBucketCount[value] += 1;
+                }
+import org.apache.lucene.search.MatchAllDocsQuery;
+import org.apache.lucene.document.Field;
+        assertEquals(filters.getBucketByKey("foobar").getDocCount(), 2);
+/*
+        IndexReader indexReader = DirectoryReader.open(directory);
+        assertTrue(AggregationInspectionHelper.hasValue(filters));
+    }
+        indexWriter.commit();
+            for (int i = 0; i < filters.length; i++) {
+        document.add(new Field("field", "foobar", KeywordFieldMapper.Defaults.FIELD_TYPE));
+        assertEquals(filters.getBucketByKey("same").getDocCount(), 1);
+        indexReader.close();
+        keys[1] = new FiltersAggregator.KeyedFilter("bar", QueryBuilders.termQuery("field", "bar"));
+        document.clear();
+            final InternalFilters response = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), builder, fieldType);
+import org.opensearch.index.query.QueryBuilders;
+        assertEquals(response.getBuckets().size(), numFilters);
+            int value = randomInt(maxTerm - 1);
+            // Always true because we include 'other' in the agg
+        document.clear();
+        indexWriter.close();
+ * Modifications Copyright OpenSearch Contributors. See
+            FiltersAggregationBuilder builder = new FiltersAggregationBuilder("test", filters);
+import org.apache.lucene.index.IndexReader;
+        document.add(new Field("field", "bar", KeywordFieldMapper.Defaults.FIELD_TYPE));
+package org.opensearch.search.aggregations.bucket.filter;
+        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
+            indexWriter.addDocument(document);
         FiltersAggregator.KeyedFilter[] keys = new FiltersAggregator.KeyedFilter[6];
         keys[0] = new FiltersAggregator.KeyedFilter("foobar", QueryBuilders.termQuery("field", "foobar"));
-        keys[1] = new FiltersAggregator.KeyedFilter("bar", QueryBuilders.termQuery("field", "bar"));
-        keys[2] = new FiltersAggregator.KeyedFilter("foo", QueryBuilders.termQuery("field", "foo"));
-        keys[3] = new FiltersAggregator.KeyedFilter("foo2", QueryBuilders.termQuery("field", "foo"));
-        keys[4] = new FiltersAggregator.KeyedFilter("same", QueryBuilders.termQuery("field", "foo"));
-        // filter name already present so it should be merge with the previous one ?
-        keys[5] = new FiltersAggregator.KeyedFilter("same", QueryBuilders.termQuery("field", "bar"));
-        FiltersAggregationBuilder builder = new FiltersAggregationBuilder("test", keys);
-        builder.otherBucket(true);
-        builder.otherBucketKey("other");
-        final InternalFilters filters = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), builder, fieldType);
-        assertEquals(filters.getBuckets().size(), 7);
-        assertEquals(filters.getBucketByKey("foobar").getDocCount(), 2);
-        assertEquals(filters.getBucketByKey("foo").getDocCount(), 2);
-        assertEquals(filters.getBucketByKey("foo2").getDocCount(), 2);
-        assertEquals(filters.getBucketByKey("bar").getDocCount(), 1);
-        assertEquals(filters.getBucketByKey("same").getDocCount(), 1);
-        assertEquals(filters.getBucketByKey("other").getDocCount(), 2);
-        assertTrue(AggregationInspectionHelper.hasValue(filters));
-
-        indexReader.close();
-        directory.close();
-    }
-
-    public void testRandom() throws Exception {
         Directory directory = newDirectory();
-        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
-        int numDocs = randomIntBetween(100, 200);
-        int maxTerm = randomIntBetween(10, 50);
-        int[] expectedBucketCount = new int[maxTerm];
-        Document document = new Document();
-        for (int i = 0; i < numDocs; i++) {
-            if (frequently()) {
-                // make sure we have more than one segment to test the merge
+import org.opensearch.search.aggregations.AggregatorTestCase;
                 indexWriter.commit();
-            }
-            int value = randomInt(maxTerm - 1);
-            expectedBucketCount[value] += 1;
-            document.add(new Field("field", Integer.toString(value), KeywordFieldMapper.Defaults.FIELD_TYPE));
-            indexWriter.addDocument(document);
-            document.clear();
-        }
-        indexWriter.close();
-
-        IndexReader indexReader = DirectoryReader.open(directory);
-        IndexSearcher indexSearcher = newSearcher(indexReader, true, true);
-        try {
-            int numFilters = randomIntBetween(1, 10);
-            QueryBuilder[] filters = new QueryBuilder[numFilters];
-            int[] filterTerms = new int[numFilters];
-            int expectedOtherCount = numDocs;
-            Set<Integer> filterSet = new HashSet<>();
-            for (int i = 0; i < filters.length; i++) {
-                int value = randomInt(maxTerm - 1);
                 filters[i] = QueryBuilders.termQuery("field", Integer.toString(value));
-                filterTerms[i] = value;
-                if (filterSet.contains(value) == false) {
-                    expectedOtherCount -= expectedBucketCount[value];
-                    filterSet.add(value);
-                }
-            }
-            FiltersAggregationBuilder builder = new FiltersAggregationBuilder("test", filters);
-            builder.otherBucket(true);
-            builder.otherBucketKey("other");
-
-            final InternalFilters response = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), builder, fieldType);
-            List<InternalFilters.InternalBucket> buckets = response.getBuckets();
+ * this file be licensed under the Apache-2.0 license or a
             assertEquals(buckets.size(), filters.length + 1);
-
-            for (InternalFilters.InternalBucket bucket : buckets) {
-                if ("other".equals(bucket.getKey())) {
-                    assertEquals(bucket.getDocCount(), expectedOtherCount);
-                } else {
-                    int index = Integer.parseInt(bucket.getKey());
-                    assertEquals(bucket.getDocCount(), (long) expectedBucketCount[filterTerms[index]]);
-                }
-            }
-
-            // Always true because we include 'other' in the agg
-            assertTrue(AggregationInspectionHelper.hasValue(response));
-        } finally {
-            indexReader.close();
-            directory.close();
-        }
+ */
+        indexWriter.close();
+            document.clear();
+        assertEquals(filters.getBucketByKey("foo2").getDocCount(), 2);
+        Directory directory = newDirectory();
+                    filterSet.add(value);
+ * license agreements. See the NOTICE file distributed with
+                if (filterSet.contains(value) == false) {
+        int numFilters = randomIntBetween(1, 10);
     }
-}
+        for (int i = 0; i < numDocs; i++) {
+public class FiltersAggregatorTests extends AggregatorTestCase {
+            int[] filterTerms = new int[numFilters];
+        int maxTerm = randomIntBetween(10, 50);
+    }
+        indexWriter.close();
+        indexWriter.addDocument(document);
+        keys[2] = new FiltersAggregator.KeyedFilter("foo", QueryBuilders.termQuery("field", "foo"));
+                // make sure we have more than one segment to test the merge
+ * compatible open source license.
+        RandomIndexWriter indexWriter = new RandomIndexWriter(random(), directory);
+        Document document = new Document();
+ * GitHub history for details.
+        directory.close();
+import java.util.Set;
+            assertTrue(AggregationInspectionHelper.hasValue(response));
+        for (int i = 0; i < filters.length; i++) {
+        keys[3] = new FiltersAggregator.KeyedFilter("foo2", QueryBuilders.termQuery("field", "foo"));
+            }
+ * ownership. Elasticsearch licenses this file to you under
+        IndexSearcher indexSearcher = newSearcher(indexReader, true, true);
+            filters[i] = QueryBuilders.termQuery("field", randomAlphaOfLength(5));
+import org.apache.lucene.search.IndexSearcher;
+    @Before
+            for (InternalFilters.InternalBucket bucket : buckets) {
+                    assertEquals(bucket.getDocCount(), (long) expectedBucketCount[filterTerms[index]]);
+        document.clear();
+        FiltersAggregationBuilder builder = new FiltersAggregationBuilder("test", filters);
+ * under the License.
+        builder.otherBucketKey("other");
+        document.clear();
+            builder.otherBucketKey("other");
+                }
+ * SPDX-License-Identifier: Apache-2.0
+        document.add(new Field("field", "foo", KeywordFieldMapper.Defaults.FIELD_TYPE));
+                } else {
+        final InternalFilters filters = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), builder, fieldType);
+                if ("other".equals(bucket.getKey())) {
+import java.util.HashSet;
+ * the Apache License, Version 2.0 (the "License"); you may
+        IndexReader indexReader = DirectoryReader.open(directory);
+        Directory directory = newDirectory();
+ */
+        for (InternalFilters.InternalBucket filter : response.getBuckets()) {
+    }
+ *
+        document.add(new Field("field", "foo", KeywordFieldMapper.Defaults.FIELD_TYPE));
+        indexWriter.commit();
+        IndexSearcher indexSearcher = newSearcher(indexReader, true, true);
+ * The OpenSearch Contributors require contributions made to
+                    assertEquals(bucket.getDocCount(), expectedOtherCount);
+        assertEquals(filters.getBucketByKey("foo").getDocCount(), 2);
+        QueryBuilder[] filters = new QueryBuilder[numFilters];
+    public void testEmpty() throws Exception {
+        InternalFilters response = searchAndReduce(indexSearcher, new MatchAllDocsQuery(), builder, fieldType);
+import org.apache.lucene.store.Directory;
+ *
+    public void testRandom() throws Exception {
+        // filter name already present so it should be merge with the previous one ?
+            }
+            }
+            Set<Integer> filterSet = new HashSet<>();
+import org.apache.lucene.tests.index.RandomIndexWriter;
+ * KIND, either express or implied.  See the License for the
+        IndexSearcher indexSearcher = newSearcher(indexReader, true, true);
+            builder.otherBucket(true);
+        assertEquals(filters.getBucketByKey("bar").getDocCount(), 1);

@@ -1,378 +1,339 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
+        }
  * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.be.datafusion;
-
-import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexLiteral;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.SqlFunction;
-import org.apache.calcite.sql.SqlFunctionCategory;
-import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.SqlOperator;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.sql.type.OperandTypes;
-import org.apache.calcite.sql.type.ReturnTypes;
-import org.apache.calcite.sql.type.SqlOperandTypeChecker;
-import org.apache.calcite.sql.type.SqlReturnTypeInference;
-import org.apache.calcite.sql.type.SqlTypeFamily;
-import org.apache.calcite.sql.type.SqlTypeName;
-import org.opensearch.analytics.spi.AbstractNameMappingAdapter;
-import org.opensearch.analytics.spi.FieldStorageInfo;
+                    rexBuilder.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP),
+    private static void rejectOutOfRangeMonthOrDay(RexCall original) {
 import org.opensearch.analytics.spi.NumericToDoubleAdapter;
-
-import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
-
-/**
- * Adapters for PPL datetime functions routed to Rust UDFs. Each {@code LOCAL_*_OP}
- * names a Calcite {@link SqlFunction} matching a UDF in {@code rust/src/udf/mod.rs};
- * Substrait sigs live in {@code opensearch_scalar_functions.yaml} +
- * {@link DataFusionFragmentConvertor#ADDITIONAL_SCALAR_SIGS}.
- *
- * @opensearch.internal
- */
-final class RustUdfDateTimeAdapters {
-
-    private RustUdfDateTimeAdapters() {}
-
-    private static SqlOperator udf(String name, SqlReturnTypeInference ret, SqlOperandTypeChecker operands) {
-        return new SqlFunction(name, SqlKind.OTHER_FUNCTION, ret, null, operands, SqlFunctionCategory.TIMEDATE);
-    }
-
-    static final SqlOperator LOCAL_EXTRACT_OP = udf("opensearch_extract", ReturnTypes.BIGINT_NULLABLE, OperandTypes.ANY_ANY);
-    static final SqlOperator LOCAL_FROM_UNIXTIME_OP = udf("from_unixtime", ReturnTypes.TIMESTAMP_NULLABLE, OperandTypes.ANY);
-    static final SqlOperator LOCAL_MAKETIME_OP = udf(
-        "maketime",
-        ReturnTypes.TIME_NULLABLE,
-        OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ANY, SqlTypeFamily.ANY)
-    );
-    static final SqlOperator LOCAL_MAKEDATE_OP = udf("makedate", ReturnTypes.DATE_NULLABLE, OperandTypes.ANY_ANY);
-    static final SqlOperator LOCAL_DATE_FORMAT_OP = udf("date_format", ReturnTypes.VARCHAR_NULLABLE, OperandTypes.ANY_ANY);
-    static final SqlOperator LOCAL_TIME_FORMAT_OP = udf("time_format", ReturnTypes.VARCHAR_NULLABLE, OperandTypes.ANY_ANY);
-    static final SqlOperator LOCAL_STR_TO_DATE_OP = udf("str_to_date", ReturnTypes.TIMESTAMP_NULLABLE, OperandTypes.ANY_ANY);
-
-    /** WEEK(date [, mode]) target — MySQL semantics, accepts 1- and 2-arg forms. */
-    static final SqlOperator LOCAL_OS_WEEK_OP = udf("os_week", ReturnTypes.INTEGER_NULLABLE, OperandTypes.VARIADIC);
-
-    /** YEARWEEK(date [, mode]) target — routes to the Rust {@code os_yearweek} UDF. */
-    static final SqlOperator LOCAL_OS_YEARWEEK_OP = udf("os_yearweek", ReturnTypes.INTEGER_NULLABLE, OperandTypes.VARIADIC);
-
-    /**
-     * Adapter for PPL {@code extract(<unit> FROM <expr>)}.
-     * <p>For TIME(p) operands, CASTs to VARCHAR so the call binds to the {@code (string, string)}
-     * yaml overload — substrait-java 0.89.1 can't emit a {@code precision_time<P>} signature.
-     * <p>When the unit is a known date-part (YEAR/MONTH/DAY/...), the value is anchored to today's
-     * UTC date at plan time before the VARCHAR cast — matches SQL plugin's {@code FunctionProperties
-     * .getQueryStartClock()} snapshot semantics so date-parts on TIME values yield the current date
-     * rather than the 1970 epoch implied by Arrow's TIME representation.
-     * Other operand types (DATE / TIMESTAMP / VARCHAR) pass through unchanged.
-     */
-    static final class ExtractAdapter extends AbstractNameMappingAdapter {
-
-        /** Units that need a date context; pure time-parts (HOUR/MINUTE/...) are absent. */
-        private static final Set<String> DATE_PART_UNITS = Set.of(
-            "YEAR",
-            "MONTH",
-            "DAY",
-            "WEEK",
-            "QUARTER",
-            "DOW",
-            "DOY",
-            "YEAR_MONTH",
-            "DAY_HOUR",
-            "DAY_MINUTE",
-            "DAY_SECOND",
-            "DAY_MICROSECOND"
-        );
-
-        ExtractAdapter() {
-            super(LOCAL_EXTRACT_OP, List.of(), List.of());
-        }
-
-        @Override
-        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
-            RexCall toAdapt = isTimeValueOperand(original) ? rewriteTimeOperand(original, cluster) : original;
-            return super.adapt(toAdapt, fieldStorage, cluster);
-        }
-
-        private static boolean isTimeValueOperand(RexCall call) {
-            return call.getOperands().size() == 2 && call.getOperands().get(1).getType().getSqlTypeName() == SqlTypeName.TIME;
-        }
-
-        /**
-         * Builds the rewritten call for a TIME value operand. For date-part units, prepends today's
-         * UTC date to the time string so Rust parses it as a full timestamp; otherwise just casts
-         * TIME→VARCHAR.
-         */
-        private static RexCall rewriteTimeOperand(RexCall original, RelOptCluster cluster) {
-            RexBuilder rexBuilder = cluster.getRexBuilder();
-            RexNode unit = original.getOperands().get(0);
-            RexNode value = original.getOperands().get(1);
-            RelDataType varcharType = rexBuilder.getTypeFactory()
-                .createTypeWithNullability(rexBuilder.getTypeFactory().createSqlType(SqlTypeName.VARCHAR), value.getType().isNullable());
-            RexNode timeAsVarchar = rexBuilder.makeCast(varcharType, value);
-            RexNode rewrittenValue = needsDateContext(unit) ? prependTodayLiteral(rexBuilder, varcharType, timeAsVarchar) : timeAsVarchar;
-            return (RexCall) rexBuilder.makeCall(original.getType(), original.getOperator(), List.of(unit, rewrittenValue));
-        }
-
-        /** True if the unit is a literal naming a date-part (the only case we can specialize). */
-        private static boolean needsDateContext(RexNode unit) {
-            if (!(unit instanceof RexLiteral)) {
-                return false;
-            }
-            Object raw = ((RexLiteral) unit).getValue2();
-            return raw != null && DATE_PART_UNITS.contains(raw.toString().toUpperCase(Locale.ROOT));
-        }
-
-        /** Returns {@code "<today> " || cast(time as varchar)}; today snapshotted at plan time. */
-        private static RexNode prependTodayLiteral(RexBuilder rexBuilder, RelDataType varcharType, RexNode timeAsVarchar) {
-            String todayPrefix = LocalDate.now(ZoneOffset.UTC).toString() + " ";
-            RelDataType nonNullVarchar = rexBuilder.getTypeFactory().createSqlType(SqlTypeName.VARCHAR);
-            RexNode prefix = rexBuilder.makeLiteral(todayPrefix, nonNullVarchar, false);
-            return rexBuilder.makeCall(varcharType, SqlStdOperatorTable.CONCAT, List.of(prefix, timeAsVarchar));
-        }
-    }
-
-    static final class DateFormatAdapter extends AbstractNameMappingAdapter {
-        DateFormatAdapter() {
-            super(LOCAL_DATE_FORMAT_OP, List.of(), List.of());
-        }
-
-        @Override
-        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
-            validateFirstArgIfStringLiteral(original, DatetimeLiteralValidator.Kind.TIMESTAMP);
-            return super.adapt(original, fieldStorage, cluster);
-        }
-    }
-
-    // DAYNAME(x) → date_format(x, '%W'). %W renders full weekday name (e.g. "Monday")
-    // via mysql_format::weekday_full — matches legacy PPL DAYNAME semantics.
-    static final class DaynameAdapter extends AbstractNameMappingAdapter {
-        DaynameAdapter() {
-            super(LOCAL_DATE_FORMAT_OP, List.of(), List.of("%W"));
-        }
-
-        @Override
-        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
-            validateFirstArgIfStringLiteral(original, DatetimeLiteralValidator.Kind.TIMESTAMP);
-            return super.adapt(original, fieldStorage, cluster);
-        }
-    }
-
-    // MONTHNAME(x) → date_format(x, '%M'). %M renders full month name (e.g. "September").
-    static final class MonthnameAdapter extends AbstractNameMappingAdapter {
-        MonthnameAdapter() {
-            super(LOCAL_DATE_FORMAT_OP, List.of(), List.of("%M"));
-        }
-
-        @Override
-        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
-            validateFirstArgIfStringLiteral(original, DatetimeLiteralValidator.Kind.TIMESTAMP);
-            return super.adapt(original, fieldStorage, cluster);
-        }
-    }
-
-    static final class TimeFormatAdapter extends AbstractNameMappingAdapter {
-        TimeFormatAdapter() {
-            super(LOCAL_TIME_FORMAT_OP, List.of(), List.of());
-        }
-
-        @Override
-        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
-            validateFirstArgIfStringLiteral(original, DatetimeLiteralValidator.Kind.TIMESTAMP);
-            // Calcite-stock TIME serialises to substrait precision_time<P>, which has no yaml
-            // signature (substrait-java 0.89.1 lacks ToTypeString for PrecisionTime, so the yaml
             // can't even declare one). Anchor a TIME first operand to a TIMESTAMP via the shared
-            // coercion path so isthmus binds the precision_timestamp<P> arm — same workaround
-            // DatePartAdapters uses for hour/minute/second.
-            if (!original.getOperands().isEmpty() && original.getOperands().get(0).getType().getSqlTypeName() == SqlTypeName.TIME) {
-                RexBuilder rexBuilder = cluster.getRexBuilder();
-                List<RexNode> coerced = new java.util.ArrayList<>(original.getOperands().size());
-                coerced.add(DatePartAdapters.coerceCharacterOperandToTimestamp(original.getOperands().get(0), cluster));
-                for (int i = 1; i < original.getOperands().size(); i++) {
-                    coerced.add(original.getOperands().get(i));
-                }
-                return rexBuilder.makeCall(original.getType(), LOCAL_TIME_FORMAT_OP, coerced);
-            }
-            return super.adapt(original, fieldStorage, cluster);
-        }
     }
-
-    /** PPL str_to_date returns NULL on parse failure; invalid month/day values still need to error rather than silent-null. */
-    static final class StrToDateAdapter extends AbstractNameMappingAdapter {
-        StrToDateAdapter() {
+        /** True if the unit is a literal naming a date-part (the only case we can specialize). */
+    static final class MaketimeAdapter extends NumericToDoubleAdapter {
+import org.apache.calcite.rex.RexBuilder;
+package org.opensearch.be.datafusion;
+            RexBuilder rexBuilder = cluster.getRexBuilder();
+    static final class OsYearweekAdapter extends AbstractNameMappingAdapter {
+        DatetimeLiteralValidator.validate(firstArg, kind);
+import org.apache.calcite.sql.SqlFunctionCategory;
+            RexNode unit = original.getOperands().get(0);
+/*
+            }
+    }
+            RexNode ts = rexBuilder.makeCall(tsType, LOCAL_FROM_UNIXTIME_OP, List.of(epoch));
+    private static SqlOperator udf(String name, SqlReturnTypeInference ret, SqlOperandTypeChecker operands) {
+        FromUnixtimeAdapter() {
+        }
+            "QUARTER",
+    static final class FromUnixtimeAdapter extends NumericToDoubleAdapter {
+    static final class MakedateAdapter extends NumericToDoubleAdapter {
+import org.apache.calcite.rex.RexLiteral;
+        @Override
+    /**
+        }
+                return super.adapt(original, fieldStorage, cluster);
+        );
             super(LOCAL_STR_TO_DATE_OP, List.of(), List.of());
         }
-
-        @Override
-        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
-            rejectOutOfRangeMonthOrDay(original);
             return super.adapt(original, fieldStorage, cluster);
+        OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ANY, SqlTypeFamily.ANY)
+        java.util.regex.Matcher valMatcher = VALUE_NUMBER.matcher(value);
+            RexNode value = original.getOperands().get(1);
+        MaketimeAdapter() {
+     * rather than the 1970 epoch implied by Arrow's TIME representation.
+            RelDataType nonNullVarchar = rexBuilder.getTypeFactory().createSqlType(SqlTypeName.VARCHAR);
+                coerced.add(original.getOperands().get(i));
+     * UTC date at plan time before the VARCHAR cast — matches SQL plugin's {@code FunctionProperties
+                coerced.add(DatePartAdapters.coerceCharacterOperandToTimestamp(original.getOperands().get(0), cluster));
+    );
+            RexNode timeAsVarchar = rexBuilder.makeCast(varcharType, value);
+            RexCall toAdapt = isTimeValueOperand(original) ? rewriteTimeOperand(original, cluster) : original;
+                List<RexNode> coerced = new java.util.ArrayList<>(original.getOperands().size());
+ *
+    // MONTHNAME(x) → date_format(x, '%M'). %M renders full month name (e.g. "September").
+            if (original.getOperands().size() != 2) {
+                throw outOfRange("day", n, 1, 31, value, format);
+            super(LOCAL_MAKETIME_OP);
+            for (int i = 1; i < original.getOperands().size(); i++) {
+        "maketime",
+        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
+        StrToDateAdapter() {
+            RelDataType tsType = rexBuilder.getTypeFactory()
+        if (original.getOperands().isEmpty()) {
+ * Substrait sigs live in {@code opensearch_scalar_functions.yaml} +
+     * {@link DatePartAdapters#coerceCharacterOperandToTimestamp} helper (handling character/TIME forms
+import java.util.Set;
+            return;
+    static final SqlOperator LOCAL_FROM_UNIXTIME_OP = udf("from_unixtime", ReturnTypes.TIMESTAMP_NULLABLE, OperandTypes.ANY);
+ * compatible open source license.
+            super(LOCAL_DATE_FORMAT_OP, List.of(), List.of("%W"));
+        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
+    static final class TimeFormatAdapter extends AbstractNameMappingAdapter {
+    }
+    // via mysql_format::weekday_full — matches legacy PPL DAYNAME semantics.
+    private static IllegalArgumentException outOfRange(String component, int n, int lo, int hi, String value, String format) {
+    /**
+                for (int i = 1; i < original.getOperands().size(); i++) {
+        }
+        @Override
+     * <p>For TIME(p) operands, CASTs to VARCHAR so the call binds to the {@code (string, string)}
+        }
+            return call.getOperands().size() == 2 && call.getOperands().get(1).getType().getSqlTypeName() == SqlTypeName.TIME;
+        if (value == null || format == null) {
+        }
+        }
+            )
+        }
+ */
+        }
+        OsYearweekAdapter() {
+            if (!original.getOperands().isEmpty() && original.getOperands().get(0).getType().getSqlTypeName() == SqlTypeName.TIME) {
+     * Adapter for PPL {@code extract(<unit> FROM <expr>)}.
+    static final SqlOperator LOCAL_MAKEDATE_OP = udf("makedate", ReturnTypes.DATE_NULLABLE, OperandTypes.ANY_ANY);
+import org.opensearch.analytics.spi.FieldStorageInfo;
+     * with MySQL year-boundary semantics). The first operand is coerced to TIMESTAMP via the shared
+            RexNode prefix = rexBuilder.makeLiteral(todayPrefix, nonNullVarchar, false);
+            String token = fmtMatcher.group();
+            }
+            rejectOutOfRangeMonthOrDay(original);
+        DateFormatAdapter() {
+import org.apache.calcite.rex.RexCall;
+            return super.adapt(original, fieldStorage, cluster);
+        ReturnTypes.TIME_NULLABLE,
+    /**
+            if (("%d".equals(token) || "%e".equals(token)) && (n < 1 || n > 31)) {
+            super(LOCAL_OS_WEEK_OP, List.of(), List.of());
+                    coerced.add(original.getOperands().get(i));
+    }
+        }
+            }
+    }
         }
     }
-
-    private static void validateFirstArgIfStringLiteral(RexCall original, DatetimeLiteralValidator.Kind kind) {
-        if (original.getOperands().isEmpty()) {
-            return;
+        DaynameAdapter() {
+    static final class StrToDateAdapter extends AbstractNameMappingAdapter {
+            String.format(
+        OsWeekAdapter() {
+            }
+        while (fmtMatcher.find() && valMatcher.find()) {
+    static final SqlOperator LOCAL_TIME_FORMAT_OP = udf("time_format", ReturnTypes.VARCHAR_NULLABLE, OperandTypes.ANY_ANY);
+        private static final Set<String> DATE_PART_UNITS = Set.of(
+                continue;
+        private static RexCall rewriteTimeOperand(RexCall original, RelOptCluster cluster) {
+            if (original.getOperands().isEmpty()) {
+ * {@link DataFusionFragmentConvertor#ADDITIONAL_SCALAR_SIGS}.
+            for (int i = 1; i < originalOperands.size(); i++) {
+        @Override
+        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
+            return super.adapt(original, fieldStorage, cluster);
+ * @opensearch.internal
+    static final class ExtractAdapter extends AbstractNameMappingAdapter {
+     * PPL {@code YEARWEEK(date[, mode])} — routes to the {@code os_yearweek} Rust UDF (year*100+week
+        );
+            List<RexNode> coerced = new java.util.ArrayList<>(originalOperands.size());
+        MakedateAdapter() {
+            }
+    static final SqlOperator LOCAL_MAKETIME_OP = udf(
+        }
+            RexNode format = original.getOperands().get(1);
+        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
+            return raw != null && DATE_PART_UNITS.contains(raw.toString().toUpperCase(Locale.ROOT));
+                n = Integer.parseInt(valMatcher.group());
+            "DOW",
+import org.apache.calcite.sql.type.SqlOperandTypeChecker;
+        MonthnameAdapter() {
+                coerced.add(originalOperands.get(i));
+                    originalOperands.get(0).getType().isNullable()
+        @Override
+    }
+import org.apache.calcite.sql.type.OperandTypes;
+ * names a Calcite {@link SqlFunction} matching a UDF in {@code rust/src/udf/mod.rs};
         }
         RexNode firstArg = original.getOperands().get(0);
-        if (!SqlTypeFamily.CHARACTER.contains(firstArg.getType())) {
-            return;
-        }
-        DatetimeLiteralValidator.validate(firstArg, kind);
-    }
-
-    private static final java.util.regex.Pattern FORMAT_TOKEN = java.util.regex.Pattern.compile("%[a-zA-Z]");
+ */
     private static final java.util.regex.Pattern VALUE_NUMBER = java.util.regex.Pattern.compile("\\d+");
-
-    /** Mirrors legacy DateTimeFormatterUtil: reject %m/%c values outside 1..12 and %d/%e values outside 1..31. */
-    private static void rejectOutOfRangeMonthOrDay(RexCall original) {
-        if (original.getOperands().size() != 2) {
-            return;
-        }
-        if (!(original.getOperands().get(0) instanceof RexLiteral valueLit)
-            || !(original.getOperands().get(1) instanceof RexLiteral fmtLit)) {
-            return;
-        }
-        String value = valueLit.getValueAs(String.class);
-        String format = fmtLit.getValueAs(String.class);
-        if (value == null || format == null) {
-            return;
-        }
-        java.util.regex.Matcher fmtMatcher = FORMAT_TOKEN.matcher(format);
-        java.util.regex.Matcher valMatcher = VALUE_NUMBER.matcher(value);
-        while (fmtMatcher.find() && valMatcher.find()) {
-            String token = fmtMatcher.group();
-            int n;
-            try {
-                n = Integer.parseInt(valMatcher.group());
-            } catch (NumberFormatException ignored) {
-                continue;
-            }
-            if (("%m".equals(token) || "%c".equals(token)) && (n < 1 || n > 12)) {
-                throw outOfRange("month", n, 1, 12, value, format);
-            }
-            if (("%d".equals(token) || "%e".equals(token)) && (n < 1 || n > 31)) {
-                throw outOfRange("day", n, 1, 31, value, format);
-            }
-        }
-    }
-
-    private static IllegalArgumentException outOfRange(String component, int n, int lo, int hi, String value, String format) {
-        return new IllegalArgumentException(
-            String.format(
-                Locale.ROOT,
-                "%s value %d is out of range (%d..%d) in str_to_date('%s', '%s')",
-                component,
-                n,
-                lo,
                 hi,
-                value,
-                format
-            )
-        );
-    }
-
-    /**
-     * Rewrites WEEK(date [, mode]) to os_week(...). String operands cast to TIMESTAMP because the
-     * substrait resolver rejects VARCHAR for the YAML date/timestamp impls.
-     */
+        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.plan.RelOptCluster;
+            Object raw = ((RexLiteral) unit).getValue2();
+import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SqlReturnTypeInference;
+        private static boolean needsDateContext(RexNode unit) {
     static final class OsWeekAdapter extends AbstractNameMappingAdapter {
-        OsWeekAdapter() {
-            super(LOCAL_OS_WEEK_OP, List.of(), List.of());
         }
-
-        @Override
         public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
-            List<RexNode> originalOperands = original.getOperands();
-            if (originalOperands.isEmpty() || !SqlTypeFamily.CHARACTER.contains(originalOperands.get(0).getType())) {
-                return super.adapt(original, fieldStorage, cluster);
-            }
-            RexBuilder rexBuilder = cluster.getRexBuilder();
             DatePartAdapters.validateDatetimeLiteral(originalOperands.get(0));
+                return false;
+            validateFirstArgIfStringLiteral(original, DatetimeLiteralValidator.Kind.TIMESTAMP);
+            }
+            "DAY_SECOND",
+        }
             RelDataType timestampType = rexBuilder.getTypeFactory()
-                .createTypeWithNullability(
-                    rexBuilder.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP),
-                    originalOperands.get(0).getType().isNullable()
-                );
-            List<RexNode> coerced = new java.util.ArrayList<>(originalOperands.size());
-            coerced.add(rexBuilder.makeCast(timestampType, originalOperands.get(0)));
-            for (int i = 1; i < originalOperands.size(); i++) {
-                coerced.add(originalOperands.get(i));
             }
-            return rexBuilder.makeCall(original.getType(), LOCAL_OS_WEEK_OP, coerced);
-        }
-    }
-
-    /**
-     * PPL {@code YEARWEEK(date[, mode])} — routes to the {@code os_yearweek} Rust UDF (year*100+week
-     * with MySQL year-boundary semantics). The first operand is coerced to TIMESTAMP via the shared
-     * {@link DatePartAdapters#coerceCharacterOperandToTimestamp} helper (handling character/TIME forms
+            return rexBuilder.makeCall(varcharType, SqlStdOperatorTable.CONCAT, List.of(prefix, timeAsVarchar));
+            return super.adapt(toAdapt, fieldStorage, cluster);
+    static final SqlOperator LOCAL_DATE_FORMAT_OP = udf("date_format", ReturnTypes.VARCHAR_NULLABLE, OperandTypes.ANY_ANY);
+            RexBuilder rexBuilder = cluster.getRexBuilder();
      * the same way {@code WEEKDAY}/{@code os_week} do) so it binds the yaml {@code precision_timestamp<P>}
-     * signature; an optional {@code mode} operand passes through unchanged.
-     */
-    static final class OsYearweekAdapter extends AbstractNameMappingAdapter {
-        OsYearweekAdapter() {
-            super(LOCAL_OS_YEARWEEK_OP, List.of(), List.of());
-        }
-
-        @Override
-        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
-            if (original.getOperands().isEmpty()) {
                 return super.adapt(original, fieldStorage, cluster);
             }
-            RexBuilder rexBuilder = cluster.getRexBuilder();
-            List<RexNode> coerced = new java.util.ArrayList<>(original.getOperands().size());
-            coerced.add(DatePartAdapters.coerceCharacterOperandToTimestamp(original.getOperands().get(0), cluster));
-            for (int i = 1; i < original.getOperands().size(); i++) {
-                coerced.add(original.getOperands().get(i));
-            }
-            return rexBuilder.makeCall(original.getType(), LOCAL_OS_YEARWEEK_OP, coerced);
+    /** YEARWEEK(date [, mode]) target — routes to the Rust {@code os_yearweek} UDF. */
+        /** Returns {@code "<today> " || cast(time as varchar)}; today snapshotted at plan time. */
+            String todayPrefix = LocalDate.now(ZoneOffset.UTC).toString() + " ";
         }
+        }
+    static final SqlOperator LOCAL_OS_WEEK_OP = udf("os_week", ReturnTypes.INTEGER_NULLABLE, OperandTypes.VARIADIC);
+ *
+import java.time.LocalDate;
+     * yaml overload — substrait-java 0.89.1 can't emit a {@code precision_time<P>} signature.
     }
-
-    /** PPL FROM_UNIXTIME(epoch [, format]); 2-arg → date_format(from_unixtime(epoch), format). */
-    static final class FromUnixtimeAdapter extends NumericToDoubleAdapter {
-        FromUnixtimeAdapter() {
-            super(LOCAL_FROM_UNIXTIME_OP);
+            // coercion path so isthmus binds the precision_timestamp<P> arm — same workaround
+                value,
+            return;
+     * .getQueryStartClock()} snapshot semantics so date-parts on TIME values yield the current date
+    static final class MonthnameAdapter extends AbstractNameMappingAdapter {
+import java.util.Locale;
+            "YEAR",
         }
-
-        @Override
-        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
-            if (original.getOperands().size() != 2) {
-                return super.adapt(original, fieldStorage, cluster);
-            }
-            RexBuilder rexBuilder = cluster.getRexBuilder();
+            // Calcite-stock TIME serialises to substrait precision_time<P>, which has no yaml
+import org.apache.calcite.sql.type.SqlTypeFamily;
+        }
+            "DAY_HOUR",
+        if (original.getOperands().size() != 2) {
             RexNode epoch = NumericToDoubleAdapter.widenToDoubleIfNumeric(original.getOperands().get(0), cluster);
-            RexNode format = original.getOperands().get(1);
-            RelDataType tsType = rexBuilder.getTypeFactory()
+    /** PPL str_to_date returns NULL on parse failure; invalid month/day values still need to error rather than silent-null. */
+        @Override
+                format
+        if (!SqlTypeFamily.CHARACTER.contains(firstArg.getType())) {
+    static final class DaynameAdapter extends AbstractNameMappingAdapter {
+        @Override
+/**
+                );
+            super(LOCAL_FROM_UNIXTIME_OP);
+    /** Mirrors legacy DateTimeFormatterUtil: reject %m/%c values outside 1..12 and %d/%e values outside 1..31. */
+    }
+            coerced.add(DatePartAdapters.coerceCharacterOperandToTimestamp(original.getOperands().get(0), cluster));
+            try {
+                component,
+        ExtractAdapter() {
+            RelDataType varcharType = rexBuilder.getTypeFactory()
+        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
+        }
+final class RustUdfDateTimeAdapters {
+            return;
+            return super.adapt(original, fieldStorage, cluster);
+            "MONTH",
+            RexNode rewrittenValue = needsDateContext(unit) ? prependTodayLiteral(rexBuilder, varcharType, timeAsVarchar) : timeAsVarchar;
+            }
+            coerced.add(rexBuilder.makeCast(timestampType, originalOperands.get(0)));
+                RexBuilder rexBuilder = cluster.getRexBuilder();
+                throw outOfRange("month", n, 1, 12, value, format);
+            RexBuilder rexBuilder = cluster.getRexBuilder();
+            if (originalOperands.isEmpty() || !SqlTypeFamily.CHARACTER.contains(originalOperands.get(0).getType())) {
+    // DAYNAME(x) → date_format(x, '%W'). %W renders full weekday name (e.g. "Monday")
+    }
+            "YEAR_MONTH",
+            if (("%m".equals(token) || "%c".equals(token)) && (n < 1 || n > 12)) {
+import java.time.ZoneOffset;
+    /** WEEK(date [, mode]) target — MySQL semantics, accepts 1- and 2-arg forms. */
+                .createTypeWithNullability(rexBuilder.getTypeFactory().createSqlType(SqlTypeName.VARCHAR), value.getType().isNullable());
+            // DatePartAdapters uses for hour/minute/second.
+                }
+            super(LOCAL_DATE_FORMAT_OP, List.of(), List.of());
+                "%s value %d is out of range (%d..%d) in str_to_date('%s', '%s')",
+        TimeFormatAdapter() {
+            "DAY_MICROSECOND"
                 .createTypeWithNullability(rexBuilder.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP), true);
-            RexNode ts = rexBuilder.makeCall(tsType, LOCAL_FROM_UNIXTIME_OP, List.of(epoch));
+            super(LOCAL_OS_YEARWEEK_OP, List.of(), List.of());
+        @Override
+        @Override
+     * substrait resolver rejects VARCHAR for the YAML date/timestamp impls.
+        private static boolean isTimeValueOperand(RexCall call) {
+        /**
+    static final SqlOperator LOCAL_OS_YEARWEEK_OP = udf("os_yearweek", ReturnTypes.INTEGER_NULLABLE, OperandTypes.VARIADIC);
+        /** Units that need a date context; pure time-parts (HOUR/MINUTE/...) are absent. */
+        java.util.regex.Matcher fmtMatcher = FORMAT_TOKEN.matcher(format);
+import org.apache.calcite.sql.SqlKind;
+        }
+                n,
+     */
+        }
+         */
+ * SPDX-License-Identifier: Apache-2.0
+    /** PPL FROM_UNIXTIME(epoch [, format]); 2-arg → date_format(from_unixtime(epoch), format). */
+        @Override
+            super(LOCAL_EXTRACT_OP, List.of(), List.of());
+    private RustUdfDateTimeAdapters() {}
+     * Other operand types (DATE / TIMESTAMP / VARCHAR) pass through unchanged.
+import org.apache.calcite.sql.SqlOperator;
+            "WEEK",
+            validateFirstArgIfStringLiteral(original, DatetimeLiteralValidator.Kind.TIMESTAMP);
+import org.apache.calcite.sql.type.SqlTypeName;
+        return new SqlFunction(name, SqlKind.OTHER_FUNCTION, ret, null, operands, SqlFunctionCategory.TIMEDATE);
+            "DAY_MINUTE",
+}
+            "DOY",
+        String format = fmtLit.getValueAs(String.class);
+            int n;
+    }
+            // signature (substrait-java 0.89.1 lacks ToTypeString for PrecisionTime, so the yaml
+import org.apache.calcite.rex.RexNode;
+            if (!(unit instanceof RexLiteral)) {
+        if (!(original.getOperands().get(0) instanceof RexLiteral valueLit)
+        return new IllegalArgumentException(
+        private static RexNode prependTodayLiteral(RexBuilder rexBuilder, RelDataType varcharType, RexNode timeAsVarchar) {
+import java.util.List;
+     */
+ * Adapters for PPL datetime functions routed to Rust UDFs. Each {@code LOCAL_*_OP}
+            return super.adapt(original, fieldStorage, cluster);
+            || !(original.getOperands().get(1) instanceof RexLiteral fmtLit)) {
+            List<RexNode> originalOperands = original.getOperands();
+        }
+                return rexBuilder.makeCall(original.getType(), LOCAL_TIME_FORMAT_OP, coerced);
+                return super.adapt(original, fieldStorage, cluster);
+            RexBuilder rexBuilder = cluster.getRexBuilder();
+            return rexBuilder.makeCall(original.getType(), LOCAL_OS_YEARWEEK_OP, coerced);
+         * UTC date to the time string so Rust parses it as a full timestamp; otherwise just casts
+     * Rewrites WEEK(date [, mode]) to os_week(...). String operands cast to TIMESTAMP because the
+    }
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+ * this file be licensed under the Apache-2.0 license or a
+     */
+        }
+import org.opensearch.analytics.spi.AbstractNameMappingAdapter;
+            return (RexCall) rexBuilder.makeCall(original.getType(), original.getOperator(), List.of(unit, rewrittenValue));
+            super(LOCAL_DATE_FORMAT_OP, List.of(), List.of("%M"));
+        String value = valueLit.getValueAs(String.class);
+    static final SqlOperator LOCAL_EXTRACT_OP = udf("opensearch_extract", ReturnTypes.BIGINT_NULLABLE, OperandTypes.ANY_ANY);
+            return;
+                lo,
+         * TIME→VARCHAR.
             return rexBuilder.makeCall(original.getType(), LOCAL_DATE_FORMAT_OP, List.of(ts, format));
         }
-    }
-
-    static final class MaketimeAdapter extends NumericToDoubleAdapter {
-        MaketimeAdapter() {
-            super(LOCAL_MAKETIME_OP);
+            return rexBuilder.makeCall(original.getType(), LOCAL_OS_WEEK_OP, coerced);
+     * <p>When the unit is a known date-part (YEAR/MONTH/DAY/...), the value is anchored to today's
         }
+        }
+     * signature; an optional {@code mode} operand passes through unchanged.
+            validateFirstArgIfStringLiteral(original, DatetimeLiteralValidator.Kind.TIMESTAMP);
+import org.apache.calcite.sql.SqlFunction;
+            } catch (NumberFormatException ignored) {
+        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
+         * Builds the rewritten call for a TIME value operand. For date-part units, prepends today's
+            }
+    static final class DateFormatAdapter extends AbstractNameMappingAdapter {
+        }
+        public RexNode adapt(RexCall original, List<FieldStorageInfo> fieldStorage, RelOptCluster cluster) {
+        }
+    static final SqlOperator LOCAL_STR_TO_DATE_OP = udf("str_to_date", ReturnTypes.TIMESTAMP_NULLABLE, OperandTypes.ANY_ANY);
     }
-
-    static final class MakedateAdapter extends NumericToDoubleAdapter {
-        MakedateAdapter() {
+    }
+    private static final java.util.regex.Pattern FORMAT_TOKEN = java.util.regex.Pattern.compile("%[a-zA-Z]");
+            super(LOCAL_TIME_FORMAT_OP, List.of(), List.of());
+            "DAY",
+                Locale.ROOT,
             super(LOCAL_MAKEDATE_OP);
-        }
+    private static void validateFirstArgIfStringLiteral(RexCall original, DatetimeLiteralValidator.Kind kind) {
+            return;
+            List<RexNode> coerced = new java.util.ArrayList<>(original.getOperands().size());
+            validateFirstArgIfStringLiteral(original, DatetimeLiteralValidator.Kind.TIMESTAMP);
+                .createTypeWithNullability(
     }
-}

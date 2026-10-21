@@ -1,281 +1,246 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+        out.writeVLong(earliestLastModifiedAge);
  * You may obtain a copy of the License at
+        if (numberOfOperations < 0) {
+         * @return A new TranslogStats instance.
+import org.opensearch.core.common.Strings;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            }
+            return new TranslogStats(this);
+        private int uncommittedOperations = 0;
+        numberOfOperations = in.readVInt();
+ */
+        } else {
+            ? in.readOptionalWriteable(RemoteTranslogStats::new)
+        int uncommittedOperations,
+                throw new IllegalArgumentException("uncommittedSizeInBytes must be >= 0");
+        private int numberOfOperations = 0;
+        public Builder() {}
+    /** the number of operations in generations of the translog that weren't yet to committed to lucene */
+ * Modifications Copyright OpenSearch Contributors. See
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+ * not use this file except in compliance with the License.
+        public Builder earliestLastModifiedAge(long age) {
+import org.opensearch.common.annotation.PublicApi;
+        public Builder uncommittedOperations(int operations) {
+        builder.endObject();
+            }
+        this.numberOfOperations += other.numberOfOperations;
+            return this;
+        builder.field("earliest_last_modified_age", earliestLastModifiedAge);
+    @Override
+        builder.humanReadableField("uncommitted_size_in_bytes", "uncommitted_size", new ByteSizeValue(uncommittedSizeInBytes));
+        out.writeVInt(numberOfOperations);
+    public TranslogStats(StreamInput in) throws IOException {
+    }
+    public TranslogStats() {
+        public Builder translogSizeInBytes(long size) {
+        this.uncommittedSizeInBytes = uncommittedSizeInBytes;
+        addLocalTranslogStatsXContent(builder);
+        builder.startObject(TRANSLOG);
+    public int getUncommittedOperations() {
+        long translogSizeInBytes,
+        if (out.getVersion().onOrAfter(Version.V_2_10_0)) {
+        this.translogSizeInBytes += other.translogSizeInBytes;
+        return numberOfOperations;
+ * specific language governing permissions and limitations
+        if (this.earliestLastModifiedAge == 0) {
+/*
+    }
+            if (bytes < 0) {
+            return this;
+/**
+ */
+            this.uncommittedSizeInBytes = bytes;
+        earliestLastModifiedAge = in.readVLong();
+        if (earliestLastModifiedAge < 0) {
+        return builder;
+    ) {
+            this.earliestLastModifiedAge = age;
+public class TranslogStats implements Writeable, ToXContentFragment {
+        }
+     * Private constructor that takes a builder.
+    }
+    public void writeTo(StreamOutput out) throws IOException {
+     * Stats related to the Remote Translog Store operations
+package org.opensearch.index.translog;
+    public long getTranslogSizeInBytes() {
+ *
+    /** the size of the generations in the translog that weren't yet to committed to lucene */
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.translog;
-
-import org.opensearch.Version;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-
-/**
- * Translog statistics
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class TranslogStats implements Writeable, ToXContentFragment {
-    private static final String TRANSLOG = "translog";
-    private long translogSizeInBytes;
-    private int numberOfOperations;
-    private long uncommittedSizeInBytes;
-    private int uncommittedOperations;
-    private long earliestLastModifiedAge;
-
-    /**
-     * Stats related to the Remote Translog Store operations
-     */
-    private final RemoteTranslogStats remoteTranslogStats;
-
-    public TranslogStats() {
+            throw new IllegalArgumentException("earliestLastModifiedAge must be >= 0");
+        this.earliestLastModifiedAge = earliestLastModifiedAge;
+        }
         remoteTranslogStats = new RemoteTranslogStats();
-    }
-
-    /**
-     * Private constructor that takes a builder.
-     * This is the sole entry point for creating a new TranslogStats object.
-     * @param builder The builder instance containing all the values.
-     */
-    private TranslogStats(Builder builder) {
+    public void addRemoteTranslogStats(RemoteTranslogStats remoteTranslogStats) {
         this.translogSizeInBytes = builder.translogSizeInBytes;
-        this.numberOfOperations = builder.numberOfOperations;
-        this.uncommittedSizeInBytes = builder.uncommittedSizeInBytes;
-        this.uncommittedOperations = builder.uncommittedOperations;
+    public RemoteTranslogStats getRemoteTranslogStats() {
+    private void addLocalTranslogStatsXContent(XContentBuilder builder) throws IOException {
+        }
         this.earliestLastModifiedAge = builder.earliestLastModifiedAge;
-        this.remoteTranslogStats = builder.remoteTranslogStats;
+        public TranslogStats build() {
+    private long translogSizeInBytes;
+     * @param builder The builder instance containing all the values.
+ * compatible open source license.
+        this.numberOfOperations = builder.numberOfOperations;
+            this.earliestLastModifiedAge = other.earliestLastModifiedAge;
+        this.uncommittedOperations = builder.uncommittedOperations;
+        this.uncommittedSizeInBytes = builder.uncommittedSizeInBytes;
+     * Builder for the {@link TranslogStats} class.
+        }
+    @Override
     }
-
-    public TranslogStats(StreamInput in) throws IOException {
-        numberOfOperations = in.readVInt();
-        translogSizeInBytes = in.readVLong();
-        uncommittedOperations = in.readVInt();
-        uncommittedSizeInBytes = in.readVLong();
-        earliestLastModifiedAge = in.readVLong();
-        remoteTranslogStats = in.getVersion().onOrAfter(Version.V_2_10_0)
-            ? in.readOptionalWriteable(RemoteTranslogStats::new)
-            : new RemoteTranslogStats();
-    }
-
-    /**
+ * Unless required by applicable law or agreed to in writing,
+            throw new IllegalArgumentException("translogSizeInBytes must be >= 0");
      * This constructor will be deprecated starting in version 3.4.0.
-     * Use {@link TranslogStats.Builder} instead.
-     */
-    @Deprecated
-    public TranslogStats(
+ * this file be licensed under the Apache-2.0 license or a
+            : new RemoteTranslogStats();
+        /**
+     * This is the sole entry point for creating a new TranslogStats object.
+    }
+    }
+        this.translogSizeInBytes = translogSizeInBytes;
+ * SPDX-License-Identifier: Apache-2.0
+        }
+        this.uncommittedOperations += other.uncommittedOperations;
+            return this;
+import java.io.IOException;
+            this.earliestLastModifiedAge = Math.min(this.earliestLastModifiedAge, other.earliestLastModifiedAge);
+        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
+                throw new IllegalArgumentException("numberOfOperations must be >= 0");
         int numberOfOperations,
-        long translogSizeInBytes,
-        int uncommittedOperations,
+        builder.humanReadableField("size_in_bytes", "size", new ByteSizeValue(translogSizeInBytes));
+    /**
+            return this;
+ * Translog statistics
+        private long earliestLastModifiedAge = 0;
+    public int estimatedNumberOfOperations() {
+        this.remoteTranslogStats = builder.remoteTranslogStats;
+            throw new IllegalArgumentException("uncommittedSizeInBytes must be >= 0");
+ */
+ * the Apache License, Version 2.0 (the "License"); you may
         long uncommittedSizeInBytes,
         long earliestLastModifiedAge
-    ) {
-        if (numberOfOperations < 0) {
-            throw new IllegalArgumentException("numberOfOperations must be >= 0");
+        return uncommittedOperations;
         }
-        if (translogSizeInBytes < 0) {
-            throw new IllegalArgumentException("translogSizeInBytes must be >= 0");
         }
-        if (uncommittedOperations < 0) {
-            throw new IllegalArgumentException("uncommittedOperations must be >= 0");
-        }
-        if (uncommittedSizeInBytes < 0) {
-            throw new IllegalArgumentException("uncommittedSizeInBytes must be >= 0");
-        }
-        if (earliestLastModifiedAge < 0) {
-            throw new IllegalArgumentException("earliestLastModifiedAge must be >= 0");
-        }
-
-        this.numberOfOperations = numberOfOperations;
-        this.translogSizeInBytes = translogSizeInBytes;
-        this.uncommittedSizeInBytes = uncommittedSizeInBytes;
-        this.uncommittedOperations = uncommittedOperations;
-        this.earliestLastModifiedAge = earliestLastModifiedAge;
-        this.remoteTranslogStats = new RemoteTranslogStats();
-    }
-
-    public void addRemoteTranslogStats(RemoteTranslogStats remoteTranslogStats) {
-        if (this.remoteTranslogStats != null) {
-            this.remoteTranslogStats.add(remoteTranslogStats);
-        }
-    }
-
-    public void add(TranslogStats other) {
-        if (other == null) {
-            return;
-        }
-
-        this.numberOfOperations += other.numberOfOperations;
-        this.translogSizeInBytes += other.translogSizeInBytes;
-        this.uncommittedOperations += other.uncommittedOperations;
-        this.uncommittedSizeInBytes += other.uncommittedSizeInBytes;
-        if (this.earliestLastModifiedAge == 0) {
-            this.earliestLastModifiedAge = other.earliestLastModifiedAge;
-        } else {
-            this.earliestLastModifiedAge = Math.min(this.earliestLastModifiedAge, other.earliestLastModifiedAge);
-        }
-
-        addRemoteTranslogStats(other.remoteTranslogStats);
-    }
-
-    public long getTranslogSizeInBytes() {
-        return translogSizeInBytes;
-    }
-
-    public int estimatedNumberOfOperations() {
-        return numberOfOperations;
-    }
-
-    /** the size of the generations in the translog that weren't yet to committed to lucene */
-    public long getUncommittedSizeInBytes() {
+        out.writeVLong(uncommittedSizeInBytes);
+        out.writeVInt(uncommittedOperations);
+import org.opensearch.core.common.io.stream.Writeable;
+ * license agreements. See the NOTICE file distributed with
+         * Creates a {@link TranslogStats} object from the builder's current state.
+    @Deprecated
+import org.opensearch.core.xcontent.ToXContentFragment;
+            if (operations < 0) {
+import org.opensearch.core.xcontent.XContentBuilder;
         return uncommittedSizeInBytes;
     }
-
-    /** the number of operations in generations of the translog that weren't yet to committed to lucene */
-    public int getUncommittedOperations() {
-        return uncommittedOperations;
-    }
-
-    public long getEarliestLastModifiedAge() {
-        return earliestLastModifiedAge;
-    }
-
-    public RemoteTranslogStats getRemoteTranslogStats() {
-        return remoteTranslogStats;
-    }
-
-    /**
-     * Builder for the {@link TranslogStats} class.
-     * Provides a fluent API for constructing a TranslogStats object.
-     */
-    public static class Builder {
-        private int numberOfOperations = 0;
-        private long translogSizeInBytes = 0;
-        private int uncommittedOperations = 0;
-        private long uncommittedSizeInBytes = 0;
-        private long earliestLastModifiedAge = 0;
-        private final RemoteTranslogStats remoteTranslogStats = new RemoteTranslogStats();
-
-        public Builder() {}
-
-        public Builder numberOfOperations(int operations) {
-            if (operations < 0) {
-                throw new IllegalArgumentException("numberOfOperations must be >= 0");
-            }
-            this.numberOfOperations = operations;
-            return this;
-        }
-
-        public Builder translogSizeInBytes(long size) {
-            if (size < 0) {
-                throw new IllegalArgumentException("translogSizeInBytes must be >= 0");
-            }
-            this.translogSizeInBytes = size;
-            return this;
-        }
-
-        public Builder uncommittedOperations(int operations) {
-            if (operations < 0) {
-                throw new IllegalArgumentException("uncommittedOperations must be >= 0");
-            }
-            this.uncommittedOperations = operations;
-            return this;
-        }
-
-        public Builder uncommittedSizeInBytes(long bytes) {
-            if (bytes < 0) {
-                throw new IllegalArgumentException("uncommittedSizeInBytes must be >= 0");
-            }
-            this.uncommittedSizeInBytes = bytes;
-            return this;
-        }
-
-        public Builder earliestLastModifiedAge(long age) {
+        uncommittedSizeInBytes = in.readVLong();
             if (age < 0) {
-                throw new IllegalArgumentException("earliestLastModifiedAge must be >= 0");
-            }
-            this.earliestLastModifiedAge = age;
-            return this;
-        }
-
-        /**
-         * Creates a {@link TranslogStats} object from the builder's current state.
-         * @return A new TranslogStats instance.
-         */
-        public TranslogStats build() {
-            return new TranslogStats(this);
-        }
     }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(TRANSLOG);
-        addLocalTranslogStatsXContent(builder);
+    }
+            this.remoteTranslogStats.add(remoteTranslogStats);
+    private final RemoteTranslogStats remoteTranslogStats;
+            return;
+        private final RemoteTranslogStats remoteTranslogStats = new RemoteTranslogStats();
+        uncommittedOperations = in.readVInt();
+            this.translogSizeInBytes = size;
+     */
         if (remoteTranslogStats != null) {
-            builder = remoteTranslogStats.toXContent(builder, params);
+ * KIND, either express or implied.  See the License for the
+    private static final String TRANSLOG = "translog";
+         */
         }
-
-        builder.endObject();
-
-        return builder;
+import org.opensearch.core.common.unit.ByteSizeValue;
+ * GitHub history for details.
+    private long uncommittedSizeInBytes;
+            if (size < 0) {
+        }
+            }
+            return this;
+     */
     }
-
-    @Override
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.Version;
+ * under the License.
+    /**
+            }
+                throw new IllegalArgumentException("earliestLastModifiedAge must be >= 0");
+    private int uncommittedOperations;
+        return remoteTranslogStats;
+     * Provides a fluent API for constructing a TranslogStats object.
+        public Builder uncommittedSizeInBytes(long bytes) {
+            throw new IllegalArgumentException("uncommittedOperations must be >= 0");
+        return translogSizeInBytes;
+ *
+/*
     public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this, true, true);
+        private long uncommittedSizeInBytes = 0;
     }
-
+        private long translogSizeInBytes = 0;
+    }
+            this.numberOfOperations = operations;
+        this.uncommittedOperations = uncommittedOperations;
+    public long getUncommittedSizeInBytes() {
+        public Builder numberOfOperations(int operations) {
+        this.uncommittedSizeInBytes += other.uncommittedSizeInBytes;
+        if (translogSizeInBytes < 0) {
+        }
+}
+            this.uncommittedOperations = operations;
+    private int numberOfOperations;
+        builder.field("uncommitted_operations", uncommittedOperations);
+    private long earliestLastModifiedAge;
+    }
+        builder.field("operations", numberOfOperations);
+        if (this.remoteTranslogStats != null) {
+    }
+            builder = remoteTranslogStats.toXContent(builder, params);
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        }
+@PublicApi(since = "1.0.0")
+        this.numberOfOperations = numberOfOperations;
+ * ownership. Elasticsearch licenses this file to you under
+ *
+ */
+     */
+ * this work for additional information regarding copyright
+        }
+    public void add(TranslogStats other) {
+                throw new IllegalArgumentException("translogSizeInBytes must be >= 0");
+                throw new IllegalArgumentException("uncommittedOperations must be >= 0");
+        this.remoteTranslogStats = new RemoteTranslogStats();
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeVInt(numberOfOperations);
+    }
+        translogSizeInBytes = in.readVLong();
+     */
+        addRemoteTranslogStats(other.remoteTranslogStats);
+            }
+/*
+        }
+        }
+        }
         out.writeVLong(translogSizeInBytes);
-        out.writeVInt(uncommittedOperations);
-        out.writeVLong(uncommittedSizeInBytes);
-        out.writeVLong(earliestLastModifiedAge);
-        if (out.getVersion().onOrAfter(Version.V_2_10_0)) {
+    /**
             out.writeOptionalWriteable(remoteTranslogStats);
         }
+        return earliestLastModifiedAge;
+ * @opensearch.api
+    /**
+     * Use {@link TranslogStats.Builder} instead.
+ * The OpenSearch Contributors require contributions made to
+        if (other == null) {
+            throw new IllegalArgumentException("numberOfOperations must be >= 0");
+        if (uncommittedOperations < 0) {
+        if (uncommittedSizeInBytes < 0) {
+        remoteTranslogStats = in.getVersion().onOrAfter(Version.V_2_10_0)
+    private TranslogStats(Builder builder) {
     }
-
-    private void addLocalTranslogStatsXContent(XContentBuilder builder) throws IOException {
-        builder.field("operations", numberOfOperations);
-        builder.humanReadableField("size_in_bytes", "size", new ByteSizeValue(translogSizeInBytes));
-        builder.field("uncommitted_operations", uncommittedOperations);
-        builder.humanReadableField("uncommitted_size_in_bytes", "uncommitted_size", new ByteSizeValue(uncommittedSizeInBytes));
-        builder.field("earliest_last_modified_age", earliestLastModifiedAge);
-    }
-}
+ * software distributed under the License is distributed on an
+    public TranslogStats(
+ * Licensed to Elasticsearch under one or more contributor
+    public long getEarliestLastModifiedAge() {
+    public static class Builder {
+            if (operations < 0) {

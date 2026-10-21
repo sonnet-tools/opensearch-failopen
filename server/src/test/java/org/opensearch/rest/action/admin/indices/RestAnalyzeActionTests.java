@@ -1,236 +1,216 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.rest.action.admin.indices;
-
-import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.analysis.NameOrDefinition;
-import org.opensearch.rest.RestRequest;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.client.NoOpNodeClient;
-import org.opensearch.test.rest.FakeRestRequest;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.io.IOException;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.notNullValue;
-
-public class RestAnalyzeActionTests extends OpenSearchTestCase {
-
-    public void testParseXContentForAnalyzeRequest() throws Exception {
-        try (
-            XContentParser content = createParser(
-                XContentFactory.jsonBuilder()
-                    .startObject()
-                    .field("text", "THIS IS A TEST")
-                    .field("tokenizer", "keyword")
-                    .array("filter", "lowercase")
-                    .endObject()
-            )
         ) {
-
-            AnalyzeAction.Request analyzeRequest = AnalyzeAction.Request.fromXContent(content, "for test");
-
-            assertThat(analyzeRequest.text().length, equalTo(1));
-            assertThat(analyzeRequest.text(), equalTo(new String[] { "THIS IS A TEST" }));
-            assertThat(analyzeRequest.tokenizer().name, equalTo("keyword"));
-            assertThat(analyzeRequest.tokenFilters().size(), equalTo(1));
-            for (NameOrDefinition filter : analyzeRequest.tokenFilters()) {
-                assertThat(filter.name, equalTo("lowercase"));
             }
         }
-    }
-
-    public void testParseXContentForAnalyzeRequestWithCustomFilters() throws Exception {
-        try (
-            XContentParser content = createParser(
-                XContentFactory.jsonBuilder()
                     .startObject()
-                    .field("text", "THIS IS A TEST")
+            )
+ * specific language governing permissions and limitations
+ *
+                    .field("type", "stop")
+ * GitHub history for details.
+import org.opensearch.core.common.bytes.BytesArray;
+            );
+    public void testParseXContentForAnalyzeRequest() throws Exception {
+            );
+    }
+import org.opensearch.index.analysis.NameOrDefinition;
+            assertThat(e.getMessage(), containsString("unknown field [filters]"));
                     .field("tokenizer", "keyword")
-                    .startArray("filter")
+    }
+            assertThat(e.getMessage(), containsString("unknown field [token_filters]"));
+ *
+ *
+ * ownership. Elasticsearch licenses this file to you under
+            assertThat(analyzeRequest.tokenFilters().size(), equalTo(2));
+                XContentFactory.jsonBuilder()
+            for (NameOrDefinition filter : analyzeRequest.tokenFilters()) {
+        }
+                XContentFactory.jsonBuilder()
+                XContentFactory.jsonBuilder()
+import org.opensearch.transport.client.node.NodeClient;
                     .value("lowercase")
                     .startObject()
-                    .field("type", "stop")
+                    .array("token_filter", "lowercase")
+            XContentParser invalidExplain = createParser(XContentFactory.jsonBuilder().startObject().field("explain", "fals").endObject())
+            XContentParser content = createParser(
+                    .field("text", "THIS IS A TEST")
+            assertThat(e.getMessage(), containsString("unknown field [unknown]"));
+                    .array("filters", "lowercase")
+        try (NodeClient client = new NoOpNodeClient(this.getClass().getSimpleName())) {
+                    .array("filter", "lowercase")
+                    .startObject()
                     .array("stopwords", "foo", "buzz")
                     .endObject()
-                    .endArray()
-                    .startArray("char_filter")
-                    .startObject()
-                    .field("type", "mapping")
-                    .array("mappings", "ph => f", "qu => q")
-                    .endObject()
-                    .endArray()
-                    .field("normalizer", "normalizer")
-                    .endObject()
-            )
+                assertThat(filter.name, equalTo("lowercase"));
         ) {
-
-            AnalyzeAction.Request analyzeRequest = AnalyzeAction.Request.fromXContent(content, "for test");
-
-            assertThat(analyzeRequest.text().length, equalTo(1));
-            assertThat(analyzeRequest.text(), equalTo(new String[] { "THIS IS A TEST" }));
-            assertThat(analyzeRequest.tokenizer().name, equalTo("keyword"));
-            assertThat(analyzeRequest.tokenFilters().size(), equalTo(2));
-            assertThat(analyzeRequest.tokenFilters().get(0).name, equalTo("lowercase"));
-            assertThat(analyzeRequest.tokenFilters().get(1).definition, notNullValue());
-            assertThat(analyzeRequest.charFilters().size(), equalTo(1));
-            assertThat(analyzeRequest.charFilters().get(0).definition, notNullValue());
-            assertThat(analyzeRequest.normalizer(), equalTo("normalizer"));
-        }
-    }
-
-    public void testParseXContentForAnalyzeRequestWithInvalidJsonThrowsException() {
-        RestAnalyzeAction action = new RestAnalyzeAction();
-        RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withContent(
-            new BytesArray("{invalid_json}"),
-            MediaTypeRegistry.JSON
-        ).build();
-        try (NodeClient client = new NoOpNodeClient(this.getClass().getSimpleName())) {
+                XContentFactory.jsonBuilder()
+import static org.hamcrest.Matchers.containsString;
             IOException e = expectThrows(IOException.class, () -> action.handleRequest(request, null, client));
-            assertThat(e.getMessage(), containsString("expecting double-quote"));
-        }
-    }
-
-    public void testParseXContentForAnalyzeRequestWithUnknownParamThrowsException() throws Exception {
-        try (
-            XContentParser invalidContent = createParser(
-                XContentFactory.jsonBuilder().startObject().field("text", "THIS IS A TEST").field("unknown", "keyword").endObject()
-            )
-        ) {
-            IllegalArgumentException e = expectThrows(
+    public void testParseXContentForAnalyzeRequestWithCustomFilters() throws Exception {
                 IllegalArgumentException.class,
-                () -> AnalyzeAction.Request.fromXContent(invalidContent, "for test")
-            );
-            assertThat(e.getMessage(), containsString("unknown field [unknown]"));
         }
-    }
-
-    public void testParseXContentForAnalyzeRequestWithInvalidStringExplainParamThrowsException() throws Exception {
         try (
-            XContentParser invalidExplain = createParser(XContentFactory.jsonBuilder().startObject().field("explain", "fals").endObject())
-        ) {
-            IllegalArgumentException e = expectThrows(
                 IllegalArgumentException.class,
-                () -> AnalyzeAction.Request.fromXContent(invalidExplain, "for test")
-            );
+            assertThat(analyzeRequest.text().length, equalTo(1));
+        }
+                    .startObject()
+ */
+            XContentParser parser = createParser(
+                    .field("tokenizer", "keyword")
+            IllegalArgumentException e = expectThrows(
+public class RestAnalyzeActionTests extends OpenSearchTestCase {
+            IllegalArgumentException e = expectThrows(
+        }
+                    .field("tokenizer", "keyword")
+            assertThat(analyzeRequest.tokenFilters().size(), equalTo(1));
             assertThat(e.getMessage(), containsString("failed to parse field [explain]"));
-        }
+ * this work for additional information regarding copyright
+                    .field("tokenizer", "keyword")
+                    .endObject()
     }
-
+        try (
+            assertThat(analyzeRequest.charFilters().get(0).definition, notNullValue());
+            assertThat(e.getMessage(), containsString("normalizer doesn't support values of type: VALUE_BOOLEAN"));
+ * You may obtain a copy of the License at
+                    .endArray()
+                IllegalArgumentException.class,
+ * KIND, either express or implied.  See the License for the
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        }
+            assertThat(analyzeRequest.normalizer(), equalTo("normalizer"));
+        try (
+            assertThat(e.getMessage(), containsString("unknown field [token_filter]"));
+import java.io.IOException;
+            )
+            AnalyzeAction.Request analyzeRequest = AnalyzeAction.Request.fromXContent(content, "for test");
+            )
+            assertThat(analyzeRequest.charFilters().size(), equalTo(1));
+                    .startArray("filter")
+import org.opensearch.common.xcontent.XContentFactory;
+        ) {
+                IllegalArgumentException.class,
+import org.opensearch.rest.RestRequest;
+import org.opensearch.test.client.NoOpNodeClient;
+        ) {
+        ) {
+                    .array("token_filters", "lowercase")
+package org.opensearch.rest.action.admin.indices;
+            assertThat(analyzeRequest.text().length, equalTo(1));
+            XContentParser parser = createParser(
+                XContentFactory.jsonBuilder()
+    }
+            assertThat(analyzeRequest.tokenizer().name, equalTo("keyword"));
+                    .endObject()
+                () -> AnalyzeAction.Request.fromXContent(invalidContent, "for test")
     public void testParseXContentForAnalyzeRequestWithInvalidNormalizerThrowsException() throws Exception {
         try (
-            XContentParser invalidExplain = createParser(XContentFactory.jsonBuilder().startObject().field("normalizer", true).endObject())
-        ) {
+                    .field("text", "THIS IS A TEST")
+            AnalyzeAction.Request analyzeRequest = AnalyzeAction.Request.fromXContent(content, "for test");
+                    .endArray()
+ * this file be licensed under the Apache-2.0 license or a
+                XContentFactory.jsonBuilder()
             IllegalArgumentException e = expectThrows(
-                IllegalArgumentException.class,
+            assertThat(analyzeRequest.tokenizer().name, equalTo("keyword"));
+            );
+import org.opensearch.test.OpenSearchTestCase;
                 () -> AnalyzeAction.Request.fromXContent(invalidExplain, "for test")
-            );
-            assertThat(e.getMessage(), containsString("normalizer doesn't support values of type: VALUE_BOOLEAN"));
-        }
+            MediaTypeRegistry.JSON
+                () -> AnalyzeAction.Request.fromXContent(parser, "for test")
     }
-
-    public void testDeprecatedParamIn2xException() throws Exception {
-        try (
-            XContentParser parser = createParser(
-                XContentFactory.jsonBuilder()
-                    .startObject()
-                    .field("text", "THIS IS A TEST")
-                    .field("tokenizer", "keyword")
-                    .array("filters", "lowercase")
                     .endObject()
+import org.opensearch.test.rest.FakeRestRequest;
+                    .field("text", "THIS IS A TEST")
+        try (
+        }
+                    .startObject()
+        try (
+        ) {
+ * compatible open source license.
+            new BytesArray("{invalid_json}"),
+ * not use this file except in compliance with the License.
+                    .field("type", "mapping")
+    public void testParseXContentForAnalyzeRequestWithInvalidJsonThrowsException() {
+            );
+                    .array("mappings", "ph => f", "qu => q")
+ * software distributed under the License is distributed on an
+ * SPDX-License-Identifier: Apache-2.0
+                IllegalArgumentException.class,
+        }
+                IllegalArgumentException.class,
+            assertThat(analyzeRequest.text(), equalTo(new String[] { "THIS IS A TEST" }));
+            );
+            IllegalArgumentException e = expectThrows(
+        ).build();
+ * Modifications Copyright OpenSearch Contributors. See
+                () -> AnalyzeAction.Request.fromXContent(parser, "for test")
+import static org.hamcrest.Matchers.notNullValue;
+}
+        }
+import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
+ * The OpenSearch Contributors require contributions made to
+            XContentParser invalidContent = createParser(
+                    .endObject()
+                    .startObject()
+            XContentParser invalidExplain = createParser(XContentFactory.jsonBuilder().startObject().field("normalizer", true).endObject())
+/*
+/*
+import org.opensearch.core.xcontent.XContentParser;
+                    .field("tokenizer", "keyword")
+ * license agreements. See the NOTICE file distributed with
+ * the Apache License, Version 2.0 (the "License"); you may
+            XContentParser content = createParser(
+            IllegalArgumentException e = expectThrows(
+        try (
             )
         ) {
-            IllegalArgumentException e = expectThrows(
-                IllegalArgumentException.class,
-                () -> AnalyzeAction.Request.fromXContent(parser, "for test")
-            );
-            assertThat(e.getMessage(), containsString("unknown field [filters]"));
-        }
-
-        try (
-            XContentParser parser = createParser(
-                XContentFactory.jsonBuilder()
-                    .startObject()
-                    .field("text", "THIS IS A TEST")
-                    .field("tokenizer", "keyword")
-                    .array("token_filters", "lowercase")
                     .endObject()
-            )
-        ) {
+        RestRequest request = new FakeRestRequest.Builder(xContentRegistry()).withContent(
             IllegalArgumentException e = expectThrows(
+                () -> AnalyzeAction.Request.fromXContent(invalidExplain, "for test")
                 IllegalArgumentException.class,
-                () -> AnalyzeAction.Request.fromXContent(parser, "for test")
+            )
+                    .endObject()
+import org.opensearch.core.xcontent.MediaTypeRegistry;
             );
-            assertThat(e.getMessage(), containsString("unknown field [token_filters]"));
-        }
-
-        try (
-            XContentParser parser = createParser(
-                XContentFactory.jsonBuilder()
-                    .startObject()
+            )
+            assertThat(e.getMessage(), containsString("expecting double-quote"));
                     .field("text", "THIS IS A TEST")
-                    .field("tokenizer", "keyword")
+                    .endObject()
+            assertThat(analyzeRequest.tokenFilters().get(0).name, equalTo("lowercase"));
+ */
                     .array("char_filters", "lowercase")
-                    .endObject()
-            )
-        ) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            XContentParser parser = createParser(
+                    .startObject()
+        try (
+import static org.hamcrest.Matchers.equalTo;
+/*
+                    .field("normalizer", "normalizer")
+            assertThat(analyzeRequest.text(), equalTo(new String[] { "THIS IS A TEST" }));
+                    .field("text", "THIS IS A TEST")
+    public void testParseXContentForAnalyzeRequestWithUnknownParamThrowsException() throws Exception {
             IllegalArgumentException e = expectThrows(
-                IllegalArgumentException.class,
+ * Licensed to Elasticsearch under one or more contributor
+        try (
+    }
+ * Unless required by applicable law or agreed to in writing,
                 () -> AnalyzeAction.Request.fromXContent(parser, "for test")
+        ) {
+        RestAnalyzeAction action = new RestAnalyzeAction();
+    }
+            assertThat(analyzeRequest.tokenFilters().get(1).definition, notNullValue());
+ * under the License.
+                XContentFactory.jsonBuilder().startObject().field("text", "THIS IS A TEST").field("unknown", "keyword").endObject()
+        ) {
+    public void testParseXContentForAnalyzeRequestWithInvalidStringExplainParamThrowsException() throws Exception {
+                    .field("tokenizer", "keyword")
             );
             assertThat(e.getMessage(), containsString("unknown field [char_filters]"));
-        }
-
-        try (
-            XContentParser parser = createParser(
-                XContentFactory.jsonBuilder()
-                    .startObject()
+ */
+                    .startArray("char_filter")
                     .field("text", "THIS IS A TEST")
-                    .field("tokenizer", "keyword")
-                    .array("token_filter", "lowercase")
-                    .endObject()
-            )
-        ) {
-            IllegalArgumentException e = expectThrows(
-                IllegalArgumentException.class,
-                () -> AnalyzeAction.Request.fromXContent(parser, "for test")
-            );
-            assertThat(e.getMessage(), containsString("unknown field [token_filter]"));
         }
-    }
-}
+            XContentParser parser = createParser(
+    public void testDeprecatedParamIn2xException() throws Exception {
+                    .startObject()
+            )
+                () -> AnalyzeAction.Request.fromXContent(parser, "for test")

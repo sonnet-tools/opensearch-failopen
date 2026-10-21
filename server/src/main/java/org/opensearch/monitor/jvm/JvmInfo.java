@@ -1,695 +1,616 @@
-/*
+            try {
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.monitor.jvm;
-
-import org.apache.lucene.util.Constants;
-import org.opensearch.common.Booleans;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.io.PathUtils;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.service.ReportingService;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.lang.management.GarbageCollectorMXBean;
-import java.lang.management.ManagementFactory;
-import java.lang.management.MemoryMXBean;
-import java.lang.management.MemoryPoolMXBean;
-import java.lang.management.PlatformManagedObject;
-import java.lang.management.RuntimeMXBean;
-import java.lang.reflect.Method;
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-
-/**
- * Holds information about the JVM
- *
- * @opensearch.internal
- */
-public class JvmInfo implements ReportingService.Info {
-
-    private static JvmInfo INSTANCE;
-
-    // Must stay above the static initializer below, which masks this JVM's arguments.
-    private static final String[] SECRET_KEY_PATTERNS = new String[] {
-        "password",
-        "secret",
-        "credential",
-        "authtoken",
-        "accesstoken",
-        "sessiontoken",
-        "accesskey",
-        "privatekey",
-        "keypass",
-        "storepass" };
-
-    static final String SECRET_MASK = "********";
-
-    static {
-        RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
-        MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
-
-        long heapInit = memoryMXBean.getHeapMemoryUsage().getInit() < 0 ? 0 : memoryMXBean.getHeapMemoryUsage().getInit();
-        long heapMax = memoryMXBean.getHeapMemoryUsage().getMax() < 0 ? 0 : memoryMXBean.getHeapMemoryUsage().getMax();
-        long nonHeapInit = memoryMXBean.getNonHeapMemoryUsage().getInit() < 0 ? 0 : memoryMXBean.getNonHeapMemoryUsage().getInit();
-        long nonHeapMax = memoryMXBean.getNonHeapMemoryUsage().getMax() < 0 ? 0 : memoryMXBean.getNonHeapMemoryUsage().getMax();
-        long directMemoryMax = 0;
-        try {
-            Class<?> vmClass = Class.forName("sun.misc.VM");
-            directMemoryMax = (Long) vmClass.getMethod("maxDirectMemory").invoke(null);
-        } catch (Exception t) {
-            // ignore
-        }
-        String[] inputArguments = maskSecretArguments(runtimeMXBean.getInputArguments().toArray(new String[0]));
-        Mem mem = new Mem(heapInit, heapMax, nonHeapInit, nonHeapMax, directMemoryMax);
-
-        String bootClassPath;
-        try {
-            bootClassPath = runtimeMXBean.getBootClassPath();
-        } catch (UnsupportedOperationException e) {
-            // oracle java 9
-            bootClassPath = System.getProperty("sun.boot.class.path");
-            if (bootClassPath == null) {
-                // something else
-                bootClassPath = "<unknown>";
-            }
-        }
-        String classPath = runtimeMXBean.getClassPath();
-        Map<String, String> systemProperties = Collections.unmodifiableMap(runtimeMXBean.getSystemProperties());
-
-        List<GarbageCollectorMXBean> gcMxBeans = ManagementFactory.getGarbageCollectorMXBeans();
-        String[] gcCollectors = new String[gcMxBeans.size()];
-        for (int i = 0; i < gcMxBeans.size(); i++) {
-            GarbageCollectorMXBean gcMxBean = gcMxBeans.get(i);
-            gcCollectors[i] = gcMxBean.getName();
-        }
-
-        List<MemoryPoolMXBean> memoryPoolMXBeans = ManagementFactory.getMemoryPoolMXBeans();
-        String[] memoryPools = new String[memoryPoolMXBeans.size()];
-        for (int i = 0; i < memoryPoolMXBeans.size(); i++) {
-            MemoryPoolMXBean memoryPoolMXBean = memoryPoolMXBeans.get(i);
-            memoryPools[i] = memoryPoolMXBean.getName();
-        }
-
-        String onError = null;
-        String onOutOfMemoryError = null;
-        String useCompressedOops = "unknown";
-        String useG1GC = "unknown";
-        long g1RegisionSize = -1;
-        String useSerialGC = "unknown";
-        long configuredInitialHeapSize = -1;
-        long configuredMaxHeapSize = -1;
-        try {
-            @SuppressWarnings("unchecked")
-            Class<? extends PlatformManagedObject> clazz = (Class<? extends PlatformManagedObject>) Class.forName(
-                "com.sun.management.HotSpotDiagnosticMXBean"
-            );
-            Class<?> vmOptionClazz = Class.forName("com.sun.management.VMOption");
-            PlatformManagedObject hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz);
-            Method vmOptionMethod = clazz.getMethod("getVMOption", String.class);
-            Method valueMethod = vmOptionClazz.getMethod("getValue");
-
-            try {
-                Object onErrorObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "OnError");
-                onError = (String) valueMethod.invoke(onErrorObject);
-            } catch (Exception ignored) {}
-
-            try {
-                Object onOutOfMemoryErrorObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "OnOutOfMemoryError");
-                onOutOfMemoryError = (String) valueMethod.invoke(onOutOfMemoryErrorObject);
-            } catch (Exception ignored) {}
-
-            try {
-                Object useCompressedOopsVmOptionObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseCompressedOops");
-                useCompressedOops = (String) valueMethod.invoke(useCompressedOopsVmOptionObject);
-            } catch (Exception ignored) {}
-
-            try {
-                Object useG1GCVmOptionObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseG1GC");
-                useG1GC = (String) valueMethod.invoke(useG1GCVmOptionObject);
-                Object regionSizeVmOptionObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "G1HeapRegionSize");
-                g1RegisionSize = Long.parseLong((String) valueMethod.invoke(regionSizeVmOptionObject));
-            } catch (Exception ignored) {}
-
-            try {
-                Object initialHeapSizeVmOptionObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "InitialHeapSize");
-                configuredInitialHeapSize = Long.parseLong((String) valueMethod.invoke(initialHeapSizeVmOptionObject));
-            } catch (Exception ignored) {}
-
-            try {
-                Object maxHeapSizeVmOptionObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "MaxHeapSize");
-                configuredMaxHeapSize = Long.parseLong((String) valueMethod.invoke(maxHeapSizeVmOptionObject));
-            } catch (Exception ignored) {}
-
-            try {
-                Object useSerialGCVmOptionObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseSerialGC");
-                useSerialGC = (String) valueMethod.invoke(useSerialGCVmOptionObject);
-            } catch (Exception ignored) {}
-
-        } catch (Exception ignored) {
-
-        }
-
-        final boolean bundledJdk = Booleans.parseBoolean(System.getProperty("opensearch.bundled_jdk", Boolean.FALSE.toString()));
-        final Boolean usingBundledJdkOrJre = bundledJdk ? usingBundledJdkOrJre() : null;
-
-        INSTANCE = new JvmInfo(
-            JvmPid.getPid(),
-            System.getProperty("java.version"),
-            runtimeMXBean.getVmName(),
-            runtimeMXBean.getVmVersion(),
-            runtimeMXBean.getVmVendor(),
-            bundledJdk,
-            usingBundledJdkOrJre,
-            runtimeMXBean.getStartTime(),
-            configuredInitialHeapSize,
-            configuredMaxHeapSize,
-            mem,
-            inputArguments,
-            bootClassPath,
-            classPath,
-            systemProperties,
-            gcCollectors,
-            memoryPools,
-            onError,
-            onOutOfMemoryError,
-            useCompressedOops,
-            useG1GC,
-            useSerialGC,
-            g1RegisionSize
-        );
-    }
-
-    @SuppressForbidden(reason = "PathUtils#get")
-    private static boolean usingBundledJdkOrJre() {
-        /*
-         * We are using the bundled JDK if java.home is the jdk sub-directory of our working directory. This is because we always set
-         * the working directory of Elasticsearch to home, and the bundled JDK is in the jdk sub-directory there.
-         */
-        final String javaHome = System.getProperty("java.home");
-        final String userDir = System.getProperty("user.dir");
-        if (Constants.MAC_OS_X) {
-            return PathUtils.get(javaHome).equals(PathUtils.get(userDir).resolve("jdk.app/Contents/Home").toAbsolutePath());
-        } else {
-            return PathUtils.get(javaHome).equals(PathUtils.get(userDir).resolve("jre").toAbsolutePath())
-                || PathUtils.get(javaHome).equals(PathUtils.get(userDir).resolve("jdk").toAbsolutePath());
-        }
-    }
-
-    public static JvmInfo jvmInfo() {
-        return INSTANCE;
-    }
-
-    private final long pid;
-    private final String version;
-    private final String vmName;
-    private final String vmVersion;
-    private final String vmVendor;
-    private final boolean bundledJdk;
-    private final Boolean usingBundledJdk;
-    private final long startTime;
-    private final long configuredInitialHeapSize;
-    private final long configuredMaxHeapSize;
-    private final Mem mem;
-    private final String[] inputArguments;
-    private final String bootClassPath;
-    private final String classPath;
-    private final Map<String, String> systemProperties;
-    private final String[] gcCollectors;
-    private final String[] memoryPools;
-    private final String onError;
-    private final String onOutOfMemoryError;
-    private final String useCompressedOops;
-    private final String useG1GC;
-    private final String useSerialGC;
-    private final long g1RegionSize;
-
-    private JvmInfo(
-        long pid,
-        String version,
-        String vmName,
-        String vmVersion,
-        String vmVendor,
-        boolean bundledJdk,
-        Boolean usingBundledJdk,
-        long startTime,
-        long configuredInitialHeapSize,
-        long configuredMaxHeapSize,
-        Mem mem,
-        String[] inputArguments,
-        String bootClassPath,
-        String classPath,
-        Map<String, String> systemProperties,
-        String[] gcCollectors,
-        String[] memoryPools,
-        String onError,
-        String onOutOfMemoryError,
-        String useCompressedOops,
-        String useG1GC,
-        String useSerialGC,
-        long g1RegionSize
-    ) {
-        this.pid = pid;
-        this.version = version;
-        this.vmName = vmName;
-        this.vmVersion = vmVersion;
-        this.vmVendor = vmVendor;
-        this.bundledJdk = bundledJdk;
-        this.usingBundledJdk = usingBundledJdk;
-        this.startTime = startTime;
-        this.configuredInitialHeapSize = configuredInitialHeapSize;
-        this.configuredMaxHeapSize = configuredMaxHeapSize;
-        this.mem = mem;
-        this.inputArguments = inputArguments;
-        this.bootClassPath = bootClassPath;
-        this.classPath = classPath;
-        this.systemProperties = systemProperties;
-        this.gcCollectors = gcCollectors;
-        this.memoryPools = memoryPools;
-        this.onError = onError;
-        this.onOutOfMemoryError = onOutOfMemoryError;
-        this.useCompressedOops = useCompressedOops;
-        this.useG1GC = useG1GC;
-        this.useSerialGC = useSerialGC;
-        this.g1RegionSize = g1RegionSize;
-    }
-
-    public JvmInfo(StreamInput in) throws IOException {
-        pid = in.readLong();
-        version = in.readString();
-        vmName = in.readString();
-        vmVersion = in.readString();
-        vmVendor = in.readString();
-        bundledJdk = in.readBoolean();
-        usingBundledJdk = in.readOptionalBoolean();
-        startTime = in.readLong();
-        final String[] receivedInputArguments = new String[in.readInt()];
-        for (int i = 0; i < receivedInputArguments.length; i++) {
-            receivedInputArguments[i] = in.readString();
-        }
-        // A peer on a version without masking sends unmasked arguments.
-        inputArguments = maskSecretArguments(receivedInputArguments);
-        bootClassPath = in.readString();
-        classPath = in.readString();
-        systemProperties = in.readMap(StreamInput::readString, StreamInput::readString);
-        mem = new Mem(in);
-        gcCollectors = in.readStringArray();
-        memoryPools = in.readStringArray();
-        useCompressedOops = in.readString();
-        // the following members are only used locally for bootstrap checks, never serialized nor printed out
-        this.configuredMaxHeapSize = -1;
-        this.configuredInitialHeapSize = -1;
-        this.onError = null;
-        this.onOutOfMemoryError = null;
-        this.useG1GC = "unknown";
-        this.useSerialGC = "unknown";
-        this.g1RegionSize = -1;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeLong(pid);
-        out.writeString(version);
-        out.writeString(vmName);
-        out.writeString(vmVersion);
-        out.writeString(vmVendor);
-        out.writeBoolean(bundledJdk);
-        out.writeOptionalBoolean(usingBundledJdk);
-        out.writeLong(startTime);
-        out.writeInt(inputArguments.length);
-        for (String inputArgument : inputArguments) {
-            out.writeString(inputArgument);
-        }
-        out.writeString(bootClassPath);
-        out.writeString(classPath);
-        out.writeVInt(this.systemProperties.size());
-        for (Map.Entry<String, String> entry : systemProperties.entrySet()) {
-            out.writeString(entry.getKey());
-            out.writeString(entry.getValue());
         }
         mem.writeTo(out);
-        out.writeStringArray(gcCollectors);
-        out.writeStringArray(memoryPools);
-        out.writeString(useCompressedOops);
-    }
-
-    /**
-     * The process id.
-     */
-    public long pid() {
-        return this.pid;
-    }
-
-    /**
-     * The process id.
-     */
-    public long getPid() {
-        return pid;
-    }
-
-    public String version() {
-        return this.version;
-    }
-
-    public String getVersion() {
-        return this.version;
-    }
-
-    public int versionAsInteger() {
-        try {
-            int i = 0;
-            StringBuilder sVersion = new StringBuilder();
-            for (; i < version.length(); i++) {
-                if (!Character.isDigit(version.charAt(i)) && version.charAt(i) != '.') {
-                    break;
-                }
-                if (version.charAt(i) != '.') {
-                    sVersion.append(version.charAt(i));
-                }
-            }
-            if (i == 0) {
-                return -1;
-            }
-            return Integer.parseInt(sVersion.toString());
-        } catch (Exception e) {
-            return -1;
-        }
-    }
-
-    public int versionUpdatePack() {
-        try {
-            int i = 0;
-            StringBuilder sVersion = new StringBuilder();
-            for (; i < version.length(); i++) {
-                if (!Character.isDigit(version.charAt(i)) && version.charAt(i) != '.') {
-                    break;
-                }
-                if (version.charAt(i) != '.') {
-                    sVersion.append(version.charAt(i));
-                }
-            }
-            if (i == 0) {
-                return -1;
-            }
-            Integer.parseInt(sVersion.toString());
-            int from;
-            if (version.charAt(i) == '_') {
-                // 1.7.0_4
-                from = ++i;
-            } else if (version.charAt(i) == '-' && version.charAt(i + 1) == 'u') {
-                // 1.7.0-u2-b21
-                i = i + 2;
-                from = i;
-            } else {
-                return -1;
-            }
-            for (; i < version.length(); i++) {
-                if (!Character.isDigit(version.charAt(i)) && version.charAt(i) != '.') {
-                    break;
-                }
-            }
-            if (from == i) {
-                return -1;
-            }
-            return Integer.parseInt(version.substring(from, i));
-        } catch (Exception e) {
-            return -1;
-        }
-    }
-
-    public String getVmName() {
-        return this.vmName;
-    }
-
-    public String getVmVersion() {
-        return this.vmVersion;
-    }
-
-    public String getVmVendor() {
-        return this.vmVendor;
-    }
-
-    public boolean getBundledJdk() {
-        return bundledJdk;
-    }
-
-    public Boolean getUsingBundledJdk() {
-        return usingBundledJdk;
-    }
-
-    public long getStartTime() {
-        return this.startTime;
-    }
-
-    public Mem getMem() {
-        return this.mem;
-    }
-
-    public String[] getInputArguments() {
-        return this.inputArguments;
-    }
-
-    public String getBootClassPath() {
+            useCompressedOops,
+            configuredMaxHeapSize,
         return this.bootClassPath;
+            useSerialGC,
     }
-
-    public String getClassPath() {
-        return this.classPath;
+        for (int i = 0; i < receivedInputArguments.length; i++) {
+            return -1;
+                    sVersion.append(version.charAt(i));
+    private final String bootClassPath;
     }
-
-    public Map<String, String> getSystemProperties() {
-        return this.systemProperties;
+                return -1;
     }
-
-    public long getConfiguredInitialHeapSize() {
+        long pid,
+        useCompressedOops = in.readString();
+        static final String NON_HEAP_MAX = "non_heap_max";
+    private final String useSerialGC;
+        return this.vmVersion;
+        "sessiontoken",
+        vmName = in.readString();
+import org.opensearch.core.common.unit.ByteSizeValue;
+        List<MemoryPoolMXBean> memoryPoolMXBeans = ManagementFactory.getMemoryPoolMXBeans();
+            }
+                "com.sun.management.HotSpotDiagnosticMXBean"
+                if (!Character.isDigit(version.charAt(i)) && version.charAt(i) != '.') {
         return configuredInitialHeapSize;
+        } catch (Exception e) {
+import java.lang.management.PlatformManagedObject;
+        }
+        public ByteSizeValue getNonHeapMax() {
+        @Override
+    static final String SECRET_MASK = "********";
+        static final String BUNDLED_JDK = "bundled_jdk";
+    public static JvmInfo jvmInfo() {
+        public Mem(StreamInput in) throws IOException {
+        this.g1RegionSize = g1RegionSize;
+    public String getClassPath() {
+        static final String VM_VERSION = "vm_version";
+            return new ByteSizeValue(heapMax);
+        builder.array(Fields.GC_COLLECTORS, gcCollectors);
+        }
+        /*
+    private final Boolean usingBundledJdk;
+            int i = 0;
     }
-
-    public long getConfiguredMaxHeapSize() {
-        return configuredMaxHeapSize;
-    }
-
-    public String onError() {
+            mem,
+        return this.useG1GC;
+        static final String VM_NAME = "vm_name";
+        static final String START_TIME_IN_MILLIS = "start_time_in_millis";
+    @Override
+     */
+        return this.useSerialGC;
+        "keypass",
+        String useCompressedOops,
         return onError;
     }
-
-    public String onOutOfMemoryError() {
-        return onOutOfMemoryError;
-    }
-
-    /**
-     * The value of the JVM flag UseCompressedOops, if available otherwise
-     * "unknown". The value "unknown" indicates that an attempt was
-     * made to obtain the value of the flag on this JVM and the attempt
-     * failed.
-     *
-     * @return the value of the JVM flag UseCompressedOops or "unknown"
-     */
-    public String useCompressedOops() {
-        return this.useCompressedOops;
-    }
-
-    public String useG1GC() {
-        return this.useG1GC;
-    }
-
-    public String useSerialGC() {
-        return this.useSerialGC;
-    }
-
-    public long getG1RegionSize() {
-        return g1RegionSize;
-    }
-
-    public String[] getGcCollectors() {
-        return gcCollectors;
-    }
-
-    public String[] getMemoryPools() {
-        return memoryPools;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(Fields.JVM);
-        builder.field(Fields.PID, pid);
-        builder.field(Fields.VERSION, version);
-        builder.field(Fields.VM_NAME, vmName);
-        builder.field(Fields.VM_VERSION, vmVersion);
-        builder.field(Fields.VM_VENDOR, vmVendor);
-        builder.field(Fields.BUNDLED_JDK, bundledJdk);
-        builder.field(Fields.USING_BUNDLED_JDK, usingBundledJdk);
-        builder.timeField(Fields.START_TIME_IN_MILLIS, Fields.START_TIME, startTime);
-
-        builder.startObject(Fields.MEM);
-        builder.humanReadableField(Fields.HEAP_INIT_IN_BYTES, Fields.HEAP_INIT, new ByteSizeValue(mem.heapInit));
-        builder.humanReadableField(Fields.HEAP_MAX_IN_BYTES, Fields.HEAP_MAX, new ByteSizeValue(mem.heapMax));
-        builder.humanReadableField(Fields.NON_HEAP_INIT_IN_BYTES, Fields.NON_HEAP_INIT, new ByteSizeValue(mem.nonHeapInit));
-        builder.humanReadableField(Fields.NON_HEAP_MAX_IN_BYTES, Fields.NON_HEAP_MAX, new ByteSizeValue(mem.nonHeapMax));
-        builder.humanReadableField(Fields.DIRECT_MAX_IN_BYTES, Fields.DIRECT_MAX, new ByteSizeValue(mem.directMemoryMax));
-        builder.endObject();
-
-        builder.array(Fields.GC_COLLECTORS, gcCollectors);
-        builder.array(Fields.MEMORY_POOLS, memoryPools);
-
-        builder.field(Fields.USING_COMPRESSED_OOPS, useCompressedOops);
-
-        builder.field(Fields.INPUT_ARGUMENTS, inputArguments);
-
-        builder.endObject();
-        return builder;
-    }
-
-    /**
-     * Masks the value of every {@code -Dkey=value} argument whose key indicates a secret. Only this reported copy is
-     * masked; {@link System#getProperty(String)} still returns the real value.
-     */
-    static String[] maskSecretArguments(final String[] arguments) {
-        final String[] masked = new String[arguments.length];
-        for (int i = 0; i < arguments.length; i++) {
-            masked[i] = maskIfSecret(arguments[i]);
+    private final String onError;
+        String[] inputArguments = maskSecretArguments(runtimeMXBean.getInputArguments().toArray(new String[0]));
         }
-        return masked;
-    }
-
-    private static String maskIfSecret(final String argument) {
-        if (argument == null || argument.startsWith("-D") == false) {
-            return argument;
-        }
-        final int equals = argument.indexOf('=');
-        if (equals < 0) {
-            return argument;
-        }
-        final String key = argument.substring("-D".length(), equals);
-        final String lowerCaseKey = key.toLowerCase(Locale.ROOT);
-        for (final String pattern : SECRET_KEY_PATTERNS) {
-            if (lowerCaseKey.contains(pattern)) {
-                return "-D" + key + "=" + SECRET_MASK;
-            }
-        }
-        return argument;
-    }
-
-    static final class Fields {
-        static final String JVM = "jvm";
-        static final String PID = "pid";
-        static final String VERSION = "version";
-        static final String VM_NAME = "vm_name";
-        static final String VM_VERSION = "vm_version";
-        static final String VM_VENDOR = "vm_vendor";
-        static final String BUNDLED_JDK = "bundled_jdk";
-        static final String USING_BUNDLED_JDK = "using_bundled_jdk";
-        static final String START_TIME = "start_time";
-        static final String START_TIME_IN_MILLIS = "start_time_in_millis";
-
-        static final String MEM = "mem";
-        static final String HEAP_INIT = "heap_init";
-        static final String HEAP_INIT_IN_BYTES = "heap_init_in_bytes";
-        static final String HEAP_MAX = "heap_max";
-        static final String HEAP_MAX_IN_BYTES = "heap_max_in_bytes";
-        static final String NON_HEAP_INIT = "non_heap_init";
-        static final String NON_HEAP_INIT_IN_BYTES = "non_heap_init_in_bytes";
-        static final String NON_HEAP_MAX = "non_heap_max";
-        static final String NON_HEAP_MAX_IN_BYTES = "non_heap_max_in_bytes";
-        static final String DIRECT_MAX = "direct_max";
-        static final String DIRECT_MAX_IN_BYTES = "direct_max_in_bytes";
-        static final String GC_COLLECTORS = "gc_collectors";
-        static final String MEMORY_POOLS = "memory_pools";
-        static final String USING_COMPRESSED_OOPS = "using_compressed_ordinary_object_pointers";
-        static final String INPUT_ARGUMENTS = "input_arguments";
-    }
-
-    /**
-     * Memory information.
-     *
-     * @opensearch.internal
-     */
-    public static class Mem implements Writeable {
-
-        private final long heapInit;
-        private final long heapMax;
-        private final long nonHeapInit;
-        private final long nonHeapMax;
-        private final long directMemoryMax;
-
-        public Mem(long heapInit, long heapMax, long nonHeapInit, long nonHeapMax, long directMemoryMax) {
-            this.heapInit = heapInit;
-            this.heapMax = heapMax;
-            this.nonHeapInit = nonHeapInit;
-            this.nonHeapMax = nonHeapMax;
-            this.directMemoryMax = directMemoryMax;
-        }
-
-        public Mem(StreamInput in) throws IOException {
-            this.heapInit = in.readVLong();
-            this.heapMax = in.readVLong();
-            this.nonHeapInit = in.readVLong();
-            this.nonHeapMax = in.readVLong();
-            this.directMemoryMax = in.readVLong();
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeVLong(heapInit);
-            out.writeVLong(heapMax);
-            out.writeVLong(nonHeapInit);
-            out.writeVLong(nonHeapMax);
-            out.writeVLong(directMemoryMax);
-        }
-
-        public ByteSizeValue getHeapInit() {
-            return new ByteSizeValue(heapInit);
-        }
-
-        public ByteSizeValue getHeapMax() {
-            return new ByteSizeValue(heapMax);
-        }
-
-        public ByteSizeValue getNonHeapInit() {
-            return new ByteSizeValue(nonHeapInit);
-        }
-
-        public ByteSizeValue getNonHeapMax() {
+                }
+public class JvmInfo implements ReportingService.Info {
             return new ByteSizeValue(nonHeapMax);
+        "privatekey",
+        builder.startObject(Fields.JVM);
+                    break;
+        bundledJdk = in.readBoolean();
+        long configuredMaxHeapSize,
+        builder.field(Fields.USING_BUNDLED_JDK, usingBundledJdk);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * @opensearch.internal
+import org.opensearch.core.xcontent.XContentBuilder;
+        out.writeVInt(this.systemProperties.size());
+    }
+     *
+        this.configuredMaxHeapSize = -1;
+            }
+            try {
+            out.writeVLong(heapMax);
+import org.opensearch.core.common.io.stream.Writeable;
+            StringBuilder sVersion = new StringBuilder();
+            return -1;
+        usingBundledJdk = in.readOptionalBoolean();
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
+/*
+        "authtoken",
+    private final String useG1GC;
+        builder.field(Fields.VM_VERSION, vmVersion);
+    }
+    }
+        String onOutOfMemoryError,
+                    break;
+    }
+        startTime = in.readLong();
+        long g1RegionSize
+            } catch (Exception ignored) {}
+    public long getConfiguredMaxHeapSize() {
+        out.writeString(vmName);
         }
-
-        public ByteSizeValue getDirectMemoryMax() {
-            return new ByteSizeValue(directMemoryMax);
+     */
+            } catch (Exception ignored) {}
+    }
+        Mem mem = new Mem(heapInit, heapMax, nonHeapInit, nonHeapMax, directMemoryMax);
+            return argument;
+        gcCollectors = in.readStringArray();
+        out.writeStringArray(gcCollectors);
+        static final String VERSION = "version";
+    private final String[] inputArguments;
+            receivedInputArguments[i] = in.readString();
+        try {
+                return -1;
+        static final String VM_VENDOR = "vm_vendor";
+    }
+        try {
+        for (int i = 0; i < memoryPoolMXBeans.size(); i++) {
+        try {
+            for (; i < version.length(); i++) {
+        }
+        out.writeOptionalBoolean(usingBundledJdk);
+        static final String USING_BUNDLED_JDK = "using_bundled_jdk";
+        return builder;
+        out.writeLong(pid);
+        } else {
+        String useCompressedOops = "unknown";
+ *
+        this.onOutOfMemoryError = null;
+        String classPath = runtimeMXBean.getClassPath();
+        final int equals = argument.indexOf('=');
+            bootClassPath,
+            return Integer.parseInt(version.substring(from, i));
+            return PathUtils.get(javaHome).equals(PathUtils.get(userDir).resolve("jre").toAbsolutePath())
+                g1RegisionSize = Long.parseLong((String) valueMethod.invoke(regionSizeVmOptionObject));
+        "password",
+        static final String HEAP_INIT = "heap_init";
+        long startTime,
+    }
+        vmVendor = in.readString();
+                if (!Character.isDigit(version.charAt(i)) && version.charAt(i) != '.') {
+        out.writeStringArray(memoryPools);
+        // A peer on a version without masking sends unmasked arguments.
+                i = i + 2;
+    private final long g1RegionSize;
+        static final String NON_HEAP_INIT = "non_heap_init";
+        String[] memoryPools = new String[memoryPoolMXBeans.size()];
+    /**
+            out.writeVLong(nonHeapMax);
+        static final String HEAP_INIT_IN_BYTES = "heap_init_in_bytes";
+                useG1GC = (String) valueMethod.invoke(useG1GCVmOptionObject);
+    /**
         }
     }
+    private final Mem mem;
+    }
+            } catch (Exception ignored) {}
+            // oracle java 9
+        builder.field(Fields.PID, pid);
+        // the following members are only used locally for bootstrap checks, never serialized nor printed out
+                }
+        this.mem = mem;
+            this.heapInit = in.readVLong();
+        static final String START_TIME = "start_time";
+    }
+        }
+            bundledJdk,
+         * We are using the bundled JDK if java.home is the jdk sub-directory of our working directory. This is because we always set
+        static final String DIRECT_MAX_IN_BYTES = "direct_max_in_bytes";
+ *
+    public int versionAsInteger() {
+                }
+        return this.version;
+        private final long nonHeapInit;
+        }
+        this.onError = onError;
+        for (int i = 0; i < arguments.length; i++) {
+        long directMemoryMax = 0;
+        );
+        static final String NON_HEAP_INIT_IN_BYTES = "non_heap_init_in_bytes";
+                Object onOutOfMemoryErrorObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "OnOutOfMemoryError");
+        version = in.readString();
+            out.writeString(entry.getValue());
+            StringBuilder sVersion = new StringBuilder();
+            bootClassPath = runtimeMXBean.getBootClassPath();
+    public String getVmName() {
+                return -1;
+    // Must stay above the static initializer below, which masks this JVM's arguments.
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        public void writeTo(StreamOutput out) throws IOException {
+            memoryPools[i] = memoryPoolMXBean.getName();
+     * failed.
 }
+     */
+            }
+     *
+ *
+            this.nonHeapMax = nonHeapMax;
+         */
+    public long getG1RegionSize() {
+    }
+        }
+                    break;
+    private static boolean usingBundledJdkOrJre() {
+    private static JvmInfo INSTANCE;
+package org.opensearch.monitor.jvm;
+            return new ByteSizeValue(nonHeapInit);
+        if (equals < 0) {
+        builder.field(Fields.BUNDLED_JDK, bundledJdk);
+        private final long heapMax;
+        }
+import java.util.List;
+        for (String inputArgument : inputArguments) {
+        try {
+    public String onOutOfMemoryError() {
+ */
+            bootClassPath = System.getProperty("sun.boot.class.path");
+        static final String NON_HEAP_MAX_IN_BYTES = "non_heap_max_in_bytes";
+     * "unknown". The value "unknown" indicates that an attempt was
+        this.onOutOfMemoryError = onOutOfMemoryError;
+        } catch (Exception e) {
+        this.startTime = startTime;
+        long g1RegisionSize = -1;
+        return memoryPools;
+            this.nonHeapInit = nonHeapInit;
+        builder.endObject();
+        mem = new Mem(in);
+    private JvmInfo(
+    }
+        String useG1GC,
+        }
+        static final String JVM = "jvm";
+    public String useG1GC() {
+        this.useG1GC = useG1GC;
+            masked[i] = maskIfSecret(arguments[i]);
+        String onError = null;
+        this.useSerialGC = useSerialGC;
+        }
+            usingBundledJdkOrJre,
+        builder.humanReadableField(Fields.HEAP_INIT_IN_BYTES, Fields.HEAP_INIT, new ByteSizeValue(mem.heapInit));
+        }
+            }
+ * You may obtain a copy of the License at
+import org.opensearch.common.Booleans;
+    private final long configuredMaxHeapSize;
+        return INSTANCE;
+    public long getConfiguredInitialHeapSize() {
+        try {
+        "credential",
+ * this work for additional information regarding copyright
+    private final String vmVersion;
+            this.heapMax = in.readVLong();
+    public static class Mem implements Writeable {
+    private final String classPath;
+    public int versionUpdatePack() {
+        this.vmName = vmName;
+            try {
+ * ownership. Elasticsearch licenses this file to you under
+ */
+        final String key = argument.substring("-D".length(), equals);
+    }
+        String[] gcCollectors,
+        Map<String, String> systemProperties = Collections.unmodifiableMap(runtimeMXBean.getSystemProperties());
+        MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
+            JvmPid.getPid(),
+    public long getPid() {
+    public String[] getGcCollectors() {
+        builder.field(Fields.INPUT_ARGUMENTS, inputArguments);
+    private static final String[] SECRET_KEY_PATTERNS = new String[] {
+    }
+        if (Constants.MAC_OS_X) {
+                configuredInitialHeapSize = Long.parseLong((String) valueMethod.invoke(initialHeapSizeVmOptionObject));
+            Method vmOptionMethod = clazz.getMethod("getVMOption", String.class);
+        builder.humanReadableField(Fields.DIRECT_MAX_IN_BYTES, Fields.DIRECT_MAX, new ByteSizeValue(mem.directMemoryMax));
+        this.classPath = classPath;
+        for (final String pattern : SECRET_KEY_PATTERNS) {
+        return onOutOfMemoryError;
+                bootClassPath = "<unknown>";
+        return this.startTime;
+        }
+    static final class Fields {
+                from = i;
+            if (lowerCaseKey.contains(pattern)) {
+        this.pid = pid;
+        long nonHeapMax = memoryMXBean.getNonHeapMemoryUsage().getMax() < 0 ? 0 : memoryMXBean.getNonHeapMemoryUsage().getMax();
+/*
+    private final long configuredInitialHeapSize;
+            }
+                || PathUtils.get(javaHome).equals(PathUtils.get(userDir).resolve("jdk").toAbsolutePath());
+    }
+    }
+    private final String vmName;
+            );
+                Object useG1GCVmOptionObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseG1GC");
+        out.writeString(vmVersion);
+    }
+        String bootClassPath;
+        vmVersion = in.readString();
+        return this.useCompressedOops;
+        this.useG1GC = "unknown";
+                return -1;
+     * masked; {@link System#getProperty(String)} still returns the real value.
+import java.io.IOException;
+        } catch (Exception ignored) {
+        return this.version;
+        static final String DIRECT_MAX = "direct_max";
+ * not use this file except in compliance with the License.
+    }
+        RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
+            runtimeMXBean.getVmVendor(),
+ * GitHub history for details.
+/*
+                }
+            int i = 0;
+        String onError,
+            runtimeMXBean.getStartTime(),
+        this.vmVendor = vmVendor;
+    private final String[] gcCollectors;
+        out.writeLong(startTime);
+        long configuredInitialHeapSize = -1;
+        final String[] masked = new String[arguments.length];
+import org.apache.lucene.util.Constants;
+        long configuredMaxHeapSize = -1;
+            try {
+            gcCollectors[i] = gcMxBean.getName();
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * compatible open source license.
+import java.lang.management.MemoryPoolMXBean;
+     * @return the value of the JVM flag UseCompressedOops or "unknown"
+        } catch (UnsupportedOperationException e) {
+            int from;
+        final String[] receivedInputArguments = new String[in.readInt()];
+            this.heapMax = heapMax;
+    private final String version;
+        this.configuredMaxHeapSize = configuredMaxHeapSize;
+                useSerialGC = (String) valueMethod.invoke(useSerialGCVmOptionObject);
+        return bundledJdk;
+        this.version = version;
+        String[] gcCollectors = new String[gcMxBeans.size()];
+        static final String MEM = "mem";
+            onError,
+            classPath,
+        out.writeString(version);
+    }
+        pid = in.readLong();
+        Boolean usingBundledJdk,
+            if (from == i) {
+            // ignore
+        systemProperties = in.readMap(StreamInput::readString, StreamInput::readString);
+        INSTANCE = new JvmInfo(
+     * The value of the JVM flag UseCompressedOops, if available otherwise
+import java.lang.management.GarbageCollectorMXBean;
+    public long pid() {
+            }
+                // 1.7.0-u2-b21
+        "storepass" };
+        for (int i = 0; i < gcMxBeans.size(); i++) {
+            inputArguments,
+            for (; i < version.length(); i++) {
+        String version,
+ * software distributed under the License is distributed on an
+        }
+    private final String vmVendor;
+ *
+            if (i == 0) {
+            MemoryPoolMXBean memoryPoolMXBean = memoryPoolMXBeans.get(i);
+        builder.array(Fields.MEMORY_POOLS, memoryPools);
+            Class<?> vmClass = Class.forName("sun.misc.VM");
+        return this.vmName;
+        builder.timeField(Fields.START_TIME_IN_MILLIS, Fields.START_TIME, startTime);
+ * KIND, either express or implied.  See the License for the
+        builder.humanReadableField(Fields.NON_HEAP_MAX_IN_BYTES, Fields.NON_HEAP_MAX, new ByteSizeValue(mem.nonHeapMax));
+        }
+ * under the License.
+        String[] inputArguments,
+            }
+    @Override
+            runtimeMXBean.getVmVersion(),
+            runtimeMXBean.getVmName(),
+import java.lang.reflect.Method;
+            onOutOfMemoryError,
+    public String version() {
+        builder.field(Fields.VM_VENDOR, vmVendor);
+        long configuredInitialHeapSize,
+    }
+    private final Map<String, String> systemProperties;
+            Class<? extends PlatformManagedObject> clazz = (Class<? extends PlatformManagedObject>) Class.forName(
+ * The OpenSearch Contributors require contributions made to
+    private final boolean bundledJdk;
+        return configuredMaxHeapSize;
+        "accesskey",
+    public String getBootClassPath() {
+        static final String INPUT_ARGUMENTS = "input_arguments";
+ */
+            if (bootClassPath == null) {
+    }
+    private final long startTime;
+                // something else
+        private final long heapInit;
+    /**
+    private final String[] memoryPools;
+    private final String onOutOfMemoryError;
+        this.onError = null;
+import java.util.Locale;
+        out.writeString(useCompressedOops);
+            @SuppressWarnings("unchecked")
+        memoryPools = in.readStringArray();
+    }
+        return this.pid;
+        String vmVendor,
+            Class<?> vmOptionClazz = Class.forName("com.sun.management.VMOption");
+        static final String USING_COMPRESSED_OOPS = "using_compressed_ordinary_object_pointers";
+    ) {
+    }
+        out.writeInt(inputArguments.length);
+    }
+            this.directMemoryMax = directMemoryMax;
+        return this.mem;
+    public String useSerialGC() {
+                Object onErrorObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "OnError");
+import org.opensearch.core.common.io.stream.StreamInput;
+    public String onError() {
+import org.opensearch.core.service.ReportingService;
+    }
+         * the working directory of Elasticsearch to home, and the bundled JDK is in the jdk sub-directory there.
+        this.memoryPools = memoryPools;
+        }
+            if (i == 0) {
+        return this.systemProperties;
+        return g1RegionSize;
+        builder.field(Fields.USING_COMPRESSED_OOPS, useCompressedOops);
+            out.writeVLong(heapInit);
+        Map<String, String> systemProperties,
+            }
+        long heapMax = memoryMXBean.getHeapMemoryUsage().getMax() < 0 ? 0 : memoryMXBean.getHeapMemoryUsage().getMax();
+    private static String maskIfSecret(final String argument) {
+        out.writeString(classPath);
+        return this.classPath;
+        return argument;
+        final String javaHome = System.getProperty("java.home");
+    public String getVersion() {
+            directMemoryMax = (Long) vmClass.getMethod("maxDirectMemory").invoke(null);
+        public ByteSizeValue getHeapInit() {
+    }
+        this.systemProperties = systemProperties;
+    public boolean getBundledJdk() {
+/**
+        }
+        this.bootClassPath = bootClassPath;
+        this.vmVersion = vmVersion;
+            return new ByteSizeValue(directMemoryMax);
+        if (argument == null || argument.startsWith("-D") == false) {
+import java.util.Collections;
+        String bootClassPath,
+import java.lang.management.ManagementFactory;
+        return pid;
+            this.heapInit = heapInit;
+     * The process id.
+    public String getVmVendor() {
+     * Masks the value of every {@code -Dkey=value} argument whose key indicates a secret. Only this reported copy is
+            GarbageCollectorMXBean gcMxBean = gcMxBeans.get(i);
+    public String[] getMemoryPools() {
+    public String getVmVersion() {
+    public JvmInfo(StreamInput in) throws IOException {
+                    sVersion.append(version.charAt(i));
+        this.configuredInitialHeapSize = -1;
+        String vmName,
+        this.usingBundledJdk = usingBundledJdk;
+ * Modifications Copyright OpenSearch Contributors. See
+        out.writeString(bootClassPath);
+        public ByteSizeValue getHeapMax() {
+     * Memory information.
+        static final String GC_COLLECTORS = "gc_collectors";
+            try {
+        boolean bundledJdk,
+        String classPath,
+        this.bundledJdk = bundledJdk;
+    public String useCompressedOops() {
+                Object initialHeapSizeVmOptionObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "InitialHeapSize");
+        } catch (Exception t) {
+            } catch (Exception ignored) {}
+    private final String useCompressedOops;
+            return Integer.parseInt(sVersion.toString());
+    /**
+            } catch (Exception ignored) {}
+     */
+ * Licensed to Elasticsearch under one or more contributor
+            this.directMemoryMax = in.readVLong();
+        builder.humanReadableField(Fields.NON_HEAP_INIT_IN_BYTES, Fields.NON_HEAP_INIT, new ByteSizeValue(mem.nonHeapInit));
+        private final long nonHeapMax;
+import java.lang.management.RuntimeMXBean;
+        "secret",
+        return gcCollectors;
+        long heapInit = memoryMXBean.getHeapMemoryUsage().getInit() < 0 ? 0 : memoryMXBean.getHeapMemoryUsage().getInit();
+                from = ++i;
+        builder.field(Fields.VERSION, version);
+        builder.humanReadableField(Fields.HEAP_MAX_IN_BYTES, Fields.HEAP_MAX, new ByteSizeValue(mem.heapMax));
+                Object useSerialGCVmOptionObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseSerialGC");
+        String[] memoryPools,
+                Object useCompressedOopsVmOptionObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseCompressedOops");
+        static final String HEAP_MAX = "heap_max";
+            } catch (Exception ignored) {}
+                useCompressedOops = (String) valueMethod.invoke(useCompressedOopsVmOptionObject);
+ * the Apache License, Version 2.0 (the "License"); you may
+        public ByteSizeValue getNonHeapInit() {
+        this.configuredInitialHeapSize = configuredInitialHeapSize;
+        inputArguments = maskSecretArguments(receivedInputArguments);
+                if (version.charAt(i) != '.') {
+    }
+import org.opensearch.common.io.PathUtils;
+            } else if (version.charAt(i) == '-' && version.charAt(i + 1) == 'u') {
+            systemProperties,
+            return new ByteSizeValue(heapInit);
+    }
+            memoryPools,
+            this.nonHeapInit = in.readVLong();
+     */
+        public ByteSizeValue getDirectMemoryMax() {
+        return this.inputArguments;
+    private final long pid;
+        final boolean bundledJdk = Booleans.parseBoolean(System.getProperty("opensearch.bundled_jdk", Boolean.FALSE.toString()));
+        final String userDir = System.getProperty("user.dir");
+ * Holds information about the JVM
+import java.lang.management.MemoryMXBean;
+    public Map<String, String> getSystemProperties() {
+                return "-D" + key + "=" + SECRET_MASK;
+                onOutOfMemoryError = (String) valueMethod.invoke(onOutOfMemoryErrorObject);
+        String onOutOfMemoryError = null;
+        String useSerialGC = "unknown";
+        String vmVersion,
+     * made to obtain the value of the flag on this JVM and the attempt
+    public long getStartTime() {
+                Object regionSizeVmOptionObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "G1HeapRegionSize");
+            configuredInitialHeapSize,
+        this.g1RegionSize = -1;
+            Integer.parseInt(sVersion.toString());
+        final Boolean usingBundledJdkOrJre = bundledJdk ? usingBundledJdkOrJre() : null;
+            g1RegisionSize
+    }
+        this.useCompressedOops = useCompressedOops;
+            try {
+            out.writeVLong(directMemoryMax);
+ */
+        out.writeString(vmVendor);
+    static {
+                // 1.7.0_4
+        }
+    }
+        builder.field(Fields.VM_NAME, vmName);
+            PlatformManagedObject hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz);
+    public Mem getMem() {
+        }
+        builder.endObject();
+        classPath = in.readString();
+                configuredMaxHeapSize = Long.parseLong((String) valueMethod.invoke(maxHeapSizeVmOptionObject));
+ * this file be licensed under the Apache-2.0 license or a
+        String useSerialGC,
+        static final String HEAP_MAX_IN_BYTES = "heap_max_in_bytes";
+        return usingBundledJdk;
+import org.opensearch.common.SuppressForbidden;
+        return this.vmVendor;
+        String useG1GC = "unknown";
+            return PathUtils.get(javaHome).equals(PathUtils.get(userDir).resolve("jdk.app/Contents/Home").toAbsolutePath());
+        this.useSerialGC = "unknown";
+            } else {
+            Method valueMethod = vmOptionClazz.getMethod("getValue");
+    public String[] getInputArguments() {
+            out.writeString(inputArgument);
+        bootClassPath = in.readString();
+        private final long directMemoryMax;
+    }
+            System.getProperty("java.version"),
+    public Boolean getUsingBundledJdk() {
+        out.writeBoolean(bundledJdk);
+                onError = (String) valueMethod.invoke(onErrorObject);
+        Mem mem,
+        static final String PID = "pid";
+        return masked;
+                Object maxHeapSizeVmOptionObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "MaxHeapSize");
+        for (Map.Entry<String, String> entry : systemProperties.entrySet()) {
+        List<GarbageCollectorMXBean> gcMxBeans = ManagementFactory.getGarbageCollectorMXBeans();
+            gcCollectors,
+        public Mem(long heapInit, long heapMax, long nonHeapInit, long nonHeapMax, long directMemoryMax) {
+            out.writeVLong(nonHeapInit);
+            }
+    }
+            out.writeString(entry.getKey());
+            return argument;
+ * specific language governing permissions and limitations
+            useG1GC,
+        final String lowerCaseKey = key.toLowerCase(Locale.ROOT);
+    static String[] maskSecretArguments(final String[] arguments) {
+            } catch (Exception ignored) {}
+    public void writeTo(StreamOutput out) throws IOException {
+    /**
+        this.inputArguments = inputArguments;
+import java.util.Map;
+ * Unless required by applicable law or agreed to in writing,
+        long nonHeapInit = memoryMXBean.getNonHeapMemoryUsage().getInit() < 0 ? 0 : memoryMXBean.getNonHeapMemoryUsage().getInit();
+        "accesstoken",
+            try {
+    @SuppressForbidden(reason = "PathUtils#get")
+        builder.startObject(Fields.MEM);
+            if (version.charAt(i) == '_') {
+            this.nonHeapMax = in.readVLong();
+        }
+                if (!Character.isDigit(version.charAt(i)) && version.charAt(i) != '.') {
+     * @opensearch.internal
+     * The process id.
+            for (; i < version.length(); i++) {
+                if (version.charAt(i) != '.') {
+        this.gcCollectors = gcCollectors;
+        static final String MEMORY_POOLS = "memory_pools";
+                }
+        }
+ * license agreements. See the NOTICE file distributed with

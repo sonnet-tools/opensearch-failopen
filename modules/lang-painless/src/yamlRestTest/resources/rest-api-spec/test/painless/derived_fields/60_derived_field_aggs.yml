@@ -1,1515 +1,1395 @@
----
-setup:
-- skip:
-    version: " - 2.14.99"
-    reason: "derived_field feature was added in 2.15"
-
-# -- NOT SUPPORTED: --
-# geobounds
-# scripted metric
-# -- NOT SUPPORTED: --
-# Any geo agg
-# sig terms/text
-
-- do:
-    indices.create:
-      index: test
-      body:
-        mappings:
-          properties:
-            text:
-              type: text
-            keyword:
-              type: keyword
-            os:
-              type: keyword
-            long:
-              type: long
-            float:
-              type: float
-            double:
-              type: double
-            date:
-              type: date
-            geo:
-              type: geo_point
-            ip:
-              type: ip
-            boolean:
-              type: boolean
-            array_of_long:
-              type: long
-            json_field:
-              type: text
-          derived:
-            derived_text:
-              type: text
-              script: "emit(params._source[\"text\"])"
-            derived_text_prefilter_field:
-              type: text
-              script: "emit(params._source[\"text\"])"
-              prefilter_field: "text"
-            derived_keyword:
-              type: keyword
-              script: "emit(params._source[\"keyword\"])"
-            derived_os:
-              type: keyword
-              script: "emit(params._source[\"os\"])"
-            derived_long:
-              type: long
-              script: "emit(params._source[\"long\"])"
-            derived_float:
-              type: float
-              script: "emit(params._source[\"float\"])"
-            derived_double:
-              type: double
-              script: "emit(params._source[\"double\"])"
-            derived_date:
-              type: date
-              script: "emit(ZonedDateTime.parse(params._source[\"date\"]).toInstant().toEpochMilli())"
-            derived_geo:
-              type: geo_point
-              script: "emit(params._source[\"geo\"][0], params._source[\"geo\"][1])"
-            derived_ip:
-              type: ip
-              script: "emit(params._source[\"ip\"])"
-            derived_boolean:
-              type: boolean
-              script: "emit(params._source[\"boolean\"])"
-            derived_array_of_long:
-              type: long
-              script: "emit(params._source[\"array_of_long\"][0]);emit(params._source[\"array_of_long\"][1]);"
-            derived_object:
-              type: object
-              properties:
-                keyword: keyword
-                ip: ip
-                os: keyword
-              script: "emit(params._source[\"json_field\"])"
-              prefilter_field: "json_field"
-
-- do:
-    bulk:
-      refresh: true
-      body:
-      - index:
-          _index: test
-          _id: 1
-      - text: "peter piper"
-        keyword: "foo"
-        os: "mac"
-        long: 1
-        float: 1.0
-        double: 1.0
-        date: "2017-01-01T00:00:00Z"
-        geo: [ -74.0060, 40.7128 ]
-        ip: "192.168.0.1"
-        boolean: true
-        array_of_long: [ 1, 2 ]
-        json_field: "{\"text\":\"peter piper\",\"keyword\":\"foo\",\"os\":\"mac\",\"long\":1,\"float\":1.0,\"double\":1.0,\"date\":\"2017-01-01T00:00:00Z\",\"ip\":\"192.168.0.1\",\"boolean\":true, \"array_of_long\": [1, 2]}"
-      - index:
-          _index: test
-          _id: 2
-      - text: "piper picked a peck"
-        keyword: "bar"
-        os: "windows"
-        long: 2
-        float: 2.0
-        double: 2.0
-        date: "2017-01-02T00:00:00Z"
-        geo: [ -118.2437, 34.0522 ]
-        ip: "10.0.0.1"
-        boolean: false
-        array_of_long: [ 2, 3 ]
-        json_field: "{\"keyword\":\"bar\",\"long\":2,\"float\":2.0,\"os\":\"windows\",\"double\":2.0,\"date\":\"2017-01-02T00:00:00Z\",\"ip\":\"10.0.0.1\",\"boolean\":false, \"array_of_long\": [2, 3]}"
-      - index:
-          _index: test
-          _id: 3
-      - text: "peck of pickled peppers"
-        keyword: "baz"
-        os: "mac"
-        long: -3
-        float: -3.0
-        double: -3.0
-        date: "2017-01-03T00:00:00Z"
-        geo: [ -87.6298, 41.87 ]
-        ip: "172.16.0.1"
-        boolean: true
-        array_of_long: [ 3, 4 ]
-        json_field: "{\"keyword\":\"baz\",\"long\":-3,\"float\":-3.0,\"os\":\"mac\",\"double\":-3.0,\"date\":\"2017-01-03T00:00:00Z\",\"ip\":\"172.16.0.1\",\"boolean\":true, \"array_of_long\": [3, 4]}"
-      - index:
-          _index: test
-          _id: 4
-      - text: "pickled peppers"
-        keyword: "qux"
-        os: "windows"
-        long: 4
-        float: 4.0
-        double: 4.0
-        date: "2017-01-04T00:00:00Z"
-        geo: [ -74.0060, 40.7128 ]
-        ip: "192.168.0.2"
-        boolean: false
-        array_of_long: [ 4, 5 ]
-        json_field: "{\"keyword\":\"qux\",\"long\":4,\"float\":4.0,\"os\":\"windows\",\"double\":4.0,\"date\":\"2017-01-04T00:00:00Z\",\"ip\":\"192.168.0.2\",\"boolean\":false, \"array_of_long\": [4, 5]}"
-      - index:
-          _index: test
-          _id: 5
-      - text: "peppers"
-        keyword: "quux"
-        os: "mac"
-        long: 5
-        float: 5.0
-        double: 5.0
-        date: "2017-01-05T00:00:00Z"
-        geo: [ -87.6298, 41.87 ]
-        ip: "10.0.0.2"
-        boolean: true
-        array_of_long: [ 5, 6 ]
-        json_field: "{\"keyword\":\"quux\",\"long\":5,\"float\":5.0,\"os\":\"mac\",\"double\":5.0,\"date\":\"2017-01-05T00:00:00Z\",\"ip\":\"10.0.0.2\",\"boolean\":true, \"array_of_long\": [5, 6]}"
-
-- do:
-      indices.refresh:
-        index: [test]
-
-### BUCKET AGGS
----
-"Test terms aggregation on derived_keyword from search definition":
-- do:
-    search:
-      index: test
-      body:
-        derived:
-          derived_keyword_search_definition:
-            type: keyword
-            script: "emit(params._source[\"keyword\"])"
-        size: 0
-        aggs:
-          keywords:
-            terms:
-              field: derived_keyword_search_definition
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.keywords.buckets: 5 }
-- match: { aggregations.keywords.buckets.0.key: "bar" }
-- match: { aggregations.keywords.buckets.0.doc_count: 1 }
-- match: { aggregations.keywords.buckets.1.key: "baz" }
-- match: { aggregations.keywords.buckets.1.doc_count: 1 }
-- match: { aggregations.keywords.buckets.2.key: "foo" }
-- match: { aggregations.keywords.buckets.2.doc_count: 1 }
-- match: { aggregations.keywords.buckets.3.key: "quux" }
-- match: { aggregations.keywords.buckets.3.doc_count: 1 }
-- match: { aggregations.keywords.buckets.4.key: "qux" }
-- match: { aggregations.keywords.buckets.4.doc_count: 1 }
-
----
-"Test terms aggregation on derived_keyword":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          keywords:
-            terms:
-              field: derived_keyword
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.keywords.buckets: 5 }
-- match: { aggregations.keywords.buckets.0.key: "bar" }
-- match: { aggregations.keywords.buckets.0.doc_count: 1 }
-- match: { aggregations.keywords.buckets.1.key: "baz" }
-- match: { aggregations.keywords.buckets.1.doc_count: 1 }
-- match: { aggregations.keywords.buckets.2.key: "foo" }
-- match: { aggregations.keywords.buckets.2.doc_count: 1 }
-- match: { aggregations.keywords.buckets.3.key: "quux" }
-- match: { aggregations.keywords.buckets.3.doc_count: 1 }
-- match: { aggregations.keywords.buckets.4.key: "qux" }
-- match: { aggregations.keywords.buckets.4.doc_count: 1 }
-
----
-"Test range aggregation on derived_long":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          long_ranges:
-            range:
-              field: derived_long
-              ranges:
-              - to: 0
-              - from: 0
-                to: 3
-              - from: 3
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.long_ranges.buckets: 3 }
-- match: { aggregations.long_ranges.buckets.0.doc_count: 1 }
-- match: { aggregations.long_ranges.buckets.1.doc_count: 2 }
-- match: { aggregations.long_ranges.buckets.2.doc_count: 2 }
-
----
-"Test histogram aggregation on derived_float":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          float_histogram:
-            histogram:
-              field: derived_float
-              interval: 2
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.float_histogram.buckets: 5 }
-- match: { aggregations.float_histogram.buckets.0.key: -4.0 }
-- match: { aggregations.float_histogram.buckets.0.doc_count: 1 }
-
----
-"Test date_histogram aggregation on derived_date":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          date_histogram:
-            date_histogram:
-              field: derived_date
-              calendar_interval: day
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.date_histogram.buckets: 5 }
-- match: { aggregations.date_histogram.buckets.0.key_as_string: "2017-01-01T00:00:00.000Z" }
-- match: { aggregations.date_histogram.buckets.0.doc_count: 1 }
-- match: { aggregations.date_histogram.buckets.1.key_as_string: "2017-01-02T00:00:00.000Z" }
-- match: { aggregations.date_histogram.buckets.1.doc_count: 1 }
-- match: { aggregations.date_histogram.buckets.2.key_as_string: "2017-01-03T00:00:00.000Z" }
-- match: { aggregations.date_histogram.buckets.2.doc_count: 1 }
-- match: { aggregations.date_histogram.buckets.3.key_as_string: "2017-01-04T00:00:00.000Z" }
-- match: { aggregations.date_histogram.buckets.3.doc_count: 1 }
-- match: { aggregations.date_histogram.buckets.4.key_as_string: "2017-01-05T00:00:00.000Z" }
-- match: { aggregations.date_histogram.buckets.4.doc_count: 1 }
-
----
-"Test date_range aggregation on derived_date":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          date_range:
-            date_range:
-              field: derived_date
-              ranges:
-              - to: "2017-01-03T00:00:00Z"
-              - from: "2017-01-03T00:00:00Z"
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.date_range.buckets.0.key: "*-2017-01-03T00:00:00.000Z" }
-- match: { aggregations.date_range.buckets.0.doc_count: 2 }
-- match: { aggregations.date_range.buckets.1.key: "2017-01-03T00:00:00.000Z-*" }
-- match: { aggregations.date_range.buckets.1.doc_count: 3 }
-
----
-"Test filters aggregation on derived_boolean":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          boolean_filters:
-            filters:
-              filters:
-                true_values:
-                  term:
-                    derived_boolean: true
-                false_values:
-                  term:
-                    derived_boolean: false
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.boolean_filters.buckets.true_values.doc_count: 3 }
-- match: { aggregations.boolean_filters.buckets.false_values.doc_count: 2 }
-
----
-"Test adjacency matrix aggregation on derived_long":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          adj_matrix:
-            adjacency_matrix:
-              filters:
-                high_num:
-                  range:
-                    derived_long:
-                      gte: 3
-                low_num:
-                  range:
-                    derived_long:
-                      lt: 3
-- match: { hits.total.value: 5 }
-- length: { aggregations.adj_matrix.buckets: 2 }
-- match: { aggregations.adj_matrix.buckets.0.key: "high_num" }
-- match: { aggregations.adj_matrix.buckets.0.doc_count: 2 }
-- match: { aggregations.adj_matrix.buckets.1.key: "low_num" }
-- match: { aggregations.adj_matrix.buckets.1.doc_count: 3 }
-
-### METRIC AGGS
-
----
-"Test stats aggregation on derived_array_of_long":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          long_array_stats:
-            stats:
-              field: derived_array_of_long
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.long_array_stats.count: 10 }
-- match: { aggregations.long_array_stats.min: 1 }
-- match: { aggregations.long_array_stats.max: 6 }
-- match: { aggregations.long_array_stats.avg: 3.5 }
-- match: { aggregations.long_array_stats.sum: 35 }
-
----
-"Test cardinality aggregation on derived_keyword":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          unique_keywords:
-            cardinality:
-              field: derived_keyword
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.unique_keywords.value: 5 }
-
----
-"Test percentiles aggregation on derived_double":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          double_percentiles:
-            percentiles:
-              field: derived_double
-              percents: [ 25, 50, 75 ]
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.double_percentiles.values: 3}
-
----
-"Test percentile ranks aggregation on derived_long":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          long_percentile_ranks:
-            percentile_ranks:
-              field: derived_long
-              values: [ 2, 4 ]
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.long_percentile_ranks.values: 2}
-
----
-"Test top hits aggregation on derived_keyword":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          top_keywords:
-            terms:
-              field: derived_keyword
-            aggs:
-              top_hits:
-                top_hits:
-                  size: 1
-- match: { hits.total.value: 5 }
-- length: { aggregations.top_keywords.buckets: 5 }
-- match: { aggregations.top_keywords.buckets.0.key: "bar" }
-- match: { aggregations.top_keywords.buckets.0.doc_count: 1 }
-- length: { aggregations.top_keywords.buckets.0.top_hits.hits.hits: 1 }
-
----
-"Test matrix stats aggregation on derived_long and float":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          matrix_stats:
-            matrix_stats:
-              fields: [ derived_long, derived_float ]
-- match: { hits.total.value: 5 }
-- length: { aggregations.matrix_stats.fields: 2 }
-- match: { aggregations.matrix_stats.fields.0.name: "derived_float" }
-- match: { aggregations.matrix_stats.fields.0.count: 5 }
-- match: { aggregations.matrix_stats.fields.1.name: "derived_long" }
-- match: { aggregations.matrix_stats.fields.1.count: 5 }
-
----
-"Test median absolute deviation aggregation on derived_long":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          mad_long:
-            median_absolute_deviation:
-              field: derived_long
-- match: { hits.total.value: 5 }
-- match: { aggregations.mad_long.value: 2.0 }
-
-## Pipeline agg
----
-"Test simple pipeline agg with derived_keyword and long":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          keywords:
-            terms:
-              field: derived_keyword
-            aggs:
-              sum_derived_longs:
-                sum:
-                  field: derived_long
-          sum_total:
-            sum_bucket:
-              buckets_path: "keywords>sum_derived_longs"
-- match: { hits.total.value: 5 }
-- match: { aggregations.keywords.buckets.0.key: "bar" }
-- match: { aggregations.keywords.buckets.0.sum_derived_longs.value: 2 }
-- match: { aggregations.keywords.buckets.1.key: "baz" }
-- match: { aggregations.keywords.buckets.1.sum_derived_longs.value: -3 }
-- match: { aggregations.keywords.buckets.2.key: "foo" }
-- match: { aggregations.keywords.buckets.2.sum_derived_longs.value: 1 }
-- match: { aggregations.keywords.buckets.3.key: "quux" }
-- match: { aggregations.keywords.buckets.3.sum_derived_longs.value: 5 }
-- match: { aggregations.keywords.buckets.4.key: "qux" }
-- match: { aggregations.keywords.buckets.4.sum_derived_longs.value: 4 }
-- match: { aggregations.sum_total.value: 9 }
-
-
----
-"Test terms aggregation on derived_ip":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          ip_terms:
-            terms:
-              field: derived_ip
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.ip_terms.buckets: 5 }
-- match: { aggregations.ip_terms.buckets.0.key: "10.0.0.1" }
-- match: { aggregations.ip_terms.buckets.0.doc_count: 1 }
-
----
-"Test range aggregation on derived_ip":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          ip_ranges:
-            ip_range:
-              field: derived_ip
-              ranges:
-              - to: "10.0.0.0"
-              - from: "10.0.0.0"
-                to: "172.16.0.0"
-              - from: "172.16.0.0"
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.ip_ranges.buckets: 3 }
-- match: { aggregations.ip_ranges.buckets.0.doc_count: 0 }
-- match: { aggregations.ip_ranges.buckets.1.doc_count: 2 }
-- match: { aggregations.ip_ranges.buckets.2.doc_count: 3 }
-
----
-"Test cardinality aggregation on derived_ip":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          unique_ips:
-            cardinality:
-              field: derived_ip
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.unique_ips.value: 5 }
-
----
-"Test missing aggregation on derived_ip":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          missing_ips:
-            missing:
-              field: derived_ip
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.missing_ips.doc_count: 0 }
-
----
-"Test value count aggregation on derived_ip":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          ip_count:
-            value_count:
-              field: derived_ip
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.ip_count.value: 5 }
-
----
-"Test composite agg":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          test_composite_agg:
-            composite:
-              size: 10
-              sources:
-              - os:
-                  terms:
-                    field: derived_os
-              - keyword:
-                  terms:
-                    field: derived_keyword
-              - is_true:
-                  terms:
-                    field: derived_boolean
-            aggs:
-              avg_long:
-                avg:
-                  field: derived_long
-- match: { aggregations.test_composite_agg.buckets.0.key.os: "mac" }
-- match: { aggregations.test_composite_agg.buckets.0.key.keyword: "baz" }
-- match: { aggregations.test_composite_agg.buckets.0.key.is_true: true }
-- match: { aggregations.test_composite_agg.buckets.0.doc_count: 1 }
-- match: { aggregations.test_composite_agg.buckets.0.avg_long.value: -3.0 }
-- match: { aggregations.test_composite_agg.buckets.1.key.os: "mac" }
-- match: { aggregations.test_composite_agg.buckets.1.key.keyword: "foo" }
 - match: { aggregations.test_composite_agg.buckets.1.key.is_true: true }
-- match: { aggregations.test_composite_agg.buckets.1.doc_count: 1 }
-- match: { aggregations.test_composite_agg.buckets.1.avg_long.value: 1.0 }
-- match: { aggregations.test_composite_agg.buckets.2.key.os: "mac" }
-- match: { aggregations.test_composite_agg.buckets.2.key.keyword: "quux" }
-- match: { aggregations.test_composite_agg.buckets.2.key.is_true: true }
-- match: { aggregations.test_composite_agg.buckets.2.doc_count: 1 }
 - match: { aggregations.test_composite_agg.buckets.2.avg_long.value: 5.0 }
-- match: { aggregations.test_composite_agg.buckets.3.key.os: "windows" }
-- match: { aggregations.test_composite_agg.buckets.3.key.keyword: "bar" }
-- match: { aggregations.test_composite_agg.buckets.3.key.is_true: false }
-- match: { aggregations.test_composite_agg.buckets.3.doc_count: 1 }
-- match: { aggregations.test_composite_agg.buckets.3.avg_long.value: 2.0 }
-- match: { aggregations.test_composite_agg.buckets.4.key.os: "windows" }
-- match: { aggregations.test_composite_agg.buckets.4.key.keyword: "qux" }
-- match: { aggregations.test_composite_agg.buckets.4.key.is_true: false }
-- match: { aggregations.test_composite_agg.buckets.4.doc_count: 1 }
-- match: { aggregations.test_composite_agg.buckets.4.avg_long.value: 4.0 }
-
----
-"Test auto date histogram":
-- do:
-    search:
-      rest_total_hits_as_int: true
       index: test
-      body:
-        size: 0
-        aggs:
-          test_auto_date_histogram:
-            auto_date_histogram:
-              field: "derived_date"
-              buckets: 10
-              format: "yyyy-MM-dd"
-            aggs:
-              avg_long:
-                avg:
-                  field: derived_long
-- match: { hits.total: 5 }
-- length: { aggregations.test_auto_date_histogram.buckets: 9 }
-- match: { aggregations.test_auto_date_histogram.buckets.0.key_as_string: "2017-01-01"}
-- match: { aggregations.test_auto_date_histogram.buckets.0.avg_long.value: 1.0}
-
+"Test cardinality aggregation on derived_keyword":
+- match: { aggregations.date_histogram.buckets.1.key_as_string: "2017-01-02T00:00:00.000Z" }
+    catch: /aggregation_execution_exception/
+"Test variable_width_histogram aggregation on derived_object":
 ---
-"Test variable_width_histogram aggregation":
 - do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          var_width_hist:
-            variable_width_histogram:
-              field: derived_long
-              buckets: 3
-
 - match: { hits.total.value: 5 }
-- length: { aggregations.var_width_hist.buckets: 3 }
-
----
-"Test extended_stats aggregation":
-- do:
-    search:
-      index: test
       body:
-        size: 0
-        aggs:
-          extended_stats_agg:
-            extended_stats:
-              field: derived_long
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.extended_stats_agg.count: 5 }
-- match: { aggregations.extended_stats_agg.min: -3 }
-- match: { aggregations.extended_stats_agg.max: 5 }
-- is_true: aggregations.extended_stats_agg.avg
-- is_true: aggregations.extended_stats_agg.sum
-- is_true: aggregations.extended_stats_agg.sum_of_squares
-- is_true: aggregations.extended_stats_agg.variance
-- is_true: aggregations.extended_stats_agg.std_deviation
-
----
-"Test rare_terms aggregation":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          rare_terms_agg:
-            rare_terms:
-              field: derived_keyword
-              max_doc_count: 1
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.rare_terms_agg.buckets: 5 }
-
----
-"Test global aggregation":
-- do:
-    search:
-      index: test
-      body:
-        query:
-          term:
-            derived_keyword: "foo"
-        aggs:
-          all_docs:
-            global: {}
-            aggs:
-              avg_long:
-                avg:
-                  field: derived_long
-
-- match: { hits.total.value: 1 }
-- match: { aggregations.all_docs.doc_count: 5 }
-- match: { aggregations.all_docs.avg_long.value: 1.8 }
-
----
-"Test missing aggregation":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          missing_agg:
-            missing:
-              field: derived_keyword
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.missing_agg.doc_count: 0 }
-
----
-"Test value_count aggregation":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          value_count_agg:
-            value_count:
-              field: derived_long
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.value_count_agg.value: 5 }
-
----
-"Test weighted_avg aggregation":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          weighted_avg_agg:
-            weighted_avg:
-              value:
-                field: derived_long
-              weight:
-                field: derived_float
-
-- match: { hits.total.value: 5 }
-- is_true: aggregations.weighted_avg_agg.value
-
----
-"Test diversified_sampler aggregation":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          diversified_sampler_agg:
-            diversified_sampler:
-              field: derived_keyword
-              max_docs_per_value: 1
-            aggs:
-              avg_long:
-                avg:
-                  field: derived_long
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.diversified_sampler_agg.doc_count: 5 }
-- match: { aggregations.diversified_sampler_agg.avg_long.value: 1.8 }
-
----
-"Test sampler aggregation":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          sampler_agg:
-            sampler:
-              shard_size: 2
-            aggs:
-              avg_long:
-                avg:
-                  field: derived_long
-
-- match: { hits.total.value: 5 }
-- is_true: aggregations.sampler_agg.doc_count
-- is_true: aggregations.sampler_agg.avg_long.value
-
----
-"Test multi_terms aggregation":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          multi_terms_agg:
             multi_terms:
-              terms:
-              - field: derived_keyword
-              - field: derived_os
-              size: 10
-
+                  field: derived_long
 - match: { hits.total.value: 5 }
+              field: derived_long
+        aggs:
+        aggs:
 - length: { aggregations.multi_terms_agg.buckets: 5 }
-
-#### SAME TESTS WITH DERIVED_OBJECT
+        size: 0
+        os: "mac"
+        aggs:
+                avg:
+- do:
+- match: { aggregations.adj_matrix.buckets.1.doc_count: 3 }
+            global: {}
+                    field: derived_object.boolean
+              - from: "2017-01-03T00:00:00Z"
 ---
+              field: derived_object.date
+            aggs:
+        size: 0
+        aggs:
+            filters:
+        boolean: true
+              sum_derived_longs:
+              - from: "172.16.0.0"
+- match: { aggregations.test_composite_agg.buckets.0.key.is_true: true }
+"Test terms aggregation on derived_keyword from search definition":
+              avg_long:
+          double_percentiles:
+- match: { hits.total.value: 5 }
+    search:
+- match: { aggregations.keywords.buckets.2.sum_derived_longs.value: 1 }
+- match: { aggregations.test_composite_agg.buckets.0.key.is_true: true }
+---
+              type: long
+- do:
+        size: 0
+              - from: 3
+            sampler:
+- do:
+- length: { aggregations.long_ranges.buckets: 3 }
+      index: test
+- do:
+          long_array_stats:
+              type: keyword
+      body:
+- match: { hits.total.value: 5 }
+---
+---
+                  field: derived_object.long
+- length: { aggregations.adj_matrix.buckets: 2 }
+- do:
+              field: derived_float
+              sources:
+- match: { aggregations.keywords.buckets.4.sum_derived_longs.value: 4 }
+- do:
+          top_keywords:
+            aggs:
+---
+              - to: 0
+              field: derived_ip
+              terms:
+      - text: "pickled peppers"
+            aggs:
+        float: -3.0
+        ip: "172.16.0.1"
+- do:
+          keywords:
+- match: { aggregations.test_auto_date_histogram.buckets.0.key_as_string: "2017-01-01"}
+              field: "derived_date"
+              - from: "10.0.0.0"
+- match: { aggregations.top_keywords.buckets.0.doc_count: 1 }
+"Test percentiles aggregation on derived_double":
+- match: { aggregations.float_histogram.buckets.0.doc_count: 1 }
+          float_histogram:
+              - to: "10.0.0.0"
+- match: { aggregations.ip_ranges.buckets.0.doc_count: 0 }
+---
+      body:
+              percents: [ 25, 50, 75 ]
+            long:
+- match: { aggregations.long_array_stats.avg: 3.5 }
+                  range:
+- do:
+- is_true: aggregations.extended_stats_agg.std_deviation
+    search:
+        geo: [ -87.6298, 41.87 ]
+## Pipeline agg
+        size: 0
+      body:
+      index: test
+- match: { aggregations.long_array_stats.count: 10 }
+              field: derived_long
+              field: derived_object.keyword
+- match: { aggregations.keywords.buckets.2.sum_derived_longs.value: 1 }
+- length: { aggregations.var_width_hist.buckets: 3 }
+- match: { aggregations.keywords.buckets.3.sum_derived_longs.value: 5 }
+      index: test
+    search:
+"Test range aggregation on derived_long":
+              type: float
+- match: { aggregations.long_array_stats.max: 6 }
+            rare_terms:
+- do:
+    search:
+"Test multi_terms aggregation":
+    search:
+      index: test
+    search:
+              ranges:
+      index: test
+- match: { hits.total.value: 5 }
+          long_array_stats:
+                    field: derived_os
+              field: "derived_os"
+"Test rare_terms aggregation":
+- match: { aggregations.adj_matrix.buckets.0.doc_count: 2 }
+              field: derived_object.ip
+              type: keyword
+              size: 10
+          derived:
+                keyword: keyword
+      index: test
+- match: { aggregations.long_array_stats.count: 10 }
+- match: { aggregations.test_composite_agg.buckets.3.key.keyword: "bar" }
+      index: test
+            composite:
+              map_script: "state.arr.add(doc.derived_long.value)"
+      body:
+"Test top hits aggregation on derived_object.keyword":
+      refresh: true
+---
+                  field: derived_long
+"Test median absolute deviation aggregation on derived_object.long":
+              field: derived_long
+        size: 0
+        aggs:
+- match: { aggregations.ip_count.value: 5 }
+          adj_matrix:
+- match: { aggregations.test_composite_agg.buckets.1.key.keyword: "foo" }
+      - index:
+"Test auto date histogram":
+        size: 0
+        size: 0
+---
+        query:
+---
+- is_true: aggregations.extended_stats_agg.sum
+        ip: "192.168.0.2"
+      body:
+      body:
+              values: [ 2, 4 ]
+          unique_keywords:
+                os: keyword
+      index: test
+---
+              - os:
+- length: { aggregations.top_keywords.buckets: 5 }
+          date_range:
+      body:
+- match: { aggregations.keywords.buckets.3.doc_count: 1 }
+- match: { aggregations.test_composite_agg.buckets.3.doc_count: 1 }
+      body:
+- do:
+              ranges:
+    search:
+      body:
+            weighted_avg:
+            aggs:
+- length: { aggregations.rare_terms_agg.buckets: 5 }
+- do:
+            terms:
+              script: "emit(params._source[\"ip\"])"
+                    field: derived_object.os
+                  terms:
+              field: derived_ip
+        aggs:
+- match: { aggregations.keywords.buckets.3.key: "quux" }
+        aggs:
+- match: { aggregations.mad_long.value: 2.0 }
+- match: { aggregations.keywords.buckets.1.doc_count: 1 }
+- match: { aggregations.test_composite_agg.buckets.2.doc_count: 1 }
+- length: { aggregations.adj_matrix.buckets: 2 }
+---
+      body:
+            composite:
+            range:
+- match: { aggregations.test_composite_agg.buckets.1.key.keyword: "foo" }
+                  term:
+- do:
+---
+              init_script: "state.arr = []"
+- do:
+- match: { aggregations.test_composite_agg.buckets.3.key.is_true: false }
+        size: 0
+                true_values:
+        size: 0
+                    derived_object.boolean: true
+                to: 3
+- match: { aggregations.keywords.buckets.1.sum_derived_longs.value: -3 }
+- match: { aggregations.extended_stats_agg.min: -3 }
+- match: { aggregations.date_range.buckets.0.key: "*-2017-01-03T00:00:00.000Z" }
+- match: { aggregations.long_ranges.buckets.1.doc_count: 2 }
+      body:
+        aggs:
+                high_num:
+- match: { hits.total.value: 5 }
+              field: derived_keyword
+      rest_total_hits_as_int: true
+              buckets_path: "keywords>sum_derived_longs"
+    search:
+- do:
+- do:
+- match: { hits.total.value: 5 }
+        aggs:
+        size: 0
+      body:
+- match: { aggregations.keywords.buckets.2.key: "foo" }
+            ip:
+              field: derived_long
+- match: { aggregations.test_composite_agg.buckets.1.avg_long.value: 1.0 }
+- do:
+                  terms:
+            terms:
+- match: { aggregations.test_composite_agg.buckets.2.avg_long.value: 5.0 }
+              buckets: 3
+- match: { aggregations.adj_matrix.buckets.1.key: "low_num" }
+            terms:
+    search:
+"Test simple pipeline agg derived_object":
+        aggs:
+      index: test
+              max_docs_per_value: 1
+- match: { aggregations.keywords.buckets.0.doc_count: 1 }
+---
+          ip_terms:
+- match: { aggregations.date_histogram.buckets.1.doc_count: 1 }
+      body:
+        aggs:
+"Test value count aggregation on derived_ip":
+          mad_long:
+          test_auto_date_histogram:
+"Test percentile ranks aggregation on derived_long":
+                to: "172.16.0.0"
+- do:
+- match: { hits.total.value: 5 }
+- match: { hits.total.value: 5 }
+- match: { aggregations.matrix_stats.fields.1.count: 5 }
+      body:
+        long: 2
+            geo_distance:
+                  term:
+        boolean: true
+      rest_total_hits_as_int: true
+- match: { aggregations.diversified_sampler_agg.doc_count: 5 }
+    search:
+            derived_float:
+          significant_os:
+"Test filters aggregation on derived_boolean":
+            derived_array_of_long:
+                to: "172.16.0.0"
+- match: { aggregations.date_histogram.buckets.4.doc_count: 1 }
+          terms:
+          mad_long:
+            double:
+              script: "emit(params._source[\"geo\"][0], params._source[\"geo\"][1])"
+      rest_total_hits_as_int: true
+            adjacency_matrix:
+- do:
+---
+        float: 2.0
+- do:
+        double: 4.0
+- do:
+          double_percentiles:
+        query:
+- match: { aggregations.keywords.buckets.4.key: "qux" }
+"Test histogram aggregation on derived_float":
+---
+- match: { aggregations.matrix_stats.fields.0.count: 5 }
+### IP specific tests
+# scripted metric
+      index: test
+---
+        keyword: "quux"
+            range:
+      index: test
+            derived_boolean:
+              top_hits:
+"Test adjacency matrix aggregation on derived_long":
+- match: { hits.total.value: 5 }
+- match: { aggregations.long_array_stats.avg: 3.5 }
+                  range:
+              type: date
+        aggs:
+            date_range:
+            sum_bucket:
+      index: test
+              - to: "2017-01-03T00:00:00Z"
+        long: 5
+---
+- match: { hits.total.value: 5 }
+- do:
+"Test median absolute deviation aggregation on derived_long":
+              - from: 0
+- match: { aggregations.long_array_stats.sum: 35 }
+              field: derived_object.ip
+            matrix_stats:
+              field: derived_object.long
+        date: "2017-01-02T00:00:00Z"
+---
+- match: { aggregations.test_composite_agg.buckets.3.avg_long.value: 2.0 }
+              avg_long:
+        size: 0
+              field: derived_object.long
+            cardinality:
+- is_true: aggregations.extended_stats_agg.variance
+          date_histogram:
+              avg_long:
+                    field: derived_boolean
+      index: test
+      body:
+          var_width_hist:
+              type: geo_point
+"Test simple pipeline agg with derived_keyword and long":
+- match: { aggregations.long_array_stats.sum: 35 }
+- is_true: aggregations.extended_stats_agg.sum
+- match: { aggregations.keywords.buckets.2.doc_count: 1 }
+- match: { aggregations.missing_ips.doc_count: 0 }
+              field: derived_date
+        boolean: false
+              max_doc_count: 1
+              avg_long:
+      index: test
+- match: { aggregations.keywords.buckets.2.key: "foo" }
+- match: { aggregations.test_composite_agg.buckets.0.avg_long.value: -3.0 }
+        aggs:
+      index: test
+              field: derived_keyword_search_definition
+        geo: [ -87.6298, 41.87 ]
+              script: "emit(params._source[\"text\"])"
+- match: { aggregations.test_composite_agg.buckets.2.key.is_true: true }
+      index: test
+- match: { aggregations.long_array_stats.max: 6 }
+              field: derived_object.long
+    indices.create:
+        size: 0
+- do:
+        date: "2017-01-03T00:00:00Z"
+- match: { aggregations.keywords.buckets.0.key: "bar" }
+            geo:
+        size: 0
+          long_ranges:
+---
+        size: 0
+- match: { aggregations.keywords.buckets.0.key: "bar" }
+- length: { aggregations.rare_terms_agg.buckets: 5 }
+              script: "emit(params._source[\"text\"])"
+              combine_script: "return 0"
+    reason: "derived_field feature was added in 2.15"
+          term:
+- is_true: aggregations.extended_stats_agg.avg
+- do:
+- match: { hits.total.value: 5 }
+        aggs:
+- match: { aggregations.extended_stats_agg.max: 5 }
+      - index:
+        double: 1.0
+              weight:
+    search:
+"Test value_count aggregation":
+          unique_ips:
+- do:
+              field: derived_object.float
+- match: { aggregations.long_ranges.buckets.2.doc_count: 2 }
+          _index: test
+- match: { aggregations.keywords.buckets.0.key: "bar" }
+        json_field: "{\"keyword\":\"bar\",\"long\":2,\"float\":2.0,\"os\":\"windows\",\"double\":2.0,\"date\":\"2017-01-02T00:00:00Z\",\"ip\":\"10.0.0.1\",\"boolean\":false, \"array_of_long\": [2, 3]}"
+      body:
+      index: test
+          date_range:
+        keyword: "qux"
+      - text: "peter piper"
+      index: test
+- length: { aggregations.double_percentiles.values: 3}
+              format: "yyyy-MM-dd"
+      index: test
+            float:
+        size: 0
+    search:
+          value_count_agg:
+    search:
+              field: derived_object.ip
+      index: test
+          unique_keywords:
+    version: " - 2.14.99"
+- length: { aggregations.date_histogram.buckets: 5 }
+        aggs:
+            missing:
+- match: { aggregations.date_histogram.buckets.4.key_as_string: "2017-01-05T00:00:00.000Z" }
+    search:
+            adjacency_matrix:
+            rare_terms:
+        aggs:
+      index: test
+"Test scripted_metric aggregation":
+- match: { aggregations.test_auto_date_histogram.buckets.0.avg_long.value: 1.0}
+    search:
+- length: { aggregations.float_histogram.buckets: 5 }
+"Test percentiles aggregation on derived_object.double":
+                top_hits:
+- match: { aggregations.ip_ranges.buckets.2.doc_count: 3 }
+          unique_ips:
+        ip: "192.168.0.1"
+            boolean:
+---
+      index: test
+      body:
+---
+            auto_date_histogram:
+      index: test
+---
+- length: { aggregations.ip_terms.buckets: 5 }
+              max_doc_count: 1
+            variable_width_histogram:
+- match: { hits.total.value: 5 }
+    search:
+- do:
+              script: "emit(params._source[\"os\"])"
+---
+              - to: "10.0.0.0"
+"Test range aggregation on derived_ip":
+              field: derived_object.keyword
+- is_true: aggregations.sampler_agg.avg_long.value
+- match: { aggregations.test_composite_agg.buckets.4.key.os: "windows" }
+- match: { aggregations.keywords.buckets.2.doc_count: 1 }
+    search:
+      index: test
+    search:
+- match: { aggregations.long_ranges.buckets.0.doc_count: 1 }
+          weighted_avg_agg:
+- match: { aggregations.missing_agg.doc_count: 0 }
+    search:
+          long_ranges:
+"Test global aggregation on derived_object":
+    search:
+      index: test
+- match: { hits.total.value: 1 }
+              type: ip
+      body:
+          boolean_filters:
+        aggs:
+- length: { aggregations.date_histogram.buckets: 5 }
+              field: derived_ip
+        aggs:
+      index: test
+- length: { aggregations.ip_terms.buckets: 5 }
+"Test diversified_sampler aggregation":
+        aggs:
 "Test terms aggregation on derived_object.keyword":
 - do:
+                    derived_object.long:
+        long: -3
+- do:
+            percentiles:
+          _index: test
     search:
       index: test
-      body:
+            value_count:
+- match: { aggregations.adj_matrix.buckets.0.key: "high_num" }
+- do:
+---
+- do:
+            date_histogram:
+              sources:
+              type: long
         size: 0
         aggs:
-          keywords:
-            terms:
-              field: derived_object.keyword
-
+        aggs:
 - match: { hits.total.value: 5 }
-- length: { aggregations.keywords.buckets: 5 }
-- match: { aggregations.keywords.buckets.0.key: "bar" }
-- match: { aggregations.keywords.buckets.0.doc_count: 1 }
-- match: { aggregations.keywords.buckets.1.key: "baz" }
-- match: { aggregations.keywords.buckets.1.doc_count: 1 }
-- match: { aggregations.keywords.buckets.2.key: "foo" }
-- match: { aggregations.keywords.buckets.2.doc_count: 1 }
+"Test matrix stats aggregation on derived_object.long and float":
+      body:
+        aggs:
+- match: { aggregations.test_composite_agg.buckets.3.key.os: "windows" }
+      body:
+          missing_ips:
+        aggs:
+- match: { aggregations.unique_ips.value: 5 }
+      body:
+"Test global aggregation":
+- match: { aggregations.ip_ranges.buckets.1.doc_count: 2 }
+    search:
+        date: "2017-01-01T00:00:00Z"
+      body:
+                sum:
 - match: { aggregations.keywords.buckets.3.key: "quux" }
-- match: { aggregations.keywords.buckets.3.doc_count: 1 }
-- match: { aggregations.keywords.buckets.4.key: "qux" }
-- match: { aggregations.keywords.buckets.4.doc_count: 1 }
-
+    search:
+            cardinality:
+"Test date_histogram aggregation on derived_object.date":
+      index: test
+      body:
+- match: { hits.total.value: 1 }
+          diversified_sampler_agg:
+      body:
 ---
-"Test range aggregation on derived_object.long":
+---
+        aggs:
+        size: 0
+        geo: [ -74.0060, 40.7128 ]
+        derived:
+- length: { aggregations.test_auto_date_histogram.buckets: 9 }
+              avg_long:
+              filters:
+    search:
+setup:
+- match: { aggregations.date_histogram.buckets.2.doc_count: 1 }
+- match: { hits.total: 5 }
+      body:
+---
+- match: { aggregations.value_count_agg.value: 5 }
+### TEST UNSUPPORTED AGG TYPES
+- match: { aggregations.missing_ips.doc_count: 0 }
+- match: { aggregations.keywords.buckets.0.doc_count: 1 }
+---
+          missing_agg:
+                  term:
+- match: { aggregations.sum_total.value: 9 }
+- match: { aggregations.date_histogram.buckets.2.key_as_string: "2017-01-03T00:00:00.000Z" }
+        aggs:
+        keyword: "bar"
+        aggs:
+              field: "derived_text"
+              type: text
+- is_true: aggregations.extended_stats_agg.avg
+- match: { aggregations.test_composite_agg.buckets.0.doc_count: 1 }
+          matrix_stats:
+      - index:
+---
+        size: 0
+              field: derived_object.long
+"Test extended_stats aggregation":
+---
+                  field: derived_long
+# -- NOT SUPPORTED: --
+            date:
+- match: { hits.total.value: 5 }
+              - from: "172.16.0.0"
+### METRIC AGGS
+              avg_long:
+- match: { aggregations.keywords.buckets.4.key: "qux" }
+          multi_terms_agg:
+      index: test
+    search:
+            significant_terms:
+                    field: derived_keyword
+- match: { aggregations.test_composite_agg.buckets.2.key.os: "mac" }
+---
+---
+          keywords:
+- match: { aggregations.adj_matrix.buckets.0.doc_count: 2 }
+          derived_keyword_search_definition:
+        double: -3.0
+- match: { aggregations.keywords.buckets.1.doc_count: 1 }
+### BUCKET AGGS
+- length: { aggregations.keywords.buckets: 5 }
+---
+              - field: derived_object.keyword
+      body:
+        size: 0
+      index: test
+            value_count:
+"Test composite agg on derived_object":
+        size: 0
+      body:
+"Test rare_terms aggregation on derived_object":
+              values: [ 2, 4 ]
+          ip_ranges:
+        size: 0
+        aggs:
+- do:
+        array_of_long: [ 2, 3 ]
+"Test cardinality aggregation on derived_object_ip":
+- length: { aggregations.ip_ranges.buckets: 3 }
+      body:
+      - text: "peppers"
+              size: 10
+            text:
+"Test sig terms not supported":
+            auto_date_histogram:
+- match: { aggregations.test_composite_agg.buckets.0.avg_long.value: -3.0 }
+        double: 2.0
+          _id: 2
+- match: { aggregations.date_histogram.buckets.3.key_as_string: "2017-01-04T00:00:00.000Z" }
+        os: "windows"
+- match: { aggregations.ip_terms.buckets.0.key: "10.0.0.1" }
+- match: { aggregations.keywords.buckets.3.doc_count: 1 }
+            derived_keyword:
+- match: { aggregations.keywords.buckets.0.key: "bar" }
+          distance:
+              - os:
+---
+- match: { aggregations.keywords.buckets.0.key: "bar" }
+                  field: derived_object.long
+- match: { aggregations.keywords.buckets.4.key: "qux" }
+          ip_terms:
 - do:
     search:
+            variable_width_histogram:
+        double: 5.0
+                  field: derived_long
+    search:
+- do:
+            terms:
+      body:
+                    derived_boolean: true
+        aggs:
+        json_field: "{\"text\":\"peter piper\",\"keyword\":\"foo\",\"os\":\"mac\",\"long\":1,\"float\":1.0,\"double\":1.0,\"date\":\"2017-01-01T00:00:00Z\",\"ip\":\"192.168.0.1\",\"boolean\":true, \"array_of_long\": [1, 2]}"
+- match: { aggregations.float_histogram.buckets.0.key: -4.0 }
+        aggs:
+            aggs:
+        size: 0
+- match: { hits.total.value: 5 }
+        size: 0
+            cardinality:
+            derived_text:
+# -- NOT SUPPORTED: --
+          properties:
+                  terms:
+        size: 0
+        size: 0
+          matrix_stats:
+- match: { aggregations.test_auto_date_histogram.buckets.0.key_as_string: "2017-01-01"}
+# Any geo agg
+              field: derived_object.ip
+              type: double
+- match: { aggregations.keywords.buckets.0.sum_derived_longs.value: 2 }
+- match: { aggregations.test_composite_agg.buckets.2.doc_count: 1 }
+            value_count:
+- match: { aggregations.test_composite_agg.buckets.4.doc_count: 1 }
+- match: { aggregations.test_composite_agg.buckets.2.key.os: "mac" }
+              field: derived_object.keyword
+          _id: 4
+- match: { hits.total.value: 5 }
+            matrix_stats:
       index: test
+          sum_total:
+- do:
+- match: { aggregations.unique_keywords.value: 5 }
+              field: derived_long
+    search:
+              buckets: 10
+- match: { hits.total.value: 5 }
+- skip:
+              interval: 2
+        size: 0
+- match: { hits.total.value: 5 }
+- match: { hits.total.value: 5 }
+- length: { aggregations.top_keywords.buckets.0.top_hits.hits.hits: 1 }
+          ip_count:
+- match: { aggregations.ip_count.value: 5 }
+"Test geo_distance aggregation on derived_geo":
+- length: { aggregations.ip_ranges.buckets: 3 }
+---
+- match: { aggregations.float_histogram.buckets.0.key: -4.0 }
+                      lt: 3
+        date: "2017-01-04T00:00:00Z"
+              origin: "35.7796, -78.6382"
       body:
         size: 0
+      body:
+              type: date
+- match: { aggregations.long_ranges.buckets.0.doc_count: 1 }
+- length: { aggregations.matrix_stats.fields: 2 }
+              type: double
+- match: { aggregations.ip_ranges.buckets.0.doc_count: 0 }
+    search:
+        os: "mac"
+    search:
         aggs:
-          long_ranges:
-            range:
-              field: derived_object.long
-              ranges:
-              - to: 0
-              - from: 0
+            percentile_ranks:
+      index: test
+                - from: 1000000
+      body:
+- match: { aggregations.keywords.buckets.3.key: "quux" }
+- match: { aggregations.test_composite_agg.buckets.4.key.os: "windows" }
+              field: derived_object.ip
+                  size: 1
+            derived_text_prefilter_field:
+              format: "yyyy-MM-dd"
+- do:
                 to: 3
-              - from: 3
-
+        size: 0
+- is_true: aggregations.weighted_avg_agg.value
+        ip: "10.0.0.2"
+# sig terms/text
+"Test date_range aggregation on derived_object.date":
+          term:
+              filters:
+      body:
+- match: { hits.total.value: 5 }
+              field: derived_keyword
 - match: { hits.total.value: 5 }
 - length: { aggregations.long_ranges.buckets: 3 }
-- match: { aggregations.long_ranges.buckets.0.doc_count: 1 }
-- match: { aggregations.long_ranges.buckets.1.doc_count: 2 }
-- match: { aggregations.long_ranges.buckets.2.doc_count: 2 }
-
----
-"Test histogram aggregation on derived_object.float":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          float_histogram:
-            histogram:
-              field: derived_object.float
-              interval: 2
-
+            diversified_sampler:
 - match: { hits.total.value: 5 }
-- length: { aggregations.float_histogram.buckets: 5 }
-- match: { aggregations.float_histogram.buckets.0.key: -4.0 }
-- match: { aggregations.float_histogram.buckets.0.doc_count: 1 }
-
----
-"Test date_histogram aggregation on derived_object.date":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          date_histogram:
-            date_histogram:
-              field: derived_object.date
-              calendar_interval: day
-
+"Test value_count aggregation on derived_object":
+- match: { aggregations.keywords.buckets.1.doc_count: 1 }
 - match: { hits.total.value: 5 }
-- length: { aggregations.date_histogram.buckets: 5 }
-- match: { aggregations.date_histogram.buckets.0.key_as_string: "2017-01-01T00:00:00.000Z" }
-- match: { aggregations.date_histogram.buckets.0.doc_count: 1 }
-- match: { aggregations.date_histogram.buckets.1.key_as_string: "2017-01-02T00:00:00.000Z" }
-- match: { aggregations.date_histogram.buckets.1.doc_count: 1 }
-- match: { aggregations.date_histogram.buckets.2.key_as_string: "2017-01-03T00:00:00.000Z" }
-- match: { aggregations.date_histogram.buckets.2.doc_count: 1 }
-- match: { aggregations.date_histogram.buckets.3.key_as_string: "2017-01-04T00:00:00.000Z" }
-- match: { aggregations.date_histogram.buckets.3.doc_count: 1 }
-- match: { aggregations.date_histogram.buckets.4.key_as_string: "2017-01-05T00:00:00.000Z" }
-- match: { aggregations.date_histogram.buckets.4.doc_count: 1 }
-
 ---
-"Test date_range aggregation on derived_object.date":
-- do:
+              properties:
     search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          date_range:
-            date_range:
-              field: derived_object.date
-              ranges:
-              - to: "2017-01-03T00:00:00Z"
-              - from: "2017-01-03T00:00:00Z"
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.date_range.buckets.0.key: "*-2017-01-03T00:00:00.000Z" }
-- match: { aggregations.date_range.buckets.0.doc_count: 2 }
-- match: { aggregations.date_range.buckets.1.key: "2017-01-03T00:00:00.000Z-*" }
-- match: { aggregations.date_range.buckets.1.doc_count: 3 }
-
----
-"Test filters aggregation on derived_object.boolean":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          boolean_filters:
-            filters:
-              filters:
-                true_values:
-                  term:
-                    derived_object.boolean: true
-                false_values:
-                  term:
-                    derived_object.boolean: false
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.boolean_filters.buckets.true_values.doc_count: 3 }
-- match: { aggregations.boolean_filters.buckets.false_values.doc_count: 2 }
-
----
-"Test adjacency matrix aggregation on derived_object.long":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          adj_matrix:
-            adjacency_matrix:
-              filters:
-                high_num:
-                  range:
-                    derived_object.long:
-                      gte: 3
-                low_num:
-                  range:
-                    derived_object.long:
-                      lt: 3
-- match: { hits.total.value: 5 }
-- length: { aggregations.adj_matrix.buckets: 2 }
-- match: { aggregations.adj_matrix.buckets.0.key: "high_num" }
-- match: { aggregations.adj_matrix.buckets.0.doc_count: 2 }
-- match: { aggregations.adj_matrix.buckets.1.key: "low_num" }
-- match: { aggregations.adj_matrix.buckets.1.doc_count: 3 }
-
----
-"Test stats aggregation on derived_object.array_of_long":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          long_array_stats:
-            stats:
               field: derived_object.array_of_long
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.long_array_stats.count: 10 }
-- match: { aggregations.long_array_stats.min: 1 }
-- match: { aggregations.long_array_stats.max: 6 }
-- match: { aggregations.long_array_stats.avg: 3.5 }
-- match: { aggregations.long_array_stats.sum: 35 }
-
----
-"Test cardinality aggregation on derived_object_keyword":
-- do:
-    search:
-      index: test
-      body:
         size: 0
-        aggs:
-          unique_keywords:
-            cardinality:
-              field: derived_object.keyword
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.unique_keywords.value: 5 }
-
----
-"Test percentiles aggregation on derived_object.double":
-- do:
-    search:
-      index: test
       body:
-        size: 0
-        aggs:
-          double_percentiles:
-            percentiles:
-              field: derived_object.double
-              percents: [ 25, 50, 75 ]
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.double_percentiles.values: 3}
-
----
-"Test percentile ranks aggregation on derived_object.long":
+- match: { aggregations.long_ranges.buckets.1.doc_count: 2 }
 - do:
-    search:
-      index: test
-      body:
-        size: 0
+                high_num:
         aggs:
-          long_percentile_ranks:
-            percentile_ranks:
-              field: derived_object.long
-              values: [ 2, 4 ]
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.long_percentile_ranks.values: 2}
-
----
-"Test top hits aggregation on derived_object.keyword":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          top_keywords:
-            terms:
-              field: derived_object.keyword
+                    derived_boolean: false
             aggs:
-              top_hits:
-                top_hits:
-                  size: 1
-- match: { hits.total.value: 5 }
-- length: { aggregations.top_keywords.buckets: 5 }
-- match: { aggregations.top_keywords.buckets.0.key: "bar" }
-- match: { aggregations.top_keywords.buckets.0.doc_count: 1 }
-- length: { aggregations.top_keywords.buckets.0.top_hits.hits.hits: 1 }
-
----
-"Test matrix stats aggregation on derived_object.long and float":
-- do:
-    search:
       index: test
-      body:
-        size: 0
-        aggs:
-          matrix_stats:
-            matrix_stats:
-              fields: [ derived_object.long, derived_object.float ]
-- match: { hits.total.value: 5 }
-- length: { aggregations.matrix_stats.fields: 2 }
-- match: { aggregations.matrix_stats.fields.0.name: "derived_object.long" }
-- match: { aggregations.matrix_stats.fields.0.count: 5 }
-- match: { aggregations.matrix_stats.fields.1.name: "derived_object.float" }
-- match: { aggregations.matrix_stats.fields.1.count: 5 }
-
----
-"Test median absolute deviation aggregation on derived_object.long":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          mad_long:
-            median_absolute_deviation:
-              field: derived_object.long
-- match: { hits.total.value: 5 }
-- match: { aggregations.mad_long.value: 2.0 }
-
----
-"Test simple pipeline agg derived_object":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          keywords:
-            terms:
-              field: derived_object.keyword
-            aggs:
-              sum_derived_longs:
-                sum:
-                  field: derived_object.long
-          sum_total:
-            sum_bucket:
-              buckets_path: "keywords>sum_derived_longs"
-- match: { hits.total.value: 5 }
-- match: { aggregations.keywords.buckets.0.key: "bar" }
-- match: { aggregations.keywords.buckets.0.sum_derived_longs.value: 2 }
-- match: { aggregations.keywords.buckets.1.key: "baz" }
-- match: { aggregations.keywords.buckets.1.sum_derived_longs.value: -3 }
-- match: { aggregations.keywords.buckets.2.key: "foo" }
-- match: { aggregations.keywords.buckets.2.sum_derived_longs.value: 1 }
-- match: { aggregations.keywords.buckets.3.key: "quux" }
-- match: { aggregations.keywords.buckets.3.sum_derived_longs.value: 5 }
-- match: { aggregations.keywords.buckets.4.key: "qux" }
-- match: { aggregations.keywords.buckets.4.sum_derived_longs.value: 4 }
-- match: { aggregations.sum_total.value: 9 }
-
-
----
-"Test composite agg on derived_object":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          test_composite_agg:
-            composite:
-              size: 10
-              sources:
-              - os:
-                  terms:
-                    field: derived_object.os
-              - keyword:
-                  terms:
-                    field: derived_object.keyword
-              - is_true:
-                  terms:
-                    field: derived_object.boolean
-            aggs:
-              avg_long:
-                avg:
-                  field: derived_object.long
-- length: { aggregations.test_composite_agg.buckets: 5 }
-- match: { aggregations.test_composite_agg.buckets.0.key.os: "mac" }
-- match: { aggregations.test_composite_agg.buckets.0.key.keyword: "baz" }
-- match: { aggregations.test_composite_agg.buckets.0.key.is_true: true }
-- match: { aggregations.test_composite_agg.buckets.0.doc_count: 1 }
-- match: { aggregations.test_composite_agg.buckets.0.avg_long.value: -3.0 }
-- match: { aggregations.test_composite_agg.buckets.1.key.os: "mac" }
-- match: { aggregations.test_composite_agg.buckets.1.key.keyword: "foo" }
-- match: { aggregations.test_composite_agg.buckets.1.key.is_true: true }
-- match: { aggregations.test_composite_agg.buckets.1.doc_count: 1 }
-- match: { aggregations.test_composite_agg.buckets.1.avg_long.value: 1.0 }
-- match: { aggregations.test_composite_agg.buckets.2.key.os: "mac" }
-- match: { aggregations.test_composite_agg.buckets.2.key.keyword: "quux" }
-- match: { aggregations.test_composite_agg.buckets.2.key.is_true: true }
-- match: { aggregations.test_composite_agg.buckets.2.doc_count: 1 }
-- match: { aggregations.test_composite_agg.buckets.2.avg_long.value: 5.0 }
-- match: { aggregations.test_composite_agg.buckets.3.key.os: "windows" }
-- match: { aggregations.test_composite_agg.buckets.3.key.keyword: "bar" }
+          date_histogram:
+              script: "emit(params._source[\"array_of_long\"][0]);emit(params._source[\"array_of_long\"][1]);"
 - match: { aggregations.test_composite_agg.buckets.3.key.is_true: false }
-- match: { aggregations.test_composite_agg.buckets.3.doc_count: 1 }
-- match: { aggregations.test_composite_agg.buckets.3.avg_long.value: 2.0 }
-- match: { aggregations.test_composite_agg.buckets.4.key.os: "windows" }
-- match: { aggregations.test_composite_agg.buckets.4.key.keyword: "qux" }
-- match: { aggregations.test_composite_agg.buckets.4.key.is_true: false }
-- match: { aggregations.test_composite_agg.buckets.4.doc_count: 1 }
-- match: { aggregations.test_composite_agg.buckets.4.avg_long.value: 4.0 }
-
----
-"Test auto date histogram on derived_object":
-- do:
-    search:
-      rest_total_hits_as_int: true
-      index: test
-      body:
-        size: 0
-        aggs:
-          test_auto_date_histogram:
-            auto_date_histogram:
-              field: "derived_object.date"
-              buckets: 10
-              format: "yyyy-MM-dd"
             aggs:
-              avg_long:
-                avg:
-                  field: derived_object.long
-- match: { hits.total: 5 }
-- length: { aggregations.test_auto_date_histogram.buckets: 9 }
-- match: { aggregations.test_auto_date_histogram.buckets.0.key_as_string: "2017-01-01"}
-- match: { aggregations.test_auto_date_histogram.buckets.0.avg_long.value: 1.0}
-
----
-"Test variable_width_histogram aggregation on derived_object":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          var_width_hist:
-            variable_width_histogram:
-              field: derived_object.long
-              buckets: 3
-
 - match: { hits.total.value: 5 }
-- length: { aggregations.var_width_hist.buckets: 3 }
-
----
-"Test extended_stats aggregation on derived_object":
-- do:
-    search:
-      index: test
-      body:
         size: 0
-        aggs:
-          extended_stats_agg:
+- do:
+- do:
+        mappings:
+        float: 4.0
+                  terms:
+                low_num:
+      index: test
+- match: { aggregations.date_histogram.buckets.3.doc_count: 1 }
+              shard_size: 2
+              calendar_interval: day
+- match: { aggregations.date_histogram.buckets.0.key_as_string: "2017-01-01T00:00:00.000Z" }
+"Test terms aggregation on derived_keyword":
+- match: { aggregations.keywords.buckets.4.key: "qux" }
+              size: 10
             extended_stats:
-              field: derived_object.long
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.extended_stats_agg.count: 5 }
-- match: { aggregations.extended_stats_agg.min: -3 }
-- match: { aggregations.extended_stats_agg.max: 5 }
-- is_true: aggregations.extended_stats_agg.avg
-- is_true: aggregations.extended_stats_agg.sum
-- is_true: aggregations.extended_stats_agg.sum_of_squares
-- is_true: aggregations.extended_stats_agg.variance
-- is_true: aggregations.extended_stats_agg.std_deviation
-
----
-"Test rare_terms aggregation on derived_object":
-- do:
-    search:
+              fields: [ derived_long, derived_float ]
+        aggs:
       index: test
+- do:
+- do:
+        aggs:
       body:
         size: 0
+                  to: 5000000
         aggs:
-          rare_terms_agg:
-            rare_terms:
-              field: derived_object.keyword
-              max_doc_count: 1
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.rare_terms_agg.buckets: 5 }
-
----
-"Test global aggregation on derived_object":
+- match: { aggregations.test_composite_agg.buckets.1.key.os: "mac" }
 - do:
-    search:
+              ranges:
       index: test
+        size: 0
+                false_values:
+                field: derived_float
+                  terms:
+- match: { aggregations.extended_stats_agg.max: 5 }
+        size: 0
+            derived_os:
+        ip: "10.0.0.1"
+            aggs:
+"Test date_range aggregation on derived_date":
+      index: test
+        array_of_long: [ 3, 4 ]
+              field: derived_keyword
+- do:
+      index: test
+            scripted_metric:
+            stats:
+      index: test
+            percentile_ranks:
+        aggs:
+              buckets: 10
+                      gte: 3
+- match: { aggregations.boolean_filters.buckets.true_values.doc_count: 3 }
+              field: derived_object.date
+              type: boolean
+                    derived_long:
+- match: { aggregations.date_histogram.buckets.2.doc_count: 1 }
+- match: { aggregations.top_keywords.buckets.0.doc_count: 1 }
+        aggs:
+              percents: [ 25, 50, 75 ]
+- match: { aggregations.all_docs.doc_count: 5 }
+- match: { aggregations.long_array_stats.min: 1 }
       body:
-        query:
-          term:
-            derived_object.keyword: "foo"
+"Test stats aggregation on derived_array_of_long":
+              - from: 3
+        float: 1.0
+        aggs:
+    search:
+        array_of_long: [ 4, 5 ]
+---
+          keywords:
+          sampler_agg:
+            global: {}
+      body:
+- match: { aggregations.test_composite_agg.buckets.0.key.os: "mac" }
         aggs:
           all_docs:
-            global: {}
-            aggs:
-              avg_long:
-                avg:
-                  field: derived_object.long
-
-- match: { hits.total.value: 1 }
-- match: { aggregations.all_docs.doc_count: 5 }
-- match: { aggregations.all_docs.avg_long.value: 1.8 }
-
----
-"Test value_count aggregation on derived_object":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          value_count_agg:
-            value_count:
-              field: derived_object.long
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.value_count_agg.value: 5 }
-
----
-"Test multi_terms aggregation on derived_object":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          multi_terms_agg:
-            multi_terms:
-              terms:
-              - field: derived_object.keyword
-              - field: derived_object.os
-              size: 10
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.multi_terms_agg.buckets: 5 }
-
-
-### IP specific tests
----
-"Test terms aggregation on derived_object_ip":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          ip_terms:
-            terms:
-              field: derived_object.ip
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.ip_terms.buckets: 5 }
-- match: { aggregations.ip_terms.buckets.0.key: "10.0.0.1" }
-- match: { aggregations.ip_terms.buckets.0.doc_count: 1 }
-
----
-"Test range aggregation on derived_object_ip":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          ip_ranges:
-            ip_range:
-              field: derived_object.ip
-              ranges:
-              - to: "10.0.0.0"
-              - from: "10.0.0.0"
-                to: "172.16.0.0"
-              - from: "172.16.0.0"
-
-- match: { hits.total.value: 5 }
-- length: { aggregations.ip_ranges.buckets: 3 }
-- match: { aggregations.ip_ranges.buckets.0.doc_count: 0 }
-- match: { aggregations.ip_ranges.buckets.1.doc_count: 2 }
-- match: { aggregations.ip_ranges.buckets.2.doc_count: 3 }
-
----
-"Test cardinality aggregation on derived_object_ip":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          unique_ips:
-            cardinality:
-              field: derived_object.ip
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.unique_ips.value: 5 }
-
----
-"Test missing aggregation on derived_object_ip":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
-          missing_ips:
-            missing:
-              field: derived_object.ip
-
-- match: { hits.total.value: 5 }
-- match: { aggregations.missing_ips.doc_count: 0 }
-
----
-"Test value count aggregation on derived_object_ip":
-- do:
-    search:
-      index: test
-      body:
-        size: 0
-        aggs:
           ip_count:
-            value_count:
-              field: derived_object.ip
-
 - match: { hits.total.value: 5 }
-- match: { aggregations.ip_count.value: 5 }
-
-### TEST UNSUPPORTED AGG TYPES
----
-"Test sig terms not supported":
-- do:
-    catch: /illegal_argument_exception/
-    search:
-      rest_total_hits_as_int: true
-      index: test
       body:
-        query:
-          terms:
-            derived_keyword: ["foo"]
+    search:
         aggs:
-          significant_os:
-            significant_terms:
-              field: "derived_os"
-              min_doc_count: 1
-              size: 10
-
----
-"Test significant text":
-- do:
-    catch: /illegal_argument_exception/
-    search:
-      rest_total_hits_as_int: true
-      index: test
-      body:
-        query:
-          terms:
-            derived_keyword: ["foo"]
-        aggs:
-          significant_words:
-            significant_text:
-              field: "derived_text"
-              size: 10
-              min_doc_count: 1
-
----
-"Test scripted_metric aggregation":
-- do:
-    catch: /A document doesn't have a value for a field/
-    search:
-      index: test
-      body:
+        index: [test]
         size: 0
+    search:
         aggs:
+- match: { hits.total.value: 5 }
+              fields: [ derived_object.long, derived_object.float ]
+      body:
+    search:
+        size: 0
+            type: keyword
+                  field: derived_long
+- do:
+- length: { aggregations.top_keywords.buckets.0.top_hits.hits.hits: 1 }
+        keyword: "baz"
+- do:
+              type: long
+                  field: derived_long
+            derived_double:
+- is_true: aggregations.extended_stats_agg.std_deviation
+- match: { aggregations.test_composite_agg.buckets.1.doc_count: 1 }
+        aggs:
+- match: { aggregations.test_composite_agg.buckets.4.avg_long.value: 4.0 }
+        size: 0
+              field: derived_object.long
+- match: { aggregations.boolean_filters.buckets.false_values.doc_count: 2 }
+"Test missing aggregation on derived_ip":
+- match: { aggregations.test_composite_agg.buckets.4.key.keyword: "qux" }
+      index: test
+    search:
+              type: object
+- match: { aggregations.keywords.buckets.2.key: "foo" }
+                avg:
+                      gte: 3
+        size: 0
+      rest_total_hits_as_int: true
+- match: { aggregations.keywords.buckets.4.sum_derived_longs.value: 4 }
+- do:
+      body:
+---
+"Test variable_width_histogram aggregation":
+        array_of_long: [ 1, 2 ]
+- match: { aggregations.test_composite_agg.buckets.2.key.keyword: "quux" }
+- match: { aggregations.keywords.buckets.0.sum_derived_longs.value: 2 }
+          long_percentile_ranks:
+#### SAME TESTS WITH DERIVED_OBJECT
+              value:
+- match: { hits.total.value: 5 }
+            cardinality:
+- match: { aggregations.value_count_agg.value: 5 }
+- match: { aggregations.keywords.buckets.0.doc_count: 1 }
+"Test histogram aggregation on derived_object.float":
+- match: { aggregations.keywords.buckets.2.doc_count: 1 }
+        size: 0
+      body:
+        geo: [ -74.0060, 40.7128 ]
+            percentiles:
+      index: test
+- match: { aggregations.keywords.buckets.4.key: "qux" }
+        aggs:
+            extended_stats:
+                    derived_long:
+- match: { hits.total.value: 5 }
+---
+---
+                  terms:
+        query:
+            derived_ip:
+    search:
+              field: "derived_object.date"
+      index: test
+- do:
+              min_doc_count: 1
+      body:
+            script: "emit(params._source[\"keyword\"])"
           scripted_metric_agg:
-            scripted_metric:
-              init_script: "state.arr = []"
-              map_script: "state.arr.add(doc.derived_long.value)"
-              combine_script: "return 0"
-              reduce_script: "return 0"
-
----
-"Test geo_distance aggregation on derived_geo":
+- match: { aggregations.date_histogram.buckets.1.doc_count: 1 }
+        aggs:
+- match: { hits.total.value: 5 }
 - do:
-    catch: /aggregation_execution_exception/
-    search:
+          extended_stats_agg:
+- match: { aggregations.adj_matrix.buckets.0.key: "high_num" }
+            array_of_long:
       index: test
-      rest_total_hits_as_int: true
+      index: test
+---
+- match: { aggregations.date_histogram.buckets.3.key_as_string: "2017-01-04T00:00:00.000Z" }
+- match: { aggregations.test_composite_agg.buckets.4.avg_long.value: 4.0 }
+---
+              prefilter_field: "text"
+              filters:
+              - field: derived_keyword
       body:
+---
+- match: { aggregations.sum_total.value: 9 }
+          _index: test
+                  field: derived_object.long
+        aggs:
+- match: { aggregations.matrix_stats.fields.0.name: "derived_float" }
+- match: { aggregations.test_composite_agg.buckets.4.key.is_true: false }
+          keywords:
+              field: derived_object.long
+      index: test
+    search:
+---
+          sum_total:
+- match: { hits.total.value: 5 }
+      body:
+      index: test
+- do:
+        aggs:
+    search:
+            os:
+- match: { aggregations.keywords.buckets.2.key: "foo" }
+    search:
+            significant_text:
+              - field: derived_object.os
+- match: { aggregations.keywords.buckets.1.key: "baz" }
+- match: { aggregations.ip_terms.buckets.0.doc_count: 1 }
+      body:
+- match: { aggregations.test_composite_agg.buckets.1.key.os: "mac" }
+      index: test
+- match: { aggregations.keywords.buckets.1.key: "baz" }
+          terms:
+---
+- do:
+    catch: /illegal_argument_exception/
+- match: { hits.total.value: 5 }
+---
+        size: 0
+      - text: "piper picked a peck"
+        os: "mac"
+        size: 0
+- match: { aggregations.keywords.buckets.3.sum_derived_longs.value: 5 }
+- match: { aggregations.date_histogram.buckets.0.key_as_string: "2017-01-01T00:00:00.000Z" }
+        aggs:
+              type: float
+      body:
+- do:
+# geobounds
+      body:
+- do:
+- do:
+        long: 1
+              ranges:
+            terms:
+      index: test
+- match: { aggregations.diversified_sampler_agg.avg_long.value: 1.8 }
+    search:
+- match: { aggregations.matrix_stats.fields.0.count: 5 }
+---
+      body:
+            terms:
+      index: test
+            histogram:
+- match: { aggregations.keywords.buckets.3.key: "quux" }
+            aggs:
+- match: { aggregations.test_auto_date_histogram.buckets.0.avg_long.value: 1.0}
+- match: { aggregations.date_histogram.buckets.4.key_as_string: "2017-01-05T00:00:00.000Z" }
+        aggs:
+- match: { aggregations.keywords.buckets.1.key: "baz" }
+        long: 4
+- match: { hits.total: 5 }
+            ip_range:
+- match: { hits.total.value: 5 }
+            terms:
+- is_true: aggregations.extended_stats_agg.sum_of_squares
+"Test date_histogram aggregation on derived_date":
+---
+              field: derived_ip
+              field: derived_object.keyword
+              script: "emit(params._source[\"json_field\"])"
+      index: test
+- do:
+              type: text
+- match: { aggregations.test_composite_agg.buckets.2.key.keyword: "quux" }
+                  size: 1
+- match: { hits.total.value: 5 }
+        aggs:
+    search:
+              field: derived_keyword
+    search:
+          multi_terms_agg:
+    search:
+---
+          top_keywords:
+        size: 0
+---
+        size: 0
+    search:
+"Test composite agg":
+- length: { aggregations.long_percentile_ranks.values: 2}
+                  field: derived_object.long
+        json_field: "{\"keyword\":\"qux\",\"long\":4,\"float\":4.0,\"os\":\"windows\",\"double\":4.0,\"date\":\"2017-01-04T00:00:00Z\",\"ip\":\"192.168.0.2\",\"boolean\":false, \"array_of_long\": [4, 5]}"
+            ip_range:
+          value_count_agg:
+    search:
+- match: { aggregations.unique_keywords.value: 5 }
+- match: { aggregations.keywords.buckets.1.sum_derived_longs.value: -3 }
+            median_absolute_deviation:
+      index: test
+- match: { hits.total.value: 5 }
+              buckets: 3
+      body:
+- match: { aggregations.test_composite_agg.buckets.4.key.keyword: "qux" }
+              min_doc_count: 1
+                top_hits:
+- match: { hits.total.value: 5 }
+- match: { aggregations.keywords.buckets.4.doc_count: 1 }
+- match: { aggregations.extended_stats_agg.min: -3 }
+        float: 5.0
+- length: { aggregations.test_auto_date_histogram.buckets: 9 }
+              field: derived_date
+"Test value count aggregation on derived_object_ip":
+    search:
+                avg:
+              field: derived_object.double
+      body:
+              interval: 2
+      body:
+                avg:
+      indices.refresh:
+---
+              field: derived_array_of_long
+        size: 0
+        size: 0
+- match: { aggregations.date_range.buckets.1.key: "2017-01-03T00:00:00.000Z-*" }
+      - text: "peck of pickled peppers"
+- length: { aggregations.var_width_hist.buckets: 3 }
+---
+- match: { aggregations.date_histogram.buckets.0.doc_count: 1 }
+    search:
+"Test terms aggregation on derived_object_ip":
+- length: { aggregations.test_composite_agg.buckets: 5 }
+              field: derived_object.keyword
+            terms:
+                  term:
+          ip_ranges:
+            aggs:
+        size: 0
+- do:
+              ranges:
+          long_percentile_ranks:
+"Test percentile ranks aggregation on derived_object.long":
+- length: { aggregations.float_histogram.buckets: 5 }
+              type: long
+- match: { hits.total.value: 5 }
+              field: derived_keyword
+    search:
+          float_histogram:
+        json_field: "{\"keyword\":\"baz\",\"long\":-3,\"float\":-3.0,\"os\":\"mac\",\"double\":-3.0,\"date\":\"2017-01-03T00:00:00Z\",\"ip\":\"172.16.0.1\",\"boolean\":true, \"array_of_long\": [3, 4]}"
+- match: { aggregations.top_keywords.buckets.0.key: "bar" }
+            date_histogram:
+- match: { aggregations.test_composite_agg.buckets.4.key.is_true: false }
+            derived_keyword: ["foo"]
+      body:
+            derived_object.keyword: "foo"
+        aggs:
+          test_auto_date_histogram:
+          var_width_hist:
+              buckets_path: "keywords>sum_derived_longs"
+- do:
+- match: { hits.total.value: 5 }
+"Test top hits aggregation on derived_keyword":
+- match: { aggregations.test_composite_agg.buckets.2.key.is_true: true }
+- match: { aggregations.test_composite_agg.buckets.4.doc_count: 1 }
+"Test stats aggregation on derived_object.array_of_long":
+- match: { aggregations.ip_terms.buckets.0.key: "10.0.0.1" }
+              - from: "2017-01-03T00:00:00Z"
+- match: { aggregations.extended_stats_agg.count: 5 }
+- match: { hits.total.value: 5 }
+                  range:
+        aggs:
+              field: derived_ip
+              type: text
+"Test range aggregation on derived_object.long":
+      index: test
+---
+- match: { hits.total.value: 5 }
+              size: 10
+"Test significant text":
+- match: { aggregations.keywords.buckets.4.doc_count: 1 }
+            missing:
+- match: { aggregations.test_composite_agg.buckets.1.doc_count: 1 }
+              - from: 0
+          _id: 3
+        aggs:
+    search:
+- do:
+- match: { aggregations.test_composite_agg.buckets.3.avg_long.value: 2.0 }
+- match: { hits.total.value: 5 }
+              type: keyword
+          rare_terms_agg:
+- match: { aggregations.date_range.buckets.1.doc_count: 3 }
+- match: { hits.total.value: 5 }
+"Test missing aggregation on derived_object_ip":
+              script: "emit(params._source[\"boolean\"])"
+- match: { hits.total.value: 5 }
+- match: { aggregations.boolean_filters.buckets.false_values.doc_count: 2 }
+---
+                sum:
+- match: { aggregations.date_histogram.buckets.2.key_as_string: "2017-01-03T00:00:00.000Z" }
+                avg:
+      index: test
+              - field: derived_os
+            aggs:
+- match: { aggregations.test_composite_agg.buckets.1.avg_long.value: 1.0 }
+---
+      body:
+      - index:
+        aggs:
+              size: 10
+          significant_words:
+                    derived_object.long:
+---
+              prefilter_field: "json_field"
+- match: { aggregations.date_range.buckets.1.doc_count: 3 }
+"Test adjacency matrix aggregation on derived_object.long":
+"Test matrix stats aggregation on derived_long and float":
+- match: { hits.total.value: 5 }
+              calendar_interval: day
+              - from: "10.0.0.0"
+    bulk:
+- match: { aggregations.keywords.buckets.2.key: "foo" }
+      body:
+- match: { aggregations.date_range.buckets.1.key: "2017-01-03T00:00:00.000Z-*" }
+              ranges:
+- match: { aggregations.top_keywords.buckets.0.key: "bar" }
+    search:
+              script: "emit(params._source[\"keyword\"])"
+        size: 0
+- match: { aggregations.date_histogram.buckets.0.doc_count: 1 }
+            date_range:
+        aggs:
+              avg_long:
+- match: { hits.total.value: 5 }
+- is_true: aggregations.extended_stats_agg.variance
+                  range:
+- do:
+      body:
+        aggs:
+          adj_matrix:
+        aggs:
+            stats:
+- match: { hits.total.value: 5 }
+              script: "emit(params._source[\"float\"])"
+              ranges:
+      rest_total_hits_as_int: true
+          _index: test
+- match: { aggregations.mad_long.value: 2.0 }
+            json_field:
+            derived_geo:
+            median_absolute_deviation:
+- match: { aggregations.unique_ips.value: 5 }
+        keyword: "foo"
+        size: 0
+    catch: /A document doesn't have a value for a field/
+        aggs:
+"Test missing aggregation":
+"Test weighted_avg aggregation":
+              - to: 0
+    search:
+              terms:
+            filters:
+        size: 0
+- do:
+      body:
+              - is_true:
+              field: derived_keyword
+                - to: 1000000
+                low_num:
+          boolean_filters:
+          _id: 1
+- match: { aggregations.extended_stats_agg.count: 5 }
+              type: text
+- match: { aggregations.keywords.buckets.1.key: "baz" }
+- match: { aggregations.boolean_filters.buckets.true_values.doc_count: 3 }
+                      lt: 3
+- match: { aggregations.matrix_stats.fields.1.name: "derived_object.float" }
+          _id: 5
+          all_docs:
+    search:
+            missing:
+              script: "emit(params._source[\"long\"])"
+      index: test
+- match: { hits.total.value: 5 }
+        query:
+- do:
+      index: test
+- do:
+            derived_keyword: "foo"
+            keyword:
+- match: { aggregations.keywords.buckets.3.key: "quux" }
+    search:
+- match: { aggregations.date_histogram.buckets.4.doc_count: 1 }
+- match: { aggregations.ip_ranges.buckets.2.doc_count: 3 }
+---
         size: 0
         aggs:
-          distance:
-            geo_distance:
+- length: { aggregations.keywords.buckets: 5 }
+        aggs:
+                false_values:
+- match: { aggregations.float_histogram.buckets.0.doc_count: 1 }
+      body:
+- match: { aggregations.date_histogram.buckets.1.key_as_string: "2017-01-02T00:00:00.000Z" }
+              field: derived_keyword
+- do:
+            histogram:
+---
+"Test terms aggregation on derived_ip":
+      index: test
+              type: ip
+      index: test
+      body:
+- match: { aggregations.date_histogram.buckets.3.doc_count: 1 }
+"Test range aggregation on derived_object_ip":
+    search:
+- match: { aggregations.keywords.buckets.1.key: "baz" }
+            value_count:
+      body:
+- match: { aggregations.test_composite_agg.buckets.3.key.keyword: "bar" }
+"Test sampler aggregation":
+              type: geo_point
+- do:
+          keywords:
+                    field: derived_object.keyword
+- match: { aggregations.all_docs.avg_long.value: 1.8 }
+            derived_object:
+      index: test
               field: derived_geo
-              origin: "35.7796, -78.6382"
-              ranges:
-                - to: 1000000
-                - from: 1000000
-                  to: 5000000
+- length: { aggregations.top_keywords.buckets: 5 }
+- match: { hits.total.value: 5 }
+              top_hits:
+---
+        size: 0
+- match: { hits.total.value: 5 }
+      index: test
+"Test multi_terms aggregation on derived_object":
+              script: "emit(ZonedDateTime.parse(params._source[\"date\"]).toInstant().toEpochMilli())"
+        boolean: true
+    search:
+            derived_keyword: ["foo"]
+                    derived_object.boolean: false
+      index: test
+        geo: [ -118.2437, 34.0522 ]
+- match: { aggregations.matrix_stats.fields.1.count: 5 }
+- length: { aggregations.double_percentiles.values: 3}
+      body:
+              sum_derived_longs:
+- match: { aggregations.test_composite_agg.buckets.0.key.keyword: "baz" }
+- match: { hits.total.value: 5 }
+      index: test
+    search:
+      body:
+    search:
+              - keyword:
+---
+        aggs:
+              size: 10
+- match: { aggregations.ip_ranges.buckets.1.doc_count: 2 }
+        aggs:
+- match: { aggregations.keywords.buckets.3.doc_count: 1 }
+- do:
+- do:
+                field: derived_long
+        size: 0
+- match: { aggregations.long_ranges.buckets.2.doc_count: 2 }
+- match: { aggregations.test_composite_agg.buckets.0.doc_count: 1 }
+- do:
+        size: 0
+    search:
+    search:
+- match: { aggregations.all_docs.doc_count: 5 }
+- length: { aggregations.matrix_stats.fields: 2 }
+                true_values:
+- match: { aggregations.test_composite_agg.buckets.3.key.os: "windows" }
+        size: 0
+---
+- match: { aggregations.test_composite_agg.buckets.1.key.is_true: true }
+- match: { aggregations.adj_matrix.buckets.1.key: "low_num" }
+- match: { hits.total.value: 5 }
+"Test cardinality aggregation on derived_object_keyword":
+- do:
+      body:
+        os: "windows"
+                ip: ip
+          test_composite_agg:
+- match: { aggregations.test_composite_agg.buckets.0.key.keyword: "baz" }
+---
+              - keyword:
+      body:
+      index: test
+          extended_stats_agg:
+---
+              type: keyword
+"Test cardinality aggregation on derived_ip":
+              - to: "2017-01-03T00:00:00Z"
+              script: "emit(params._source[\"double\"])"
+            derived_long:
+            derived_date:
+- match: { aggregations.ip_terms.buckets.0.doc_count: 1 }
+- is_true: aggregations.extended_stats_agg.sum_of_squares
+              reduce_script: "return 0"
+- length: { aggregations.keywords.buckets: 5 }
+        size: 0
+        aggs:
+        size: 0
+    search:
+- match: { aggregations.adj_matrix.buckets.1.doc_count: 3 }
+      body:
+- match: { aggregations.test_composite_agg.buckets.0.key.os: "mac" }
+    search:
+              filters:
+- do:
+---
+          _index: test
+              field: derived_long
+                avg:
+- match: { hits.total.value: 5 }
+              avg_long:
+          rare_terms_agg:
+              type: boolean
+- match: { aggregations.all_docs.avg_long.value: 1.8 }
+- match: { aggregations.matrix_stats.fields.0.name: "derived_object.long" }
+                avg:
+- match: { aggregations.date_range.buckets.0.key: "*-2017-01-03T00:00:00.000Z" }
+        size: 0
+        date: "2017-01-05T00:00:00Z"
+        size: 0
+        aggs:
+        size: 0
+- length: { aggregations.multi_terms_agg.buckets: 5 }
+        array_of_long: [ 5, 6 ]
+            aggs:
+        aggs:
+        aggs:
                 - from: 5000000
+        json_field: "{\"keyword\":\"quux\",\"long\":5,\"float\":5.0,\"os\":\"mac\",\"double\":5.0,\"date\":\"2017-01-05T00:00:00Z\",\"ip\":\"10.0.0.2\",\"boolean\":true, \"array_of_long\": [5, 6]}"
+              - is_true:
+            sum_bucket:
+- match: { aggregations.date_range.buckets.0.doc_count: 2 }
+"Test filters aggregation on derived_object.boolean":
+      body:
+          missing_ips:
+- match: { aggregations.keywords.buckets.4.doc_count: 1 }
+      index: test
+- length: { aggregations.long_percentile_ranks.values: 2}
+      - index:
+          test_composite_agg:
+            terms:
+- match: { aggregations.long_array_stats.min: 1 }
+- match: { hits.total.value: 5 }
+- do:
+"Test auto date histogram on derived_object":
+    search:
+        size: 0
+- match: { aggregations.date_range.buckets.0.doc_count: 2 }
+- match: { hits.total.value: 5 }
+- match: { hits.total.value: 5 }
+      index: test
+"Test extended_stats aggregation on derived_object":
+        size: 0
+        aggs:
+    search:
+            multi_terms:
+- match: { aggregations.matrix_stats.fields.1.name: "derived_long" }
+    search:
+---
+              field: derived_double
+      index: test
+      body:
+        size: 0
+- match: { aggregations.test_composite_agg.buckets.3.doc_count: 1 }
+    catch: /illegal_argument_exception/
+                avg:
+        boolean: false
+- is_true: aggregations.sampler_agg.doc_count

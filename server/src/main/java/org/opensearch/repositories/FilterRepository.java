@@ -1,355 +1,314 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.repositories;
-
-import org.apache.lucene.index.IndexCommit;
-import org.opensearch.Version;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateUpdateTask;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.metadata.RepositoryMetadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.Priority;
-import org.opensearch.common.lifecycle.Lifecycle;
-import org.opensearch.common.lifecycle.LifecycleListener;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
-import org.opensearch.index.snapshots.blobstore.RemoteStoreShardShallowCopySnapshot;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.store.lockmanager.RemoteStoreLockManagerFactory;
-import org.opensearch.indices.recovery.RecoveryState;
-import org.opensearch.snapshots.SnapshotId;
-import org.opensearch.snapshots.SnapshotInfo;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Map;
-import java.util.function.Consumer;
 import java.util.function.Function;
-
-/**
- * Repository that is filtered
- *
- * @opensearch.internal
- */
-public class FilterRepository implements Repository {
-
-    private final Repository in;
-
-    public FilterRepository(Repository in) {
-        this.in = in;
-    }
-
-    @Override
-    public RepositoryMetadata getMetadata() {
-        return in.getMetadata();
-    }
-
-    @Override
-    public SnapshotInfo getSnapshotInfo(SnapshotId snapshotId) {
-        return in.getSnapshotInfo(snapshotId);
-    }
-
-    @Override
-    public Metadata getSnapshotGlobalMetadata(SnapshotId snapshotId) {
-        return in.getSnapshotGlobalMetadata(snapshotId);
-    }
-
-    @Override
-    public IndexMetadata getSnapshotIndexMetaData(RepositoryData repositoryData, SnapshotId snapshotId, IndexId index) throws IOException {
-        return in.getSnapshotIndexMetaData(repositoryData, snapshotId, index);
-    }
-
-    @Override
-    public void getRepositoryData(ActionListener<RepositoryData> listener) {
-        in.getRepositoryData(listener);
-    }
-
-    @Override
-    public void finalizeSnapshot(
-        ShardGenerations shardGenerations,
-        long repositoryStateId,
-        Metadata clusterMetadata,
-        SnapshotInfo snapshotInfo,
-        Version repositoryMetaVersion,
-        Function<ClusterState, ClusterState> stateTransformer,
-        ActionListener<RepositoryData> listener
-    ) {
-        in.finalizeSnapshot(
-            shardGenerations,
-            repositoryStateId,
-            clusterMetadata,
-            snapshotInfo,
             repositoryMetaVersion,
-            stateTransformer,
-            listener
-        );
-    }
-
-    @Override
-    public void finalizeSnapshot(
-        ShardGenerations shardGenerations,
-        long repositoryStateId,
-        Metadata clusterMetadata,
-        SnapshotInfo snapshotInfo,
-        Version repositoryMetaVersion,
-        Function<ClusterState, ClusterState> stateTransformer,
-        Priority repositoryUpdatePriority,
-        ActionListener<RepositoryData> listener
-    ) {
-        in.finalizeSnapshot(
-            shardGenerations,
-            repositoryStateId,
-            clusterMetadata,
+            snapshotId,
+import org.opensearch.common.lifecycle.LifecycleListener;
+            startTime,
+        in.close();
             snapshotInfo,
-            repositoryMetaVersion,
-            stateTransformer,
-            repositoryUpdatePriority,
-            listener
-        );
-    }
-
-    @Override
-    public void deleteSnapshots(
-        Collection<SnapshotId> snapshotIds,
-        long repositoryStateId,
-        Version repositoryMetaVersion,
-        ActionListener<RepositoryData> listener
+import org.opensearch.cluster.ClusterStateUpdateTask;
+ * The OpenSearch Contributors require contributions made to
     ) {
-        in.deleteSnapshots(snapshotIds, repositoryStateId, repositoryMetaVersion, listener);
-    }
-
-    @Override
-    public long getSnapshotThrottleTimeInNanos() {
-        return in.getSnapshotThrottleTimeInNanos();
-    }
-
-    @Override
-    public long getRestoreThrottleTimeInNanos() {
-        return in.getRestoreThrottleTimeInNanos();
-    }
-
-    @Override
-    public long getRemoteUploadThrottleTimeInNanos() {
-        return in.getRemoteUploadThrottleTimeInNanos();
-    }
-
-    @Override
-    public long getLowPriorityRemoteUploadThrottleTimeInNanos() {
-        return in.getRemoteUploadThrottleTimeInNanos();
-    }
-
-    @Override
-    public long getRemoteDownloadThrottleTimeInNanos() {
-        return in.getRemoteDownloadThrottleTimeInNanos();
-    }
-
-    @Override
-    public long getLowPriorityRemoteDownloadThrottleTimeInNanos() {
-        return in.getLowPriorityRemoteDownloadThrottleTimeInNanos();
-    }
-
-    @Override
-    public String startVerification() {
-        return in.startVerification();
-    }
-
-    @Override
-    public void endVerification(String verificationToken) {
-        in.endVerification(verificationToken);
-    }
-
-    @Override
-    public void verify(String verificationToken, DiscoveryNode localNode) {
         in.verify(verificationToken, localNode);
     }
-
-    @Override
-    public boolean isReadOnly() {
-        return in.isReadOnly();
     }
-
-    @Override
-    public boolean isSystemRepository() {
-        return in.isSystemRepository();
-    }
-
-    @Override
-    public void snapshotShard(
-        Store store,
-        MapperService mapperService,
-        SnapshotId snapshotId,
-        IndexId indexId,
-        IndexCommit snapshotIndexCommit,
-        String shardStateIdentifier,
-        IndexShardSnapshotStatus snapshotStatus,
-        Version repositoryMetaVersion,
-        Map<String, Object> userMetadata,
-        ActionListener<String> listener,
-        IndexMetadata indexMetadata
-    ) {
-        in.snapshotShard(
-            store,
-            mapperService,
-            snapshotId,
-            indexId,
-            snapshotIndexCommit,
-            shardStateIdentifier,
-            snapshotStatus,
-            repositoryMetaVersion,
-            userMetadata,
-            listener,
-            indexMetadata
-        );
-    }
-
-    @Override
-    public void snapshotRemoteStoreIndexShard(
-        Store store,
-        SnapshotId snapshotId,
-        IndexId indexId,
-        IndexCommit snapshotIndexCommit,
-        String shardStateIdentifier,
-        IndexShardSnapshotStatus snapshotStatus,
-        long primaryTerm,
-        long startTime,
-        ActionListener<String> listener
-    ) {
-        in.snapshotRemoteStoreIndexShard(
-            store,
-            snapshotId,
-            indexId,
-            snapshotIndexCommit,
-            shardStateIdentifier,
-            snapshotStatus,
-            primaryTerm,
-            startTime,
-            listener
-        );
-    }
-
-    @Override
-    public void restoreShard(
-        Store store,
-        SnapshotId snapshotId,
-        IndexId indexId,
-        ShardId snapshotShardId,
-        RecoveryState recoveryState,
-        ActionListener<Void> listener
-    ) {
-        in.restoreShard(store, snapshotId, indexId, snapshotShardId, recoveryState, listener);
-    }
-
-    @Override
-    public RemoteStoreShardShallowCopySnapshot getRemoteStoreShallowCopyShardMetadata(
-        SnapshotId snapshotId,
-        IndexId indexId,
-        ShardId snapshotShardId
-    ) {
-        return in.getRemoteStoreShallowCopyShardMetadata(snapshotId, indexId, snapshotShardId);
-    }
-
-    @Override
-    public IndexShardSnapshotStatus getShardSnapshotStatus(SnapshotId snapshotId, IndexId indexId, ShardId shardId) {
-        return in.getShardSnapshotStatus(snapshotId, indexId, shardId);
-    }
-
-    @Override
-    public void updateState(ClusterState state) {
-        in.updateState(state);
-    }
-
-    @Override
-    public void executeConsistentStateUpdate(
+import org.opensearch.core.action.ActionListener;
         Function<RepositoryData, ClusterStateUpdateTask> createUpdateTask,
-        String source,
-        Consumer<Exception> onFailure
-    ) {
-        in.executeConsistentStateUpdate(createUpdateTask, source, onFailure);
-    }
-
+    public long getRemoteUploadThrottleTimeInNanos() {
+        SnapshotId source,
     @Override
+ * @opensearch.internal
+import org.opensearch.common.lifecycle.Lifecycle;
+    }
+    @Override
+        SnapshotId snapshotId,
+    }
+        SnapshotId snapshotId,
+import org.opensearch.cluster.metadata.Metadata;
+    public void getRepositoryData(ActionListener<RepositoryData> listener) {
+    @Override
+        long primaryTerm,
+ * Repository that is filtered
+    }
+    public void close() {
+ */
+ * under the License.
+        Collection<SnapshotId> snapshotIds,
+    public FilterRepository(Repository in) {
+            repositoryStateId,
+        ActionListener<String> listener
+    private final Repository in;
+        IndexCommit snapshotIndexCommit,
+            snapshotStatus,
+    public IndexShardSnapshotStatus getShardSnapshotStatus(SnapshotId snapshotId, IndexId indexId, ShardId shardId) {
+public class FilterRepository implements Repository {
+            shardStateIdentifier,
+            listener,
+    @Override
+/*
+import java.io.IOException;
+ * You may obtain a copy of the License at
+        this.in = in;
+        in.restoreShard(store, snapshotId, indexId, snapshotShardId, recoveryState, listener);
+ */
+import org.opensearch.snapshots.SnapshotId;
+        );
+    public void executeConsistentStateUpdate(
+    }
     public void cloneRemoteStoreIndexShardSnapshot(
-        SnapshotId source,
-        SnapshotId target,
-        RepositoryShardId shardId,
-        String shardGeneration,
-        RemoteStoreLockManagerFactory remoteStoreLockManagerFactory,
-        ActionListener<String> listener
-    ) {
-        in.cloneRemoteStoreIndexShardSnapshot(source, target, shardId, shardGeneration, remoteStoreLockManagerFactory, listener);
+        IndexShardSnapshotStatus snapshotStatus,
+        return in.getSnapshotIndexMetaData(repositoryData, snapshotId, index);
+        );
     }
-
-    @Override
-    public void cloneShardSnapshot(
-        SnapshotId source,
-        SnapshotId target,
-        RepositoryShardId shardId,
-        String shardGeneration,
-        ActionListener<String> listener
-    ) {
-        in.cloneShardSnapshot(source, target, shardId, shardGeneration, listener);
+    public String startVerification() {
+import org.opensearch.cluster.ClusterState;
+        long repositoryStateId,
     }
-
+import java.util.Map;
+        Version repositoryMetaVersion,
+import org.opensearch.cluster.node.DiscoveryNode;
     @Override
-    public Lifecycle.State lifecycleState() {
-        return in.lifecycleState();
+        in.updateState(state);
+            clusterMetadata,
     }
-
-    @Override
-    public void addLifecycleListener(LifecycleListener listener) {
-        in.addLifecycleListener(listener);
+ * not use this file except in compliance with the License.
     }
-
+        Priority repositoryUpdatePriority,
     @Override
-    public void removeLifecycleListener(LifecycleListener listener) {
-        in.removeLifecycleListener(listener);
-    }
-
-    @Override
+            indexMetadata
+ * software distributed under the License is distributed on an
+    public void restoreShard(
+    public void snapshotRemoteStoreIndexShard(
     public void start() {
-        in.start();
+ * ownership. Elasticsearch licenses this file to you under
+    public void removeLifecycleListener(LifecycleListener listener) {
+            mapperService,
+        ShardId snapshotShardId
+        in.cloneRemoteStoreIndexShardSnapshot(source, target, shardId, shardGeneration, remoteStoreLockManagerFactory, listener);
+import org.opensearch.snapshots.SnapshotInfo;
+    @Override
+    public long getRestoreThrottleTimeInNanos() {
+    @Override
+        return in.getShardSnapshotStatus(snapshotId, indexId, shardId);
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void cloneShardSnapshot(
+    public void finalizeSnapshot(
     }
-
+    }
+    @Override
+            listener
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+            primaryTerm,
+        long repositoryStateId,
+        RepositoryShardId shardId,
+        RemoteStoreLockManagerFactory remoteStoreLockManagerFactory,
+        return in.getRemoteDownloadThrottleTimeInNanos();
+    public long getSnapshotThrottleTimeInNanos() {
+            stateTransformer,
+        SnapshotInfo snapshotInfo,
+ * Modifications Copyright OpenSearch Contributors. See
+    @Override
+            store,
+            listener
+    @Override
+            snapshotStatus,
+        String shardStateIdentifier,
+import org.opensearch.Version;
+import org.opensearch.core.index.shard.ShardId;
+        in.snapshotShard(
+    public Metadata getSnapshotGlobalMetadata(SnapshotId snapshotId) {
+        return in.getRemoteStoreShallowCopyShardMetadata(snapshotId, indexId, snapshotShardId);
+        return in.getSnapshotThrottleTimeInNanos();
+            repositoryMetaVersion,
+    }
+            repositoryMetaVersion,
+    @Override
+import org.opensearch.cluster.metadata.RepositoryMetadata;
+            stateTransformer,
+    public boolean isSystemRepository() {
+        return in.getSnapshotGlobalMetadata(snapshotId);
+        Map<String, Object> userMetadata,
+        in.stop();
+package org.opensearch.repositories;
+        IndexCommit snapshotIndexCommit,
+/**
+    @Override
+            clusterMetadata,
+        return in.lifecycleState();
+    public void snapshotShard(
+ *
+        Version repositoryMetaVersion,
+    }
+    }
+        ActionListener<String> listener
+    @Override
+    ) {
+ * GitHub history for details.
+    ) {
+    public long getLowPriorityRemoteDownloadThrottleTimeInNanos() {
+    }
+    public IndexMetadata getSnapshotIndexMetaData(RepositoryData repositoryData, SnapshotId snapshotId, IndexId index) throws IOException {
+            userMetadata,
+    ) {
+        IndexId indexId,
+        Version repositoryMetaVersion,
+            snapshotInfo,
+    }
+        in.getRepositoryData(listener);
+        in.removeLifecycleListener(listener);
+    public void deleteSnapshots(
+        return in.getMetadata();
+    @Override
+        String source,
+        ShardGenerations shardGenerations,
+            listener
+        return in.startVerification();
+    }
+import org.opensearch.index.store.Store;
+            indexId,
+    @Override
+    @Override
+/*
+            repositoryStateId,
+        in.deleteSnapshots(snapshotIds, repositoryStateId, repositoryMetaVersion, listener);
+        Function<ClusterState, ClusterState> stateTransformer,
+    }
+    @Override
+    @Override
+    @Override
+ * this work for additional information regarding copyright
+            shardGenerations,
+        IndexId indexId,
+ */
+        return in.getLowPriorityRemoteDownloadThrottleTimeInNanos();
+    }
+    ) {
+    }
+ * compatible open source license.
+        IndexId indexId,
+    public void endVerification(String verificationToken) {
+        ActionListener<RepositoryData> listener
+ * specific language governing permissions and limitations
+    @Override
+    }
+            snapshotId,
+    public boolean isReadOnly() {
+        Metadata clusterMetadata,
+    @Override
+            repositoryUpdatePriority,
+    @Override
+        return in.getRestoreThrottleTimeInNanos();
+            indexId,
+        Store store,
+    ) {
+    public RemoteStoreShardShallowCopySnapshot getRemoteStoreShallowCopyShardMetadata(
+        ShardGenerations shardGenerations,
+        in.cloneShardSnapshot(source, target, shardId, shardGeneration, listener);
+ *
+    public long getLowPriorityRemoteUploadThrottleTimeInNanos() {
+    ) {
+ * this file be licensed under the Apache-2.0 license or a
+    public void verify(String verificationToken, DiscoveryNode localNode) {
+}
+        IndexShardSnapshotStatus snapshotStatus,
+        return in.getSnapshotInfo(snapshotId);
+        RecoveryState recoveryState,
+ * Unless required by applicable law or agreed to in writing,
+ *
+        SnapshotId snapshotId,
+        return in.getRemoteUploadThrottleTimeInNanos();
+        return in.getRemoteUploadThrottleTimeInNanos();
+            store,
+    public Lifecycle.State lifecycleState() {
+        in.snapshotRemoteStoreIndexShard(
+    public long getRemoteDownloadThrottleTimeInNanos() {
+    }
+            snapshotIndexCommit,
+            shardGenerations,
+        return in.isSystemRepository();
+import java.util.function.Consumer;
+ */
+        SnapshotId source,
+        ShardId snapshotShardId,
+import org.opensearch.index.snapshots.blobstore.RemoteStoreShardShallowCopySnapshot;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    public void addLifecycleListener(LifecycleListener listener) {
+import org.opensearch.index.store.lockmanager.RemoteStoreLockManagerFactory;
+    ) {
+        long startTime,
+    }
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        Metadata clusterMetadata,
+    public void finalizeSnapshot(
+        IndexMetadata indexMetadata
+        String shardGeneration,
+ * KIND, either express or implied.  See the License for the
+    @Override
+import org.opensearch.common.Priority;
+import org.apache.lucene.index.IndexCommit;
+        );
+        SnapshotId snapshotId,
+    }
+    ) {
+        return in.isReadOnly();
+    @Override
+    public RepositoryMetadata getMetadata() {
+        in.start();
+            shardStateIdentifier,
+        ActionListener<RepositoryData> listener
+    @Override
+        Store store,
+        SnapshotId target,
+        String shardStateIdentifier,
+        ActionListener<RepositoryData> listener
+        ActionListener<Void> listener
+    @Override
+    @Override
+    }
+        Version repositoryMetaVersion,
+import org.opensearch.indices.recovery.RecoveryState;
+    @Override
+        in.addLifecycleListener(listener);
+        IndexId indexId,
+    }
+        MapperService mapperService,
+        Store store,
+        Consumer<Exception> onFailure
+        ActionListener<String> listener,
+    }
+import org.opensearch.index.mapper.MapperService;
+        ActionListener<String> listener
+import java.util.Collection;
+ *
+        SnapshotInfo snapshotInfo,
+        in.finalizeSnapshot(
+    public void updateState(ClusterState state) {
+        RepositoryShardId shardId,
+ * Licensed to Elasticsearch under one or more contributor
+        in.endVerification(verificationToken);
+    }
+    }
+import org.opensearch.index.snapshots.IndexShardSnapshotStatus;
+import org.opensearch.cluster.metadata.IndexMetadata;
+    public SnapshotInfo getSnapshotInfo(SnapshotId snapshotId) {
+        String shardGeneration,
+    @Override
+    }
+/*
+        in.executeConsistentStateUpdate(createUpdateTask, source, onFailure);
+ * license agreements. See the NOTICE file distributed with
+        in.finalizeSnapshot(
+    ) {
+        long repositoryStateId,
     @Override
     public void stop() {
-        in.stop();
     }
-
+        SnapshotId target,
     @Override
-    public void close() {
-        in.close();
+    @Override
+        );
     }
-}
+    @Override
+        Function<ClusterState, ClusterState> stateTransformer,
+            snapshotIndexCommit,

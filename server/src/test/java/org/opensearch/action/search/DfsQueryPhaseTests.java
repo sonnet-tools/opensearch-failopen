@@ -1,332 +1,318 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.search;
-
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.TermStatistics;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.tests.store.MockDirectoryWrapper;
-import org.opensearch.action.OriginalIndices;
-import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
-import org.opensearch.common.util.concurrent.AtomicArray;
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.breaker.NoopCircuitBreaker;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.search.DocValueFormat;
+        }, mockSearchPhaseContext);
+                1,
 import org.opensearch.search.SearchPhaseResult;
-import org.opensearch.search.SearchShardTarget;
-import org.opensearch.search.dfs.DfsSearchResult;
-import org.opensearch.search.internal.ShardSearchContextId;
-import org.opensearch.search.query.QuerySearchRequest;
-import org.opensearch.search.query.QuerySearchResult;
-import org.opensearch.test.InternalAggregationTestCase;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.Transport;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.concurrent.atomic.AtomicReference;
-
-public class DfsQueryPhaseTests extends OpenSearchTestCase {
-
-    private static DfsSearchResult newSearchResult(int shardIndex, ShardSearchContextId contextId, SearchShardTarget target) {
-        DfsSearchResult result = new DfsSearchResult(contextId, target, null);
-        result.setShardIndex(shardIndex);
-        return result;
-    }
-
-    public void testDfsWith2Shards() throws IOException {
-        AtomicArray<DfsSearchResult> results = new AtomicArray<>(2);
-        AtomicReference<AtomicArray<SearchPhaseResult>> responseRef = new AtomicReference<>();
-        results.set(
-            0,
-            newSearchResult(
-                0,
-                new ShardSearchContextId("", 1),
-                new SearchShardTarget("node1", new ShardId("test", "na", 0), null, OriginalIndices.NONE)
-            )
-        );
-        results.set(
-            1,
-            newSearchResult(
-                1,
-                new ShardSearchContextId("", 2),
-                new SearchShardTarget("node2", new ShardId("test", "na", 0), null, OriginalIndices.NONE)
-            )
-        );
-        results.get(0).termsStatistics(new Term[0], new TermStatistics[0]);
-        results.get(1).termsStatistics(new Term[0], new TermStatistics[0]);
-
-        SearchTransportService searchTransportService = new SearchTransportService(null, null) {
-            @Override
-            public void sendExecuteQuery(
-                Transport.Connection connection,
+            mockSearchPhaseContext.searchRequest,
+        }, mockSearchPhaseContext);
+        QueryPhaseResultConsumer consumer = searchPhaseController.newSearchPhaseResults(
+        assertEquals(42, responseRef.get().get(0).queryResult().topDocs().topDocs.scoreDocs[0].doc);
+        assertNotNull(responseRef.get().get(0));
                 QuerySearchRequest request,
-                SearchTask task,
                 SearchActionListener<QuerySearchResult> listener
-            ) {
-                if (request.contextId().getId() == 1) {
-                    QuerySearchResult queryResult = new QuerySearchResult(
-                        new ShardSearchContextId("", 123),
-                        new SearchShardTarget("node1", new ShardId("test", "na", 0), null, OriginalIndices.NONE),
-                        null
-                    );
-                    queryResult.topDocs(
-                        new TopDocsAndMaxScore(
-                            new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(42, 1.0F) }),
-                            2.0F
-                        ),
-                        new DocValueFormat[0]
-                    );
-                    queryResult.size(2); // the size of the result set
-                    listener.onResponse(queryResult);
-                } else if (request.contextId().getId() == 2) {
-                    QuerySearchResult queryResult = new QuerySearchResult(
-                        new ShardSearchContextId("", 123),
+        results.set(
+ * under the License.
+        results.set(
+ *
+            @Override
                         new SearchShardTarget("node2", new ShardId("test", "na", 0), null, OriginalIndices.NONE),
-                        null
-                    );
-                    queryResult.topDocs(
-                        new TopDocsAndMaxScore(
-                            new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(84, 2.0F) }),
-                            2.0F
-                        ),
-                        new DocValueFormat[0]
-                    );
                     queryResult.size(2); // the size of the result set
-                    listener.onResponse(queryResult);
-                } else {
-                    fail("no such request ID: " + request.contextId());
-                }
-            }
-        };
-        SearchPhaseController searchPhaseController = searchPhaseController();
-        MockSearchPhaseContext mockSearchPhaseContext = new MockSearchPhaseContext(2);
-        mockSearchPhaseContext.searchTransport = searchTransportService;
-        QueryPhaseResultConsumer consumer = searchPhaseController.newSearchPhaseResults(
-            OpenSearchExecutors.newDirectExecutorService(),
-            new NoopCircuitBreaker(CircuitBreaker.REQUEST),
-            SearchProgressListener.NOOP,
-            mockSearchPhaseContext.searchRequest,
-            results.length(),
-            exc -> {}
-        );
-        DfsQueryPhase phase = new DfsQueryPhase(results.asList(), null, consumer, (response) -> new SearchPhase("test") {
-            @Override
-            public void run() throws IOException {
-                responseRef.set(response.results);
-            }
-        }, mockSearchPhaseContext);
-        assertEquals("dfs_query", phase.getName());
-        phase.run();
-        mockSearchPhaseContext.assertNoFailure();
-        assertNotNull(responseRef.get());
-        assertNotNull(responseRef.get().get(0));
-        assertNull(responseRef.get().get(0).fetchResult());
-        assertEquals(1, responseRef.get().get(0).queryResult().topDocs().topDocs.totalHits.value());
-        assertEquals(42, responseRef.get().get(0).queryResult().topDocs().topDocs.scoreDocs[0].doc);
-        assertNotNull(responseRef.get().get(1));
-        assertNull(responseRef.get().get(1).fetchResult());
-        assertEquals(1, responseRef.get().get(1).queryResult().topDocs().topDocs.totalHits.value());
-        assertEquals(84, responseRef.get().get(1).queryResult().topDocs().topDocs.scoreDocs[0].doc);
-        assertTrue(mockSearchPhaseContext.releasedSearchContexts.isEmpty());
-        assertEquals(2, mockSearchPhaseContext.numSuccess.get());
-    }
-
-    public void testDfsWith1ShardFailed() throws IOException {
-        AtomicArray<DfsSearchResult> results = new AtomicArray<>(2);
-        AtomicReference<AtomicArray<SearchPhaseResult>> responseRef = new AtomicReference<>();
-        results.set(
-            0,
-            newSearchResult(
-                0,
-                new ShardSearchContextId("", 1),
-                new SearchShardTarget("node1", new ShardId("test", "na", 0), null, OriginalIndices.NONE)
-            )
-        );
-        results.set(
-            1,
-            newSearchResult(
-                1,
-                new ShardSearchContextId("", 2),
-                new SearchShardTarget("node2", new ShardId("test", "na", 0), null, OriginalIndices.NONE)
-            )
-        );
-        results.get(0).termsStatistics(new Term[0], new TermStatistics[0]);
-        results.get(1).termsStatistics(new Term[0], new TermStatistics[0]);
-
-        SearchTransportService searchTransportService = new SearchTransportService(null, null) {
-            @Override
-            public void sendExecuteQuery(
-                Transport.Connection connection,
-                QuerySearchRequest request,
-                SearchTask task,
-                SearchActionListener<QuerySearchResult> listener
             ) {
-                if (request.contextId().getId() == 1) {
-                    QuerySearchResult queryResult = new QuerySearchResult(
-                        new ShardSearchContextId("", 123),
-                        new SearchShardTarget("node1", new ShardId("test", "na", 0), null, OriginalIndices.NONE),
-                        null
-                    );
-                    queryResult.topDocs(
-                        new TopDocsAndMaxScore(
-                            new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(42, 1.0F) }),
-                            2.0F
-                        ),
-                        new DocValueFormat[0]
-                    );
-                    queryResult.size(2); // the size of the result set
-                    listener.onResponse(queryResult);
-                } else if (request.contextId().getId() == 2) {
-                    listener.onFailure(new MockDirectoryWrapper.FakeIOException());
-                } else {
-                    fail("no such request ID: " + request.contextId());
-                }
-            }
-        };
-        SearchPhaseController searchPhaseController = searchPhaseController();
-        MockSearchPhaseContext mockSearchPhaseContext = new MockSearchPhaseContext(2);
-        mockSearchPhaseContext.searchTransport = searchTransportService;
-        QueryPhaseResultConsumer consumer = searchPhaseController.newSearchPhaseResults(
-            OpenSearchExecutors.newDirectExecutorService(),
             new NoopCircuitBreaker(CircuitBreaker.REQUEST),
-            SearchProgressListener.NOOP,
-            mockSearchPhaseContext.searchRequest,
-            results.length(),
-            exc -> {}
-        );
-        DfsQueryPhase phase = new DfsQueryPhase(results.asList(), null, consumer, (response) -> new SearchPhase("test") {
-            @Override
-            public void run() throws IOException {
-                responseRef.set(response.results);
-            }
-        }, mockSearchPhaseContext);
         assertEquals("dfs_query", phase.getName());
-        phase.run();
-        mockSearchPhaseContext.assertNoFailure();
-        assertNotNull(responseRef.get());
-        assertNotNull(responseRef.get().get(0));
-        assertNull(responseRef.get().get(0).fetchResult());
-        assertEquals(1, responseRef.get().get(0).queryResult().topDocs().topDocs.totalHits.value());
-        assertEquals(42, responseRef.get().get(0).queryResult().topDocs().topDocs.scoreDocs[0].doc);
-        assertNull(responseRef.get().get(1));
-
-        assertEquals(1, mockSearchPhaseContext.numSuccess.get());
-        assertEquals(1, mockSearchPhaseContext.failures.size());
-        assertTrue(mockSearchPhaseContext.failures.get(0).getCause() instanceof MockDirectoryWrapper.FakeIOException);
-        assertEquals(1, mockSearchPhaseContext.releasedSearchContexts.size());
-        assertTrue(mockSearchPhaseContext.releasedSearchContexts.contains(new ShardSearchContextId("", 2L)));
-        assertNull(responseRef.get().get(1));
-    }
-
-    public void testFailPhaseOnException() throws IOException {
-        AtomicArray<DfsSearchResult> results = new AtomicArray<>(2);
-        AtomicReference<AtomicArray<SearchPhaseResult>> responseRef = new AtomicReference<>();
-        results.set(
-            0,
-            newSearchResult(
-                0,
-                new ShardSearchContextId("", 1),
-                new SearchShardTarget("node1", new ShardId("test", "na", 0), null, OriginalIndices.NONE)
-            )
-        );
-        results.set(
-            1,
-            newSearchResult(
-                1,
-                new ShardSearchContextId("", 2),
-                new SearchShardTarget("node2", new ShardId("test", "na", 0), null, OriginalIndices.NONE)
-            )
-        );
-        results.get(0).termsStatistics(new Term[0], new TermStatistics[0]);
-        results.get(1).termsStatistics(new Term[0], new TermStatistics[0]);
-
-        SearchTransportService searchTransportService = new SearchTransportService(null, null) {
-            @Override
-            public void sendExecuteQuery(
                 Transport.Connection connection,
-                QuerySearchRequest request,
-                SearchTask task,
-                SearchActionListener<QuerySearchResult> listener
-            ) {
-                if (request.contextId().getId() == 1) {
-                    QuerySearchResult queryResult = new QuerySearchResult(
-                        new ShardSearchContextId("", 123),
-                        new SearchShardTarget("node1", new ShardId("test", "na", 0), null, OriginalIndices.NONE),
-                        null
-                    );
-                    queryResult.topDocs(
-                        new TopDocsAndMaxScore(
-                            new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(42, 1.0F) }),
-                            2.0F
-                        ),
-                        new DocValueFormat[0]
-                    );
-                    queryResult.size(2); // the size of the result set
-                    listener.onResponse(queryResult);
-                } else if (request.contextId().getId() == 2) {
+ * compatible open source license.
+            OpenSearchExecutors.newDirectExecutorService(),
+                }
                     throw new UncheckedIOException(new MockDirectoryWrapper.FakeIOException());
-                } else {
-                    fail("no such request ID: " + request.contextId());
-                }
-            }
+                0,
+            ) {
         };
-        SearchPhaseController searchPhaseController = searchPhaseController();
-        MockSearchPhaseContext mockSearchPhaseContext = new MockSearchPhaseContext(2);
-        mockSearchPhaseContext.searchTransport = searchTransportService;
-        QueryPhaseResultConsumer consumer = searchPhaseController.newSearchPhaseResults(
-            OpenSearchExecutors.newDirectExecutorService(),
-            new NoopCircuitBreaker(CircuitBreaker.REQUEST),
-            SearchProgressListener.NOOP,
-            mockSearchPhaseContext.searchRequest,
-            results.length(),
-            exc -> {}
-        );
-        DfsQueryPhase phase = new DfsQueryPhase(results.asList(), null, consumer, (response) -> new SearchPhase("test") {
-            @Override
-            public void run() throws IOException {
-                responseRef.set(response.results);
-            }
-        }, mockSearchPhaseContext);
-        assertEquals("dfs_query", phase.getName());
-        expectThrows(UncheckedIOException.class, phase::run);
-        assertTrue(mockSearchPhaseContext.releasedSearchContexts.isEmpty()); // phase execution will clean up on the contexts
-    }
-
-    private SearchPhaseController searchPhaseController() {
-        return new SearchPhaseController(writableRegistry(), request -> InternalAggregationTestCase.emptyReduceContextBuilder());
-    }
+        assertNotNull(responseRef.get());
+        SearchTransportService searchTransportService = new SearchTransportService(null, null) {
 }
+ * this work for additional information regarding copyright
+            @Override
+            @Override
+                            2.0F
+            mockSearchPhaseContext.searchRequest,
+            exc -> {}
+ * specific language governing permissions and limitations
+ * You may obtain a copy of the License at
+        mockSearchPhaseContext.searchTransport = searchTransportService;
+            @Override
+            newSearchResult(
+            )
+ * ownership. Elasticsearch licenses this file to you under
+            1,
+                        ),
+            1,
+ * Licensed to Elasticsearch under one or more contributor
+                    fail("no such request ID: " + request.contextId());
+import org.apache.lucene.search.TopDocs;
+                    );
+                SearchTask task,
+ * GitHub history for details.
+        SearchTransportService searchTransportService = new SearchTransportService(null, null) {
+                        new DocValueFormat[0]
+        results.set(
+            newSearchResult(
+                    QuerySearchResult queryResult = new QuerySearchResult(
+                        ),
+                    fail("no such request ID: " + request.contextId());
+            }
+            OpenSearchExecutors.newDirectExecutorService(),
+        assertTrue(mockSearchPhaseContext.releasedSearchContexts.contains(new ShardSearchContextId("", 2L)));
+ *
+            exc -> {}
+ */
+import org.opensearch.search.query.QuerySearchRequest;
+                        new ShardSearchContextId("", 123),
+                            new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(42, 1.0F) }),
+                    fail("no such request ID: " + request.contextId());
+        QueryPhaseResultConsumer consumer = searchPhaseController.newSearchPhaseResults(
+            }
+        mockSearchPhaseContext.searchTransport = searchTransportService;
+                            2.0F
+            }
+import org.apache.lucene.search.TotalHits;
+                responseRef.set(response.results);
+                new ShardSearchContextId("", 1),
+        assertNull(responseRef.get().get(1));
+        AtomicReference<AtomicArray<SearchPhaseResult>> responseRef = new AtomicReference<>();
+        MockSearchPhaseContext mockSearchPhaseContext = new MockSearchPhaseContext(2);
+            0,
+    public void testDfsWith2Shards() throws IOException {
+            new NoopCircuitBreaker(CircuitBreaker.REQUEST),
+                            2.0F
+                        new DocValueFormat[0]
+                    QuerySearchResult queryResult = new QuerySearchResult(
+import org.opensearch.test.InternalAggregationTestCase;
+                QuerySearchRequest request,
+        AtomicArray<DfsSearchResult> results = new AtomicArray<>(2);
+        DfsQueryPhase phase = new DfsQueryPhase(results.asList(), null, consumer, (response) -> new SearchPhase("test") {
+    private SearchPhaseController searchPhaseController() {
+    }
+                        new ShardSearchContextId("", 123),
+        assertNull(responseRef.get().get(1));
+            )
+                SearchActionListener<QuerySearchResult> listener
+            0,
+                        new SearchShardTarget("node1", new ShardId("test", "na", 0), null, OriginalIndices.NONE),
+                        new SearchShardTarget("node1", new ShardId("test", "na", 0), null, OriginalIndices.NONE),
+                    queryResult.topDocs(
+        SearchTransportService searchTransportService = new SearchTransportService(null, null) {
+import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+        );
+            public void run() throws IOException {
+                        null
+                new ShardSearchContextId("", 1),
+            )
+                SearchTask task,
+                    QuerySearchResult queryResult = new QuerySearchResult(
+    public void testFailPhaseOnException() throws IOException {
+                    );
+            OpenSearchExecutors.newDirectExecutorService(),
+        );
+                Transport.Connection connection,
+                        new TopDocsAndMaxScore(
+                0,
+            @Override
+                }
+            exc -> {}
+                new SearchShardTarget("node1", new ShardId("test", "na", 0), null, OriginalIndices.NONE)
+                        null
+                            2.0F
+        assertNull(responseRef.get().get(1).fetchResult());
+                    listener.onResponse(queryResult);
+            @Override
+        assertEquals("dfs_query", phase.getName());
+                            new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(42, 1.0F) }),
+                if (request.contextId().getId() == 1) {
+/*
+        results.get(0).termsStatistics(new Term[0], new TermStatistics[0]);
+                new ShardSearchContextId("", 2),
+                new SearchShardTarget("node2", new ShardId("test", "na", 0), null, OriginalIndices.NONE)
+            SearchProgressListener.NOOP,
+        assertNull(responseRef.get().get(0).fetchResult());
+import org.opensearch.test.OpenSearchTestCase;
+            results.length(),
+    }
+                    listener.onResponse(queryResult);
+        );
+                        new SearchShardTarget("node1", new ShardId("test", "na", 0), null, OriginalIndices.NONE),
+            newSearchResult(
+        DfsQueryPhase phase = new DfsQueryPhase(results.asList(), null, consumer, (response) -> new SearchPhase("test") {
+        mockSearchPhaseContext.assertNoFailure();
+        assertTrue(mockSearchPhaseContext.releasedSearchContexts.isEmpty());
+        assertEquals(1, mockSearchPhaseContext.numSuccess.get());
+ */
+                        new DocValueFormat[0]
+        assertNotNull(responseRef.get());
+                    );
+                        new ShardSearchContextId("", 123),
+import org.opensearch.search.dfs.DfsSearchResult;
+                SearchTask task,
+        assertTrue(mockSearchPhaseContext.failures.get(0).getCause() instanceof MockDirectoryWrapper.FakeIOException);
+                        ),
+        results.get(0).termsStatistics(new Term[0], new TermStatistics[0]);
+        MockSearchPhaseContext mockSearchPhaseContext = new MockSearchPhaseContext(2);
+                new SearchShardTarget("node1", new ShardId("test", "na", 0), null, OriginalIndices.NONE)
+        expectThrows(UncheckedIOException.class, phase::run);
+                    queryResult.topDocs(
+                Transport.Connection connection,
+import org.opensearch.search.query.QuerySearchResult;
+        results.get(1).termsStatistics(new Term[0], new TermStatistics[0]);
+import java.io.IOException;
+        AtomicArray<DfsSearchResult> results = new AtomicArray<>(2);
+                        null
+                    );
+                    listener.onFailure(new MockDirectoryWrapper.FakeIOException());
+            results.length(),
+                    queryResult.topDocs(
+                if (request.contextId().getId() == 1) {
+        phase.run();
+        );
+        };
+                    listener.onResponse(queryResult);
+        results.set(
+        assertNull(responseRef.get().get(0).fetchResult());
+                    );
+        );
+            public void sendExecuteQuery(
+        assertEquals("dfs_query", phase.getName());
+                            new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(42, 1.0F) }),
+        assertEquals(2, mockSearchPhaseContext.numSuccess.get());
+            )
+                new ShardSearchContextId("", 1),
+        SearchPhaseController searchPhaseController = searchPhaseController();
+        phase.run();
+import org.apache.lucene.search.TermStatistics;
+import org.opensearch.search.internal.ShardSearchContextId;
+                        new DocValueFormat[0]
+        AtomicReference<AtomicArray<SearchPhaseResult>> responseRef = new AtomicReference<>();
+        assertTrue(mockSearchPhaseContext.releasedSearchContexts.isEmpty()); // phase execution will clean up on the contexts
+            }
+ */
+            public void run() throws IOException {
+                            new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(84, 2.0F) }),
+import java.util.concurrent.atomic.AtomicReference;
+        result.setShardIndex(shardIndex);
+        SearchPhaseController searchPhaseController = searchPhaseController();
+ * SPDX-License-Identifier: Apache-2.0
+import java.io.UncheckedIOException;
+        results.get(1).termsStatistics(new Term[0], new TermStatistics[0]);
+                0,
+            newSearchResult(
+        results.set(
+                    );
+                        new ShardSearchContextId("", 123),
+        DfsQueryPhase phase = new DfsQueryPhase(results.asList(), null, consumer, (response) -> new SearchPhase("test") {
+            1,
+            SearchProgressListener.NOOP,
+    }
+                new ShardSearchContextId("", 2),
+        );
+        assertEquals(84, responseRef.get().get(1).queryResult().topDocs().topDocs.scoreDocs[0].doc);
+                    queryResult.topDocs(
+            ) {
+                        new TopDocsAndMaxScore(
+                responseRef.set(response.results);
+        return new SearchPhaseController(writableRegistry(), request -> InternalAggregationTestCase.emptyReduceContextBuilder());
+                } else if (request.contextId().getId() == 2) {
+            }
+        mockSearchPhaseContext.assertNoFailure();
+                new SearchShardTarget("node1", new ShardId("test", "na", 0), null, OriginalIndices.NONE)
+package org.opensearch.action.search;
+/*
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.common.util.concurrent.OpenSearchExecutors;
+        DfsSearchResult result = new DfsSearchResult(contextId, target, null);
+ * Unless required by applicable law or agreed to in writing,
+                        new TopDocsAndMaxScore(
+                new SearchShardTarget("node2", new ShardId("test", "na", 0), null, OriginalIndices.NONE)
+                new SearchShardTarget("node2", new ShardId("test", "na", 0), null, OriginalIndices.NONE)
+        mockSearchPhaseContext.searchTransport = searchTransportService;
+        assertEquals(1, responseRef.get().get(0).queryResult().topDocs().topDocs.totalHits.value());
+        assertEquals(1, mockSearchPhaseContext.failures.size());
+ * software distributed under the License is distributed on an
+        }, mockSearchPhaseContext);
+ * license agreements. See the NOTICE file distributed with
+                    );
+                } else if (request.contextId().getId() == 2) {
+                } else {
+        assertNotNull(responseRef.get().get(1));
+                    QuerySearchResult queryResult = new QuerySearchResult(
+            0,
+    }
+        assertNotNull(responseRef.get().get(0));
+        assertEquals(1, responseRef.get().get(0).queryResult().topDocs().topDocs.totalHits.value());
+                    queryResult.size(2); // the size of the result set
+                        null
+            public void sendExecuteQuery(
+        results.get(1).termsStatistics(new Term[0], new TermStatistics[0]);
+ * The OpenSearch Contributors require contributions made to
+                responseRef.set(response.results);
+        MockSearchPhaseContext mockSearchPhaseContext = new MockSearchPhaseContext(2);
+    public void testDfsWith1ShardFailed() throws IOException {
+import org.opensearch.search.DocValueFormat;
+            newSearchResult(
+        AtomicReference<AtomicArray<SearchPhaseResult>> responseRef = new AtomicReference<>();
+        results.get(0).termsStatistics(new Term[0], new TermStatistics[0]);
+                }
+import org.opensearch.action.OriginalIndices;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                } else {
+                new ShardSearchContextId("", 2),
+import org.opensearch.transport.Transport;
+                    );
+public class DfsQueryPhaseTests extends OpenSearchTestCase {
+                    listener.onResponse(queryResult);
+        SearchPhaseController searchPhaseController = searchPhaseController();
+                1,
+ * this file be licensed under the Apache-2.0 license or a
+            public void sendExecuteQuery(
+/*
+        );
+import org.opensearch.search.SearchShardTarget;
+ * Modifications Copyright OpenSearch Contributors. See
+        AtomicArray<DfsSearchResult> results = new AtomicArray<>(2);
+import org.apache.lucene.index.Term;
+            }
+                        ),
+import org.opensearch.core.common.breaker.CircuitBreaker;
+                QuerySearchRequest request,
+import org.apache.lucene.search.ScoreDoc;
+            )
+            new NoopCircuitBreaker(CircuitBreaker.REQUEST),
+            public void run() throws IOException {
+                    queryResult.size(2); // the size of the result set
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.core.common.breaker.NoopCircuitBreaker;
+        return result;
+        );
+                    queryResult.size(2); // the size of the result set
+ * KIND, either express or implied.  See the License for the
+        QueryPhaseResultConsumer consumer = searchPhaseController.newSearchPhaseResults(
+        assertEquals(1, mockSearchPhaseContext.releasedSearchContexts.size());
+            SearchProgressListener.NOOP,
+                if (request.contextId().getId() == 1) {
+    private static DfsSearchResult newSearchResult(int shardIndex, ShardSearchContextId contextId, SearchShardTarget target) {
+                        new TopDocsAndMaxScore(
+ *
+    }
+        );
+                1,
+ * not use this file except in compliance with the License.
+            results.length(),
+        assertEquals(42, responseRef.get().get(0).queryResult().topDocs().topDocs.scoreDocs[0].doc);
+            )
+        };
+                SearchActionListener<QuerySearchResult> listener
+            newSearchResult(
+                } else {
+        assertEquals(1, responseRef.get().get(1).queryResult().topDocs().topDocs.totalHits.value());
+                } else if (request.contextId().getId() == 2) {
+import org.opensearch.common.util.concurrent.AtomicArray;
+        results.set(
+            mockSearchPhaseContext.searchRequest,

@@ -1,649 +1,581 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-
-import org.apache.logging.log4j.LogManager;
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.action.admin.cluster.node.tasks.cancel.CancelTasksResponse;
-import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
-import org.opensearch.action.bulk.BulkRequestBuilder;
-import org.opensearch.action.search.MultiSearchAction;
-import org.opensearch.action.search.MultiSearchResponse;
-import org.opensearch.action.search.SearchAction;
-import org.opensearch.action.search.SearchPhaseExecutionException;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.search.SearchScrollAction;
-import org.opensearch.action.search.ShardSearchFailure;
-import org.opensearch.action.support.WriteRequest;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.action.ActionFuture;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.tasks.TaskCancelledException;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.PluginsService;
-import org.opensearch.script.MockScriptPlugin;
-import org.opensearch.script.Script;
-import org.opensearch.script.ScriptType;
-import org.opensearch.search.lookup.LeafFieldsLookup;
-import org.opensearch.tasks.TaskInfo;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-import org.opensearch.transport.TransportException;
-import org.junit.After;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
-
-import static org.opensearch.action.search.TransportSearchAction.SEARCH_CANCEL_AFTER_TIME_INTERVAL_SETTING_KEY;
-import static org.opensearch.index.query.QueryBuilders.scriptQuery;
-import static org.opensearch.search.SearchCancellationIT.ScriptedBlockPlugin.SCRIPT_NAME;
-import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
-import static org.opensearch.search.SearchService.NO_TIMEOUT;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertFailures;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertNoFailures;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.notNullValue;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE)
-public class SearchCancellationIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
-
-    private TimeValue requestCancellationTimeout = TimeValue.timeValueSeconds(1);
-    private TimeValue clusterCancellationTimeout = TimeValue.timeValueMillis(1500);
-    private TimeValue keepAlive = TimeValue.timeValueSeconds(5);
-
-    public SearchCancellationIT(Settings settings) {
-        super(settings);
-    }
-
-    @ParametersFactory
-    public static Collection<Object[]> parameters() {
-        return Arrays.asList(
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
-        );
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Collections.singleton(ScriptedBlockPlugin.class);
-    }
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {
-        boolean lowLevelCancellation = randomBoolean();
-        logger.info("Using lowLevelCancellation: {}", lowLevelCancellation);
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(SearchService.LOW_LEVEL_CANCELLATION_SETTING.getKey(), lowLevelCancellation)
-            .build();
-    }
-
-    @After
-    public void cleanup() {
-        client().admin().cluster().prepareUpdateSettings().setPersistentSettings(Settings.builder().putNull("*")).get();
-    }
-
-    private void indexTestData() {
-        for (int i = 0; i < 5; i++) {
-            // Make sure we have a few segments
-            BulkRequestBuilder bulkRequestBuilder = client().prepareBulk().setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
-            for (int j = 0; j < 20; j++) {
-                bulkRequestBuilder.add(client().prepareIndex("test").setId(Integer.toString(i * 5 + j)).setSource("field", "value"));
-            }
-            assertNoFailures(bulkRequestBuilder.get());
-        }
-    }
-
-    private List<ScriptedBlockPlugin> initBlockFactory() {
-        List<ScriptedBlockPlugin> plugins = new ArrayList<>();
-        for (PluginsService pluginsService : internalCluster().getDataNodeInstances(PluginsService.class)) {
-            plugins.addAll(pluginsService.filterPlugins(ScriptedBlockPlugin.class));
-        }
-        for (ScriptedBlockPlugin plugin : plugins) {
-            plugin.reset();
-            plugin.enableBlock();
-        }
-        return plugins;
-    }
-
-    private void awaitForBlock(List<ScriptedBlockPlugin> plugins) throws Exception {
-        int numberOfShards = getNumShards("test").numPrimaries;
-        assertBusy(() -> {
-            int numberOfBlockedPlugins = 0;
-            for (ScriptedBlockPlugin plugin : plugins) {
-                numberOfBlockedPlugins += plugin.hits.get();
-            }
-            logger.info("The plugin blocked on {} out of {} shards", numberOfBlockedPlugins, numberOfShards);
-            assertThat(numberOfBlockedPlugins, greaterThan(0));
-        });
-    }
-
-    private void disableBlocks(List<ScriptedBlockPlugin> plugins) throws Exception {
-        for (ScriptedBlockPlugin plugin : plugins) {
-            plugin.disableBlock();
-        }
-    }
-
-    private void cancelSearch(String action) {
-        ListTasksResponse listTasksResponse = client().admin().cluster().prepareListTasks().setActions(action).get();
-        assertThat(listTasksResponse.getTasks(), hasSize(1));
-        TaskInfo searchTask = listTasksResponse.getTasks().get(0);
-
-        logger.info("Cancelling search");
-        CancelTasksResponse cancelTasksResponse = client().admin().cluster().prepareCancelTasks().setTaskId(searchTask.getTaskId()).get();
-        assertThat(cancelTasksResponse.getTasks(), hasSize(1));
-        assertThat(cancelTasksResponse.getTasks().get(0).getTaskId(), equalTo(searchTask.getTaskId()));
-    }
-
-    private SearchResponse ensureSearchWasCancelled(ActionFuture<SearchResponse> searchResponse) {
-        try {
-            SearchResponse response = searchResponse.actionGet();
-            logger.info("Search response {}", response);
-            assertNotEquals("At least one shard should have failed", 0, response.getFailedShards());
-            verifyCancellationException(response.getShardFailures());
-            return response;
-        } catch (SearchPhaseExecutionException ex) {
-            logger.info("All shards failed with", ex);
-            verifyCancellationException(ex.shardFailures());
-            return null;
-        }
-    }
-
-    private void ensureMSearchWasCancelled(ActionFuture<MultiSearchResponse> mSearchResponse, Set<Integer> expectedFailedChildRequests) {
-        MultiSearchResponse response = mSearchResponse.actionGet();
-        Set<Integer> actualFailedChildRequests = new HashSet<>();
-        for (int i = 0; i < response.getResponses().length; ++i) {
-            SearchResponse sResponse = response.getResponses()[i].getResponse();
-            // check if response is null means all the shard failed for this search request
-            if (sResponse == null) {
-                Exception ex = response.getResponses()[i].getFailure();
-                assertTrue(ex instanceof SearchPhaseExecutionException);
                 verifyCancellationException(((SearchPhaseExecutionException) ex).shardFailures());
-                actualFailedChildRequests.add(i);
-
-            } else if (sResponse.getShardFailures().length > 0) {
-                verifyCancellationException(sResponse.getShardFailures());
-                actualFailedChildRequests.add(i);
-            }
+        cancelSearch(SearchAction.NAME);
+            .setSize(5)
+        logger.info("Executing search");
+            .add(
+import org.opensearch.action.search.ShardSearchFailure;
+            BulkRequestBuilder bulkRequestBuilder = client().prepareBulk().setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+            .prepareUpdateSettings()
+            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", SCRIPT_NAME, Collections.emptyMap())))
         }
+            verifyCancellationException(ex.shardFailures());
+            // The response might not have failed on all shards - we need to clean scroll
+        indexTestData();
+                for (ShardSearchFailure shardFailure : item.getResponse().getShardFailures()) {
+    }
+    private List<ScriptedBlockPlugin> initBlockFactory() {
+        // Enable block so the second request would block
+        expectedFailedRequests.add(0);
+        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
+        awaitForBlock(plugins);
+        // unblock the search thread
+            // The response didn't fail completely - update scroll id
+        cancelSearch(SearchAction.NAME);
+                client().prepareSearch("test")
+        logger.info("Segments {}", Strings.toString(MediaTypeRegistry.JSON, client().admin().indices().prepareSegments("test").get()));
+import java.util.Collections;
+            .setScroll(keepAlive)
+import org.opensearch.action.search.SearchPhaseExecutionException;
+            .setScroll(keepAlive)
+    private SearchResponse ensureSearchWasCancelled(ActionFuture<SearchResponse> searchResponse) {
+            logger.info("Cleaning scroll with id {}", response.getScrollId());
+            return response;
+            .setPersistentSettings(Settings.builder().put(SEARCH_CANCEL_AFTER_TIME_INTERVAL_SETTING_KEY, NO_TIMEOUT).build())
+            .prepareUpdateSettings()
+                    .setQuery(
+            )
         assertEquals(
-            "Actual child request with cancellation failure is different that expected",
-            expectedFailedChildRequests,
-            actualFailedChildRequests
+            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap())))
+                return true;
+        boolean lowLevelCancellation = randomBoolean();
+        }
+        // unblock the search thread
+import org.opensearch.plugins.PluginsService;
+        return Collections.singleton(ScriptedBlockPlugin.class);
+    public void testCancellationDuringQueryPhase() throws Exception {
+        });
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+            int numberOfBlockedPlugins = 0;
+import java.util.concurrent.atomic.AtomicInteger;
+            // The response might not have failed on all shards - we need to clean scroll
+        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
+        disableBlocks(plugins);
+    }
+    /**
+            .add(
+        assertThat(listTasksResponse.getTasks(), hasSize(1));
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            // failure may happen while executing the search or while sending shard request for next phase.
+                    .setRequestCache(false)
+            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap())))
+        // unblock the search thread
+    public void testCancellationOfScrollSearchesOnFollowupRequests() throws Exception {
+        // ensure search was successful since cancellation was disabled at request level
+        for (ScriptedBlockPlugin plugin : plugins) {
+            } else {
+        }
+        if (response != null) {
+            .setSize(5)
+        for (PluginsService pluginsService : internalCluster().getDataNodeInstances(PluginsService.class)) {
+                    .setQuery(
+import org.opensearch.action.support.WriteRequest;
+            // Make sure we have a few segments
+                    .setRequestCache(false)
+            scrollId = response.getScrollId();
+        ActionFuture<SearchResponse> scrollResponse = client().prepareSearchScroll(searchResponse.getScrollId())
+        final Set<Integer> expectedFailedRequests = new HashSet<>();
+        CancelTasksResponse cancelTasksResponse = client().admin().cluster().prepareCancelTasks().setTaskId(searchTask.getTaskId()).get();
+        indexTestData();
+            .get();
+        // unblock the search thread
+        assertBusy(() -> {
+                assertTrue(ex instanceof SearchPhaseExecutionException);
+        }
+        sleepForAtLeast(Math.max(requestCancellationTimeout.getMillis(), clusterCancellationTimeout.getMillis()));
+        disableBlocks(plugins);
+        ActionFuture<MultiSearchResponse> mSearchResponse = client().prepareMultiSearch()
+                topFailureCause instanceof TransportException || topFailureCause instanceof TaskCancelledException
+        sleepForAtLeast(requestCancellationTimeout.getMillis());
+            .cluster()
+    public void testDisableCancellationAtRequestLevel() throws Exception {
+        SearchResponse searchResponse = client().prepareSearch("test")
+        // unblock the search thread
+        }
+import org.opensearch.core.common.Strings;
+        }
+        awaitForBlock(plugins);
+ * SPDX-License-Identifier: Apache-2.0
+        for (ShardSearchFailure searchFailure : failures) {
+ * compatible open source license.
+        logger.info("Cleaning scroll with id {}", scrollId);
+        sleepForAtLeast(clusterCancellationTimeout.getMillis());
+            assertNotEquals("At least one shard should have failed", 0, response.getFailedShards());
+        logger.info("Cancelling search");
+        SearchResponse response = ensureSearchWasCancelled(searchResponse);
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+        // both child requests are expected to fail
+            }
+                client().prepareSearch("test")
+            plugin.disableBlock();
+                    .setCancelAfterTimeInterval(requestCancellationTimeout)
+            client().prepareClearScroll().addScrollId(response.getScrollId()).get();
+    }
+        indexTestData();
+            )
+import org.opensearch.script.MockScriptPlugin;
+        ensureSearchWasCancelled(searchResponse);
+    }
+                numberOfBlockedPlugins += plugin.hits.get();
+    }
+        }
+    public static Collection<Object[]> parameters() {
+import static org.hamcrest.Matchers.hasSize;
+        disableBlocks(plugins);
+        }
+                    throw new RuntimeException(e);
+            .setCancelAfterTimeInterval(requestCancellationTimeout)
+        private final AtomicInteger hits = new AtomicInteger();
+            .add(
+        indexTestData();
+            )
+            .get();
+        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
+import org.opensearch.test.OpenSearchIntegTestCase;
+        sleepForAtLeast(requestCancellationTimeout.getMillis());
+import org.opensearch.core.tasks.TaskCancelledException;
+            logger.info("Search response {}", response);
+            // check if response is null means all the shard failed for this search request
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+            .prepareUpdateSettings()
+        for (int i = 0; i < response.getResponses().length; ++i) {
+    }
+        disableBlocks(plugins);
+        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
+ */
+    }
+            plugin.reset();
+        }
+        indexTestData();
+    private TimeValue keepAlive = TimeValue.timeValueSeconds(5);
+ * KIND, either express or implied.  See the License for the
+        public Map<String, Function<Map<String, Object>, Object>> pluginScripts() {
+import static org.opensearch.search.SearchCancellationIT.ScriptedBlockPlugin.SCRIPT_NAME;
+            }
+    private void cancelSearch(String action) {
+ * not use this file except in compliance with the License.
+        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
+                Exception ex = response.getResponses()[i].getFailure();
+                client().prepareSearch("test")
+ * this work for additional information regarding copyright
+        client().admin()
+        MultiSearchResponse response = mSearchResponse.actionGet();
+        awaitForBlock(plugins);
+ * license agreements. See the NOTICE file distributed with
+            hits.set(0);
+    public void testCancelMultiSearch() throws Exception {
+                client().prepareSearch("test")
+                actualFailedChildRequests.add(i);
+            .get();
+ * the Apache License, Version 2.0 (the "License"); you may
+        private final AtomicBoolean shouldBlock = new AtomicBoolean(true);
+    public void cleanup() {
+            .setMaxConcurrentSearchRequests(3)
+        logger.info("Executing search");
+        return Arrays.asList(
+        indexTestData();
+ * Licensed to Elasticsearch under one or more contributor
+            .cluster()
+            assertTrue(
+import static org.hamcrest.Matchers.greaterThan;
+        assertEquals(0, searchResponse.get().getFailedShards());
+            logger.info("All shards failed with", ex);
+        }
+import static org.opensearch.index.query.QueryBuilders.scriptQuery;
+        awaitForBlock(plugins);
+                hits.incrementAndGet();
+        disableBlocks(plugins);
+ *
+        ActionFuture<MultiSearchResponse> mSearchResponse = client().prepareMultiSearch()
+            )
+        client().admin()
+        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
+/*
+            return null;
+                    .setAllowPartialSearchResults(randomBoolean())
+            SearchResponse response = searchResponse.actionGet();
+ * You may obtain a copy of the License at
+        ensureSearchWasCancelled(searchResponse);
+    }
+                    .setAllowPartialSearchResults(randomBoolean())
+                        scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap()))
+            .execute();
+                searchFailure.toString(),
+            .setScroll(keepAlive)
+        awaitForBlock(plugins);
+ * Unless required by applicable law or agreed to in writing,
+            logger.info("The plugin blocked on {} out of {} shards", numberOfBlockedPlugins, numberOfShards);
+    }
+                    )
+        disableBlocks(plugins);
+import java.util.ArrayList;
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+        ActionFuture<SearchResponse> scrollResponse = client().prepareSearchScroll(searchResponse.getScrollId())
+                actualFailedChildRequests.add(i);
+    }
+        public void reset() {
+        disableBlocks(plugins);
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+        awaitForBlock(plugins);
+        awaitForBlock(plugins);
+            .setCancelAfterTimeInterval(NO_TIMEOUT)
+        cancelSearch(MultiSearchAction.NAME);
+        client().admin()
+        disableBlocks(plugins);
+        // Enable block so the second request would block
+        for (int i = 0; i < 5; i++) {
+import org.opensearch.common.action.ActionFuture;
+        String scrollId = searchResponse.getScrollId();
+        SearchResponse searchResponse = client().prepareSearch("test")
+                    )
+        sleepForAtLeast(requestCancellationTimeout.getMillis());
+            for (int j = 0; j < 20; j++) {
+        public void disableBlock() {
+            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap())))
+        cancelSearch(SearchAction.NAME);
+        return plugins;
+                assertFailures(item.getResponse());
+        assertThat(cancelTasksResponse.getTasks(), hasSize(1));
+            plugin.enableBlock();
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+                Settings.builder().put(SEARCH_CANCEL_AFTER_TIME_INTERVAL_SETTING_KEY, clusterCancellationTimeout).build()
+        sleepForAtLeast(requestCancellationTimeout.getMillis());
+            .setScroll(keepAlive)
+import java.util.Arrays;
+            logger.info("Cleaning scroll with id {}", response.getScrollId());
+                    assertBusy(() -> assertFalse(shouldBlock.get()));
+        // ensure search was successful since cancellation was disabled at request level
+            for (ScriptedBlockPlugin plugin : plugins) {
+        // unblock the search thread
+    public void testCancellationDuringFetchPhase() throws Exception {
+        } catch (SearchPhaseExecutionException ex) {
+                bulkRequestBuilder.add(client().prepareIndex("test").setId(Integer.toString(i * 5 + j)).setSource("field", "value"));
+        ensureMSearchWasCancelled(mSearchResponse, expectedFailedRequests);
+        static final String SCRIPT_NAME = "search_block";
+        for (ScriptedBlockPlugin plugin : plugins) {
+            .setPersistentSettings(
+                    )
+            plugin.enableBlock();
+        assertNotNull(searchResponse.getScrollId());
+            .put(SearchService.LOW_LEVEL_CANCELLATION_SETTING.getKey(), lowLevelCancellation)
+            )
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+                try {
+     * @throws InterruptedException if interrupted during sleep
+        awaitForBlock(plugins);
+            .execute();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+            .execute();
+        sleepForAtLeast(clusterCancellationTimeout.getMillis());
+            .setAllowPartialSearchResults(randomBoolean())
+        indexTestData();
+            .setSize(2)
+        ensureMSearchWasCancelled(mSearchResponse, expectedFailedRequests);
+import org.opensearch.action.search.MultiSearchAction;
+                verifyCancellationException(sResponse.getShardFailures());
+                LogManager.getLogger(SearchCancellationIT.class).info("Blocking on the document {}", fieldsLookup.get("_id"));
+        assertEquals(0, response.getFailedShards());
+            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", SCRIPT_NAME, Collections.emptyMap())))
+ * specific language governing permissions and limitations
+            .setPersistentSettings(
+    private static void sleepForAtLeast(long milliseconds) throws InterruptedException {
+            .add(
+        // unblock the search thread
+    }
+ *
+        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
+        );
+    public void testCancellationDuringQueryPhaseUsingClusterSetting() throws Exception {
+        List<ScriptedBlockPlugin> plugins = new ArrayList<>();
+        expectedFailedRequests.add(0);
+    }
+                    .addScriptField("test_field", new Script(ScriptType.INLINE, "mockscript", SCRIPT_NAME, Collections.emptyMap()))
+    }
+                        scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap()))
+            )
         );
     }
-
-    private void verifyCancellationException(ShardSearchFailure[] failures) {
-        for (ShardSearchFailure searchFailure : failures) {
-            // failure may happen while executing the search or while sending shard request for next phase.
+     */
             // Below assertion is handling both the cases
-            final Throwable topFailureCause = searchFailure.getCause();
-            assertTrue(
-                searchFailure.toString(),
-                topFailureCause instanceof TransportException || topFailureCause instanceof TaskCancelledException
-            );
-            if (topFailureCause instanceof TransportException) {
-                assertTrue(topFailureCause.getCause() instanceof TaskCancelledException);
-            }
         }
-    }
-
-    public void testCancellationDuringQueryPhase() throws Exception {
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
-        indexTestData();
-
-        logger.info("Executing search");
         ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
-            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", SCRIPT_NAME, Collections.emptyMap())))
-            .execute();
-
-        awaitForBlock(plugins);
-        cancelSearch(SearchAction.NAME);
+        logger.info("Using lowLevelCancellation: {}", lowLevelCancellation);
         disableBlocks(plugins);
-        logger.info("Segments {}", Strings.toString(MediaTypeRegistry.JSON, client().admin().indices().prepareSegments("test").get()));
-        ensureSearchWasCancelled(searchResponse);
-    }
-
-    public void testCancellationDuringQueryPhaseUsingRequestParameter() throws Exception {
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
-        indexTestData();
-
-        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
-            .setCancelAfterTimeInterval(requestCancellationTimeout)
-            .setAllowPartialSearchResults(randomBoolean())
-            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap())))
-            .execute();
-        awaitForBlock(plugins);
-        sleepForAtLeast(requestCancellationTimeout.getMillis());
-        // unblock the search thread
-        disableBlocks(plugins);
-        ensureSearchWasCancelled(searchResponse);
-    }
-
-    public void testCancellationDuringQueryPhaseUsingClusterSetting() throws Exception {
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
-        indexTestData();
-
-        client().admin()
-            .cluster()
-            .prepareUpdateSettings()
-            .setPersistentSettings(
-                Settings.builder().put(SEARCH_CANCEL_AFTER_TIME_INTERVAL_SETTING_KEY, clusterCancellationTimeout).build()
-            )
-            .get();
-        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
-            .setAllowPartialSearchResults(randomBoolean())
-            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap())))
-            .execute();
-        awaitForBlock(plugins);
-        sleepForAtLeast(clusterCancellationTimeout.getMillis());
-        // unblock the search thread
-        disableBlocks(plugins);
-        ensureSearchWasCancelled(searchResponse);
-    }
-
-    public void testCancellationDuringFetchPhase() throws Exception {
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
-        indexTestData();
-
-        logger.info("Executing search");
-        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
-            .addScriptField("test_field", new Script(ScriptType.INLINE, "mockscript", SCRIPT_NAME, Collections.emptyMap()))
-            .execute();
-
-        awaitForBlock(plugins);
-        cancelSearch(SearchAction.NAME);
-        disableBlocks(plugins);
-        logger.info("Segments {}", Strings.toString(MediaTypeRegistry.JSON, client().admin().indices().prepareSegments("test").get()));
-        ensureSearchWasCancelled(searchResponse);
-    }
-
-    public void testCancellationDuringFetchPhaseUsingRequestParameter() throws Exception {
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
-        indexTestData();
-        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
-            .setCancelAfterTimeInterval(requestCancellationTimeout)
-            .addScriptField("test_field", new Script(ScriptType.INLINE, "mockscript", SCRIPT_NAME, Collections.emptyMap()))
-            .execute();
-        awaitForBlock(plugins);
-        sleepForAtLeast(requestCancellationTimeout.getMillis());
-        // unblock the search thread
-        disableBlocks(plugins);
-        ensureSearchWasCancelled(searchResponse);
-    }
-
-    public void testCancellationOfScrollSearches() throws Exception {
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
-        indexTestData();
-
-        logger.info("Executing search");
-        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
-            .setScroll(keepAlive)
-            .setSize(5)
-            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", SCRIPT_NAME, Collections.emptyMap())))
-            .execute();
-
-        awaitForBlock(plugins);
-        cancelSearch(SearchAction.NAME);
-        disableBlocks(plugins);
-        SearchResponse response = ensureSearchWasCancelled(searchResponse);
-        if (response != null) {
-            // The response might not have failed on all shards - we need to clean scroll
-            logger.info("Cleaning scroll with id {}", response.getScrollId());
-            client().prepareClearScroll().addScrollId(response.getScrollId()).get();
-        }
-    }
-
-    public void testCancellationOfFirstScrollSearchRequestUsingRequestParameter() throws Exception {
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
-        indexTestData();
-        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
-            .setScroll(keepAlive)
-            .setCancelAfterTimeInterval(requestCancellationTimeout)
-            .setSize(5)
-            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", SCRIPT_NAME, Collections.emptyMap())))
-            .execute();
-
-        awaitForBlock(plugins);
-        sleepForAtLeast(requestCancellationTimeout.getMillis());
-        // unblock the search thread
-        disableBlocks(plugins);
-        SearchResponse response = ensureSearchWasCancelled(searchResponse);
-        if (response != null) {
-            // The response might not have failed on all shards - we need to clean scroll
-            logger.info("Cleaning scroll with id {}", response.getScrollId());
-            client().prepareClearScroll().addScrollId(response.getScrollId()).get();
-        }
-    }
-
-    public void testCancellationOfScrollSearchesOnFollowupRequests() throws Exception {
-
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
-        indexTestData();
-
-        // Disable block so the first request would pass
-        disableBlocks(plugins);
-
-        logger.info("Executing search");
-        SearchResponse searchResponse = client().prepareSearch("test")
-            .setScroll(keepAlive)
-            .setSize(2)
-            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", SCRIPT_NAME, Collections.emptyMap())))
-            .get();
-
-        assertNotNull(searchResponse.getScrollId());
-
-        // Enable block so the second request would block
-        for (ScriptedBlockPlugin plugin : plugins) {
-            plugin.reset();
-            plugin.enableBlock();
-        }
-
-        String scrollId = searchResponse.getScrollId();
-        logger.info("Executing scroll with id {}", scrollId);
-        ActionFuture<SearchResponse> scrollResponse = client().prepareSearchScroll(searchResponse.getScrollId())
-            .setScroll(keepAlive)
-            .execute();
-
-        awaitForBlock(plugins);
-        cancelSearch(SearchScrollAction.NAME);
-        disableBlocks(plugins);
-
-        SearchResponse response = ensureSearchWasCancelled(scrollResponse);
-        if (response != null) {
-            // The response didn't fail completely - update scroll id
-            scrollId = response.getScrollId();
-        }
-        logger.info("Cleaning scroll with id {}", scrollId);
-        client().prepareClearScroll().addScrollId(scrollId).get();
-    }
-
-    public void testNoCancellationOfScrollSearchOnFollowUpRequest() throws Exception {
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
-        indexTestData();
-
-        // Disable block so the first request would pass
-        disableBlocks(plugins);
-        SearchResponse searchResponse = client().prepareSearch("test")
-            .setScroll(keepAlive)
-            .setCancelAfterTimeInterval(requestCancellationTimeout)
-            .setSize(2)
-            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap())))
-            .get();
-
-        assertNotNull(searchResponse.getScrollId());
-        // since the previous scroll response is received before cancellation timeout, the scheduled task will be cancelled. It will not
-        // be used for the subsequent scroll request, as request is of SearchScrollRequest type instead of SearchRequest type
-        // Enable block so the second request would block
-        for (ScriptedBlockPlugin plugin : plugins) {
-            plugin.reset();
-            plugin.enableBlock();
-        }
-
-        String scrollId = searchResponse.getScrollId();
-        ActionFuture<SearchResponse> scrollResponse = client().prepareSearchScroll(searchResponse.getScrollId())
-            .setScroll(keepAlive)
-            .execute();
-
-        awaitForBlock(plugins);
-        sleepForAtLeast(requestCancellationTimeout.getMillis());
-        // unblock the search thread
-        disableBlocks(plugins);
-
-        // wait for response and ensure there is no failure
-        SearchResponse response = scrollResponse.get();
-        assertEquals(0, response.getFailedShards());
-        scrollId = response.getScrollId();
-        client().prepareClearScroll().addScrollId(scrollId).get();
-    }
-
-    public void testDisableCancellationAtRequestLevel() throws Exception {
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
-        indexTestData();
-        client().admin()
-            .cluster()
-            .prepareUpdateSettings()
-            .setPersistentSettings(
-                Settings.builder().put(SEARCH_CANCEL_AFTER_TIME_INTERVAL_SETTING_KEY, clusterCancellationTimeout).build()
-            )
-            .get();
-        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
-            .setAllowPartialSearchResults(randomBoolean())
-            .setCancelAfterTimeInterval(NO_TIMEOUT)
-            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap())))
-            .execute();
-        awaitForBlock(plugins);
-        sleepForAtLeast(clusterCancellationTimeout.getMillis());
-        // unblock the search thread
-        disableBlocks(plugins);
-        // ensure search was successful since cancellation was disabled at request level
-        assertEquals(0, searchResponse.get().getFailedShards());
-    }
-
-    public void testDisableCancellationAtClusterLevel() throws Exception {
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
-        indexTestData();
-        client().admin()
-            .cluster()
-            .prepareUpdateSettings()
-            .setPersistentSettings(Settings.builder().put(SEARCH_CANCEL_AFTER_TIME_INTERVAL_SETTING_KEY, NO_TIMEOUT).build())
-            .get();
-        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
-            .setAllowPartialSearchResults(randomBoolean())
-            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap())))
-            .execute();
-        awaitForBlock(plugins);
-        sleepForAtLeast(clusterCancellationTimeout.getMillis());
-        // unblock the search thread
-        disableBlocks(plugins);
-        // ensure search was successful since cancellation was disabled at request level
-        assertEquals(0, searchResponse.get().getFailedShards());
-    }
-
-    public void testCancelMultiSearch() throws Exception {
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
-        indexTestData();
-        ActionFuture<MultiSearchResponse> msearchResponse = client().prepareMultiSearch()
-            .add(
-                client().prepareSearch("test")
-                    .addScriptField("test_field", new Script(ScriptType.INLINE, "mockscript", SCRIPT_NAME, Collections.emptyMap()))
-            )
-            .execute();
-        awaitForBlock(plugins);
-        cancelSearch(MultiSearchAction.NAME);
-        disableBlocks(plugins);
-        for (MultiSearchResponse.Item item : msearchResponse.actionGet()) {
-            if (item.getFailure() != null) {
-                assertThat(ExceptionsHelper.unwrap(item.getFailure(), TaskCancelledException.class), notNullValue());
-            } else {
-                assertFailures(item.getResponse());
-                for (ShardSearchFailure shardFailure : item.getResponse().getShardFailures()) {
-                    assertThat(ExceptionsHelper.unwrap(shardFailure.getCause(), TaskCancelledException.class), notNullValue());
-                }
-            }
-        }
-    }
-
-    public void testMSearchChildRequestCancellationWithClusterLevelTimeout() throws Exception {
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
-        indexTestData();
-        client().admin()
-            .cluster()
-            .prepareUpdateSettings()
-            .setPersistentSettings(
-                Settings.builder().put(SEARCH_CANCEL_AFTER_TIME_INTERVAL_SETTING_KEY, clusterCancellationTimeout).build()
-            )
-            .get();
-        ActionFuture<MultiSearchResponse> mSearchResponse = client().prepareMultiSearch()
-            .setMaxConcurrentSearchRequests(2)
-            .add(
-                client().prepareSearch("test")
-                    .setAllowPartialSearchResults(randomBoolean())
-                    .setQuery(
-                        scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap()))
-                    )
-            )
-            .add(
-                client().prepareSearch("test")
-                    .setAllowPartialSearchResults(randomBoolean())
-                    .setRequestCache(false)
-                    .setQuery(
-                        scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap()))
-                    )
-            )
-            .execute();
-        awaitForBlock(plugins);
-        sleepForAtLeast(clusterCancellationTimeout.getMillis());
-        // unblock the search thread
-        disableBlocks(plugins);
-        // both child requests are expected to fail
-        final Set<Integer> expectedFailedRequests = new HashSet<>();
-        expectedFailedRequests.add(0);
-        expectedFailedRequests.add(1);
-        ensureMSearchWasCancelled(mSearchResponse, expectedFailedRequests);
-    }
-
-    /**
-     * Verifies cancellation of sub search request with mix of request level and cluster level timeout parameter
-     * @throws Exception in case of unexpected errors
-     */
-    public void testMSearchChildReqCancellationWithHybridTimeout() throws Exception {
-        List<ScriptedBlockPlugin> plugins = initBlockFactory();
-        indexTestData();
-        client().admin()
-            .cluster()
-            .prepareUpdateSettings()
-            .setPersistentSettings(
-                Settings.builder().put(SEARCH_CANCEL_AFTER_TIME_INTERVAL_SETTING_KEY, clusterCancellationTimeout).build()
-            )
-            .get();
-        ActionFuture<MultiSearchResponse> mSearchResponse = client().prepareMultiSearch()
-            .setMaxConcurrentSearchRequests(3)
-            .add(
-                client().prepareSearch("test")
-                    .setAllowPartialSearchResults(randomBoolean())
-                    .setCancelAfterTimeInterval(requestCancellationTimeout)
-                    .setQuery(
-                        scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap()))
-                    )
-            )
-            .add(
-                client().prepareSearch("test")
-                    .setAllowPartialSearchResults(randomBoolean())
-                    .setCancelAfterTimeInterval(NO_TIMEOUT)
-                    .setQuery(
-                        scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap()))
-                    )
-            )
-            .add(
-                client().prepareSearch("test")
-                    .setAllowPartialSearchResults(randomBoolean())
-                    .setRequestCache(false)
-                    .setQuery(
-                        scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap()))
-                    )
-            )
-            .execute();
-        awaitForBlock(plugins);
-        sleepForAtLeast(Math.max(requestCancellationTimeout.getMillis(), clusterCancellationTimeout.getMillis()));
-        // unblock the search thread
-        disableBlocks(plugins);
-        // only first and last child request are expected to fail
-        final Set<Integer> expectedFailedRequests = new HashSet<>();
-        expectedFailedRequests.add(0);
-        expectedFailedRequests.add(2);
-        ensureMSearchWasCancelled(mSearchResponse, expectedFailedRequests);
-    }
-
-    /**
-     * Sleeps for the specified number of milliseconds plus a 100ms buffer to account for system timer/scheduler inaccuracies.
-     *
-     * @param milliseconds The minimum time to sleep
-     * @throws InterruptedException if interrupted during sleep
-     */
     @SuppressForbidden(reason = "Waiting longer than timeout")
-    private static void sleepForAtLeast(long milliseconds) throws InterruptedException {
-        Thread.sleep(milliseconds + 100L);
+        ensureSearchWasCancelled(searchResponse);
     }
-
-    public static class ScriptedBlockPlugin extends MockScriptPlugin {
-        static final String SCRIPT_NAME = "search_block";
-
-        private final AtomicInteger hits = new AtomicInteger();
-
-        private final AtomicBoolean shouldBlock = new AtomicBoolean(true);
-
-        public void reset() {
-            hits.set(0);
-        }
-
-        public void disableBlock() {
-            shouldBlock.set(false);
-        }
-
-        public void enableBlock() {
-            shouldBlock.set(true);
-        }
-
-        @Override
-        public Map<String, Function<Map<String, Object>, Object>> pluginScripts() {
-            return Collections.singletonMap(SCRIPT_NAME, params -> {
-                LeafFieldsLookup fieldsLookup = (LeafFieldsLookup) params.get("_fields");
-                LogManager.getLogger(SearchCancellationIT.class).info("Blocking on the document {}", fieldsLookup.get("_id"));
-                hits.incrementAndGet();
-                try {
-                    assertBusy(() -> assertFalse(shouldBlock.get()));
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-                return true;
+        for (MultiSearchResponse.Item item : msearchResponse.actionGet()) {
+                    .setAllowPartialSearchResults(randomBoolean())
+            );
+        ActionFuture<MultiSearchResponse> msearchResponse = client().prepareMultiSearch()
+                    .setAllowPartialSearchResults(randomBoolean())
+            )
+            )
+            .prepareUpdateSettings()
+    }
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+    public void testNoCancellationOfScrollSearchOnFollowUpRequest() throws Exception {
+            .setScroll(keepAlive)
+            plugin.reset();
+        indexTestData();
+        if (response != null) {
+    private TimeValue clusterCancellationTimeout = TimeValue.timeValueMillis(1500);
+            .setScroll(keepAlive)
+    }
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertNoFailures;
+            plugin.reset();
             });
-        }
+        ensureSearchWasCancelled(searchResponse);
+ * ownership. Elasticsearch licenses this file to you under
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
+        disableBlocks(plugins);
+            .setCancelAfterTimeInterval(requestCancellationTimeout)
+        for (ScriptedBlockPlugin plugin : plugins) {
+                        scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap()))
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+    @ParametersFactory
+            actualFailedChildRequests
+        disableBlocks(plugins);
+        disableBlocks(plugins);
+            .get();
+            final Throwable topFailureCause = searchFailure.getCause();
+        if (response != null) {
     }
+    }
+            .get();
+            .execute();
+import org.opensearch.common.unit.TimeValue;
+        sleepForAtLeast(clusterCancellationTimeout.getMillis());
+        indexTestData();
+    /**
+ */
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertFailures;
+                Settings.builder().put(SEARCH_CANCEL_AFTER_TIME_INTERVAL_SETTING_KEY, clusterCancellationTimeout).build()
+import java.util.Set;
+     */
+        super(settings);
+            }
+        assertEquals(0, searchResponse.get().getFailedShards());
+            .setAllowPartialSearchResults(randomBoolean())
+            .cluster()
+    }
+            assertThat(numberOfBlockedPlugins, greaterThan(0));
+    private void indexTestData() {
+        client().admin()
+import static org.hamcrest.Matchers.notNullValue;
+        client().prepareClearScroll().addScrollId(scrollId).get();
+        TaskInfo searchTask = listTasksResponse.getTasks().get(0);
+    private void awaitForBlock(List<ScriptedBlockPlugin> plugins) throws Exception {
+                client().prepareSearch("test")
+            .setMaxConcurrentSearchRequests(2)
+            .execute();
+            .execute();
+            )
+    }
+                client().prepareSearch("test")
+    public void testDisableCancellationAtClusterLevel() throws Exception {
+    protected Settings nodeSettings(int nodeOrdinal) {
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+            .prepareUpdateSettings()
+            .setPersistentSettings(
+import org.opensearch.action.bulk.BulkRequestBuilder;
+        disableBlocks(plugins);
+            shouldBlock.set(true);
+ *
+    public void testCancellationOfScrollSearches() throws Exception {
+package org.opensearch.search;
+        sleepForAtLeast(clusterCancellationTimeout.getMillis());
+            .cluster()
+import org.opensearch.action.search.SearchResponse;
+        int numberOfShards = getNumShards("test").numPrimaries;
+import static org.opensearch.search.SearchService.NO_TIMEOUT;
+            } else if (sResponse.getShardFailures().length > 0) {
+import java.util.function.Function;
+                    .setQuery(
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+            if (item.getFailure() != null) {
+    public void testCancellationDuringFetchPhaseUsingRequestParameter() throws Exception {
+            .execute();
+        SearchResponse response = ensureSearchWasCancelled(scrollResponse);
+            return Collections.singletonMap(SCRIPT_NAME, params -> {
+            .setSize(2)
+                    .setCancelAfterTimeInterval(NO_TIMEOUT)
+        client().admin().cluster().prepareUpdateSettings().setPersistentSettings(Settings.builder().putNull("*")).get();
+                Settings.builder().put(SEARCH_CANCEL_AFTER_TIME_INTERVAL_SETTING_KEY, clusterCancellationTimeout).build()
+        String scrollId = searchResponse.getScrollId();
+        logger.info("Segments {}", Strings.toString(MediaTypeRegistry.JSON, client().admin().indices().prepareSegments("test").get()));
+        indexTestData();
+        disableBlocks(plugins);
+     *
+    }
+                assertTrue(topFailureCause.getCause() instanceof TaskCancelledException);
+            .build();
+                } catch (Exception e) {
+        // wait for response and ensure there is no failure
+        awaitForBlock(plugins);
+import static org.hamcrest.Matchers.equalTo;
+ */
+        client().admin()
+            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap())))
+        for (ScriptedBlockPlugin plugin : plugins) {
+                }
+                        scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap()))
+        ActionFuture<SearchResponse> searchResponse = client().prepareSearch("test")
+        // be used for the subsequent scroll request, as request is of SearchScrollRequest type instead of SearchRequest type
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+    @Override
+    public static class ScriptedBlockPlugin extends MockScriptPlugin {
+        Set<Integer> actualFailedChildRequests = new HashSet<>();
+                    )
+        awaitForBlock(plugins);
+            .setPersistentSettings(
+            SearchResponse sResponse = response.getResponses()[i].getResponse();
+                assertThat(ExceptionsHelper.unwrap(item.getFailure(), TaskCancelledException.class), notNullValue());
+import org.opensearch.transport.TransportException;
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+        expectedFailedRequests.add(1);
+            .setAllowPartialSearchResults(randomBoolean())
+     * @throws Exception in case of unexpected errors
+        assertNotNull(searchResponse.getScrollId());
+    private void verifyCancellationException(ShardSearchFailure[] failures) {
+        @Override
+    }
+import org.opensearch.action.admin.cluster.node.tasks.cancel.CancelTasksResponse;
+            shouldBlock.set(false);
+        try {
+    private TimeValue requestCancellationTimeout = TimeValue.timeValueSeconds(1);
+        final Set<Integer> expectedFailedRequests = new HashSet<>();
+import org.opensearch.common.settings.Settings;
+     * Verifies cancellation of sub search request with mix of request level and cluster level timeout parameter
+        }
+ * The OpenSearch Contributors require contributions made to
+            .put(super.nodeSettings(nodeOrdinal))
+        // unblock the search thread
+        disableBlocks(plugins);
+            .execute();
+        logger.info("Executing scroll with id {}", scrollId);
+                        scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap()))
+        SearchResponse response = ensureSearchWasCancelled(searchResponse);
+import org.opensearch.tasks.TaskInfo;
+import org.opensearch.script.Script;
+public class SearchCancellationIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+        awaitForBlock(plugins);
+    private void disableBlocks(List<ScriptedBlockPlugin> plugins) throws Exception {
+            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", ScriptedBlockPlugin.SCRIPT_NAME, Collections.emptyMap())))
+        }
+import org.opensearch.action.search.SearchAction;
+    }
+import org.opensearch.action.search.MultiSearchResponse;
+            assertNoFailures(bulkRequestBuilder.get());
+            .execute();
+        // Disable block so the first request would pass
+    }
+        client().prepareClearScroll().addScrollId(scrollId).get();
+/*
+            .addScriptField("test_field", new Script(ScriptType.INLINE, "mockscript", SCRIPT_NAME, Collections.emptyMap()))
+            .execute();
+        // Disable block so the first request would pass
+import org.junit.After;
+import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
+        scrollId = response.getScrollId();
+    @Override
+    public void testMSearchChildRequestCancellationWithClusterLevelTimeout() throws Exception {
 }
+        expectedFailedRequests.add(2);
+import org.opensearch.script.ScriptType;
+                    .setAllowPartialSearchResults(randomBoolean())
+            if (sResponse == null) {
+            plugins.addAll(pluginsService.filterPlugins(ScriptedBlockPlugin.class));
+            .get();
+     * Sleeps for the specified number of milliseconds plus a 100ms buffer to account for system timer/scheduler inaccuracies.
+        return Settings.builder()
+ * this file be licensed under the Apache-2.0 license or a
+ * software distributed under the License is distributed on an
+                    )
+import java.util.Collection;
+    }
+                    assertThat(ExceptionsHelper.unwrap(shardFailure.getCause(), TaskCancelledException.class), notNullValue());
+import java.util.Map;
+        ListTasksResponse listTasksResponse = client().admin().cluster().prepareListTasks().setActions(action).get();
+        disableBlocks(plugins);
+        ensureSearchWasCancelled(searchResponse);
+        }
+     * @param milliseconds The minimum time to sleep
+                    .setQuery(
+import java.util.HashSet;
+        SearchResponse response = scrollResponse.get();
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import org.opensearch.action.search.SearchScrollAction;
+            .add(
+import org.opensearch.plugins.Plugin;
+        indexTestData();
+    public void testCancellationOfFirstScrollSearchRequestUsingRequestParameter() throws Exception {
+        assertThat(cancelTasksResponse.getTasks().get(0).getTaskId(), equalTo(searchTask.getTaskId()));
+import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+        awaitForBlock(plugins);
+        indexTestData();
+        indexTestData();
+    public void testCancellationDuringQueryPhaseUsingRequestParameter() throws Exception {
+/*
+        public void enableBlock() {
+            verifyCancellationException(response.getShardFailures());
+        }
+import org.opensearch.common.SuppressForbidden;
+                }
+                    .setQuery(
+ * GitHub history for details.
+        awaitForBlock(plugins);
+import org.apache.logging.log4j.LogManager;
+            .addScriptField("test_field", new Script(ScriptType.INLINE, "mockscript", SCRIPT_NAME, Collections.emptyMap()))
+    public void testMSearchChildReqCancellationWithHybridTimeout() throws Exception {
+ * under the License.
+            if (topFailureCause instanceof TransportException) {
+            .execute();
+            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", SCRIPT_NAME, Collections.emptyMap())))
+        Thread.sleep(milliseconds + 100L);
+    public SearchCancellationIT(Settings settings) {
+        }
+                LeafFieldsLookup fieldsLookup = (LeafFieldsLookup) params.get("_fields");
+            .execute();
+        cancelSearch(SearchScrollAction.NAME);
+            client().prepareClearScroll().addScrollId(response.getScrollId()).get();
+            "Actual child request with cancellation failure is different that expected",
+        // unblock the search thread
+            .setAllowPartialSearchResults(randomBoolean())
+import java.util.List;
+            )
+    }
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.opensearch.ExceptionsHelper;
+import org.opensearch.search.lookup.LeafFieldsLookup;
+            .setCancelAfterTimeInterval(requestCancellationTimeout)
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+import static org.opensearch.action.search.TransportSearchAction.SEARCH_CANCEL_AFTER_TIME_INTERVAL_SETTING_KEY;
+            expectedFailedChildRequests,
+        logger.info("Executing search");
+        awaitForBlock(plugins);
+            plugin.enableBlock();
+            }
+            .add(
+            }
+        logger.info("Executing search");
+    @After
+            .setQuery(scriptQuery(new Script(ScriptType.INLINE, "mockscript", SCRIPT_NAME, Collections.emptyMap())))
+            .cluster()
+            .execute();
+    private void ensureMSearchWasCancelled(ActionFuture<MultiSearchResponse> mSearchResponse, Set<Integer> expectedFailedChildRequests) {
+        // since the previous scroll response is received before cancellation timeout, the scheduled task will be cancelled. It will not
+        // only first and last child request are expected to fail
+            .get();
+        List<ScriptedBlockPlugin> plugins = initBlockFactory();
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.SUITE)
+            .setCancelAfterTimeInterval(requestCancellationTimeout)
+        indexTestData();
+            .execute();
+    }
+                Settings.builder().put(SEARCH_CANCEL_AFTER_TIME_INTERVAL_SETTING_KEY, clusterCancellationTimeout).build()

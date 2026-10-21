@@ -1,305 +1,276 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.template.post;
-
-import org.opensearch.Version;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeReadAction;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.metadata.AliasMetadata;
-import org.opensearch.cluster.metadata.AliasValidator;
-import org.opensearch.cluster.metadata.ComposableIndexTemplate;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.metadata.MetadataCreateIndexService;
-import org.opensearch.cluster.metadata.MetadataIndexTemplateService;
-import org.opensearch.cluster.metadata.Template;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.mapper.DocumentMapper;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-import static org.opensearch.cluster.metadata.MetadataIndexTemplateService.findConflictingV1Templates;
-import static org.opensearch.cluster.metadata.MetadataIndexTemplateService.findConflictingV2Templates;
-import static org.opensearch.cluster.metadata.MetadataIndexTemplateService.findV2Template;
-import static org.opensearch.cluster.metadata.MetadataIndexTemplateService.resolveSettings;
-
-/**
- * Transport Action for handling simulating an index template either by name (looking it up in the
- * cluster state), or by a provided template configuration
- *
- * @opensearch.internal
- */
-public class TransportSimulateIndexTemplateAction extends TransportClusterManagerNodeReadAction<
-    SimulateIndexTemplateRequest,
-    SimulateIndexTemplateResponse> {
-
-    private final MetadataIndexTemplateService indexTemplateService;
-    private final NamedXContentRegistry xContentRegistry;
-    private final IndicesService indicesService;
-    private AliasValidator aliasValidator;
-
-    @Inject
-    public TransportSimulateIndexTemplateAction(
-        TransportService transportService,
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        MetadataIndexTemplateService indexTemplateService,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        NamedXContentRegistry xContentRegistry,
-        IndicesService indicesService
-    ) {
-        super(
-            SimulateIndexTemplateAction.NAME,
-            transportService,
-            clusterService,
-            threadPool,
-            actionFilters,
-            SimulateIndexTemplateRequest::new,
-            indexNameExpressionResolver
-        );
-        this.indexTemplateService = indexTemplateService;
-        this.xContentRegistry = xContentRegistry;
-        this.indicesService = indicesService;
-        this.aliasValidator = new AliasValidator();
-    }
-
-    @Override
-    protected String executor() {
-        return ThreadPool.Names.SAME;
-    }
-
-    @Override
-    protected SimulateIndexTemplateResponse read(StreamInput in) throws IOException {
-        return new SimulateIndexTemplateResponse(in);
-    }
-
-    @Override
-    protected void clusterManagerOperation(
-        SimulateIndexTemplateRequest request,
-        ClusterState state,
-        ActionListener<SimulateIndexTemplateResponse> listener
-    ) throws Exception {
-        final ClusterState stateWithTemplate;
-        if (request.getIndexTemplateRequest() != null) {
-            // we'll "locally" add the template defined by the user in the cluster state (as if it existed in the system)
-            String simulateTemplateToAdd = "simulate_index_template_" + UUIDs.randomBase64UUID().toLowerCase(Locale.ROOT);
-            // Perform validation for things like typos in component template names
-            MetadataIndexTemplateService.validateV2TemplateRequest(
-                state.metadata(),
-                simulateTemplateToAdd,
-                request.getIndexTemplateRequest().indexTemplate(),
-                clusterService.getClusterSettings()
-            );
-            stateWithTemplate = indexTemplateService.addIndexTemplateV2(
-                state,
-                request.getIndexTemplateRequest().create(),
-                simulateTemplateToAdd,
-                request.getIndexTemplateRequest().indexTemplate()
-            );
-        } else {
-            stateWithTemplate = state;
-        }
-
-        String matchingTemplate = findV2Template(stateWithTemplate.metadata(), request.getIndexName(), false);
-        if (matchingTemplate == null) {
-            listener.onResponse(new SimulateIndexTemplateResponse(null, null));
-            return;
-        }
-
-        final ClusterState tempClusterState = resolveTemporaryState(matchingTemplate, request.getIndexName(), stateWithTemplate);
-        ComposableIndexTemplate templateV2 = tempClusterState.metadata().templatesV2().get(matchingTemplate);
-        assert templateV2 != null : "the matched template must exist";
-
-        final Template template = resolveTemplate(
-            matchingTemplate,
-            request.getIndexName(),
-            stateWithTemplate,
-            xContentRegistry,
-            indicesService,
-            aliasValidator,
-            clusterService.getClusterSettings().get(IndicesService.CLUSTER_PLUGGABLE_DATAFORMAT_ENABLED_SETTING),
-            clusterService.getClusterSettings().get(IndicesService.CLUSTER_PLUGGABLE_DATAFORMAT_VALUE_SETTING)
-        );
-
-        final Map<String, List<String>> overlapping = new HashMap<>();
-        overlapping.putAll(findConflictingV1Templates(tempClusterState, matchingTemplate, templateV2.indexPatterns()));
-        overlapping.putAll(findConflictingV2Templates(tempClusterState, matchingTemplate, templateV2.indexPatterns()));
-
-        listener.onResponse(new SimulateIndexTemplateResponse(template, overlapping));
-    }
-
-    @Override
-    protected ClusterBlockException checkBlock(SimulateIndexTemplateRequest request, ClusterState state) {
-        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
-    }
-
-    /**
-     * Return a temporary cluster state with an index that exists using the
-     * matched template's settings
-     */
-    public static ClusterState resolveTemporaryState(
-        final String matchingTemplate,
         final String indexName,
-        final ClusterState simulatedState
-    ) {
-        Settings settings = resolveSettings(simulatedState.metadata(), matchingTemplate);
-
-        // create the index with dummy settings in the cluster state so we can parse and validate the aliases
-        Settings dummySettings = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(settings)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID())
-            .build();
-        final IndexMetadata indexMetadata = IndexMetadata.builder(indexName).settings(dummySettings).build();
-
-        return ClusterState.builder(simulatedState)
-            .metadata(Metadata.builder(simulatedState.metadata()).put(indexMetadata, true).build())
-            .build();
-    }
-
-    /**
-     * Take a template and index name as well as state where the template exists, and return a final
-     * {@link Template} that represents all the resolved Settings, Mappings, and Aliases
-     */
-    public static Template resolveTemplate(
-        final String matchingTemplate,
-        final String indexName,
-        final ClusterState simulatedState,
-        final NamedXContentRegistry xContentRegistry,
-        final IndicesService indicesService,
-        final AliasValidator aliasValidator,
-        final boolean clusterPluggableDataFormatEnabled,
-        final String clusterPluggableDataFormatValue
-    ) throws Exception {
-        Settings settings = resolveSettings(simulatedState.metadata(), matchingTemplate);
-
-        List<Map<String, AliasMetadata>> resolvedAliases = MetadataIndexTemplateService.resolveAliases(
-            simulatedState.metadata(),
-            matchingTemplate
-        );
-
-        // create the index with dummy settings in the cluster state so we can parse and validate the aliases
-        Settings.Builder dummySettingsBuilder = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(settings)
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID());
-        // When a pluggable data format is the cluster-wide default, simulate the mapping as a
-        // pluggable index would see it — unless the template opts out explicitly — so the preview
-        // matches what real index creation would do (rejecting a field that sets index:true).
-        if (clusterPluggableDataFormatEnabled && IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.exists(settings) == false) {
-            dummySettingsBuilder.put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true);
-        }
-        // Carry the cluster's default data format name too (mirroring MetadataCreateIndexService) so the
-        // preview resolves a format and rejects index:true; with no name there is no format to check.
-        if (clusterPluggableDataFormatEnabled
-            && clusterPluggableDataFormatValue.isEmpty() == false
-            && IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.exists(settings) == false) {
-            dummySettingsBuilder.put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), clusterPluggableDataFormatValue);
-        }
-        Settings dummySettings = dummySettingsBuilder.build();
-        final IndexMetadata indexMetadata = IndexMetadata.builder(indexName).settings(dummySettings).build();
-
-        final ClusterState tempClusterState = ClusterState.builder(simulatedState)
-            .metadata(Metadata.builder(simulatedState.metadata()).put(indexMetadata, true).build())
-            .build();
-        List<AliasMetadata> aliases = indicesService.withTempIndexService(
-            indexMetadata,
-            tempIndexService -> MetadataCreateIndexService.resolveAndValidateAliases(
-                indexName,
-                Collections.emptySet(),
-                resolvedAliases,
-                tempClusterState.metadata(),
-                aliasValidator,
-                xContentRegistry,
-                // the context is only used for validation so it's fine to pass fake values for the
-                // shard id and the current timestamp
-                tempIndexService.newQueryShardContext(0, null, () -> 0L, null)
-            )
-        );
-        Map<String, AliasMetadata> aliasesByName = aliases.stream().collect(Collectors.toMap(AliasMetadata::getAlias, Function.identity()));
-
-        // empty request mapping as the user can't specify any explicit mappings via the simulate api
-        List<Map<String, Object>> mappings = MetadataCreateIndexService.collectV2Mappings(
-            "{}",
-            simulatedState,
-            matchingTemplate,
-            xContentRegistry,
-            indexName
-        );
-
-        CompressedXContent mergedMapping = indicesService.<CompressedXContent, Exception>withTempIndexService(
-            indexMetadata,
-            tempIndexService -> {
-                MapperService mapperService = tempIndexService.mapperService();
-                for (Map<String, Object> mapping : mappings) {
-                    if (mapping.isEmpty() == false) {
-                        mapperService.merge(MapperService.SINGLE_MAPPING_NAME, mapping, MapperService.MergeReason.INDEX_TEMPLATE);
-                    }
-                }
-
-                DocumentMapper documentMapper = mapperService.documentMapper();
                 return documentMapper != null ? documentMapper.mappingSource() : null;
-            }
+        ClusterService clusterService,
+        final ClusterState stateWithTemplate;
+import java.util.Locale;
+        final String clusterPluggableDataFormatValue
+import org.opensearch.index.IndexSettings;
+        overlapping.putAll(findConflictingV2Templates(tempClusterState, matchingTemplate, templateV2.indexPatterns()));
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        if (clusterPluggableDataFormatEnabled && IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.exists(settings) == false) {
+                tempIndexService.newQueryShardContext(0, null, () -> 0L, null)
+                xContentRegistry,
+        IndicesService indicesService
+import java.util.stream.Collectors;
+        overlapping.putAll(findConflictingV1Templates(tempClusterState, matchingTemplate, templateV2.indexPatterns()));
+            .metadata(Metadata.builder(simulatedState.metadata()).put(indexMetadata, true).build())
+import static org.opensearch.cluster.metadata.MetadataIndexTemplateService.findConflictingV1Templates;
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            .put(settings)
+public class TransportSimulateIndexTemplateAction extends TransportClusterManagerNodeReadAction<
+ * Unless required by applicable law or agreed to in writing,
+            .metadata(Metadata.builder(simulatedState.metadata()).put(indexMetadata, true).build())
+        this.indexTemplateService = indexTemplateService;
+                tempClusterState.metadata(),
+ * cluster state), or by a provided template configuration
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        final IndexMetadata indexMetadata = IndexMetadata.builder(indexName).settings(dummySettings).build();
+package org.opensearch.action.admin.indices.template.post;
+                // shard id and the current timestamp
+            indicesService,
+        Settings.Builder dummySettingsBuilder = Settings.builder()
         );
-
-        return new Template(settings, mergedMapping, aliasesByName);
+ *
+            SimulateIndexTemplateRequest::new,
+            stateWithTemplate,
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.settings.Settings;
+    ) throws Exception {
+    protected SimulateIndexTemplateResponse read(StreamInput in) throws IOException {
+        MetadataIndexTemplateService indexTemplateService,
+     * {@link Template} that represents all the resolved Settings, Mappings, and Aliases
+        ComposableIndexTemplate templateV2 = tempClusterState.metadata().templatesV2().get(matchingTemplate);
+import org.opensearch.cluster.metadata.AliasMetadata;
     }
+import org.opensearch.cluster.metadata.Metadata;
+    private final MetadataIndexTemplateService indexTemplateService;
+        }
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+        );
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+    @Override
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeReadAction;
+            // we'll "locally" add the template defined by the user in the cluster state (as if it existed in the system)
+            tempIndexService -> MetadataCreateIndexService.resolveAndValidateAliases(
+            && clusterPluggableDataFormatValue.isEmpty() == false
+        final String indexName,
+        }
+    SimulateIndexTemplateResponse> {
+    }
+        final IndexMetadata indexMetadata = IndexMetadata.builder(indexName).settings(dummySettings).build();
+    ) throws Exception {
+import org.opensearch.cluster.block.ClusterBlockLevel;
+import org.opensearch.cluster.ClusterState;
+            dummySettingsBuilder.put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), clusterPluggableDataFormatValue);
+        final Map<String, List<String>> overlapping = new HashMap<>();
+                request.getIndexTemplateRequest().create(),
+import org.opensearch.cluster.metadata.MetadataCreateIndexService;
+ * You may obtain a copy of the License at
+                clusterService.getClusterSettings()
+        // pluggable index would see it — unless the template opts out explicitly — so the preview
+                resolvedAliases,
+                }
+import org.opensearch.cluster.metadata.MetadataIndexTemplateService;
+ * this work for additional information regarding copyright
+/*
+        Map<String, AliasMetadata> aliasesByName = aliases.stream().collect(Collectors.toMap(AliasMetadata::getAlias, Function.identity()));
+        if (request.getIndexTemplateRequest() != null) {
+            indexMetadata,
+import org.opensearch.action.support.ActionFilters;
+        List<AliasMetadata> aliases = indicesService.withTempIndexService(
+            );
+import org.opensearch.cluster.metadata.AliasValidator;
+                    }
+import org.opensearch.cluster.metadata.Template;
+            dummySettingsBuilder.put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true);
+/*
+    ) {
+        // Carry the cluster's default data format name too (mirroring MetadataCreateIndexService) so the
+import org.opensearch.core.action.ActionListener;
+    public static Template resolveTemplate(
+        Settings settings = resolveSettings(simulatedState.metadata(), matchingTemplate);
+ */
+import org.opensearch.index.mapper.MapperService;
+    public static ClusterState resolveTemporaryState(
+        final Template template = resolveTemplate(
+import org.opensearch.threadpool.ThreadPool;
+            actionFilters,
+                simulateTemplateToAdd,
+            indexNameExpressionResolver
+            aliasValidator,
+        this.indicesService = indicesService;
+        SimulateIndexTemplateRequest request,
+import org.opensearch.cluster.block.ClusterBlockException;
+    protected String executor() {
+            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID());
+                // the context is only used for validation so it's fine to pass fake values for the
+                simulateTemplateToAdd,
+            clusterService.getClusterSettings().get(IndicesService.CLUSTER_PLUGGABLE_DATAFORMAT_ENABLED_SETTING),
+ * ownership. Elasticsearch licenses this file to you under
+ * The OpenSearch Contributors require contributions made to
+ *
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+        final AliasValidator aliasValidator,
+                state,
+        ActionListener<SimulateIndexTemplateResponse> listener
+     */
+/**
+        }
+        return ClusterState.builder(simulatedState)
+import org.opensearch.common.compress.CompressedXContent;
+            .build();
+        final String matchingTemplate,
+ */
+            clusterService,
+import static org.opensearch.cluster.metadata.MetadataIndexTemplateService.findConflictingV2Templates;
+        if (clusterPluggableDataFormatEnabled
+ * compatible open source license.
+        );
+import java.util.Map;
+        ThreadPool threadPool,
+            matchingTemplate,
+        List<Map<String, AliasMetadata>> resolvedAliases = MetadataIndexTemplateService.resolveAliases(
+            stateWithTemplate = indexTemplateService.addIndexTemplateV2(
+import static org.opensearch.cluster.metadata.MetadataIndexTemplateService.resolveSettings;
+        assert templateV2 != null : "the matched template must exist";
+                DocumentMapper documentMapper = mapperService.documentMapper();
+            MetadataIndexTemplateService.validateV2TemplateRequest(
+ * KIND, either express or implied.  See the License for the
+                request.getIndexTemplateRequest().indexTemplate()
+ * the Apache License, Version 2.0 (the "License"); you may
+import java.util.List;
+        // create the index with dummy settings in the cluster state so we can parse and validate the aliases
+        // When a pluggable data format is the cluster-wide default, simulate the mapping as a
+        final ClusterState simulatedState,
+                        mapperService.merge(MapperService.SINGLE_MAPPING_NAME, mapping, MapperService.MergeReason.INDEX_TEMPLATE);
+import org.opensearch.cluster.metadata.ComposableIndexTemplate;
+            && IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.exists(settings) == false) {
+import org.opensearch.common.inject.Inject;
+            indexName
+        List<Map<String, Object>> mappings = MetadataCreateIndexService.collectV2Mappings(
+import org.opensearch.cluster.service.ClusterService;
+        Settings dummySettings = dummySettingsBuilder.build();
+ * specific language governing permissions and limitations
+ *
+                    if (mapping.isEmpty() == false) {
+        this.aliasValidator = new AliasValidator();
+        listener.onResponse(new SimulateIndexTemplateResponse(template, overlapping));
+import org.opensearch.Version;
+    protected void clusterManagerOperation(
+            // Perform validation for things like typos in component template names
+    ) {
 }
+    @Override
+            clusterService.getClusterSettings().get(IndicesService.CLUSTER_PLUGGABLE_DATAFORMAT_VALUE_SETTING)
+    @Override
+    private final NamedXContentRegistry xContentRegistry;
+            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID())
+            request.getIndexName(),
+    protected ClusterBlockException checkBlock(SimulateIndexTemplateRequest request, ClusterState state) {
+        );
+        CompressedXContent mergedMapping = indicesService.<CompressedXContent, Exception>withTempIndexService(
+            simulatedState.metadata(),
+    }
+        final String matchingTemplate,
+import java.util.function.Function;
+    /**
+            .build();
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                Collections.emptySet(),
+            xContentRegistry,
+import org.opensearch.common.UUIDs;
+            .build();
+import org.opensearch.core.common.io.stream.StreamInput;
+    SimulateIndexTemplateRequest,
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
+     */
+import org.opensearch.transport.TransportService;
+     * Take a template and index name as well as state where the template exists, and return a final
+ * Transport Action for handling simulating an index template either by name (looking it up in the
+        final ClusterState tempClusterState = ClusterState.builder(simulatedState)
+    public TransportSimulateIndexTemplateAction(
+ * SPDX-License-Identifier: Apache-2.0
+    @Inject
+            }
+        // empty request mapping as the user can't specify any explicit mappings via the simulate api
+        Settings dummySettings = Settings.builder()
+import org.opensearch.cluster.metadata.IndexMetadata;
+            "{}",
+ * not use this file except in compliance with the License.
+    }
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+    }
+        }
+            matchingTemplate,
+            tempIndexService -> {
+     * matched template's settings
+            transportService,
+ * Licensed to Elasticsearch under one or more contributor
+            listener.onResponse(new SimulateIndexTemplateResponse(null, null));
+            indexMetadata,
+ * under the License.
+                indexName,
+ * Modifications Copyright OpenSearch Contributors. See
+        final ClusterState simulatedState
+import java.util.HashMap;
+        final NamedXContentRegistry xContentRegistry,
+            );
+import org.opensearch.indices.IndicesService;
+                for (Map<String, Object> mapping : mappings) {
+        Settings settings = resolveSettings(simulatedState.metadata(), matchingTemplate);
+ *
+            stateWithTemplate = state;
+    @Override
+            simulatedState,
+import java.util.Collections;
+import static org.opensearch.cluster.metadata.MetadataIndexTemplateService.findV2Template;
+        // create the index with dummy settings in the cluster state so we can parse and validate the aliases
+    }
+    /**
+/*
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+                MapperService mapperService = tempIndexService.mapperService();
+            SimulateIndexTemplateAction.NAME,
+ * @opensearch.internal
+                request.getIndexTemplateRequest().indexTemplate(),
+        } else {
+    private final IndicesService indicesService;
+        // matches what real index creation would do (rejecting a field that sets index:true).
+     * Return a temporary cluster state with an index that exists using the
+        this.xContentRegistry = xContentRegistry;
+        final boolean clusterPluggableDataFormatEnabled,
+        String matchingTemplate = findV2Template(stateWithTemplate.metadata(), request.getIndexName(), false);
+        ActionFilters actionFilters,
+            threadPool,
+ * software distributed under the License is distributed on an
+        return new Template(settings, mergedMapping, aliasesByName);
+ */
+    }
+        super(
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+                state.metadata(),
+    private AliasValidator aliasValidator;
+            String simulateTemplateToAdd = "simulate_index_template_" + UUIDs.randomBase64UUID().toLowerCase(Locale.ROOT);
+        final IndicesService indicesService,
+        NamedXContentRegistry xContentRegistry,
+            return;
+        );
+            )
+        final ClusterState tempClusterState = resolveTemporaryState(matchingTemplate, request.getIndexName(), stateWithTemplate);
+            matchingTemplate
+ * license agreements. See the NOTICE file distributed with
+            .put(settings)
+                aliasValidator,
+            xContentRegistry,
+        IndexNameExpressionResolver indexNameExpressionResolver,
+        TransportService transportService,
+        ClusterState state,
+import org.opensearch.index.mapper.DocumentMapper;
+        if (matchingTemplate == null) {
+ */
+        return ThreadPool.Names.SAME;
+ * GitHub history for details.
+        // preview resolves a format and rejects index:true; with no name there is no format to check.
+import java.io.IOException;
+        );
+        return new SimulateIndexTemplateResponse(in);

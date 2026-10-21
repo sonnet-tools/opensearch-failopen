@@ -1,344 +1,293 @@
-setup:
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
+  - match: { aggregations.percentiles_missing.values.99\.0: 1.0 }
   - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_replicas: 0
-              number_of_shards: 5
-              number_of_routing_shards: 5
-            mappings:
-              properties:
-                unsigned_field:
-                   type : unsigned_long
-                double_field:
-                   type : double
-                string_field:
-                   type: keyword
-
+        rest_total_hits_as_int: true
   - do:
+  - match: { aggregations.percentiles_unsigned.values.1\.0: 1.0 }
+             string_field: foo
+                field: unsigned_field
+      search:
+            percentiles_unsigned:
+          aggs:
+              percentiles:
+"Metadata test":
+  - match: { hits.total: 4 }
+  - do:
+        body:
+"Missing field with missing param":
+          aggs:
+  - match: { aggregations.percentiles_double.values.5\.0: 1.0 }
+  - match: { aggregations.percentiles_double.values.75\.0: 1101.9990234375 }
+  - match: { aggregations.percentiles_unsigned.values.25\.0: 1.0 }
+  - match: { aggregations.percentiles_unsigned.values.25\.0: 1.0 }
        bulk:
-         refresh: true
-         body:
-           - index:
-               _index: test_1
-               _id:    1
-           - unsigned_field: 1
-             double_field: 1.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    2
-           - unsigned_field: 51
+              percentiles:
+                   type : unsigned_long
+  - match: { aggregations.percentiles_double.values.99\.0: 1426066581225472 }
              double_field: 51.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    3
-           - unsigned_field: 1101
-             double_field: 1101.0
-             string_field: foo
-           - index:
-               _index: test_1
-               _id:    4
-           - unsigned_field: 1425497558138880
+                  number_of_significant_value_digits: 3
+  - match: { aggregations.percentiles_double.values.5\.0: 1.0 }
+              percentiles:
+  - match: { aggregations.percentiles_unsigned.values.5\.0: 1.0 }
+      search:
+              percentiles:
+  - do:
+                  number_of_significant_value_digits: 3
+  - match: { aggregations.percentiles_unsigned.values.50\.0: 51.0302734375 }
+        rest_total_hits_as_int: true
+                percents: [5.0, 25.0, 50.0]
+              number_of_routing_shards: 5
+           - unsigned_field: 51
+                foo: bar
+  - match: { aggregations.percentiles_double.values.99\.0: 1426066581225472 }
+  - match: { aggregations.percentiles_double.values.25\.0: 1.0 }
+  - do:
+                field: missing_field
+                hdr: {}
+  - match: { aggregations.percentiles_unsigned.values.25\.0: 1.0 }
+  - match: { aggregations.percentiles_double.values.95\.0: 1426066581225472 }
+      search:
+  - match: { aggregations.percentiles_double.values.5\.0: 1.0 }
+      indices.create:
              double_field: 1425497558138880.0
-             string_field: foo
-
----
-"Basic test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            percentiles_unsigned:
-              percentiles:
-                field: unsigned_field
-                hdr: {}
-            percentiles_double:
-              percentiles:
-                field: double_field
-                hdr: {}
-
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-
-  - match: { aggregations.percentiles_unsigned.values.1\.0: 1.0 }
-  - match: { aggregations.percentiles_unsigned.values.5\.0: 1.0 }
-  - match: { aggregations.percentiles_unsigned.values.25\.0: 1.0 }
-  - match: { aggregations.percentiles_unsigned.values.50\.0: 51.0302734375 }
-  - match: { aggregations.percentiles_unsigned.values.75\.0: 1101.9990234375 }
-  - match: { aggregations.percentiles_unsigned.values.95\.0: 1426066581225472 }
-  - match: { aggregations.percentiles_unsigned.values.99\.0: 1426066581225472 }
-
-  - match: { aggregations.percentiles_double.values.1\.0: 1.0 }
-  - match: { aggregations.percentiles_double.values.5\.0: 1.0 }
-  - match: { aggregations.percentiles_double.values.25\.0: 1.0 }
-  - match: { aggregations.percentiles_double.values.50\.0: 51.0302734375 }
   - match: { aggregations.percentiles_double.values.75\.0: 1101.9990234375 }
-  - match: { aggregations.percentiles_double.values.95\.0: 1426066581225472 }
-  - match: { aggregations.percentiles_double.values.99\.0: 1426066581225472 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            percentiles_unsigned:
-              percentiles:
-                field: unsigned_field
+  - match: { aggregations.percentiles_double.values.25\.0: 1.0 }
                 hdr:
-                  number_of_significant_value_digits: 3
-            percentiles_double:
-              percentiles:
-                field: double_field
-                hdr:
-                  number_of_significant_value_digits: 3
-
-
   - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-
-  - match: { aggregations.percentiles_unsigned.values.1\.0: 1.0 }
   - match: { aggregations.percentiles_unsigned.values.5\.0: 1.0 }
-  - match: { aggregations.percentiles_unsigned.values.25\.0: 1.0 }
-  - match: { aggregations.percentiles_unsigned.values.50\.0: 51.0302734375 }
-  - match: { aggregations.percentiles_unsigned.values.75\.0: 1101.9990234375 }
-  - match: { aggregations.percentiles_unsigned.values.95\.0: 1426066581225472 }
-  - match: { aggregations.percentiles_unsigned.values.99\.0: 1426066581225472 }
-
-  - match: { aggregations.percentiles_double.values.1\.0: 1.0 }
-  - match: { aggregations.percentiles_double.values.5\.0: 1.0 }
-  - match: { aggregations.percentiles_double.values.25\.0: 1.0 }
-  - match: { aggregations.percentiles_double.values.50\.0: 51.0302734375 }
-  - match: { aggregations.percentiles_double.values.75\.0: 1101.9990234375 }
-  - match: { aggregations.percentiles_double.values.95\.0: 1426066581225472 }
-  - match: { aggregations.percentiles_double.values.99\.0: 1426066581225472 }
-
-
----
-"Only aggs test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          size: 0
-          aggs:
-            percentiles_unsigned:
-              percentiles:
-                field: unsigned_field
-                hdr: {}
-            percentiles_double:
-              percentiles:
-                field: double_field
-                hdr: {}
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 0 }
-
-  - match: { aggregations.percentiles_unsigned.values.1\.0: 1.0 }
-  - match: { aggregations.percentiles_unsigned.values.5\.0: 1.0 }
-  - match: { aggregations.percentiles_unsigned.values.25\.0: 1.0 }
-  - match: { aggregations.percentiles_unsigned.values.50\.0: 51.0302734375 }
-  - match: { aggregations.percentiles_unsigned.values.75\.0: 1101.9990234375 }
-  - match: { aggregations.percentiles_unsigned.values.95\.0: 1426066581225472 }
-  - match: { aggregations.percentiles_unsigned.values.99\.0: 1426066581225472 }
-
-  - match: { aggregations.percentiles_double.values.1\.0: 1.0 }
-  - match: { aggregations.percentiles_double.values.5\.0: 1.0 }
-  - match: { aggregations.percentiles_double.values.25\.0: 1.0 }
-  - match: { aggregations.percentiles_double.values.50\.0: 51.0302734375 }
-  - match: { aggregations.percentiles_double.values.75\.0: 1101.9990234375 }
-  - match: { aggregations.percentiles_double.values.95\.0: 1426066581225472 }
-  - match: { aggregations.percentiles_double.values.99\.0: 1426066581225472 }
-
-
----
-"Filtered test":
-
-  - do:
-      bulk:
         refresh: true
+                hdr: {}
+  - match: { aggregations.percentiles_double.values.5\.0: 51.0 }
+              filter:
+  - match: { aggregations.percentiles_unsigned.values.5\.0: 51.0 }
+  - match: { aggregations.percentiles_missing.values.75\.0: 1.0 }
+            percentiles_unsigned:
+---
+  - match: { aggregations.percentiles_unsigned.values.1\.0: 1.0 }
+            constant_score:
+  - match: { aggregations.percentiles_unsigned.values.50\.0: 51.0302734375 }
+                field: double_field
+        rest_total_hits_as_int: true
+  - match: { aggregations.percentiles_double.values.95\.0: 1426066581225472 }
+                field: unsigned_field
+  - match: { aggregations.percentiles_unsigned.meta.foo: "bar" }
+               _id:    1
+  - match:  { aggregations.percentiles_unsigned.values.0.key:  5.0 }
+  - match:  { aggregations.percentiles_unsigned.values.1.key:  25.0 }
+           - unsigned_field: 1101
+                string_field:
+                field: double_field
+"Filtered test":
+  - match: { aggregations.percentiles_unsigned.values.50\.0: 51.0302734375 }
+  - match: { aggregations.percentiles_unsigned.values.5\.0: 1.0 }
+  - match: { aggregations.percentiles_double.values.50\.0: 51.0302734375 }
+  - match: { aggregations.percentiles_missing.values.50\.0: 1.0 }
+  - match: { aggregations.percentiles_unsigned.values.99\.0: 1426066581225472 }
+      search:
+  - match:  { aggregations.percentiles_unsigned.values.1.value:  1.0 }
+  - length: { hits.hits: 4 }
+---
+---
+          aggs:
+  - match: { aggregations.percentiles_double.values.25\.0: 51.0 }
+         body:
+            percentiles_missing:
+              percentiles:
+          size: 0
+               _id:    4
+      reason: unsigned_long is not supported before 2.8.0
+             string_field: foo
+  - length: { hits.hits: 4 }
+---
+  - match: { aggregations.percentiles_unsigned.values.99\.0: 1426066581225472 }
         body:
-          - index:
+  - match: { aggregations.percentiles_unsigned.values.99\.0: 1426066581225472 }
+  - match: { aggregations.percentiles_double.values.1\.0: 1.0 }
+             string_field: foo
+  - do:
+"Explicit Percents test":
+        body:
+  - do:
+        body:
+  - match: { aggregations.percentiles_unsigned.values.95\.0: 1426066581225472 }
+  - match:  { aggregations.percentiles_unsigned.values.2.value:  51.0302734375 }
+                hdr: {}
+        rest_total_hits_as_int: true
+                  unsigned_field:
+      search:
+            percentiles_unsigned:
+                field: unsigned_field
+  - match: { aggregations.percentiles_double.values.25\.0: 1.0 }
+      search:
+  - match: { aggregations.percentiles_unsigned.values.1\.0: 1.0 }
+  - match: { aggregations.percentiles_unsigned.values.95\.0: 1426066581225472 }
+            percentiles_unsigned:
+            settings:
+  - match: { aggregations.percentiles_unsigned.values.95\.0: 1426066581225472 }
+            percentiles_missing:
+---
+        rest_total_hits_as_int: true
+  - match: { aggregations.percentiles_unsigned.values.50\.0: 126.03125 }
+                percents: [5.0, 25.0, 50.0]
+"Basic test":
+              percentiles:
+                range:
+             double_field: 1.0
+               _index: test_1
+"Non-keyed test":
+  - match: { aggregations.percentiles_missing.values.5\.0: 1.0 }
+---
+          body:
               _index: test_1
+         refresh: true
+  - skip:
+  - match:  { aggregations.percentiles_unsigned.values.0.value:  1.0 }
               _id:    5
-          - unsigned_field: 126
-            double_field: 126.0
+  - is_false: aggregations.percentiles_missing.value
+  - do:
+                hdr: {}
+              number_of_replicas: 0
+  - match: { aggregations.percentiles_double.values.25\.0: 1.0 }
+  - match: { hits.total: 4 }
+           - unsigned_field: 1
+            percentiles_double:
+              percentiles:
+        body:
+  - match: { aggregations.percentiles_double.values.5\.0: 1.0 }
+              percentiles:
+  - match: { hits.total: 4 }
+  - do:
+        body:
+           - index:
+           - index:
+  - match: { aggregations.percentiles_double.values.1\.0: 1.0 }
+  - match: { aggregations.percentiles_double.values.50\.0: 51.0302734375 }
+  - match: { hits.total: 4 }
+  - match: { aggregations.percentiles_double.values.75\.0: 1101.96875 }
+          query:
+      version: " - 2.7.99"
+              meta:
+---
+                field: unsigned_field
+           - index:
+                missing: 1.0
+                field: double_field
+                field: unsigned_field
+                double_field:
+  - match: { aggregations.percentiles_unsigned.values.99\.0: 1426066581225472 }
+  - length: { hits.hits: 4 }
+"Only aggs test":
+                hdr: {}
+  - match: { aggregations.percentiles_unsigned.values.95\.0: 1426066581225472 }
+  - match: { aggregations.percentiles_double.values.99\.0: 1426066581225472 }
+      search:
+            percentiles_double:
+          aggs:
+  - match: { aggregations.percentiles_double.values.99\.0: 1426066581225472 }
+          aggs:
+  - match: { aggregations.percentiles_double.values.1\.0: 51.0 }
+              percentiles:
+  - match: { aggregations.percentiles_unsigned.values.50\.0: 51.0302734375 }
+  - match: { aggregations.percentiles_missing.values.25\.0: 1.0 }
+                hdr: {}
+  - match: { hits.total: 4 }
+  - match: { aggregations.percentiles_unsigned.values.75\.0: 1101.96875 }
+  - match: { aggregations.percentiles_unsigned.values.75\.0: 1101.9990234375 }
+  - match: { hits.total: 4 }
+  - match: { aggregations.percentiles_double.values.95\.0: 1426066581225472 }
+          aggs:
+               _index: test_1
+  - do:
+                unsigned_field:
+                field: double_field
+  - match: { aggregations.percentiles_unsigned.values.75\.0: 1101.9990234375 }
+                hdr: {}
+          aggs:
+---
+  - match: { hits.total: 4 }
+  - match: { aggregations.percentiles_missing.values.1\.0: 1.0 }
+                hdr: {}
+           - index:
+  - match: { aggregations.percentiles_double.values.50\.0: 51.0302734375 }
             string_field: foo
   - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          query:
-            constant_score:
-              filter:
-                range:
-                  unsigned_field:
-                    gte: 50
-          aggs:
-            percentiles_unsigned:
-              percentiles:
-                field: unsigned_field
-                hdr: {}
             percentiles_double:
-              percentiles:
-                field: double_field
-                hdr: {}
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-
-  - match: { aggregations.percentiles_unsigned.values.1\.0: 51.0 }
-  - match: { aggregations.percentiles_unsigned.values.5\.0: 51.0 }
-  - match: { aggregations.percentiles_unsigned.values.25\.0: 51.0 }
-  - match: { aggregations.percentiles_unsigned.values.50\.0: 126.03125 }
-  - match: { aggregations.percentiles_unsigned.values.75\.0: 1101.96875 }
-  - match: { aggregations.percentiles_unsigned.values.95\.0: 1426066581225472 }
-  - match: { aggregations.percentiles_unsigned.values.99\.0: 1426066581225472 }
-
-  - match: { aggregations.percentiles_double.values.1\.0: 51.0 }
-  - match: { aggregations.percentiles_double.values.5\.0: 51.0 }
-  - match: { aggregations.percentiles_double.values.25\.0: 51.0 }
-  - match: { aggregations.percentiles_double.values.50\.0: 126.03125 }
-  - match: { aggregations.percentiles_double.values.75\.0: 1101.96875 }
-  - match: { aggregations.percentiles_double.values.95\.0: 1426066581225472 }
-  - match: { aggregations.percentiles_double.values.99\.0: 1426066581225472 }
-
-
----
-"Missing field with missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            percentiles_missing:
-              percentiles:
-                field: missing_field
-                missing: 1.0
-                hdr: {}
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-
-  - match: { aggregations.percentiles_missing.values.1\.0: 1.0 }
-  - match: { aggregations.percentiles_missing.values.5\.0: 1.0 }
-  - match: { aggregations.percentiles_missing.values.25\.0: 1.0 }
-  - match: { aggregations.percentiles_missing.values.50\.0: 1.0 }
-  - match: { aggregations.percentiles_missing.values.75\.0: 1.0 }
-  - match: { aggregations.percentiles_missing.values.95\.0: 1.0 }
-  - match: { aggregations.percentiles_missing.values.99\.0: 1.0 }
-
----
 "Missing field without missing param":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
         body:
-          aggs:
-            percentiles_missing:
-              percentiles:
-                field: missing_field
-                hdr: {}
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - is_false: aggregations.percentiles_missing.value
-
----
-"Metadata test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            percentiles_unsigned:
-              meta:
-                foo: bar
-              percentiles:
-                field: unsigned_field
-                hdr: {}
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-  - match: { aggregations.percentiles_unsigned.meta.foo: "bar" }
-
-  - match: { aggregations.percentiles_unsigned.values.1\.0: 1.0 }
-  - match: { aggregations.percentiles_unsigned.values.5\.0: 1.0 }
-  - match: { aggregations.percentiles_unsigned.values.25\.0: 1.0 }
-  - match: { aggregations.percentiles_unsigned.values.50\.0: 51.0302734375 }
-  - match: { aggregations.percentiles_unsigned.values.75\.0: 1101.9990234375 }
-  - match: { aggregations.percentiles_unsigned.values.95\.0: 1426066581225472 }
-  - match: { aggregations.percentiles_unsigned.values.99\.0: 1426066581225472 }
-
----
-"Explicit Percents test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            percentiles_unsigned:
-              percentiles:
-                field: unsigned_field
-                percents: [5.0, 25.0, 50.0]
-                hdr: {}
+                hdr:
             percentiles_double:
-              percentiles:
-                field: double_field
-                percents: [5.0, 25.0, 50.0]
-                hdr: {}
-
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-
   - match: { aggregations.percentiles_unsigned.values.5\.0: 1.0 }
-  - match: { aggregations.percentiles_unsigned.values.25\.0: 1.0 }
-  - match: { aggregations.percentiles_unsigned.values.50\.0: 51.0302734375 }
-
-
-  - match: { aggregations.percentiles_double.values.5\.0: 1.0 }
-  - match: { aggregations.percentiles_double.values.25\.0: 1.0 }
-  - match: { aggregations.percentiles_double.values.50\.0: 51.0302734375 }
-
-
----
-"Non-keyed test":
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body:
-          aggs:
-            percentiles_unsigned:
+                    gte: 50
               percentiles:
-                field: unsigned_field
-                percents: [5.0, 25.0, 50.0]
-                keyed: false
+  - match: { aggregations.percentiles_unsigned.values.25\.0: 1.0 }
+          aggs:
+          - index:
+        body:
                 hdr: {}
-
-
-  - match: { hits.total: 4 }
-  - length: { hits.hits: 4 }
-
-
-  - match:  { aggregations.percentiles_unsigned.values.0.key:  5.0 }
-  - match:  { aggregations.percentiles_unsigned.values.0.value:  1.0 }
-  - match:  { aggregations.percentiles_unsigned.values.1.key:  25.0 }
-  - match:  { aggregations.percentiles_unsigned.values.1.value:  1.0 }
+              percentiles:
+               _index: test_1
+        body:
+          - unsigned_field: 126
+                   type: keyword
+  - match: { aggregations.percentiles_unsigned.values.1\.0: 51.0 }
+               _id:    3
+  - do:
+  - match: { aggregations.percentiles_double.values.50\.0: 51.0302734375 }
+      bulk:
+            percentiles_unsigned:
+                   type : double
+          aggs:
+             double_field: 1101.0
+             string_field: foo
+              number_of_shards: 5
+                field: unsigned_field
+              properties:
+                field: missing_field
   - match:  { aggregations.percentiles_unsigned.values.2.key:  50.0 }
-  - match:  { aggregations.percentiles_unsigned.values.2.value:  51.0302734375 }
+              percentiles:
+setup:
+                hdr: {}
+               _index: test_1
+  - match: { aggregations.percentiles_unsigned.values.75\.0: 1101.9990234375 }
+  - length: { hits.hits: 4 }
+        rest_total_hits_as_int: true
+                hdr: {}
+  - match: { aggregations.percentiles_unsigned.values.5\.0: 1.0 }
+  - length: { hits.hits: 0 }
+               _id:    2
+          index: test_1
+              percentiles:
+  - length: { hits.hits: 4 }
+  - length: { hits.hits: 4 }
+            percentiles_unsigned:
+  - match: { aggregations.percentiles_unsigned.values.25\.0: 1.0 }
+        body:
+                field: unsigned_field
+            percentiles_double:
+  - match: { aggregations.percentiles_double.values.95\.0: 1426066581225472 }
+            percentiles_unsigned:
+  - length: { hits.hits: 4 }
+  - match: { aggregations.percentiles_double.values.75\.0: 1101.9990234375 }
+  - length: { hits.hits: 4 }
+        rest_total_hits_as_int: true
+        rest_total_hits_as_int: true
+  - match: { aggregations.percentiles_unsigned.values.1\.0: 1.0 }
+      search:
+  - match: { aggregations.percentiles_unsigned.values.95\.0: 1426066581225472 }
+        rest_total_hits_as_int: true
+                field: double_field
+  - match: { aggregations.percentiles_unsigned.values.25\.0: 51.0 }
+                hdr: {}
+                percents: [5.0, 25.0, 50.0]
+              percentiles:
+  - match: { aggregations.percentiles_unsigned.values.99\.0: 1426066581225472 }
+            mappings:
+  - match: { hits.total: 4 }
+  - match: { aggregations.percentiles_unsigned.values.75\.0: 1101.9990234375 }
+                keyed: false
+      search:
+  - match: { aggregations.percentiles_unsigned.values.50\.0: 51.0302734375 }
+  - match: { aggregations.percentiles_double.values.1\.0: 1.0 }
+           - unsigned_field: 1425497558138880
+  - match: { aggregations.percentiles_double.values.50\.0: 126.03125 }
+  - match: { aggregations.percentiles_missing.values.95\.0: 1.0 }
+            double_field: 126.0

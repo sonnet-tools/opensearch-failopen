@@ -1,843 +1,764 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.support.broadcast.node;
-
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.action.FailedNodeException;
-import org.opensearch.action.IndicesRequest;
-import org.opensearch.action.NoShardAvailableActionException;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.HandledTransportAction;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.TransportActions;
-import org.opensearch.action.support.TransportIndicesResolvingAction;
-import org.opensearch.action.support.broadcast.BroadcastRequest;
-import org.opensearch.action.support.broadcast.BroadcastResponse;
-import org.opensearch.action.support.broadcast.BroadcastShardOperationFailedException;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.OptionallyResolvedIndices;
-import org.opensearch.cluster.metadata.ResolvedIndices;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.ShardsIterator;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.transport.TransportResponse;
-import org.opensearch.tasks.Task;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.NodeShouldNotConnectException;
-import org.opensearch.transport.TransportChannel;
-import org.opensearch.transport.TransportException;
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportRequestHandler;
-import org.opensearch.transport.TransportRequestOptions;
-import org.opensearch.transport.TransportResponseHandler;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReferenceArray;
-
-/**
- * Abstraction for transporting aggregated shard-level operations in a single request (NodeRequest) per-node
- * and executing the shard-level operations serially on the receiving node. Each shard-level operation can produce a
- * result (ShardOperationResult), these per-node shard-level results are aggregated into a single result
- * (BroadcastByNodeResponse) to the coordinating node. These per-node results are aggregated into a single result (Result)
- * to the client.
- *
- * @param <Request>              the underlying client request
- * @param <Response>             the response to the client request
- * @param <ShardOperationResult> per-shard operation results
- *
- * @opensearch.internal
- */
-public abstract class TransportBroadcastByNodeAction<
-    Request extends BroadcastRequest<Request>,
-    Response extends BroadcastResponse,
-    ShardOperationResult extends Writeable> extends HandledTransportAction<Request, Response>
-    implements
-        TransportIndicesResolvingAction<Request> {
-
-    private final ClusterService clusterService;
-    private final TransportService transportService;
-    private final IndexNameExpressionResolver indexNameExpressionResolver;
-    private final ThreadPool threadPool;
-
-    final String transportNodeBroadcastAction;
-
-    public TransportBroadcastByNodeAction(
-        String actionName,
-        ClusterService clusterService,
-        TransportService transportService,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        Writeable.Reader<Request> request,
-        String executor
-    ) {
-        this(actionName, clusterService, transportService, actionFilters, indexNameExpressionResolver, request, executor, true);
-    }
-
-    public TransportBroadcastByNodeAction(
-        String actionName,
-        ClusterService clusterService,
-        TransportService transportService,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        Writeable.Reader<Request> request,
-        String executor,
-        boolean canTripCircuitBreaker
-    ) {
-        super(actionName, canTripCircuitBreaker, transportService, actionFilters, request);
-
-        this.clusterService = clusterService;
-        this.transportService = transportService;
-        this.indexNameExpressionResolver = indexNameExpressionResolver;
-        this.threadPool = transportService.getThreadPool();
-
-        transportNodeBroadcastAction = actionName + "[n]";
-
-        transportService.registerRequestHandler(
-            transportNodeBroadcastAction,
-            executor,
-            false,
-            canTripCircuitBreaker,
-            NodeRequest::new,
-            new BroadcastByNodeTransportRequestHandler()
-        );
-    }
-
-    private Response newResponse(
-        Request request,
-        AtomicReferenceArray responses,
-        List<NoShardAvailableActionException> unavailableShardExceptions,
-        Map<String, List<ShardRouting>> nodes,
-        ClusterState clusterState
-    ) {
-        int totalShards = 0;
-        int successfulShards = 0;
-        List<ShardOperationResult> broadcastByNodeResponses = new ArrayList<>();
-        List<DefaultShardOperationFailedException> exceptions = new ArrayList<>();
-        for (int i = 0; i < responses.length(); i++) {
-            if (responses.get(i) instanceof FailedNodeException) {
-                FailedNodeException exception = (FailedNodeException) responses.get(i);
-                totalShards += nodes.get(exception.nodeId()).size();
-                for (ShardRouting shard : nodes.get(exception.nodeId())) {
-                    exceptions.add(new DefaultShardOperationFailedException(shard.getIndexName(), shard.getId(), exception));
-                }
-            } else {
-                NodeResponse response = (NodeResponse) responses.get(i);
-                broadcastByNodeResponses.addAll(response.results);
-                totalShards += response.getTotalShards();
-                successfulShards += response.getSuccessfulShards();
-                for (BroadcastShardOperationFailedException throwable : response.getExceptions()) {
-                    if (!TransportActions.isShardNotAvailableException(throwable)) {
-                        exceptions.add(
-                            new DefaultShardOperationFailedException(
-                                throwable.getShardId().getIndexName(),
-                                throwable.getShardId().getId(),
-                                throwable
-                            )
-                        );
-                    }
-                }
-            }
-        }
-        totalShards += unavailableShardExceptions.size();
-        int failedShards = exceptions.size();
-        return newResponse(request, totalShards, successfulShards, failedShards, broadcastByNodeResponses, exceptions, clusterState);
-    }
-
-    /**
-     * Deserialize a shard-level result from an input stream
-     *
-     * @param in input stream
-     * @return a deserialized shard-level result
-     */
-    protected abstract ShardOperationResult readShardResult(StreamInput in) throws IOException;
-
-    /**
-     * Creates a new response to the underlying request.
-     *
-     * @param request          the underlying request
-     * @param totalShards      the total number of shards considered for execution of the operation
-     * @param successfulShards the total number of shards for which execution of the operation was successful
-     * @param failedShards     the total number of shards for which execution of the operation failed
-     * @param results          the per-node aggregated shard-level results
-     * @param shardFailures    the exceptions corresponding to shard operation failures
-     * @param clusterState     the cluster state
-     * @return the response
-     */
-    protected abstract Response newResponse(
-        Request request,
-        int totalShards,
-        int successfulShards,
-        int failedShards,
-        List<ShardOperationResult> results,
-        List<DefaultShardOperationFailedException> shardFailures,
-        ClusterState clusterState
-    );
-
-    /**
-     * Deserialize a request from an input stream
-     *
-     * @param in input stream
-     * @return a de-serialized request
-     */
-    protected abstract Request readRequestFrom(StreamInput in) throws IOException;
-
-    /**
-     * Executes the shard-level operation. This method is called once per shard serially on the receiving node.
-     *
-     * @param request      the node-level request
-     * @param shardRouting the shard on which to execute the operation
-     * @return the result of the shard-level operation for the shard
-     */
-    protected abstract ShardOperationResult shardOperation(Request request, ShardRouting shardRouting) throws IOException;
-
-    /**
-     * Async shard operation with ActionListener callback.
-     * Subclasses that opt into async execution (via {@link #isAsyncShardOperation()}) MUST
-     * override this method with their non-blocking implementation.
-     * The default throws {@link UnsupportedOperationException} — async subclasses should
-     * never fall through to the sync path.
-     *
-     * @param request      the indices-level request
-     * @param shardRouting the shard on which to execute the operation
-     * @param listener     callback to invoke with the result or failure
-     */
-    protected void shardOperationAsync(Request request, ShardRouting shardRouting, ActionListener<ShardOperationResult> listener) {
-        throw new UnsupportedOperationException(
-            "shardOperationAsync must be overridden by subclasses that return isAsyncShardOperation()=true"
-        );
-    }
-
-    /**
-     * Determines the shards on which this operation will be executed on. The operation is executed once per shard.
-     *
-     * @param clusterState    the cluster state
-     * @param request         the underlying request
-     * @param concreteIndices the concrete indices on which to execute the operation
-     * @return the shards on which to execute the operation
-     */
-    protected abstract ShardsIterator shards(ClusterState clusterState, Request request, String[] concreteIndices);
-
-    /**
-     * Executes a node-level operation. This method is called one time per node, after all shard-level operations have completed.
-     * @param results List of results from the completed shard-level operations.
-     * @param accumulatedExceptions List of any exceptions thrown by the shard-level operations.
-     */
-    protected void nodeOperation(List<ShardOperationResult> results, List<BroadcastShardOperationFailedException> accumulatedExceptions) {}
-
-    /**
-     * Returns true if shard operations should execute asynchronously on the data node.
-     * When true, each shard operation is submitted to the thread pool in parallel and the
-     * transport response is sent only after all shards complete (via CountDownLatch).
-     * This prevents long-running shard operations (e.g., flush + remote sync) from blocking
-     * the thread pool thread that received the transport request.
-     * <p>
-     * Default is false (synchronous, sequential execution) for backwards compatibility.
-     *
-     * @return true if shard operations should be dispatched asynchronously
-     */
-    protected boolean isAsyncShardOperation() {
-        return false;
-    }
-
-    /**
-     * Returns the thread pool name to use when dispatching async shard operations on the data node.
-     * Only consulted when {@link #isAsyncShardOperation()} is true.
-     * Default is {@link ThreadPool.Names#GENERIC} — a scaling pool, so per-shard tasks do not queue
-     * behind each other on a bounded executor. Override to redirect to a dedicated pool if needed.
-     *
-     * @return the thread pool name for async per-shard execution
-     */
-    protected String asyncShardOperationThreadPool() {
-        return ThreadPool.Names.GENERIC;
-    }
-
-    /**
-     * Executes a global block check before polling the cluster state.
-     *
-     * @param state   the cluster state
-     * @param request the underlying request
-     * @return a non-null exception if the operation is blocked
-     */
-    protected abstract ClusterBlockException checkGlobalBlock(ClusterState state, Request request);
-
-    /**
-     * Executes a global request-level check before polling the cluster state.
-     *
-     * @param state           the cluster state
-     * @param request         the underlying request
-     * @param concreteIndices the concrete indices on which to execute the operation
-     * @return a non-null exception if the operation if blocked
-     */
-    protected abstract ClusterBlockException checkRequestBlock(ClusterState state, Request request, String[] concreteIndices);
-
-    /**
-     * Resolves a list of concrete index names. Override this if index names should be resolved differently than normal.
-     *
-     * @param clusterState the cluster state
-     * @param request the underlying request
-     * @return a list of concrete indices that this action should operate on
-     */
-    protected ResolvedIndices.Local.Concrete resolveConcreteIndices(ClusterState clusterState, Request request) {
-        return indexNameExpressionResolver.concreteResolvedIndices(clusterState, request);
-    }
-
-    @Override
-    protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
-        new AsyncAction(task, request, listener).start();
-    }
-
-    @Override
-    public OptionallyResolvedIndices resolveIndices(Request request) {
-        return ResolvedIndices.of(resolveConcreteIndices(clusterService.state(), request));
-    }
-
-    /**
-     * Asynchronous action
-     *
-     * @opensearch.internal
-     */
-    protected class AsyncAction {
-        private final Task task;
-        private final Request request;
-        private final ActionListener<Response> listener;
-        private final ClusterState clusterState;
-        private final DiscoveryNodes nodes;
-        private final Map<String, List<ShardRouting>> nodeIds;
-        private final AtomicReferenceArray<Object> responses;
-        private final AtomicInteger counter = new AtomicInteger();
-        private List<NoShardAvailableActionException> unavailableShardExceptions = new ArrayList<>();
-
-        protected AsyncAction(Task task, Request request, ActionListener<Response> listener) {
-            this.task = task;
-            this.request = request;
-            this.listener = listener;
-
-            clusterState = clusterService.state();
-            nodes = clusterState.nodes();
-
-            ClusterBlockException globalBlockException = checkGlobalBlock(clusterState, request);
-            if (globalBlockException != null) {
-                throw globalBlockException;
-            }
-
-            String[] concreteIndices = resolveConcreteIndices(clusterState, request).namesOfConcreteIndicesAsArray();
-            ClusterBlockException requestBlockException = checkRequestBlock(clusterState, request, concreteIndices);
-            if (requestBlockException != null) {
-                throw requestBlockException;
-            }
-
-            if (logger.isTraceEnabled()) {
-                logger.trace("resolving shards for [{}] based on cluster state version [{}]", actionName, clusterState.version());
-            }
-            ShardsIterator shardIt = shards(clusterState, request, concreteIndices);
-            nodeIds = new HashMap<>();
-
-            for (ShardRouting shard : shardIt) {
-                // send a request to the shard only if it is assigned to a node that is in the local node's cluster state
-                // a scenario in which a shard can be assigned but to a node that is not in the local node's cluster state
-                // is when the shard is assigned to the cluster-manager node, the local node has detected the cluster-manager as failed
-                // and a new cluster-manager has not yet been elected; in this situation the local node will have removed the
-                // cluster-manager node from the local cluster state, but the shards assigned to the cluster-manager will still be in the
-                // routing table as such
-                if (shard.assignedToNode() && nodes.get(shard.currentNodeId()) != null) {
-                    String nodeId = shard.currentNodeId();
-                    if (!nodeIds.containsKey(nodeId)) {
-                        nodeIds.put(nodeId, new ArrayList<>());
-                    }
-                    nodeIds.get(nodeId).add(shard);
-                } else {
-                    unavailableShardExceptions.add(
-                        new NoShardAvailableActionException(
-                            shard.shardId(),
-                            " no shards available for shard " + shard.toString() + " while executing " + actionName
-                        )
-                    );
-                }
-            }
-
-            responses = new AtomicReferenceArray<>(nodeIds.size());
-        }
-
-        public void start() {
-            if (nodeIds.size() == 0) {
-                try {
-                    onCompletion();
-                } catch (Exception e) {
-                    listener.onFailure(e);
-                }
-            } else {
-                int nodeIndex = -1;
-                for (Map.Entry<String, List<ShardRouting>> entry : nodeIds.entrySet()) {
-                    nodeIndex++;
-                    DiscoveryNode node = nodes.get(entry.getKey());
-                    sendNodeRequest(node, entry.getValue(), nodeIndex);
-                }
-            }
-        }
-
-        private void sendNodeRequest(final DiscoveryNode node, List<ShardRouting> shards, final int nodeIndex) {
-            try {
-                NodeRequest nodeRequest = new NodeRequest(node.getId(), request, shards);
-                if (task != null) {
-                    nodeRequest.setParentTask(clusterService.localNode().getId(), task.getId());
-                }
-                TransportRequestOptions transportRequestOptions = TransportRequestOptions.EMPTY;
-                if (request != null && request.timeout() != null) {
-                    transportRequestOptions = TransportRequestOptions.builder().withTimeout(request.timeout()).build();
-                }
-                transportService.sendRequest(
-                    node,
-                    transportNodeBroadcastAction,
-                    nodeRequest,
-                    transportRequestOptions,
-                    new TransportResponseHandler<NodeResponse>() {
-                        @Override
-                        public NodeResponse read(StreamInput in) throws IOException {
-                            return new NodeResponse(in);
-                        }
-
-                        @Override
-                        public void handleResponse(NodeResponse response) {
-                            onNodeResponse(node, nodeIndex, response);
-                        }
-
-                        @Override
-                        public void handleException(TransportException exp) {
-                            onNodeFailure(node, nodeIndex, exp);
-                        }
-
-                        @Override
-                        public String executor() {
-                            return ThreadPool.Names.SAME;
-                        }
-                    }
-                );
-            } catch (Exception e) {
-                onNodeFailure(node, nodeIndex, e);
-            }
-        }
-
-        protected void onNodeResponse(DiscoveryNode node, int nodeIndex, NodeResponse response) {
-            if (logger.isTraceEnabled()) {
-                logger.trace("received response for [{}] from node [{}]", actionName, node.getId());
-            }
-
-            // this is defensive to protect against the possibility of double invocation
-            // the current implementation of TransportService#sendRequest guards against this
-            // but concurrency is hard, safety is important, and the small performance loss here does not matter
-            if (responses.compareAndSet(nodeIndex, null, response)) {
-                if (counter.incrementAndGet() == responses.length()) {
-                    onCompletion();
-                }
-            }
-        }
-
-        protected void onNodeFailure(DiscoveryNode node, int nodeIndex, Throwable t) {
-            String nodeId = node.getId();
-            if (logger.isDebugEnabled() && !(t instanceof NodeShouldNotConnectException)) {
-                logger.debug(new ParameterizedMessage("failed to execute [{}] on node [{}]", actionName, nodeId), t);
-            }
-
-            // this is defensive to protect against the possibility of double invocation
-            // the current implementation of TransportService#sendRequest guards against this
-            // but concurrency is hard, safety is important, and the small performance loss here does not matter
-            if (responses.compareAndSet(nodeIndex, null, new FailedNodeException(nodeId, "Failed node [" + nodeId + "]", t))) {
-                if (counter.incrementAndGet() == responses.length()) {
-                    onCompletion();
-                }
-            }
-        }
-
-        protected void onCompletion() {
-            Response response = null;
-            try {
-                response = newResponse(request, responses, unavailableShardExceptions, nodeIds, clusterState);
-            } catch (Exception e) {
-                logger.debug("failed to combine responses from nodes", e);
-                listener.onFailure(e);
-            }
-            if (response != null) {
-                try {
-                    listener.onResponse(response);
-                } catch (Exception e) {
-                    listener.onFailure(e);
-                }
-            }
-        }
-    }
-
-    /**
-     * Broadcast by a node's transport request handler
-     *
-     * @opensearch.internal
-     */
-    class BroadcastByNodeTransportRequestHandler implements TransportRequestHandler<NodeRequest> {
-        @Override
-        public void messageReceived(final NodeRequest request, TransportChannel channel, Task task) throws Exception {
-            List<ShardRouting> shards = request.getShards();
-            final int totalShards = shards.size();
-            if (logger.isTraceEnabled()) {
-                logger.trace("[{}] executing operation on [{}] shards", actionName, totalShards);
-            }
-            final Object[] shardResultOrExceptions = new Object[totalShards];
-
-            if (isAsyncShardOperation()) {
-                logger.trace("[{}] executing async operation on [{}] shards", actionName, totalShards);
-                onAsyncShardOperation(request, channel, shards, totalShards, shardResultOrExceptions);
-            } else {
-                // Sync mode: original sequential execution (backwards compatible)
-                int shardIndex = -1;
-                for (final ShardRouting shardRouting : shards) {
-                    shardIndex++;
-                    onShardOperation(request, shardResultOrExceptions, shardIndex, shardRouting);
-                }
-                sendNodeResponse(request, channel, totalShards, shardResultOrExceptions);
-            }
-        }
-
-        /**
-         * Dispatches each shard's {@link #shardOperationAsync} as its own task on
-         * {@link #asyncShardOperationThreadPool()} so a slow/blocking shard prefix (e.g. a permit wait)
-         * does not serialize the others on the single node-handler thread. The listener is wrapped in
-         * {@link ActionListener#notifyOnce} so a shard implementation that completes more than once
-         * (e.g. a racing drain-callback and timeout) still counts as exactly one shard.
-         * If the pool rejects a per-shard dispatch, that shard is recorded as a failure via the same
-         * listener so {@code remaining} still reaches zero and the node response is sent.
-         */
-        private void onAsyncShardOperation(
-            final NodeRequest request,
-            TransportChannel channel,
-            List<ShardRouting> shards,
-            int totalShards,
-            Object[] shardResultOrExceptions
-        ) {
-            final AtomicInteger remaining = new AtomicInteger(totalShards);
-            final String asyncPool = asyncShardOperationThreadPool();
-            int idx = 0;
-            for (final ShardRouting shardRouting : shards) {
-                final int shardIndex = idx++;
-                ActionListener<ShardOperationResult> shardListener = ActionListener.notifyOnce(new ActionListener<ShardOperationResult>() {
-                    @Override
-                    public void onResponse(ShardOperationResult result) {
                         shardResultOrExceptions[shardIndex] = result;
-                        onShardOperationComplete(request, channel, totalShards, shardResultOrExceptions, remaining);
-                    }
-
-                    @Override
-                    public void onFailure(Exception e) {
-                        BroadcastShardOperationFailedException failure = new BroadcastShardOperationFailedException(
-                            shardRouting.shardId(),
-                            "operation " + actionName + " failed",
-                            e
-                        );
-                        failure.setShard(shardRouting.shardId());
-                        shardResultOrExceptions[shardIndex] = failure;
-                        onShardOperationComplete(request, channel, totalShards, shardResultOrExceptions, remaining);
-                    }
-                });
-                try {
-                    threadPool.executor(asyncPool).execute(() -> {
-                        try {
-                            shardOperationAsync(request.indicesLevelRequest, shardRouting, shardListener);
-                        } catch (Exception inner) {
-                            // shardOperationAsync threw synchronously on the pool worker (e.g. an
-                            // IndexNotFoundException raced index deletion). Without this, the throw
-                            // would escape onto the pool's uncaught-exception handler — the listener
-                            // would never fire, `remaining` would never decrement, and the coordinator
-                            // would only get a response after its transport timeout. notifyOnce keeps
-                            // this safe even if the impl partially completed the listener before throwing.
-                            shardListener.onFailure(inner);
-                        }
-                    });
-                } catch (Exception e) {
-                    // Pool rejected at dispatch time (shutdown / saturated) — record as a shard failure
-                    // on the same (notifyOnce-wrapped) listener so the remaining counter still reaches
-                    // zero and the node response is sent.
-                    RejectedExecutionException rejection = new RejectedExecutionException(
-                        "rejected by thread pool [" + asyncPool + "] for shard " + shardRouting.shardId(),
-                        e
-                    );
-                    shardListener.onFailure(rejection);
-                }
-            }
         }
-
-        private void onShardOperationComplete(
-            NodeRequest request,
-            TransportChannel channel,
-            int totalShards,
-            Object[] shardResultOrExceptions,
-            AtomicInteger remaining
-        ) {
-            if (remaining.decrementAndGet() == 0) {
-                try {
-                    sendNodeResponse(request, channel, totalShards, shardResultOrExceptions);
-                } catch (IOException e) {
-                    logger.warn("[{}] failed to send response after async shard operations", actionName);
-                }
-            }
-        }
-
-        private void sendNodeResponse(
-            final NodeRequest request,
-            TransportChannel channel,
-            int totalShards,
-            Object[] shardResultOrExceptions
-        ) throws IOException {
-            List<BroadcastShardOperationFailedException> accumulatedExceptions = new ArrayList<>();
-            List<ShardOperationResult> results = new ArrayList<>();
-            for (int i = 0; i < totalShards; i++) {
-                if (shardResultOrExceptions[i] instanceof BroadcastShardOperationFailedException) {
-                    accumulatedExceptions.add((BroadcastShardOperationFailedException) shardResultOrExceptions[i]);
-                } else {
-                    results.add((ShardOperationResult) shardResultOrExceptions[i]);
-                }
-            }
-
-            nodeOperation(results, accumulatedExceptions);
-
-            channel.sendResponse(new NodeResponse(request.getNodeId(), totalShards, results, accumulatedExceptions));
-        }
-
-        private void onShardOperation(
-            final NodeRequest request,
-            final Object[] shardResults,
-            final int shardIndex,
-            final ShardRouting shardRouting
-        ) {
-            try {
-                if (logger.isTraceEnabled()) {
-                    logger.trace("[{}]  executing operation for shard [{}]", actionName, shardRouting.shortSummary());
-                }
-                ShardOperationResult result = shardOperation(request.indicesLevelRequest, shardRouting);
-                shardResults[shardIndex] = result;
-                if (logger.isTraceEnabled()) {
-                    logger.trace("[{}]  completed operation for shard [{}]", actionName, shardRouting.shortSummary());
-                }
-            } catch (Exception e) {
-                BroadcastShardOperationFailedException failure = new BroadcastShardOperationFailedException(
-                    shardRouting.shardId(),
-                    "operation " + actionName + " failed",
-                    e
-                );
-                failure.setShard(shardRouting.shardId());
-                shardResults[shardIndex] = failure;
-                if (TransportActions.isShardNotAvailableException(e)) {
-                    if (logger.isTraceEnabled()) {
-                        logger.trace(
-                            new ParameterizedMessage(
-                                "[{}] failed to execute operation for shard [{}]",
-                                actionName,
-                                shardRouting.shortSummary()
-                            ),
-                            e
-                        );
-                    }
-                } else {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug(
-                            new ParameterizedMessage(
-                                "[{}] failed to execute operation for shard [{}]",
-                                actionName,
-                                shardRouting.shortSummary()
-                            ),
-                            e
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * This method reads ShardRouting from input stream
-     */
-    public List<ShardRouting> getShardRoutingsFromInputStream(StreamInput in) throws IOException {
-        return in.readList(ShardRouting::new);
-    }
-
-    /**
-     * A node request
      *
-     * @opensearch.internal
-     */
-    public class NodeRequest extends TransportRequest implements IndicesRequest {
-        private String nodeId;
-
-        private List<ShardRouting> shards;
-
-        protected Request indicesLevelRequest;
-
-        public NodeRequest(StreamInput in) throws IOException {
-            super(in);
-            indicesLevelRequest = readRequestFrom(in);
-            shards = getShardRoutingsFromInputStream(in);
-            nodeId = in.readString();
-        }
-
-        public NodeRequest(String nodeId, Request request, List<ShardRouting> shards) {
-            this.indicesLevelRequest = request;
-            this.shards = shards;
-            this.nodeId = nodeId;
-        }
-
-        public List<ShardRouting> getShards() {
-            return shards;
-        }
-
-        public String getNodeId() {
-            return nodeId;
-        }
-
-        @Override
-        public String[] indices() {
-            return indicesLevelRequest.indices();
-        }
-
-        @Override
-        public IndicesOptions indicesOptions() {
-            return indicesLevelRequest.indicesOptions();
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
-            indicesLevelRequest.writeTo(out);
-            out.writeList(shards);
-            out.writeString(nodeId);
-        }
-    }
-
-    /**
-     * A node response
-     *
-     * @opensearch.internal
-     */
-    class NodeResponse extends TransportResponse {
-        protected String nodeId;
-        protected int totalShards;
-        protected List<BroadcastShardOperationFailedException> exceptions;
-        protected List<ShardOperationResult> results;
-
-        NodeResponse(StreamInput in) throws IOException {
-            super(in);
-            nodeId = in.readString();
-            totalShards = in.readVInt();
-            results = in.readList((stream) -> stream.readBoolean() ? readShardResult(stream) : null);
-            if (in.readBoolean()) {
-                exceptions = in.readList(BroadcastShardOperationFailedException::new);
-            } else {
-                exceptions = null;
-            }
-        }
-
-        NodeResponse(
-            String nodeId,
-            int totalShards,
-            List<ShardOperationResult> results,
-            List<BroadcastShardOperationFailedException> exceptions
-        ) {
-            this.nodeId = nodeId;
-            this.totalShards = totalShards;
-            this.results = results;
-            this.exceptions = exceptions;
-        }
-
-        public String getNodeId() {
-            return nodeId;
-        }
-
-        public int getTotalShards() {
-            return totalShards;
-        }
-
-        public int getSuccessfulShards() {
-            return results.size();
-        }
-
-        public List<BroadcastShardOperationFailedException> getExceptions() {
             return exceptions;
         }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(nodeId);
-            out.writeVInt(totalShards);
-            out.writeVInt(results.size());
-            for (ShardOperationResult result : results) {
-                out.writeOptionalWriteable(result);
-            }
-            out.writeBoolean(exceptions != null);
-            if (exceptions != null) {
-                out.writeList(exceptions);
-            }
+        private void onAsyncShardOperation(
+                    transportNodeBroadcastAction,
+                                shardRouting.shortSummary()
+     * @param shardFailures    the exceptions corresponding to shard operation failures
+                    String nodeId = shard.currentNodeId();
+                    }
+        ActionFilters actionFilters,
+    protected abstract ClusterBlockException checkRequestBlock(ClusterState state, Request request, String[] concreteIndices);
+                FailedNodeException exception = (FailedNodeException) responses.get(i);
+                            )
+ */
+        int totalShards = 0;
+        protected AsyncAction(Task task, Request request, ActionListener<Response> listener) {
         }
+        );
+     * @return the response
+        ) {
+                    if (logger.isTraceEnabled()) {
+import org.apache.logging.log4j.message.ParameterizedMessage;
+ * Abstraction for transporting aggregated shard-level operations in a single request (NodeRequest) per-node
+                    onCompletion();
+     * @return true if shard operations should be dispatched asynchronously
+import java.util.ArrayList;
+        private final ActionListener<Response> listener;
+ * specific language governing permissions and limitations
+                // and a new cluster-manager has not yet been elected; in this situation the local node will have removed the
+     * The default throws {@link UnsupportedOperationException} — async subclasses should
     }
-
-    /**
-     * Can be used for implementations of {@link #shardOperation(BroadcastRequest, ShardRouting) shardOperation} for
-     * which there is no shard-level return value.
-     *
-     * @opensearch.internal
-     */
-    public static final class EmptyResult implements Writeable {
+            List<ShardOperationResult> results = new ArrayList<>();
+        private String nodeId;
+            return totalShards;
+import org.opensearch.transport.TransportRequestOptions;
+        String executor
+     * @param shardRouting the shard on which to execute the operation
+     * @param successfulShards the total number of shards for which execution of the operation was successful
+                // is when the shard is assigned to the cluster-manager node, the local node has detected the cluster-manager as failed
+     * @param state           the cluster state
+        return false;
+ *
+        throw new UnsupportedOperationException(
+            super.writeTo(out);
+    ) {
+                        }
+     * @return the shards on which to execute the operation
+import org.opensearch.transport.TransportRequestHandler;
+     * This prevents long-running shard operations (e.g., flush + remote sync) from blocking
+            String[] concreteIndices = resolveConcreteIndices(clusterState, request).namesOfConcreteIndicesAsArray();
+            if (remaining.decrementAndGet() == 0) {
+            Response response = null;
+import org.opensearch.action.NoShardAvailableActionException;
+        public String getNodeId() {
         public static EmptyResult INSTANCE = new EmptyResult();
-
+                } catch (Exception e) {
+                        );
+            NodeRequest::new,
+        protected void onCompletion() {
+                    DiscoveryNode node = nodes.get(entry.getKey());
+        }
+ * @param <ShardOperationResult> per-shard operation results
+            // this is defensive to protect against the possibility of double invocation
+            // the current implementation of TransportService#sendRequest guards against this
+                        @Override
+                    logger.warn("[{}] failed to send response after async shard operations", actionName);
+            TransportChannel channel,
+                            // would escape onto the pool's uncaught-exception handler — the listener
+            if (responses.get(i) instanceof FailedNodeException) {
+                    logger.trace("[{}]  executing operation for shard [{}]", actionName, shardRouting.shortSummary());
+        ) {
+                            ),
+     */
+                }
+    }
+                } catch (IOException e) {
         private EmptyResult() {}
-
-        private EmptyResult(StreamInput in) {}
-
-        @Override
-        public void writeTo(StreamOutput out) {}
-
-        public static EmptyResult readEmptyResultFrom(StreamInput in) {
-            return INSTANCE;
+    }
+     * @param state   the cluster state
+                totalShards += response.getTotalShards();
+    public OptionallyResolvedIndices resolveIndices(Request request) {
+            super(in);
+                    unavailableShardExceptions.add(
+        }
+ */
+        return ThreadPool.Names.GENERIC;
+                onAsyncShardOperation(request, channel, shards, totalShards, shardResultOrExceptions);
+        List<ShardOperationResult> results,
+     * @opensearch.internal
+import java.util.List;
+        int totalShards,
+        ) {
+            false,
+        int successfulShards,
+    /**
+                    });
+            Object[] shardResultOrExceptions,
+    protected abstract Response newResponse(
+            }
+     * Can be used for implementations of {@link #shardOperation(BroadcastRequest, ShardRouting) shardOperation} for
+import java.util.HashMap;
+     */
+            }
+     * @param in input stream
+            nodeId = in.readString();
+            if (in.readBoolean()) {
+     * @param request          the underlying request
+     * @param clusterState the cluster state
+ * compatible open source license.
+ */
+        return in.readList(ShardRouting::new);
+        }
+                    }
+     *
+    @Override
+            if (logger.isTraceEnabled()) {
+        TransportService transportService,
+public abstract class TransportBroadcastByNodeAction<
+         * If the pool rejects a per-shard dispatch, that shard is recorded as a failure via the same
+        IndexNameExpressionResolver indexNameExpressionResolver,
+                }
+     */
+     */
+                    nodeRequest.setParentTask(clusterService.localNode().getId(), task.getId());
+                }
+                failure.setShard(shardRouting.shardId());
+     *
+     *
+import org.opensearch.action.support.broadcast.BroadcastResponse;
+            channel.sendResponse(new NodeResponse(request.getNodeId(), totalShards, results, accumulatedExceptions));
+import org.opensearch.action.support.IndicesOptions;
+    }
+                            shardOperationAsync(request.indicesLevelRequest, shardRouting, shardListener);
+ * Modifications Copyright OpenSearch Contributors. See
+                try {
+     * @return a non-null exception if the operation if blocked
+        this.threadPool = transportService.getThreadPool();
+    }
+import java.util.concurrent.atomic.AtomicInteger;
+    /**
+            clusterState = clusterService.state();
+                } else {
+            }
+                        exceptions.add(
+import org.opensearch.core.common.io.stream.Writeable;
+                ActionListener<ShardOperationResult> shardListener = ActionListener.notifyOnce(new ActionListener<ShardOperationResult>() {
+                    // zero and the node response is sent.
+import org.opensearch.cluster.routing.ShardsIterator;
+    /**
+     * @param clusterState    the cluster state
+                        );
+        Map<String, List<ShardRouting>> nodes,
+     */
         }
     }
+                        @Override
+     * A node request
+        @Override
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.action.IndicesRequest;
+        this.transportService = transportService;
+            }
+import org.opensearch.action.support.broadcast.BroadcastRequest;
+    protected String asyncShardOperationThreadPool() {
+                logger.trace("received response for [{}] from node [{}]", actionName, node.getId());
+         * (e.g. a racing drain-callback and timeout) still counts as exactly one shard.
+                        public NodeResponse read(StreamInput in) throws IOException {
+        protected void onNodeFailure(DiscoveryNode node, int nodeIndex, Throwable t) {
+        List<NoShardAvailableActionException> unavailableShardExceptions,
+    private final IndexNameExpressionResolver indexNameExpressionResolver;
+    protected abstract ClusterBlockException checkGlobalBlock(ClusterState state, Request request);
+    }
+                            e
+    );
+        private final DiscoveryNodes nodes;
+                    RejectedExecutionException rejection = new RejectedExecutionException(
+ */
+        Writeable.Reader<Request> request,
+    /**
+                // routing table as such
+                );
+     * @param results List of results from the completed shard-level operations.
+                BroadcastShardOperationFailedException failure = new BroadcastShardOperationFailedException(
+                        try {
+        public List<BroadcastShardOperationFailedException> getExceptions() {
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+                });
+        public void start() {
+        }
+import org.opensearch.action.support.HandledTransportAction;
+        protected void onNodeResponse(DiscoveryNode node, int nodeIndex, NodeResponse response) {
+        public NodeRequest(String nodeId, Request request, List<ShardRouting> shards) {
+        private List<NoShardAvailableActionException> unavailableShardExceptions = new ArrayList<>();
+import org.opensearch.cluster.node.DiscoveryNode;
+        totalShards += unavailableShardExceptions.size();
+                    onShardOperation(request, shardResultOrExceptions, shardIndex, shardRouting);
+                } catch (Exception e) {
+    public class NodeRequest extends TransportRequest implements IndicesRequest {
+        this.clusterService = clusterService;
+            return INSTANCE;
+                                actionName,
+        ClusterState clusterState
+     * @param request the underlying request
+                        BroadcastShardOperationFailedException failure = new BroadcastShardOperationFailedException(
+                out.writeOptionalWriteable(result);
+            canTripCircuitBreaker,
+        }
+            } catch (Exception e) {
+ * under the License.
+     */
+        ClusterState clusterState
+                }
+                for (final ShardRouting shardRouting : shards) {
+            this.exceptions = exceptions;
+        Request request,
+     * Returns the thread pool name to use when dispatching async shard operations on the data node.
+                    new TransportResponseHandler<NodeResponse>() {
+            List<ShardRouting> shards = request.getShards();
+            }
+                            "operation " + actionName + " failed",
+    /**
+     *
+     * When true, each shard operation is submitted to the thread pool in parallel and the
+            for (ShardRouting shard : shardIt) {
+    public static final class EmptyResult implements Writeable {
+            final NodeRequest request,
+ * KIND, either express or implied.  See the License for the
+            responses = new AtomicReferenceArray<>(nodeIds.size());
+            totalShards = in.readVInt();
+            if (responses.compareAndSet(nodeIndex, null, response)) {
+        }
+     * @opensearch.internal
+                        "rejected by thread pool [" + asyncPool + "] for shard " + shardRouting.shardId(),
+        ) throws IOException {
+        transportNodeBroadcastAction = actionName + "[n]";
+        public List<ShardRouting> getShards() {
+        }
+            new BroadcastByNodeTransportRequestHandler()
+     * @param request      the indices-level request
+     * @param request         the underlying request
+        protected String nodeId;
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+    /**
+                logger.trace("[{}] executing operation on [{}] shards", actionName, totalShards);
+    protected ResolvedIndices.Local.Concrete resolveConcreteIndices(ClusterState clusterState, Request request) {
+     * behind each other on a bounded executor. Override to redirect to a dedicated pool if needed.
+     * Executes the shard-level operation. This method is called once per shard serially on the receiving node.
+        IndexNameExpressionResolver indexNameExpressionResolver,
+                    public void onFailure(Exception e) {
+        String actionName,
+    public TransportBroadcastByNodeAction(
+                    logger.trace("[{}]  completed operation for shard [{}]", actionName, shardRouting.shortSummary());
+            TransportChannel channel,
+                exceptions = null;
+        ClusterService clusterService,
+         * does not serialize the others on the single node-handler thread. The listener is wrapped in
+                if (logger.isTraceEnabled()) {
+                        )
+     */
+            super(in);
+    protected abstract ShardOperationResult shardOperation(Request request, ShardRouting shardRouting) throws IOException;
+        private void onShardOperationComplete(
+        public void messageReceived(final NodeRequest request, TransportChannel channel, Task task) throws Exception {
+/*
+import org.opensearch.transport.TransportException;
+    /**
+     * @return a non-null exception if the operation is blocked
+     * @param totalShards      the total number of shards considered for execution of the operation
+        public static EmptyResult readEmptyResultFrom(StreamInput in) {
+import org.opensearch.transport.TransportRequest;
+        super(actionName, canTripCircuitBreaker, transportService, actionFilters, request);
+                NodeRequest nodeRequest = new NodeRequest(node.getId(), request, shards);
+     */
+        private void sendNodeRequest(final DiscoveryNode node, List<ShardRouting> shards, final int nodeIndex) {
+     * @return the thread pool name for async per-shard execution
+                }
+        public NodeRequest(StreamInput in) throws IOException {
+        this(actionName, clusterService, transportService, actionFilters, indexNameExpressionResolver, request, executor, true);
+                if (counter.incrementAndGet() == responses.length()) {
+     * Default is {@link ThreadPool.Names#GENERIC} — a scaling pool, so per-shard tasks do not queue
+                NodeResponse response = (NodeResponse) responses.get(i);
+                        );
+            }
+     * @param request the underlying request
+ * You may obtain a copy of the License at
+     * Deserialize a request from an input stream
+                    node,
+     * @param concreteIndices the concrete indices on which to execute the operation
+                        }
+                );
+        }
+        }
+                logger.trace("[{}] executing async operation on [{}] shards", actionName, totalShards);
+        @Override
+                                throwable
+                    }
+                                actionName,
+            ClusterBlockException requestBlockException = checkRequestBlock(clusterState, request, concreteIndices);
+    protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
+import org.opensearch.transport.TransportChannel;
+        }
+import org.opensearch.action.support.TransportIndicesResolvingAction;
+            } catch (Exception e) {
+            out.writeList(shards);
+                        } catch (Exception inner) {
+     * Returns true if shard operations should execute asynchronously on the data node.
+     */
+            }
+                                throwable.getShardId().getId(),
+            final AtomicInteger remaining = new AtomicInteger(totalShards);
+        }
+                        @Override
+                            return new NodeResponse(in);
+ * @opensearch.internal
+                if (shardResultOrExceptions[i] instanceof BroadcastShardOperationFailedException) {
+import org.opensearch.transport.TransportService;
+import org.opensearch.cluster.service.ClusterService;
+            }
+import java.util.Map;
+     * <p>
+                    sendNodeResponse(request, channel, totalShards, shardResultOrExceptions);
+     * Executes a global block check before polling the cluster state.
+            if (response != null) {
+            this.listener = listener;
+        public IndicesOptions indicesOptions() {
+                }
+                if (task != null) {
+     * @return a de-serialized request
+        }
+     * Only consulted when {@link #isAsyncShardOperation()} is true.
+                    transportRequestOptions = TransportRequestOptions.builder().withTimeout(request.timeout()).build();
+            shards = getShardRoutingsFromInputStream(in);
+     * @param in input stream
+     * Deserialize a shard-level result from an input stream
+     * A node response
+                exceptions = in.readList(BroadcastShardOperationFailedException::new);
+    protected class AsyncAction {
+                    if (!TransportActions.isShardNotAvailableException(throwable)) {
+                            // would never fire, `remaining` would never decrement, and the coordinator
+                            shardRouting.shardId(),
+            Object[] shardResultOrExceptions
+            this.shards = shards;
+     */
+     * @param clusterState     the cluster state
+         * {@link #asyncShardOperationThreadPool()} so a slow/blocking shard prefix (e.g. a permit wait)
+     * Creates a new response to the underlying request.
+                    @Override
+            out.writeBoolean(exceptions != null);
+ * Licensed to Elasticsearch under one or more contributor
+    private final ThreadPool threadPool;
+        private void onShardOperation(
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
+            List<ShardRouting> shards,
+            final Object[] shardResultOrExceptions = new Object[totalShards];
+        }
+                            onNodeResponse(node, nodeIndex, response);
+            this.indicesLevelRequest = request;
+ * SPDX-License-Identifier: Apache-2.0
+                        public void handleResponse(NodeResponse response) {
+                    }
+            List<ShardOperationResult> results,
+            }
+        NodeResponse(
+     * @param listener     callback to invoke with the result or failure
+        public void writeTo(StreamOutput out) {}
+        );
+                        shardResultOrExceptions[shardIndex] = failure;
+                out.writeList(exceptions);
+                shardResults[shardIndex] = failure;
+                            new ParameterizedMessage(
+                sendNodeResponse(request, channel, totalShards, shardResultOrExceptions);
+        int successfulShards = 0;
+                        failure.setShard(shardRouting.shardId());
+                    // Pool rejected at dispatch time (shutdown / saturated) — record as a shard failure
+ *
+import org.opensearch.cluster.ClusterState;
+                    nodeIndex++;
+            List<BroadcastShardOperationFailedException> exceptions
+    /**
+                }
+        @Override
+    protected void shardOperationAsync(Request request, ShardRouting shardRouting, ActionListener<ShardOperationResult> listener) {
+package org.opensearch.action.support.broadcast.node;
+            // but concurrency is hard, safety is important, and the small performance loss here does not matter
+        }
+    }
+                            // IndexNotFoundException raced index deletion). Without this, the throw
+ *
+        }
+import org.opensearch.cluster.metadata.ResolvedIndices;
+                listener.onFailure(e);
+                } catch (Exception e) {
+    protected abstract ShardOperationResult readShardResult(StreamInput in) throws IOException;
+    final String transportNodeBroadcastAction;
+                    onCompletion();
+            if (logger.isTraceEnabled()) {
+        }
+     * @return a deserialized shard-level result
+            }
+            }
+            nodeId = in.readString();
+            indicesLevelRequest.writeTo(out);
+        /**
+        private List<ShardRouting> shards;
+     *
+ * @param <Response>             the response to the client request
+        public String[] indices() {
+                    results.add((ShardOperationResult) shardResultOrExceptions[i]);
+     *
+     * @return a list of concrete indices that this action should operate on
+                    );
+                if (TransportActions.isShardNotAvailableException(e)) {
+     */
+     * Determines the shards on which this operation will be executed on. The operation is executed once per shard.
+        public void writeTo(StreamOutput out) throws IOException {
+                            // would only get a response after its transport timeout. notifyOnce keeps
+            NodeRequest request,
+                }
+                    "operation " + actionName + " failed",
+                // cluster-manager node from the local cluster state, but the shards assigned to the cluster-manager will still be in the
+        List<ShardOperationResult> broadcastByNodeResponses = new ArrayList<>();
+     * @opensearch.internal
+    @Override
+                logger.debug(new ParameterizedMessage("failed to execute [{}] on node [{}]", actionName, nodeId), t);
+ * ownership. Elasticsearch licenses this file to you under
+import org.opensearch.threadpool.ThreadPool;
+                    if (logger.isDebugEnabled()) {
+                if (logger.isTraceEnabled()) {
+            if (requestBlockException != null) {
+    public List<ShardRouting> getShardRoutingsFromInputStream(StreamInput in) throws IOException {
+     */
+     */
 }
+        @Override
+    /**
+            transportNodeBroadcastAction,
+                totalShards += nodes.get(exception.nodeId()).size();
+                            new DefaultShardOperationFailedException(
+                                "[{}] failed to execute operation for shard [{}]",
+ * The OpenSearch Contributors require contributions made to
+    }
+                            onNodeFailure(node, nodeIndex, exp);
+/*
+ * Unless required by applicable law or agreed to in writing,
+                throw requestBlockException;
+            }
+            int totalShards,
+            }
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;
+            }
+    /**
+ * to the client.
+            if (exceptions != null) {
+            nodeIds = new HashMap<>();
+            // but concurrency is hard, safety is important, and the small performance loss here does not matter
+            return results.size();
+     * @param results          the per-node aggregated shard-level results
+            results = in.readList((stream) -> stream.readBoolean() ? readShardResult(stream) : null);
+    }
+                if (shard.assignedToNode() && nodes.get(shard.currentNodeId()) != null) {
+                        logger.debug(
+            try {
+        this.indexNameExpressionResolver = indexNameExpressionResolver;
+        ) {
+            if (logger.isDebugEnabled() && !(t instanceof NodeShouldNotConnectException)) {
+            final Object[] shardResults,
+        }
+        }
+                        nodeIds.put(nodeId, new ArrayList<>());
+                    nodeRequest,
+            }
+        protected Request indicesLevelRequest;
+                broadcastByNodeResponses.addAll(response.results);
+import org.opensearch.cluster.metadata.OptionallyResolvedIndices;
+            try {
+     */
+     *
+        private final AtomicInteger counter = new AtomicInteger();
+                logger.trace("resolving shards for [{}] based on cluster state version [{}]", actionName, clusterState.version());
+        List<DefaultShardOperationFailedException> exceptions = new ArrayList<>();
+                // Sync mode: original sequential execution (backwards compatible)
+        ClusterService clusterService,
+                }
+     *
+            int totalShards,
+                int shardIndex = -1;
+    protected boolean isAsyncShardOperation() {
+ * and executing the shard-level operations serially on the receiving node. Each shard-level operation can produce a
+import org.opensearch.tasks.Task;
+    }
+        transportService.registerRequestHandler(
+        return newResponse(request, totalShards, successfulShards, failedShards, broadcastByNodeResponses, exceptions, clusterState);
+    /**
+                    exceptions.add(new DefaultShardOperationFailedException(shard.getIndexName(), shard.getId(), exception));
+            }
+            this.request = request;
+    implements
+    ) {
+            for (ShardOperationResult result : results) {
+         * listener so {@code remaining} still reaches zero and the node response is sent.
+            out.writeString(nodeId);
+                for (ShardRouting shard : nodes.get(exception.nodeId())) {
+        boolean canTripCircuitBreaker
+                    threadPool.executor(asyncPool).execute(() -> {
+                transportService.sendRequest(
+                        );
+        new AsyncAction(task, request, listener).start();
+            return indicesLevelRequest.indicesOptions();
+                    // on the same (notifyOnce-wrapped) listener so the remaining counter still reaches
+            } catch (Exception e) {
+    public TransportBroadcastByNodeAction(
+            nodeOperation(results, accumulatedExceptions);
+import org.opensearch.action.FailedNodeException;
+                }
+ * software distributed under the License is distributed on an
+                            new ParameterizedMessage(
+ *
+                final int shardIndex = idx++;
+            executor,
+            }
+import org.opensearch.cluster.node.DiscoveryNodes;
+     * @param shardRouting the shard on which to execute the operation
+        public void writeTo(StreamOutput out) throws IOException {
+                    public void onResponse(ShardOperationResult result) {
+     */
+        String actionName,
+            final ShardRouting shardRouting
+                                throwable.getShardId().getIndexName(),
+    /**
+                throw globalBlockException;
+            return nodeId;
+    protected abstract ShardsIterator shards(ClusterState clusterState, Request request, String[] concreteIndices);
+            }
+            for (final ShardRouting shardRouting : shards) {
+     * @param failedShards     the total number of shards for which execution of the operation failed
+    private final ClusterService clusterService;
+            indicesLevelRequest = readRequestFrom(in);
+        }
+import org.opensearch.transport.TransportResponseHandler;
+                try {
+            final int totalShards = shards.size();
+                shardResults[shardIndex] = result;
+     * @param request         the underlying request
+     *
+import java.util.concurrent.atomic.AtomicReferenceArray;
+ * GitHub history for details.
+     * Async shard operation with ActionListener callback.
+                                shardRouting.shortSummary()
+    Response extends BroadcastResponse,
+            out.writeString(nodeId);
+ * this work for additional information regarding copyright
+ * @param <Request>              the underlying client request
+                if (counter.incrementAndGet() == responses.length()) {
+        protected List<ShardOperationResult> results;
+            return nodeId;
+import java.util.concurrent.RejectedExecutionException;
+                int nodeIndex = -1;
+                        public String executor() {
+        private void sendNodeResponse(
+                }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    ShardOperationResult extends Writeable> extends HandledTransportAction<Request, Response>
+            final NodeRequest request,
+        public String getNodeId() {
+     */
+                    transportRequestOptions,
+                    );
+    /**
+        NodeResponse(StreamInput in) throws IOException {
+ * (BroadcastByNodeResponse) to the coordinating node. These per-node results are aggregated into a single result (Result)
+     * never fall through to the sync path.
+            int idx = 0;
+                    listener.onResponse(response);
+        return ResolvedIndices.of(resolveConcreteIndices(clusterService.state(), request));
+                        @Override
+            }
+                            shardListener.onFailure(inner);
+            int totalShards,
+                                "[{}] failed to execute operation for shard [{}]",
+    /**
+     */
+                            shard.shardId(),
+     * transport response is sent only after all shards complete (via CountDownLatch).
+                            return ThreadPool.Names.SAME;
+                            e
+                // send a request to the shard only if it is assigned to a node that is in the local node's cluster state
+ * result (ShardOperationResult), these per-node shard-level results are aggregated into a single result
+                }
+        private final Request request;
+            this.nodeId = nodeId;
+     *
+                        new NoShardAvailableActionException(
+                        }
+     *
+            out.writeVInt(results.size());
+            } else {
+                try {
+        private final AtomicReferenceArray<Object> responses;
+     * Resolves a list of concrete index names. Override this if index names should be resolved differently than normal.
+import org.opensearch.action.support.broadcast.BroadcastShardOperationFailedException;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            if (logger.isTraceEnabled()) {
+            final String asyncPool = asyncShardOperationThreadPool();
+     * override this method with their non-blocking implementation.
+        int failedShards,
+                    shardListener.onFailure(rejection);
+                }
+import org.opensearch.action.support.TransportActions;
+         * {@link ActionListener#notifyOnce} so a shard implementation that completes more than once
+     * @param accumulatedExceptions List of any exceptions thrown by the shard-level operations.
+                    }
+    ) {
+/**
+                        }
+            AtomicInteger remaining
+        @Override
+        protected List<BroadcastShardOperationFailedException> exceptions;
+                    onCompletion();
+     * the thread pool thread that received the transport request.
+            out.writeVInt(totalShards);
+                }
+    protected abstract Request readRequestFrom(StreamInput in) throws IOException;
+    protected void nodeOperation(List<ShardOperationResult> results, List<BroadcastShardOperationFailedException> accumulatedExceptions) {}
+    }
+        for (int i = 0; i < responses.length(); i++) {
+            String nodeId,
+/*
+            this.results = results;
+            ClusterBlockException globalBlockException = checkGlobalBlock(clusterState, request);
+                } else {
+        private final Map<String, List<ShardRouting>> nodeIds;
+            }
+            } else {
+                    @Override
+import org.opensearch.cluster.block.ClusterBlockException;
+            int totalShards,
+            return indicesLevelRequest.indices();
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.cluster.routing.ShardRouting;
+                            ),
+                        logger.trace(
+     * Broadcast by a node's transport request handler
+                            " no shards available for shard " + shard.toString() + " while executing " + actionName
+            this.task = task;
+        Writeable.Reader<Request> request,
+     * This method reads ShardRouting from input stream
+                } else {
+     *
+            final int shardIndex,
+     */
+                }
+    /**
+            if (isAsyncShardOperation()) {
+import org.opensearch.core.transport.TransportResponse;
+                    listener.onFailure(e);
+ * not use this file except in compliance with the License.
+        ActionFilters actionFilters,
+     * @param request      the node-level request
+        List<DefaultShardOperationFailedException> shardFailures,
+        protected int totalShards;
+                        onShardOperationComplete(request, channel, totalShards, shardResultOrExceptions, remaining);
+import org.opensearch.transport.NodeShouldNotConnectException;
+                }
+import org.opensearch.action.support.ActionFilters;
+    /**
+     * which there is no shard-level return value.
+ * this file be licensed under the Apache-2.0 license or a
+        private EmptyResult(StreamInput in) {}
+            List<BroadcastShardOperationFailedException> accumulatedExceptions = new ArrayList<>();
+        }
+        private final ClusterState clusterState;
+        int failedShards = exceptions.size();
+            // this is defensive to protect against the possibility of double invocation
+                for (BroadcastShardOperationFailedException throwable : response.getExceptions()) {
+    private final TransportService transportService;
+import java.io.IOException;
+        String executor,
+                response = newResponse(request, responses, unavailableShardExceptions, nodeIds, clusterState);
+    Request extends BroadcastRequest<Request>,
+        }
+                    if (!nodeIds.containsKey(nodeId)) {
+                        public void handleException(TransportException exp) {
+    /**
+                            // this safe even if the impl partially completed the listener before throwing.
+     * @return the result of the shard-level operation for the shard
+                try {
+         */
+            this.nodeId = nodeId;
+            } else {
+     * @opensearch.internal
+                    shardRouting.shardId(),
+            return shards;
+                        e
+            "shardOperationAsync must be overridden by subclasses that return isAsyncShardOperation()=true"
+            for (int i = 0; i < totalShards; i++) {
+            } else {
+                        onShardOperationComplete(request, channel, totalShards, shardResultOrExceptions, remaining);
+    private Response newResponse(
+            // the current implementation of TransportService#sendRequest guards against this
+    class BroadcastByNodeTransportRequestHandler implements TransportRequestHandler<NodeRequest> {
+         * Dispatches each shard's {@link #shardOperationAsync} as its own task on
+            if (nodeIds.size() == 0) {
+ *
+            try {
+                    sendNodeRequest(node, entry.getValue(), nodeIndex);
+                    shardIndex++;
+            Object[] shardResultOrExceptions
+     * Executes a global request-level check before polling the cluster state.
+        public int getSuccessfulShards() {
+        public int getTotalShards() {
+                // a scenario in which a shard can be assigned but to a node that is not in the local node's cluster state
+                logger.debug("failed to combine responses from nodes", e);
+                if (request != null && request.timeout() != null) {
+                    e
+     *
+        AtomicReferenceArray responses,
+            final NodeRequest request,
+                            // shardOperationAsync threw synchronously on the pool worker (e.g. an
+            TransportChannel channel,
+        Request request,
+                onNodeFailure(node, nodeIndex, e);
+     * @param concreteIndices the concrete indices on which to execute the operation
+    class NodeResponse extends TransportResponse {
+            }
+                TransportRequestOptions transportRequestOptions = TransportRequestOptions.EMPTY;
+    }
+import org.opensearch.core.action.ActionListener;
+        }
+                    listener.onFailure(e);
+                successfulShards += response.getSuccessfulShards();
+            nodes = clusterState.nodes();
+                            e
+        private final Task task;
+            this.totalShards = totalShards;
+     * Subclasses that opt into async execution (via {@link #isAsyncShardOperation()}) MUST
+            ShardsIterator shardIt = shards(clusterState, request, concreteIndices);
+                }
+     * Executes a node-level operation. This method is called one time per node, after all shard-level operations have completed.
+        TransportIndicesResolvingAction<Request> {
+            if (globalBlockException != null) {
+                    }
+        }
+     * Default is false (synchronous, sequential execution) for backwards compatibility.
+     * Asynchronous action
+            String nodeId = node.getId();
+        @Override
+        return indexNameExpressionResolver.concreteResolvedIndices(clusterState, request);
+     *
+                    accumulatedExceptions.add((BroadcastShardOperationFailedException) shardResultOrExceptions[i]);
+                    nodeIds.get(nodeId).add(shard);
+     * @opensearch.internal
+            if (responses.compareAndSet(nodeIndex, null, new FailedNodeException(nodeId, "Failed node [" + nodeId + "]", t))) {
+                        }
+    /**
+     *
+        TransportService transportService,
+                for (Map.Entry<String, List<ShardRouting>> entry : nodeIds.entrySet()) {
+                    }
+                ShardOperationResult result = shardOperation(request.indicesLevelRequest, shardRouting);
+            }

@@ -1,494 +1,424 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index;
-
-import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
-import org.opensearch.action.admin.indices.stats.ShardStats;
-import org.opensearch.action.bulk.BulkRequest;
-import org.opensearch.action.bulk.BulkResponse;
-import org.opensearch.action.bulk.TransportShardBulkAction;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.action.ActionFuture;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.InternalSettingsPlugin;
-import org.opensearch.test.InternalTestCluster;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.transport.MockTransportService;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.concurrent.CountDownLatch;
-import java.util.stream.Stream;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.instanceOf;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 2, numClientNodes = 1)
-public class IndexingPressureIT extends OpenSearchIntegTestCase {
-
-    public static final String INDEX_NAME = "test";
-
-    private static final Settings unboundedWriteQueue = Settings.builder().put("thread_pool.write.queue_size", -1).build();
-
-    public static final Settings settings = Settings.builder()
-        .put(ShardIndexingPressureSettings.SHARD_INDEXING_PRESSURE_ENABLED.getKey(), false)
-        .build();
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder().put(super.nodeSettings(nodeOrdinal)).put(unboundedWriteQueue).put(settings).build();
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Arrays.asList(MockTransportService.TestPlugin.class, InternalSettingsPlugin.class);
-    }
-
-    @Override
-    protected int numberOfReplicas() {
-        return 1;
-    }
-
-    @Override
-    protected int numberOfShards() {
-        return 1;
-    }
-
-    public void testWriteBytesAreIncremented() throws Exception {
-        assertAcked(
-            prepareCreate(
-                INDEX_NAME,
-                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            )
-        );
-        ensureGreen(INDEX_NAME);
-
-        Tuple<String, String> primaryReplicaNodeNames = getPrimaryReplicaNodeNames();
-        String primaryName = primaryReplicaNodeNames.v1();
-        String replicaName = primaryReplicaNodeNames.v2();
-        String coordinatingOnlyNode = getCoordinatingOnlyNode();
-
-        final CountDownLatch replicationSendPointReached = new CountDownLatch(1);
-        final CountDownLatch latchBlockingReplicationSend = new CountDownLatch(1);
-
-        TransportService primaryService = internalCluster().getInstance(TransportService.class, primaryName);
-        final MockTransportService primaryTransportService = (MockTransportService) primaryService;
-        TransportService replicaService = internalCluster().getInstance(TransportService.class, replicaName);
-        final MockTransportService replicaTransportService = (MockTransportService) replicaService;
-
-        primaryTransportService.addSendBehavior((connection, requestId, action, request, options) -> {
-            if (action.equals(TransportShardBulkAction.ACTION_NAME + "[r]")) {
-                try {
-                    replicationSendPointReached.countDown();
-                    latchBlockingReplicationSend.await();
-                } catch (InterruptedException e) {
-                    throw new IllegalStateException(e);
-                }
-            }
-            connection.sendRequest(requestId, action, request, options);
-        });
-
-        final ThreadPool replicaThreadPool = replicaTransportService.getThreadPool();
-        final Releasable replicaRelease = blockReplicas(replicaThreadPool);
-
-        final BulkRequest bulkRequest = new BulkRequest();
-        int totalRequestSize = 0;
-        for (int i = 0; i < 80; ++i) {
-            IndexRequest request = new IndexRequest(INDEX_NAME).id(UUIDs.base64UUID())
-                .source(Collections.singletonMap("key", randomAlphaOfLength(50)));
-            totalRequestSize += request.ramBytesUsed();
-            assertTrue(request.ramBytesUsed() > request.source().length());
-            bulkRequest.add(request);
-        }
-
-        final long bulkRequestSize = bulkRequest.ramBytesUsed();
-        final long bulkShardRequestSize = totalRequestSize;
-
-        try {
-            final ActionFuture<BulkResponse> successFuture = client(coordinatingOnlyNode).bulk(bulkRequest);
-            replicationSendPointReached.await();
-
-            IndexingPressure primaryWriteLimits = internalCluster().getInstance(IndexingPressureService.class, primaryName)
-                .getShardIndexingPressure();
-            IndexingPressure replicaWriteLimits = internalCluster().getInstance(IndexingPressureService.class, replicaName)
-                .getShardIndexingPressure();
-            ;
-            IndexingPressure coordinatingWriteLimits = internalCluster().getInstance(IndexingPressureService.class, coordinatingOnlyNode)
-                .getShardIndexingPressure();
-            ;
-
-            assertThat(primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes(), greaterThan(bulkShardRequestSize));
-            assertThat(primaryWriteLimits.getCurrentPrimaryBytes(), greaterThan(bulkShardRequestSize));
-            assertEquals(0, primaryWriteLimits.getCurrentCoordinatingBytes());
-            assertEquals(0, primaryWriteLimits.getCurrentReplicaBytes());
-
-            assertEquals(0, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-            assertEquals(0, replicaWriteLimits.getCurrentCoordinatingBytes());
-            assertEquals(0, replicaWriteLimits.getCurrentPrimaryBytes());
-            assertEquals(0, replicaWriteLimits.getCurrentReplicaBytes());
-
-            assertEquals(bulkRequestSize, coordinatingWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-            assertEquals(bulkRequestSize, coordinatingWriteLimits.getCurrentCoordinatingBytes());
-            assertEquals(0, coordinatingWriteLimits.getCurrentPrimaryBytes());
-            assertEquals(0, coordinatingWriteLimits.getCurrentReplicaBytes());
-
-            latchBlockingReplicationSend.countDown();
-
-            IndexRequest request = new IndexRequest(INDEX_NAME).id(UUIDs.base64UUID())
-                .source(Collections.singletonMap("key", randomAlphaOfLength(50)));
-            final BulkRequest secondBulkRequest = new BulkRequest();
-            secondBulkRequest.add(request);
-
-            // Use the primary or the replica data node as the coordinating node this time
-            boolean usePrimaryAsCoordinatingNode = randomBoolean();
-            final ActionFuture<BulkResponse> secondFuture;
-            if (usePrimaryAsCoordinatingNode) {
-                secondFuture = client(primaryName).bulk(secondBulkRequest);
-            } else {
-                secondFuture = client(replicaName).bulk(secondBulkRequest);
-            }
-
-            final long secondBulkRequestSize = secondBulkRequest.ramBytesUsed();
-            final long secondBulkShardRequestSize = request.ramBytesUsed();
-
-            if (usePrimaryAsCoordinatingNode) {
-                assertBusy(() -> {
-                    assertThat(
-                        primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes(),
-                        greaterThan(bulkShardRequestSize + secondBulkRequestSize)
-                    );
-                    assertEquals(secondBulkRequestSize, primaryWriteLimits.getCurrentCoordinatingBytes());
-                    assertThat(primaryWriteLimits.getCurrentPrimaryBytes(), greaterThan(bulkShardRequestSize + secondBulkRequestSize));
-
-                    assertEquals(0, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-                    assertEquals(0, replicaWriteLimits.getCurrentCoordinatingBytes());
-                    assertEquals(0, replicaWriteLimits.getCurrentPrimaryBytes());
-                });
-            } else {
-                assertThat(primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes(), greaterThan(bulkShardRequestSize));
-
-                assertEquals(secondBulkRequestSize, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-                assertEquals(secondBulkRequestSize, replicaWriteLimits.getCurrentCoordinatingBytes());
-                assertEquals(0, replicaWriteLimits.getCurrentPrimaryBytes());
-            }
-            assertEquals(bulkRequestSize, coordinatingWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-            assertBusy(
-                () -> assertThat(
-                    replicaWriteLimits.getCurrentReplicaBytes(),
-                    greaterThan(bulkShardRequestSize + secondBulkShardRequestSize)
-                )
-            );
-
-            replicaRelease.close();
-
-            successFuture.actionGet();
-            secondFuture.actionGet();
-
-            assertEquals(0, primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-            assertEquals(0, primaryWriteLimits.getCurrentCoordinatingBytes());
-            assertEquals(0, primaryWriteLimits.getCurrentPrimaryBytes());
-            assertEquals(0, primaryWriteLimits.getCurrentReplicaBytes());
-
-            assertEquals(0, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-            assertEquals(0, replicaWriteLimits.getCurrentCoordinatingBytes());
-            assertEquals(0, replicaWriteLimits.getCurrentPrimaryBytes());
-            assertEquals(0, replicaWriteLimits.getCurrentReplicaBytes());
-
-            assertEquals(0, coordinatingWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-            assertEquals(0, coordinatingWriteLimits.getCurrentCoordinatingBytes());
-            assertEquals(0, coordinatingWriteLimits.getCurrentPrimaryBytes());
-            assertEquals(0, coordinatingWriteLimits.getCurrentReplicaBytes());
-        } finally {
-            if (replicationSendPointReached.getCount() > 0) {
-                replicationSendPointReached.countDown();
-            }
-            replicaRelease.close();
-            if (latchBlockingReplicationSend.getCount() > 0) {
-                latchBlockingReplicationSend.countDown();
-            }
-            replicaRelease.close();
-            primaryTransportService.clearAllRules();
-        }
-    }
-
-    public void testWriteCanBeRejectedAtCoordinatingLevel() throws Exception {
-        final BulkRequest bulkRequest = new BulkRequest();
-        int totalRequestSize = 0;
-        for (int i = 0; i < 80; ++i) {
-            IndexRequest request = new IndexRequest(INDEX_NAME).id(UUIDs.base64UUID())
-                .source(Collections.singletonMap("key", randomAlphaOfLength(50)));
-            totalRequestSize += request.ramBytesUsed();
-            assertTrue(request.ramBytesUsed() > request.source().length());
-            bulkRequest.add(request);
-        }
-
-        final long bulkRequestSize = bulkRequest.ramBytesUsed();
-        final long bulkShardRequestSize = totalRequestSize;
-        restartNodesWithSettings(
-            Settings.builder().put(IndexingPressure.MAX_INDEXING_BYTES.getKey(), (long) (bulkShardRequestSize * 1.5) + "B").build()
-        );
-
-        assertAcked(
-            prepareCreate(
-                INDEX_NAME,
-                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            )
-        );
-        ensureGreen(INDEX_NAME);
-
-        Tuple<String, String> primaryReplicaNodeNames = getPrimaryReplicaNodeNames();
-        String primaryName = primaryReplicaNodeNames.v1();
-        String replicaName = primaryReplicaNodeNames.v2();
-        String coordinatingOnlyNode = getCoordinatingOnlyNode();
-
-        final ThreadPool replicaThreadPool = internalCluster().getInstance(ThreadPool.class, replicaName);
-        try (Releasable replicaRelease = blockReplicas(replicaThreadPool)) {
-            final ActionFuture<BulkResponse> successFuture = client(coordinatingOnlyNode).bulk(bulkRequest);
-
-            IndexingPressure primaryWriteLimits = internalCluster().getInstance(IndexingPressureService.class, primaryName)
-                .getShardIndexingPressure();
-            IndexingPressure replicaWriteLimits = internalCluster().getInstance(IndexingPressureService.class, replicaName)
-                .getShardIndexingPressure();
-            IndexingPressure coordinatingWriteLimits = internalCluster().getInstance(IndexingPressureService.class, coordinatingOnlyNode)
-                .getShardIndexingPressure();
-
-            assertBusy(() -> {
-                assertThat(primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes(), greaterThan(bulkShardRequestSize));
-                assertEquals(0, primaryWriteLimits.getCurrentReplicaBytes());
-                assertEquals(0, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-                assertThat(replicaWriteLimits.getCurrentReplicaBytes(), greaterThan(bulkShardRequestSize));
-                assertEquals(bulkRequestSize, coordinatingWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-                assertEquals(0, coordinatingWriteLimits.getCurrentReplicaBytes());
-            });
-
-            expectThrows(OpenSearchRejectedExecutionException.class, () -> {
-                if (randomBoolean()) {
-                    client(coordinatingOnlyNode).bulk(bulkRequest).actionGet();
                 } else if (randomBoolean()) {
-                    client(primaryName).bulk(bulkRequest).actionGet();
-                } else {
-                    client(replicaName).bulk(bulkRequest).actionGet();
-                }
-            });
-
-            replicaRelease.close();
-
-            successFuture.actionGet();
-
-            assertEquals(0, primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-            assertEquals(0, primaryWriteLimits.getCurrentReplicaBytes());
-            assertEquals(0, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-            assertEquals(0, replicaWriteLimits.getCurrentReplicaBytes());
-            assertEquals(0, coordinatingWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-            assertEquals(0, coordinatingWriteLimits.getCurrentReplicaBytes());
-        }
-    }
-
-    public void testWriteCanBeRejectedAtPrimaryLevel() throws Exception {
-        final BulkRequest bulkRequest = new BulkRequest();
+    @Override
         int totalRequestSize = 0;
-        for (int i = 0; i < 80; ++i) {
-            IndexRequest request = new IndexRequest(INDEX_NAME).id(UUIDs.base64UUID())
-                .source(Collections.singletonMap("key", randomAlphaOfLength(50)));
-            totalRequestSize += request.ramBytesUsed();
-            assertTrue(request.ramBytesUsed() > request.source().length());
-            bulkRequest.add(request);
-        }
-        final long bulkShardRequestSize = totalRequestSize;
-        restartNodesWithSettings(
-            Settings.builder().put(IndexingPressure.MAX_INDEXING_BYTES.getKey(), (long) (bulkShardRequestSize * 1.5) + "B").build()
-        );
-
-        assertAcked(
-            prepareCreate(
-                INDEX_NAME,
-                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            )
-        );
-        ensureGreen(INDEX_NAME);
-
-        Tuple<String, String> primaryReplicaNodeNames = getPrimaryReplicaNodeNames();
-        String primaryName = primaryReplicaNodeNames.v1();
-        String replicaName = primaryReplicaNodeNames.v2();
-        String coordinatingOnlyNode = getCoordinatingOnlyNode();
-
-        final ThreadPool replicaThreadPool = internalCluster().getInstance(ThreadPool.class, replicaName);
-        try (Releasable replicaRelease = blockReplicas(replicaThreadPool)) {
-            final ActionFuture<BulkResponse> successFuture = client(primaryName).bulk(bulkRequest);
-
-            IndexingPressure primaryWriteLimits = internalCluster().getInstance(IndexingPressureService.class, primaryName)
-                .getShardIndexingPressure();
-            IndexingPressure replicaWriteLimits = internalCluster().getInstance(IndexingPressureService.class, replicaName)
-                .getShardIndexingPressure();
-            IndexingPressure coordinatingWriteLimits = internalCluster().getInstance(IndexingPressureService.class, coordinatingOnlyNode)
-                .getShardIndexingPressure();
-
-            assertBusy(() -> {
-                assertThat(primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes(), greaterThan(bulkShardRequestSize));
-                assertEquals(0, primaryWriteLimits.getCurrentReplicaBytes());
-                assertEquals(0, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-                assertThat(replicaWriteLimits.getCurrentReplicaBytes(), greaterThan(bulkShardRequestSize));
-                assertEquals(0, coordinatingWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
-                assertEquals(0, coordinatingWriteLimits.getCurrentReplicaBytes());
-            });
-
-            BulkResponse responses = client(coordinatingOnlyNode).bulk(bulkRequest).actionGet();
-            assertTrue(responses.hasFailures());
+                assertEquals(0, replicaWriteLimits.getCurrentPrimaryBytes());
+            .map(ShardStats::getShardRouting)
+ * software distributed under the License is distributed on an
+                    assertEquals(secondBulkRequestSize, primaryWriteLimits.getCurrentCoordinatingBytes());
             assertThat(responses.getItems()[0].getFailure().getCause().getCause(), instanceOf(OpenSearchRejectedExecutionException.class));
-
-            replicaRelease.close();
-
-            successFuture.actionGet();
-
-            assertEquals(0, primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+        restartNodesWithSettings(
+            } else {
+                assertEquals(0, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
             assertEquals(0, primaryWriteLimits.getCurrentReplicaBytes());
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 2, numClientNodes = 1)
+    }
+            .iterator()
+            final long secondBulkRequestSize = secondBulkRequest.ramBytesUsed();
+                .getShardIndexingPressure();
+            assertBusy(() -> {
+        );
+            totalRequestSize += request.ramBytesUsed();
+ * Licensed to Elasticsearch under one or more contributor
+    @Override
+            .currentNodeId();
+            )
+        ensureGreen(INDEX_NAME);
+        return 1;
+            final ActionFuture<BulkResponse> secondFuture;
+        TransportService primaryService = internalCluster().getInstance(TransportService.class, primaryName);
+                } catch (InterruptedException e) {
+ * this file be licensed under the Apache-2.0 license or a
+            .filter(sr -> sr.primary() == false)
+            assertEquals(0, coordinatingWriteLimits.getCurrentReplicaBytes());
+        final ThreadPool replicaThreadPool = replicaTransportService.getThreadPool();
+        TransportService replicaService = internalCluster().getInstance(TransportService.class, replicaName);
+                assertBusy(() -> {
+                .source(Collections.singletonMap("key", randomAlphaOfLength(50)));
+                .getShardIndexingPressure();
+            .cluster()
+            if (latchBlockingReplicationSend.getCount() > 0) {
+import org.opensearch.action.bulk.TransportShardBulkAction;
+        try (Releasable replicaRelease = blockReplicas(replicaThreadPool)) {
+            ;
+            .values()
+                INDEX_NAME,
+        final ThreadPool replicaThreadPool = internalCluster().getInstance(ThreadPool.class, replicaName);
+            .next()
+            replicationSendPointReached.await();
+            }
+ * under the License.
+            final ActionFuture<BulkResponse> successFuture = client(coordinatingOnlyNode).bulk(bulkRequest);
+    }
+        String primaryId = Stream.of(response.getShards())
+    public void testWritesWillSucceedIfBelowThreshold() throws Exception {
+            secondBulkRequest.add(request);
+                    client(coordinatingOnlyNode).bulk(bulkRequest).actionGet();
+            totalRequestSize += request.ramBytesUsed();
+    protected int numberOfShards() {
+            assertEquals(0, primaryWriteLimits.getCurrentCoordinatingBytes());
+            if (action.equals(TransportShardBulkAction.ACTION_NAME + "[r]")) {
+            assertEquals(0, primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+        restartNodesWithSettings(Settings.builder().put(IndexingPressure.MAX_INDEXING_BYTES.getKey(), "1MB").build());
+                    assertThat(primaryWriteLimits.getCurrentPrimaryBytes(), greaterThan(bulkShardRequestSize + secondBulkRequestSize));
+    protected Settings nodeSettings(int nodeOrdinal) {
+                assertThat(primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes(), greaterThan(bulkShardRequestSize));
+            )
+        });
+import org.opensearch.common.settings.Settings;
+        for (int i = 0; i < threads; ++i) {
+            if (blockReplication.getCount() > 0) {
+            replicaRelease.close();
+        String coordinatingOnlyNode = getCoordinatingOnlyNode();
+import java.util.stream.Stream;
+        ensureGreen(INDEX_NAME);
+                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+import org.opensearch.test.OpenSearchIntegTestCase;
+            public Settings onNodeStopped(String nodeName) {
+ * KIND, either express or implied.  See the License for the
+                if (randomBoolean()) {
+            if (replicationSendPointReached.getCount() > 0) {
+        final CountDownLatch blockReplication = new CountDownLatch(1);
+import java.util.Collections;
+            assertEquals(0, replicaWriteLimits.getCurrentCoordinatingBytes());
+                assertEquals(0, coordinatingWriteLimits.getCurrentReplicaBytes());
+            bulkRequest.add(request);
+        String replicaId = Stream.of(response.getShards())
+        );
+                assertThat(replicaWriteLimits.getCurrentReplicaBytes(), greaterThan(bulkShardRequestSize));
+        internalCluster().fullRestart(new InternalTestCluster.RestartCallback() {
+        Tuple<String, String> primaryReplicaNodeNames = getPrimaryReplicaNodeNames();
+    }
+        primaryTransportService.addSendBehavior((connection, requestId, action, request, options) -> {
+        }
+            } else {
+    public static final Settings settings = Settings.builder()
+                .source(Collections.singletonMap("key", randomAlphaOfLength(50)));
+ * specific language governing permissions and limitations
+            });
             assertEquals(0, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+            .filter(ShardRouting::primary)
+            responses.forEach(ActionFuture::actionGet);
+import java.util.ArrayList;
+        }
+        String coordinatingOnlyNode = getCoordinatingOnlyNode();
+            latchBlockingReplicationSend.countDown();
+                secondFuture = client(primaryName).bulk(secondBulkRequest);
+        assertAcked(
+package org.opensearch.index;
+import org.opensearch.action.admin.indices.stats.IndicesStatsResponse;
+            assertTrue(responses.hasFailures());
+        final CountDownLatch latchBlockingReplicationSend = new CountDownLatch(1);
+    }
+            assertTrue(request.ramBytesUsed() > request.source().length());
+                INDEX_NAME,
+            assertEquals(0, replicaWriteLimits.getCurrentCoordinatingBytes());
+ * this work for additional information regarding copyright
+                assertEquals(secondBulkRequestSize, replicaWriteLimits.getCurrentCoordinatingBytes());
+        String replicaName = primaryReplicaNodeNames.v2();
+            }
+        final long bulkRequestSize = bulkRequest.ramBytesUsed();
+            bulkRequest.add(request);
+                });
+                        greaterThan(bulkShardRequestSize + secondBulkRequestSize)
+        ensureGreen(INDEX_NAME);
+    private String getCoordinatingOnlyNode() {
+            secondFuture.actionGet();
+                    replicationSendPointReached.countDown();
+            .map(ShardStats::getShardRouting)
+        final int threads = threadPool.info(ThreadPool.Names.WRITE).getMax();
+ *
+        return Arrays.asList(MockTransportService.TestPlugin.class, InternalSettingsPlugin.class);
+        return Settings.builder().put(super.nodeSettings(nodeOrdinal)).put(unboundedWriteQueue).put(settings).build();
+            assertEquals(0, coordinatingWriteLimits.getCurrentReplicaBytes());
+ */
+            // The write limits is set to 1MB. We will send up to 800KB to stay below that threshold.
+            boolean usePrimaryAsCoordinatingNode = randomBoolean();
+            expectThrows(OpenSearchRejectedExecutionException.class, () -> {
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+            while (totalRequestSize < thresholdToStopSending) {
+            BulkResponse responses = client(coordinatingOnlyNode).bulk(bulkRequest).actionGet();
+                    .source(Collections.singletonMap("key", randomAlphaOfLength(500)));
+                .source(Collections.singletonMap("key", randomAlphaOfLength(50)));
+import org.opensearch.test.transport.MockTransportService;
+        final long bulkRequestSize = bulkRequest.ramBytesUsed();
+        ensureGreen(INDEX_NAME);
+            // Use the primary or the replica data node as the coordinating node this time
+            replicaRelease.close();
+                    pointReached.countDown();
+            final long secondBulkShardRequestSize = request.ramBytesUsed();
+        final Releasable replicaRelease = blockReplicas(replicaThreadPool);
+public class IndexingPressureIT extends OpenSearchIntegTestCase {
+            }
+            assertEquals(0, primaryWriteLimits.getCurrentReplicaBytes());
+            prepareCreate(
+                        primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes(),
+        int totalRequestSize = 0;
+import org.opensearch.threadpool.ThreadPool;
+        );
+        );
+import org.opensearch.common.collect.Tuple;
+        String replicaName = primaryReplicaNodeNames.v2();
+            assertBusy(
+        }
+import java.util.Arrays;
+                    assertEquals(0, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+                assertEquals(0, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+            assertEquals(0, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+                )
+            assertEquals(0, primaryWriteLimits.getCurrentCoordinatingBytes());
+                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+            if (usePrimaryAsCoordinatingNode) {
+    }
+                .getShardIndexingPressure();
+            IndexingPressure primaryWriteLimits = internalCluster().getInstance(IndexingPressureService.class, primaryName)
+            final BulkRequest secondBulkRequest = new BulkRequest();
+                responses.add(client(coordinatingOnlyNode).index(request));
+            assertEquals(0, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+            .nodes()
+            .getName();
+            .currentNodeId();
+                try {
+    }
+            IndexingPressure coordinatingWriteLimits = internalCluster().getInstance(IndexingPressureService.class, coordinatingOnlyNode)
+            successFuture.actionGet();
+            replicaRelease.close();
+            });
+            assertEquals(0, coordinatingWriteLimits.getCurrentPrimaryBytes());
+                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+            }
+        }
+        for (int i = 0; i < 80; ++i) {
+            .getState()
+            prepareCreate(
+        .put(ShardIndexingPressureSettings.SHARD_INDEXING_PRESSURE_ENABLED.getKey(), false)
+import java.util.Collection;
+                } catch (InterruptedException e) {
+            .prepareState()
+ * GitHub history for details.
+import org.opensearch.test.InternalTestCluster;
+    protected int numberOfReplicas() {
+            assertEquals(0, coordinatingWriteLimits.getCurrentCoordinatingBytes());
+            assertTrue(request.ramBytesUsed() > request.source().length());
+        final BulkRequest bulkRequest = new BulkRequest();
+    private static final Settings unboundedWriteQueue = Settings.builder().put("thread_pool.write.queue_size", -1).build();
+}
+                } else {
+            IndexingPressure replicaWriteLimits = internalCluster().getInstance(IndexingPressureService.class, replicaName)
+    public void testWriteCanBeRejectedAtCoordinatingLevel() throws Exception {
+            assertEquals(0, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+            replicaRelease.close();
+ * SPDX-License-Identifier: Apache-2.0
+        .build();
+        Tuple<String, String> primaryReplicaNodeNames = getPrimaryReplicaNodeNames();
+    private Tuple<String, String> getPrimaryReplicaNodeNames() {
+ * the Apache License, Version 2.0 (the "License"); you may
+            bulkRequest.add(request);
+                    client(replicaName).bulk(bulkRequest).actionGet();
+                    );
+        final ThreadPool replicaThreadPool = internalCluster().getInstance(ThreadPool.class, replicaName);
+            IndexingPressure coordinatingWriteLimits = internalCluster().getInstance(IndexingPressureService.class, coordinatingOnlyNode)
+            @Override
+            assertEquals(0, replicaWriteLimits.getCurrentPrimaryBytes());
+                    assertThat(
+            Settings.builder().put(IndexingPressure.MAX_INDEXING_BYTES.getKey(), (long) (bulkShardRequestSize * 1.5) + "B").build()
+                    assertEquals(0, replicaWriteLimits.getCurrentPrimaryBytes());
+    public static final String INDEX_NAME = "test";
+                .getShardIndexingPressure();
+            replicaRelease.close();
+            int thresholdToStopSending = 800 * 1024;
+import org.opensearch.action.admin.indices.stats.ShardStats;
+    }
+        String primaryName = nodes.get(primaryId).getName();
+                assertEquals(0, coordinatingWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+        for (int i = 0; i < 80; ++i) {
+                try {
+        String replicaName = primaryReplicaNodeNames.v2();
+        final CountDownLatch pointReached = new CountDownLatch(threads);
+ * You may obtain a copy of the License at
+        Tuple<String, String> primaryReplicaNodeNames = getPrimaryReplicaNodeNames();
+            assertEquals(0, coordinatingWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+                    throw new IllegalStateException(e);
+        final ThreadPool replicaThreadPool = internalCluster().getInstance(ThreadPool.class, replicaName);
+import org.opensearch.common.action.ActionFuture;
+import org.opensearch.cluster.metadata.IndexMetadata;
+        }
+                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+        String primaryName = primaryReplicaNodeNames.v1();
+                .getShardIndexingPressure();
+                }
+        final BulkRequest bulkRequest = new BulkRequest();
+            assertEquals(0, coordinatingWriteLimits.getCurrentPrimaryBytes());
+                    greaterThan(bulkShardRequestSize + secondBulkShardRequestSize)
+            successFuture.actionGet();
+            IndexingPressure primaryWriteLimits = internalCluster().getInstance(IndexingPressureService.class, primaryName)
+            assertEquals(0, primaryWriteLimits.getCurrentPrimaryBytes());
+            IndexRequest request = new IndexRequest(INDEX_NAME).id(UUIDs.base64UUID())
+    public void testWriteCanBeRejectedAtPrimaryLevel() throws Exception {
+        final long bulkShardRequestSize = totalRequestSize;
+/*
             assertEquals(0, replicaWriteLimits.getCurrentReplicaBytes());
+        String replicaName = primaryReplicaNodeNames.v2();
+    }
+                assertEquals(0, primaryWriteLimits.getCurrentReplicaBytes());
+    private Releasable blockReplicas(ThreadPool threadPool) {
+            Settings.builder().put(IndexingPressure.MAX_INDEXING_BYTES.getKey(), (long) (bulkShardRequestSize * 1.5) + "B").build()
+                INDEX_NAME,
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+            assertEquals(0, coordinatingWriteLimits.getCurrentReplicaBytes());
+                    client(primaryName).bulk(bulkRequest).actionGet();
+ * compatible open source license.
+            assertEquals(bulkRequestSize, coordinatingWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+import org.opensearch.cluster.routing.ShardRouting;
+            .get()
+            if (usePrimaryAsCoordinatingNode) {
+        assertAcked(
+                replicationSendPointReached.countDown();
+import org.opensearch.cluster.node.DiscoveryNodes;
+        };
+    private void restartNodesWithSettings(Settings settings) throws Exception {
+        final long bulkShardRequestSize = totalRequestSize;
+            prepareCreate(
+import static org.hamcrest.Matchers.greaterThan;
+    }
+    }
+            assertEquals(0, primaryWriteLimits.getCurrentReplicaBytes());
+        }
+import org.opensearch.action.bulk.BulkResponse;
+            final ActionFuture<BulkResponse> successFuture = client(primaryName).bulk(bulkRequest);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        );
+            assertEquals(0, replicaWriteLimits.getCurrentReplicaBytes());
+                IndexRequest request = new IndexRequest(INDEX_NAME).id(UUIDs.base64UUID())
+                .getShardIndexingPressure();
+            .getCoordinatingOnlyNodes()
+import org.opensearch.action.index.IndexResponse;
+            assertEquals(0, replicaWriteLimits.getCurrentReplicaBytes());
+            assertThat(primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes(), greaterThan(bulkShardRequestSize));
+        }
             assertEquals(0, coordinatingWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
             assertEquals(0, coordinatingWriteLimits.getCurrentReplicaBytes());
-        }
-    }
-
-    public void testWritesWillSucceedIfBelowThreshold() throws Exception {
-        restartNodesWithSettings(Settings.builder().put(IndexingPressure.MAX_INDEXING_BYTES.getKey(), "1MB").build());
         assertAcked(
-            prepareCreate(
-                INDEX_NAME,
-                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            )
-        );
-        ensureGreen(INDEX_NAME);
-
-        Tuple<String, String> primaryReplicaNodeNames = getPrimaryReplicaNodeNames();
-        String replicaName = primaryReplicaNodeNames.v2();
-        String coordinatingOnlyNode = getCoordinatingOnlyNode();
-
-        final ThreadPool replicaThreadPool = internalCluster().getInstance(ThreadPool.class, replicaName);
+            .get()
+                assertThat(replicaWriteLimits.getCurrentReplicaBytes(), greaterThan(bulkShardRequestSize));
+            }
+        final long bulkShardRequestSize = totalRequestSize;
         try (Releasable replicaRelease = blockReplicas(replicaThreadPool)) {
-            // The write limits is set to 1MB. We will send up to 800KB to stay below that threshold.
-            int thresholdToStopSending = 800 * 1024;
-
-            ArrayList<ActionFuture<IndexResponse>> responses = new ArrayList<>();
-            int totalRequestSize = 0;
-            while (totalRequestSize < thresholdToStopSending) {
-                IndexRequest request = new IndexRequest(INDEX_NAME).id(UUIDs.base64UUID())
-                    .source(Collections.singletonMap("key", randomAlphaOfLength(500)));
-                totalRequestSize += request.ramBytesUsed();
-                responses.add(client(coordinatingOnlyNode).index(request));
-            }
-
-            replicaRelease.close();
-
-            // Would throw exception if one of the operations was rejected
-            responses.forEach(ActionFuture::actionGet);
-        }
-    }
-
-    private void restartNodesWithSettings(Settings settings) throws Exception {
-        internalCluster().fullRestart(new InternalTestCluster.RestartCallback() {
-            @Override
-            public Settings onNodeStopped(String nodeName) {
-                return Settings.builder().put(unboundedWriteQueue).put(settings).build();
-            }
-        });
-    }
-
-    private String getCoordinatingOnlyNode() {
-        return client().admin()
-            .cluster()
-            .prepareState()
-            .get()
-            .getState()
-            .nodes()
-            .getCoordinatingOnlyNodes()
-            .values()
-            .iterator()
-            .next()
-            .getName();
-    }
-
-    private Tuple<String, String> getPrimaryReplicaNodeNames() {
-        IndicesStatsResponse response = client().admin().indices().prepareStats(INDEX_NAME).get();
-        String primaryId = Stream.of(response.getShards())
-            .map(ShardStats::getShardRouting)
-            .filter(ShardRouting::primary)
-            .findAny()
-            .get()
-            .currentNodeId();
-        String replicaId = Stream.of(response.getShards())
-            .map(ShardStats::getShardRouting)
-            .filter(sr -> sr.primary() == false)
-            .findAny()
-            .get()
-            .currentNodeId();
-        DiscoveryNodes nodes = client().admin().cluster().prepareState().get().getState().nodes();
-        String primaryName = nodes.get(primaryId).getName();
-        String replicaName = nodes.get(replicaId).getName();
-        return new Tuple<>(primaryName, replicaName);
-    }
-
-    private Releasable blockReplicas(ThreadPool threadPool) {
-        final CountDownLatch blockReplication = new CountDownLatch(1);
-        final int threads = threadPool.info(ThreadPool.Names.WRITE).getMax();
-        final CountDownLatch pointReached = new CountDownLatch(threads);
-        for (int i = 0; i < threads; ++i) {
-            threadPool.executor(ThreadPool.Names.WRITE).execute(() -> {
-                try {
-                    pointReached.countDown();
-                    blockReplication.await();
-                } catch (InterruptedException e) {
-                    throw new IllegalStateException(e);
                 }
-            });
-        }
-
-        return () -> {
-            if (blockReplication.getCount() > 0) {
+ * The OpenSearch Contributors require contributions made to
+            totalRequestSize += request.ramBytesUsed();
                 blockReplication.countDown();
-            }
-        };
+    public void testWriteBytesAreIncremented() throws Exception {
+                .getShardIndexingPressure();
+                }
+            threadPool.executor(ThreadPool.Names.WRITE).execute(() -> {
+        return client().admin()
+                assertEquals(bulkRequestSize, coordinatingWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+        return 1;
+        final MockTransportService primaryTransportService = (MockTransportService) primaryService;
+ * license agreements. See the NOTICE file distributed with
+                    replicaWriteLimits.getCurrentReplicaBytes(),
+            assertThat(primaryWriteLimits.getCurrentPrimaryBytes(), greaterThan(bulkShardRequestSize));
+            replicaRelease.close();
+            int totalRequestSize = 0;
+                .source(Collections.singletonMap("key", randomAlphaOfLength(50)));
+    @Override
+                assertThat(primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes(), greaterThan(bulkShardRequestSize));
+import org.opensearch.test.InternalSettingsPlugin;
+            assertEquals(0, replicaWriteLimits.getCurrentReplicaBytes());
+ *
+                assertEquals(0, primaryWriteLimits.getCurrentReplicaBytes());
+            });
+            )
+        IndicesStatsResponse response = client().admin().indices().prepareStats(INDEX_NAME).get();
+            assertBusy(() -> {
+        return new Tuple<>(primaryName, replicaName);
+import org.opensearch.action.index.IndexRequest;
+            IndexingPressure replicaWriteLimits = internalCluster().getInstance(IndexingPressureService.class, replicaName)
+            assertEquals(bulkRequestSize, coordinatingWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+            final ActionFuture<BulkResponse> successFuture = client(coordinatingOnlyNode).bulk(bulkRequest);
+ */
+            assertEquals(bulkRequestSize, coordinatingWriteLimits.getCurrentCoordinatingBytes());
+            assertEquals(0, replicaWriteLimits.getCurrentPrimaryBytes());
+        assertAcked(
+import org.opensearch.transport.TransportService;
+ * Unless required by applicable law or agreed to in writing,
+                assertThat(primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes(), greaterThan(bulkShardRequestSize));
+            IndexingPressure primaryWriteLimits = internalCluster().getInstance(IndexingPressureService.class, primaryName)
+                () -> assertThat(
+        for (int i = 0; i < 80; ++i) {
+                INDEX_NAME,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            assertEquals(0, primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+        }
+            assertTrue(request.ramBytesUsed() > request.source().length());
+            });
+            connection.sendRequest(requestId, action, request, options);
+        try {
+ */
+    @Override
+                    throw new IllegalStateException(e);
+            IndexRequest request = new IndexRequest(INDEX_NAME).id(UUIDs.base64UUID())
+import org.opensearch.common.lease.Releasable;
+            IndexRequest request = new IndexRequest(INDEX_NAME).id(UUIDs.base64UUID())
+        restartNodesWithSettings(
+        String replicaName = nodes.get(replicaId).getName();
+        } finally {
+            assertEquals(0, primaryWriteLimits.getCurrentReplicaBytes());
+        try (Releasable replicaRelease = blockReplicas(replicaThreadPool)) {
+                latchBlockingReplicationSend.countDown();
     }
-}
+            }
+import static org.hamcrest.Matchers.instanceOf;
+                    assertEquals(0, replicaWriteLimits.getCurrentCoordinatingBytes());
+        final CountDownLatch replicationSendPointReached = new CountDownLatch(1);
+        final BulkRequest bulkRequest = new BulkRequest();
+            ;
+        int totalRequestSize = 0;
+import org.opensearch.action.bulk.BulkRequest;
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
+                    blockReplication.await();
+    }
+            IndexingPressure replicaWriteLimits = internalCluster().getInstance(IndexingPressureService.class, replicaName)
+        String coordinatingOnlyNode = getCoordinatingOnlyNode();
+        Tuple<String, String> primaryReplicaNodeNames = getPrimaryReplicaNodeNames();
+                .getShardIndexingPressure();
+ * ownership. Elasticsearch licenses this file to you under
+            );
+        String primaryName = primaryReplicaNodeNames.v1();
+                secondFuture = client(replicaName).bulk(secondBulkRequest);
+        });
+            .get()
+ * not use this file except in compliance with the License.
+                totalRequestSize += request.ramBytesUsed();
+                assertEquals(0, coordinatingWriteLimits.getCurrentReplicaBytes());
+        DiscoveryNodes nodes = client().admin().cluster().prepareState().get().getState().nodes();
+        );
+            }
+            )
+            IndexingPressure coordinatingWriteLimits = internalCluster().getInstance(IndexingPressureService.class, coordinatingOnlyNode)
+        String primaryName = primaryReplicaNodeNames.v1();
+            assertEquals(0, primaryWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+            .findAny()
+import java.util.concurrent.CountDownLatch;
+                .getShardIndexingPressure();
+                return Settings.builder().put(unboundedWriteQueue).put(settings).build();
+/*
+            primaryTransportService.clearAllRules();
+            .findAny()
+        String coordinatingOnlyNode = getCoordinatingOnlyNode();
+            }
+            // Would throw exception if one of the operations was rejected
+        return () -> {
+import org.opensearch.common.UUIDs;
+        final MockTransportService replicaTransportService = (MockTransportService) replicaService;
+            successFuture.actionGet();
+/*
+            assertEquals(0, coordinatingWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+import org.opensearch.plugins.Plugin;
+ *
+                assertEquals(secondBulkRequestSize, replicaWriteLimits.getCurrentCombinedCoordinatingAndPrimaryBytes());
+            IndexRequest request = new IndexRequest(INDEX_NAME).id(UUIDs.base64UUID())
+            ArrayList<ActionFuture<IndexResponse>> responses = new ArrayList<>();
+            prepareCreate(
+                    latchBlockingReplicationSend.await();

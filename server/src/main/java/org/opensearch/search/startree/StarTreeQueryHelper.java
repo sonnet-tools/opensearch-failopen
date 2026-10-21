@@ -1,268 +1,240 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.search.startree;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.SegmentReader;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.util.FixedBitSet;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.index.codec.composite.CompositeIndexFieldInfo;
-import org.opensearch.index.codec.composite.CompositeIndexReader;
-import org.opensearch.index.compositeindex.datacube.Dimension;
-import org.opensearch.index.compositeindex.datacube.MetricStat;
-import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;
-import org.opensearch.index.compositeindex.datacube.startree.utils.StarTreeUtils;
-import org.opensearch.index.compositeindex.datacube.startree.utils.iterator.SortedNumericStarTreeValuesIterator;
-import org.opensearch.index.mapper.DocCountFieldMapper;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.StarTreeBucketCollector;
-import org.opensearch.search.aggregations.StarTreePreComputeCollector;
-import org.opensearch.search.aggregations.support.ValuesSource;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.startree.filter.DimensionFilter;
-import org.opensearch.search.startree.filter.StarTreeFilter;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
-
-/**
- * Helper class for building star-tree query
- *
- * @opensearch.internal
- * @opensearch.experimental
- */
-public class StarTreeQueryHelper {
-
-    /**
-     * Checks if the search context can be supported by star-tree
-     */
-    public static boolean isStarTreeSupported(SearchContext context) {
-        return context.aggregations() != null && context.mapperService().isCompositeIndexPresent() && context.parsedPostFilter() == null;
-    }
-
-    public static CompositeIndexFieldInfo getSupportedStarTree(QueryShardContext context) {
-        StarTreeQueryContext starTreeQueryContext = context.getStarTreeQueryContext();
-        return (starTreeQueryContext != null) ? starTreeQueryContext.getStarTree() : null;
-    }
-
-    public static StarTreeValues getStarTreeValues(LeafReaderContext context, CompositeIndexFieldInfo starTree) throws IOException {
-        SegmentReader reader = Lucene.segmentReader(context.reader());
-        if (!(reader.getDocValuesReader() instanceof CompositeIndexReader starTreeDocValuesReader)) {
-            return null;
-        }
-        return (StarTreeValues) starTreeDocValuesReader.getCompositeIndexValues(starTree);
-    }
-
-    /**
-     * Get the star-tree leaf collector
-     * This collector computes the aggregation prematurely and invokes an early termination collector
-     */
-    public static void precomputeLeafUsingStarTree(
-        SearchContext context,
-        ValuesSource.Numeric valuesSource,
-        LeafReaderContext ctx,
-        CompositeIndexFieldInfo starTree,
-        String metric,
-        Consumer<Long> valueConsumer,
-        Runnable finalConsumer
-    ) throws IOException {
-        StarTreeValues starTreeValues = getStarTreeValues(ctx, starTree);
-        assert starTreeValues != null;
-        String fieldName = ((ValuesSource.Numeric.FieldData) valuesSource).getIndexFieldName();
-        String metricName = StarTreeUtils.fullyQualifiedFieldNameForStarTreeMetricsDocValues(starTree.getField(), fieldName, metric);
-
-        SortedNumericStarTreeValuesIterator valuesIterator = (SortedNumericStarTreeValuesIterator) starTreeValues.getMetricValuesIterator(
-            metricName
-        );
-        // Obtain a FixedBitSet of matched star tree document IDs
-        FixedBitSet filteredValues = getStarTreeFilteredValues(context, ctx, starTreeValues);
-
-        int numBits = filteredValues.length();  // Get the number of the filtered values (matching docs)
-        if (numBits > 0) {
-            // Iterate over the filtered values
             for (int bit = filteredValues.nextSetBit(0); bit != DocIdSetIterator.NO_MORE_DOCS; bit = (bit + 1 < numBits)
-                ? filteredValues.nextSetBit(bit + 1)
-                : DocIdSetIterator.NO_MORE_DOCS) {
-                // Advance to the entryId in the valuesIterator
-                if (valuesIterator.advanceExact(bit) == false) {
-                    continue;  // Skip if no more entries
-                }
-
-                // Iterate over the values for the current entryId
-                for (int i = 0, count = valuesIterator.entryValueCount(); i < count; i++) {
-                    long value = valuesIterator.nextValue();
-                    valueConsumer.accept(value); // Apply the consumer operation (e.g., max, sum)
-                }
-            }
-        }
-
-        // Call the final consumer after processing all entries
-        finalConsumer.run();
-    }
-
-    /**
-     * Get the filtered values for the star-tree query
-     * Cache the results in case of multiple aggregations (if cache is initialized)
-     * @return FixedBitSet of matched document IDs
-     */
-    public static FixedBitSet getStarTreeFilteredValues(SearchContext context, LeafReaderContext ctx, StarTreeValues starTreeValues)
-        throws IOException {
-        FixedBitSet result = context.getQueryShardContext().getStarTreeQueryContext().maybeGetCachedNodeIdsForSegment(ctx.ord);
-        if (result == null) {
-            result = StarTreeTraversalUtil.getStarTreeResult(
-                starTreeValues,
                 context.getQueryShardContext().getStarTreeQueryContext().getBaseQueryStarTreeFilter(),
-                context
+    ) {
+        }
+        List<DimensionFilter> dimensionFiltersToMerge = new ArrayList<>(initialDimensionFilters);
+ */
+     */
+        Consumer<Long> growArrays,
+        StarTreeValues starTreeValues,
+        for (String baseDimension : baseStarTreeFilter.getDimensions()) {
+        CompositeIndexFieldInfo starTree,
+        List<Dimension> matchingDimensions = orderedDimensions.stream().filter(x -> x.getField().equals(dimensionName)).toList();
+        return result;
+            // Iterate over the filtered values
+    ) {
+    }
+                ? filteredValues.nextSetBit(bit + 1)
+    }
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.index.codec.composite.CompositeIndexReader;
+    public static boolean isStarTreeSupported(SearchContext context) {
+import java.util.Collections;
+import org.opensearch.index.compositeindex.datacube.MetricStat;
+        SortedNumericStarTreeValuesIterator valuesIterator = (SortedNumericStarTreeValuesIterator) starTreeValues.getMetricValuesIterator(
+            starTreeFilter = StarTreeQueryHelper.mergeDimensionFilterIfNotExists(
             );
+import org.opensearch.index.query.QueryShardContext;
+    public static StarTreeBucketCollector getStarTreeBucketMetricCollector(
+        ValuesSource.Numeric valuesSource,
         }
         context.getQueryShardContext().getStarTreeQueryContext().maybeSetCachedNodeIdsForSegment(ctx.ord, result);
-        return result;
+                }
+        assert starTreeValues != null;
     }
-
-    public static Dimension getMatchingDimensionOrThrow(String dimensionName, List<Dimension> orderedDimensions) {
+            SortedNumericStarTreeValuesIterator metricValuesIterator = (SortedNumericStarTreeValuesIterator) starTreeValues
+/**
+    public static StarTreeValues getStarTreeValues(LeafReaderContext context, CompositeIndexFieldInfo starTree) throws IOException {
+     * Get the filtered values for the star-tree query
+            public void collectStarTreeEntry(int starTreeEntryBit, long bucket) throws IOException {
+import org.opensearch.index.compositeindex.datacube.startree.utils.StarTreeUtils;
+import org.opensearch.search.startree.filter.StarTreeFilter;
+ * @opensearch.experimental
+        Aggregator[] subAggregators
+                if (valuesIterator.advanceExact(bit) == false) {
+import org.opensearch.search.aggregations.StarTreePreComputeCollector;
+                if (!metricValuesIterator.advanceExact(starTreeEntryBit)) {
+        List<DimensionFilter> initialDimensionFilters,
+                // Advance the valuesIterator to the current bit
+import org.apache.lucene.index.SegmentReader;
+    /**
+            result = StarTreeTraversalUtil.getStarTreeResult(
+    ) throws IOException {
+                dimensionFiltersToMerge.addAll(childFilters != null ? childFilters : Collections.emptyList());
+        String metricName = StarTreeUtils.fullyQualifiedFieldNameForStarTreeMetricsDocValues(starTree.getField(), fieldName, metric);
+import org.apache.lucene.search.DocIdSetIterator;
+        Consumer<Long> valueConsumer,
+                List<DimensionFilter> childFilters = collector.getDimensionFilters();
+                List.of(dimensionFilter)
+    public static FixedBitSet getStarTreeResult(
+        return (StarTreeValues) starTreeDocValuesReader.getCompositeIndexValues(starTree);
+import org.opensearch.search.internal.SearchContext;
+        SegmentReader reader = Lucene.segmentReader(context.reader());
+        FixedBitSet result = context.getQueryShardContext().getStarTreeQueryContext().maybeGetCachedNodeIdsForSegment(ctx.ord);
+     */
+            if (subAgg instanceof StarTreePreComputeCollector collector) {
+        return (SortedNumericStarTreeValuesIterator) starTreeValues.getMetricValuesIterator(metricName);
+    ) {
+ *
+import org.opensearch.index.compositeindex.datacube.startree.index.StarTreeValues;
+        return (starTreeQueryContext != null) ? starTreeQueryContext.getStarTree() : null;
+        }
+}
+            }
+ * Helper class for building star-tree query
+        String metric,
+     * @return FixedBitSet of matched document IDs
+    public static void precomputeLeafUsingStarTree(
         Dimension matchingDimension = getMatchingDimensionOrNull(dimensionName, orderedDimensions);
+        StarTreeFilter starTreeFilter = context.getQueryShardContext().getStarTreeQueryContext().getBaseQueryStarTreeFilter();
+        throws IOException {
+            dimensionFilterMap.put(dimensionToMerge, dimensionFiltersToMerge);
+    ) throws IOException {
+        return dimensionFiltersToMerge;
+        );
+                starTree.getField(),
+    public static SortedNumericStarTreeValuesIterator getDocCountsIterator(
+    }
+        ValuesSource.Numeric valuesSource,
+            return null;
+                ? matchingDocsBitSet.nextSetBit(bit + 1)
+        assert parentCollector != null;
+import org.opensearch.index.codec.composite.CompositeIndexFieldInfo;
+import org.opensearch.common.lucene.Lucene;
+ * SPDX-License-Identifier: Apache-2.0
+        String metric,
+        // Obtain a FixedBitSet of matched star tree document IDs
+                // Iterate over the values for the current entryId
+     * For a StarTreeBucketCollector, get matching star-tree entries and update relevant buckets in aggregator
+        if (numBits > 0) {
+ */
+        String metricName = StarTreeUtils.fullyQualifiedFieldNameForStarTreeMetricsDocValues(
+        BiConsumer<Long, Long> updateBucket
+        }
+    }
+        FixedBitSet filteredValues = getStarTreeFilteredValues(context, ctx, starTreeValues);
+ * this file be licensed under the Apache-2.0 license or a
+    // TODO: Refactor to have a single method for collecting dimension filters
+ * compatible open source license.
+        for (Aggregator subAgg : subAggregators) {
+                metric
+        }
+    public static void preComputeBucketsWithStarTree(StarTreeBucketCollector starTreeBucketCollector) throws IOException {
+    }
+        }
+    /**
+        SearchContext context,
+        return context.aggregations() != null && context.mapperService().isCompositeIndexPresent() && context.parsedPostFilter() == null;
+        return matchingDimensions.get(0);
+                    long value = valuesIterator.nextValue();
+import org.opensearch.index.compositeindex.datacube.startree.utils.iterator.SortedNumericStarTreeValuesIterator;
+                ((ValuesSource.Numeric.FieldData) valuesSource).getIndexFieldName(),
+import org.opensearch.search.aggregations.StarTreeBucketCollector;
+    public static StarTreeFilter mergeDimensionFilterIfNotExists(
+                : DocIdSetIterator.NO_MORE_DOCS) {
+        if (!dimensionFilterMap.containsKey(dimensionToMerge)) {
+    }
+import org.apache.lucene.index.LeafReaderContext;
+                starTreeValues,
+/*
+        };
+    public static List<DimensionFilter> collectDimensionFilters(
+            }
+        // Call the final consumer after processing all entries
+ * @opensearch.internal
+                : DocIdSetIterator.NO_MORE_DOCS) {
+        Map<String, List<DimensionFilter>> dimensionFilterMap = new HashMap<>(baseStarTreeFilter.getDimensions().size());
+        }
+    public static Dimension getMatchingDimensionOrThrow(String dimensionName, List<Dimension> orderedDimensions) {
+import org.opensearch.search.startree.filter.DimensionFilter;
+            );
+import java.util.function.BiConsumer;
+        StarTreeBucketCollector parentCollector,
+    }
+            return null;
+        StarTreeValues starTreeValues,
+import org.opensearch.search.aggregations.support.ValuesSource;
+        if (numBits > 0) {
+    public static CompositeIndexFieldInfo getSupportedStarTree(QueryShardContext context) {
+     */
+                .getMetricValuesIterator(metricName);
+        StarTreeValues starTreeValues = getStarTreeValues(ctx, starTree);
+    }
+        String dimensionToMerge,
+        String fieldName = ((ValuesSource.Numeric.FieldData) valuesSource).getIndexFieldName();
+    ) throws IOException {
+    }
+            metricName
+ *
+                long metricValue = metricValuesIterator.nextValue();
+    }
+     * Cache the results in case of multiple aggregations (if cache is initialized)
+        StarTreeFilter baseStarTreeFilter,
+            dimensionFilterMap.put(baseDimension, baseStarTreeFilter.getFiltersForDimension(baseDimension));
+public class StarTreeQueryHelper {
+                }
+        Runnable finalConsumer
+        }
+     * Get the star-tree leaf collector
+    }
+        SearchContext context,
+        FixedBitSet matchingDocsBitSet = starTreeBucketCollector.getMatchingDocsBitSet();
+            String metricName = StarTreeUtils.fullyQualifiedFieldNameForStarTreeMetricsDocValues(
+     */
+import org.opensearch.index.mapper.DocCountFieldMapper;
+            starTree.getField(),
+import java.util.ArrayList;
+        );
+        StarTreeQueryContext starTreeQueryContext = context.getStarTreeQueryContext();
+        return collectDimensionFilters(List.of(initialDimensionFilter), subAggregators);
+import org.opensearch.index.compositeindex.datacube.Dimension;
         if (matchingDimension == null) {
+                for (int i = 0, count = valuesIterator.entryValueCount(); i < count; i++) {
+    }
+                context
+        return matchingDimension;
+    /**
+import org.apache.lucene.util.FixedBitSet;
+            DocCountFieldMapper.NAME,
+import java.util.List;
+                starTreeBucketCollector.collectStarTreeEntry(bit, 0);
+     * This collector computes the aggregation prematurely and invokes an early termination collector
+    public static List<DimensionFilter> collectDimensionFilters(DimensionFilter initialDimensionFilter, Aggregator[] subAggregators) {
+                    valueConsumer.accept(value); // Apply the consumer operation (e.g., max, sum)
+                dimensionFilter.getMatchingDimension(),
+        LeafReaderContext ctx,
+import java.util.Map;
+        CompositeIndexFieldInfo starTree
+            }
+import java.io.IOException;
+import java.util.HashMap;
+     * Checks if the search context can be supported by star-tree
+        if (!(reader.getDocValuesReader() instanceof CompositeIndexReader starTreeDocValuesReader)) {
+import java.util.function.Consumer;
+            @Override
+        if (result == null) {
+    }
+        if (matchingDimensions.size() != 1) {
+     */
+package org.opensearch.search.startree;
+        int numBits = matchingDocsBitSet.length();
+        }
+            for (int bit = matchingDocsBitSet.nextSetBit(0); bit != DocIdSetIterator.NO_MORE_DOCS; bit = (bit + 1 < numBits)
+                }
+        int numBits = filteredValues.length();  // Get the number of the filtered values (matching docs)
+        finalConsumer.run();
+                updateBucket.accept(bucket, metricValue);
+                    continue;  // Skip if no more entries
+        return new StarTreeBucketCollector(parentCollector) {
+                // Advance to the entryId in the valuesIterator
+        return StarTreeTraversalUtil.getStarTreeResult(starTreeValues, starTreeFilter, context);
             throw new IllegalStateException("No matching dimension found for [" + dimensionName + "]");
         }
-        return matchingDimension;
-    }
-
-    public static Dimension getMatchingDimensionOrNull(String dimensionName, List<Dimension> orderedDimensions) {
-        List<Dimension> matchingDimensions = orderedDimensions.stream().filter(x -> x.getField().equals(dimensionName)).toList();
-        if (matchingDimensions.size() != 1) {
-            return null;
-        }
-        return matchingDimensions.get(0);
-    }
-
-    public static StarTreeBucketCollector getStarTreeBucketMetricCollector(
         CompositeIndexFieldInfo starTree,
-        String metric,
-        ValuesSource.Numeric valuesSource,
-        StarTreeBucketCollector parentCollector,
-        Consumer<Long> growArrays,
-        BiConsumer<Long, Long> updateBucket
-    ) throws IOException {
-        assert parentCollector != null;
-        return new StarTreeBucketCollector(parentCollector) {
-            String metricName = StarTreeUtils.fullyQualifiedFieldNameForStarTreeMetricsDocValues(
-                starTree.getField(),
-                ((ValuesSource.Numeric.FieldData) valuesSource).getIndexFieldName(),
-                metric
-            );
-            SortedNumericStarTreeValuesIterator metricValuesIterator = (SortedNumericStarTreeValuesIterator) starTreeValues
-                .getMetricValuesIterator(metricName);
-
-            @Override
-            public void collectStarTreeEntry(int starTreeEntryBit, long bucket) throws IOException {
-                growArrays.accept(bucket);
-                // Advance the valuesIterator to the current bit
-                if (!metricValuesIterator.advanceExact(starTreeEntryBit)) {
+    public static Dimension getMatchingDimensionOrNull(String dimensionName, List<Dimension> orderedDimensions) {
                     return; // Skip if no entries for this document
-                }
-                long metricValue = metricValuesIterator.nextValue();
-                updateBucket.accept(bucket, metricValue);
-            }
-        };
-    }
-
-    /**
-     * Fetches the metric values iterator for document counts from StarTreeValues.
-     */
-    public static SortedNumericStarTreeValuesIterator getDocCountsIterator(
-        StarTreeValues starTreeValues,
-        CompositeIndexFieldInfo starTree
-    ) {
-        String metricName = StarTreeUtils.fullyQualifiedFieldNameForStarTreeMetricsDocValues(
-            starTree.getField(),
-            DocCountFieldMapper.NAME,
-            MetricStat.DOC_COUNT.getTypeName()
-        );
-        return (SortedNumericStarTreeValuesIterator) starTreeValues.getMetricValuesIterator(metricName);
-    }
-
-    /**
-     * For a StarTreeBucketCollector, get matching star-tree entries and update relevant buckets in aggregator
-     */
-    public static void preComputeBucketsWithStarTree(StarTreeBucketCollector starTreeBucketCollector) throws IOException {
-        FixedBitSet matchingDocsBitSet = starTreeBucketCollector.getMatchingDocsBitSet();
-        int numBits = matchingDocsBitSet.length();
-
-        if (numBits > 0) {
-            for (int bit = matchingDocsBitSet.nextSetBit(0); bit != DocIdSetIterator.NO_MORE_DOCS; bit = (bit + 1 < numBits)
-                ? matchingDocsBitSet.nextSetBit(bit + 1)
-                : DocIdSetIterator.NO_MORE_DOCS) {
-                starTreeBucketCollector.collectStarTreeEntry(bit, 0);
-            }
-        }
-    }
-
-    public static StarTreeFilter mergeDimensionFilterIfNotExists(
-        StarTreeFilter baseStarTreeFilter,
-        String dimensionToMerge,
+                growArrays.accept(bucket);
         List<DimensionFilter> dimensionFiltersToMerge
-    ) {
-        Map<String, List<DimensionFilter>> dimensionFilterMap = new HashMap<>(baseStarTreeFilter.getDimensions().size());
-        for (String baseDimension : baseStarTreeFilter.getDimensions()) {
-            dimensionFilterMap.put(baseDimension, baseStarTreeFilter.getFiltersForDimension(baseDimension));
-        }
-        // Don't add groupBy when already present in base filter.
-        if (!dimensionFilterMap.containsKey(dimensionToMerge)) {
-            dimensionFilterMap.put(dimensionToMerge, dimensionFiltersToMerge);
-        }
-        return new StarTreeFilter(dimensionFilterMap);
-    }
-
-    public static FixedBitSet getStarTreeResult(
-        StarTreeValues starTreeValues,
-        SearchContext context,
-        List<DimensionFilter> dimensionFiltersToMerge
-    ) throws IOException {
-        StarTreeFilter starTreeFilter = context.getQueryShardContext().getStarTreeQueryContext().getBaseQueryStarTreeFilter();
-        for (DimensionFilter dimensionFilter : dimensionFiltersToMerge) {
-            starTreeFilter = StarTreeQueryHelper.mergeDimensionFilterIfNotExists(
-                starTreeFilter,
-                dimensionFilter.getMatchingDimension(),
-                List.of(dimensionFilter)
             );
-        }
-
-        return StarTreeTraversalUtil.getStarTreeResult(starTreeValues, starTreeFilter, context);
-    }
-
-    // TODO: Refactor to have a single method for collecting dimension filters
-    public static List<DimensionFilter> collectDimensionFilters(DimensionFilter initialDimensionFilter, Aggregator[] subAggregators) {
-        return collectDimensionFilters(List.of(initialDimensionFilter), subAggregators);
-    }
-
-    public static List<DimensionFilter> collectDimensionFilters(
-        List<DimensionFilter> initialDimensionFilters,
-        Aggregator[] subAggregators
-    ) {
-        List<DimensionFilter> dimensionFiltersToMerge = new ArrayList<>(initialDimensionFilters);
-
-        for (Aggregator subAgg : subAggregators) {
-            if (subAgg instanceof StarTreePreComputeCollector collector) {
-                List<DimensionFilter> childFilters = collector.getDimensionFilters();
-                dimensionFiltersToMerge.addAll(childFilters != null ? childFilters : Collections.emptyList());
+    public static FixedBitSet getStarTreeFilteredValues(SearchContext context, LeafReaderContext ctx, StarTreeValues starTreeValues)
+    /**
+        return new StarTreeFilter(dimensionFilterMap);
+    /**
+                starTreeFilter,
             }
-        }
-
-        return dimensionFiltersToMerge;
-    }
-
-}
+            MetricStat.DOC_COUNT.getTypeName()
+        // Don't add groupBy when already present in base filter.
+     * Fetches the metric values iterator for document counts from StarTreeValues.
+        for (DimensionFilter dimensionFilter : dimensionFiltersToMerge) {
+import org.opensearch.search.aggregations.Aggregator;
+        List<DimensionFilter> dimensionFiltersToMerge

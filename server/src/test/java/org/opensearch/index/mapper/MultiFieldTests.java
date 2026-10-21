@@ -1,299 +1,264 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.index.IndexOptions;
-import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.support.XContentMapValues;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.mapper.ParseContext.Document;
-import org.opensearch.index.mapper.TextFieldMapper.TextFieldType;
-import org.opensearch.test.OpenSearchSingleNodeTestCase;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.opensearch.test.StreamsUtils.copyToBytesFromClasspath;
-import static org.opensearch.test.StreamsUtils.copyToStringFromClasspath;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.notNullValue;
-
-public class MultiFieldTests extends OpenSearchSingleNodeTestCase {
-
-    public void testMultiFieldMultiFields() throws Exception {
-        String mapping = copyToStringFromClasspath("/org/opensearch/index/mapper/multifield/test-multi-fields.json");
+        builder = builder.endObject().endObject().endObject().endObject().endObject();
+            .endObject()
+        Map<String, Object> multiFields = (Map<String, Object>) XContentMapValues.extractValue(
         testMultiField(mapping);
-    }
-
-    private void testMultiField(String mapping) throws Exception {
-        IndexService indexService = createIndex("test");
-        MapperService mapperService = indexService.mapperService();
-
-        indexService.mapperService()
-            .merge(MapperService.SINGLE_MAPPING_NAME, new CompressedXContent(mapping), MapperService.MergeReason.MAPPING_UPDATE);
-
-        BytesReference json = new BytesArray(copyToBytesFromClasspath("/org/opensearch/index/mapper/multifield/test-data.json"));
-        Document doc = mapperService.documentMapper().parse(new SourceToParse("test", "1", json, MediaTypeRegistry.JSON)).rootDoc();
-
-        IndexableField f = doc.getField("name");
+        String mapping = jsonBuilder().startObject()
         assertThat(f.name(), equalTo("name"));
-        assertThat(f.stringValue(), equalTo("some name"));
-        assertThat(f.fieldType().stored(), equalTo(true));
-        assertNotSame(IndexOptions.NONE, f.fieldType().indexOptions());
-
-        f = doc.getField("name.indexed");
-        assertThat(f.name(), equalTo("name.indexed"));
-        assertThat(f.stringValue(), equalTo("some name"));
-        assertThat(f.fieldType().stored(), equalTo(false));
-        assertNotSame(IndexOptions.NONE, f.fieldType().indexOptions());
-
-        f = doc.getField("name.not_indexed");
-        assertThat(f.name(), equalTo("name.not_indexed"));
-        assertThat(f.stringValue(), equalTo("some name"));
-        assertThat(f.fieldType().stored(), equalTo(true));
-        assertEquals(IndexOptions.NONE, f.fieldType().indexOptions());
-
-        f = doc.getField("object1.multi1");
-        assertThat(f.name(), equalTo("object1.multi1"));
-
-        f = doc.getField("object1.multi1.string");
-        assertThat(f.name(), equalTo("object1.multi1.string"));
+ * The OpenSearch Contributors require contributions made to
+            .startObject("fields")
+import org.apache.lucene.index.IndexableField;
+ * software distributed under the License is distributed on an
+            .startObject("properties")
+        IndexableField f = doc.getField("name");
+                new TextFieldMapper.Builder("name", createDefaultIndexAnalyzers()).store(true)
         assertThat(f.binaryValue(), equalTo(new BytesRef("2010-01-01")));
-
-        assertThat(mapperService.fieldType("name"), notNullValue());
-        assertThat(mapperService.fieldType("name"), instanceOf(TextFieldType.class));
-        assertTrue(mapperService.fieldType("name").isSearchable());
-        assertTrue(mapperService.fieldType("name").isStored());
-        assertTrue(mapperService.fieldType("name").getTextSearchInfo().isTokenized());
-
-        assertThat(mapperService.fieldType("name.indexed"), notNullValue());
-        assertThat(mapperService.fieldType("name"), instanceOf(TextFieldType.class));
-        assertTrue(mapperService.fieldType("name.indexed").isSearchable());
-        assertFalse(mapperService.fieldType("name.indexed").isStored());
-        assertTrue(mapperService.fieldType("name.indexed").getTextSearchInfo().isTokenized());
-
-        assertThat(mapperService.fieldType("name.not_indexed"), notNullValue());
+ * SPDX-License-Identifier: Apache-2.0
+import java.io.IOException;
+        }
+            .field("type", "object")
+        assertThat(mapperService.fieldType("name.test1").eagerGlobalOrdinals(), equalTo(true));
+            .startObject("my_field")
+        Set<String> seenFields = new HashSet<>();
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            .startObject("fields");
+import org.opensearch.core.common.bytes.BytesArray;
+            .field("type", "text")
+        // underlying map is LinkedHashMap, so this ok:
+ */
+        assertThat(f.fieldType().stored(), equalTo(true));
+        }
+            .field("type", "nested")
+package org.opensearch.index.mapper;
+ * Licensed to Elasticsearch under one or more contributor
+        IndexService indexService = createIndex("test");
+import static org.opensearch.test.StreamsUtils.copyToBytesFromClasspath;
+        f = doc.getField("name.not_indexed");
+            .endObject()
+import org.opensearch.common.xcontent.XContentHelper;
+        assertThat(mapperService.fieldType("object1.multi1.string"), instanceOf(KeywordFieldMapper.KeywordFieldType.class));
+    }
         assertThat(mapperService.fieldType("name"), instanceOf(TextFieldType.class));
         assertFalse(mapperService.fieldType("name.not_indexed").isSearchable());
-        assertTrue(mapperService.fieldType("name.not_indexed").isStored());
-        assertTrue(mapperService.fieldType("name.not_indexed").getTextSearchInfo().isTokenized());
-
-        assertThat(mapperService.fieldType("name.test1"), notNullValue());
-        assertThat(mapperService.fieldType("name"), instanceOf(TextFieldType.class));
-        assertTrue(mapperService.fieldType("name.test1").isSearchable());
-        assertTrue(mapperService.fieldType("name.test1").isStored());
-        assertTrue(mapperService.fieldType("name.test1").getTextSearchInfo().isTokenized());
-        assertThat(mapperService.fieldType("name.test1").eagerGlobalOrdinals(), equalTo(true));
-
-        assertThat(mapperService.fieldType("object1.multi1"), notNullValue());
         assertThat(mapperService.fieldType("object1.multi1"), instanceOf(DateFieldMapper.DateFieldType.class));
-        assertThat(mapperService.fieldType("object1.multi1.string"), notNullValue());
-        assertThat(mapperService.fieldType("object1.multi1.string"), instanceOf(KeywordFieldMapper.KeywordFieldType.class));
-        assertTrue(mapperService.fieldType("object1.multi1.string").isSearchable());
-        assertNotNull(mapperService.fieldType("object1.multi1.string").getTextSearchInfo());
-        assertFalse(mapperService.fieldType("object1.multi1.string").getTextSearchInfo().isTokenized());
-    }
-
-    public void testBuildThenParse() throws Exception {
-        IndexService indexService = createIndex("test");
-        DocumentMapper builderDocMapper = new DocumentMapper.Builder(
-            new RootObjectMapper.Builder(MapperService.SINGLE_MAPPING_NAME).add(
-                new TextFieldMapper.Builder("name", createDefaultIndexAnalyzers()).store(true)
-                    .addMultiField(new TextFieldMapper.Builder("indexed", createDefaultIndexAnalyzers()).index(true))
-                    .addMultiField(new TextFieldMapper.Builder("not_indexed", createDefaultIndexAnalyzers()).index(false).store(true))
-            ),
-            indexService.mapperService()
-        ).build(indexService.mapperService());
-
-        String builtMapping = builderDocMapper.mappingSource().string();
-        // reparse it
-        DocumentMapper docMapper = indexService.mapperService()
-            .documentMapperParser()
-            .parse(MapperService.SINGLE_MAPPING_NAME, new CompressedXContent(builtMapping));
-
-        BytesReference json = new BytesArray(copyToBytesFromClasspath("/org/opensearch/index/mapper/multifield/test-data.json"));
-        Document doc = docMapper.parse(new SourceToParse("test", "1", json, MediaTypeRegistry.JSON)).rootDoc();
-
-        IndexableField f = doc.getField("name");
-        assertThat(f.name(), equalTo("name"));
-        assertThat(f.stringValue(), equalTo("some name"));
-        assertThat(f.fieldType().stored(), equalTo(true));
-        assertNotSame(IndexOptions.NONE, f.fieldType().indexOptions());
-
-        f = doc.getField("name.indexed");
-        assertThat(f.name(), equalTo("name.indexed"));
-        assertThat(f.stringValue(), equalTo("some name"));
-        assertThat(f.fieldType().tokenized(), equalTo(true));
-        assertThat(f.fieldType().stored(), equalTo(false));
-        assertNotSame(IndexOptions.NONE, f.fieldType().indexOptions());
-
-        f = doc.getField("name.not_indexed");
-        assertThat(f.name(), equalTo("name.not_indexed"));
-        assertThat(f.stringValue(), equalTo("some name"));
-        assertThat(f.fieldType().stored(), equalTo(true));
-        assertEquals(IndexOptions.NONE, f.fieldType().indexOptions());
-    }
-
-    // The underlying order of the fields in multi fields in the mapping source should always be consistent, if not this
-    // can to unnecessary re-syncing of the mappings between the local instance and cluster state
-    public void testMultiFieldsInConsistentOrder() throws Exception {
-        String[] multiFieldNames = new String[randomIntBetween(2, 10)];
-        Set<String> seenFields = new HashSet<>();
-        for (int i = 0; i < multiFieldNames.length; i++) {
-            multiFieldNames[i] = randomValueOtherThanMany(s -> !seenFields.add(s), () -> randomAlphaOfLength(4));
-        }
-
-        XContentBuilder builder = jsonBuilder().startObject()
-            .startObject("type")
-            .startObject("properties")
-            .startObject("my_field")
-            .field("type", "text")
-            .startObject("fields");
-        for (String multiFieldName : multiFieldNames) {
-            builder = builder.startObject(multiFieldName).field("type", "text").endObject();
-        }
-        builder = builder.endObject().endObject().endObject().endObject().endObject();
-        String mapping = builder.toString();
-        DocumentMapper docMapper = createIndex("test").mapperService()
-            .documentMapperParser()
-            .parse("type", new CompressedXContent(mapping));
-        Arrays.sort(multiFieldNames);
-
-        Map<String, Object> sourceAsMap = XContentHelper.convertToMap(
-            docMapper.mappingSource().compressedReference(),
-            true,
-            builder.contentType()
-        ).v2();
-        @SuppressWarnings("unchecked")
-        Map<String, Object> multiFields = (Map<String, Object>) XContentMapValues.extractValue(
-            "type.properties.my_field.fields",
-            sourceAsMap
-        );
         assertThat(multiFields.size(), equalTo(multiFieldNames.length));
-
-        int i = 0;
-        // underlying map is LinkedHashMap, so this ok:
-        for (String field : multiFields.keySet()) {
-            assertThat(field, equalTo(multiFieldNames[i++]));
-        }
-    }
-
-    public void testObjectFieldNotAllowed() throws Exception {
-        String mapping = jsonBuilder().startObject()
-            .startObject("type")
-            .startObject("properties")
-            .startObject("my_field")
-            .field("type", "text")
-            .startObject("fields")
-            .startObject("multi")
-            .field("type", "object")
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject()
-            .toString();
-        final DocumentMapperParser parser = createIndex("test").mapperService().documentMapperParser();
         try {
-            parser.parse("type", new CompressedXContent(mapping));
-            fail("expected mapping parse failure");
         } catch (MapperParsingException e) {
-            assertTrue(e.getMessage().contains("cannot be used in multi field"));
-        }
-    }
-
-    public void testNestedFieldNotAllowed() throws Exception {
-        String mapping = jsonBuilder().startObject()
-            .startObject("type")
-            .startObject("properties")
-            .startObject("my_field")
+                    .addMultiField(new TextFieldMapper.Builder("indexed", createDefaultIndexAnalyzers()).index(true))
+ * You may obtain a copy of the License at
+            true,
             .field("type", "text")
-            .startObject("fields")
-            .startObject("multi")
-            .field("type", "nested")
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject()
-            .toString();
-        final DocumentMapperParser parser = createIndex("test").mapperService().documentMapperParser();
-        try {
-            parser.parse("type", new CompressedXContent(mapping));
-            fail("expected mapping parse failure");
-        } catch (MapperParsingException e) {
-            assertTrue(e.getMessage().contains("cannot be used in multi field"));
-        }
-    }
-
-    public void testMultiFieldWithDot() throws IOException {
-        XContentBuilder mapping = jsonBuilder();
+ * specific language governing permissions and limitations
+            multiFieldNames[i] = randomValueOtherThanMany(s -> !seenFields.add(s), () -> randomAlphaOfLength(4));
         mapping.startObject()
-            .startObject("my_type")
-            .startObject("properties")
-            .startObject("city")
-            .field("type", "text")
-            .startObject("fields")
-            .startObject("raw.foo")
-            .field("type", "text")
-            .field("index", "not_analyzed")
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject();
-
-        MapperService mapperService = createIndex("test").mapperService();
-        try {
-            mapperService.documentMapperParser().parse("my_type", new CompressedXContent(mapping.toString()));
-            fail("this should throw an exception because one field contains a dot");
+        for (String field : multiFields.keySet()) {
+        BytesReference json = new BytesArray(copyToBytesFromClasspath("/org/opensearch/index/mapper/multifield/test-data.json"));
+ */
         } catch (MapperParsingException e) {
-            assertThat(e.getMessage(), equalTo("Field name [raw.foo] which is a multi field of [city] cannot contain '.'"));
-        }
+            .documentMapperParser()
+            "type.properties.my_field.fields",
+            .startObject("city")
+            .startObject("properties")
+        final DocumentMapperParser parser = createIndex("test").mapperService().documentMapperParser();
+        assertThat(mapperService.fieldType("object1.multi1.string"), notNullValue());
+import static org.opensearch.test.StreamsUtils.copyToStringFromClasspath;
+            mapperService.documentMapperParser().parse("my_type", new CompressedXContent(mapping.toString()));
+            .endObject()
     }
+ */
+        Document doc = mapperService.documentMapper().parse(new SourceToParse("test", "1", json, MediaTypeRegistry.JSON)).rootDoc();
+        }
+        assertNotSame(IndexOptions.NONE, f.fieldType().indexOptions());
+        assertThat(mapperService.fieldType("name.not_indexed"), notNullValue());
+        Arrays.sort(multiFieldNames);
+        assertThat(f.name(), equalTo("name.not_indexed"));
 }
+        assertThat(f.stringValue(), equalTo("some name"));
+import org.opensearch.core.common.bytes.BytesReference;
+        assertTrue(mapperService.fieldType("name.not_indexed").isStored());
+import static org.hamcrest.Matchers.notNullValue;
+            assertThat(e.getMessage(), equalTo("Field name [raw.foo] which is a multi field of [city] cannot contain '.'"));
+        assertTrue(mapperService.fieldType("name.indexed").isSearchable());
+        @SuppressWarnings("unchecked")
+        assertThat(mapperService.fieldType("name"), instanceOf(TextFieldType.class));
+    public void testMultiFieldsInConsistentOrder() throws Exception {
+    public void testNestedFieldNotAllowed() throws Exception {
+        BytesReference json = new BytesArray(copyToBytesFromClasspath("/org/opensearch/index/mapper/multifield/test-data.json"));
+            .field("index", "not_analyzed")
+import org.opensearch.index.mapper.ParseContext.Document;
+        Map<String, Object> sourceAsMap = XContentHelper.convertToMap(
+import org.opensearch.core.xcontent.XContentBuilder;
+    private void testMultiField(String mapping) throws Exception {
+        assertThat(mapperService.fieldType("name"), instanceOf(TextFieldType.class));
+        assertThat(f.fieldType().stored(), equalTo(false));
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
+    }
+import java.util.Set;
+                    .addMultiField(new TextFieldMapper.Builder("not_indexed", createDefaultIndexAnalyzers()).index(false).store(true))
+        assertTrue(mapperService.fieldType("name").getTextSearchInfo().isTokenized());
+import org.opensearch.common.compress.CompressedXContent;
+            .endObject()
+            .parse(MapperService.SINGLE_MAPPING_NAME, new CompressedXContent(builtMapping));
+            .endObject()
+        f = doc.getField("object1.multi1.string");
+        Document doc = docMapper.parse(new SourceToParse("test", "1", json, MediaTypeRegistry.JSON)).rootDoc();
+            .endObject()
+ * license agreements. See the NOTICE file distributed with
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+        DocumentMapper docMapper = createIndex("test").mapperService()
+import org.apache.lucene.util.BytesRef;
+            .toString();
+            .endObject()
+            .startObject("type")
+        assertTrue(mapperService.fieldType("name.test1").isSearchable());
+            .startObject("multi")
+import java.util.Map;
+            .startObject("type")
+        assertFalse(mapperService.fieldType("name.indexed").isStored());
+        assertThat(f.fieldType().stored(), equalTo(true));
+        String[] multiFieldNames = new String[randomIntBetween(2, 10)];
+        assertNotSame(IndexOptions.NONE, f.fieldType().indexOptions());
+            .documentMapperParser()
+        assertEquals(IndexOptions.NONE, f.fieldType().indexOptions());
+            new RootObjectMapper.Builder(MapperService.SINGLE_MAPPING_NAME).add(
+/*
+        String builtMapping = builderDocMapper.mappingSource().string();
+        MapperService mapperService = indexService.mapperService();
+            .startObject("my_field")
+        f = doc.getField("name.indexed");
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        assertNotNull(mapperService.fieldType("object1.multi1.string").getTextSearchInfo());
+        assertThat(f.fieldType().stored(), equalTo(true));
+            parser.parse("type", new CompressedXContent(mapping));
+import org.apache.lucene.index.IndexOptions;
+            .startObject("fields")
+            builder.contentType()
+            assertTrue(e.getMessage().contains("cannot be used in multi field"));
+        f = doc.getField("name.indexed");
+        assertThat(mapperService.fieldType("object1.multi1"), notNullValue());
+        assertThat(f.stringValue(), equalTo("some name"));
+import static org.hamcrest.Matchers.instanceOf;
+            sourceAsMap
+        IndexableField f = doc.getField("name");
+        f = doc.getField("object1.multi1");
+import java.util.HashSet;
+        final DocumentMapperParser parser = createIndex("test").mapperService().documentMapperParser();
+        assertTrue(mapperService.fieldType("name.indexed").getTextSearchInfo().isTokenized());
+            .startObject("my_type")
+ * this work for additional information regarding copyright
+            .toString();
+        assertTrue(mapperService.fieldType("name").isSearchable());
+ *
+        XContentBuilder builder = jsonBuilder().startObject()
+        try {
+        assertThat(f.name(), equalTo("object1.multi1.string"));
+        assertThat(mapperService.fieldType("name"), instanceOf(TextFieldType.class));
+            ),
+ * Modifications Copyright OpenSearch Contributors. See
+            .startObject("properties")
+ * compatible open source license.
+        assertThat(f.name(), equalTo("name"));
+        MapperService mapperService = createIndex("test").mapperService();
+import java.util.Arrays;
+            .startObject("fields")
+        String mapping = builder.toString();
+        assertTrue(mapperService.fieldType("name").isStored());
+import org.opensearch.common.xcontent.support.XContentMapValues;
+    }
+        assertThat(mapperService.fieldType("name.indexed"), notNullValue());
+        try {
+        assertEquals(IndexOptions.NONE, f.fieldType().indexOptions());
+        DocumentMapper docMapper = indexService.mapperService()
+        assertThat(f.fieldType().stored(), equalTo(true));
+/*
+            .field("type", "text")
+            .startObject("type")
+            .startObject("raw.foo")
+        assertThat(f.stringValue(), equalTo("some name"));
+            assertTrue(e.getMessage().contains("cannot be used in multi field"));
+            parser.parse("type", new CompressedXContent(mapping));
+ * this file be licensed under the Apache-2.0 license or a
+            fail("expected mapping parse failure");
+        assertThat(f.name(), equalTo("name.indexed"));
+        f = doc.getField("name.not_indexed");
+import static org.hamcrest.Matchers.equalTo;
+        assertThat(f.fieldType().stored(), equalTo(false));
+ * under the License.
+            .endObject()
+            .endObject()
+        ).v2();
+            .startObject("multi")
+        assertTrue(mapperService.fieldType("name.test1").getTextSearchInfo().isTokenized());
+            .endObject();
+ *
+        assertNotSame(IndexOptions.NONE, f.fieldType().indexOptions());
+            .field("type", "text")
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            .endObject()
+ * Unless required by applicable law or agreed to in writing,
+            fail("this should throw an exception because one field contains a dot");
+            .merge(MapperService.SINGLE_MAPPING_NAME, new CompressedXContent(mapping), MapperService.MergeReason.MAPPING_UPDATE);
+        int i = 0;
+            .parse("type", new CompressedXContent(mapping));
+ * the Apache License, Version 2.0 (the "License"); you may
+ * ownership. Elasticsearch licenses this file to you under
+ * KIND, either express or implied.  See the License for the
+            .endObject()
+        for (int i = 0; i < multiFieldNames.length; i++) {
+    }
+        assertThat(f.stringValue(), equalTo("some name"));
+    public void testMultiFieldMultiFields() throws Exception {
+            .endObject()
+    public void testBuildThenParse() throws Exception {
+        String mapping = copyToStringFromClasspath("/org/opensearch/index/mapper/multifield/test-multi-fields.json");
+            assertThat(field, equalTo(multiFieldNames[i++]));
+ * GitHub history for details.
+            .startObject("my_field")
+        assertThat(f.stringValue(), equalTo("some name"));
+    // can to unnecessary re-syncing of the mappings between the local instance and cluster state
+        DocumentMapper builderDocMapper = new DocumentMapper.Builder(
+            builder = builder.startObject(multiFieldName).field("type", "text").endObject();
+import org.opensearch.index.mapper.TextFieldMapper.TextFieldType;
+        }
+            .endObject()
+import org.opensearch.index.IndexService;
+        assertThat(f.name(), equalTo("name.not_indexed"));
+        assertNotSame(IndexOptions.NONE, f.fieldType().indexOptions());
+            .field("type", "text")
+        }
+        assertThat(f.stringValue(), equalTo("some name"));
+        assertThat(f.name(), equalTo("name.indexed"));
+            .endObject()
+        String mapping = jsonBuilder().startObject()
+ *
+        XContentBuilder mapping = jsonBuilder();
+            .endObject()
+            fail("expected mapping parse failure");
+/*
+            .endObject()
+        assertFalse(mapperService.fieldType("object1.multi1.string").getTextSearchInfo().isTokenized());
+        ).build(indexService.mapperService());
+        } catch (MapperParsingException e) {
+        assertThat(f.name(), equalTo("object1.multi1"));
+        assertThat(mapperService.fieldType("name"), notNullValue());
+    public void testMultiFieldWithDot() throws IOException {
+    }
+        IndexService indexService = createIndex("test");
+ * not use this file except in compliance with the License.
+        }
+        // reparse it
+        );
+        assertThat(mapperService.fieldType("name.test1"), notNullValue());
+    public void testObjectFieldNotAllowed() throws Exception {
+        indexService.mapperService()
+    }
+            .startObject("properties")
+        assertTrue(mapperService.fieldType("name.test1").isStored());
+            indexService.mapperService()
+    // The underlying order of the fields in multi fields in the mapping source should always be consistent, if not this
+            .endObject()
+public class MultiFieldTests extends OpenSearchSingleNodeTestCase {
+        for (String multiFieldName : multiFieldNames) {
+        assertTrue(mapperService.fieldType("object1.multi1.string").isSearchable());
+        assertTrue(mapperService.fieldType("name.not_indexed").getTextSearchInfo().isTokenized());
+        assertThat(f.fieldType().tokenized(), equalTo(true));
+            docMapper.mappingSource().compressedReference(),

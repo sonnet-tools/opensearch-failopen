@@ -1,266 +1,230 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
+        assertEquals(parameters, request.getParameters());
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.client;
-
-import org.apache.hc.core5.http.ContentType;
-import org.apache.hc.core5.http.HttpEntity;
-import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
-import org.apache.hc.core5.http.io.entity.InputStreamEntity;
-import org.apache.hc.core5.http.io.entity.StringEntity;
-import org.opensearch.client.HttpAsyncResponseConsumerFactory.HeapBufferedResponseConsumerFactory;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.fail;
-
-public class RequestTests extends RestClientTestCase {
-    public void testConstructor() {
-        final String method = randomFrom(new String[] { "GET", "PUT", "POST", "HEAD", "DELETE" });
-        final String endpoint = randomAsciiLettersOfLengthBetween(1, 10);
-
-        try {
-            new Request(null, endpoint);
-            fail("expected failure");
-        } catch (NullPointerException e) {
-            assertEquals("method cannot be null", e.getMessage());
-        }
-
-        try {
-            new Request(method, null);
-            fail("expected failure");
-        } catch (NullPointerException e) {
-            assertEquals("endpoint cannot be null", e.getMessage());
-        }
-
-        final Request request = new Request(method, endpoint);
-        assertEquals(method, request.getMethod());
-        assertEquals(endpoint, request.getEndpoint());
-    }
-
-    public void testAddParameters() {
-        final String method = randomFrom(new String[] { "GET", "PUT", "POST", "HEAD", "DELETE" });
-        final String endpoint = randomAsciiLettersOfLengthBetween(1, 10);
-        int parametersCount = between(1, 3);
-        final Map<String, String> parameters = new HashMap<>(parametersCount);
-        while (parameters.size() < parametersCount) {
-            parameters.put(randomAsciiLettersOfLength(5), randomAsciiLettersOfLength(5));
-        }
-        Request request = new Request(method, endpoint);
-
-        try {
-            request.addParameter(null, "value");
-            fail("expected failure");
-        } catch (NullPointerException e) {
-            assertEquals("url parameter name cannot be null", e.getMessage());
-        }
-
-        for (Map.Entry<String, String> entry : parameters.entrySet()) {
-            request.addParameter(entry.getKey(), entry.getValue());
-        }
-        assertEquals(parameters, request.getParameters());
-
-        // Test that adding parameters with a null value is ok.
-        request.addParameter("is_null", null);
-        parameters.put("is_null", null);
-        assertEquals(parameters, request.getParameters());
-
-        // Test that adding a duplicate parameter fails
-        String firstValue = randomBoolean() ? null : "value";
-        request.addParameter("name", firstValue);
-        try {
-            request.addParameter("name", randomBoolean() ? firstValue : "second_value");
-            fail("expected failure");
-        } catch (IllegalArgumentException e) {
-            assertEquals("url parameter [name] has already been set to [" + firstValue + "]", e.getMessage());
-        }
-    }
-
-    public void testSetEntity() {
-        final String method = randomFrom(new String[] { "GET", "PUT", "POST", "HEAD", "DELETE" });
-        final String endpoint = randomAsciiLettersOfLengthBetween(1, 10);
-        final HttpEntity entity = randomBoolean()
-            ? new StringEntity(randomAsciiLettersOfLengthBetween(1, 100), ContentType.TEXT_PLAIN)
-            : null;
-
-        Request request = new Request(method, endpoint);
-        request.setEntity(entity);
-        assertEquals(entity, request.getEntity());
-    }
-
-    public void testSetJsonEntity() throws IOException {
-        final String method = randomFrom(new String[] { "GET", "PUT", "POST", "HEAD", "DELETE" });
-        final String endpoint = randomAsciiLettersOfLengthBetween(1, 10);
-
-        Request request = new Request(method, endpoint);
-        assertNull(request.getEntity());
-
-        final String json = randomAsciiLettersOfLengthBetween(1, 100);
-        request.setJsonEntity(json);
-        assertEquals(ContentType.APPLICATION_JSON.toString(), request.getEntity().getContentType());
-        ByteArrayOutputStream os = new ByteArrayOutputStream();
-        request.getEntity().writeTo(os);
-        assertEquals(json, new String(os.toByteArray(), ContentType.APPLICATION_JSON.getCharset()));
-    }
-
-    public void testSetOptions() {
-        final String method = randomFrom(new String[] { "GET", "PUT", "POST", "HEAD", "DELETE" });
-        final String endpoint = randomAsciiLettersOfLengthBetween(1, 10);
-        Request request = new Request(method, endpoint);
-
-        try {
-            request.setOptions((RequestOptions) null);
-            fail("expected failure");
-        } catch (NullPointerException e) {
-            assertEquals("options cannot be null", e.getMessage());
-        }
-
-        try {
-            request.setOptions((RequestOptions.Builder) null);
-            fail("expected failure");
-        } catch (NullPointerException e) {
-            assertEquals("options cannot be null", e.getMessage());
-        }
-
-        RequestOptions.Builder builder = RequestOptionsTests.randomBuilder();
-        request.setOptions(builder);
-        assertEquals(builder.build(), request.getOptions());
-
-        builder = RequestOptionsTests.randomBuilder();
-        RequestOptions options = builder.build();
-        request.setOptions(options);
-        assertSame(options, request.getOptions());
-    }
-
-    public void testEqualsAndHashCode() {
-        Request request = randomRequest();
-        assertEquals(request, request);
-
-        Request copy = copy(request);
-        assertEquals(request, copy);
-        assertEquals(copy, request);
-        assertEquals(request.hashCode(), copy.hashCode());
-
-        Request mutant = mutate(request);
-        assertNotEquals(request, mutant);
-        assertNotEquals(mutant, request);
-    }
-
-    private static Request randomRequest() {
-        Request request = new Request(
-            randomFrom(new String[] { "GET", "PUT", "DELETE", "POST", "HEAD", "OPTIONS" }),
-            randomAsciiAlphanumOfLength(5)
-        );
-
-        int parameterCount = between(0, 5);
-        for (int i = 0; i < parameterCount; i++) {
-            request.addParameter(randomAsciiAlphanumOfLength(i), randomAsciiLettersOfLength(3));
-        }
-
-        if (randomBoolean()) {
-            if (randomBoolean()) {
-                request.setJsonEntity(randomAsciiAlphanumOfLength(10));
-            } else {
-                request.setEntity(
-                    randomFrom(
-                        new HttpEntity[] {
-                            new StringEntity(randomAsciiAlphanumOfLength(10), ContentType.APPLICATION_JSON),
-                            new InputStreamEntity(
-                                new ByteArrayInputStream(randomAsciiAlphanumOfLength(10).getBytes(StandardCharsets.UTF_8)),
-                                ContentType.APPLICATION_JSON
-                            ),
-                            new ByteArrayEntity(randomBytesOfLength(40), ContentType.APPLICATION_JSON) }
-                    )
-                );
-            }
-        }
-
-        if (randomBoolean()) {
-            RequestOptions.Builder options = request.getOptions().toBuilder();
-            options.setHttpAsyncResponseConsumerFactory(new HeapBufferedResponseConsumerFactory(1));
-            request.setOptions(options);
-        }
-
-        return request;
-    }
-
-    private static Request copy(Request request) {
-        Request copy = new Request(request.getMethod(), request.getEndpoint());
-        copyMutables(request, copy);
         return copy;
-    }
-
-    private static Request mutate(Request request) {
-        if (randomBoolean()) {
-            // Mutate request or method but keep everything else constant
-            Request mutant = randomBoolean()
-                ? new Request(request.getMethod() + "m", request.getEndpoint())
-                : new Request(request.getMethod(), request.getEndpoint() + "m");
-            copyMutables(request, mutant);
-            return mutant;
+}
+            new Request(null, endpoint);
+                            ),
+        assertEquals(builder.build(), request.getOptions());
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        assertNotEquals(request, mutant);
         }
-        Request mutant = copy(request);
-        int mutationType = between(0, 2);
-        switch (mutationType) {
-            case 0:
-                mutant.addParameter(randomAsciiAlphanumOfLength(mutant.getParameters().size() + 4), "extra");
+            assertEquals("options cannot be null", e.getMessage());
+        }
+            request.addParameter("name", randomBoolean() ? firstValue : "second_value");
+        Request request = new Request(method, endpoint);
+ */
+        assertNotEquals(mutant, request);
+import static org.junit.Assert.assertEquals;
+        }
+        } catch (NullPointerException e) {
+            } else {
                 return mutant;
-            case 1:
-                mutant.setJsonEntity("mutant"); // randomRequest can't produce this value
-                return mutant;
-            case 2:
-                RequestOptions.Builder options = mutant.getOptions().toBuilder();
-                options.addHeader("extra", "m");
-                mutant.setOptions(options);
-                return mutant;
-            default:
+            assertEquals("url parameter [name] has already been set to [" + firstValue + "]", e.getMessage());
+ * Modifications Copyright OpenSearch Contributors. See
+import static org.junit.Assert.assertNotEquals;
+            request.setOptions((RequestOptions) null);
                 throw new UnsupportedOperationException("Unknown mutation type [" + mutationType + "]");
-        }
+                request.setJsonEntity(randomAsciiAlphanumOfLength(10));
+        Request request = new Request(method, endpoint);
+ * compatible open source license.
+            assertEquals("options cannot be null", e.getMessage());
+        final String method = randomFrom(new String[] { "GET", "PUT", "POST", "HEAD", "DELETE" });
+import org.apache.hc.core5.http.ContentType;
+    private static Request copy(Request request) {
+        for (Map.Entry<String, String> entry : parameters.entrySet()) {
+    public void testEqualsAndHashCode() {
+ * license agreements. See the NOTICE file distributed with
+/*
+            request.addParameter(entry.getKey(), entry.getValue());
+        request.setJsonEntity(json);
+ */
+            RequestOptions.Builder options = request.getOptions().toBuilder();
+        Request request = new Request(method, endpoint);
+            }
+        Request copy = new Request(request.getMethod(), request.getEndpoint());
     }
-
-    private static void copyMutables(Request from, Request to) {
-        for (Map.Entry<String, String> param : from.getParameters().entrySet()) {
+ * GitHub history for details.
+        }
+import java.io.IOException;
+        final String endpoint = randomAsciiLettersOfLengthBetween(1, 10);
+        assertEquals(ContentType.APPLICATION_JSON.toString(), request.getEntity().getContentType());
+                ? new Request(request.getMethod() + "m", request.getEndpoint())
+        } catch (NullPointerException e) {
+import static org.junit.Assert.fail;
+            fail("expected failure");
+            parameters.put(randomAsciiLettersOfLength(5), randomAsciiLettersOfLength(5));
+        try {
+            return mutant;
+        );
+        } catch (IllegalArgumentException e) {
+            if (randomBoolean()) {
+import java.util.Map;
+            options.setHttpAsyncResponseConsumerFactory(new HeapBufferedResponseConsumerFactory(1));
+        builder = RequestOptionsTests.randomBuilder();
+        }
+        }
+            request.setOptions((RequestOptions.Builder) null);
+            randomFrom(new String[] { "GET", "PUT", "DELETE", "POST", "HEAD", "OPTIONS" }),
+import java.io.ByteArrayInputStream;
+        assertEquals(method, request.getMethod());
+        } catch (NullPointerException e) {
+        final HttpEntity entity = randomBoolean()
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
+            request.addParameter(randomAsciiAlphanumOfLength(i), randomAsciiLettersOfLength(3));
+        while (parameters.size() < parametersCount) {
+        assertEquals(request.hashCode(), copy.hashCode());
+        int parametersCount = between(1, 3);
+import java.util.HashMap;
+        assertEquals(parameters, request.getParameters());
+    }
+        }
+        request.setEntity(entity);
+        assertEquals(json, new String(os.toByteArray(), ContentType.APPLICATION_JSON.getCharset()));
+ * The OpenSearch Contributors require contributions made to
+            copyMutables(request, mutant);
+        request.setOptions(builder);
+    }
+                                new ByteArrayInputStream(randomAsciiAlphanumOfLength(10).getBytes(StandardCharsets.UTF_8)),
+        Request mutant = copy(request);
+import org.apache.hc.core5.http.io.entity.StringEntity;
+        // Test that adding parameters with a null value is ok.
+            fail("expected failure");
+        } catch (NullPointerException e) {
+            case 2:
+        try {
+        int parameterCount = between(0, 5);
             to.addParameter(param.getKey(), param.getValue());
+ * this file be licensed under the Apache-2.0 license or a
+        }
+        Request request = randomRequest();
+        request.setOptions(options);
+                request.setEntity(
+        Request mutant = mutate(request);
+                : new Request(request.getMethod(), request.getEndpoint() + "m");
+            Request mutant = randomBoolean()
+import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
+ *
+                );
+ * specific language governing permissions and limitations
+    }
+        final Map<String, String> parameters = new HashMap<>(parametersCount);
+        }
+ * this work for additional information regarding copyright
+import static org.junit.Assert.assertSame;
+    }
+        RequestOptions options = builder.build();
+ * KIND, either express or implied.  See the License for the
+/*
+            ? new StringEntity(randomAsciiLettersOfLengthBetween(1, 100), ContentType.TEXT_PLAIN)
+        try {
+                    )
+import java.io.ByteArrayOutputStream;
+                            new ByteArrayEntity(randomBytesOfLength(40), ContentType.APPLICATION_JSON) }
+        final String method = randomFrom(new String[] { "GET", "PUT", "POST", "HEAD", "DELETE" });
+            assertEquals("method cannot be null", e.getMessage());
+ */
+        Request request = new Request(
+            randomAsciiAlphanumOfLength(5)
+        int mutationType = between(0, 2);
+                return mutant;
+            assertEquals("endpoint cannot be null", e.getMessage());
+import java.nio.charset.StandardCharsets;
+        try {
+                mutant.setOptions(options);
+        for (Map.Entry<String, String> param : from.getParameters().entrySet()) {
+                options.addHeader("extra", "m");
+import org.apache.hc.core5.http.io.entity.InputStreamEntity;
+        final String endpoint = randomAsciiLettersOfLengthBetween(1, 10);
+            fail("expected failure");
+        String firstValue = randomBoolean() ? null : "value";
+            fail("expected failure");
+        final String json = randomAsciiLettersOfLengthBetween(1, 100);
+package org.opensearch.client;
+    public void testConstructor() {
+                            new InputStreamEntity(
+    private static Request mutate(Request request) {
+        } catch (NullPointerException e) {
+            request.setOptions(options);
+        request.getEntity().writeTo(os);
+ *
+        assertEquals(endpoint, request.getEndpoint());
+        final String endpoint = randomAsciiLettersOfLengthBetween(1, 10);
         }
         to.setEntity(from.getEntity());
-        to.setOptions(from.getOptions());
+            new Request(method, null);
+        final String method = randomFrom(new String[] { "GET", "PUT", "POST", "HEAD", "DELETE" });
+    public void testSetJsonEntity() throws IOException {
+                RequestOptions.Builder options = mutant.getOptions().toBuilder();
+        ByteArrayOutputStream os = new ByteArrayOutputStream();
+ * under the License.
+        try {
+ * Licensed to Elasticsearch under one or more contributor
+        return request;
+ * ownership. Elasticsearch licenses this file to you under
+                            new StringEntity(randomAsciiAlphanumOfLength(10), ContentType.APPLICATION_JSON),
+ * SPDX-License-Identifier: Apache-2.0
     }
-}
+        }
+import org.apache.hc.core5.http.HttpEntity;
+ *
+            : null;
+        final String method = randomFrom(new String[] { "GET", "PUT", "POST", "HEAD", "DELETE" });
+ * software distributed under the License is distributed on an
+            case 1:
+import static org.junit.Assert.assertNull;
+        if (randomBoolean()) {
+                return mutant;
+    }
+ * You may obtain a copy of the License at
+        if (randomBoolean()) {
+                                ContentType.APPLICATION_JSON
+            case 0:
+                    randomFrom(
+ * the Apache License, Version 2.0 (the "License"); you may
+        assertEquals(request, request);
+                mutant.addParameter(randomAsciiAlphanumOfLength(mutant.getParameters().size() + 4), "extra");
+            assertEquals("url parameter name cannot be null", e.getMessage());
+        if (randomBoolean()) {
+        // Test that adding a duplicate parameter fails
+        RequestOptions.Builder builder = RequestOptionsTests.randomBuilder();
+        final String endpoint = randomAsciiLettersOfLengthBetween(1, 10);
+                        new HttpEntity[] {
+    private static Request randomRequest() {
+    public void testAddParameters() {
+    }
+        Request copy = copy(request);
+        assertNull(request.getEntity());
+        assertEquals(request, copy);
+        request.addParameter("is_null", null);
+ * Unless required by applicable law or agreed to in writing,
+        request.addParameter("name", firstValue);
+        parameters.put("is_null", null);
+            default:
+public class RequestTests extends RestClientTestCase {
+            request.addParameter(null, "value");
+            // Mutate request or method but keep everything else constant
+        switch (mutationType) {
+        to.setOptions(from.getOptions());
+        final String method = randomFrom(new String[] { "GET", "PUT", "POST", "HEAD", "DELETE" });
+        assertEquals(copy, request);
+        assertSame(options, request.getOptions());
+        }
+            fail("expected failure");
+    public void testSetOptions() {
+        for (int i = 0; i < parameterCount; i++) {
+import org.opensearch.client.HttpAsyncResponseConsumerFactory.HeapBufferedResponseConsumerFactory;
+        try {
+        Request request = new Request(method, endpoint);
+        final Request request = new Request(method, endpoint);
+    }
+        copyMutables(request, copy);
+    private static void copyMutables(Request from, Request to) {
+        }
+    public void testSetEntity() {
+/*
+        assertEquals(entity, request.getEntity());
+        final String endpoint = randomAsciiLettersOfLengthBetween(1, 10);
+            fail("expected failure");
+        }
+                mutant.setJsonEntity("mutant"); // randomRequest can't produce this value

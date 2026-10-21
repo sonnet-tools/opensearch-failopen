@@ -1,188 +1,163 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.action.admin.cluster.shards.routing.weighted.get;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.cluster.metadata.WeightedRoutingMetadata;
-import org.opensearch.cluster.routing.WeightedRouting;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
-
-/**
- * Response from fetching weights for weighted round-robin search routing policy.
- *
- * @opensearch.api
- */
-@PublicApi(since = "2.4.0")
-public class ClusterGetWeightedRoutingResponse extends ActionResponse implements ToXContentObject {
-
-    private static final String WEIGHTS = "weights";
-    private long version;
-    private final Boolean discoveredClusterManager;
-
-    private static final String DISCOVERED_CLUSTER_MANAGER = "discovered_cluster_manager";
-
-    public WeightedRouting getWeightedRouting() {
-        return weightedRouting;
     }
-
-    private final WeightedRouting weightedRouting;
-
-    public long getVersion() {
-        return version;
-    }
-
-    public Boolean getDiscoveredClusterManager() {
-        return discoveredClusterManager;
-    }
-
-    ClusterGetWeightedRoutingResponse() {
-        this.weightedRouting = null;
-        this.discoveredClusterManager = null;
-    }
-
-    public ClusterGetWeightedRoutingResponse(WeightedRouting weightedRouting, Boolean discoveredClusterManager, long version) {
-        this.discoveredClusterManager = discoveredClusterManager;
-        this.weightedRouting = weightedRouting;
-        this.version = version;
-    }
-
-    ClusterGetWeightedRoutingResponse(StreamInput in) throws IOException {
-        if (in.available() != 0) {
-            this.weightedRouting = new WeightedRouting(in);
-            this.version = in.readLong();
-            this.discoveredClusterManager = in.readOptionalBoolean();
-        } else {
-            this.weightedRouting = null;
-            this.discoveredClusterManager = null;
-        }
-    }
-
-    /**
-     * List of weights to return
-     *
-     * @return list or weights
-     */
-    public WeightedRouting weights() {
-        return this.weightedRouting;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        if (weightedRouting != null) {
-            weightedRouting.writeTo(out);
-            out.writeLong(version);
-        }
-        if (discoveredClusterManager != null) {
-            out.writeOptionalBoolean(discoveredClusterManager);
-        }
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        if (this.weightedRouting != null) {
-            builder.startObject(WEIGHTS);
-            for (Map.Entry<String, Double> entry : weightedRouting.weights().entrySet()) {
-                builder.field(entry.getKey(), entry.getValue().toString());
-            }
-
-            builder.endObject();
-            builder.field(WeightedRoutingMetadata.VERSION, version);
-            if (discoveredClusterManager != null) {
-                builder.field(DISCOVERED_CLUSTER_MANAGER, discoveredClusterManager);
-            }
-        }
-        builder.endObject();
-        return builder;
-    }
-
-    public static ClusterGetWeightedRoutingResponse fromXContent(XContentParser parser) throws IOException {
-        ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-        XContentParser.Token token;
-        String attrKey = null, attrValue;
-        Boolean discoveredClusterManager = null;
-        Map<String, Double> weights = new HashMap<>();
-        long version = WeightedRoutingMetadata.VERSION_UNSET_VALUE;
-        String weightsAttr;
-        String fieldName = null;
-
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                fieldName = parser.currentName();
-                if (fieldName != null
-                    && (fieldName.equals(WeightedRoutingMetadata.VERSION) || fieldName.equals(DISCOVERED_CLUSTER_MANAGER))) {
-                    continue;
-                } else if (fieldName != null && fieldName.equals(WEIGHTS)) {
-                    weightsAttr = parser.currentName();
-                } else {
-                    throw new OpenSearchParseException("failed to parse weighted routing request object", fieldName);
-                }
-                if (parser.nextToken() != XContentParser.Token.START_OBJECT) {
-                    throw new OpenSearchParseException(
-                        "failed to parse weighted routing request object [{}], expected object",
-                        weightsAttr
-                    );
-                }
-
-                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                    if (token == XContentParser.Token.FIELD_NAME) {
-                        attrKey = parser.currentName();
                     } else if (token == XContentParser.Token.VALUE_STRING) {
-                        attrValue = parser.text();
-                        if (attrKey != null) {
-                            weights.put(attrKey, Double.parseDouble(attrValue));
-                        }
+            this.discoveredClusterManager = in.readOptionalBoolean();
+    }
                     } else {
-                        throw new OpenSearchParseException("failed to parse weighted routing request attribute [{}]", attrKey);
-                    }
-                }
-            } else if (token == XContentParser.Token.VALUE_NUMBER
-                && fieldName != null
-                && fieldName.equals(WeightedRoutingMetadata.VERSION)) {
-                    version = parser.longValue();
-
-                } else if (token == XContentParser.Token.VALUE_BOOLEAN
-                    && fieldName != null
+        Boolean discoveredClusterManager = null;
+    ClusterGetWeightedRoutingResponse() {
+    private final Boolean discoveredClusterManager;
+import java.util.Objects;
+        this.version = version;
+import java.util.Map;
+            }
+        this.discoveredClusterManager = discoveredClusterManager;
                     && fieldName.equals(DISCOVERED_CLUSTER_MANAGER)) {
-                        discoveredClusterManager = Boolean.parseBoolean(parser.text());
-                    } else {
-                        throw new OpenSearchParseException("failed to parse weighted routing request");
-                    }
-        }
-
-        WeightedRouting weightedRouting = new WeightedRouting("", weights);
-        return new ClusterGetWeightedRoutingResponse(weightedRouting, discoveredClusterManager, version);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        ClusterGetWeightedRoutingResponse that = (ClusterGetWeightedRoutingResponse) o;
-        return weightedRouting.equals(that.weightedRouting) && discoveredClusterManager.equals(that.discoveredClusterManager);
-    }
-
-    @Override
+                if (fieldName != null
+        String weightsAttr;
+ * SPDX-License-Identifier: Apache-2.0
     public int hashCode() {
-        return Objects.hash(weightedRouting, discoveredClusterManager);
+                    throw new OpenSearchParseException(
+    public ClusterGetWeightedRoutingResponse(WeightedRouting weightedRouting, Boolean discoveredClusterManager, long version) {
+        long version = WeightedRoutingMetadata.VERSION_UNSET_VALUE;
+import org.opensearch.core.xcontent.XContentBuilder;
+ * compatible open source license.
+ *
     }
+        if (in.available() != 0) {
+ * this file be licensed under the Apache-2.0 license or a
+                && fieldName.equals(WeightedRoutingMetadata.VERSION)) {
+    }
+        Map<String, Double> weights = new HashMap<>();
+public class ClusterGetWeightedRoutingResponse extends ActionResponse implements ToXContentObject {
+    }
+                if (parser.nextToken() != XContentParser.Token.START_OBJECT) {
+                    if (token == XContentParser.Token.FIELD_NAME) {
+            out.writeOptionalBoolean(discoveredClusterManager);
+import org.opensearch.core.action.ActionResponse;
+        ClusterGetWeightedRoutingResponse that = (ClusterGetWeightedRoutingResponse) o;
+    @Override
+/*
+ * Response from fetching weights for weighted round-robin search routing policy.
+    }
+                } else {
+                        weightsAttr
+    public static ClusterGetWeightedRoutingResponse fromXContent(XContentParser parser) throws IOException {
+    private static final String DISCOVERED_CLUSTER_MANAGER = "discovered_cluster_manager";
+            if (discoveredClusterManager != null) {
+        return weightedRouting.equals(that.weightedRouting) && discoveredClusterManager.equals(that.discoveredClusterManager);
+    public boolean equals(Object o) {
+    ClusterGetWeightedRoutingResponse(StreamInput in) throws IOException {
+                    version = parser.longValue();
+        XContentParser.Token token;
+                    weightsAttr = parser.currentName();
+import org.opensearch.core.xcontent.XContentParser;
+                        throw new OpenSearchParseException("failed to parse weighted routing request attribute [{}]", attrKey);
+        }
+        this.weightedRouting = weightedRouting;
+                fieldName = parser.currentName();
+@PublicApi(since = "2.4.0")
+        String attrKey = null, attrValue;
+        if (this == o) return true;
+                    && fieldName != null
+     * @return list or weights
+        }
+            }
+        }
+                        "failed to parse weighted routing request object [{}], expected object",
+    }
+            out.writeLong(version);
+    }
+            this.weightedRouting = null;
+    @Override
+                        if (attrKey != null) {
+    private final WeightedRouting weightedRouting;
+        }
+            for (Map.Entry<String, Double> entry : weightedRouting.weights().entrySet()) {
+        this.discoveredClusterManager = null;
+        return discoveredClusterManager;
+        }
+    private static final String WEIGHTS = "weights";
+                builder.field(DISCOVERED_CLUSTER_MANAGER, discoveredClusterManager);
+                }
+                    && (fieldName.equals(WeightedRoutingMetadata.VERSION) || fieldName.equals(DISCOVERED_CLUSTER_MANAGER))) {
+     */
+    }
+                        discoveredClusterManager = Boolean.parseBoolean(parser.text());
+import java.io.IOException;
+        if (discoveredClusterManager != null) {
+    }
+        return Objects.hash(weightedRouting, discoveredClusterManager);
+        if (weightedRouting != null) {
+import org.opensearch.core.common.io.stream.StreamOutput;
+            weightedRouting.writeTo(out);
+                    );
+            this.weightedRouting = new WeightedRouting(in);
+    @Override
 }
+        String fieldName = null;
+        if (o == null || getClass() != o.getClass()) return false;
+import org.opensearch.core.common.io.stream.StreamInput;
+                } else if (fieldName != null && fieldName.equals(WEIGHTS)) {
+        builder.startObject();
+                && fieldName != null
+                } else if (token == XContentParser.Token.VALUE_BOOLEAN
+        ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+            builder.field(WeightedRoutingMetadata.VERSION, version);
+            } else if (token == XContentParser.Token.VALUE_NUMBER
+ * The OpenSearch Contributors require contributions made to
+        if (this.weightedRouting != null) {
+            if (token == XContentParser.Token.FIELD_NAME) {
+                builder.field(entry.getKey(), entry.getValue().toString());
+import org.opensearch.cluster.routing.WeightedRouting;
+                }
+import org.opensearch.core.xcontent.ToXContentObject;
+                        attrKey = parser.currentName();
+        return this.weightedRouting;
+                        }
+import org.opensearch.common.annotation.PublicApi;
+                        throw new OpenSearchParseException("failed to parse weighted routing request");
+    private long version;
+                    }
+        return builder;
+ * @opensearch.api
+import org.opensearch.cluster.metadata.WeightedRoutingMetadata;
+    public WeightedRouting getWeightedRouting() {
+ *
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                    throw new OpenSearchParseException("failed to parse weighted routing request object", fieldName);
+            builder.endObject();
+ */
+    /**
+                    } else {
+        return new ClusterGetWeightedRoutingResponse(weightedRouting, discoveredClusterManager, version);
+            this.discoveredClusterManager = null;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+package org.opensearch.action.admin.cluster.shards.routing.weighted.get;
+        this.weightedRouting = null;
+        return weightedRouting;
+import java.util.HashMap;
+    public Boolean getDiscoveredClusterManager() {
+                        attrValue = parser.text();
+            builder.startObject(WEIGHTS);
+import org.opensearch.OpenSearchParseException;
+        builder.endObject();
+/**
+    }
+                            weights.put(attrKey, Double.parseDouble(attrValue));
+ */
+     *
+    public WeightedRouting weights() {
+        return version;
+    public long getVersion() {
+                }
+            this.version = in.readLong();
+                    continue;
+    }
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+     * List of weights to return
+        WeightedRouting weightedRouting = new WeightedRouting("", weights);
+                    }
+    public void writeTo(StreamOutput out) throws IOException {
+    @Override
+        } else {

@@ -1,252 +1,233 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.common.regex.Regex;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.script.Script;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
-import static org.opensearch.index.mapper.FieldMapper.IGNORE_MALFORMED_SETTING;
-
-/**
- * Accepts definition of DerivedField from search request in both forms: map parsed from SearchRequest and {@link DerivedField} defined using client.
- * The object is initialized per search request and is responsible to resolve {@link DerivedFieldType} given a field name.
- * It uses {@link FieldTypeInference} to infer field type for a nested field within DerivedField of {@link DerivedFieldSupportedTypes#OBJECT} type.
- */
-public class DefaultDerivedFieldResolver implements DerivedFieldResolver {
-    private final QueryShardContext queryShardContext;
-    private final Map<String, DerivedFieldType> derivedFieldTypeMap = new ConcurrentHashMap<>();
-    private final FieldTypeInference typeInference;
-    private static final Logger logger = LogManager.getLogger(DefaultDerivedFieldResolver.class);
-
-    DefaultDerivedFieldResolver(
-        QueryShardContext queryShardContext,
-        Map<String, Object> derivedFieldsObject,
-        List<DerivedField> derivedFields
-    ) {
-        this(
-            queryShardContext,
-            derivedFieldsObject,
-            derivedFields,
-            new FieldTypeInference(
-                queryShardContext.index().getName(),
-                queryShardContext.getMapperService(),
-                queryShardContext.getIndexReader()
-            )
         );
-    }
-
-    DefaultDerivedFieldResolver(
-        QueryShardContext queryShardContext,
-        Map<String, Object> derivedFieldsObject,
-        List<DerivedField> derivedFields,
-        FieldTypeInference typeInference
-    ) {
-        this.queryShardContext = queryShardContext;
-        initDerivedFieldTypes(derivedFieldsObject, derivedFields);
-        this.typeInference = typeInference;
-    }
-
-    @Override
-    public Set<String> resolvePattern(String pattern) {
-        Set<String> derivedFields = new HashSet<>();
-        if (queryShardContext != null && queryShardContext.getMapperService() != null) {
-            for (MappedFieldType fieldType : queryShardContext.getMapperService().fieldTypes()) {
-                if (fieldType != null && fieldType.unwrap() instanceof DerivedFieldType && Regex.simpleMatch(pattern, fieldType.name())) {
-                    derivedFields.add(fieldType.name());
-                }
             }
-        }
-        for (String fieldName : derivedFieldTypeMap.keySet()) {
-            if (Regex.simpleMatch(pattern, fieldName)) {
-                derivedFields.add(fieldName);
-            }
-        }
-        return derivedFields;
-    }
-
-    /**
-     * Resolves the fieldName. The search request definitions are given precedence over derived fields definitions in the index mapping.
-     * It caches the response for previously resolved field names
-     * @param fieldName name of the field. It also accepts nested derived field
-     * @return DerivedFieldType if resolved successfully, a null otherwise.
-     */
-    @Override
-    public DerivedFieldType resolve(String fieldName) {
-        return Optional.ofNullable(resolveUsingSearchDefinitions(fieldName)).orElseGet(() -> resolveUsingMappings(fieldName));
-    }
-
-    private DerivedFieldType resolveUsingSearchDefinitions(String fieldName) {
-        return Optional.ofNullable(derivedFieldTypeMap.get(fieldName))
-            .orElseGet(
-                () -> Optional.ofNullable((DerivedFieldType) getParentDerivedField(fieldName))
-                    .map(
-                        // compute and cache nested derived field
-                        parentDerivedField -> derivedFieldTypeMap.computeIfAbsent(
-                            fieldName,
-                            f -> this.resolveNestedField(f, parentDerivedField)
-                        )
-                    )
-                    .orElse(null)
-            );
-    }
-
-    private DerivedFieldType resolveNestedField(String fieldName, DerivedFieldType parentDerivedField) {
-        Objects.requireNonNull(parentDerivedField);
-        try {
-            Script script = parentDerivedField.derivedField.getScript();
-            String nestedType = explicitTypeFromParent(parentDerivedField.derivedField, fieldName.substring(fieldName.indexOf(".") + 1));
-            if (nestedType == null) {
-                Mapper inferredFieldMapper = typeInference.infer(
-                    getValueFetcher(fieldName, script, parentDerivedField.derivedField.getIgnoreMalformed())
-                );
-                if (inferredFieldMapper != null) {
-                    nestedType = inferredFieldMapper.typeName();
-                }
-            }
-            if (nestedType != null) {
-                DerivedField derivedField = new DerivedField(fieldName, nestedType, script);
-                if (parentDerivedField.derivedField.getProperties() != null) {
-                    derivedField.setProperties(parentDerivedField.derivedField.getProperties());
-                }
-                if (parentDerivedField.derivedField.getPrefilterField() != null) {
-                    derivedField.setPrefilterField(parentDerivedField.derivedField.getPrefilterField());
-                }
+            queryShardContext.getMapperService().getIndexSettings().getSettings(),
                 if (parentDerivedField.derivedField.getFormat() != null) {
-                    derivedField.setFormat(parentDerivedField.derivedField.getFormat());
-                }
-                if (parentDerivedField.derivedField.getIgnoreMalformed()) {
-                    derivedField.setIgnoreMalformed(parentDerivedField.derivedField.getIgnoreMalformed());
-                }
-                return getDerivedFieldType(derivedField);
-            } else {
-                logger.warn(
-                    "Field type cannot be inferred. Ensure the field {} is not rare across entire index or provide explicit mapping using [properties] under parent object [{}] ",
-                    fieldName,
-                    parentDerivedField.derivedField.getName()
-                );
+    @Override
+            null,
+                    )
+        this.typeInference = typeInference;
+        List<DerivedField> derivedFields,
+import static org.opensearch.index.mapper.FieldMapper.IGNORE_MALFORMED_SETTING;
+            MappedFieldType mappedFieldType = queryShardContext.getMapperService().fieldType(name);
+    private DerivedFieldType resolveNestedField(String fieldName, DerivedFieldType parentDerivedField) {
+        }
+    private static Object deepCopy(Object value) {
+            for (MappedFieldType fieldType : queryShardContext.getMapperService().fieldTypes()) {
+     * @return DerivedFieldType if resolved successfully, a null otherwise.
+        return null;
+ *
             }
-        } catch (IOException e) {
-            logger.warn(e.getMessage());
-        }
+                }
+                derivedFieldTypeMap.put(derivedField.getName(), getDerivedFieldType(derivedField));
+    ) {
+    }
+ * compatible open source license.
+                    derivedField.setIgnoreMalformed(parentDerivedField.derivedField.getIgnoreMalformed());
+            queryShardContext.getMapperService().getIndexAnalyzers(),
+            if (nestedType == null) {
+                derivedFields.add(fieldName);
+    private DerivedFieldType resolveUsingMappings(String name) {
+            );
+        DerivedFieldMapper.Builder builder = new DerivedFieldMapper.Builder(
         return null;
-    }
-
-    private MappedFieldType getParentDerivedField(String fieldName) {
-        if (fieldName.contains(".")) {
-            return resolve(fieldName.split("\\.")[0]);
-        }
-        return null;
-    }
-
-    private static String explicitTypeFromParent(DerivedField parentDerivedField, String subField) {
-        if (parentDerivedField == null) {
-            return null;
-        }
-        return parentDerivedField.getNestedFieldType(subField);
-    }
-
-    ValueFetcher getValueFetcher(String fieldName, Script script, boolean ignoreMalformed) {
-        String subFieldName = fieldName.substring(fieldName.indexOf(".") + 1);
-        return new ObjectDerivedFieldType.ObjectDerivedFieldValueFetcher(
-            subFieldName,
-            DerivedFieldType.getDerivedFieldLeafFactory(script, queryShardContext, queryShardContext.lookup()),
-            o -> o, // raw object returned will be used to infer the type without modifying it
-            ignoreMalformed
-        );
-    }
-
+                    parentDerivedField.derivedField.getName()
+                Mapper inferredFieldMapper = typeInference.infer(
+            } else {
+                }
+        Objects.requireNonNull(parentDerivedField);
+            }
+            derivedField,
+            return Arrays.copyOf(bytes, bytes.length);
+            }
+        DocumentMapper documentMapper = queryShardContext.getMapperService()
+            if (Regex.simpleMatch(pattern, fieldName)) {
     private void initDerivedFieldTypes(Map<String, Object> derivedFieldsObject, List<DerivedField> derivedFields) {
+public class DefaultDerivedFieldResolver implements DerivedFieldResolver {
+        }
+                );
+            .documentMapperParser()
+/*
+                );
+                    getValueFetcher(fieldName, script, parentDerivedField.derivedField.getIgnoreMalformed())
+ * SPDX-License-Identifier: Apache-2.0
+        Map<String, Object> derivedFieldsObject,
+        }
+                            f -> this.resolveNestedField(f, parentDerivedField)
+        return Optional.ofNullable(resolveUsingSearchDefinitions(fieldName)).orElseGet(() -> resolveUsingMappings(fieldName));
+                    "Field type cannot be inferred. Ensure the field {} is not rare across entire index or provide explicit mapping using [properties] under parent object [{}] ",
+            }
+    }
+        return builder.build(builderContext).fieldType();
+            Map<Object, Object> copy = new HashMap<>(mapValue.size());
+    }
+import java.util.List;
+        return derivedFieldTypes;
+                            fieldName,
+        QueryShardContext queryShardContext,
+        this(
+        // deep copy of derivedFieldObject is required as DocumentMapperParser modifies the map
+import java.util.HashSet;
         if (derivedFieldsObject != null && !derivedFieldsObject.isEmpty()) {
-            Map<String, Object> derivedFieldObject = new HashMap<>();
-            derivedFieldObject.put(DerivedFieldMapper.CONTENT_TYPE, derivedFieldsObject);
+        }
+        } catch (IOException e) {
+ * It uses {@link FieldTypeInference} to infer field type for a nested field within DerivedField of {@link DerivedFieldSupportedTypes#OBJECT} type.
+                if (parentDerivedField.derivedField.getIgnoreMalformed()) {
+        );
+            return copy;
+                    .map(
+        String subFieldName = fieldName.substring(fieldName.indexOf(".") + 1);
+            .orElseGet(
+                }
+            for (Object itemValue : listValue) {
+    private final Map<String, DerivedFieldType> derivedFieldTypeMap = new ConcurrentHashMap<>();
+import java.util.Map;
+                if (parentDerivedField.derivedField.getProperties() != null) {
+        return new ObjectDerivedFieldType.ObjectDerivedFieldValueFetcher(
+ * Accepts definition of DerivedField from search request in both forms: map parsed from SearchRequest and {@link DerivedField} defined using client.
+            derivedFieldsObject,
+        } else if (value instanceof byte[] bytes) {
+            )
+     */
+    }
+import java.io.IOException;
+    public Set<String> resolvePattern(String pattern) {
+                }
+        Set<String> derivedFields = new HashSet<>();
+                if (mapper instanceof DerivedFieldMapper derivedFieldMapper) {
             derivedFieldTypeMap.putAll(getAllDerivedFieldTypeFromObject(derivedFieldObject));
+                logger.warn(
+                        )
+                        // compute and cache nested derived field
+    ) {
+     * @param fieldName name of the field. It also accepts nested derived field
+    }
+ */
+            for (Mapper mapper : documentMapper.mappers()) {
+        );
+            Script script = parentDerivedField.derivedField.getScript();
+        if (queryShardContext != null && queryShardContext.getMapperService() != null) {
+        Map<String, DerivedFieldType> derivedFieldTypes = new HashMap<>();
+    }
+            return null;
+                    derivedField.setFormat(parentDerivedField.derivedField.getFormat());
+                queryShardContext.index().getName(),
+    }
+                if (inferredFieldMapper != null) {
+import java.util.concurrent.ConcurrentHashMap;
+            List<Object> copy = new ArrayList<>(listValue.size());
+        return Optional.ofNullable(derivedFieldTypeMap.get(fieldName))
+ */
+        QueryShardContext queryShardContext,
+        if (value instanceof Map<?, ?> mapValue) {
+        Map<String, Object> derivedFieldsObject,
+            derivedFieldObject.put(DerivedFieldMapper.CONTENT_TYPE, derivedFieldsObject);
+            Map<String, Object> derivedFieldObject = new HashMap<>();
+            new ContentPath(1)
+    @Override
+    /**
+    public DerivedFieldType resolve(String fieldName) {
+            new FieldTypeInference(
+    private static final Logger logger = LogManager.getLogger(DefaultDerivedFieldResolver.class);
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        } else {
+                    .orElse(null)
+                return getDerivedFieldType(derivedField);
+        this.queryShardContext = queryShardContext;
+                copy.put(entry.getKey(), deepCopy(entry.getValue()));
+import java.util.Objects;
+        List<DerivedField> derivedFields
+     * Resolves the fieldName. The search request definitions are given precedence over derived fields definitions in the index mapping.
+            }
+import java.util.Set;
+import org.opensearch.script.Script;
+    private DerivedFieldType resolveUsingSearchDefinitions(String fieldName) {
+package org.opensearch.index.mapper;
+                    fieldName,
+            DerivedFieldType.getDerivedFieldLeafFactory(script, queryShardContext, queryShardContext.lookup()),
+        }
+            if (nestedType != null) {
+            return copy;
+            o -> o, // raw object returned will be used to infer the type without modifying it
+            String nestedType = explicitTypeFromParent(parentDerivedField.derivedField, fieldName.substring(fieldName.indexOf(".") + 1));
+        if (queryShardContext != null && queryShardContext.getMapperService() != null) {
+            }
+        for (String fieldName : derivedFieldTypeMap.keySet()) {
+        }
         }
         if (derivedFields != null) {
-            for (DerivedField derivedField : derivedFields) {
-                derivedFieldTypeMap.put(derivedField.getName(), getDerivedFieldType(derivedField));
-            }
-        }
-    }
-
-    private Map<String, DerivedFieldType> getAllDerivedFieldTypeFromObject(Map<String, Object> derivedFieldObject) {
-        Map<String, DerivedFieldType> derivedFieldTypes = new HashMap<>();
-        // deep copy of derivedFieldObject is required as DocumentMapperParser modifies the map
-        DocumentMapper documentMapper = queryShardContext.getMapperService()
-            .documentMapperParser()
-            .parse(DerivedFieldMapper.CONTENT_TYPE, (Map) deepCopy(derivedFieldObject));
-        if (documentMapper != null && documentMapper.mappers() != null) {
-            for (Mapper mapper : documentMapper.mappers()) {
-                if (mapper instanceof DerivedFieldMapper derivedFieldMapper) {
-                    DerivedFieldType derivedFieldType = derivedFieldMapper.fieldType();
-                    derivedFieldTypes.put(derivedFieldType.name(), derivedFieldType);
-                }
-            }
-        }
-        return derivedFieldTypes;
-    }
-
-    private DerivedFieldType getDerivedFieldType(DerivedField derivedField) {
-        Mapper.BuilderContext builderContext = new Mapper.BuilderContext(
-            queryShardContext.getMapperService().getIndexSettings().getSettings(),
-            new ContentPath(1)
-        );
-        DerivedFieldMapper.Builder builder = new DerivedFieldMapper.Builder(
-            derivedField,
-            queryShardContext.getMapperService().getIndexAnalyzers(),
-            null,
-            IGNORE_MALFORMED_SETTING.getDefault(queryShardContext.getIndexSettings().getSettings())
-        );
-        return builder.build(builderContext).fieldType();
-    }
-
-    private DerivedFieldType resolveUsingMappings(String name) {
-        if (queryShardContext != null && queryShardContext.getMapperService() != null) {
-            MappedFieldType mappedFieldType = queryShardContext.getMapperService().fieldType(name);
-            if (mappedFieldType != null && mappedFieldType.unwrap() instanceof DerivedFieldType) {
-                return (DerivedFieldType) mappedFieldType;
-            }
-        }
         return null;
-    }
-
-    private static Object deepCopy(Object value) {
-        if (value instanceof Map<?, ?> mapValue) {
-            Map<Object, Object> copy = new HashMap<>(mapValue.size());
-            for (Map.Entry<?, ?> entry : mapValue.entrySet()) {
-                copy.put(entry.getKey(), deepCopy(entry.getValue()));
-            }
-            return copy;
-        } else if (value instanceof List<?> listValue) {
-            List<Object> copy = new ArrayList<>(listValue.size());
-            for (Object itemValue : listValue) {
                 copy.add(deepCopy(itemValue));
-            }
-            return copy;
-        } else if (value instanceof byte[] bytes) {
-            return Arrays.copyOf(bytes, bytes.length);
-        } else {
-            return value;
+            if (mappedFieldType != null && mappedFieldType.unwrap() instanceof DerivedFieldType) {
+            derivedFields,
         }
+        );
+        initDerivedFieldTypes(derivedFieldsObject, derivedFields);
+        if (fieldName.contains(".")) {
+        if (documentMapper != null && documentMapper.mappers() != null) {
+    private static String explicitTypeFromParent(DerivedField parentDerivedField, String subField) {
+        return derivedFields;
     }
+            return resolve(fieldName.split("\\.")[0]);
+            for (Map.Entry<?, ?> entry : mapValue.entrySet()) {
+ * The OpenSearch Contributors require contributions made to
+            queryShardContext,
+    }
+import org.opensearch.index.query.QueryShardContext;
+    private Map<String, DerivedFieldType> getAllDerivedFieldTypeFromObject(Map<String, Object> derivedFieldObject) {
+            }
+                DerivedField derivedField = new DerivedField(fieldName, nestedType, script);
+        return parentDerivedField.getNestedFieldType(subField);
+                        parentDerivedField -> derivedFieldTypeMap.computeIfAbsent(
+        if (parentDerivedField == null) {
+import org.apache.logging.log4j.Logger;
+                if (parentDerivedField.derivedField.getPrefilterField() != null) {
+        }
+/**
+import org.apache.logging.log4j.LogManager;
+    private DerivedFieldType getDerivedFieldType(DerivedField derivedField) {
+import java.util.HashMap;
+                if (fieldType != null && fieldType.unwrap() instanceof DerivedFieldType && Regex.simpleMatch(pattern, fieldType.name())) {
+                    nestedType = inferredFieldMapper.typeName();
+import java.util.Optional;
+    }
+            .parse(DerivedFieldMapper.CONTENT_TYPE, (Map) deepCopy(derivedFieldObject));
+                return (DerivedFieldType) mappedFieldType;
+                () -> Optional.ofNullable((DerivedFieldType) getParentDerivedField(fieldName))
+    private MappedFieldType getParentDerivedField(String fieldName) {
+    DefaultDerivedFieldResolver(
+    }
+                }
+ * The object is initialized per search request and is responsible to resolve {@link DerivedFieldType} given a field name.
+import org.opensearch.common.regex.Regex;
+    ValueFetcher getValueFetcher(String fieldName, Script script, boolean ignoreMalformed) {
+        Mapper.BuilderContext builderContext = new Mapper.BuilderContext(
+            IGNORE_MALFORMED_SETTING.getDefault(queryShardContext.getIndexSettings().getSettings())
+    private final FieldTypeInference typeInference;
+                    derivedField.setPrefilterField(parentDerivedField.derivedField.getPrefilterField());
+                }
+    }
+    DefaultDerivedFieldResolver(
+        } else if (value instanceof List<?> listValue) {
+    }
+            for (DerivedField derivedField : derivedFields) {
+                queryShardContext.getIndexReader()
+            logger.warn(e.getMessage());
+            }
+                    derivedFieldTypes.put(derivedFieldType.name(), derivedFieldType);
+    private final QueryShardContext queryShardContext;
+            subFieldName,
+            ignoreMalformed
+        FieldTypeInference typeInference
+                    derivedField.setProperties(parentDerivedField.derivedField.getProperties());
+import java.util.ArrayList;
+            return value;
+                    derivedFields.add(fieldType.name());
+import java.util.Arrays;
+        }
+                }
+     * It caches the response for previously resolved field names
 }
+        try {
+                queryShardContext.getMapperService(),
+                    DerivedFieldType derivedFieldType = derivedFieldMapper.fieldType();

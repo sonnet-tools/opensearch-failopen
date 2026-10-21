@@ -1,264 +1,224 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+            this.enabled = enabled;
+                activeShardGroups++;
+                clusterSettings.get(SearchIndexPruningSettings.MIN_SHARDS),
  */
-
-package org.opensearch.action.search;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.action.search.pruning.FieldDomainEvaluationContext;
-import org.opensearch.action.search.pruning.FieldDomainEvaluators;
-import org.opensearch.action.search.pruning.MandatoryQueryConstraintExtractor;
-import org.opensearch.action.search.pruning.QueryConstraint;
-import org.opensearch.action.search.pruning.QueryConstraintExtractor;
-import org.opensearch.action.search.pruning.SearchIndexPruningResult;
-import org.opensearch.action.search.pruning.SearchIndexPruningSettings;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.routing.GroupShardsIterator;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.index.fielddomain.FieldDomain;
-import org.opensearch.index.fielddomain.FieldDomainProvider;
-
-import java.util.BitSet;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
-
-/**
- * Computes index-level shard-group pruning decisions for a search request before can-match or query execution.
- *
- * This service is deliberately conservative: it only returns pruned shard groups when a mandatory query constraint
- * is provably disjoint from finalized index-level field domains stored in cluster state. Missing, malformed,
  * unsupported, unfinalized, remote, or ambiguous metadata causes the shard group to be kept.
- */
-public final class SearchIndexPruningService {
-    private static final Logger logger = LogManager.getLogger(SearchIndexPruningService.class);
-
-    private final QueryConstraintExtractor constraintExtractor;
-    private final FieldDomainProvider domainProvider;
-    private final FieldDomainEvaluators fieldDomainEvaluators;
-
-    private final AtomicReference<SearchIndexPruningConfig> config;
-
-    /**
-     * Creates a pruning service backed by cluster settings and index field domains stored in cluster state.
-     *
-     * @param clusterSettings cluster settings used to read and subscribe to pruning settings
-     * @param domainProvider provider that resolves index-level field domains for candidate shard groups
-     */
-    public SearchIndexPruningService(ClusterSettings clusterSettings, FieldDomainProvider domainProvider) {
-        this(clusterSettings, domainProvider, new MandatoryQueryConstraintExtractor(), FieldDomainEvaluators.defaultEvaluators());
-    }
-
-    SearchIndexPruningService(
-        ClusterSettings clusterSettings,
-        FieldDomainProvider domainProvider,
-        QueryConstraintExtractor constraintExtractor
-    ) {
-        this(clusterSettings, domainProvider, constraintExtractor, FieldDomainEvaluators.defaultEvaluators());
-    }
-
-    SearchIndexPruningService(
-        ClusterSettings clusterSettings,
-        FieldDomainProvider domainProvider,
-        QueryConstraintExtractor constraintExtractor,
-        FieldDomainEvaluators fieldDomainEvaluators
-    ) {
-        Objects.requireNonNull(clusterSettings, "clusterSettings must not be null");
-        this.domainProvider = Objects.requireNonNull(domainProvider, "domainProvider must not be null");
-        this.constraintExtractor = Objects.requireNonNull(constraintExtractor, "constraintExtractor must not be null");
-        this.fieldDomainEvaluators = Objects.requireNonNull(fieldDomainEvaluators, "fieldDomainEvaluators must not be null");
-
-        this.config = new AtomicReference<>(SearchIndexPruningConfig.fromClusterSettings(clusterSettings));
-        clusterSettings.addSettingsUpdateConsumer(
-            settings -> config.set(SearchIndexPruningConfig.fromSettings(settings)),
-            SearchIndexPruningSettings.getSettings()
-        );
-    }
-
-    /**
-     * Computes which shard groups can be skipped for the supplied search request.
-     *
-     * The returned result does not mutate the shard iterators. Callers decide when to materialize the result by marking
-     * the selected {@link SearchShardIterator}s as skipped.
-     *
-     * @param request search request being executed
-     * @param shardIterators shard groups resolved for this request
-     * @param clusterState cluster state used to read index metadata
-     * @param evaluationContext request-scoped values needed while evaluating field domains
-     * @return pruning result containing the original shard iterators and any pruned shard group indexes
-     */
-    public SearchIndexPruningResult prune(
-        SearchRequest request,
-        GroupShardsIterator<SearchShardIterator> shardIterators,
-        ClusterState clusterState,
-        FieldDomainEvaluationContext evaluationContext
-    ) {
-        Objects.requireNonNull(shardIterators, "shardIterators must not be null");
-        try {
-            return doPrune(request, shardIterators, clusterState, evaluationContext);
-        } catch (RuntimeException e) {
-            logger.warn("failed to compute search index pruning; continuing without pruning", e);
-            return SearchIndexPruningResult.notPruned(shardIterators);
         }
-    }
-
-    private SearchIndexPruningResult doPrune(
-        SearchRequest request,
-        GroupShardsIterator<SearchShardIterator> shardIterators,
-        ClusterState clusterState,
-        FieldDomainEvaluationContext evaluationContext
-    ) {
-        Objects.requireNonNull(evaluationContext, "evaluationContext must not be null");
-        final int originalSize = size(shardIterators);
-        final int activeShardGroups = activeShardGroups(shardIterators);
-        final SearchIndexPruningConfig currentConfig = config.get();
-
-        if (shouldSkip(request, activeShardGroups, currentConfig)) {
-            return SearchIndexPruningResult.notPruned(shardIterators);
-        }
-
-        final Set<String> pruningFields = currentConfig.fields;
-
-        final List<QueryConstraint> constraints = constraintExtractor.extractMandatoryConstraints(request.source(), pruningFields);
-
-        if (constraints.isEmpty()) {
-            return SearchIndexPruningResult.notPruned(shardIterators);
-        }
-
-        Map<String, Map<String, Optional<FieldDomain>>> domainsByIndexAndField = new HashMap<>();
-        BitSet prunedShardGroupIndexes = new BitSet(originalSize);
-        int pruned = 0;
-
-        for (int shardGroupIndex = 0; shardGroupIndex < shardIterators.size(); shardGroupIndex++) {
-            SearchShardIterator shardIterator = shardIterators.get(shardGroupIndex);
-            if (shardIterator.skip()) {
-                continue;
-            }
-
-            if (shouldAlwaysKeep(shardIterator)) {
-                continue;
-            }
-
-            final String indexName = shardIterator.shardId().getIndexName();
-
-            boolean prune = false;
-            for (QueryConstraint constraint : constraints) {
-                final Optional<FieldDomain> maybeDomain = domainsByIndexAndField.computeIfAbsent(indexName, ignored -> new HashMap<>())
-                    .computeIfAbsent(constraint.field(), field -> domainProvider.getDomain(clusterState, indexName, field));
-
-                if (maybeDomain.isEmpty()) {
-                    continue;
-                }
-
-                final FieldDomain domain = maybeDomain.get();
-
-                if (domain.finalized() == false) {
-                    continue;
-                }
-
-                if (fieldDomainEvaluators.canMatch(domain, constraint, evaluationContext) == false) {
                     prune = true;
-                    break;
-                }
+ *
+    private SearchIndexPruningResult doPrune(
             }
-
-            if (prune) {
-                prunedShardGroupIndexes.set(shardGroupIndex);
-                pruned++;
-            }
+        final List<QueryConstraint> constraints = constraintExtractor.extractMandatoryConstraints(request.source(), pruningFields);
+                    continue;
+    SearchIndexPruningService(
+                SearchIndexPruningSettings.MIN_SHARDS.get(settings),
+            return true;
+    ) {
+    /**
+     *
+import org.opensearch.action.search.pruning.QueryConstraintExtractor;
+        return iterators.size();
+import java.util.Objects;
+        if (constraints.isEmpty()) {
+        FieldDomainProvider domainProvider,
         }
-
-        if (pruned == 0) {
-            return SearchIndexPruningResult.notPruned(shardIterators);
-        }
-
-        if (pruned == activeShardGroups) {
-            /*
-             * Pruning is an optimization. If every currently active shard group would be skipped, fall back to
-             * the original iterators until zero-shard response semantics are covered explicitly for this
-             * pre-can-match stage. Existing skip flags are preserved because they may have been set by another
-             * search execution step.
-             */
-            return SearchIndexPruningResult.notPruned(shardIterators);
-        }
-
-        return SearchIndexPruningResult.pruned(shardIterators, prunedShardGroupIndexes);
-    }
-
-    private static boolean shouldSkip(SearchRequest request, int activeShardGroups, SearchIndexPruningConfig config) {
+                continue;
+     * @param shardIterators shard groups resolved for this request
+        FieldDomainEvaluationContext evaluationContext
         if (config.enabled == false) {
-            return true;
-        }
-
-        if (request == null || request.source() == null) {
-            return true;
-        }
-
+        GroupShardsIterator<SearchShardIterator> shardIterators,
+        int activeShardGroups = 0;
+    private static int size(GroupShardsIterator<SearchShardIterator> iterators) {
+            }
+     * The returned result does not mutate the shard iterators. Callers decide when to materialize the result by marking
+                continue;
+    }
+ * compatible open source license.
+     */
+        private static SearchIndexPruningConfig fromClusterSettings(ClusterSettings clusterSettings) {
+            this.minShards = minShards;
+        this.fieldDomainEvaluators = Objects.requireNonNull(fieldDomainEvaluators, "fieldDomainEvaluators must not be null");
+    }
+            if (prune) {
+                final FieldDomain domain = maybeDomain.get();
+     */
+    private final FieldDomainProvider domainProvider;
+import java.util.HashMap;
         if (request.pointInTimeBuilder() != null) {
-            // PIT searches must preserve the shard set captured by the PIT creation snapshot.
-            return true;
+        final SearchIndexPruningConfig currentConfig = config.get();
+    SearchIndexPruningService(
+    private final FieldDomainEvaluators fieldDomainEvaluators;
+                }
+     * @param clusterState cluster state used to read index metadata
         }
-
-        if (activeShardGroups < config.minShards) {
-            return true;
+                    break;
+import org.opensearch.action.search.pruning.SearchIndexPruningSettings;
+import java.util.Map;
+            return SearchIndexPruningResult.notPruned(shardIterators);
+            SearchIndexPruningSettings.getSettings()
+            return SearchIndexPruningResult.notPruned(shardIterators);
+import org.apache.logging.log4j.LogManager;
+ */
         }
+        private final boolean enabled;
+    }
+            );
+import org.opensearch.action.search.pruning.SearchIndexPruningResult;
+    }
+                }
+    private static boolean shouldAlwaysKeep(SearchShardIterator shardIterator) {
+            }
+            return new SearchIndexPruningConfig(
+        QueryConstraintExtractor constraintExtractor
+             * search execution step.
+        }
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.index.fielddomain.FieldDomain;
+                SearchIndexPruningSettings.ENABLED.get(settings),
+        final Set<String> pruningFields = currentConfig.fields;
+        ClusterState clusterState,
+public final class SearchIndexPruningService {
+     * Creates a pruning service backed by cluster settings and index field domains stored in cluster state.
+        Objects.requireNonNull(evaluationContext, "evaluationContext must not be null");
+import org.apache.logging.log4j.Logger;
+import java.util.Collection;
+            );
+        }
+import org.opensearch.action.search.pruning.QueryConstraint;
+        private static SearchIndexPruningConfig fromSettings(Settings settings) {
+        }
+                if (domain.finalized() == false) {
+        return activeShardGroups;
+ * The OpenSearch Contributors require contributions made to
+        if (request == null || request.source() == null) {
+import java.util.Set;
         return config.fields.isEmpty();
     }
-
-    private static boolean shouldAlwaysKeep(SearchShardIterator shardIterator) {
-        return shardIterator.getClusterAlias() != null;
-    }
-
-    private static int size(GroupShardsIterator<SearchShardIterator> iterators) {
-        return iterators.size();
-    }
-
-    private static int activeShardGroups(GroupShardsIterator<SearchShardIterator> iterators) {
-        int activeShardGroups = 0;
-        for (int i = 0; i < iterators.size(); i++) {
-            if (iterators.get(i).skip() == false) {
-                activeShardGroups++;
-            }
+            // PIT searches must preserve the shard set captured by the PIT creation snapshot.
+    public SearchIndexPruningService(ClusterSettings clusterSettings, FieldDomainProvider domainProvider) {
+     * @param domainProvider provider that resolves index-level field domains for candidate shard groups
+            return new SearchIndexPruningConfig(
+            for (QueryConstraint constraint : constraints) {
         }
-        return activeShardGroups;
+                    .computeIfAbsent(constraint.field(), field -> domainProvider.getDomain(clusterState, indexName, field));
+            return true;
+import org.opensearch.common.settings.Settings;
+ *
     }
-
-    private static final class SearchIndexPruningConfig {
-        private final boolean enabled;
-        private final int minShards;
+    private final AtomicReference<SearchIndexPruningConfig> config;
         private final Set<String> fields;
-
+                final Optional<FieldDomain> maybeDomain = domainsByIndexAndField.computeIfAbsent(indexName, ignored -> new HashMap<>())
+        FieldDomainEvaluators fieldDomainEvaluators
         private SearchIndexPruningConfig(boolean enabled, int minShards, Collection<String> fields) {
-            this.enabled = enabled;
-            this.minShards = minShards;
-            this.fields = Set.copyOf(fields);
-        }
-
-        private static SearchIndexPruningConfig fromClusterSettings(ClusterSettings clusterSettings) {
-            return new SearchIndexPruningConfig(
-                clusterSettings.get(SearchIndexPruningSettings.ENABLED),
-                clusterSettings.get(SearchIndexPruningSettings.MIN_SHARDS),
+        Map<String, Map<String, Optional<FieldDomain>>> domainsByIndexAndField = new HashMap<>();
+                prunedShardGroupIndexes.set(shardGroupIndex);
+import org.opensearch.index.fielddomain.FieldDomainProvider;
+             */
                 clusterSettings.get(SearchIndexPruningSettings.FIELDS)
-            );
+ * is provably disjoint from finalized index-level field domains stored in cluster state. Missing, malformed,
+package org.opensearch.action.search;
+                clusterSettings.get(SearchIndexPruningSettings.ENABLED),
+        clusterSettings.addSettingsUpdateConsumer(
+            return true;
+import org.opensearch.common.settings.ClusterSettings;
+        this.constraintExtractor = Objects.requireNonNull(constraintExtractor, "constraintExtractor must not be null");
+     * @param clusterSettings cluster settings used to read and subscribe to pruning settings
+             * the original iterators until zero-shard response semantics are covered explicitly for this
+        SearchRequest request,
+import org.opensearch.action.search.pruning.FieldDomainEvaluators;
+            SearchShardIterator shardIterator = shardIterators.get(shardGroupIndex);
+ * SPDX-License-Identifier: Apache-2.0
+        return SearchIndexPruningResult.pruned(shardIterators, prunedShardGroupIndexes);
+        final int activeShardGroups = activeShardGroups(shardIterators);
+        this(clusterSettings, domainProvider, constraintExtractor, FieldDomainEvaluators.defaultEvaluators());
+        FieldDomainEvaluationContext evaluationContext
+    private static int activeShardGroups(GroupShardsIterator<SearchShardIterator> iterators) {
         }
-
-        private static SearchIndexPruningConfig fromSettings(Settings settings) {
-            return new SearchIndexPruningConfig(
-                SearchIndexPruningSettings.ENABLED.get(settings),
-                SearchIndexPruningSettings.MIN_SHARDS.get(settings),
+        Objects.requireNonNull(clusterSettings, "clusterSettings must not be null");
+    ) {
+import org.opensearch.cluster.routing.GroupShardsIterator;
                 SearchIndexPruningSettings.FIELDS.get(settings)
-            );
+import org.opensearch.cluster.ClusterState;
+            this.fields = Set.copyOf(fields);
+        FieldDomainProvider domainProvider,
+     *
         }
+        this.domainProvider = Objects.requireNonNull(domainProvider, "domainProvider must not be null");
+     * Computes which shard groups can be skipped for the supplied search request.
+            /*
+        ClusterSettings clusterSettings,
+     * @param request search request being executed
+            logger.warn("failed to compute search index pruning; continuing without pruning", e);
+    ) {
+        ClusterSettings clusterSettings,
+                pruned++;
+            return SearchIndexPruningResult.notPruned(shardIterators);
+import java.util.List;
+import org.opensearch.action.search.pruning.FieldDomainEvaluationContext;
+        }
+        GroupShardsIterator<SearchShardIterator> shardIterators,
+/**
+        QueryConstraintExtractor constraintExtractor,
+    /**
+        this.config = new AtomicReference<>(SearchIndexPruningConfig.fromClusterSettings(clusterSettings));
+        this(clusterSettings, domainProvider, new MandatoryQueryConstraintExtractor(), FieldDomainEvaluators.defaultEvaluators());
+import org.opensearch.action.search.pruning.MandatoryQueryConstraintExtractor;
+                if (fieldDomainEvaluators.canMatch(domain, constraint, evaluationContext) == false) {
+        return shardIterator.getClusterAlias() != null;
+    public SearchIndexPruningResult prune(
+            return SearchIndexPruningResult.notPruned(shardIterators);
+                if (maybeDomain.isEmpty()) {
+            return doPrune(request, shardIterators, clusterState, evaluationContext);
+                    continue;
+        private final int minShards;
+     * @return pruning result containing the original shard iterators and any pruned shard group indexes
+            if (shardIterator.skip()) {
+             * pre-can-match stage. Existing skip flags are preserved because they may have been set by another
+        if (activeShardGroups < config.minShards) {
+            boolean prune = false;
+        if (pruned == 0) {
+    private final QueryConstraintExtractor constraintExtractor;
+    private static final Logger logger = LogManager.getLogger(SearchIndexPruningService.class);
     }
+            return true;
+import java.util.Optional;
 }
+        int pruned = 0;
+/*
+        ClusterState clusterState,
+        } catch (RuntimeException e) {
+ * This service is deliberately conservative: it only returns pruned shard groups when a mandatory query constraint
+            if (shouldAlwaysKeep(shardIterator)) {
+    private static boolean shouldSkip(SearchRequest request, int activeShardGroups, SearchIndexPruningConfig config) {
+        );
+        if (pruned == activeShardGroups) {
+            return SearchIndexPruningResult.notPruned(shardIterators);
+        }
+ * Computes index-level shard-group pruning decisions for a search request before can-match or query execution.
+import java.util.concurrent.atomic.AtomicReference;
+        final int originalSize = size(shardIterators);
+            settings -> config.set(SearchIndexPruningConfig.fromSettings(settings)),
+        for (int i = 0; i < iterators.size(); i++) {
+    }
+             * Pruning is an optimization. If every currently active shard group would be skipped, fall back to
+        Objects.requireNonNull(shardIterators, "shardIterators must not be null");
+        }
+            if (iterators.get(i).skip() == false) {
+        BitSet prunedShardGroupIndexes = new BitSet(originalSize);
+    private static final class SearchIndexPruningConfig {
+     * @param evaluationContext request-scoped values needed while evaluating field domains
+        for (int shardGroupIndex = 0; shardGroupIndex < shardIterators.size(); shardGroupIndex++) {
+    }
+                }
+            }
+import java.util.BitSet;
+    }
+        if (shouldSkip(request, activeShardGroups, currentConfig)) {
+     * the selected {@link SearchShardIterator}s as skipped.
+    ) {
+            }
+        SearchRequest request,
+            final String indexName = shardIterator.shardId().getIndexName();
+        }
+        try {
+     *

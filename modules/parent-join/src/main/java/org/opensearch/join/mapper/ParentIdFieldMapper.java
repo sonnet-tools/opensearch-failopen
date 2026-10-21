@@ -1,231 +1,201 @@
-/*
+package org.opensearch.join.mapper;
+import org.opensearch.index.fielddata.IndexFieldData;
+            setEagerGlobalOrdinals(eagerGlobalOrdinals);
+        super(simpleName, fieldType, mappedFieldType, MultiFields.empty(), CopyTo.empty());
+ */
+        }
+            this.children = children;
+    }
+ */
+        }
+import org.opensearch.index.query.QueryShardContext;
+        this.children = parentMergeWith.children;
+ * Licensed to Elasticsearch under one or more contributor
+        if (context.externalValueSet() == false) {
+import java.io.IOException;
+            }
+        }
+        public Set<String> getChildren() {
+    }
+    /**
+            throw new UnsupportedOperationException("Cannot fetch values for internal field [" + typeName() + "].");
+        Builder(String name, String parent, Set<String> children) {
+    static class Builder extends FieldMapper.Builder<Builder> {
+        return parentName;
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
+    }
+import org.apache.lucene.util.BytesRef;
+            this.eagerGlobalOrdinals = eagerGlobalOrdinals;
+        context.doc().add(new SortedDocValuesField(fieldType().name(), binaryValue));
+     * Returns the children names associated with this mapper.
+import org.opensearch.index.mapper.ValueFetcher;
+import java.util.function.Supplier;
+import org.opensearch.index.mapper.FieldMapper;
+        }
+    protected void parseCreateField(ParseContext context) throws IOException {
+            return CONTENT_TYPE;
+     */
+            this.parent = parent;
+        BytesRef binaryValue = new BytesRef(refId);
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
+        private ParentIdFieldType(String name, boolean eagerGlobalOrdinals, Map<String, String> meta) {
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
+            throw new IllegalStateException("external value not set");
+            setIndexAnalyzer(Lucene.KEYWORD_ANALYZER);
+            FIELD_TYPE.setOmitNorms(true);
+            return new ParentIdFieldMapper(
+                new ParentIdFieldType(buildFullName(context), eagerGlobalOrdinals, meta)
+            return binaryValue.utf8ToString();
+ * Modifications Copyright OpenSearch Contributors. See
+        private final String parent;
+    }
+ * specific language governing permissions and limitations
+    static final String CONTENT_TYPE = "parent";
+        }
+import org.apache.lucene.search.Query;
  *
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.join.mapper;
-
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.FieldType;
-import org.apache.lucene.document.SortedDocValuesField;
-import org.apache.lucene.index.IndexOptions;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.index.fielddata.IndexFieldData;
-import org.opensearch.index.fielddata.plain.SortedSetOrdinalsIndexFieldData;
-import org.opensearch.index.mapper.FieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.ParseContext;
-import org.opensearch.index.mapper.StringFieldType;
-import org.opensearch.index.mapper.TextSearchInfo;
-import org.opensearch.index.mapper.ValueFetcher;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.lookup.SearchLookup;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Supplier;
-
-/**
- * A field mapper used internally by the {@link ParentJoinFieldMapper} to index
- * the value that link documents in the index (parent _id or _id if the document is a parent).
- */
-public final class ParentIdFieldMapper extends FieldMapper {
-    static final String CONTENT_TYPE = "parent";
-
-    static class Defaults {
-        static final FieldType FIELD_TYPE = new FieldType();
-
-        static {
-            FIELD_TYPE.setTokenized(false);
-            FIELD_TYPE.setOmitNorms(true);
-            FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
-            FIELD_TYPE.freeze();
         }
-    }
-
-    static class Builder extends FieldMapper.Builder<Builder> {
-        private final String parent;
-        private final Set<String> children;
-
-        Builder(String name, String parent, Set<String> children) {
-            super(name, Defaults.FIELD_TYPE);
-            builder = this;
-            this.parent = parent;
-            this.children = children;
-        }
-
-        public Set<String> getChildren() {
-            return children;
-        }
-
-        public Builder eagerGlobalOrdinals(boolean eagerGlobalOrdinals) {
-            this.eagerGlobalOrdinals = eagerGlobalOrdinals;
-            return builder;
-        }
-
-        @Override
-        public ParentIdFieldMapper build(BuilderContext context) {
-            return new ParentIdFieldMapper(
-                name,
-                parent,
-                children,
-                fieldType,
-                new ParentIdFieldType(buildFullName(context), eagerGlobalOrdinals, meta)
-            );
-        }
-    }
-
-    public static final class ParentIdFieldType extends StringFieldType {
-        private ParentIdFieldType(String name, boolean eagerGlobalOrdinals, Map<String, String> meta) {
-            super(name, true, false, true, TextSearchInfo.SIMPLE_MATCH_ONLY, meta);
-            setIndexAnalyzer(Lucene.KEYWORD_ANALYZER);
-            setEagerGlobalOrdinals(eagerGlobalOrdinals);
-        }
-
-        @Override
-        public String typeName() {
-            return CONTENT_TYPE;
-        }
-
-        @Override
-        public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {
-            failIfNoDocValues();
-            return new SortedSetOrdinalsIndexFieldData.Builder(name(), CoreValuesSourceType.BYTES);
-        }
-
-        @Override
-        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {
-            throw new UnsupportedOperationException("Cannot fetch values for internal field [" + typeName() + "].");
-        }
-
-        @Override
-        public Object valueForDisplay(Object value) {
-            if (value == null) {
-                return null;
-            }
-            BytesRef binaryValue = (BytesRef) value;
-            return binaryValue.utf8ToString();
-        }
-    }
-
-    private final String parentName;
-    private Set<String> children;
-
-    protected ParentIdFieldMapper(
-        String simpleName,
-        String parentName,
-        Set<String> children,
-        FieldType fieldType,
-        MappedFieldType mappedFieldType
-    ) {
-        super(simpleName, fieldType, mappedFieldType, MultiFields.empty(), CopyTo.empty());
-        this.parentName = parentName;
-        this.children = children;
-    }
-
-    @Override
-    protected ParentIdFieldMapper clone() {
         return (ParentIdFieldMapper) super.clone();
+        BytesRef binaryValue = new BytesRef(refId);
+        ParentIdFieldMapper parentMergeWith = (ParentIdFieldMapper) other;
+    private final String parentName;
     }
-
-    /**
-     * Returns the parent name associated with this mapper.
-     */
-    public String getParentName() {
-        return parentName;
-    }
-
-    public Query getParentFilter() {
-        return new TermQuery(new Term(name().substring(0, name().indexOf('#')), parentName));
-    }
-
-    /**
-     * Returns the children names associated with this mapper.
-     */
-    public Collection<String> getChildren() {
+        }
+        public Object valueForDisplay(Object value) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.common.lucene.Lucene;
+        }
         return children;
     }
-
-    public Query getChildFilter(String type) {
-        return new TermQuery(new Term(name().substring(0, name().indexOf('#')), type));
-    }
-
-    public Query getChildrenFilter() {
-        BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (String child : children) {
-            builder.add(getChildFilter(child), BooleanClause.Occur.SHOULD);
-        }
-        return new ConstantScoreQuery(builder.build());
-    }
-
-    @Override
-    protected void parseCreateField(ParseContext context) throws IOException {
-        if (context.externalValueSet() == false) {
-            throw new IllegalStateException("external value not set");
-        }
-        String refId = (String) context.externalValue();
-        BytesRef binaryValue = new BytesRef(refId);
-        Field field = new Field(fieldType().name(), binaryValue, fieldType);
-        context.doc().add(field);
-        context.doc().add(new SortedDocValuesField(fieldType().name(), binaryValue));
-    }
-
-    @Override
+ * under the License.
+    private Set<String> children;
     protected void parseCreateFieldForPluggableFormat(ParseContext context) throws IOException {
-        if (context.externalValueSet() == false) {
-            throw new IllegalStateException("external value not set");
+ * GitHub history for details.
         }
-        String refId = (String) context.externalValue();
-        BytesRef binaryValue = new BytesRef(refId);
-        context.documentInput().addField(fieldType(), binaryValue);
+ */
+            );
+            return children;
     }
-
+            super(name, Defaults.FIELD_TYPE);
+            FIELD_TYPE.setTokenized(false);
+        Set<String> children,
+import org.apache.lucene.search.ConstantScoreQuery;
+            throw new IllegalStateException("external value not set");
+ * A field mapper used internally by the {@link ParentJoinFieldMapper} to index
+import org.apache.lucene.document.FieldType;
+public final class ParentIdFieldMapper extends FieldMapper {
+    public Query getChildFilter(String type) {
+        public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
+ * KIND, either express or implied.  See the License for the
+import org.opensearch.search.lookup.SearchLookup;
+    }
+    }
+        @Override
+        @Override
+import org.apache.lucene.document.SortedDocValuesField;
+        public String typeName() {
+        }
+    public Query getParentFilter() {
+        static final FieldType FIELD_TYPE = new FieldType();
+    public Collection<String> getChildren() {
+ * license agreements. See the NOTICE file distributed with
     @Override
+    @Override
+        Field field = new Field(fieldType().name(), binaryValue, fieldType);
+        @Override
+        @Override
+ * You may obtain a copy of the License at
+ * not use this file except in compliance with the License.
     protected void mergeOptions(FieldMapper other, List<String> conflicts) {
-        ParentIdFieldMapper parentMergeWith = (ParentIdFieldMapper) other;
-        this.children = parentMergeWith.children;
+import org.apache.lucene.index.Term;
+    protected ParentIdFieldMapper clone() {
+import java.util.Set;
+ *
+    public Query getChildrenFilter() {
+import org.apache.lucene.index.IndexOptions;
+ * this file be licensed under the Apache-2.0 license or a
+import org.apache.lucene.search.TermQuery;
+        FieldType fieldType,
+     */
+            failIfNoDocValues();
+        BooleanQuery.Builder builder = new BooleanQuery.Builder();
     }
-
-    @Override
-    protected String contentType() {
+        if (context.externalValueSet() == false) {
+import org.apache.lucene.search.BooleanQuery;
+                name,
+            return new SortedSetOrdinalsIndexFieldData.Builder(name(), CoreValuesSourceType.BYTES);
+        this.children = children;
+        context.doc().add(field);
         return CONTENT_TYPE;
+ * software distributed under the License is distributed on an
+            return builder;
+import org.opensearch.index.mapper.TextSearchInfo;
+import org.opensearch.index.mapper.MappedFieldType;
+import org.apache.lucene.document.Field;
+     * Returns the parent name associated with this mapper.
+            FIELD_TYPE.freeze();
+    ) {
+            FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
+        this.parentName = parentName;
+    public String getParentName() {
+            if (value == null) {
+        private final Set<String> children;
+        static {
+import org.apache.lucene.search.BooleanClause;
+        String refId = (String) context.externalValue();
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.index.mapper.ParseContext;
+/*
     }
+            BytesRef binaryValue = (BytesRef) value;
+    /**
+ * compatible open source license.
+import java.util.Collection;
+        return new ConstantScoreQuery(builder.build());
+/*
+/**
+    protected String contentType() {
+        }
+        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {
+        String refId = (String) context.externalValue();
+import java.util.Map;
+    @Override
+    static class Defaults {
+                parent,
+    @Override
+    }
+            super(name, true, false, true, TextSearchInfo.SIMPLE_MATCH_ONLY, meta);
+        public ParentIdFieldMapper build(BuilderContext context) {
+        public Builder eagerGlobalOrdinals(boolean eagerGlobalOrdinals) {
+        @Override
+import org.opensearch.index.fielddata.plain.SortedSetOrdinalsIndexFieldData;
+ * the Apache License, Version 2.0 (the "License"); you may
+        return new TermQuery(new Term(name().substring(0, name().indexOf('#')), parentName));
+            builder.add(getChildFilter(child), BooleanClause.Occur.SHOULD);
 }
+ */
+import java.util.List;
+    }
+ * the value that link documents in the index (parent _id or _id if the document is a parent).
+        }
+import org.opensearch.index.mapper.StringFieldType;
+    public static final class ParentIdFieldType extends StringFieldType {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                return null;
+ * ownership. Elasticsearch licenses this file to you under
+        context.documentInput().addField(fieldType(), binaryValue);
+    @Override
+    protected ParentIdFieldMapper(
+            builder = this;
+        String parentName,
+        MappedFieldType mappedFieldType
+                fieldType,
+                children,
+        String simpleName,
+    }
+        }
+        return new TermQuery(new Term(name().substring(0, name().indexOf('#')), type));

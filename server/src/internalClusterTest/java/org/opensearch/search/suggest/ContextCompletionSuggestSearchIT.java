@@ -1,774 +1,719 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.suggest;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-import com.carrotsearch.randomizedtesting.generators.RandomStrings;
-
-import org.apache.lucene.tests.util.LuceneTestCase.SuppressCodecs;
-import org.opensearch.action.index.IndexRequestBuilder;
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.common.geo.GeoPoint;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.Fuzziness;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.suggest.CompletionSuggestSearchIT.CompletionMappingBuilder;
-import org.opensearch.search.suggest.completion.CompletionSuggestionBuilder;
-import org.opensearch.search.suggest.completion.context.CategoryContextMapping;
-import org.opensearch.search.suggest.completion.context.CategoryQueryContext;
-import org.opensearch.search.suggest.completion.context.ContextBuilder;
-import org.opensearch.search.suggest.completion.context.ContextMapping;
-import org.opensearch.search.suggest.completion.context.GeoContextMapping;
-import org.opensearch.search.suggest.completion.context.GeoQueryContext;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertNoFailures;
-import static org.hamcrest.core.IsEqual.equalTo;
-
-@SuppressCodecs("*") // requires custom completion format
-public class ContextCompletionSuggestSearchIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
-    public ContextCompletionSuggestSearchIT(Settings settings) {
-        super(settings);
-    }
-
-    @ParametersFactory
-    public static Collection<Object[]> parameters() {
-        return Arrays.asList(
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
-        );
-    }
-
-    private final String INDEX = RandomStrings.randomAsciiOfLength(random(), 10).toLowerCase(Locale.ROOT);
-    private final String FIELD = RandomStrings.randomAsciiOfLength(random(), 10).toLowerCase(Locale.ROOT);
-
-    @Override
-    protected int numberOfReplicas() {
-        return 0;
-    }
-
-    public void testContextPrefix() throws Exception {
-        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
-        map.put("cat", ContextBuilder.category("cat").field("cat").build());
-        boolean addAnotherContext = randomBoolean();
-        if (addAnotherContext) {
-            map.put("type", ContextBuilder.category("type").field("type").build());
-        }
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 0; i < numDocs; i++) {
-            XContentBuilder source = jsonBuilder().startObject()
                 .startObject(FIELD)
-                .field("input", "suggestion" + i)
-                .field("weight", i + 1)
-                .endObject()
-                .field("cat", "cat" + i % 2);
-            if (addAnotherContext) {
-                source.field("type", "type" + i % 3);
-            }
-            source.endObject();
-            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
-        }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD)
-            .prefix("sugg")
-            .contexts(
-                Collections.singletonMap(
-                    "cat",
-                    Collections.singletonList(CategoryQueryContext.builder().setCategory("cat").setPrefix(true).build())
-                )
-            );
-        assertSuggestions("foo", prefix, "suggestion9", "suggestion8", "suggestion7", "suggestion6", "suggestion5");
-    }
-
-    public void testContextRegex() throws Exception {
-        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
-        map.put("cat", ContextBuilder.category("cat").field("cat").build());
-        boolean addAnotherContext = randomBoolean();
-        if (addAnotherContext) {
-            map.put("type", ContextBuilder.category("type").field("type").build());
-        }
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 0; i < numDocs; i++) {
             XContentBuilder source = jsonBuilder().startObject()
-                .startObject(FIELD)
-                .field("input", "sugg" + i + "estion")
-                .field("weight", i + 1)
-                .endObject()
-                .field("cat", "cat" + i % 2);
-            if (addAnotherContext) {
-                source.field("type", "type" + i % 3);
-            }
-            source.endObject();
-            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
-        }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD)
-            .regex("sugg.*es")
-            .contexts(
-                Collections.singletonMap(
-                    "cat",
-                    Collections.singletonList(CategoryQueryContext.builder().setCategory("cat").setPrefix(true).build())
-                )
-            );
-        assertSuggestions("foo", prefix, "sugg9estion", "sugg8estion", "sugg7estion", "sugg6estion", "sugg5estion");
-    }
-
-    public void testContextFuzzy() throws Exception {
-        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
-        map.put("cat", ContextBuilder.category("cat").field("cat").build());
-        boolean addAnotherContext = randomBoolean();
-        if (addAnotherContext) {
-            map.put("type", ContextBuilder.category("type").field("type").build());
-        }
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 0; i < numDocs; i++) {
-            XContentBuilder source = jsonBuilder().startObject()
-                .startObject(FIELD)
-                .field("input", "sugxgestion" + i)
-                .field("weight", i + 1)
-                .endObject()
-                .field("cat", "cat" + i % 2);
-            if (addAnotherContext) {
-                source.field("type", "type" + i % 3);
-            }
-            source.endObject();
-            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
-        }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD)
-            .prefix("sugg", Fuzziness.ONE)
-            .contexts(
-                Collections.singletonMap(
-                    "cat",
-                    Collections.singletonList(CategoryQueryContext.builder().setCategory("cat").setPrefix(true).build())
-                )
-            );
-        assertSuggestions("foo", prefix, "sugxgestion9", "sugxgestion8", "sugxgestion7", "sugxgestion6", "sugxgestion5");
-    }
-
-    public void testContextFilteringWorksWithUTF8Categories() throws Exception {
-        CategoryContextMapping contextMapping = ContextBuilder.category("cat").field("cat").build();
-        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>(Collections.singletonMap("cat", contextMapping));
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
-        createIndexAndMapping(mapping);
-        IndexResponse indexResponse = client().prepareIndex(INDEX)
-            .setId("1")
-            .setSource(
-                jsonBuilder().startObject()
-                    .startObject(FIELD)
-                    .field("input", "suggestion")
-                    .endObject()
-                    .field("cat", "ctx\\u00e4")
-                    .endObject()
-            )
-            .get();
         assertThat(indexResponse.status(), equalTo(RestStatus.CREATED));
-        assertNoFailures(client().admin().indices().prepareRefresh(INDEX).get());
-        CompletionSuggestionBuilder contextSuggestQuery = SuggestBuilders.completionSuggestion(FIELD)
-            .prefix("sugg")
-            .contexts(
-                Collections.singletonMap("cat", Collections.singletonList(CategoryQueryContext.builder().setCategory("ctx\\u00e4").build()))
-            );
-        assertSuggestions("foo", contextSuggestQuery, "suggestion");
-    }
-
-    public void testSingleContextFiltering() throws Exception {
-        CategoryContextMapping contextMapping = ContextBuilder.category("cat").field("cat").build();
-        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>(Collections.singletonMap("cat", contextMapping));
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 0; i < numDocs; i++) {
-            indexRequestBuilders.add(
-                client().prepareIndex(INDEX)
-                    .setId("" + i)
-                    .setSource(
-                        jsonBuilder().startObject()
-                            .startObject(FIELD)
-                            .field("input", "suggestion" + i)
-                            .field("weight", i + 1)
-                            .endObject()
-                            .field("cat", "cat" + i % 2)
-                            .endObject()
-                    )
-            );
         }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD)
-            .prefix("sugg")
-            .contexts(
-                Collections.singletonMap("cat", Collections.singletonList(CategoryQueryContext.builder().setCategory("cat0").build()))
-            );
-
-        assertSuggestions("foo", prefix, "suggestion8", "suggestion6", "suggestion4", "suggestion2", "suggestion0");
-    }
-
-    public void testSingleContextBoosting() throws Exception {
-        CategoryContextMapping contextMapping = ContextBuilder.category("cat").field("cat").build();
-        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>(Collections.singletonMap("cat", contextMapping));
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 0; i < numDocs; i++) {
-            indexRequestBuilders.add(
-                client().prepareIndex(INDEX)
-                    .setId("" + i)
-                    .setSource(
-                        jsonBuilder().startObject()
-                            .startObject(FIELD)
-                            .field("input", "suggestion" + i)
-                            .field("weight", i + 1)
-                            .endObject()
-                            .field("cat", "cat" + i % 2)
-                            .endObject()
-                    )
-            );
-        }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD)
-            .prefix("sugg")
-            .contexts(
-                Collections.singletonMap(
-                    "cat",
-                    Arrays.asList(
-                        CategoryQueryContext.builder().setCategory("cat0").setBoost(3).build(),
-                        CategoryQueryContext.builder().setCategory("cat1").build()
-                    )
-                )
-            );
-        assertSuggestions("foo", prefix, "suggestion8", "suggestion6", "suggestion4", "suggestion9", "suggestion2");
-    }
-
-    public void testMultiContextFiltering() throws Exception {
-        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
-        map.put("cat", ContextBuilder.category("cat").field("cat").build());
-        map.put("type", ContextBuilder.category("type").field("type").build());
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 0; i < numDocs; i++) {
+            .endObject();
             XContentBuilder source = jsonBuilder().startObject()
-                .startObject(FIELD)
-                .field("input", "suggestion" + i)
-                .field("weight", i + 1)
-                .endObject()
-                .field("cat", "cat" + i % 2)
-                .field("type", "type" + i % 4)
-                .endObject();
-            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
-        }
-        indexRandom(true, indexRequestBuilders);
-
-        // filter only on context cat
-        CompletionSuggestionBuilder catFilterSuggest = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
-        catFilterSuggest.contexts(
-            Collections.singletonMap("cat", Collections.singletonList(CategoryQueryContext.builder().setCategory("cat0").build()))
-        );
-        assertSuggestions("foo", catFilterSuggest, "suggestion8", "suggestion6", "suggestion4", "suggestion2", "suggestion0");
-
-        // filter only on context type
-        CompletionSuggestionBuilder typeFilterSuggest = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
-        typeFilterSuggest.contexts(
-            Collections.singletonMap(
-                "type",
-                Arrays.asList(
-                    CategoryQueryContext.builder().setCategory("type2").build(),
-                    CategoryQueryContext.builder().setCategory("type1").build()
-                )
-            )
-        );
-        assertSuggestions("foo", typeFilterSuggest, "suggestion9", "suggestion6", "suggestion5", "suggestion2", "suggestion1");
-    }
-
-    public void testMultiContextBoosting() throws Exception {
-        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
-        map.put("cat", ContextBuilder.category("cat").field("cat").build());
-        map.put("type", ContextBuilder.category("type").field("type").build());
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 0; i < numDocs; i++) {
             XContentBuilder source = jsonBuilder().startObject()
-                .startObject(FIELD)
-                .field("input", "suggestion" + i)
-                .field("weight", i + 1)
-                .endObject()
-                .field("cat", "cat" + i % 2)
-                .field("type", "type" + i % 4)
-                .endObject();
-            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
+        for (int i = 0; i < numDocs; i++) {
         }
+        createIndexAndMapping(mapping);
+                .endObject()
+        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
         indexRandom(true, indexRequestBuilders);
-
-        // boost only on context cat
-        CompletionSuggestionBuilder catBoostSuggest = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
-        catBoostSuggest.contexts(
-            Collections.singletonMap(
-                "cat",
-                Arrays.asList(
-                    CategoryQueryContext.builder().setCategory("cat0").setBoost(3).build(),
-                    CategoryQueryContext.builder().setCategory("cat1").build()
-                )
-            )
-        );
-        assertSuggestions("foo", catBoostSuggest, "suggestion8", "suggestion6", "suggestion4", "suggestion9", "suggestion2");
-
-        // boost only on context type
-        CompletionSuggestionBuilder typeBoostSuggest = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
-        typeBoostSuggest.contexts(
-            Collections.singletonMap(
-                "type",
-                Arrays.asList(
-                    CategoryQueryContext.builder().setCategory("type2").setBoost(2).build(),
-                    CategoryQueryContext.builder().setCategory("type1").setBoost(4).build()
-                )
-            )
-        );
-        assertSuggestions("foo", typeBoostSuggest, "suggestion9", "suggestion5", "suggestion6", "suggestion1", "suggestion2");
-
-        // boost on both contexts
-        CompletionSuggestionBuilder multiContextBoostSuggest = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
-        // query context order should never matter
-        Map<String, List<? extends ToXContent>> contextMap = new HashMap<>();
-        contextMap.put(
-            "type",
-            Arrays.asList(
-                CategoryQueryContext.builder().setCategory("type2").setBoost(2).build(),
-                CategoryQueryContext.builder().setCategory("type1").setBoost(4).build()
-            )
-        );
-        contextMap.put(
-            "cat",
-            Arrays.asList(
-                CategoryQueryContext.builder().setCategory("cat0").setBoost(3).build(),
-                CategoryQueryContext.builder().setCategory("cat1").build()
-            )
-        );
+                            .endObject()
+ *
         multiContextBoostSuggest.contexts(contextMap);
-        // the score of each suggestion is the maximum score among the matching contexts
-        assertSuggestions("foo", multiContextBoostSuggest, "suggestion9", "suggestion8", "suggestion5", "suggestion6", "suggestion4");
-    }
-
-    public void testSeveralContexts() throws Exception {
-        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
-        final int numContexts = randomIntBetween(2, 5);
-        for (int i = 0; i < numContexts; i++) {
-            map.put("type" + i, ContextBuilder.category("type" + i).field("type" + i).build());
-        }
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
-        createIndexAndMapping(mapping);
-        int numDocs = randomIntBetween(10, 200);
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 0; i < numDocs; i++) {
-            XContentBuilder source = jsonBuilder().startObject()
-                .startObject(FIELD)
                 .field("input", "suggestion" + i)
-                .field("weight", numDocs - i)
-                .endObject();
-            for (int c = 0; c < numContexts; c++) {
-                source.field("type" + c, "type" + c + i % 4);
-            }
-            source.endObject();
-            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
-        }
-        indexRandom(true, indexRequestBuilders);
-
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD)
-            .prefix("sugg")
-            .contexts(
-                Collections.singletonMap(
-                    "type0",
-                    Collections.singletonList(CategoryQueryContext.builder().setCategory("type").setPrefix(true).build())
-                )
+                .field("type", "type" + i % 4)
             );
-        assertSuggestions("foo", prefix, "suggestion0", "suggestion1", "suggestion2", "suggestion3", "suggestion4");
-    }
-
-    public void testGeoFiltering() throws Exception {
-        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
-        map.put("geo", ContextBuilder.geo("geo").build());
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        GeoPoint[] geoPoints = new GeoPoint[] { new GeoPoint("ezs42e44yx96"), new GeoPoint("u4pruydqqvj8") };
-        for (int i = 0; i < numDocs; i++) {
-            XContentBuilder source = jsonBuilder().startObject()
-                .startObject(FIELD)
+import java.io.IOException;
                 .field("input", "suggestion" + i)
-                .field("weight", i + 1)
-                .startObject("contexts")
-                .field("geo", (i % 2 == 0) ? geoPoints[0].getGeohash() : geoPoints[1].getGeohash())
-                .endObject()
-                .endObject()
-                .endObject();
-            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
-        }
-        indexRandom(true, indexRequestBuilders);
-
-        CompletionSuggestionBuilder geoFilteringPrefix = SuggestBuilders.completionSuggestion(FIELD)
-            .prefix("sugg")
-            .contexts(
-                Collections.singletonMap(
-                    "geo",
-                    Collections.singletonList(GeoQueryContext.builder().setGeoPoint(new GeoPoint(geoPoints[0])).build())
-                )
-            );
-
-        assertSuggestions("foo", geoFilteringPrefix, "suggestion8", "suggestion6", "suggestion4", "suggestion2", "suggestion0");
-    }
-
-    public void testGeoBoosting() throws Exception {
-        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
-        map.put("geo", ContextBuilder.geo("geo").build());
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        GeoPoint[] geoPoints = new GeoPoint[] { new GeoPoint("ezs42e44yx96"), new GeoPoint("u4pruydqqvj8") };
-        for (int i = 0; i < numDocs; i++) {
-            XContentBuilder source = jsonBuilder().startObject()
-                .startObject(FIELD)
-                .field("input", "suggestion" + i)
-                .field("weight", i + 1)
-                .startObject("contexts")
-                .field("geo", (i % 2 == 0) ? geoPoints[0].getGeohash() : geoPoints[1].getGeohash())
-                .endObject()
-                .endObject()
-                .endObject();
-            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
-        }
-        indexRandom(true, indexRequestBuilders);
-
-        GeoQueryContext context1 = GeoQueryContext.builder().setGeoPoint(geoPoints[0]).setBoost(11).build();
-        GeoQueryContext context2 = GeoQueryContext.builder().setGeoPoint(geoPoints[1]).build();
-        CompletionSuggestionBuilder geoBoostingPrefix = SuggestBuilders.completionSuggestion(FIELD)
-            .prefix("sugg")
-            .contexts(Collections.singletonMap("geo", Arrays.asList(context1, context2)));
-
-        assertSuggestions("foo", geoBoostingPrefix, "suggestion8", "suggestion6", "suggestion4", "suggestion2", "suggestion0");
-    }
-
-    public void testGeoPointContext() throws Exception {
-        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
-        map.put("geo", ContextBuilder.geo("geo").build());
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 0; i < numDocs; i++) {
-            XContentBuilder source = jsonBuilder().startObject()
-                .startObject(FIELD)
-                .field("input", "suggestion" + i)
-                .field("weight", i + 1)
-                .startObject("contexts")
-                .startObject("geo")
-                .field("lat", 52.22)
-                .field("lon", 4.53)
-                .endObject()
-                .endObject()
-                .endObject()
-                .endObject();
-            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
-        }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD)
-            .prefix("sugg")
-            .contexts(
-                Collections.singletonMap(
-                    "geo",
-                    Collections.singletonList(GeoQueryContext.builder().setGeoPoint(new GeoPoint(52.2263, 4.543)).build())
-                )
-            );
-        assertSuggestions("foo", prefix, "suggestion9", "suggestion8", "suggestion7", "suggestion6", "suggestion5");
-    }
-
-    public void testGeoNeighbours() throws Exception {
-        String geohash = "gcpv";
-        List<String> neighbours = new ArrayList<>();
-        neighbours.add("gcpw");
-        neighbours.add("gcpy");
-        neighbours.add("u10n");
-        neighbours.add("gcpt");
-        neighbours.add("u10j");
-        neighbours.add("gcps");
-        neighbours.add("gcpu");
-        neighbours.add("u10h");
-
-        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
-        map.put("geo", ContextBuilder.geo("geo").precision(4).build());
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
-        createIndexAndMapping(mapping);
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 0; i < numDocs; i++) {
-            XContentBuilder source = jsonBuilder().startObject()
-                .startObject(FIELD)
-                .field("input", "suggestion" + i)
-                .field("weight", i + 1)
-                .startObject("contexts")
-                .field("geo", randomFrom(neighbours))
-                .endObject()
-                .endObject()
-                .endObject();
-            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
-        }
-        indexRandom(true, indexRequestBuilders);
-
-        CompletionSuggestionBuilder geoNeighbourPrefix = SuggestBuilders.completionSuggestion(FIELD)
-            .prefix("sugg")
-            .contexts(
-                Collections.singletonMap(
-                    "geo",
-                    Collections.singletonList(GeoQueryContext.builder().setGeoPoint(GeoPoint.fromGeohash(geohash)).build())
-                )
-            );
-
-        assertSuggestions("foo", geoNeighbourPrefix, "suggestion9", "suggestion8", "suggestion7", "suggestion6", "suggestion5");
-    }
-
     public void testGeoField() throws Exception {
-        XContentBuilder mapping = jsonBuilder();
-        mapping.startObject();
-        mapping.startObject("properties");
-        mapping.startObject("location");
-        mapping.startObject("properties");
-        mapping.startObject("pin");
-        mapping.field("type", "geo_point");
-        // Enable store and disable indexing sometimes
-        if (randomBoolean()) {
-            mapping.field("store", "true");
+            );
+                    )
+                    Collections.singletonList(CategoryQueryContext.builder().setCategory("type").setPrefix(true).build())
+            indexRequestBuilders.add(
+        CompletionSuggestionBuilder typeBoostSuggest = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
+                            .startObject(FIELD)
+        CategoryContextMapping contextMapping = ContextBuilder.category("cat").field("cat").build();
+        int numUnique = randomIntBetween(1, numDocs);
+        // the score of each suggestion is the maximum score among the matching contexts
+                source.field("type", "type" + i % 3);
+    }
+                    "cat",
+        XContentBuilder source1 = jsonBuilder().startObject()
+        assertSuggestions("foo", contextSuggestQuery, "suggestion");
+            searchResponse.getSuggest().getSuggestion(suggestionName).iterator().next().getOptions().iterator().next().getText().string()
+import org.opensearch.search.suggest.completion.context.ContextMapping;
+            .setSource(
+    }
+ * SPDX-License-Identifier: Apache-2.0
+        assertSuggestions("foo", typeBoostSuggest, "suggestion9", "suggestion5", "suggestion6", "suggestion1", "suggestion2");
+    }
+        Map<String, List<? extends ToXContent>> contextMap = new HashMap<>();
+                    "cat",
+import org.opensearch.search.suggest.completion.context.ContextBuilder;
+        for (int i = 0; i < numDocs; i++) {
+    public void testContextRegex() throws Exception {
+        mapping.endObject(); // location
+        int numDocs = 10;
+        );
+            .latlon("pin", 52.363389, 4.888695)
+    public void testSkipDuplicatesWithContexts() throws Exception {
+        int numDocs = randomIntBetween(10, 100);
         }
+                client().prepareIndex(INDEX)
+                    CategoryQueryContext.builder().setCategory("type1").setBoost(4).build()
+        contextMap.put(
+            .endObject()
         if (randomBoolean()) {
+        assertSuggestions("foo", prefix, "suggestion9", "suggestion8", "suggestion7", "suggestion6", "suggestion5");
+                .endObject();
+        map.put("type", ContextBuilder.category("type").field("type").build());
+                        if (fieldName != null) {
+ * Unless required by applicable law or agreed to in writing,
+        CompletionSuggestionBuilder multiContextBoostSuggest = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+        CompletionSuggestionBuilder geoFilteringPrefix = SuggestBuilders.completionSuggestion(FIELD)
+            XContentBuilder source = jsonBuilder().startObject()
+            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
+            );
+                            .startObject(FIELD)
+/*
+        );
+        assertSuggestions("foo", prefix, "suggestion0", "suggestion1", "suggestion2", "suggestion3", "suggestion4");
+                            .field("input", "suggestion" + i)
+        assertSuggestions("foo", typeFilterSuggest, "suggestion9", "suggestion6", "suggestion5", "suggestion2", "suggestion1");
+            .prefix("sugg")
+                    "geo",
+            .setId("1")
+                .endObject()
+            }
+        CompletionSuggestionBuilder context = SuggestBuilders.completionSuggestion(FIELD)
+        }
+import org.opensearch.search.suggest.completion.CompletionSuggestionBuilder;
+            .startObject("location")
+        // filter only on context type
+                )
+            .filter((s) -> Integer.parseInt(s.substring("suggestion".length())) % 2 == 0)
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD)
+            mapping.endArray();
+        if (completionMappingBuilder.contextMappings != null) {
+        CompletionSuggestionBuilder completionSuggestionBuilder = SuggestBuilders.completionSuggestion(FIELD)
+        }
+                        jsonBuilder().startObject()
+            }
+        List<String> neighbours = new ArrayList<>();
+                    )
+                .field("input", "suggestion" + i)
+                        }
+                .field("type", "type" + id)
+        }
+ *
+            if (addAnotherContext) {
             mapping.field("index", "false");
         }
-        mapping.endObject(); // pin
-        mapping.endObject();
-        mapping.endObject(); // location
-        mapping.startObject(FIELD);
-        mapping.field("type", "completion");
-        mapping.field("analyzer", "simple");
-
-        mapping.startArray("contexts");
-        mapping.startObject();
-        mapping.field("name", "st");
-        mapping.field("type", "geo");
-        mapping.field("path", "location.pin");
-        mapping.field("precision", 5);
-        mapping.endObject();
-        mapping.endArray();
-
-        mapping.endObject();
-        mapping.endObject();
-        mapping.endObject();
-
-        assertAcked(prepareCreate(INDEX).setMapping(mapping));
-
-        XContentBuilder source1 = jsonBuilder().startObject()
-            .startObject("location")
-            .latlon("pin", 52.529172, 13.407333)
-            .endObject()
-            .startObject(FIELD)
-            .array("input", "Hotel Amsterdam in Berlin")
-            .endObject()
-            .endObject();
-        client().prepareIndex(INDEX).setId("1").setSource(source1).get();
-
-        XContentBuilder source2 = jsonBuilder().startObject()
-            .startObject("location")
-            .latlon("pin", 52.363389, 4.888695)
-            .endObject()
-            .startObject(FIELD)
-            .array("input", "Hotel Berlin in Amsterdam")
-            .endObject()
-            .endObject();
-        client().prepareIndex(INDEX).setId("2").setSource(source2).get();
-
-        refresh();
-
-        String suggestionName = randomAlphaOfLength(10);
-        CompletionSuggestionBuilder context = SuggestBuilders.completionSuggestion(FIELD)
-            .text("h")
-            .size(10)
-            .contexts(
-                Collections.singletonMap(
-                    "st",
-                    Collections.singletonList(GeoQueryContext.builder().setGeoPoint(new GeoPoint(52.52, 13.4)).build())
-                )
-            );
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion(suggestionName, context))
-            .get();
-
-        assertEquals(searchResponse.getSuggest().size(), 1);
-        assertEquals(
-            "Hotel Amsterdam in Berlin",
-            searchResponse.getSuggest().getSuggestion(suggestionName).iterator().next().getOptions().iterator().next().getText().string()
-        );
-    }
-
-    public void testSkipDuplicatesWithContexts() throws Exception {
-        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
-        map.put("type", ContextBuilder.category("type").field("type").build());
-        map.put("cat", ContextBuilder.category("cat").field("cat").build());
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
-        createIndexAndMapping(mapping);
-        int numDocs = randomIntBetween(10, 100);
-        int numUnique = randomIntBetween(1, numDocs);
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 0; i < numDocs; i++) {
-            int id = i % numUnique;
-            XContentBuilder source = jsonBuilder().startObject()
-                .startObject(FIELD)
-                .field("input", "suggestion" + id)
                 .field("weight", id)
-                .endObject()
-                .field("cat", "cat" + id % 2)
-                .field("type", "type" + id)
-                .endObject();
-            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
-        }
+ * this work for additional information regarding copyright
+    public static Collection<Object[]> parameters() {
+                    "cat",
+            source.endObject();
         String[] expected = new String[numUnique];
-        for (int i = 0; i < numUnique; i++) {
+ * ownership. Elasticsearch licenses this file to you under
+                            categoryContextFields.add(fieldName);
+        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>(Collections.singletonMap("cat", contextMapping));
+                .endObject();
+                .startObject(FIELD)
+    }
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
+            Arrays.asList(
+                CategoryQueryContext.builder().setCategory("type1").setBoost(4).build()
+        assertSuggestions("foo", prefix, "sugxgestion9", "sugxgestion8", "sugxgestion7", "sugxgestion6", "sugxgestion5");
+        mapping.startObject("location");
+                    Arrays.asList(
+                )
+                .field("input", "sugg" + i + "estion")
+                .field("input", "sugxgestion" + i)
+            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
+        mapping.startObject(FIELD);
+            .contexts(
+        for (int i = 0; i < numDocs; i++) {
+            );
+        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>(Collections.singletonMap("cat", contextMapping));
+        assertSuggestions("foo", prefix, "sugg9estion", "sugg8estion", "sugg7estion", "sugg6estion", "sugg5estion");
+        indexRandom(true, indexRequestBuilders);
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
+                .startObject(FIELD)
+            .skipDuplicates(true)
+            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
+                .startObject("contexts")
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+/*
+import java.util.List;
+package org.opensearch.search.suggest;
+        map.put("cat", ContextBuilder.category("cat").field("cat").build());
+                .field("input", "suggestion" + i)
+import java.util.ArrayList;
+        assertSuggestions("foo", prefix, "suggestion8", "suggestion6", "suggestion4", "suggestion9", "suggestion2");
+                jsonBuilder().startObject()
+        int numDocs = randomIntBetween(10, 200);
+        XContentBuilder mapping = jsonBuilder().startObject()
+                Collections.singletonMap(
+                .field("weight", numDocs - i)
+            source.endObject();
+            )
+                .field("weight", i + 1)
+                .startObject(FIELD)
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
+                    .field("name", contextMapping.getValue().name())
+                    Collections.singletonList(GeoQueryContext.builder().setGeoPoint(new GeoPoint(52.2263, 4.543)).build())
+            "type",
+        map.put("cat", ContextBuilder.category("cat").field("cat").build());
+    protected int numberOfReplicas() {
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
+        }
+                .startObject("contexts")
+    }
+        typeBoostSuggest.contexts(
+        createIndexAndMapping(mapping);
+        if (addAnotherContext) {
+                Collections.singletonMap(
+}
+            .prefix("sugg")
+        neighbours.add("gcpw");
+                .startObject("contexts")
+        int numDocs = 10;
+    public void testSeveralContexts() throws Exception {
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+            map.put("type", ContextBuilder.category("type").field("type").build());
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD)
+                .prepareCreate(INDEX)
+                .endObject();
+            .field("preserve_position_increments", completionMappingBuilder.preservePositionIncrements);
+        createIndexAndMapping(mapping);
+    private void createIndexAndMapping(CompletionMappingBuilder completionMappingBuilder) throws IOException {
+ * under the License.
+        mapping.endObject();
+                .startObject(FIELD)
+                    )
+import org.apache.lucene.tests.util.LuceneTestCase.SuppressCodecs;
+                .setMapping(mapping)
+        if (addAnotherContext) {
+        CompletionSuggestionBuilder geoBoostingPrefix = SuggestBuilders.completionSuggestion(FIELD)
+        assertSuggestions("suggestions", completionSuggestionBuilder, expectedModulo);
+        indexRandom(true, indexRequestBuilders);
+                client().prepareIndex(INDEX)
+    }
+ * GitHub history for details.
+            .contexts(
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+            );
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD)
+            .startObject(FIELD)
+                        mapping.field("precision", ((GeoContextMapping) contextMapping.getValue()).getPrecision());
+    public void testSingleContextBoosting() throws Exception {
+        createIndexAndMapping(mapping);
+        // boost only on context cat
+        assertSuggestions("foo", multiContextBoostSuggest, "suggestion9", "suggestion8", "suggestion5", "suggestion6", "suggestion4");
+                .field("cat", "cat" + i % 2);
+                .field("weight", i + 1)
+            .endObject()
+import org.opensearch.search.suggest.completion.context.GeoQueryContext;
+        }
+        mapping.endArray();
+import com.carrotsearch.randomizedtesting.generators.RandomStrings;
+                CategoryQueryContext.builder().setCategory("type2").setBoost(2).build(),
+                    Collections.singletonList(CategoryQueryContext.builder().setCategory("cat").setPrefix(true).build())
+                        final String name = ((GeoContextMapping) contextMapping.getValue()).getFieldName();
+            )
+        return 0;
+                    "geo",
+        neighbours.add("u10h");
+        // query context order should never matter
+            .suggest(new SuggestBuilder().addSuggestion(suggestionName, context))
+                "type",
+            .contexts(
+                )
             expected[i] = "suggestion" + (numUnique - 1 - i);
+    }
+            Collections.singletonMap("cat", Collections.singletonList(CategoryQueryContext.builder().setCategory("cat0").build()))
+/*
+            .contexts(
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertNoFailures;
+                    Collections.singletonList(GeoQueryContext.builder().setGeoPoint(GeoPoint.fromGeohash(geohash)).build())
+                Arrays.asList(
+        );
+            .get();
+                .endObject();
+            .contexts(
+        createIndexAndMapping(mapping);
+            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
+        createIndexAndMapping(mapping);
+                        jsonBuilder().startObject()
+        String[] expectedModulo = Arrays.stream(expected)
+                .field("cat", "cat" + i % 2)
+import org.opensearch.search.suggest.CompletionSuggestSearchIT.CompletionMappingBuilder;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            XContentBuilder source = jsonBuilder().startObject()
+        for (String fieldName : categoryContextFields) {
+        mapping.field("name", "st");
+                .field("weight", i + 1)
+                            mapping.field("path", name);
+    private void createIndexAndMappingAndSettings(Settings settings, CompletionMappingBuilder completionMappingBuilder) throws IOException {
+        createIndexAndMapping(mapping);
+        mapping.field("path", "location.pin");
+            XContentBuilder source = jsonBuilder().startObject()
+            .startObject(FIELD)
+        assertEquals(searchResponse.getSuggest().size(), 1);
+import org.opensearch.common.settings.Settings;
+        indexRandom(true, indexRequestBuilders);
+        createIndexAndMapping(mapping);
+                    .setSource(
+                .get()
+                            .endObject()
+            .size(10)
+                    .setId("" + i)
+        assertSuggestions("foo", prefix, "suggestion9", "suggestion8", "suggestion7", "suggestion6", "suggestion5");
+            .startObject("properties")
+import org.opensearch.action.search.SearchResponse;
+        map.put("cat", ContextBuilder.category("cat").field("cat").build());
+        createIndexAndMappingAndSettings(Settings.EMPTY, completionMappingBuilder);
+        for (int i = 0; i < numDocs; i++) {
+        CompletionSuggestionBuilder typeFilterSuggest = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
+ * KIND, either express or implied.  See the License for the
+                )
+                .field("cat", "cat" + i % 2);
+                    Collections.singletonList(CategoryQueryContext.builder().setCategory("cat").setPrefix(true).build())
+                .field("input", "suggestion" + i)
+        assertAcked(prepareCreate(INDEX).setMapping(mapping));
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
+                .startObject(FIELD)
+            .field("type", "completion")
+            .prefix("sugg")
+                    .endObject()
+    }
+        mapping.startObject("pin");
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
+        }
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
+    }
         }
         indexRandom(true, indexRequestBuilders);
-        Map<String, List<? extends ToXContent>> contextMap = new HashMap<>();
-        contextMap.put("cat", Arrays.asList(CategoryQueryContext.builder().setCategory("cat0").build()));
-        CompletionSuggestionBuilder completionSuggestionBuilder = SuggestBuilders.completionSuggestion(FIELD)
-            .prefix("sugg")
-            .contexts(contextMap)
-            .skipDuplicates(true)
-            .size(numUnique);
-
-        String[] expectedModulo = Arrays.stream(expected)
-            .filter((s) -> Integer.parseInt(s.substring("suggestion".length())) % 2 == 0)
-            .toArray(String[]::new);
-        assertSuggestions("suggestions", completionSuggestionBuilder, expectedModulo);
+                            .field("weight", i + 1)
+            .array("input", "Hotel Amsterdam in Berlin")
+                )
+                            .endObject()
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
     }
-
-    public void assertSuggestions(String suggestionName, SuggestionBuilder suggestBuilder, String... suggestions) {
-        SearchResponse searchResponse = client().prepareSearch(INDEX)
-            .suggest(new SuggestBuilder().addSuggestion(suggestionName, suggestBuilder))
-            .get();
-        CompletionSuggestSearchIT.assertSuggestions(searchResponse, suggestionName, suggestions);
-    }
-
-    private void createIndexAndMapping(CompletionMappingBuilder completionMappingBuilder) throws IOException {
-        createIndexAndMappingAndSettings(Settings.EMPTY, completionMappingBuilder);
-    }
-
-    private void createIndexAndMappingAndSettings(Settings settings, CompletionMappingBuilder completionMappingBuilder) throws IOException {
-        XContentBuilder mapping = jsonBuilder().startObject()
-            .startObject("properties")
-            .startObject(FIELD)
-            .field("type", "completion")
-            .field("analyzer", completionMappingBuilder.indexAnalyzer)
-            .field("search_analyzer", completionMappingBuilder.searchAnalyzer)
-            .field("preserve_separators", completionMappingBuilder.preserveSeparators)
-            .field("preserve_position_increments", completionMappingBuilder.preservePositionIncrements);
-
-        List<String> categoryContextFields = new ArrayList<>();
-        if (completionMappingBuilder.contextMappings != null) {
-            mapping.startArray("contexts");
-            for (Map.Entry<String, ContextMapping<?>> contextMapping : completionMappingBuilder.contextMappings.entrySet()) {
-                mapping.startObject()
-                    .field("name", contextMapping.getValue().name())
-                    .field("type", contextMapping.getValue().type().name());
-                switch (contextMapping.getValue().type()) {
-                    case CATEGORY:
-                        final String fieldName = ((CategoryContextMapping) contextMapping.getValue()).getFieldName();
-                        if (fieldName != null) {
-                            mapping.field("path", fieldName);
-                            categoryContextFields.add(fieldName);
-                        }
-                        break;
-                    case GEO:
-                        final String name = ((GeoContextMapping) contextMapping.getValue()).getFieldName();
-                        mapping.field("precision", ((GeoContextMapping) contextMapping.getValue()).getPrecision());
-                        if (name != null) {
-                            mapping.field("path", name);
-                        }
-                        break;
-                }
-
-                mapping.endObject();
-            }
-
-            mapping.endArray();
+                .startObject(FIELD)
+            );
+                .endObject()
+            Collections.singletonMap(
+        String suggestionName = randomAlphaOfLength(10);
         }
         mapping.endObject();
-        for (String fieldName : categoryContextFields) {
-            mapping.startObject(fieldName).field("type", randomBoolean() ? "keyword" : "text").endObject();
-        }
-        mapping.endObject().endObject();
-
-        assertAcked(
-            client().admin()
-                .indices()
-                .prepareCreate(INDEX)
-                .setSettings(Settings.builder().put(indexSettings()).put(settings))
-                .setMapping(mapping)
-                .get()
-        );
+        map.put("geo", ContextBuilder.geo("geo").precision(4).build());
+import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
+                .field("weight", i + 1)
+            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
+        indexRandom(true, indexRequestBuilders);
+            .get();
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+        neighbours.add("gcpt");
+                )
+                    .field("input", "suggestion")
+        map.put("cat", ContextBuilder.category("cat").field("cat").build());
+                Collections.singletonMap(
+        mapping.startObject();
+import static org.hamcrest.core.IsEqual.equalTo;
+                Collections.singletonMap(
+ */
+        createIndexAndMapping(mapping);
+                .field("input", "suggestion" + i)
+            .contexts(
+                .field("weight", i + 1)
+                    .field("cat", "ctx\\u00e4")
+        for (int i = 0; i < numDocs; i++) {
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+        catBoostSuggest.contexts(
+        mapping.field("precision", 5);
+            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        // filter only on context cat
+                .field("input", "suggestion" + i)
+            XContentBuilder source = jsonBuilder().startObject()
+                    "cat",
+        for (int i = 0; i < numDocs; i++) {
+            source.endObject();
+        mapping.field("analyzer", "simple");
     }
-}
+        for (int i = 0; i < numDocs; i++) {
+            .contexts(contextMap)
+            .contexts(Collections.singletonMap("geo", Arrays.asList(context1, context2)));
+        }
+        typeFilterSuggest.contexts(
+        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
+                .endObject()
+                Arrays.asList(
+            Arrays.asList(
+        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
+        contextMap.put(
+        );
+            .field("analyzer", completionMappingBuilder.indexAnalyzer)
+            );
+        );
+                        if (name != null) {
+                .endObject()
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+ * Modifications Copyright OpenSearch Contributors. See
+                .endObject();
+            }
+import org.opensearch.common.unit.Fuzziness;
+            .prefix("sugg")
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+                    CategoryQueryContext.builder().setCategory("type2").setBoost(2).build(),
+        // boost on both contexts
+        CategoryContextMapping contextMapping = ContextBuilder.category("cat").field("cat").build();
+        for (int i = 0; i < numDocs; i++) {
+        super(settings);
+        assertNoFailures(client().admin().indices().prepareRefresh(INDEX).get());
+    public void testGeoFiltering() throws Exception {
+                            .field("cat", "cat" + i % 2)
+        createIndexAndMapping(mapping);
+                            mapping.field("path", fieldName);
+        }
+                .endObject();
+        CompletionSuggestionBuilder geoNeighbourPrefix = SuggestBuilders.completionSuggestion(FIELD)
+import org.opensearch.search.suggest.completion.context.GeoContextMapping;
+    }
+        }
+        map.put("type", ContextBuilder.category("type").field("type").build());
+        int numDocs = 10;
+                    "type0",
+        mapping.startObject("properties");
+        neighbours.add("gcpu");
+        GeoPoint[] geoPoints = new GeoPoint[] { new GeoPoint("ezs42e44yx96"), new GeoPoint("u4pruydqqvj8") };
+    @ParametersFactory
+    }
+                CategoryQueryContext.builder().setCategory("cat0").setBoost(3).build(),
+            .latlon("pin", 52.529172, 13.407333)
+        // boost only on context type
+        for (int i = 0; i < numUnique; i++) {
+            .text("h")
+import org.opensearch.core.rest.RestStatus;
+            Collections.singletonMap(
+        map.put("cat", ContextBuilder.category("cat").field("cat").build());
+            .prefix("sugg")
+                            .field("cat", "cat" + i % 2)
+        boolean addAnotherContext = randomBoolean();
+                .field("cat", "cat" + i % 2)
+                    Collections.singletonList(GeoQueryContext.builder().setGeoPoint(new GeoPoint(geoPoints[0])).build())
+            }
+        boolean addAnotherContext = randomBoolean();
+        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
+        List<String> categoryContextFields = new ArrayList<>();
+        if (addAnotherContext) {
+            .prefix("sugg")
+        neighbours.add("gcpy");
+                Collections.singletonMap(
+                .endObject()
+                .endObject()
+            )
+    public ContextCompletionSuggestSearchIT(Settings settings) {
+        indexRandom(true, indexRequestBuilders);
+                    .setSource(
+        map.put("cat", ContextBuilder.category("cat").field("cat").build());
+                    case CATEGORY:
+        mapping.endObject();
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+ * The OpenSearch Contributors require contributions made to
+        }
+                Collections.singletonMap(
+        catFilterSuggest.contexts(
+            );
+        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
+            mapping.field("store", "true");
+            .size(numUnique);
+                Collections.singletonMap("cat", Collections.singletonList(CategoryQueryContext.builder().setCategory("cat0").build()))
+            XContentBuilder source = jsonBuilder().startObject()
+            )
+    public void testGeoNeighbours() throws Exception {
+        assertAcked(
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+import java.util.HashMap;
+            map.put("type" + i, ContextBuilder.category("type" + i).field("type" + i).build());
+        GeoPoint[] geoPoints = new GeoPoint[] { new GeoPoint("ezs42e44yx96"), new GeoPoint("u4pruydqqvj8") };
+import org.opensearch.search.suggest.completion.context.CategoryQueryContext;
+            mapping.startObject(fieldName).field("type", randomBoolean() ? "keyword" : "text").endObject();
+        int numDocs = 10;
+            .contexts(
+            );
+            )
+    }
+                source.field("type" + c, "type" + c + i % 4);
+        indexRandom(true, indexRequestBuilders);
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
+        int numDocs = 10;
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
+            );
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+                        break;
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD)
+                        final String fieldName = ((CategoryContextMapping) contextMapping.getValue()).getFieldName();
+        );
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+                Collections.singletonMap(
+        indexRandom(true, indexRequestBuilders);
+ * You may obtain a copy of the License at
+            .regex("sugg.*es")
+import org.opensearch.core.xcontent.XContentBuilder;
+        CompletionSuggestionBuilder catFilterSuggest = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD)
+            .startObject("location")
+        for (int i = 0; i < numContexts; i++) {
+                .endObject()
+        // Enable store and disable indexing sometimes
+ */
+        );
+        createIndexAndMapping(mapping);
+            if (addAnotherContext) {
+            Collections.singletonMap(
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD)
+        int numDocs = 10;
+                    CategoryQueryContext.builder().setCategory("type1").build()
+ */
+            .get();
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+        createIndexAndMapping(mapping);
+            indexRequestBuilders.add(
+            mapping.startArray("contexts");
+                            .endObject()
+                )
+                    .startObject(FIELD)
+                    "geo",
+            client().admin()
+ *
+        String geohash = "gcpv";
+        }
+                .endObject()
+        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
+                .startObject(FIELD)
+        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
+        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
+    }
+                .endObject()
+                .endObject()
+        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
+        assertSuggestions("foo", geoFilteringPrefix, "suggestion8", "suggestion6", "suggestion4", "suggestion2", "suggestion0");
+                .indices()
+                .field("cat", "cat" + i % 2);
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+import org.opensearch.common.geo.GeoPoint;
+import java.util.Collection;
+    public void testSingleContextFiltering() throws Exception {
+        );
+                )
+            XContentBuilder source = jsonBuilder().startObject()
+            );
+            if (addAnotherContext) {
+        contextMap.put("cat", Arrays.asList(CategoryQueryContext.builder().setCategory("cat0").build()));
+    }
+            int id = i % numUnique;
+    public void testMultiContextBoosting() throws Exception {
+                CategoryQueryContext.builder().setCategory("cat1").build()
+                .field("input", "suggestion" + id)
+ * Licensed to Elasticsearch under one or more contributor
+            XContentBuilder source = jsonBuilder().startObject()
+            map.put("type", ContextBuilder.category("type").field("type").build());
+        map.put("geo", ContextBuilder.geo("geo").build());
+public class ContextCompletionSuggestSearchIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
+            );
+                .startObject("contexts")
+        for (int i = 0; i < numDocs; i++) {
+import java.util.Arrays;
+ * not use this file except in compliance with the License.
+        final int numContexts = randomIntBetween(2, 5);
+                    case GEO:
+                .endObject()
+        Map<String, List<? extends ToXContent>> contextMap = new HashMap<>();
+        refresh();
+                .field("geo", (i % 2 == 0) ? geoPoints[0].getGeohash() : geoPoints[1].getGeohash())
+        assertSuggestions("foo", geoNeighbourPrefix, "suggestion9", "suggestion8", "suggestion7", "suggestion6", "suggestion5");
+        if (randomBoolean()) {
+        XContentBuilder source2 = jsonBuilder().startObject()
+    private final String INDEX = RandomStrings.randomAsciiOfLength(random(), 10).toLowerCase(Locale.ROOT);
+        neighbours.add("u10j");
+ * software distributed under the License is distributed on an
+                .field("weight", i + 1)
+                .field("lat", 52.22)
+                            .field("weight", i + 1)
+        mapping.endObject().endObject();
+    public void testGeoPointContext() throws Exception {
+            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
+            .contexts(
+        return Arrays.asList(
+            .prefix("sugg")
+        mapping.startArray("contexts");
+    public void testMultiContextFiltering() throws Exception {
+        int numDocs = 10;
+    public void testContextPrefix() throws Exception {
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
+        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>(Collections.singletonMap("cat", contextMapping));
+                Collections.singletonMap(
+                        CategoryQueryContext.builder().setCategory("cat1").build()
+            );
+                mapping.endObject();
+        client().prepareIndex(INDEX).setId("2").setSource(source2).get();
+                .setSettings(Settings.builder().put(indexSettings()).put(settings))
+                source.field("type", "type" + i % 3);
+        mapping.endObject();
+        }
+ * compatible open source license.
+                Arrays.asList(
+        createIndexAndMapping(mapping);
+        GeoQueryContext context1 = GeoQueryContext.builder().setGeoPoint(geoPoints[0]).setBoost(11).build();
+        int numDocs = 10;
+                    .field("type", contextMapping.getValue().type().name());
+            .prefix("sugg")
+            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
+            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
+                .field("input", "suggestion" + i)
+        CompletionSuggestionBuilder catBoostSuggest = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
+                .endObject()
+                    CategoryQueryContext.builder().setCategory("type2").build(),
+        for (int i = 0; i < numDocs; i++) {
+    public void assertSuggestions(String suggestionName, SuggestionBuilder suggestBuilder, String... suggestions) {
+            .startObject(FIELD)
+        createIndexAndMapping(mapping);
+            .contexts(
+        }
+                        }
+            }
+        IndexResponse indexResponse = client().prepareIndex(INDEX)
+        CompletionSuggestionBuilder contextSuggestQuery = SuggestBuilders.completionSuggestion(FIELD)
+        mapping.field("type", "geo");
+            .contexts(
+                .field("cat", "cat" + id % 2)
+                .field("geo", randomFrom(neighbours))
+import java.util.LinkedHashMap;
+import org.opensearch.action.index.IndexResponse;
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+                .startObject(FIELD)
+            "cat",
+ * license agreements. See the NOTICE file distributed with
+    private final String FIELD = RandomStrings.randomAsciiOfLength(random(), 10).toLowerCase(Locale.ROOT);
+        CategoryContextMapping contextMapping = ContextBuilder.category("cat").field("cat").build();
+    public void testContextFuzzy() throws Exception {
+            .array("input", "Hotel Berlin in Amsterdam")
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
+        indexRandom(true, indexRequestBuilders);
+                    .setId("" + i)
+import org.opensearch.action.index.IndexRequestBuilder;
+        indexRandom(true, indexRequestBuilders);
+import java.util.Map;
+            .prefix("sugg")
+        indexRandom(true, indexRequestBuilders);
+import java.util.Locale;
+        );
+    public void testContextFilteringWorksWithUTF8Categories() throws Exception {
+        mapping.startObject("properties");
+            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
+                mapping.startObject()
+                switch (contextMapping.getValue().type()) {
+        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
+                Collections.singletonMap("cat", Collections.singletonList(CategoryQueryContext.builder().setCategory("ctx\\u00e4").build()))
+        for (int i = 0; i < numDocs; i++) {
+                .endObject();
+            .endObject()
+        mapping.endObject();
+                    .endObject()
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
+        assertEquals(
+                .startObject(FIELD)
+                    CategoryQueryContext.builder().setCategory("cat0").setBoost(3).build(),
+                "cat",
+        mapping.field("type", "completion");
+                .endObject()
+            indexRequestBuilders.add(client().prepareIndex(INDEX).setId("" + i).setSource(source));
+    }
+                )
+        indexRandom(true, indexRequestBuilders);
+            )
+        boolean addAnotherContext = randomBoolean();
+                .endObject();
+            "Hotel Amsterdam in Berlin",
+    @Override
+            .contexts(
+                            .field("input", "suggestion" + i)
+                    "st",
+        client().prepareIndex(INDEX).setId("1").setSource(source1).get();
+            .toArray(String[]::new);
+        assertSuggestions("foo", catFilterSuggest, "suggestion8", "suggestion6", "suggestion4", "suggestion2", "suggestion0");
+    }
+        map.put("type", ContextBuilder.category("type").field("type").build());
+        SearchResponse searchResponse = client().prepareSearch(INDEX)
+        }
+                .startObject(FIELD)
+            for (Map.Entry<String, ContextMapping<?>> contextMapping : completionMappingBuilder.contextMappings.entrySet()) {
+            .endObject();
+        }
+        GeoQueryContext context2 = GeoQueryContext.builder().setGeoPoint(geoPoints[1]).build();
+        map.put("geo", ContextBuilder.geo("geo").build());
+        int numDocs = 10;
+ * this file be licensed under the Apache-2.0 license or a
+                    CategoryQueryContext.builder().setCategory("cat1").build()
+                .endObject()
+            .prefix("sugg", Fuzziness.ONE)
+        mapping.endObject(); // pin
+        mapping.startObject();
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD)
+        mapping.endObject();
+        }
+            .field("preserve_separators", completionMappingBuilder.preserveSeparators)
+            .field("search_analyzer", completionMappingBuilder.searchAnalyzer)
+    }
+@SuppressCodecs("*") // requires custom completion format
+                .field("lon", 4.53)
+        mapping.field("type", "geo_point");
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+        neighbours.add("gcps");
+            source.endObject();
+            .prefix("sugg")
+        int numDocs = 10;
+import org.opensearch.core.xcontent.ToXContent;
+                        CategoryQueryContext.builder().setCategory("cat0").setBoost(3).build(),
+                )
+            .endObject()
+                    Collections.singletonList(GeoQueryContext.builder().setGeoPoint(new GeoPoint(52.52, 13.4)).build())
+ * specific language governing permissions and limitations
+                .field("weight", i + 1)
+            XContentBuilder source = jsonBuilder().startObject()
+        assertSuggestions("foo", geoBoostingPrefix, "suggestion8", "suggestion6", "suggestion4", "suggestion2", "suggestion0");
+        for (int i = 0; i < numDocs; i++) {
+ * the Apache License, Version 2.0 (the "License"); you may
+                .startObject("geo")
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
+    public void testGeoBoosting() throws Exception {
+    }
+                .field("weight", i + 1)
+    }
+                        break;
+        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
+            for (int c = 0; c < numContexts; c++) {
+                )
+        assertSuggestions("foo", prefix, "suggestion8", "suggestion6", "suggestion4", "suggestion2", "suggestion0");
+                .field("type", "type" + i % 4)
+import java.util.Collections;
+        map.put("geo", ContextBuilder.geo("geo").build());
+                .field("geo", (i % 2 == 0) ? geoPoints[0].getGeohash() : geoPoints[1].getGeohash())
+        neighbours.add("u10n");
+                source.field("type", "type" + i % 3);
+            map.put("type", ContextBuilder.category("type").field("type").build());
+                )
+        assertSuggestions("foo", catBoostSuggest, "suggestion8", "suggestion6", "suggestion4", "suggestion9", "suggestion2");
+        for (int i = 0; i < numDocs; i++) {
+            .suggest(new SuggestBuilder().addSuggestion(suggestionName, suggestBuilder))
+        XContentBuilder mapping = jsonBuilder();
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
+        LinkedHashMap<String, ContextMapping<?>> map = new LinkedHashMap<>();
+                }
+                    Collections.singletonList(CategoryQueryContext.builder().setCategory("cat").setPrefix(true).build())
+                .field("weight", i + 1)
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder().context(map);
+                Collections.singletonMap(
+import org.opensearch.search.suggest.completion.context.CategoryContextMapping;
+                "type",
+        int numDocs = 10;
+        CompletionSuggestSearchIT.assertSuggestions(searchResponse, suggestionName, suggestions);

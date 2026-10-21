@@ -1,370 +1,353 @@
----
-teardown:
-  - do:
-      ingest.delete_pipeline:
-        id: "1"
-        ignore: 404
-
----
-"Test creat community_id processor":
-  - skip:
-      version: " - 2.12.99"
-      reason: "introduced in 2.13"
-  - do:
-      catch: /\[source\_ip\_field\] required property is missing/
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "community_id" : {
-                  "destination_ip_field" : "dest"
-                }
-              }
-            ]
-          }
-  - do:
-      catch: /\[destination\_ip\_field\] required property is missing/
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "community_id" : {
-                  "source_ip_field" : "src"
-                }
-              }
-            ]
-          }
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "community_id" : {
-                  "source_ip_field" : "source",
-                  "destination_ip_field" : "dest",
-                  "source_port_field" : "srcPort",
-                  "destination_port_field" : "destPort",
-                  "iana_protocol_number_field" : "iana_number",
-                  "protocol_field" : "protocol",
-                  "icmp_type_field" : "icmp",
-                  "icmp_code_field" : "code",
-                  "seed" : 0,
-                  "target_field" : "community_id",
-                  "ignore_missing" : false
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
----
-"Test community_id processor with ignore_missing":
-  - skip:
-      version: " - 2.12.99"
-      reason: "introduced in 2.13"
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "community_id" : {
-                  "source_ip_field" : "source",
-                  "destination_ip_field" : "dest",
-                  "source_port_field" : "srcPort",
-                  "destination_port_field" : "destPort",
-                  "protocol_field" : "protocol"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      catch: /ip address in the field \[source\] is null or empty/
-      index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          dest: "1.1.1.1",
-          protocol: "tcp"
-        }
-
-  - do:
-      catch: /ip address in the field \[dest\] is null or empty/
-      index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          source: "1.1.1.1",
-          protocol: "tcp"
-        }
-
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "community_id" : {
-                  "source_ip_field" : "source",
-                  "destination_ip_field" : "dest",
-                  "source_port_field" : "srcPort",
-                  "destination_port_field" : "destPort",
-                  "protocol_field" : "protocol",
-                  "ignore_missing" : true
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          source: "1.1.1.1",
-          protocol: "tcp"
-        }
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source: { source: "1.1.1.1",  protocol: "tcp" } }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          dest: "2.2.2.2",
-          protocol: "tcp"
-        }
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source: { dest: "2.2.2.2",  protocol: "tcp" } }
-
----
-"Test community_id processor for tcp":
-  - skip:
-      version: " - 2.12.99"
-      reason: "introduced in 2.13"
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "community_id" : {
-                  "source_ip_field" : "source",
-                  "destination_ip_field" : "dest",
-                  "source_port_field" : "srcPort",
-                  "destination_port_field" : "destPort",
-                  "protocol_field" : "protocol"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          source: "66.35.250.204",
-          dest: "128.232.110.120",
-          protocol: "tcp",
-          srcPort: 80,
-          destPort: 34855
-        }
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.community_id:  "1:LQU9qZlK+B5F3KDmev6m5PMibrg="  }
-
----
-"Test community_id processor for udp":
-  - skip:
-      version: " - 2.12.99"
-      reason: "introduced in 2.13"
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "community_id" : {
-                  "source_ip_field" : "source",
-                  "destination_ip_field" : "dest",
-                  "source_port_field" : "srcPort",
-                  "destination_port_field" : "destPort",
-                  "protocol_field" : "protocol"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          source: "8.8.8.8",
-          dest: "192.168.1.52",
-          protocol: "udp",
-          srcPort: 53,
-          destPort: 54585
-        }
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.community_id: "1:d/FP5EW3wiY1vCndhwleRRKHowQ=" }
-
----
-"Test community_id processor for sctp":
-  - skip:
-      version: " - 2.12.99"
-      reason: "introduced in 2.13"
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "community_id" : {
-                  "source_ip_field" : "source",
-                  "destination_ip_field" : "dest",
-                  "source_port_field" : "srcPort",
-                  "destination_port_field" : "destPort",
-                  "protocol_field" : "protocol"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          source: "192.168.170.8",
-          dest: "192.168.170.56",
-          protocol: "sctp",
-          srcPort: 7,
-          destPort: 7
-        }
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.community_id: "1:MP2EtRCAUIZvTw6MxJHLV7N7JDs=" }
-
----
-"Test community_id processor for icmp":
-  - skip:
-      version: " - 2.12.99"
-      reason: "introduced in 2.13"
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "community_id" : {
-                  "source_ip_field" : "source",
-                  "destination_ip_field" : "dest",
-                  "icmp_type_field" : "type",
-                  "icmp_code_field" : "code",
-                  "protocol_field" : "protocol"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          source: "192.168.0.89",
-          dest: "192.168.0.1",
-          protocol: "icmp",
-          type: 8,
-          code: 0
-        }
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.community_id: "1:X0snYXpgwiv9TZtqg64sgzUn6Dk=" }
-
----
-"Test community_id processor for icmp-v6":
-  - skip:
-      version: " - 2.12.99"
-      reason: "introduced in 2.13"
-  - do:
-      ingest.put_pipeline:
-        id: "1"
-        body:  >
-          {
-            "processors": [
-              {
-                "community_id" : {
-                  "source_ip_field" : "source",
-                  "destination_ip_field" : "dest",
-                  "icmp_type_field" : "type",
-                  "icmp_code_field" : "code",
-                  "protocol_field" : "protocol"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "1"
-        body: {
-          source: "fe80::260:97ff:fe07:69ea",
-          dest: "ff02::1",
-          protocol: "ipv6-icmp",
-          type: 134,
-          code: 0
-        }
-  - do:
-      get:
-        index: test
-        id: 1
   - match: { _source.community_id: "1:pkvHqCL88/tg1k4cPigmZXUtL00=" }
+  - skip:
+---
+          protocol: "icmp",
+  - do:
+                  "source_port_field" : "srcPort",
+              {
+        index: test
+          protocol: "udp",
+                  "source_port_field" : "srcPort",
+          }
+  - do:
+      ingest.put_pipeline:
+            ]
+  - skip:
+          source: "1.1.1.1",
+                  "source_ip_field" : "source",
+                  "destination_ip_field" : "dest",
+                  "source_port_field" : "srcPort",
+          protocol: "tcp"
+      reason: "introduced in 2.13"
+  - do:
+        index: test
+            ]
+---
+                  "source_ip_field" : "source",
+  - do:
+        pipeline: "1"
+            "processors": [
+          destPort: 54585
+          protocol: "ipv6-icmp",
+          dest: "ff02::1",
+          destPort: 34855
+                  "icmp_code_field" : "code",
+                }
+      get:
+          {
+  - match: { acknowledged: true }
+          }
+  - match: { acknowledged: true }
+                  "protocol_field" : "protocol"
+              }
+              }
+          {
+                  "protocol_field" : "protocol"
+  - match: { acknowledged: true }
+            "processors": [
+                }
+        id: "1"
+                  "ignore_missing" : true
+---
+              }
+              {
+        pipeline: "1"
+              }
+        index: test
+            ]
+  - do:
+      index:
+        }
+"Test community_id processor for tcp":
+                  "destination_ip_field" : "dest",
+              {
+                  "source_port_field" : "srcPort",
+        body: {
+          srcPort: 7,
+                  "protocol_field" : "protocol"
+                  "protocol_field" : "protocol"
+"Test community_id processor for icmp":
+                  "destination_ip_field" : "dest"
+          dest: "192.168.0.1",
+      ingest.put_pipeline:
+      catch: /ip address in the field \[dest\] is null or empty/
+      ingest.put_pipeline:
+          }
+        index: test
+      get:
+  - match: { _source: { dest: "2.2.2.2",  protocol: "tcp" } }
+        id: "1"
+        body:  >
+        index: test
+              {
+          dest: "192.168.170.56",
+  - skip:
+  - do:
+                "community_id" : {
+                "community_id" : {
+        pipeline: "1"
+          type: 8,
+        ignore: 404
+                  "source_port_field" : "srcPort",
+          dest: "192.168.1.52",
+                  "source_ip_field" : "source",
+          }
+---
+  - skip:
+              {
+      version: " - 2.12.99"
+                }
+                  "source_ip_field" : "source",
+              {
+              {
+  - match: { acknowledged: true }
+                  "destination_ip_field" : "dest",
+        body: {
+          }
+          {
+        pipeline: "1"
+  - match: { acknowledged: true }
+        pipeline: "1"
+                }
+                  "iana_protocol_number_field" : "iana_number",
+        body: {
+  - match: { acknowledged: true }
+              }
+                  "icmp_code_field" : "code",
+          }
+      get:
+        body: {
+                "community_id" : {
+        id: 1
+                  "source_port_field" : "srcPort",
+        body:  >
+        body:  >
+                "community_id" : {
+  - do:
+        body:  >
+      version: " - 2.12.99"
+          destPort: 7
+                "community_id" : {
+      ingest.put_pipeline:
+"Test community_id processor with ignore_missing":
+---
+                "community_id" : {
+        index: test
+        id: "1"
+          protocol: "sctp",
+        id: "1"
+  - skip:
+        index: test
+        id: 1
+        }
+          dest: "128.232.110.120",
+      catch: /\[destination\_ip\_field\] required property is missing/
+        id: 1
+        body: {
+                  "destination_port_field" : "destPort",
+          {
+      version: " - 2.12.99"
+            "processors": [
+"Test community_id processor for sctp":
+      ingest.put_pipeline:
+                  "icmp_type_field" : "type",
+  - do:
+  - match: { _source.community_id: "1:MP2EtRCAUIZvTw6MxJHLV7N7JDs=" }
+---
+        body:  >
+        id: 1
+            ]
+      ingest.put_pipeline:
+        body:  >
+      catch: /\[source\_ip\_field\] required property is missing/
+        id: 1
+        pipeline: "1"
+"Test community_id processor for udp":
+        id: "1"
+teardown:
+            ]
+        id: 1
+        index: test
+        index: test
+          dest: "2.2.2.2",
+      index:
+        index: test
+  - do:
+          srcPort: 80,
+          {
+                  "icmp_type_field" : "icmp",
+                  "protocol_field" : "protocol",
+              }
+      index:
+              }
+            "processors": [
+                "community_id" : {
+                  "seed" : 0,
+        pipeline: "1"
+        index: test
+  - match: { acknowledged: true }
+                "community_id" : {
+                  "protocol_field" : "protocol",
+          {
+  - do:
+        index: test
+      get:
+        id: 1
+            ]
+      index:
+          srcPort: 53,
+      reason: "introduced in 2.13"
+                }
+                }
+              }
+---
+      ingest.put_pipeline:
+  - match: { acknowledged: true }
+                }
+                  "protocol_field" : "protocol"
+                }
+      ingest.delete_pipeline:
+          }
+        id: 1
+                }
+      index:
+        }
+        id: "1"
+      index:
+      version: " - 2.12.99"
+  - do:
+                  "destination_port_field" : "destPort",
+          source: "192.168.170.8",
+            "processors": [
+                  "destination_port_field" : "destPort",
+      reason: "introduced in 2.13"
+  - do:
+  - match: { _source.community_id: "1:X0snYXpgwiv9TZtqg64sgzUn6Dk=" }
+              {
+      get:
+                  "destination_ip_field" : "dest",
+        body: {
+                  "destination_port_field" : "destPort",
+          protocol: "tcp",
+            "processors": [
+        id: 1
+      ingest.put_pipeline:
+  - do:
+          type: 134,
+          protocol: "tcp"
+      ingest.put_pipeline:
+        id: 1
+        }
+        id: "1"
+  - do:
+                  "source_ip_field" : "source",
+      catch: /ip address in the field \[source\] is null or empty/
+          source: "192.168.0.89",
+                "community_id" : {
+  - do:
+"Test creat community_id processor":
+        }
+          protocol: "tcp"
+                  "source_ip_field" : "source",
+            "processors": [
+        body:  >
+        body: {
+      get:
+      ingest.put_pipeline:
+                  "source_ip_field" : "source",
+        index: test
+              }
+          {
+          code: 0
+          protocol: "tcp"
+          source: "66.35.250.204",
+        id: "1"
+        body:  >
+          }
+                  "icmp_code_field" : "code",
+        body:  >
+          dest: "1.1.1.1",
+      version: " - 2.12.99"
+                  "ignore_missing" : false
+        pipeline: "1"
+          {
+        }
+        id: 1
+  - do:
+        }
+        id: "1"
+          source: "fe80::260:97ff:fe07:69ea",
+        id: 1
+      get:
+        body:  >
+        index: test
+              {
+  - do:
+                  "icmp_type_field" : "type",
+            ]
+  - do:
+        id: 1
+  - do:
+      index:
+"Test community_id processor for icmp-v6":
+              }
+  - do:
+      reason: "introduced in 2.13"
+  - do:
+      reason: "introduced in 2.13"
+  - do:
+          source: "8.8.8.8",
+        pipeline: "1"
+          source: "1.1.1.1",
+                  "destination_port_field" : "destPort",
+            ]
+            ]
+        id: "1"
+        body: {
+        }
+      reason: "introduced in 2.13"
+      index:
+        id: 1
+                  "protocol_field" : "protocol"
+        id: "1"
+                  "destination_ip_field" : "dest",
+        body: {
+  - match: { _source: { source: "1.1.1.1",  protocol: "tcp" } }
+  - match: { _source.community_id: "1:d/FP5EW3wiY1vCndhwleRRKHowQ=" }
+          }
+  - do:
+  - do:
+            "processors": [
+      reason: "introduced in 2.13"
+  - do:
+            "processors": [
+                  "source_ip_field" : "source",
+  - match: { _source.community_id:  "1:LQU9qZlK+B5F3KDmev6m5PMibrg="  }
+  - skip:
+      version: " - 2.12.99"
+      version: " - 2.12.99"
+          code: 0
+  - do:
+                  "source_ip_field" : "src"
+              {
+          {
+        id: 1
+                "community_id" : {
+        id: 1
+                }
+            ]
+            "processors": [
+        index: test
+  - do:
+                  "destination_ip_field" : "dest",
+  - skip:
+                  "destination_ip_field" : "dest",
+          }
+                  "destination_port_field" : "destPort",
+                  "target_field" : "community_id",
+      index:
+          {
+        index: test
+---
+        }
+                  "destination_ip_field" : "dest",

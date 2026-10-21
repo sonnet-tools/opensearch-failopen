@@ -1,487 +1,452 @@
-#
-# Licensed to Elasticsearch under one or more contributor
-# license agreements. See the NOTICE file distributed with
-# this work for additional information regarding copyright
-# ownership. Elasticsearch licenses this file to you under
-# the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
-#
-
-#
-# Painless definition file. This defines the hierarchy of classes,
-# what methods and fields they have, etc.
-#
-
-#### Interfaces
-
-class java.text.AttributedCharacterIterator {
-  Set getAllAttributeKeys()
-  def getAttribute(AttributedCharacterIterator.Attribute)
-  Map getAttributes()
-  int getRunLimit()
-  int getRunLimit(Set)
-  int getRunStart()
-  int getRunStart(Set)
-}
-
-class java.text.CharacterIterator {
-  char DONE
-  def clone()
-  char current()
-  char first()
-  int getBeginIndex()
-  int getEndIndex()
-  int getIndex()
-  char last()
-  char next()
-  char previous()
-  char setIndex(int)
-}
-
-#### Classes
-
-class java.text.Annotation {
-  (Object)
-  def getValue()
-}
-
-class java.text.AttributedCharacterIterator$Attribute {
-  AttributedCharacterIterator.Attribute INPUT_METHOD_SEGMENT
-  AttributedCharacterIterator.Attribute LANGUAGE
-  AttributedCharacterIterator.Attribute READING
-}
-
-class java.text.AttributedString {
-  (String)
-  (String,Map)
-  void addAttribute(AttributedCharacterIterator.Attribute,Object)
-  void addAttribute(AttributedCharacterIterator.Attribute,Object,int,int)
-  void addAttributes(Map,int,int)
-  AttributedCharacterIterator getIterator()
-  AttributedCharacterIterator getIterator(AttributedCharacterIterator.Attribute[])
-  AttributedCharacterIterator getIterator(AttributedCharacterIterator.Attribute[],int,int)
-}
-
-class java.text.Bidi {
-  int DIRECTION_DEFAULT_LEFT_TO_RIGHT
-  int DIRECTION_DEFAULT_RIGHT_TO_LEFT
-  int DIRECTION_LEFT_TO_RIGHT
-  int DIRECTION_RIGHT_TO_LEFT
-  (AttributedCharacterIterator)
-  (char[],int,byte[],int,int,int)
-  (String,int)
-  boolean baseIsLeftToRight()
-  Bidi createLineBidi(int,int)
-  int getBaseLevel()
-  int getLength()
-  int getLevelAt(int)
-  int getRunCount()
-  int getRunLevel(int)
-  int getRunLimit(int)
-  int getRunStart(int)
-  boolean isLeftToRight()
-  boolean isMixed()
-  boolean isRightToLeft()
-  void reorderVisually(byte[],int,Object[],int,int)
-  boolean requiresBidi(char[],int,int)
-}
-
-class java.text.BreakIterator {
-  int DONE
-  def clone()
-  int current()
-  int first()
-  int following(int)
-  Locale[] getAvailableLocales()
-  BreakIterator getCharacterInstance()
-  BreakIterator getCharacterInstance(Locale)
-  BreakIterator getLineInstance()
-  BreakIterator getLineInstance(Locale)
-  BreakIterator getSentenceInstance()
-  BreakIterator getSentenceInstance(Locale)
-  CharacterIterator getText()
-  BreakIterator getWordInstance()
-  BreakIterator getWordInstance(Locale)
-  boolean isBoundary(int)
-  int last()
-  int next()
-  int next(int)
-  int preceding(int)
-  int previous()
-  void setText(String)
-}
-
-class java.text.ChoiceFormat {
-  (double[],String[])
-  (String)
-  void applyPattern(String)
-  def[] getFormats()
-  double[] getLimits()
-  double nextDouble(double)
-  double nextDouble(double,boolean)
-  double previousDouble(double)
-  void setChoices(double[],String[])
   String toPattern()
-}
-
-class java.text.CollationElementIterator {
-  int NULLORDER
-  int getMaxExpansion(int)
-  int getOffset()
-  int next()
-  int previous()
-  int primaryOrder(int)
-  void reset()
-  short secondaryOrder(int)
-  void setOffset(int)
-  void setText(String)
-  short tertiaryOrder(int)
-}
-
-class java.text.CollationKey {
-  int compareTo(CollationKey)
-  String getSourceString()
-  byte[] toByteArray()
-}
-
-class java.text.Collator {
-  int CANONICAL_DECOMPOSITION
-  int FULL_DECOMPOSITION
-  int IDENTICAL
-  int NO_DECOMPOSITION
-  int PRIMARY
-  int SECONDARY
-  int TERTIARY
-  def clone()
-  boolean equals(String,String)
-  Locale[] getAvailableLocales()
-  CollationKey getCollationKey(String)
-  int getDecomposition()
-  Collator getInstance()
-  Collator getInstance(Locale)
-  int getStrength()
-  void setDecomposition(int)
-  void setStrength(int)
-}
-
-class java.text.DateFormat {
-  int AM_PM_FIELD
-  int DATE_FIELD
-  int DAY_OF_WEEK_FIELD
-  int DAY_OF_WEEK_IN_MONTH_FIELD
-  int DAY_OF_YEAR_FIELD
-  int DEFAULT
-  int ERA_FIELD
-  int FULL
-  int HOUR_OF_DAY0_FIELD
-  int HOUR_OF_DAY1_FIELD
-  int HOUR0_FIELD
-  int HOUR1_FIELD
-  int LONG
-  int MEDIUM
-  int MILLISECOND_FIELD
-  int MINUTE_FIELD
-  int MONTH_FIELD
-  int SECOND_FIELD
-  int SHORT
-  int TIMEZONE_FIELD
-  int WEEK_OF_MONTH_FIELD
-  int WEEK_OF_YEAR_FIELD
-  int YEAR_FIELD
-  Locale[] getAvailableLocales()
-  Calendar getCalendar()
-  DateFormat getDateInstance()
-  DateFormat getDateInstance(int)
-  DateFormat getDateInstance(int,Locale)
-  DateFormat getDateTimeInstance()
-  DateFormat getDateTimeInstance(int,int)
-  DateFormat getDateTimeInstance(int,int,Locale)
-  DateFormat getInstance()
-  NumberFormat getNumberFormat()
-  DateFormat getTimeInstance()
-  DateFormat getTimeInstance(int)
-  DateFormat getTimeInstance(int,Locale)
-  TimeZone getTimeZone()
-  boolean isLenient()
-  Date parse(String)
-  Date parse(String,ParsePosition)
-  void setCalendar(Calendar)
-  void setLenient(boolean)
-  void setNumberFormat(NumberFormat)
-  void setTimeZone(TimeZone)
-}
-
-class java.text.DateFormat$Field {
-  DateFormat.Field AM_PM
-  DateFormat.Field DAY_OF_MONTH
-  DateFormat.Field DAY_OF_WEEK
-  DateFormat.Field DAY_OF_WEEK_IN_MONTH
-  DateFormat.Field DAY_OF_YEAR
-  DateFormat.Field ERA
-  DateFormat.Field HOUR_OF_DAY0
-  DateFormat.Field HOUR_OF_DAY1
-  DateFormat.Field HOUR0
-  DateFormat.Field HOUR1
-  DateFormat.Field MILLISECOND
-  DateFormat.Field MINUTE
-  DateFormat.Field MONTH
-  DateFormat.Field SECOND
-  DateFormat.Field TIME_ZONE
-  DateFormat.Field WEEK_OF_MONTH
-  DateFormat.Field WEEK_OF_YEAR
-  DateFormat.Field YEAR
-  int getCalendarField()
-  DateFormat.Field ofCalendarField(int)
-}
-
-class java.text.DateFormatSymbols {
-  ()
-  (Locale)
-  def clone()
-  String[] getAmPmStrings()
-  Locale[] getAvailableLocales()
-  String[] getEras()
-  DateFormatSymbols getInstance()
-  DateFormatSymbols getInstance(Locale)
-  String getLocalPatternChars()
-  String[] getMonths()
-  String[] getShortMonths()
-  String[] getShortWeekdays()
-  String[] getWeekdays()
-  String[][] getZoneStrings()
-  int hashCode()
-  void setAmPmStrings(String[])
-  void setEras(String[])
-  void setLocalPatternChars(String)
-  void setMonths(String[])
-  void setShortMonths(String[])
-  void setShortWeekdays(String[])
-  void setWeekdays(String[])
-  void setZoneStrings(String[][])
-}
-
-class java.text.DecimalFormat {
-  ()
-  (String)
-  (String,DecimalFormatSymbols)
-  void applyLocalizedPattern(String)
-  void applyPattern(String)
-  DecimalFormatSymbols getDecimalFormatSymbols()
-  int getGroupingSize()
-  int getMultiplier()
-  String getNegativePrefix()
-  String getNegativeSuffix()
-  String getPositivePrefix()
-  String getPositiveSuffix()
-  boolean isDecimalSeparatorAlwaysShown()
-  boolean isParseBigDecimal()
-  void setDecimalFormatSymbols(DecimalFormatSymbols)
-  void setDecimalSeparatorAlwaysShown(boolean)
-  void setGroupingSize(int)
-  void setMultiplier(int)
-  void setNegativePrefix(String)
-  void setNegativeSuffix(String)
-  void setPositivePrefix(String)
-  void setPositiveSuffix(String)
-  void setParseBigDecimal(boolean)
-  String toLocalizedPattern()
-  String toPattern()
-}
-
-class java.text.DecimalFormatSymbols {
-  ()
-  (Locale)
-  def clone()
-  Locale[] getAvailableLocales()
-  Currency getCurrency()
-  String getCurrencySymbol()
-  char getDecimalSeparator()
-  char getDigit()
-  String getExponentSeparator()
-  char getGroupingSeparator()
-  String getInfinity()
-  DecimalFormatSymbols getInstance()
-  DecimalFormatSymbols getInstance(Locale)
-  String getInternationalCurrencySymbol()
-  char getMinusSign()
-  char getMonetaryDecimalSeparator()
-  String getNaN()
-  char getPatternSeparator()
-  char getPercent()
-  char getPerMill()
-  char getZeroDigit()
-  void setCurrency(Currency)
-  void setCurrencySymbol(String)
-  void setDecimalSeparator(char)
   void setDigit(char)
-  void setExponentSeparator(String)
-  void setGroupingSeparator(char)
-  void setInfinity(String)
-  void setInternationalCurrencySymbol(String)
-  void setMinusSign(char)
-  void setMonetaryDecimalSeparator(char)
-  void setNaN(String)
-  void setPatternSeparator(char)
-  void setPercent(char)
-  void setPerMill(char)
-  void setZeroDigit(char)
-}
-
-class java.text.FieldPosition {
-  (int)
-  (Format.Field,int)
-  int getBeginIndex()
-  int getEndIndex()
-  int getField()
-  Format.Field getFieldAttribute()
-  void setBeginIndex(int)
-  void setEndIndex(int)
-}
-
-class java.text.Format {
-  def clone()
-  String format(Object)
-  StringBuffer format(Object,StringBuffer,FieldPosition)
-  AttributedCharacterIterator formatToCharacterIterator(Object)
-  Object parseObject(String)
-  Object parseObject(String,ParsePosition)
-}
-
-class java.text.Format$Field {
-}
-
-class java.text.MessageFormat {
-  void applyPattern(String)
-  String format(String,Object[])
-  Format[] getFormats()
-  Format[] getFormatsByArgumentIndex()
-  Locale getLocale()
-  Object[] parse(String)
-  Object[] parse(String,ParsePosition)
-  void setFormat(int,Format)
-  void setFormatByArgumentIndex(int,Format)
-  void setFormats(Format[])
-  void setFormatsByArgumentIndex(Format[])
-  void setLocale(Locale)
-  String toPattern()
-}
-
-class java.text.MessageFormat$Field {
-  MessageFormat.Field ARGUMENT
-}
-
-class java.text.Normalizer {
-  boolean isNormalized(CharSequence,Normalizer.Form)
-  String normalize(CharSequence,Normalizer.Form)
-}
-
-class java.text.NumberFormat {
-  int FRACTION_FIELD
-  int INTEGER_FIELD
-  Locale[] getAvailableLocales()
-  Currency getCurrency()
-  NumberFormat getCurrencyInstance()
-  NumberFormat getCurrencyInstance(Locale)
-  NumberFormat getInstance()
-  NumberFormat getInstance(Locale)
-  NumberFormat getIntegerInstance()
-  NumberFormat getIntegerInstance(Locale)
-  int getMaximumFractionDigits()
-  int getMaximumIntegerDigits()
-  int getMinimumFractionDigits()
-  int getMinimumIntegerDigits()
-  NumberFormat getNumberInstance()
-  NumberFormat getNumberInstance(Locale)
-  NumberFormat getPercentInstance()
-  NumberFormat getPercentInstance(Locale)
-  RoundingMode getRoundingMode()
-  boolean isGroupingUsed()
-  boolean isParseIntegerOnly()
-  Number parse(String)
-  Number parse(String,ParsePosition)
-  void setCurrency(Currency)
-  void setGroupingUsed(boolean)
-  void setMaximumFractionDigits(int)
-  void setMaximumIntegerDigits(int)
-  void setMinimumFractionDigits(int)
-  void setMinimumIntegerDigits(int)
-  void setParseIntegerOnly(boolean)
-  void setRoundingMode(RoundingMode)
-}
-
-class java.text.NumberFormat$Field {
-  NumberFormat.Field CURRENCY
-  NumberFormat.Field DECIMAL_SEPARATOR
-  NumberFormat.Field EXPONENT
-  NumberFormat.Field EXPONENT_SIGN
-  NumberFormat.Field EXPONENT_SYMBOL
-  NumberFormat.Field FRACTION
-  NumberFormat.Field GROUPING_SEPARATOR
-  NumberFormat.Field INTEGER
-  NumberFormat.Field PERCENT
-  NumberFormat.Field PERMILLE
-  NumberFormat.Field SIGN
-}
-
-class java.text.ParsePosition {
-  (int)
-  int getErrorIndex()
-  int getIndex()
-  void setErrorIndex(int)
-  void setIndex(int)
-}
-
-class java.text.RuleBasedCollator {
-  (String)
-  CollationElementIterator getCollationElementIterator(String)
-  String getRules()
-}
-
-class java.text.SimpleDateFormat {
-  ()
-  (String)
-  (String,Locale)
-  void applyLocalizedPattern(String)
-  void applyPattern(String)
-  Date get2DigitYearStart()
-  DateFormatSymbols getDateFormatSymbols()
-  void setDateFormatSymbols(DateFormatSymbols)
-  void set2DigitYearStart(Date)
+  int DAY_OF_WEEK_FIELD
+  int DIRECTION_LEFT_TO_RIGHT
+  void addAttribute(AttributedCharacterIterator.Attribute,Object)
+  double nextDouble(double,boolean)
+#
+  boolean isLeftToRight()
+  void setLenient(boolean)
+  void setChoices(double[],String[])
+#
+  int getOffset()
+  void setShortMonths(String[])
+  DateFormat.Field DAY_OF_MONTH
+  String getPositiveSuffix()
+  void setCalendar(Calendar)
+  char getMonetaryDecimalSeparator()
+  DateFormat.Field HOUR_OF_DAY1
+  int MEDIUM
+  int getRunLimit(int)
   String toLocalizedPattern()
-  String toPattern()
+  void applyLocalizedPattern(String)
+  void setParseIntegerOnly(boolean)
+  void setPercent(char)
+  void setShortWeekdays(String[])
+  DateFormat getTimeInstance(int,Locale)
+  int getMultiplier()
+  Calendar getCalendar()
 }
-
-class java.text.StringCharacterIterator {
-  (String)
-  (String,int)
-  (String,int,int,int)
-  void setText(String)
+  int getRunLevel(int)
+  int next()
 }
-
-#### Enums
-
-class java.text.Normalizer$Form {
-  Normalizer.Form NFC
-  Normalizer.Form NFD
+  int next(int)
+  char setIndex(int)
+  int getRunStart()
+  String getExponentSeparator()
+  int SECONDARY
+  DecimalFormatSymbols getInstance()
+  void setMultiplier(int)
+  RoundingMode getRoundingMode()
   Normalizer.Form NFKC
-  Normalizer.Form NFKD
+  DateFormat getDateInstance(int,Locale)
+  DateFormat.Field SECOND
+  String getLocalPatternChars()
+  String[][] getZoneStrings()
+  int WEEK_OF_MONTH_FIELD
+}
+  DateFormat getTimeInstance(int)
+  def clone()
+  AttributedCharacterIterator.Attribute LANGUAGE
+  void setNegativeSuffix(String)
+  void setRoundingMode(RoundingMode)
+  (String)
+  int MONTH_FIELD
+#### Enums
+# ownership. Elasticsearch licenses this file to you under
+class java.text.Normalizer {
+  BreakIterator getLineInstance()
+  int DEFAULT
+class java.text.Normalizer$Form {
+  int getStrength()
+  int getRunLimit()
+  void setCurrency(Currency)
+  BreakIterator getWordInstance()
+  int FULL
+}
+class java.text.AttributedCharacterIterator$Attribute {
+  int DIRECTION_DEFAULT_RIGHT_TO_LEFT
+  int preceding(int)
+  boolean isLenient()
+}
+  NumberFormat.Field CURRENCY
+  String getInternationalCurrencySymbol()
+  void setNegativePrefix(String)
+  void setFormat(int,Format)
+  int getMaxExpansion(int)
+  def clone()
+  short secondaryOrder(int)
+  NumberFormat getInstance()
+  int TERTIARY
+  int NO_DECOMPOSITION
+  int getMaximumIntegerDigits()
+  def clone()
+  (String)
+  void applyPattern(String)
+  void applyLocalizedPattern(String)
+  boolean isParseIntegerOnly()
+  boolean equals(String,String)
+  int DAY_OF_YEAR_FIELD
+  def clone()
+  DateFormat.Field HOUR_OF_DAY0
+}
+  NumberFormat.Field EXPONENT
+  def[] getFormats()
+# specific language governing permissions and limitations
+  int AM_PM_FIELD
+  void setCurrency(Currency)
+  String format(String,Object[])
+  boolean isDecimalSeparatorAlwaysShown()
+  DateFormat.Field DAY_OF_WEEK
+  boolean isNormalized(CharSequence,Normalizer.Form)
   Normalizer.Form valueOf(String)
-  Normalizer.Form[] values()
-}
-
-#### Exceptions
-
-class java.text.ParseException {
+  double[] getLimits()
+  DateFormatSymbols getInstance(Locale)
+  int getLength()
+  char getDigit()
+class java.text.CharacterIterator {
   (String,int)
-  int getErrorOffset()
+  void setGroupingUsed(boolean)
+  void setText(String)
+  Object parseObject(String,ParsePosition)
+  int getLevelAt(int)
+  int last()
+class java.text.NumberFormat {
+  DateFormat getInstance()
+# what methods and fields they have, etc.
 }
+#### Exceptions
+  Locale[] getAvailableLocales()
+  int getErrorIndex()
+  int YEAR_FIELD
+  AttributedCharacterIterator getIterator(AttributedCharacterIterator.Attribute[])
+  void setFormatsByArgumentIndex(Format[])
+class java.text.ParsePosition {
+  void setPerMill(char)
+  Format.Field getFieldAttribute()
+  int getRunStart(int)
+# this work for additional information regarding copyright
+  NumberFormat.Field PERCENT
+  (String,DecimalFormatSymbols)
+class java.text.Format$Field {
+class java.text.NumberFormat$Field {
+  void setZoneStrings(String[][])
+class java.text.AttributedCharacterIterator {
+}
+  int FULL_DECOMPOSITION
+  def getValue()
+  NumberFormat.Field PERMILLE
+}
+  int compareTo(CollationKey)
+  ()
+  DateFormat.Field HOUR1
+  String toPattern()
+  String[] getShortWeekdays()
+  int NULLORDER
+  int getBeginIndex()
+class java.text.SimpleDateFormat {
+#
+  void setMonetaryDecimalSeparator(char)
+  NumberFormat getPercentInstance(Locale)
+  void applyPattern(String)
+#### Interfaces
+  char getDecimalSeparator()
+  NumberFormat.Field EXPONENT_SIGN
+class java.text.ParseException {
+  int previous()
+#
+  int WEEK_OF_YEAR_FIELD
+  Locale getLocale()
+class java.text.Format {
+  int MINUTE_FIELD
+  int SECOND_FIELD
+  String toPattern()
+  byte[] toByteArray()
+  DateFormat getDateInstance(int)
+  int DAY_OF_WEEK_IN_MONTH_FIELD
+  DateFormat.Field ofCalendarField(int)
+  (String,int)
+  String normalize(CharSequence,Normalizer.Form)
+  int getIndex()
+# under the License.
+  BreakIterator getWordInstance(Locale)
+  int current()
+class java.text.ChoiceFormat {
+  boolean isRightToLeft()
+class java.text.Annotation {
+  int getDecomposition()
+  Normalizer.Form[] values()
+  int getField()
+  BreakIterator getCharacterInstance(Locale)
+  (Format.Field,int)
+  void setLocalPatternChars(String)
+  NumberFormat getInstance(Locale)
+  ()
+  Normalizer.Form NFKD
+  DateFormat.Field HOUR0
+  void setInternationalCurrencySymbol(String)
+  DateFormat.Field YEAR
+  BreakIterator getSentenceInstance(Locale)
+#    http://www.apache.org/licenses/LICENSE-2.0
+  NumberFormat.Field INTEGER
+  void setMaximumIntegerDigits(int)
+  void addAttributes(Map,int,int)
+  NumberFormat.Field SIGN
+  TimeZone getTimeZone()
+  Currency getCurrency()
+class java.text.DecimalFormat {
+  char getPatternSeparator()
+  void setParseBigDecimal(boolean)
+  Collator getInstance(Locale)
+  Object[] parse(String,ParsePosition)
+}
+# You may obtain a copy of the License at
+  DateFormat.Field MILLISECOND
+}
+  NumberFormat getIntegerInstance()
+  Number parse(String)
+}
+  DateFormat.Field WEEK_OF_YEAR
+# software distributed under the License is distributed on an
+  char last()
+}
+  (String,Locale)
+  Date parse(String)
+  boolean requiresBidi(char[],int,int)
+  DateFormat.Field DAY_OF_WEEK_IN_MONTH
+  void set2DigitYearStart(Date)
+class java.text.Collator {
+}
+  (Locale)
+  NumberFormat getNumberInstance(Locale)
+# the Apache License, Version 2.0 (the "License"); you may
+  void setInfinity(String)
+  StringBuffer format(Object,StringBuffer,FieldPosition)
+  void applyPattern(String)
+  boolean isBoundary(int)
+  (Object)
+  void setExponentSeparator(String)
+}
+  int getMinimumFractionDigits()
+  (int)
+  int getIndex()
+  DateFormat.Field MINUTE
+#
+  (String,int)
+  char next()
+  void addAttribute(AttributedCharacterIterator.Attribute,Object,int,int)
+  def clone()
+  NumberFormat.Field EXPONENT_SYMBOL
+}
+  DateFormat getDateInstance()
+}
+  int INTEGER_FIELD
+  int MILLISECOND_FIELD
+  (AttributedCharacterIterator)
+  int getErrorOffset()
+  char getPercent()
+}
+  NumberFormat getCurrencyInstance(Locale)
+  void setMaximumFractionDigits(int)
+}
+  ()
+  int following(int)
+class java.text.DateFormat {
+  int LONG
+  AttributedCharacterIterator formatToCharacterIterator(Object)
+# license agreements. See the NOTICE file distributed with
+}
+class java.text.CollationElementIterator {
+  CharacterIterator getText()
+  NumberFormat.Field DECIMAL_SEPARATOR
+  int first()
+class java.text.FieldPosition {
+  Locale[] getAvailableLocales()
+class java.text.MessageFormat$Field {
+  Locale[] getAvailableLocales()
+}
+  Format[] getFormatsByArgumentIndex()
+  int getEndIndex()
+  Collator getInstance()
+  DecimalFormatSymbols getInstance(Locale)
+  String[] getAmPmStrings()
+  void setText(String)
+  void setDecimalFormatSymbols(DecimalFormatSymbols)
+  (String)
+# not use this file except in compliance with the License.
+  void setDecimalSeparator(char)
+  (String,Map)
+  Bidi createLineBidi(int,int)
+}
+  boolean isParseBigDecimal()
+  void setFormatByArgumentIndex(int,Format)
+  char getMinusSign()
+class java.text.AttributedString {
+  String[] getEras()
+  int next()
+  String getInfinity()
+  (String)
+  void setEras(String[])
+  DateFormat getDateTimeInstance(int,int,Locale)
+  (char[],int,byte[],int,int,int)
+  int PRIMARY
+  void setWeekdays(String[])
+  void setErrorIndex(int)
+  int getEndIndex()
+}
+  void setMinimumIntegerDigits(int)
+  void setText(String)
+  int getRunLimit(Set)
+  void setMonths(String[])
+  double previousDouble(double)
+  void reorderVisually(byte[],int,Object[],int,int)
+class java.text.DecimalFormatSymbols {
+  void setNaN(String)
+# KIND, either express or implied.  See the License for the
+class java.text.MessageFormat {
+class java.text.RuleBasedCollator {
+  AttributedCharacterIterator.Attribute INPUT_METHOD_SEGMENT
+# Unless required by applicable law or agreed to in writing,
+  Object[] parse(String)
+  DateFormat.Field DAY_OF_YEAR
+  char first()
+}
+  void setMinimumFractionDigits(int)
+  Map getAttributes()
+  DateFormat getTimeInstance()
+  String[] getMonths()
+  Locale[] getAvailableLocales()
+  String[] getWeekdays()
+  int DIRECTION_DEFAULT_LEFT_TO_RIGHT
+  (Locale)
+  int HOUR_OF_DAY1_FIELD
+  Format[] getFormats()
+  void setOffset(int)
+  Locale[] getAvailableLocales()
+  short tertiaryOrder(int)
+  int IDENTICAL
+  void setStrength(int)
+  (String)
+  void setIndex(int)
+  DateFormat.Field AM_PM
+  void setTimeZone(TimeZone)
+  void applyPattern(String)
+  NumberFormat getIntegerInstance(Locale)
+  DateFormatSymbols getInstance()
+  String getNegativePrefix()
+  int getRunStart(Set)
+  void setPatternSeparator(char)
+  void setNumberFormat(NumberFormat)
+  int TIMEZONE_FIELD
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+  int DATE_FIELD
+  String getPositivePrefix()
+  void setDecomposition(int)
+  MessageFormat.Field ARGUMENT
+  int getBaseLevel()
+  void setPositivePrefix(String)
+}
+class java.text.StringCharacterIterator {
+  int CANONICAL_DECOMPOSITION
+  String[] getShortMonths()
+# Licensed to Elasticsearch under one or more contributor
+  int DIRECTION_RIGHT_TO_LEFT
+  Set getAllAttributeKeys()
+  int DONE
+  int HOUR_OF_DAY0_FIELD
+  Normalizer.Form NFD
+  String getNegativeSuffix()
+  (int)
+  int ERA_FIELD
+  boolean isGroupingUsed()
+  boolean isMixed()
+  int getGroupingSize()
+  Number parse(String,ParsePosition)
+  Date parse(String,ParsePosition)
+  char getPerMill()
+  DateFormat.Field MONTH
+  void setZeroDigit(char)
+  NumberFormat.Field FRACTION
+}
+  void setGroupingSeparator(char)
+}
+  DateFormat.Field TIME_ZONE
+  void setBeginIndex(int)
+  int previous()
+  char current()
+  char getZeroDigit()
+  BreakIterator getCharacterInstance()
+  boolean baseIsLeftToRight()
+class java.text.Bidi {
+  char getGroupingSeparator()
+  int getRunCount()
+  void setGroupingSize(int)
+  (String)
+}
+  void setCurrencySymbol(String)
+class java.text.DateFormatSymbols {
+  NumberFormat.Field GROUPING_SEPARATOR
+  String getRules()
+class java.text.DateFormat$Field {
+  DecimalFormatSymbols getDecimalFormatSymbols()
+class java.text.BreakIterator {
+  CollationKey getCollationKey(String)
+class java.text.CollationKey {
+  String getSourceString()
+  Currency getCurrency()
+  int getBeginIndex()
+  int getMaximumFractionDigits()
+  int getMinimumIntegerDigits()
+  void setDecimalSeparatorAlwaysShown(boolean)
+  ()
+  void setEndIndex(int)
+#
+  Locale[] getAvailableLocales()
+}
+  String getCurrencySymbol()
+  String toPattern()
+  void reset()
+  DateFormat.Field WEEK_OF_MONTH
+  NumberFormat getNumberInstance()
+  String getNaN()
+  Date get2DigitYearStart()
+  void setFormats(Format[])
+  def clone()
+  CollationElementIterator getCollationElementIterator(String)
+  int SHORT
+  void setMinusSign(char)
+  Object parseObject(String)
+  void setAmPmStrings(String[])
+#### Classes
+  char previous()
+  DateFormatSymbols getDateFormatSymbols()
+# Painless definition file. This defines the hierarchy of classes,
+  String toLocalizedPattern()
+  void setLocale(Locale)
+  String format(Object)
+  DateFormat getDateTimeInstance()
+  BreakIterator getSentenceInstance()
+  int HOUR1_FIELD
+  DateFormat getDateTimeInstance(int,int)
+  double nextDouble(double)
+  NumberFormat getNumberFormat()
+  void setPositiveSuffix(String)
+  NumberFormat getCurrencyInstance()
+  int hashCode()
+  void setDateFormatSymbols(DateFormatSymbols)
+  int primaryOrder(int)
+  BreakIterator getLineInstance(Locale)
+  char DONE
+  (double[],String[])
+  int FRACTION_FIELD
+}
+  AttributedCharacterIterator getIterator()
+  def getAttribute(AttributedCharacterIterator.Attribute)
+  int getCalendarField()
+  int HOUR0_FIELD
+  DateFormat.Field ERA
+  NumberFormat getPercentInstance()
+  AttributedCharacterIterator.Attribute READING
+  AttributedCharacterIterator getIterator(AttributedCharacterIterator.Attribute[],int,int)
+  (String,int,int,int)
+  Normalizer.Form NFC

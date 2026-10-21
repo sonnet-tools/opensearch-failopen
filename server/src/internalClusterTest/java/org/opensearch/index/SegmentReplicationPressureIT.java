@@ -1,385 +1,344 @@
-/*
- * Copyright OpenSearch Contributors.
- * SPDX-License-Identifier: Apache-2.0
- */
-
-package org.opensearch.index;
-
-import org.opensearch.action.admin.indices.replication.SegmentReplicationStatsResponse;
-import org.opensearch.action.bulk.BulkItemResponse;
-import org.opensearch.action.bulk.BulkRequest;
-import org.opensearch.action.bulk.BulkResponse;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardState;
-import org.opensearch.indices.replication.SegmentReplicationBaseIT;
-import org.opensearch.indices.replication.common.ReplicationType;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.transport.MockTransportService;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static java.util.Arrays.asList;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
-import static org.opensearch.index.SegmentReplicationPressureService.MAX_INDEXING_CHECKPOINTS;
-import static org.opensearch.index.SegmentReplicationPressureService.MAX_REPLICATION_LIMIT_STALE_REPLICA_SETTING;
-import static org.opensearch.index.SegmentReplicationPressureService.MAX_REPLICATION_TIME_BACKPRESSURE_SETTING;
-import static org.opensearch.index.SegmentReplicationPressureService.SEGMENT_REPLICATION_INDEXING_PRESSURE_ENABLED;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
-
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-public class SegmentReplicationPressureIT extends SegmentReplicationBaseIT {
-
-    private static final int MAX_CHECKPOINTS_BEHIND = 2;
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(SEGMENT_REPLICATION_INDEXING_PRESSURE_ENABLED.getKey(), true)
-            .put(MAX_REPLICATION_TIME_BACKPRESSURE_SETTING.getKey(), TimeValue.timeValueSeconds(1))
-            .put(MAX_INDEXING_CHECKPOINTS.getKey(), MAX_CHECKPOINTS_BEHIND)
-            .build();
-    }
-
-    @Override
-    public Settings indexSettings() {
-        // we want to control refreshes
-        return Settings.builder()
-            .put(super.indexSettings())
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, SHARD_COUNT)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, REPLICA_COUNT)
-            .put(IndexModule.INDEX_QUERY_CACHE_ENABLED_SETTING.getKey(), false)
-            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
-            .put("index.refresh_interval", -1)
-            .build();
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return asList(MockTransportService.TestPlugin.class);
-    }
-
-    public void testWritesRejected() throws Exception {
-        final String primaryNode = internalCluster().startNode();
-        createIndex(INDEX_NAME);
-        ensureYellowAndNoInitializingShards(INDEX_NAME);
-        final String replicaNode = internalCluster().startNode();
-        ensureGreen(INDEX_NAME);
-
-        final IndexShard primaryShard = getIndexShard(primaryNode, INDEX_NAME);
-        final List<String> replicaNodes = asList(replicaNode);
-        assertEqualSegmentInfosVersion(replicaNodes, primaryShard);
-
-        final CountDownLatch latch = new CountDownLatch(1);
-        final AtomicInteger totalDocs = new AtomicInteger(0);
-        try (final Releasable ignored = blockReplication(replicaNodes, latch)) {
-            Thread indexingThread = new Thread(() -> { totalDocs.getAndSet(indexUntilCheckpointCount()); });
-            indexingThread.start();
-            indexingThread.join();
-            latch.await();
-
-            indexDoc();
-            totalDocs.incrementAndGet();
-            refresh(INDEX_NAME);
-            // index again while we are stale.
-            assertBusy(() -> {
-                expectThrows(OpenSearchRejectedExecutionException.class, () -> {
-                    indexDoc();
-                    totalDocs.incrementAndGet();
-                });
-            });
-            // Try to index one more doc.
             expectThrows(OpenSearchRejectedExecutionException.class, () -> {
-                indexDoc();
-                totalDocs.incrementAndGet();
-                refresh(INDEX_NAME);
-            });
-
-            // Verify the rejected doc count.
-            SegmentReplicationStatsResponse segmentReplicationStatsResponse = dataNodeClient().admin()
-                .indices()
-                .prepareSegmentReplicationStats(INDEX_NAME)
-                .setDetailed(true)
-                .execute()
-                .actionGet();
-            SegmentReplicationPerGroupStats perGroupStats = segmentReplicationStatsResponse.getReplicationStats().get(INDEX_NAME).get(0);
-
-            assertEquals(perGroupStats.getRejectedRequestCount(), 2L);
-        }
-        refresh(INDEX_NAME);
-
-        // wait for the replicas to catch up after block is released.
-        assertReplicaCheckpointUpdated(primaryShard);
-        // index another doc showing there is no pressure enforced.
-        indexDoc();
-        refresh(INDEX_NAME);
-        waitForSearchableDocs(totalDocs.incrementAndGet(), replicaNodes.toArray(new String[] {}));
-        verifyStoreContent();
-    }
-
-    /**
-     * This test ensures that a replica can be added while the index is under write block.
-     * Ensuring that only write requests are blocked.
-     */
-    public void testAddReplicaWhileWritesBlocked() throws Exception {
-        final String primaryNode = internalCluster().startNode();
-        createIndex(INDEX_NAME);
         ensureYellowAndNoInitializingShards(INDEX_NAME);
-        final String replicaNode = internalCluster().startNode();
         ensureGreen(INDEX_NAME);
-
-        final IndexShard primaryShard = getIndexShard(primaryNode, INDEX_NAME);
-        final List<String> replicaNodes = new ArrayList<>();
-        replicaNodes.add(replicaNode);
-        assertEqualSegmentInfosVersion(replicaNodes, primaryShard);
-
-        final CountDownLatch latch = new CountDownLatch(1);
-        final AtomicInteger totalDocs = new AtomicInteger(0);
-        try (final Releasable ignored = blockReplication(replicaNodes, latch)) {
-            Thread indexingThread = new Thread(() -> { totalDocs.getAndSet(indexUntilCheckpointCount()); });
-            indexingThread.start();
-            indexingThread.join();
-            latch.await();
-            indexDoc();
-            totalDocs.incrementAndGet();
-            refresh(INDEX_NAME);
-            // index again while we are stale.
-            assertBusy(() -> {
-                expectThrows(OpenSearchRejectedExecutionException.class, () -> {
-                    indexDoc();
+            // Try to index one more doc.
+        ensureYellowAndNoInitializingShards(INDEX_NAME);
                     totalDocs.incrementAndGet();
-                });
-            });
-            final String replica_2 = internalCluster().startNode();
-            assertAcked(
-                client().admin()
-                    .indices()
-                    .prepareUpdateSettings(INDEX_NAME)
-                    .setSettings(Settings.builder().put(SETTING_NUMBER_OF_REPLICAS, 2))
-            );
-            replicaNodes.add(replica_2);
-        }
-        ensureGreen(INDEX_NAME);
-        waitForSearchableDocs(totalDocs.get(), replicaNodes);
-        refresh(INDEX_NAME);
-        // wait for the replicas to catch up after block is released.
-        assertReplicaCheckpointUpdated(primaryShard);
-
         // index another doc showing there is no pressure enforced.
-        indexDoc();
-        refresh(INDEX_NAME);
-        waitForSearchableDocs(totalDocs.incrementAndGet(), replicaNodes.toArray(new String[] {}));
-        verifyStoreContent();
-    }
-
-    public void testBelowReplicaLimit() throws Exception {
-        final Settings settings = Settings.builder().put(indexSettings()).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 3).build();
-        final String primaryNode = internalCluster().startNode();
-        createIndex(INDEX_NAME, settings);
-        ensureYellowAndNoInitializingShards(INDEX_NAME);
-        List<String> replicaNodes = new ArrayList<>();
-        for (int i = 0; i < 3; i++) {
-            replicaNodes.add(internalCluster().startNode());
-        }
-        ensureGreen(INDEX_NAME);
-
-        final IndexShard primaryShard = getIndexShard(primaryNode, INDEX_NAME);
-        assertEqualSegmentInfosVersion(replicaNodes, primaryShard);
-
-        final CountDownLatch latch = new CountDownLatch(1);
-        final AtomicInteger totalDocs = new AtomicInteger(0);
-        // only block a single replica, pressure should not get applied.
-        try (final Releasable ignored = blockReplication(replicaNodes.subList(0, 1), latch)) {
-            Thread indexingThread = new Thread(() -> totalDocs.getAndSet(indexUntilCheckpointCount()));
-            indexingThread.start();
-            indexingThread.join();
-            latch.await();
-            indexDoc();
-            totalDocs.incrementAndGet();
-            refresh(INDEX_NAME);
-        }
-        // index another doc showing there is no pressure enforced.
-        indexDoc();
-        refresh(INDEX_NAME);
-        waitForSearchableDocs(totalDocs.incrementAndGet(), replicaNodes.toArray(new String[] {}));
-        verifyStoreContent();
-    }
-
-    public void testFailStaleReplica() throws Exception {
-
-        Settings settings = Settings.builder()
-            .put(MAX_REPLICATION_TIME_BACKPRESSURE_SETTING.getKey(), TimeValue.timeValueMillis(500))
-            .put(MAX_REPLICATION_LIMIT_STALE_REPLICA_SETTING.getKey(), TimeValue.timeValueMillis(1000))
-            .build();
-        // Starts a primary and replica node.
-        final String primaryNode = internalCluster().startNode(settings);
-        createIndex(INDEX_NAME);
-        ensureYellowAndNoInitializingShards(INDEX_NAME);
-        final String replicaNode = internalCluster().startNode(settings);
-        ensureGreen(INDEX_NAME);
-
-        final IndexShard primaryShard = getIndexShard(primaryNode, INDEX_NAME);
-        final List<String> replicaNodes = asList(replicaNode);
-        assertEqualSegmentInfosVersion(replicaNodes, primaryShard);
-        IndexShard replicaShard = getIndexShard(replicaNode, INDEX_NAME);
-
-        final CountDownLatch latch = new CountDownLatch(1);
-        final AtomicInteger totalDocs = new AtomicInteger(0);
-        try (final Releasable ignored = blockReplication(replicaNodes, latch)) {
-            // Index docs until replicas are staled.
-            totalDocs.getAndSet(indexUntilCheckpointCount());
-            latch.await();
-            // index again while we are stale.
-            indexDoc();
-            refresh(INDEX_NAME);
-            totalDocs.incrementAndGet();
-
-            // Verify that replica shard is closed.
-            assertBusy(() -> { assertTrue(replicaShard.state().equals(IndexShardState.CLOSED)); }, 1, TimeUnit.MINUTES);
-        }
-        ensureGreen(INDEX_NAME);
-        final IndexShard replicaAfterFailure = getIndexShard(replicaNode, INDEX_NAME);
-
-        // Verify that new replica shard after failure is different from old replica shard.
-        assertNotEquals(replicaAfterFailure.routingEntry().allocationId().getId(), replicaShard.routingEntry().allocationId().getId());
-    }
-
-    public void testWithDocumentReplicationEnabledIndex() throws Exception {
-        assumeFalse(
-            "Skipping the test as its not compatible with segment replication with remote store. Cannot create DocRep indices with Remote store enabled",
-            segmentReplicationWithRemoteEnabled()
-        );
-        Settings settings = Settings.builder()
-            .put(MAX_REPLICATION_TIME_BACKPRESSURE_SETTING.getKey(), TimeValue.timeValueMillis(500))
-            .build();
-        // Starts a primary and replica node.
-        final String primaryNode = internalCluster().startNode(settings);
-        createIndex(
-            INDEX_NAME,
-            Settings.builder().put(indexSettings()).put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT).build()
-        );
-        ensureYellowAndNoInitializingShards(INDEX_NAME);
-        final String replicaNode = internalCluster().startNode(settings);
-        ensureGreen(INDEX_NAME);
-        final AtomicInteger totalDocs = new AtomicInteger(0);
-        // Index docs until replica stale limit is reached.
-        totalDocs.getAndSet(indexUntilCheckpointCount());
-        // index again after stale limit.
-        indexDoc();
-        refresh(INDEX_NAME);
-        totalDocs.incrementAndGet();
-        // verify total doc count is same and docs are not rejected.
-        assertHitCount(client(primaryNode).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get(), totalDocs.get());
-        assertHitCount(client(replicaNode).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get(), totalDocs.get());
-
-    }
-
-    public void testBulkWritesRejected() throws Exception {
-        final String primaryNode = internalCluster().startNode();
-        createIndex(INDEX_NAME);
-        ensureYellowAndNoInitializingShards(INDEX_NAME);
-        final String replicaNode = internalCluster().startNode();
-        final String coordinator = internalCluster().startCoordinatingOnlyNode(Settings.EMPTY);
-        ensureGreen(INDEX_NAME);
-
-        final IndexShard primaryShard = getIndexShard(primaryNode, INDEX_NAME);
-        final List<String> replicaNodes = asList(replicaNode);
-        assertEqualSegmentInfosVersion(replicaNodes, primaryShard);
-
-        final CountDownLatch latch = new CountDownLatch(1);
-        List<String> nodes = List.of(primaryNode, replicaNode, coordinator);
-
-        int docsPerBatch = randomIntBetween(1, 200);
-        int totalDocs = docsPerBatch * MAX_CHECKPOINTS_BEHIND;
-        try (final Releasable ignored = blockReplication(replicaNodes, latch)) {
             Thread indexingThread = new Thread(() -> {
-                for (int i = 0; i < MAX_CHECKPOINTS_BEHIND + 1; i++) {
-                    executeBulkRequest(nodes, docsPerBatch);
-                    refresh(INDEX_NAME);
-                }
-            });
-            indexingThread.start();
-            indexingThread.join();
-            latch.await();
-            // try and index again while we are stale.
-            assertBusy(() -> { assertFailedRequests(executeBulkRequest(nodes, randomIntBetween(1, 200))); });
-        }
-        refresh(INDEX_NAME);
-        // wait for the replicas to catch up after block is released.
-        assertReplicaCheckpointUpdated(primaryShard);
-
-        // index another doc showing there is no pressure enforced.
-        executeBulkRequest(nodes, totalDocs);
-        waitForSearchableDocs(totalDocs * 2L, replicaNodes.toArray(new String[] {}));
-        verifyStoreContent();
+import org.opensearch.test.OpenSearchIntegTestCase;
+        IndexShard replicaShard = getIndexShard(replicaNode, INDEX_NAME);
     }
-
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
+    private int indexUntilCheckpointCount() {
+            // Verify that replica shard is closed.
+import static org.opensearch.index.SegmentReplicationPressureService.SEGMENT_REPLICATION_INDEXING_PRESSURE_ENABLED;
+        // wait for the replicas to catch up after block is released.
+    private static final int MAX_CHECKPOINTS_BEHIND = 2;
+            indexingThread.start();
+        assertReplicaCheckpointUpdated(primaryShard);
+            .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
+        assertEqualSegmentInfosVersion(replicaNodes, primaryShard);
+            final IndexShard replicaShard = getIndexShard(replicaName, INDEX_NAME);
+        return Settings.builder()
+        // index another doc showing there is no pressure enforced.
+        refresh(INDEX_NAME);
+import org.opensearch.core.rest.RestStatus;
+        assertTrue(Arrays.stream(response.getItems()).allMatch(BulkItemResponse::isFailed));
+        final String primaryNode = internalCluster().startNode();
+            }
+    public Settings indexSettings() {
+            // index again while we are stale.
+        }
+            indexDoc();
+        ensureGreen(INDEX_NAME);
+        ensureGreen(INDEX_NAME);
+        try (final Releasable ignored = blockReplication(replicaNodes, latch)) {
+        int totalDocs = docsPerBatch * MAX_CHECKPOINTS_BEHIND;
+import org.opensearch.action.index.IndexRequest;
+        );
+        final AtomicInteger totalDocs = new AtomicInteger(0);
+    @Override
+        final IndexShard primaryShard = getIndexShard(primaryNode, INDEX_NAME);
+        // we want to control refreshes
+        try (final Releasable ignored = blockReplication(replicaNodes.subList(0, 1), latch)) {
+        }
+    public void testWithDocumentReplicationEnabledIndex() throws Exception {
+        List<String> replicaNodes = new ArrayList<>();
+        assertTrue(
+        final AtomicInteger totalDocs = new AtomicInteger(0);
+            indexDoc();
+                expectThrows(OpenSearchRejectedExecutionException.class, () -> {
+        final String replicaNode = internalCluster().startNode(settings);
+        for (String replicaName : replicaNames) {
+    private void assertEqualSegmentInfosVersion(List<String> replicaNames, IndexShard primaryShard) {
+            // Index docs until replicas are staled.
+    /**
+            final int numDocs = randomIntBetween(1, 5);
+import org.opensearch.action.bulk.BulkItemResponse;
+        totalDocs.incrementAndGet();
+            .put("index.refresh_interval", -1)
+        createIndex(INDEX_NAME);
+            assertEquals(
     private BulkResponse executeBulkRequest(List<String> nodes, int docsPerBatch) {
+     * This test ensures that a replica can be added while the index is under write block.
+        replicaNodes.add(replicaNode);
+            SegmentReplicationPerGroupStats perGroupStats = segmentReplicationStatsResponse.getReplicationStats().get(INDEX_NAME).get(0);
+    }
+        refresh(INDEX_NAME);
+        return Settings.builder()
+        final String replicaNode = internalCluster().startNode();
+    }
+            indexingThread.join();
+                indexDoc();
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
+        final CountDownLatch latch = new CountDownLatch(1);
+import org.opensearch.action.bulk.BulkRequest;
+        createIndex(INDEX_NAME);
+        // wait for the replicas to catch up after block is released.
+        waitForSearchableDocs(totalDocs.incrementAndGet(), replicaNodes.toArray(new String[] {}));
+        // verify total doc count is same and docs are not rejected.
+            assertAcked(
+        final String coordinator = internalCluster().startCoordinatingOnlyNode(Settings.EMPTY);
+            .put(MAX_REPLICATION_TIME_BACKPRESSURE_SETTING.getKey(), TimeValue.timeValueSeconds(1))
+import java.util.concurrent.atomic.AtomicInteger;
+ * SPDX-License-Identifier: Apache-2.0
+            });
+import org.opensearch.indices.replication.common.ReplicationType;
+        Settings settings = Settings.builder()
+        assertEqualSegmentInfosVersion(replicaNodes, primaryShard);
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, REPLICA_COUNT)
+        // wait for the replicas to catch up after block is released.
+            .build();
+        indexDoc();
+/*
+    }
+ */
+        refresh(INDEX_NAME);
+            segmentReplicationWithRemoteEnabled()
+                indexDoc();
+        }
+    }
+        // Starts a primary and replica node.
+        ensureYellowAndNoInitializingShards(INDEX_NAME);
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+    public void testFailStaleReplica() throws Exception {
+        final IndexShard primaryShard = getIndexShard(primaryNode, INDEX_NAME);
+            // try and index again while we are stale.
+                }
+                .allMatch((failure) -> failure.getStatus() == RestStatus.TOO_MANY_REQUESTS)
+    protected Settings nodeSettings(int nodeOrdinal) {
+}
+        refresh(INDEX_NAME);
+                    .prepareUpdateSettings(INDEX_NAME)
+        final CountDownLatch latch = new CountDownLatch(1);
+            bulkRequest.add(request);
+        for (int i = 0; i < 3; i++) {
+        verifyStoreContent();
+        final String primaryNode = internalCluster().startNode();
+                .setDetailed(true)
+import static org.opensearch.index.SegmentReplicationPressureService.MAX_REPLICATION_TIME_BACKPRESSURE_SETTING;
+        verifyStoreContent();
+                refresh(INDEX_NAME);
+        }
+        final CountDownLatch latch = new CountDownLatch(1);
+        ensureGreen(INDEX_NAME);
+    public void testWritesRejected() throws Exception {
+            // index again while we are stale.
+                for (int i = 0; i < MAX_CHECKPOINTS_BEHIND + 1; i++) {
+                .map(BulkItemResponse::getFailure)
+ * Copyright OpenSearch Contributors.
+     * Ensuring that only write requests are blocked.
+import static org.opensearch.index.SegmentReplicationPressureService.MAX_INDEXING_CHECKPOINTS;
+    public void testAddReplicaWhileWritesBlocked() throws Exception {
+                expectThrows(OpenSearchRejectedExecutionException.class, () -> {
+    }
+        // Verify that new replica shard after failure is different from old replica shard.
+        ensureGreen(INDEX_NAME);
+            indexingThread.start();
+            totalDocs.getAndSet(indexUntilCheckpointCount());
+        final IndexShard primaryShard = getIndexShard(primaryNode, INDEX_NAME);
+            refresh(INDEX_NAME);
+package org.opensearch.index;
+            latch.await();
+            indexingThread.start();
+            indexingThread.start();
+import org.opensearch.common.lease.Releasable;
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
+        refresh(INDEX_NAME);
+import org.opensearch.cluster.metadata.IndexMetadata;
+            totalDocs.incrementAndGet();
+        // Index docs until replica stale limit is reached.
+        try (final Releasable ignored = blockReplication(replicaNodes, latch)) {
+    private void indexDoc() {
+        createIndex(INDEX_NAME, settings);
+            Arrays.stream(response.getItems())
+            });
+import org.opensearch.indices.replication.SegmentReplicationBaseIT;
+import java.util.List;
+            Thread indexingThread = new Thread(() -> { totalDocs.getAndSet(indexUntilCheckpointCount()); });
+    }
+        final AtomicInteger totalDocs = new AtomicInteger(0);
+            });
+import static java.util.Arrays.asList;
+            .put(super.indexSettings())
+            indexDoc();
+        client().prepareIndex(INDEX_NAME).setId(UUIDs.base64UUID()).setSource("{}", "{}").execute().actionGet();
+        ensureGreen(INDEX_NAME);
+            totalDocs.incrementAndGet();
+        for (int i = 0; i < MAX_CHECKPOINTS_BEHIND; i++) {
+        final List<String> replicaNodes = asList(replicaNode);
+        assertHitCount(client(primaryNode).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get(), totalDocs.get());
+        // index another doc showing there is no pressure enforced.
+                });
+import java.util.concurrent.CountDownLatch;
+        indexDoc();
+            .put(MAX_REPLICATION_TIME_BACKPRESSURE_SETTING.getKey(), TimeValue.timeValueMillis(500))
+            });
+        final IndexShard primaryShard = getIndexShard(primaryNode, INDEX_NAME);
+                    executeBulkRequest(nodes, docsPerBatch);
+        assumeFalse(
+                .execute()
+        assertHitCount(client(replicaNode).prepareSearch(INDEX_NAME).setSize(0).setPreference("_only_local").get(), totalDocs.get());
+        waitForSearchableDocs(totalDocs.incrementAndGet(), replicaNodes.toArray(new String[] {}));
+import java.util.Collection;
+            // index again while we are stale.
+            Settings.builder().put(indexSettings()).put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.DOCUMENT).build()
+        // index again after stale limit.
+        }
+import org.opensearch.plugins.Plugin;
+        final List<String> replicaNodes = asList(replicaNode);
+        final String replicaNode = internalCluster().startNode();
+            indexingThread.join();
+    }
+                    .indices()
+        return total;
+        assertEqualSegmentInfosVersion(replicaNodes, primaryShard);
+            latch.await();
+        createIndex(
+        final IndexShard replicaAfterFailure = getIndexShard(replicaNode, INDEX_NAME);
+            .build();
+import org.opensearch.index.shard.IndexShard;
+            refresh(INDEX_NAME);
+        refresh(INDEX_NAME);
+                .indices()
+import org.opensearch.action.admin.indices.replication.SegmentReplicationStatsResponse;
+            refresh(INDEX_NAME);
+        );
+            .put(IndexModule.INDEX_QUERY_CACHE_ENABLED_SETTING.getKey(), false)
+                .actionGet();
+import org.opensearch.common.settings.Settings;
+            latch.await();
+        try (final Releasable ignored = blockReplication(replicaNodes, latch)) {
+                .prepareSegmentReplicationStats(INDEX_NAME)
+import java.util.ArrayList;
+        verifyStoreContent();
+        final CountDownLatch latch = new CountDownLatch(1);
+        totalDocs.getAndSet(indexUntilCheckpointCount());
+            .put(super.nodeSettings(nodeOrdinal))
+        // index another doc showing there is no pressure enforced.
+import static org.opensearch.index.SegmentReplicationPressureService.MAX_REPLICATION_LIMIT_STALE_REPLICA_SETTING;
+    }
+    }
+            indexDoc();
+     * Asserts that there are no stale replicas according to the primary until cp count is reached.
+            assertBusy(() -> { assertTrue(replicaShard.state().equals(IndexShardState.CLOSED)); }, 1, TimeUnit.MINUTES);
+        final String primaryNode = internalCluster().startNode();
+        );
+            totalDocs.incrementAndGet();
+            for (int j = 0; j < numDocs; ++j) {
+        createIndex(INDEX_NAME);
+            total += numDocs;
+        final String replicaNode = internalCluster().startNode();
         final BulkRequest bulkRequest = new BulkRequest();
         for (int j = 0; j < docsPerBatch; ++j) {
-            IndexRequest request = new IndexRequest(INDEX_NAME).id(UUIDs.base64UUID())
-                .source(Collections.singletonMap("key", randomAlphaOfLength(50)));
-            bulkRequest.add(request);
-        }
-        final BulkResponse bulkItemResponses = client(randomFrom(nodes)).bulk(bulkRequest).actionGet();
+                totalDocs.incrementAndGet();
+            assertEquals(perGroupStats.getRejectedRequestCount(), 2L);
+        assertReplicaCheckpointUpdated(primaryShard);
+                client().admin()
+        // only block a single replica, pressure should not get applied.
+        final IndexShard primaryShard = getIndexShard(primaryNode, INDEX_NAME);
+    public void testBelowReplicaLimit() throws Exception {
+import java.util.concurrent.TimeUnit;
+            Thread indexingThread = new Thread(() -> totalDocs.getAndSet(indexUntilCheckpointCount()));
+        try (final Releasable ignored = blockReplication(replicaNodes, latch)) {
+                    indexDoc();
         refresh(INDEX_NAME);
-        return bulkItemResponses;
-    }
-
-    /**
-     * Index and Refresh in batches to force checkpoints behind.
-     * Asserts that there are no stale replicas according to the primary until cp count is reached.
-     */
-    private int indexUntilCheckpointCount() {
+        indexDoc();
+import org.opensearch.action.bulk.BulkResponse;
+import org.opensearch.common.unit.TimeValue;
+import org.opensearch.common.UUIDs;
+        }
         int total = 0;
-        for (int i = 0; i < MAX_CHECKPOINTS_BEHIND; i++) {
-            final int numDocs = randomIntBetween(1, 5);
-            for (int j = 0; j < numDocs; ++j) {
-                indexDoc();
-            }
-            total += numDocs;
+            assertBusy(() -> { assertFailedRequests(executeBulkRequest(nodes, randomIntBetween(1, 200))); });
+            assertBusy(() -> {
+        return asList(MockTransportService.TestPlugin.class);
+import java.util.Collections;
+        assertEqualSegmentInfosVersion(replicaNodes, primaryShard);
+        verifyStoreContent();
+        assertEqualSegmentInfosVersion(replicaNodes, primaryShard);
+import org.opensearch.index.shard.IndexShardState;
+    /**
+        ensureGreen(INDEX_NAME);
+     * Index and Refresh in batches to force checkpoints behind.
+        }
+            assertBusy(() -> {
+    @Override
+        int docsPerBatch = randomIntBetween(1, 200);
+        waitForSearchableDocs(totalDocs * 2L, replicaNodes.toArray(new String[] {}));
             refresh(INDEX_NAME);
+            latch.await();
+            .put(SEGMENT_REPLICATION_INDEXING_PRESSURE_ENABLED.getKey(), true)
+import java.util.Arrays;
+public class SegmentReplicationPressureIT extends SegmentReplicationBaseIT {
+            latch.await();
+            totalDocs.incrementAndGet();
+    }
+            .put(MAX_INDEXING_CHECKPOINTS.getKey(), MAX_CHECKPOINTS_BEHIND)
+        final String primaryNode = internalCluster().startNode(settings);
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+            INDEX_NAME,
+            .put(MAX_REPLICATION_TIME_BACKPRESSURE_SETTING.getKey(), TimeValue.timeValueMillis(500))
+        waitForSearchableDocs(totalDocs.get(), replicaNodes);
         }
-        return total;
-    }
-
-    private void assertFailedRequests(BulkResponse response) {
-        assertTrue(Arrays.stream(response.getItems()).allMatch(BulkItemResponse::isFailed));
-        assertTrue(
-            Arrays.stream(response.getItems())
-                .map(BulkItemResponse::getFailure)
-                .allMatch((failure) -> failure.getStatus() == RestStatus.TOO_MANY_REQUESTS)
-        );
-    }
-
-    private void indexDoc() {
-        client().prepareIndex(INDEX_NAME).setId(UUIDs.base64UUID()).setSource("{}", "{}").execute().actionGet();
-    }
-
-    private void assertEqualSegmentInfosVersion(List<String> replicaNames, IndexShard primaryShard) {
-        for (String replicaName : replicaNames) {
-            final IndexShard replicaShard = getIndexShard(replicaName, INDEX_NAME);
-            assertEquals(
                 primaryShard.getLatestReplicationCheckpoint().getSegmentInfosVersion(),
+    private void assertFailedRequests(BulkResponse response) {
+     */
+        Settings settings = Settings.builder()
+    public void testBulkWritesRejected() throws Exception {
+        List<String> nodes = List.of(primaryNode, replicaNode, coordinator);
+        ensureYellowAndNoInitializingShards(INDEX_NAME);
+        final List<String> replicaNodes = asList(replicaNode);
+        // Starts a primary and replica node.
                 replicaShard.getLatestReplicationCheckpoint().getSegmentInfosVersion()
-            );
-        }
+            IndexRequest request = new IndexRequest(INDEX_NAME).id(UUIDs.base64UUID())
+        final String replicaNode = internalCluster().startNode(settings);
     }
-}
+            );
+     */
+            Thread indexingThread = new Thread(() -> { totalDocs.getAndSet(indexUntilCheckpointCount()); });
+        return bulkItemResponses;
+            .put(MAX_REPLICATION_LIMIT_STALE_REPLICA_SETTING.getKey(), TimeValue.timeValueMillis(1000))
+    }
+                });
+            SegmentReplicationStatsResponse segmentReplicationStatsResponse = dataNodeClient().admin()
+            .build();
+                    refresh(INDEX_NAME);
+        createIndex(INDEX_NAME);
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicInteger totalDocs = new AtomicInteger(0);
+        }
+    @Override
+            final String replica_2 = internalCluster().startNode();
+        final AtomicInteger totalDocs = new AtomicInteger(0);
+        assertNotEquals(replicaAfterFailure.routingEntry().allocationId().getId(), replicaShard.routingEntry().allocationId().getId());
+        final String primaryNode = internalCluster().startNode();
+                    indexDoc();
+            indexingThread.join();
+        assertReplicaCheckpointUpdated(primaryShard);
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, SHARD_COUNT)
+        final Settings settings = Settings.builder().put(indexSettings()).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 3).build();
+            replicaNodes.add(internalCluster().startNode());
+                    totalDocs.incrementAndGet();
+        ensureYellowAndNoInitializingShards(INDEX_NAME);
+            replicaNodes.add(replica_2);
+    }
+        refresh(INDEX_NAME);
+        waitForSearchableDocs(totalDocs.incrementAndGet(), replicaNodes.toArray(new String[] {}));
+            "Skipping the test as its not compatible with segment replication with remote store. Cannot create DocRep indices with Remote store enabled",
+        final String primaryNode = internalCluster().startNode(settings);
+        final List<String> replicaNodes = new ArrayList<>();
+            refresh(INDEX_NAME);
+        ensureGreen(INDEX_NAME);
+        ensureYellowAndNoInitializingShards(INDEX_NAME);
+        indexDoc();
+                    .setSettings(Settings.builder().put(SETTING_NUMBER_OF_REPLICAS, 2))
+        final BulkResponse bulkItemResponses = client(randomFrom(nodes)).bulk(bulkRequest).actionGet();
+            // Verify the rejected doc count.
+import org.opensearch.test.transport.MockTransportService;
+        executeBulkRequest(nodes, totalDocs);
+                .source(Collections.singletonMap("key", randomAlphaOfLength(50)));
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+            indexingThread.join();
+            .build();
+            );

@@ -1,316 +1,259 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.search.query.rewriters;
-
-import org.apache.lucene.document.Document;
 import org.apache.lucene.document.IntPoint;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.store.Directory;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.NumberFieldMapper;
-import org.opensearch.index.query.BoolQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.test.OpenSearchTestCase;
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class MustNotToShouldRewriterTests extends OpenSearchTestCase {
-
-    private final MustNotToShouldRewriter rewriter = MustNotToShouldRewriter.INSTANCE;
-    private QueryShardContext context;
-    private Directory directory;
-    private IndexReader reader;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        context = mock(QueryShardContext.class);
-
-        // Create an index with single-valued numeric fields
-        directory = newDirectory();
-        IndexWriterConfig config = new IndexWriterConfig(Lucene.STANDARD_ANALYZER);
-        IndexWriter writer = new IndexWriter(directory, config);
-
-        // Add some documents with single-valued numeric fields
-        for (int i = 0; i < 100; i++) {
+        QueryBuilder query = QueryBuilders.boolQuery()
             Document doc = new Document();
-            doc.add(new IntPoint("age", i));
-            doc.add(new IntPoint("status", i % 10));
-            writer.addDocument(doc);
-        }
-
-        writer.close();
-        reader = DirectoryReader.open(directory);
-        when(context.getIndexReader()).thenReturn(reader);
-
-        // Setup numeric field types
-        NumberFieldMapper.NumberFieldType intFieldType = mock(NumberFieldMapper.NumberFieldType.class);
-        when(intFieldType.numberType()).thenReturn(NumberFieldMapper.NumberType.INTEGER);
-        // Make parse return the input value as a Number
-        when(intFieldType.parse(any())).thenAnswer(invocation -> {
-            Object arg = invocation.getArgument(0);
-            if (arg instanceof Number) {
-                return (Number) arg;
-            }
-            return Integer.parseInt(arg.toString());
-        });
-        when(context.fieldMapper("age")).thenReturn(intFieldType);
-        when(context.fieldMapper("status")).thenReturn(intFieldType);
-        when(context.fieldMapper("price")).thenReturn(intFieldType);
-
-        // Setup non-numeric field types
-        MappedFieldType textFieldType = mock(MappedFieldType.class);
-        when(context.fieldMapper("name")).thenReturn(textFieldType);
-        when(context.fieldMapper("description")).thenReturn(textFieldType);
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        super.tearDown();
-        reader.close();
-        directory.close();
-    }
-
-    public void testRangeQueryRewritten() {
-        // Test that must_not range query is rewritten to should clauses
-        QueryBuilder query = QueryBuilders.boolQuery()
-            .must(QueryBuilders.termQuery("type", "product"))
-            .mustNot(QueryBuilders.rangeQuery("age").gte(18).lte(65));
-
-        QueryBuilder rewritten = rewriter.rewrite(query, context);
-        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
+ */
+    public void setUp() throws Exception {
         BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
-
-        // Should have the original term query plus a new bool query from the rewrite
-        assertThat(rewrittenBool.must().size(), equalTo(2));
-
-        // The must_not clause should be removed
-        assertThat(rewrittenBool.mustNot().size(), equalTo(0));
-
-        // Find the nested bool query
-        BoolQueryBuilder nestedBool = null;
         for (QueryBuilder must : rewrittenBool.must()) {
-            if (must instanceof BoolQueryBuilder) {
-                nestedBool = (BoolQueryBuilder) must;
-                break;
-            }
-        }
-
-        assertNotNull(nestedBool);
-        assertThat(nestedBool.should().size(), equalTo(2)); // Two range queries for complement
-        assertThat(nestedBool.minimumShouldMatch(), equalTo("1"));
-    }
-
-    public void testNumericTermQueryRewritten() {
-        // Test that must_not term query on numeric field is rewritten
-        QueryBuilder query = QueryBuilders.boolQuery().mustNot(QueryBuilders.termQuery("status", 5));
-
-        QueryBuilder rewritten = rewriter.rewrite(query, context);
-        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
-        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
-
-        // Should have a new bool query from the rewrite
-        assertThat(rewrittenBool.must().size(), equalTo(1));
-        assertThat(rewrittenBool.mustNot().size(), equalTo(0));
-
-        BoolQueryBuilder nestedBool = (BoolQueryBuilder) rewrittenBool.must().get(0);
-        assertThat(nestedBool.should().size(), equalTo(2)); // Two range queries for complement
-        assertThat(nestedBool.minimumShouldMatch(), equalTo("1"));
-    }
-
-    public void testIdempotence() {
-        QueryBuilder query = QueryBuilders.boolQuery().mustNot(QueryBuilders.termQuery("status", 3));
-        QueryBuilder once = rewriter.rewrite(query, context);
-        QueryBuilder twice = rewriter.rewrite(once, context);
-        assertEquals(once.toString(), twice.toString());
-    }
-
-    public void testMultiValuedNumericFieldNotRewritten() throws Exception {
-        // Create an index where a field has multiple values per doc
-        Directory multiDir = newDirectory();
-        IndexWriter writer = new IndexWriter(multiDir, new IndexWriterConfig(Lucene.STANDARD_ANALYZER));
-        Document doc = new Document();
-        doc.add(new IntPoint("multi_age", 10));
-        doc.add(new IntPoint("multi_age", 20));
-        writer.addDocument(doc);
-        writer.close();
-
-        IndexReader multiReader = DirectoryReader.open(multiDir);
-        when(context.getIndexReader()).thenReturn(multiReader);
-        // numeric field type mapping
-        NumberFieldMapper.NumberFieldType intFieldType = mock(NumberFieldMapper.NumberFieldType.class);
-        when(context.fieldMapper("multi_age")).thenReturn(intFieldType);
-
-        QueryBuilder query = QueryBuilders.boolQuery().mustNot(QueryBuilders.rangeQuery("multi_age").gte(15));
-        QueryBuilder rewritten = rewriter.rewrite(query, context);
-        // Should not rewrite because docs can have multiple values
-        assertSame(query, rewritten);
-
-        multiReader.close();
-        multiDir.close();
-    }
-
-    public void testNumericTermsQueryRewritten() {
-        // Test that must_not terms query on numeric field is rewritten
-        QueryBuilder query = QueryBuilders.boolQuery().mustNot(QueryBuilders.termsQuery("status", new Object[] { 1, 2, 3 }));
-
-        QueryBuilder rewritten = rewriter.rewrite(query, context);
-        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
-        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
-
-        // Should have a new bool query from the rewrite
-        assertThat(rewrittenBool.must().size(), equalTo(1));
-        assertThat(rewrittenBool.mustNot().size(), equalTo(0));
-    }
-
-    public void testNumericMatchQueryRewritten() {
-        // Test that must_not match query on numeric field is rewritten
-        QueryBuilder query = QueryBuilders.boolQuery().mustNot(QueryBuilders.matchQuery("age", 25));
-
-        QueryBuilder rewritten = rewriter.rewrite(query, context);
-        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
-        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
-
-        // Should have a new bool query from the rewrite
-        assertThat(rewrittenBool.must().size(), equalTo(1));
-        assertThat(rewrittenBool.mustNot().size(), equalTo(0));
-    }
-
-    public void testTextFieldNotRewritten() {
-        // Test that must_not queries on text fields are not rewritten
-        QueryBuilder query = QueryBuilders.boolQuery()
-            .mustNot(QueryBuilders.termQuery("name", "test"))
-            .mustNot(QueryBuilders.matchQuery("description", "product"));
-
-        QueryBuilder rewritten = rewriter.rewrite(query, context);
         assertSame(query, rewritten); // No changes
-    }
-
-    public void testMultipleQueriesOnSameFieldNotRewritten() {
-        // Test that multiple must_not queries on the same field are not rewritten
-        QueryBuilder query = QueryBuilders.boolQuery()
-            .mustNot(QueryBuilders.rangeQuery("age").gte(18))
-            .mustNot(QueryBuilders.rangeQuery("age").lte(65));
-
-        QueryBuilder rewritten = rewriter.rewrite(query, context);
-        assertSame(query, rewritten); // No changes
-    }
-
-    public void testMinimumShouldMatchHandling() {
-        // Test that minimumShouldMatch is properly handled
-        QueryBuilder query = QueryBuilders.boolQuery()
-            .should(QueryBuilders.termQuery("category", "A"))
-            .should(QueryBuilders.termQuery("category", "B"))
-            .mustNot(QueryBuilders.rangeQuery("age").gte(18));
-
-        QueryBuilder rewritten = rewriter.rewrite(query, context);
-        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
-        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
-
-        // Since we added a must clause, minimumShouldMatch should be set to 1
         assertThat(rewrittenBool.minimumShouldMatch(), equalTo("1"));
-    }
-
-    public void testExistingMustClausesPreserved() {
-        // Test that existing must/filter/should clauses are preserved
-        QueryBuilder query = QueryBuilders.boolQuery()
-            .must(QueryBuilders.termQuery("type", "product"))
-            .filter(QueryBuilders.rangeQuery("price").gte(100))
-            .should(QueryBuilders.termQuery("featured", true))
-            .mustNot(QueryBuilders.rangeQuery("age").gte(18));
-
-        QueryBuilder rewritten = rewriter.rewrite(query, context);
-        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
-        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
-
-        // Original clauses should be preserved
-        assertThat(rewrittenBool.must().size(), equalTo(2)); // Original + rewritten
-        assertThat(rewrittenBool.filter().size(), equalTo(1));
-        assertThat(rewrittenBool.should().size(), equalTo(1));
-        assertThat(rewrittenBool.mustNot().size(), equalTo(0));
-    }
-
-    public void testNestedBooleanQueriesRewritten() {
-        // Test that nested boolean queries are also rewritten
-        QueryBuilder nested = QueryBuilders.boolQuery().mustNot(QueryBuilders.rangeQuery("age").gte(18));
-
         QueryBuilder query = QueryBuilders.boolQuery().must(nested);
-
-        QueryBuilder rewritten = rewriter.rewrite(query, context);
-        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
-        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
-
-        // The nested bool should be rewritten
-        assertThat(rewrittenBool.must().size(), equalTo(1));
-        assertThat(rewrittenBool.must().get(0), instanceOf(BoolQueryBuilder.class));
-
-        BoolQueryBuilder innerBool = (BoolQueryBuilder) rewrittenBool.must().get(0);
-        assertThat(innerBool.must().size(), equalTo(1)); // The rewritten clause
-        assertThat(innerBool.mustNot().size(), equalTo(0));
-    }
-
-    public void testNoMustNotClausesNoChanges() {
-        // Query without must_not clauses should not be changed
-        QueryBuilder query = QueryBuilders.boolQuery()
-            .must(QueryBuilders.termQuery("type", "product"))
-            .filter(QueryBuilders.rangeQuery("price").gte(100));
-
-        QueryBuilder rewritten = rewriter.rewrite(query, context);
-        assertSame(query, rewritten);
-    }
-
-    public void testNonBoolQueryUnchanged() {
-        // Non-bool queries should not be changed
-        QueryBuilder query = QueryBuilders.termQuery("field", "value");
-        QueryBuilder rewritten = rewriter.rewrite(query, context);
-        assertSame(query, rewritten);
-    }
-
-    public void testNullContextNoRewrite() {
-        // With null context, no rewriting should happen
-        QueryBuilder query = QueryBuilders.boolQuery().mustNot(QueryBuilders.rangeQuery("age").gte(18));
-
-        QueryBuilder rewritten = rewriter.rewrite(query, null);
-        assertSame(query, rewritten);
-    }
-
-    public void testRewriterPriority() {
-        // Verify rewriter has correct priority
+        // Test that must_not term query on numeric field is rewritten
+        assertThat(rewrittenBool.mustNot().size(), equalTo(0));
+import org.opensearch.index.query.QueryShardContext;
+        MappedFieldType textFieldType = mock(MappedFieldType.class);
         assertThat(rewriter.priority(), equalTo(175));
-        assertThat(rewriter.name(), equalTo("must_not_to_should"));
+        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
+        });
+        assertThat(rewrittenBool.adjustPureNegative(), equalTo(false));
+    private QueryShardContext context;
+        super.setUp();
+        when(context.getIndexReader()).thenReturn(multiReader);
+        BoolQueryBuilder nestedBool = null;
+        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
+    public void testNullContextNoRewrite() {
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.index.query.QueryBuilders;
+            .must(QueryBuilders.termQuery("type", "product"))
+import org.apache.lucene.document.Document;
+        QueryBuilder rewritten = rewriter.rewrite(query, context);
+        // Setup non-numeric field types
+        when(intFieldType.numberType()).thenReturn(NumberFieldMapper.NumberType.INTEGER);
+        // Setup numeric field types
+    public void testMultiValuedNumericFieldNotRewritten() throws Exception {
+import static org.mockito.Mockito.mock;
     }
-
-    public void testBoolQueryPropertiesPreserved() {
-        // All bool query properties should be preserved
+        // Since we added a must clause, minimumShouldMatch should be set to 1
+                nestedBool = (BoolQueryBuilder) must;
+ *
+        assertThat(rewrittenBool.should().size(), equalTo(1));
+            if (must instanceof BoolQueryBuilder) {
+    public void testNumericMatchQueryRewritten() {
+        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
+        assertThat(nestedBool.minimumShouldMatch(), equalTo("1"));
+    public void testRangeQueryRewritten() {
+    }
+        assertSame(query, rewritten);
+    public void tearDown() throws Exception {
+    }
         QueryBuilder query = QueryBuilders.boolQuery()
+        }
+    }
+        assertThat(rewrittenBool.must().size(), equalTo(2));
+        context = mock(QueryShardContext.class);
+        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
+    public void testNoMustNotClausesNoChanges() {
+        QueryBuilder rewritten = rewriter.rewrite(query, context);
+        QueryBuilder rewritten = rewriter.rewrite(query, context);
+        QueryBuilder rewritten = rewriter.rewrite(query, context);
+    public void testNumericTermsQueryRewritten() {
+        QueryBuilder query = QueryBuilders.boolQuery().mustNot(QueryBuilders.rangeQuery("age").gte(18));
+    }
+        writer.close();
+        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
+        assertThat(rewrittenBool.must().size(), equalTo(1));
+        when(context.fieldMapper("description")).thenReturn(textFieldType);
+        assertThat(rewrittenBool.mustNot().size(), equalTo(0));
+        NumberFieldMapper.NumberFieldType intFieldType = mock(NumberFieldMapper.NumberFieldType.class);
+            .should(QueryBuilders.termQuery("featured", true))
+            .mustNot(QueryBuilders.rangeQuery("age").gte(18).lte(65));
+        QueryBuilder rewritten = rewriter.rewrite(query, context);
+        assertThat(rewrittenBool.must().size(), equalTo(1));
+        // The must_not clause should be removed
+import static org.mockito.Mockito.when;
+            .mustNot(QueryBuilders.matchQuery("description", "product"));
+    }
+        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
+        reader.close();
+        when(context.fieldMapper("status")).thenReturn(intFieldType);
+        QueryBuilder query = QueryBuilders.boolQuery().mustNot(QueryBuilders.termsQuery("status", new Object[] { 1, 2, 3 }));
+import org.opensearch.index.query.BoolQueryBuilder;
+public class MustNotToShouldRewriterTests extends OpenSearchTestCase {
+        reader = DirectoryReader.open(directory);
+        directory = newDirectory();
+import static org.hamcrest.Matchers.instanceOf;
+    public void testNestedBooleanQueriesRewritten() {
+        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
+        // Test that must_not match query on numeric field is rewritten
+        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
+    public void testMultipleQueriesOnSameFieldNotRewritten() {
+        // Test that minimumShouldMatch is properly handled
+        assertThat(rewrittenBool.filter().size(), equalTo(1));
+        // Non-bool queries should not be changed
+            .mustNot(QueryBuilders.termQuery("name", "test"))
+        assertNotNull(nestedBool);
+        QueryBuilder query = QueryBuilders.boolQuery()
+        // Verify rewriter has correct priority
+        assertThat(rewriter.name(), equalTo("must_not_to_should"));
+        assertThat(rewrittenBool.mustNot().size(), equalTo(0));
+        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
+            writer.addDocument(doc);
+                return (Number) arg;
+ * SPDX-License-Identifier: Apache-2.0
+        IndexWriterConfig config = new IndexWriterConfig(Lucene.STANDARD_ANALYZER);
+        QueryBuilder once = rewriter.rewrite(query, context);
+        QueryBuilder rewritten = rewriter.rewrite(query, null);
+/*
+        assertThat(rewrittenBool.queryName(), equalTo("my_query"));
+ * The OpenSearch Contributors require contributions made to
+    public void testTextFieldNotRewritten() {
+        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
+        QueryBuilder rewritten = rewriter.rewrite(query, context);
+    private Directory directory;
+        // Test that existing must/filter/should clauses are preserved
+    public void testBoolQueryPropertiesPreserved() {
+    }
+        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
+        assertThat(innerBool.mustNot().size(), equalTo(0));
+import org.opensearch.index.query.QueryBuilder;
+    @Override
+}
+            }
+        // Test that nested boolean queries are also rewritten
+        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
+        when(intFieldType.parse(any())).thenAnswer(invocation -> {
+        assertSame(query, rewritten);
+ * compatible open source license.
+        writer.addDocument(doc);
+            }
+package org.opensearch.search.query.rewriters;
+    }
+    public void testNonBoolQueryUnchanged() {
+        // Create an index where a field has multiple values per doc
+        BoolQueryBuilder nestedBool = (BoolQueryBuilder) rewrittenBool.must().get(0);
             .mustNot(QueryBuilders.rangeQuery("age").gte(18))
             .boost(2.0f)
-            .queryName("my_query")
-            .adjustPureNegative(false);
-
-        QueryBuilder rewritten = rewriter.rewrite(query, context);
-        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
-        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
-
-        // Properties should be preserved
-        assertThat(rewrittenBool.boost(), equalTo(2.0f));
-        assertThat(rewrittenBool.queryName(), equalTo("my_query"));
-        assertThat(rewrittenBool.adjustPureNegative(), equalTo(false));
     }
-}
+        assertThat(rewrittenBool.boost(), equalTo(2.0f));
+        QueryBuilder query = QueryBuilders.boolQuery().mustNot(QueryBuilders.matchQuery("age", 25));
+            return Integer.parseInt(arg.toString());
+    public void testRewriterPriority() {
+ * this file be licensed under the Apache-2.0 license or a
+    }
+            .must(QueryBuilders.termQuery("type", "product"))
+        multiReader.close();
+        QueryBuilder query = QueryBuilders.termQuery("field", "value");
+import org.opensearch.common.lucene.Lucene;
+        assertThat(rewrittenBool.must().size(), equalTo(1));
+        assertThat(nestedBool.should().size(), equalTo(2)); // Two range queries for complement
+        QueryBuilder twice = rewriter.rewrite(once, context);
+            .adjustPureNegative(false);
+            .mustNot(QueryBuilders.rangeQuery("age").lte(65));
+        // Should have a new bool query from the rewrite
+            .filter(QueryBuilders.rangeQuery("price").gte(100));
+        QueryBuilder query = QueryBuilders.boolQuery()
+    }
+    public void testMinimumShouldMatchHandling() {
+    public void testIdempotence() {
+        // Create an index with single-valued numeric fields
+        Document doc = new Document();
+        when(context.fieldMapper("age")).thenReturn(intFieldType);
+        assertSame(query, rewritten);
+        QueryBuilder rewritten = rewriter.rewrite(query, context);
+    }
+    }
+import static org.mockito.ArgumentMatchers.any;
+                break;
+import org.apache.lucene.index.IndexWriter;
+        // Should have the original term query plus a new bool query from the rewrite
+import org.opensearch.index.mapper.NumberFieldMapper;
+    @Override
+        QueryBuilder query = QueryBuilders.boolQuery().mustNot(QueryBuilders.rangeQuery("multi_age").gte(15));
+import org.apache.lucene.store.Directory;
+        when(context.fieldMapper("price")).thenReturn(intFieldType);
+        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
+        // Should not rewrite because docs can have multiple values
+        // Test that must_not terms query on numeric field is rewritten
+            Object arg = invocation.getArgument(0);
+        // Should have a new bool query from the rewrite
+import org.apache.lucene.index.IndexReader;
+        IndexWriter writer = new IndexWriter(directory, config);
+        // Test that must_not range query is rewritten to should clauses
+        assertThat(nestedBool.should().size(), equalTo(2)); // Two range queries for complement
+    }
+        super.tearDown();
+        // With null context, no rewriting should happen
+        QueryBuilder rewritten = rewriter.rewrite(query, context);
+import org.apache.lucene.index.IndexWriterConfig;
+        multiDir.close();
+        // Original clauses should be preserved
+import static org.hamcrest.Matchers.equalTo;
+            .should(QueryBuilders.termQuery("category", "B"))
+            .should(QueryBuilders.termQuery("category", "A"))
+        assertThat(rewrittenBool.must().size(), equalTo(1));
+            .mustNot(QueryBuilders.rangeQuery("age").gte(18));
+import org.opensearch.index.mapper.MappedFieldType;
+        doc.add(new IntPoint("multi_age", 20));
+    }
+        BoolQueryBuilder rewrittenBool = (BoolQueryBuilder) rewritten;
+        // Test that multiple must_not queries on the same field are not rewritten
+        IndexWriter writer = new IndexWriter(multiDir, new IndexWriterConfig(Lucene.STANDARD_ANALYZER));
+        when(context.getIndexReader()).thenReturn(reader);
+        QueryBuilder nested = QueryBuilders.boolQuery().mustNot(QueryBuilders.rangeQuery("age").gte(18));
+        assertThat(rewrittenBool.mustNot().size(), equalTo(0));
+        assertThat(rewrittenBool.mustNot().size(), equalTo(0));
+    public void testExistingMustClausesPreserved() {
+        assertThat(rewritten, instanceOf(BoolQueryBuilder.class));
+        QueryBuilder rewritten = rewriter.rewrite(query, context);
+            .mustNot(QueryBuilders.rangeQuery("age").gte(18));
+        assertThat(rewrittenBool.must().get(0), instanceOf(BoolQueryBuilder.class));
+        assertThat(nestedBool.minimumShouldMatch(), equalTo("1"));
+            doc.add(new IntPoint("age", i));
+        QueryBuilder query = QueryBuilders.boolQuery()
+            .filter(QueryBuilders.rangeQuery("price").gte(100))
+        writer.close();
+        QueryBuilder query = QueryBuilders.boolQuery().mustNot(QueryBuilders.termQuery("status", 3));
+        Directory multiDir = newDirectory();
+import org.apache.lucene.index.DirectoryReader;
+        QueryBuilder query = QueryBuilders.boolQuery().mustNot(QueryBuilders.termQuery("status", 5));
+        // Should have a new bool query from the rewrite
+        when(context.fieldMapper("name")).thenReturn(textFieldType);
+    }
+            .queryName("my_query")
+            if (arg instanceof Number) {
+            .must(QueryBuilders.termQuery("type", "product"))
+        assertSame(query, rewritten); // No changes
+        // Properties should be preserved
+        // Add some documents with single-valued numeric fields
+        assertThat(rewrittenBool.must().size(), equalTo(2)); // Original + rewritten
+        doc.add(new IntPoint("multi_age", 10));
+        assertSame(query, rewritten);
+        BoolQueryBuilder innerBool = (BoolQueryBuilder) rewrittenBool.must().get(0);
+        for (int i = 0; i < 100; i++) {
+        QueryBuilder rewritten = rewriter.rewrite(query, context);
+        QueryBuilder query = QueryBuilders.boolQuery()
+    private final MustNotToShouldRewriter rewriter = MustNotToShouldRewriter.INSTANCE;
+        when(context.fieldMapper("multi_age")).thenReturn(intFieldType);
+    }
+        IndexReader multiReader = DirectoryReader.open(multiDir);
+        // The nested bool should be rewritten
+        // Make parse return the input value as a Number
+        }
+        QueryBuilder rewritten = rewriter.rewrite(query, context);
+        // Find the nested bool query
+            .mustNot(QueryBuilders.rangeQuery("age").gte(18))
+        QueryBuilder rewritten = rewriter.rewrite(query, context);
+    private IndexReader reader;
+        // numeric field type mapping
+    }
+        // All bool query properties should be preserved
+        QueryBuilder query = QueryBuilders.boolQuery()
+        directory.close();
+        // Test that must_not queries on text fields are not rewritten
+        assertThat(innerBool.must().size(), equalTo(1)); // The rewritten clause
+        QueryBuilder rewritten = rewriter.rewrite(query, context);
+    public void testNumericTermQueryRewritten() {
+        NumberFieldMapper.NumberFieldType intFieldType = mock(NumberFieldMapper.NumberFieldType.class);
+            doc.add(new IntPoint("status", i % 10));
+        assertEquals(once.toString(), twice.toString());
+        // Query without must_not clauses should not be changed

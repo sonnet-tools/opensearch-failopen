@@ -1,230 +1,191 @@
+            return channel -> client.executeLocally(INSTANCE, request, new RestToXContentListener<>(channel));
 /*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.painless.action;
-
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.ActionType;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.HandledTransportAction;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.painless.PainlessScriptEngine;
-import org.opensearch.painless.lookup.PainlessLookup;
-import org.opensearch.rest.BaseRestHandler;
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.action.RestToXContentListener;
-import org.opensearch.script.ScriptContext;
-import org.opensearch.tasks.Task;
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
-
-import static java.util.Collections.singletonList;
-import static org.opensearch.rest.RestRequest.Method.GET;
-
-/**
- * Internal REST API for querying context information about Painless allowlists.
- * Commands include the following:
- * <ul>
- *     <li> GET /_scripts/painless/_context -- retrieves a list of contexts </li>
- *     <li> GET /_scripts/painless/_context?context=%name% --
- *     retrieves all available information about the API for this specific context</li>
- * </ul>
- */
-public class PainlessContextAction extends ActionType<PainlessContextAction.Response> {
-
-    public static final PainlessContextAction INSTANCE = new PainlessContextAction();
-    private static final String NAME = "cluster:admin/scripts/painless/context";
-
+        public Response(List<String> scriptContextNames, PainlessContextInfo painlessContextInfo) {
     private static final String SCRIPT_CONTEXT_NAME_PARAM = "context";
-
-    private PainlessContextAction() {
+import org.opensearch.core.action.ActionResponse;
+/*
+import org.opensearch.rest.action.RestToXContentListener;
+ *
+ *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
+ * You may obtain a copy of the License at
+        @Override
+        public static final ParseField CONTEXTS = new ParseField("contexts");
+                painlessContextInfo = null;
+ * software distributed under the License is distributed on an
+ *     <li> GET /_scripts/painless/_context?context=%name% --
+                    .entrySet()) {
+        }
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.action.ActionType;
+            this.painlessScriptEngine = painlessScriptEngine;
+            super.writeTo(out);
+            out.writeStringCollection(scriptContextNames);
+import org.opensearch.action.support.ActionFilters;
+ * compatible open source license.
+        @Override
         super(NAME, PainlessContextAction.Response::new);
+            Request request = new Request();
+                        scriptContext = contextLookupEntry.getKey();
+            PainlessContextInfo painlessContextInfo;
+                        painlessLookup = contextLookupEntry.getValue();
+            super(NAME, transportService, actionFilters, (Writeable.Reader<Request>) Request::new);
+        public ActionRequestValidationException validate() {
     }
-
-    public static class Request extends ActionRequest {
-
-        private String scriptContextName;
-
-        public Request() {
-            scriptContextName = null;
-        }
-
-        public Request(StreamInput in) throws IOException {
-            super(in);
-            scriptContextName = in.readString();
-        }
-
-        public void setScriptContextName(String scriptContextName) {
-            this.scriptContextName = scriptContextName;
-        }
-
         public String getScriptContextName() {
+            scriptContextName = in.readString();
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        @Override
+            return "_scripts_painless_context";
+import org.opensearch.core.common.io.stream.Writeable;
+                for (Map.Entry<ScriptContext<?>, PainlessLookup> contextLookupEntry : painlessScriptEngine.getContextsToLookups()
+    }
+        public Request(StreamInput in) throws IOException {
+            } else {
+ *     <li> GET /_scripts/painless/_context -- retrieves a list of contexts </li>
+import org.opensearch.core.ParseField;
+                painlessContextInfo = new PainlessContextInfo(scriptContext, painlessLookup);
+            if (painlessContextInfo == null) {
+                    .stream()
+        public void writeTo(StreamOutput out) throws IOException {
+        }
+            return builder;
+            scriptContextNames = new ArrayList<>(scriptContextNames);
+            super(in);
+    public static class RestAction extends BaseRestHandler {
+import org.opensearch.script.ScriptContext;
+ *
+        private final PainlessContextInfo painlessContextInfo;
+                painlessContextInfo.toXContent(builder, params);
+import java.util.ArrayList;
+import org.opensearch.rest.BaseRestHandler;
+import org.opensearch.painless.PainlessScriptEngine;
+import java.util.List;
+ * KIND, either express or implied.  See the License for the
             return scriptContextName;
         }
-
-        @Override
-        public ActionRequestValidationException validate() {
-            return null;
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
-            out.writeString(scriptContextName);
-        }
-    }
-
-    public static class Response extends ActionResponse implements ToXContentObject {
-
-        public static final ParseField CONTEXTS = new ParseField("contexts");
-
-        private final List<String> scriptContextNames;
-        private final PainlessContextInfo painlessContextInfo;
-
-        public Response(List<String> scriptContextNames, PainlessContextInfo painlessContextInfo) {
-            Objects.requireNonNull(scriptContextNames);
-            scriptContextNames = new ArrayList<>(scriptContextNames);
-            scriptContextNames.sort(String::compareTo);
-            this.scriptContextNames = Collections.unmodifiableList(scriptContextNames);
-            this.painlessContextInfo = painlessContextInfo;
-        }
-
-        public Response(StreamInput in) throws IOException {
-            super(in);
-            scriptContextNames = in.readStringList();
-            painlessContextInfo = in.readOptionalWriteable(PainlessContextInfo::new);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeStringCollection(scriptContextNames);
-            out.writeOptionalWriteable(painlessContextInfo);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            if (painlessContextInfo == null) {
-                builder.startObject();
-                builder.field(CONTEXTS.getPreferredName(), scriptContextNames);
-                builder.endObject();
-            } else {
-                painlessContextInfo.toXContent(builder, params);
-            }
-
-            return builder;
-        }
-    }
-
-    public static class TransportAction extends HandledTransportAction<Request, Response> {
-
-        private final PainlessScriptEngine painlessScriptEngine;
-
-        @Inject
-        public TransportAction(TransportService transportService, ActionFilters actionFilters, PainlessScriptEngine painlessScriptEngine) {
-            super(NAME, transportService, actionFilters, (Writeable.Reader<Request>) Request::new);
-            this.painlessScriptEngine = painlessScriptEngine;
-        }
-
-        @Override
-        protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
-            List<String> scriptContextNames;
-            PainlessContextInfo painlessContextInfo;
-
-            if (request.scriptContextName == null) {
-                scriptContextNames = painlessScriptEngine.getContextsToLookups()
-                    .keySet()
-                    .stream()
-                    .map(v -> v.name)
-                    .collect(Collectors.toList());
-                painlessContextInfo = null;
-            } else {
-                ScriptContext<?> scriptContext = null;
-                PainlessLookup painlessLookup = null;
-
-                for (Map.Entry<ScriptContext<?>, PainlessLookup> contextLookupEntry : painlessScriptEngine.getContextsToLookups()
-                    .entrySet()) {
-                    if (contextLookupEntry.getKey().name.equals(request.getScriptContextName())) {
-                        scriptContext = contextLookupEntry.getKey();
-                        painlessLookup = contextLookupEntry.getValue();
-                        break;
-                    }
-                }
-
-                if (scriptContext == null || painlessLookup == null) {
-                    throw new IllegalArgumentException("script context [" + request.getScriptContextName() + "] not found");
-                }
-
-                scriptContextNames = Collections.emptyList();
-                painlessContextInfo = new PainlessContextInfo(scriptContext, painlessLookup);
-            }
-
-            listener.onResponse(new Response(scriptContextNames, painlessContextInfo));
-        }
-    }
-
-    public static class RestAction extends BaseRestHandler {
-
-        @Override
-        public List<Route> routes() {
-            return singletonList(new Route(GET, "/_scripts/painless/_context"));
-        }
-
-        @Override
-        public String getName() {
-            return "_scripts_painless_context";
-        }
-
-        @Override
-        protected RestChannelConsumer prepareRequest(RestRequest restRequest, NodeClient client) {
-            Request request = new Request();
-            request.setScriptContextName(restRequest.param(SCRIPT_CONTEXT_NAME_PARAM));
-            return channel -> client.executeLocally(INSTANCE, request, new RestToXContentListener<>(channel));
-        }
-    }
 }
+        public Request() {
+            painlessContextInfo = in.readOptionalWriteable(PainlessContextInfo::new);
+                }
+            this.painlessContextInfo = painlessContextInfo;
+import org.opensearch.common.inject.Inject;
+            this.scriptContextName = scriptContextName;
+import org.opensearch.transport.TransportService;
+                if (scriptContext == null || painlessLookup == null) {
+                builder.startObject();
+import java.util.Collections;
+        }
+import java.util.stream.Collectors;
+import java.util.Map;
+        }
+import org.opensearch.core.common.io.stream.StreamInput;
+        @Override
+ * SPDX-License-Identifier: Apache-2.0
+        private final PainlessScriptEngine painlessScriptEngine;
+        public void setScriptContextName(String scriptContextName) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.rest.RestRequest;
+    private static final String NAME = "cluster:admin/scripts/painless/context";
+/**
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+            return singletonList(new Route(GET, "/_scripts/painless/_context"));
+        public String getName() {
+        @Override
+ * license agreements. See the NOTICE file distributed with
+ * Unless required by applicable law or agreed to in writing,
+        private String scriptContextName;
+            }
+            this.scriptContextNames = Collections.unmodifiableList(scriptContextNames);
+ * Commands include the following:
+            scriptContextNames = in.readStringList();
+            if (request.scriptContextName == null) {
+        }
+                PainlessLookup painlessLookup = null;
+ *     retrieves all available information about the API for this specific context</li>
+import java.io.IOException;
+ * Licensed to Elasticsearch under one or more contributor
+        }
+            Objects.requireNonNull(scriptContextNames);
+ */
+import static java.util.Collections.singletonList;
+import java.util.Objects;
+        @Override
+        }
+ * under the License.
+    }
+    public static class Response extends ActionResponse implements ToXContentObject {
+        protected RestChannelConsumer prepareRequest(RestRequest restRequest, NodeClient client) {
+        }
+                    if (contextLookupEntry.getKey().name.equals(request.getScriptContextName())) {
+                }
+import org.opensearch.painless.lookup.PainlessLookup;
+        public void writeTo(StreamOutput out) throws IOException {
+                scriptContextNames = Collections.emptyList();
+            out.writeOptionalWriteable(painlessContextInfo);
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+            super(in);
+    }
+ * The OpenSearch Contributors require contributions made to
+            request.setScriptContextName(restRequest.param(SCRIPT_CONTEXT_NAME_PARAM));
+ * GitHub history for details.
+            scriptContextNames.sort(String::compareTo);
+        }
+                scriptContextNames = painlessScriptEngine.getContextsToLookups()
+    private PainlessContextAction() {
+ * ownership. Elasticsearch licenses this file to you under
+ */
+import org.opensearch.core.xcontent.ToXContentObject;
+import static org.opensearch.rest.RestRequest.Method.GET;
+                ScriptContext<?> scriptContext = null;
+        }
+        @Override
+ * </ul>
+            List<String> scriptContextNames;
+                    .collect(Collectors.toList());
+        public Response(StreamInput in) throws IOException {
+                builder.endObject();
+ */
+        }
+            }
+import org.opensearch.tasks.Task;
+import org.opensearch.transport.client.node.NodeClient;
+import org.opensearch.action.ActionRequestValidationException;
+                        break;
+ * Internal REST API for querying context information about Painless allowlists.
+        public List<Route> routes() {
+import org.opensearch.core.action.ActionListener;
+import org.opensearch.action.support.HandledTransportAction;
+import org.opensearch.core.xcontent.XContentBuilder;
+            } else {
+ * specific language governing permissions and limitations
+import org.opensearch.action.ActionRequest;
+/*
+                builder.field(CONTEXTS.getPreferredName(), scriptContextNames);
+        }
+        }
+ * <ul>
+        @Inject
+                    .map(v -> v.name)
+        @Override
+            listener.onResponse(new Response(scriptContextNames, painlessContextInfo));
+            out.writeString(scriptContextName);
+ * not use this file except in compliance with the License.
+    public static class TransportAction extends HandledTransportAction<Request, Response> {
+ * this work for additional information regarding copyright
+    }
+public class PainlessContextAction extends ActionType<PainlessContextAction.Response> {
+    public static final PainlessContextAction INSTANCE = new PainlessContextAction();
+                    throw new IllegalArgumentException("script context [" + request.getScriptContextName() + "] not found");
+import org.opensearch.core.common.io.stream.StreamOutput;
+package org.opensearch.painless.action;
+            scriptContextName = null;
+            return null;
+        private final List<String> scriptContextNames;
+    public static class Request extends ActionRequest {
+                    .keySet()
+                    }
+        public TransportAction(TransportService transportService, ActionFilters actionFilters, PainlessScriptEngine painlessScriptEngine) {

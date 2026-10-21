@@ -1,238 +1,213 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.ingest;
-
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.ingest.IngestDocument;
-import org.opensearch.test.AbstractXContentTestCase;
-
-import java.io.IOException;
-import java.util.StringJoiner;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
-
-import static org.opensearch.action.ingest.WriteableIngestDocumentTests.createRandomIngestDoc;
-import static org.opensearch.ingest.IngestDocumentMatcher.assertIngestDocument;
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;
-
-public class SimulateProcessorResultTests extends AbstractXContentTestCase<SimulateProcessorResult> {
-
-    public void testSerialization() throws IOException {
-        boolean isSuccessful = randomBoolean();
-        boolean isIgnoredException = randomBoolean();
-        boolean hasCondition = randomBoolean();
-        SimulateProcessorResult simulateProcessorResult = createTestInstance(isSuccessful, isIgnoredException, hasCondition);
-
-        BytesStreamOutput out = new BytesStreamOutput();
-        simulateProcessorResult.writeTo(out);
-        StreamInput streamInput = out.bytes().streamInput();
-        SimulateProcessorResult otherSimulateProcessorResult = new SimulateProcessorResult(streamInput);
-        assertThat(otherSimulateProcessorResult.getProcessorTag(), equalTo(simulateProcessorResult.getProcessorTag()));
-        assertThat(otherSimulateProcessorResult.getDescription(), equalTo(simulateProcessorResult.getDescription()));
-        if (isSuccessful) {
-            assertIngestDocument(otherSimulateProcessorResult.getIngestDocument(), simulateProcessorResult.getIngestDocument());
-            if (isIgnoredException) {
-                assertThat(otherSimulateProcessorResult.getFailure(), instanceOf(IllegalArgumentException.class));
-                IllegalArgumentException e = (IllegalArgumentException) otherSimulateProcessorResult.getFailure();
-                assertThat(e.getMessage(), equalTo("test"));
-            } else {
-                assertThat(otherSimulateProcessorResult.getFailure(), nullValue());
-            }
-        } else {
-            assertThat(otherSimulateProcessorResult.getIngestDocument(), is(nullValue()));
-            assertThat(otherSimulateProcessorResult.getFailure(), instanceOf(IllegalArgumentException.class));
-            IllegalArgumentException e = (IllegalArgumentException) otherSimulateProcessorResult.getFailure();
-            assertThat(e.getMessage(), equalTo("test"));
-        }
-    }
-
-    static SimulateProcessorResult createTestInstance(boolean isSuccessful, boolean isIgnoredException, boolean hasCondition) {
-        String type = randomAlphaOfLengthBetween(1, 10);
-        String processorTag = randomAlphaOfLengthBetween(1, 10);
-        String description = randomAlphaOfLengthBetween(1, 10);
-        Tuple<String, Boolean> conditionWithResult = hasCondition ? new Tuple<>(randomAlphaOfLengthBetween(1, 10), randomBoolean()) : null;
-        SimulateProcessorResult simulateProcessorResult;
-        if (isSuccessful) {
             IngestDocument ingestDocument = createRandomIngestDoc();
-            if (isIgnoredException) {
-                simulateProcessorResult = new SimulateProcessorResult(
-                    type,
-                    processorTag,
-                    description,
-                    ingestDocument,
-                    new IllegalArgumentException("test"),
-                    conditionWithResult
-                );
-            } else {
-                simulateProcessorResult = new SimulateProcessorResult(type, processorTag, description, ingestDocument, conditionWithResult);
-            }
-        } else {
-            simulateProcessorResult = new SimulateProcessorResult(
-                type,
-                processorTag,
-                description,
-                new IllegalArgumentException("test"),
-                conditionWithResult
-            );
-        }
-        return simulateProcessorResult;
-    }
-
-    private static SimulateProcessorResult createTestInstanceWithFailures() {
-        boolean isSuccessful = randomBoolean();
-        boolean isIgnoredException = randomBoolean();
-        boolean hasCondition = randomBoolean();
-        return createTestInstance(isSuccessful, isIgnoredException, hasCondition);
-    }
-
-    @Override
-    protected SimulateProcessorResult createTestInstance() {
-        // we test failures separately since comparing XContent is not possible with failures
-        return createTestInstance(true, false, true);
-    }
-
-    @Override
-    protected SimulateProcessorResult doParseInstance(XContentParser parser) {
-        return SimulateProcessorResult.fromXContent(parser);
-    }
-
-    @Override
-    protected boolean supportsUnknownFields() {
-        return true;
-    }
-
-    @Override
-    protected Predicate<String> getRandomFieldsExcludeFilter() {
-        // We cannot have random fields in the _source field and _ingest field
-        return field -> field.startsWith(
+import static org.hamcrest.Matchers.equalTo;
+        result = new SimulateProcessorResult(
             new StringJoiner(".").add(WriteableIngestDocument.DOC_FIELD).add(WriteableIngestDocument.SOURCE_FIELD).toString()
-        )
-            || field.startsWith(
-                new StringJoiner(".").add(WriteableIngestDocument.DOC_FIELD).add(WriteableIngestDocument.INGEST_FIELD).toString()
-            );
-    }
-
-    static void assertEqualProcessorResults(SimulateProcessorResult response, SimulateProcessorResult parsedResponse) {
-        assertEquals(response.getProcessorTag(), parsedResponse.getProcessorTag());
-        assertEquals(response.getIngestDocument(), parsedResponse.getIngestDocument());
-        if (response.getFailure() != null) {
-            assertNotNull(parsedResponse.getFailure());
-            assertThat(parsedResponse.getFailure().getMessage(), containsString(response.getFailure().getMessage()));
-        } else {
-            assertNull(parsedResponse.getFailure());
-        }
-    }
-
-    @Override
-    protected void assertEqualInstances(SimulateProcessorResult response, SimulateProcessorResult parsedResponse) {
-        assertEqualProcessorResults(response, parsedResponse);
-    }
-
-    /**
-     * Test parsing {@link SimulateProcessorResult} with inner failures as they don't support asserting on xcontent equivalence, given that
      * exceptions are not parsed back as the same original class. We run the usual {@link AbstractXContentTestCase#testFromXContent()}
-     * without failures, and this other test with failures where we disable asserting on xcontent equivalence at the end.
-     */
-    public void testFromXContentWithFailures() throws IOException {
-        Supplier<SimulateProcessorResult> instanceSupplier = SimulateProcessorResultTests::createTestInstanceWithFailures;
-        // with random fields insertion in the inner exceptions, some random stuff may be parsed back as metadata,
-        // but that does not bother our assertions, as we only want to test that we don't break.
-        boolean supportsUnknownFields = true;
-        // exceptions are not of the same type whenever parsed back
-        boolean assertToXContentEquivalence = false;
-        AbstractXContentTestCase.testFromXContent(
+        result = new SimulateProcessorResult(
+        return field -> field.startsWith(
+                    processorTag,
+import org.opensearch.common.io.stream.BytesStreamOutput;
+import static org.opensearch.ingest.IngestDocumentMatcher.assertIngestDocument;
+            null,
+            }
+ * not use this file except in compliance with the License.
+        return createTestInstance(isSuccessful, isIgnoredException, hasCondition);
+            new Tuple<>(randomAlphaOfLengthBetween(1, 10), false)
+            assertThat(e.getMessage(), equalTo("test"));
+        // failure, but ignored
+                conditionWithResult
+            if (isIgnoredException) {
+        assertEquals(response.getProcessorTag(), parsedResponse.getProcessorTag());
+        boolean isSuccessful = randomBoolean();
+        SimulateProcessorResult simulateProcessorResult = createTestInstance(isSuccessful, isIgnoredException, hasCondition);
+/*
+        boolean isIgnoredException = randomBoolean();
+        StreamInput streamInput = out.bytes().streamInput();
+        );
+        // We cannot have random fields in the _source field and _ingest field
+        SimulateProcessorResult result;
+        return true;
+        // we test failures separately since comparing XContent is not possible with failures
+    }
+        assertEquals(SimulateProcessorResult.Status.DROPPED, result.getStatus(null));
+            if (isIgnoredException) {
+ */
+        // no ingest doc - as pipeline processor
+    protected boolean supportsUnknownFields() {
+            this::assertEqualInstances,
+            simulateProcessorResult = new SimulateProcessorResult(
+        assertEquals(SimulateProcessorResult.Status.SKIPPED, result.getStatus("set"));
+        boolean hasCondition = randomBoolean();
+                description,
+        );
+            null,
+            getToXContentParams()
+ * Modifications Copyright OpenSearch Contributors. See
+            IllegalArgumentException e = (IllegalArgumentException) otherSimulateProcessorResult.getFailure();
+    }
+        result = new SimulateProcessorResult(null, null, null, null, null, null);
+ * Unless required by applicable law or agreed to in writing,
             NUMBER_OF_TEST_RUNS,
-            instanceSupplier,
-            supportsUnknownFields,
+        }
+        result = new SimulateProcessorResult(null, null, null, createRandomIngestDoc(), null, null);
+    static SimulateProcessorResult createTestInstance(boolean isSuccessful, boolean isIgnoredException, boolean hasCondition) {
+        assertThat(otherSimulateProcessorResult.getDescription(), equalTo(simulateProcessorResult.getDescription()));
+        } else {
+    }
+            assertThat(otherSimulateProcessorResult.getFailure(), instanceOf(IllegalArgumentException.class));
+import static org.opensearch.action.ingest.WriteableIngestDocumentTests.createRandomIngestDoc;
+ * license agreements. See the NOTICE file distributed with
+                IllegalArgumentException e = (IllegalArgumentException) otherSimulateProcessorResult.getFailure();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    }
+ */
+ * this file be licensed under the Apache-2.0 license or a
+                processorTag,
+    private static SimulateProcessorResult createTestInstanceWithFailures() {
+            this::doParseInstance,
+    @Override
+        }
+        BytesStreamOutput out = new BytesStreamOutput();
+        } else {
             getShuffleFieldsExceptions(),
+    }
+            new Tuple<>(randomAlphaOfLengthBetween(1, 10), true)
+            null,
+ * compatible open source license.
+ * KIND, either express or implied.  See the License for the
+        assertThat(otherSimulateProcessorResult.getProcessorTag(), equalTo(simulateProcessorResult.getProcessorTag()));
+        // but that does not bother our assertions, as we only want to test that we don't break.
+    }
+            createRandomIngestDoc(),
+        String type = randomAlphaOfLengthBetween(1, 10);
+        if (isSuccessful) {
+                    ingestDocument,
+        assertEquals(SimulateProcessorResult.Status.ERROR_IGNORED, result.getStatus(""));
+import static org.hamcrest.CoreMatchers.containsString;
+    }
+ * GitHub history for details.
+        )
+        assertEqualProcessorResults(response, parsedResponse);
+}
+import org.opensearch.test.AbstractXContentTestCase;
+                new StringJoiner(".").add(WriteableIngestDocument.DOC_FIELD).add(WriteableIngestDocument.INGEST_FIELD).toString()
+ * The OpenSearch Contributors require contributions made to
+        // with random fields insertion in the inner exceptions, some random stuff may be parsed back as metadata,
+            assertNotNull(parsedResponse.getFailure());
+package org.opensearch.action.ingest;
+                    description,
+        result = new SimulateProcessorResult(null, null, null, createRandomIngestDoc(), new RuntimeException(""), null);
+        // success - no conditional
+            assertNull(parsedResponse.getFailure());
+import java.io.IOException;
+        // success - conditional true
+        Supplier<SimulateProcessorResult> instanceSupplier = SimulateProcessorResultTests::createTestInstanceWithFailures;
+                );
+                assertThat(otherSimulateProcessorResult.getFailure(), nullValue());
+        // failure
+    @Override
+    public void testStatus() {
             getRandomFieldsExcludeFilter(),
             this::createParser,
-            this::doParseInstance,
-            this::assertEqualInstances,
-            assertToXContentEquivalence,
-            getToXContentParams()
-        );
-    }
-
-    public void testStatus() {
-        SimulateProcessorResult result;
+        Tuple<String, Boolean> conditionWithResult = hasCondition ? new Tuple<>(randomAlphaOfLengthBetween(1, 10), randomBoolean()) : null;
+        // exceptions are not of the same type whenever parsed back
+            assertThat(parsedResponse.getFailure().getMessage(), containsString(response.getFailure().getMessage()));
+    /**
+import org.opensearch.common.collect.Tuple;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        boolean supportsUnknownFields = true;
+            null,
+    protected Predicate<String> getRandomFieldsExcludeFilter() {
+        return createTestInstance(true, false, true);
+    public void testFromXContentWithFailures() throws IOException {
+import org.opensearch.core.xcontent.XContentParser;
+ * Licensed to Elasticsearch under one or more contributor
+            createRandomIngestDoc(),
+        boolean isSuccessful = randomBoolean();
+            );
+/*
+import org.opensearch.core.common.io.stream.StreamInput;
+ *
+                assertThat(otherSimulateProcessorResult.getFailure(), instanceOf(IllegalArgumentException.class));
+                new IllegalArgumentException("test"),
+    public void testSerialization() throws IOException {
+ *
+            null,
+        boolean isIgnoredException = randomBoolean();
+ * ownership. Elasticsearch licenses this file to you under
+            instanceSupplier,
+import java.util.function.Predicate;
+        assertEquals(SimulateProcessorResult.Status.SUCCESS, result.getStatus(null));
+            null,
+     * without failures, and this other test with failures where we disable asserting on xcontent equivalence at the end.
+            assertThat(otherSimulateProcessorResult.getIngestDocument(), is(nullValue()));
+        }
+    protected SimulateProcessorResult doParseInstance(XContentParser parser) {
+                    new IllegalArgumentException("test"),
         // conditional returned false
-        result = new SimulateProcessorResult(
-            null,
-            null,
-            null,
-            createRandomIngestDoc(),
-            null,
-            new Tuple<>(randomAlphaOfLengthBetween(1, 10), false)
-        );
-        assertEquals(SimulateProcessorResult.Status.SKIPPED, result.getStatus("set"));
-
-        // no ingest doc
+                simulateProcessorResult = new SimulateProcessorResult(type, processorTag, description, ingestDocument, conditionWithResult);
+ * under the License.
+     */
+    protected SimulateProcessorResult createTestInstance() {
+        assertEquals(response.getIngestDocument(), parsedResponse.getIngestDocument());
         result = new SimulateProcessorResult(null, null, null, null, null, null);
-        assertEquals(SimulateProcessorResult.Status.DROPPED, result.getStatus(null));
-
-        // no ingest doc - as pipeline processor
-        result = new SimulateProcessorResult(null, null, null, null, null, null);
-        assertEquals(SimulateProcessorResult.Status.SUCCESS, result.getStatus("pipeline"));
-
-        // failure
-        result = new SimulateProcessorResult(null, null, null, null, new RuntimeException(""), null);
-        assertEquals(SimulateProcessorResult.Status.ERROR, result.getStatus("rename"));
-
-        // failure, but ignored
-        result = new SimulateProcessorResult(null, null, null, createRandomIngestDoc(), new RuntimeException(""), null);
-        assertEquals(SimulateProcessorResult.Status.ERROR_IGNORED, result.getStatus(""));
-
-        // success - no conditional
-        result = new SimulateProcessorResult(null, null, null, createRandomIngestDoc(), null, null);
-        assertEquals(SimulateProcessorResult.Status.SUCCESS, result.getStatus(null));
-
-        // success - conditional true
-        result = new SimulateProcessorResult(
-            null,
-            null,
-            null,
-            createRandomIngestDoc(),
-            null,
-            new Tuple<>(randomAlphaOfLengthBetween(1, 10), true)
-        );
-        assertEquals(SimulateProcessorResult.Status.SUCCESS, result.getStatus(null));
     }
-}
+ * SPDX-License-Identifier: Apache-2.0
+            }
+    }
+        String processorTag = randomAlphaOfLengthBetween(1, 10);
+import static org.hamcrest.Matchers.is;
+    @Override
+    }
+        SimulateProcessorResult simulateProcessorResult;
+    @Override
+                    type,
+import java.util.function.Supplier;
+        result = new SimulateProcessorResult(null, null, null, null, new RuntimeException(""), null);
+        String description = randomAlphaOfLengthBetween(1, 10);
+        if (isSuccessful) {
+        return simulateProcessorResult;
+/*
+            || field.startsWith(
+import static org.hamcrest.Matchers.nullValue;
+     * Test parsing {@link SimulateProcessorResult} with inner failures as they don't support asserting on xcontent equivalence, given that
+            null,
+            assertIngestDocument(otherSimulateProcessorResult.getIngestDocument(), simulateProcessorResult.getIngestDocument());
+ * software distributed under the License is distributed on an
+            } else {
+ * the Apache License, Version 2.0 (the "License"); you may
+        // no ingest doc
+        } else {
+            null,
+        if (response.getFailure() != null) {
+        AbstractXContentTestCase.testFromXContent(
+ *
+            } else {
+        );
+ * specific language governing permissions and limitations
+                type,
+    static void assertEqualProcessorResults(SimulateProcessorResult response, SimulateProcessorResult parsedResponse) {
+        return SimulateProcessorResult.fromXContent(parser);
+ * You may obtain a copy of the License at
+ */
+import static org.hamcrest.Matchers.instanceOf;
+        simulateProcessorResult.writeTo(out);
+                assertThat(e.getMessage(), equalTo("test"));
+            assertToXContentEquivalence,
+    }
+    protected void assertEqualInstances(SimulateProcessorResult response, SimulateProcessorResult parsedResponse) {
+                    conditionWithResult
+        assertEquals(SimulateProcessorResult.Status.SUCCESS, result.getStatus("pipeline"));
+        boolean assertToXContentEquivalence = false;
+                simulateProcessorResult = new SimulateProcessorResult(
+        assertEquals(SimulateProcessorResult.Status.SUCCESS, result.getStatus(null));
+import org.opensearch.ingest.IngestDocument;
+        boolean hasCondition = randomBoolean();
+public class SimulateProcessorResultTests extends AbstractXContentTestCase<SimulateProcessorResult> {
+            supportsUnknownFields,
+    @Override
+import java.util.StringJoiner;
+            );
+ * this work for additional information regarding copyright
+        assertEquals(SimulateProcessorResult.Status.ERROR, result.getStatus("rename"));
+        SimulateProcessorResult otherSimulateProcessorResult = new SimulateProcessorResult(streamInput);

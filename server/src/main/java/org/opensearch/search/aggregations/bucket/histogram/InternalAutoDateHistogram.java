@@ -1,672 +1,593 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.histogram;
-
-import org.apache.lucene.util.PriorityQueue;
-import org.opensearch.common.Rounding;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.Aggregations;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
-import org.opensearch.search.aggregations.KeyComparable;
-import org.opensearch.search.aggregations.bucket.IteratorAndCurrent;
-import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation;
-import org.opensearch.search.aggregations.bucket.histogram.AutoDateHistogramAggregationBuilder.RoundingInfo;
-
-import java.io.IOException;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.ListIterator;
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * Implementation of {@link Histogram}.
- *
- * @opensearch.internal
- */
-public final class InternalAutoDateHistogram extends InternalMultiBucketAggregation<
-    InternalAutoDateHistogram,
-    InternalAutoDateHistogram.Bucket> implements Histogram, HistogramFactory {
-
-    /**
-     * Bucket for the internal auto date histogram agg
-     *
-     * @opensearch.internal
-     */
-    public static class Bucket extends InternalMultiBucketAggregation.InternalBucket implements Histogram.Bucket, KeyComparable<Bucket> {
-
-        final long key;
-        final long docCount;
-        final InternalAggregations aggregations;
-        protected final transient DocValueFormat format;
-
-        public Bucket(long key, long docCount, DocValueFormat format, InternalAggregations aggregations) {
-            this.format = format;
-            this.key = key;
-            this.docCount = docCount;
-            this.aggregations = aggregations;
-        }
-
-        /**
-         * Read from a stream.
-         */
-        public Bucket(StreamInput in, DocValueFormat format) throws IOException {
-            this.format = format;
-            key = in.readLong();
-            docCount = in.readVLong();
-            aggregations = InternalAggregations.readFrom(in);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null || obj.getClass() != InternalAutoDateHistogram.Bucket.class) {
-                return false;
-            }
-            InternalAutoDateHistogram.Bucket that = (InternalAutoDateHistogram.Bucket) obj;
-            // No need to take the keyed and format parameters into account,
-            // they are already stored and tested on the InternalDateHistogram object
-            return key == that.key && docCount == that.docCount && Objects.equals(aggregations, that.aggregations);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(getClass(), key, docCount, aggregations);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeLong(key);
-            out.writeVLong(docCount);
-            aggregations.writeTo(out);
-        }
-
-        @Override
-        public String getKeyAsString() {
-            return format.format(key).toString();
-        }
-
-        @Override
-        public Object getKey() {
-            return Instant.ofEpochMilli(key).atZone(ZoneOffset.UTC);
-        }
-
-        @Override
-        public long getDocCount() {
-            return docCount;
-        }
-
-        @Override
-        public Aggregations getAggregations() {
-            return aggregations;
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            String keyAsString = format.format(key).toString();
-            builder.startObject();
-            if (format != DocValueFormat.RAW) {
-                builder.field(CommonFields.KEY_AS_STRING.getPreferredName(), keyAsString);
-            }
-            builder.field(CommonFields.KEY.getPreferredName(), key);
-            builder.field(CommonFields.DOC_COUNT.getPreferredName(), docCount);
-            aggregations.toXContentInternal(builder, params);
-            builder.endObject();
-            return builder;
-        }
-
-        @Override
-        public int compareKey(Bucket other) {
-            return Long.compare(key, other.key);
-        }
-
-        public DocValueFormat getFormatter() {
-            return format;
-        }
-    }
-
-    /**
-     * Information about the bucket
-     *
-     * @opensearch.internal
-     */
-    static class BucketInfo {
-
-        final RoundingInfo[] roundingInfos;
-        final int roundingIdx;
-        final InternalAggregations emptySubAggregations;
-
-        BucketInfo(RoundingInfo[] roundings, int roundingIdx, InternalAggregations subAggregations) {
-            this.roundingInfos = roundings;
-            this.roundingIdx = roundingIdx;
-            this.emptySubAggregations = subAggregations;
-        }
-
-        BucketInfo(StreamInput in) throws IOException {
-            int size = in.readVInt();
-            roundingInfos = new RoundingInfo[size];
-            for (int i = 0; i < size; i++) {
-                roundingInfos[i] = new RoundingInfo(in);
-            }
-            roundingIdx = in.readVInt();
-            emptySubAggregations = InternalAggregations.readFrom(in);
-        }
-
-        void writeTo(StreamOutput out) throws IOException {
-            out.writeVInt(roundingInfos.length);
-            for (RoundingInfo roundingInfo : roundingInfos) {
-                roundingInfo.writeTo(out);
-            }
-            out.writeVInt(roundingIdx);
-            emptySubAggregations.writeTo(out);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null || getClass() != obj.getClass()) {
-                return false;
-            }
-            BucketInfo that = (BucketInfo) obj;
-            return Objects.deepEquals(roundingInfos, that.roundingInfos)
-                && Objects.equals(roundingIdx, that.roundingIdx)
-                && Objects.equals(emptySubAggregations, that.emptySubAggregations);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(getClass(), Arrays.hashCode(roundingInfos), roundingIdx, emptySubAggregations);
-        }
-    }
-
-    private final List<Bucket> buckets;
-    private final DocValueFormat format;
-    private final BucketInfo bucketInfo;
-    private final int targetBuckets;
-    /**
-     * The interval within the rounding that the buckets are using.
-     */
-    private final long bucketInnerInterval;
-
-    InternalAutoDateHistogram(
-        String name,
-        List<Bucket> buckets,
-        int targetBuckets,
-        BucketInfo emptyBucketInfo,
-        DocValueFormat formatter,
-        Map<String, Object> metadata,
-        long bucketInnerInterval
-    ) {
-        super(name, metadata);
-        this.buckets = buckets;
-        this.bucketInfo = emptyBucketInfo;
-        this.format = formatter;
-        this.targetBuckets = targetBuckets;
-        this.bucketInnerInterval = bucketInnerInterval;
-    }
-
-    /**
-     * Stream from a stream.
-     */
-    public InternalAutoDateHistogram(StreamInput in) throws IOException {
-        super(in);
-        bucketInfo = new BucketInfo(in);
-        format = in.readNamedWriteable(DocValueFormat.class);
-        buckets = in.readList(stream -> new Bucket(stream, format));
-        this.targetBuckets = in.readVInt();
-        bucketInnerInterval = 1; // Calculated on merge.
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        bucketInfo.writeTo(out);
-        out.writeNamedWriteable(format);
-        out.writeList(buckets);
-        out.writeVInt(targetBuckets);
-    }
-
-    public DateHistogramInterval getInterval() {
-
-        RoundingInfo roundingInfo = this.bucketInfo.roundingInfos[this.bucketInfo.roundingIdx];
-        String unitAbbreviation = roundingInfo.unitAbbreviation;
-        return new DateHistogramInterval(Long.toString(bucketInnerInterval) + unitAbbreviation);
-    }
-
-    @Override
-    public String getWriteableName() {
-        return AutoDateHistogramAggregationBuilder.NAME;
-    }
-
-    @Override
-    public List<InternalAutoDateHistogram.Bucket> getBuckets() {
-        return Collections.unmodifiableList(buckets);
-    }
-
-    DocValueFormat getFormatter() {
-        return format;
-    }
-
-    public int getTargetBuckets() {
-        return targetBuckets;
-    }
-
-    public BucketInfo getBucketInfo() {
-        return bucketInfo;
-    }
-
-    @Override
-    public InternalAutoDateHistogram create(List<Bucket> buckets) {
-        return new InternalAutoDateHistogram(name, buckets, targetBuckets, bucketInfo, format, metadata, bucketInnerInterval);
-    }
-
-    @Override
-    public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
-        return new Bucket(prototype.key, prototype.docCount, prototype.format, aggregations);
-    }
-
-    /**
-     * This method works almost exactly the same as
-     * InternalDateHistogram#reduceBuckets(List, ReduceContext), the different
-     * here is that we need to round all the keys we see using the highest level
-     * rounding returned across all the shards so the resolution of the buckets
-     * is the same and they can be reduced together.
-     */
-    private BucketReduceResult reduceBuckets(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-
-        // First we need to find the highest level rounding used across all the
-        // shards
-        int reduceRoundingIdx = 0;
-        long min = Long.MAX_VALUE;
-        long max = Long.MIN_VALUE;
-        for (InternalAggregation aggregation : aggregations) {
-            InternalAutoDateHistogram agg = ((InternalAutoDateHistogram) aggregation);
-            reduceRoundingIdx = Math.max(agg.bucketInfo.roundingIdx, reduceRoundingIdx);
-            if (false == agg.buckets.isEmpty()) {
-                min = Math.min(min, agg.buckets.get(0).key);
-                max = Math.max(max, agg.buckets.get(agg.buckets.size() - 1).key);
-            }
-        }
-        Rounding.Prepared reduceRounding = prepare(reduceRoundingIdx, min, max);
-
-        final PriorityQueue<IteratorAndCurrent<Bucket>> pq = new PriorityQueue<IteratorAndCurrent<Bucket>>(aggregations.size()) {
-            @Override
-            protected boolean lessThan(IteratorAndCurrent<Bucket> a, IteratorAndCurrent<Bucket> b) {
-                return a.current().key < b.current().key;
-            }
-        };
-        for (InternalAggregation aggregation : aggregations) {
-            InternalAutoDateHistogram histogram = (InternalAutoDateHistogram) aggregation;
-            if (histogram.buckets.isEmpty() == false) {
-                pq.add(new IteratorAndCurrent(histogram.buckets.iterator()));
-            }
-        }
-
-        List<Bucket> reducedBuckets = new ArrayList<>();
-        if (pq.size() > 0) {
-            // list of buckets coming from different shards that have the same key
-            List<Bucket> currentBuckets = new ArrayList<>();
-            long key = reduceRounding.round(pq.top().current().key);
-
-            do {
-                final IteratorAndCurrent<Bucket> top = pq.top();
-
-                if (reduceRounding.round(top.current().key) != key) {
-                    // the key changes, reduce what we already buffered and reset the buffer for current buckets
-                    final Bucket reduced = reduceBucket(currentBuckets, reduceContext);
-                    reducedBuckets.add(reduced);
-                    currentBuckets.clear();
-                    key = reduceRounding.round(top.current().key);
-                }
-
-                currentBuckets.add(top.current());
-
-                if (top.hasNext()) {
-                    top.next();
-                    assert top.current().key > key : "shards must return data sorted by key";
-                    pq.updateTop();
-                } else {
-                    pq.pop();
-                }
-            } while (pq.size() > 0);
-
-            if (currentBuckets.isEmpty() == false) {
-                final Bucket reduced = reduceBucket(currentBuckets, reduceContext);
-                reducedBuckets.add(reduced);
-            }
-        }
-
-        return mergeBucketsIfNeeded(new BucketReduceResult(reducedBuckets, reduceRoundingIdx, 1, reduceRounding, min, max), reduceContext);
-    }
-
-    private BucketReduceResult mergeBucketsIfNeeded(BucketReduceResult firstPassResult, ReduceContext reduceContext) {
-        int idx = firstPassResult.roundingIdx;
-        RoundingInfo info = bucketInfo.roundingInfos[idx];
-        List<Bucket> buckets = firstPassResult.buckets;
-        Rounding.Prepared prepared = firstPassResult.preparedRounding;
-        while (buckets.size() > (targetBuckets * info.getMaximumInnerInterval()) && idx < bucketInfo.roundingInfos.length - 1) {
-            idx++;
-            info = bucketInfo.roundingInfos[idx];
-            prepared = prepare(idx, firstPassResult.min, firstPassResult.max);
-            buckets = mergeBuckets(buckets, prepared, reduceContext);
-        }
-        return new BucketReduceResult(buckets, idx, 1, prepared, firstPassResult.min, firstPassResult.max);
-    }
-
-    private Rounding.Prepared prepare(int idx, long min, long max) {
-        Rounding rounding = bucketInfo.roundingInfos[idx].rounding;
-        return min <= max ? rounding.prepare(min, max) : rounding.prepareForUnknown();
-    }
-
-    private List<Bucket> mergeBuckets(List<Bucket> reducedBuckets, Rounding.Prepared reduceRounding, ReduceContext reduceContext) {
-        List<Bucket> mergedBuckets = new ArrayList<>();
-
-        List<Bucket> sameKeyedBuckets = new ArrayList<>();
-        double key = Double.NaN;
-        for (Bucket bucket : reducedBuckets) {
-            long roundedBucketKey = reduceRounding.round(bucket.key);
-            if (Double.isNaN(key)) {
-                key = roundedBucketKey;
-                sameKeyedBuckets.add(createBucket(key, bucket.docCount, bucket.aggregations));
-            } else if (roundedBucketKey == key) {
-                sameKeyedBuckets.add(createBucket(key, bucket.docCount, bucket.aggregations));
-            } else {
-                mergedBuckets.add(reduceBucket(sameKeyedBuckets, reduceContext));
-                sameKeyedBuckets.clear();
-                key = roundedBucketKey;
-                sameKeyedBuckets.add(createBucket(key, bucket.docCount, bucket.aggregations));
-            }
-        }
-        if (sameKeyedBuckets.isEmpty() == false) {
-            mergedBuckets.add(reduceBucket(sameKeyedBuckets, reduceContext));
-        }
-        reducedBuckets = mergedBuckets;
-        return reducedBuckets;
-    }
-
-    @Override
-    protected Bucket reduceBucket(List<Bucket> buckets, ReduceContext context) {
-        assert buckets.size() > 0;
-        List<InternalAggregations> aggregations = new ArrayList<>(buckets.size());
-        long docCount = 0;
-        for (Bucket bucket : buckets) {
-            docCount += bucket.docCount;
-            aggregations.add((InternalAggregations) bucket.getAggregations());
-        }
-        InternalAggregations aggs = InternalAggregations.reduce(aggregations, context);
-        return new InternalAutoDateHistogram.Bucket(buckets.get(0).key, docCount, format, aggs);
-    }
-
-    /**
-     * The result from a bucket reduce
-     *
-     * @opensearch.internal
-     */
-    private static class BucketReduceResult {
         final List<Bucket> buckets;
-        final int roundingIdx;
-        final long innerInterval;
-        final Rounding.Prepared preparedRounding;
-        final long min;
-        final long max;
-
-        BucketReduceResult(
-            List<Bucket> buckets,
-            int roundingIdx,
-            long innerInterval,
-            Rounding.Prepared preparedRounding,
-            long min,
-            long max
-        ) {
-            this.buckets = buckets;
-            this.roundingIdx = roundingIdx;
-            this.innerInterval = innerInterval;
-            this.preparedRounding = preparedRounding;
-            this.min = min;
-            this.max = max;
-        }
-    }
-
-    private BucketReduceResult addEmptyBuckets(BucketReduceResult current, ReduceContext reduceContext) {
-        List<Bucket> list = current.buckets;
-        if (list.isEmpty()) {
-            return current;
-        }
-        int roundingIdx = getAppropriateRounding(
-            list.get(0).key,
-            list.get(list.size() - 1).key,
-            current.roundingIdx,
-            bucketInfo.roundingInfos,
-            targetBuckets
-        );
-        Rounding.Prepared rounding = current.roundingIdx == roundingIdx
-            ? current.preparedRounding
-            : prepare(roundingIdx, current.min, current.max);
-        // merge buckets using the new rounding
-        list = mergeBuckets(list, rounding, reduceContext);
-
-        Bucket lastBucket = null;
-        ListIterator<Bucket> iter = list.listIterator();
-        InternalAggregations reducedEmptySubAggs = InternalAggregations.reduce(List.of(bucketInfo.emptySubAggregations), reduceContext);
-
-        // Add the empty buckets within the data,
-        // e.g. if the data series is [1,2,3,7] there're 3 empty buckets that will be created for 4,5,6
-        while (iter.hasNext()) {
-            Bucket nextBucket = list.get(iter.nextIndex());
-            if (lastBucket != null) {
-                long key = rounding.nextRoundingValue(lastBucket.key);
-                while (key < nextBucket.key) {
-                    iter.add(new InternalAutoDateHistogram.Bucket(key, 0, format, reducedEmptySubAggs));
-                    key = rounding.nextRoundingValue(key);
-                }
-                assert key == nextBucket.key : "key: " + key + ", nextBucket.key: " + nextBucket.key;
             }
-            lastBucket = iter.next();
-        }
-        return new BucketReduceResult(list, roundingIdx, 1, rounding, current.min, current.max);
-    }
-
-    static int getAppropriateRounding(long minKey, long maxKey, int roundingIdx, RoundingInfo[] roundings, int targetBuckets) {
-        if (roundingIdx == roundings.length - 1) {
-            return roundingIdx;
-        }
-        int currentRoundingIdx = roundingIdx;
-
-        // Getting the accurate number of required buckets can be slow for large
-        // ranges at low roundings so get a rough estimate of the rounding first
-        // so we are at most 1 away from the correct rounding and then get the
-        // accurate rounding value
-        for (int i = currentRoundingIdx + 1; i < roundings.length; i++) {
-            long dataDuration = maxKey - minKey;
+import org.opensearch.search.aggregations.InternalAggregation;
+ * Implementation of {@link Histogram}.
+        final long docCount;
+            aggregations.toXContentInternal(builder, params);
+            out.writeVInt(roundingInfos.length);
+                }
+                }
+ * You may obtain a copy of the License at
+                    currentBuckets.clear();
             long roughEstimateRequiredBuckets = dataDuration / roundings[i].getRoughEstimateDurationMillis();
-            if (roughEstimateRequiredBuckets < targetBuckets * roundings[i].getMaximumInnerInterval()) {
-                currentRoundingIdx = i - 1;
-                break;
-            } else if (i == roundingIdx - 1) {
-                currentRoundingIdx = i;
-                break;
-            }
-        }
-
-        int requiredBuckets = 0;
-        do {
-            Rounding currentRounding = roundings[currentRoundingIdx].rounding;
-            long currentKey = minKey;
-            requiredBuckets = 0;
-            while (currentKey < maxKey) {
-                requiredBuckets++;
-                currentKey = currentRounding.nextRoundingValue(currentKey);
-            }
-            currentRoundingIdx++;
-        } while (requiredBuckets > (targetBuckets * roundings[currentRoundingIdx - 1].getMaximumInnerInterval())
-            && currentRoundingIdx < roundings.length);
-        // The loop will increase past the correct rounding index here so we
-        // need to subtract one to get the rounding index we need
-        return currentRoundingIdx - 1;
-    }
-
-    @Override
-    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-        BucketReduceResult reducedBucketsResult = reduceBuckets(aggregations, reduceContext);
-
-        if (reduceContext.isFinalReduce()) {
-            // adding empty buckets if needed
-            reducedBucketsResult = addEmptyBuckets(reducedBucketsResult, reduceContext);
-
-            // Adding empty buckets may have tipped us over the target so merge the buckets again if needed
-            reducedBucketsResult = mergeBucketsIfNeeded(reducedBucketsResult, reduceContext);
-
-            // Now finally see if we need to merge consecutive buckets together to make a coarser interval at the same rounding
-            reducedBucketsResult = maybeMergeConsecutiveBuckets(reducedBucketsResult, reduceContext);
-        }
-        reduceContext.consumeBucketsAndMaybeBreak(reducedBucketsResult.buckets.size());
-        BucketInfo bucketInfo = new BucketInfo(
-            this.bucketInfo.roundingInfos,
-            reducedBucketsResult.roundingIdx,
-            this.bucketInfo.emptySubAggregations
-        );
-
-        return new InternalAutoDateHistogram(
-            getName(),
-            reducedBucketsResult.buckets,
-            targetBuckets,
-            bucketInfo,
-            format,
-            getMetadata(),
-            reducedBucketsResult.innerInterval
-        );
-    }
-
-    private BucketReduceResult maybeMergeConsecutiveBuckets(BucketReduceResult current, ReduceContext reduceContext) {
-        List<Bucket> buckets = current.buckets;
-        RoundingInfo roundingInfo = bucketInfo.roundingInfos[current.roundingIdx];
-        if (buckets.size() > targetBuckets) {
-            for (int interval : roundingInfo.innerIntervals) {
-                int resultingBuckets = buckets.size() / interval;
-                if (buckets.size() % interval != 0) {
-                    resultingBuckets++;
-                }
-                if (resultingBuckets <= targetBuckets) {
-                    return mergeConsecutiveBuckets(current, interval, reduceContext);
-                }
-            }
-        }
-        return current;
-    }
-
-    private BucketReduceResult mergeConsecutiveBuckets(BucketReduceResult current, int mergeInterval, ReduceContext reduceContext) {
-        List<Bucket> mergedBuckets = new ArrayList<>();
-        List<Bucket> sameKeyedBuckets = new ArrayList<>();
-
-        double key = current.preparedRounding.round(current.buckets.get(0).key);
-        for (int i = 0; i < current.buckets.size(); i++) {
-            Bucket bucket = current.buckets.get(i);
-            if (i % mergeInterval == 0 && sameKeyedBuckets.isEmpty() == false) {
-                mergedBuckets.add(reduceBucket(sameKeyedBuckets, reduceContext));
-                sameKeyedBuckets.clear();
-                key = current.preparedRounding.round(bucket.key);
-            }
-            sameKeyedBuckets.add(new Bucket(Math.round(key), bucket.docCount, format, bucket.aggregations));
-        }
-        if (sameKeyedBuckets.isEmpty() == false) {
             mergedBuckets.add(reduceBucket(sameKeyedBuckets, reduceContext));
+            this.docCount = docCount;
         }
-        return new BucketReduceResult(
-            mergedBuckets,
-            current.roundingIdx,
-            mergeInterval,
-            current.preparedRounding,
-            current.min,
-            current.max
+        long docCount = 0;
+            }
+            emptySubAggregations.writeTo(out);
+            if (roughEstimateRequiredBuckets < targetBuckets * roundings[i].getMaximumInnerInterval()) {
+    private static class BucketReduceResult {
+                    pq.pop();
+        int reduceRoundingIdx = 0;
+        return AutoDateHistogramAggregationBuilder.NAME;
+        // Getting the accurate number of required buckets can be slow for large
+            }
+        while (iter.hasNext()) {
+                if (reduceRounding.round(top.current().key) != key) {
+                    pq.updateTop();
+        for (int i = currentRoundingIdx + 1; i < roundings.length; i++) {
+    }
+    /**
+            : prepare(roundingIdx, current.min, current.max);
         );
-    }
-
-    @Override
-    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        builder.startArray(CommonFields.BUCKETS.getPreferredName());
-        for (Bucket bucket : buckets) {
-            bucket.toXContent(builder, params);
-        }
-        builder.endArray();
-        builder.field("interval", getInterval().toString());
-        return builder;
-    }
-
-    // HistogramFactory method impls
-
-    @Override
+        @Override
     public Number getKey(MultiBucketsAggregation.Bucket bucket) {
-        return ((Bucket) bucket).key;
-    }
-
-    @Override
-    public Number nextKey(Number key) {
-        return bucketInfo.roundingInfos[bucketInfo.roundingIdx].rounding.nextRoundingValue(key.longValue());
-    }
-
-    @Override
-    public InternalAggregation createAggregation(List<MultiBucketsAggregation.Bucket> buckets) {
-        // convert buckets to the right type
-        List<Bucket> buckets2 = new ArrayList<>(buckets.size());
-        for (Object b : buckets) {
-            buckets2.add((Bucket) b);
+        if (this == obj) return true;
+            lastBucket = iter.next();
+            this.preparedRounding = preparedRounding;
         }
-        buckets2 = Collections.unmodifiableList(buckets2);
-        return new InternalAutoDateHistogram(name, buckets2, targetBuckets, bucketInfo, format, getMetadata(), bucketInnerInterval);
+        return mergeBucketsIfNeeded(new BucketReduceResult(reducedBuckets, reduceRoundingIdx, 1, reduceRounding, min, max), reduceContext);
+            do {
+            reduceRoundingIdx = Math.max(agg.bucketInfo.roundingIdx, reduceRoundingIdx);
+                break;
+        @Override
+import org.apache.lucene.util.PriorityQueue;
     }
-
+ * Modifications Copyright OpenSearch Contributors. See
+        Rounding.Prepared rounding = current.roundingIdx == roundingIdx
+        BucketReduceResult reducedBucketsResult = reduceBuckets(aggregations, reduceContext);
+        ListIterator<Bucket> iter = list.listIterator();
+    }
+    }
+            }
+import org.opensearch.search.aggregations.InternalAggregations;
+    private BucketReduceResult maybeMergeConsecutiveBuckets(BucketReduceResult current, ReduceContext reduceContext) {
+        final PriorityQueue<IteratorAndCurrent<Bucket>> pq = new PriorityQueue<IteratorAndCurrent<Bucket>>(aggregations.size()) {
+            }
+    // HistogramFactory method impls
+            targetBuckets
+                sameKeyedBuckets.add(createBucket(key, bucket.docCount, bucket.aggregations));
+ * Licensed to Elasticsearch under one or more contributor
+                mergedBuckets.add(reduceBucket(sameKeyedBuckets, reduceContext));
+            aggregations.add((InternalAggregations) bucket.getAggregations());
+    protected Bucket reduceBucket(List<Bucket> buckets, ReduceContext context) {
+            }
+    private final List<Bucket> buckets;
+            // they are already stored and tested on the InternalDateHistogram object
+    }
+            this.format = format;
+        return new BucketReduceResult(
+    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+     *
+                currentRoundingIdx = i - 1;
+        final int roundingIdx;
+                }
+            prepared = prepare(idx, firstPassResult.min, firstPassResult.max);
+     * @opensearch.internal
+            return docCount;
+import java.io.IOException;
+        public boolean equals(Object obj) {
+        InternalAggregations reducedEmptySubAggs = InternalAggregations.reduce(List.of(bucketInfo.emptySubAggregations), reduceContext);
+                roundingInfo.writeTo(out);
+        } while (requiredBuckets > (targetBuckets * roundings[currentRoundingIdx - 1].getMaximumInnerInterval())
+                currentBuckets.add(top.current());
     @Override
-    public Bucket createBucket(Number key, long docCount, InternalAggregations aggregations) {
+            long max
+     *
+            targetBuckets,
+        public Object getKey() {
+            // Now finally see if we need to merge consecutive buckets together to make a coarser interval at the same rounding
+        while (buckets.size() > (targetBuckets * info.getMaximumInnerInterval()) && idx < bucketInfo.roundingInfos.length - 1) {
+        int roundingIdx = getAppropriateRounding(
+            }
+            List<Bucket> currentBuckets = new ArrayList<>();
+            current.preparedRounding,
+            buckets = mergeBuckets(buckets, prepared, reduceContext);
+        return bucketInfo;
+            if (obj == null || getClass() != obj.getClass()) {
+            int size = in.readVInt();
+        }
+            current.min,
+    public int hashCode() {
+                long key = rounding.nextRoundingValue(lastBucket.key);
+        }
+        }
+        }
+        ) {
+        return current;
+ * this file be licensed under the Apache-2.0 license or a
+        List<Bucket> buckets = current.buckets;
+            info = bucketInfo.roundingInfos[idx];
+        String unitAbbreviation = roundingInfo.unitAbbreviation;
+     * Information about the bucket
+            String keyAsString = format.format(key).toString();
+                sameKeyedBuckets.clear();
+     */
+     *
+            }
+            builder.field(CommonFields.DOC_COUNT.getPreferredName(), docCount);
+        protected final transient DocValueFormat format;
+        public int hashCode() {
+        this.bucketInnerInterval = bucketInnerInterval;
+            reducedBucketsResult = maybeMergeConsecutiveBuckets(reducedBucketsResult, reduceContext);
+            buckets2.add((Bucket) b);
+    private BucketReduceResult mergeBucketsIfNeeded(BucketReduceResult firstPassResult, ReduceContext reduceContext) {
+    }
+                if (resultingBuckets <= targetBuckets) {
+        public int compareKey(Bucket other) {
+        return new InternalAutoDateHistogram(name, buckets, targetBuckets, bucketInfo, format, metadata, bucketInnerInterval);
+    @Override
+            // No need to take the keyed and format parameters into account,
+    }
+        final long innerInterval;
+}
+        Rounding.Prepared prepared = firstPassResult.preparedRounding;
+        if (sameKeyedBuckets.isEmpty() == false) {
+    private BucketReduceResult mergeConsecutiveBuckets(BucketReduceResult current, int mergeInterval, ReduceContext reduceContext) {
+            // adding empty buckets if needed
+        for (Bucket bucket : reducedBuckets) {
+    }
+                if (buckets.size() % interval != 0) {
+    static int getAppropriateRounding(long minKey, long maxKey, int roundingIdx, RoundingInfo[] roundings, int targetBuckets) {
+        return bucketInfo.roundingInfos[bucketInfo.roundingIdx].rounding.nextRoundingValue(key.longValue());
+        DocValueFormat formatter,
+     * @opensearch.internal
+        public Aggregations getAggregations() {
+        List<Bucket> sameKeyedBuckets = new ArrayList<>();
+import java.util.ListIterator;
+    @Override
+        if (buckets.size() > targetBuckets) {
+                    final Bucket reduced = reduceBucket(currentBuckets, reduceContext);
+ *
+    /**
+    }
+import java.time.ZoneOffset;
+            return Long.compare(key, other.key);
+    private final int targetBuckets;
+        return new BucketReduceResult(buckets, idx, 1, prepared, firstPassResult.min, firstPassResult.max);
+        if (list.isEmpty()) {
+    public Number nextKey(Number key) {
+        for (InternalAggregation aggregation : aggregations) {
         return new Bucket(key.longValue(), docCount, format, aggregations);
     }
-
+                min = Math.min(min, agg.buckets.get(0).key);
     @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;
-
+                } else {
+import java.util.Objects;
+        // accurate rounding value
+    @Override
+        List<Bucket> list = current.buckets;
+        List<Bucket> mergedBuckets = new ArrayList<>();
+     * This method works almost exactly the same as
+            mergedBuckets,
+            roundingIdx = in.readVInt();
+/**
+        return targetBuckets;
+        }
+            }
+    InternalAutoDateHistogram(
+        return new InternalAutoDateHistogram.Bucket(buckets.get(0).key, docCount, format, aggs);
+    public int getTargetBuckets() {
+            }
+import org.opensearch.core.common.io.stream.StreamInput;
+        List<Bucket> buckets = firstPassResult.buckets;
+        this.targetBuckets = in.readVInt();
+            getName(),
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                sameKeyedBuckets.clear();
+    private final DocValueFormat format;
+        return min <= max ? rounding.prepare(min, max) : rounding.prepareForUnknown();
+    }
+        for (Object b : buckets) {
+        super(name, metadata);
+            return Objects.hash(getClass(), key, docCount, aggregations);
+        int currentRoundingIdx = roundingIdx;
+        this.buckets = buckets;
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                mergedBuckets.add(reduceBucket(sameKeyedBuckets, reduceContext));
+                builder.field(CommonFields.KEY_AS_STRING.getPreferredName(), keyAsString);
+        final int roundingIdx;
+            return Instant.ofEpochMilli(key).atZone(ZoneOffset.UTC);
+        Bucket lastBucket = null;
+            for (int i = 0; i < size; i++) {
+     */
+        }
+        InternalAggregations aggs = InternalAggregations.reduce(aggregations, context);
+        RoundingInfo roundingInfo = this.bucketInfo.roundingInfos[this.bucketInfo.roundingIdx];
+     * @opensearch.internal
+        BucketInfo(RoundingInfo[] roundings, int roundingIdx, InternalAggregations subAggregations) {
+     * here is that we need to round all the keys we see using the highest level
+            this.roundingInfos = roundings;
+        }
+        String name,
+            }
+        RoundingInfo roundingInfo = bucketInfo.roundingInfos[current.roundingIdx];
+    public String getWriteableName() {
+            long innerInterval,
+        RoundingInfo info = bucketInfo.roundingInfos[idx];
+            this.innerInterval = innerInterval;
+        @Override
+    }
+        @Override
+        /**
+                return a.current().key < b.current().key;
+        public String getKeyAsString() {
+import org.opensearch.search.aggregations.bucket.histogram.AutoDateHistogramAggregationBuilder.RoundingInfo;
+                return false;
+        if (roundingIdx == roundings.length - 1) {
+            if (false == agg.buckets.isEmpty()) {
+    public BucketInfo getBucketInfo() {
+        // so we are at most 1 away from the correct rounding and then get the
+        Rounding.Prepared reduceRounding = prepare(reduceRoundingIdx, min, max);
+            long key = reduceRounding.round(pq.top().current().key);
+        }
+                if (top.hasNext()) {
+            List<Bucket> buckets,
+    @Override
+/*
+                currentRoundingIdx = i;
+            for (RoundingInfo roundingInfo : roundingInfos) {
+        return Collections.unmodifiableList(buckets);
+                key = roundedBucketKey;
+                }
+            long dataDuration = maxKey - minKey;
+        if (sameKeyedBuckets.isEmpty() == false) {
+            } else {
+        assert buckets.size() > 0;
+    }
+         */
+            } else if (i == roundingIdx - 1) {
+        };
+    private final BucketInfo bucketInfo;
+        out.writeVInt(targetBuckets);
+        }
+        // ranges at low roundings so get a rough estimate of the rounding first
+        }
+        int idx = firstPassResult.roundingIdx;
+    }
+        }
+        final long key;
+        if (pq.size() > 0) {
+    public InternalAggregation createAggregation(List<MultiBucketsAggregation.Bucket> buckets) {
+        final long min;
+                final Bucket reduced = reduceBucket(currentBuckets, reduceContext);
+        List<Bucket> buckets2 = new ArrayList<>(buckets.size());
+    private BucketReduceResult addEmptyBuckets(BucketReduceResult current, ReduceContext reduceContext) {
+        @Override
         InternalAutoDateHistogram that = (InternalAutoDateHistogram) obj;
-        return Objects.equals(buckets, that.buckets) && Objects.equals(format, that.format) && Objects.equals(bucketInfo, that.bucketInfo);
+ */
+            InternalAutoDateHistogram agg = ((InternalAutoDateHistogram) aggregation);
+        double key = Double.NaN;
+            return Objects.deepEquals(roundingInfos, that.roundingInfos)
+        bucketInfo.writeTo(out);
     }
-
+    }
+import java.time.Instant;
+                pq.add(new IteratorAndCurrent(histogram.buckets.iterator()));
+            return aggregations;
+        format = in.readNamedWriteable(DocValueFormat.class);
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), buckets, format, bucketInfo);
+            currentRoundingIdx++;
+        public boolean equals(Object obj) {
+        return new Bucket(prototype.key, prototype.docCount, prototype.format, aggregations);
+        }
+import java.util.List;
+    InternalAutoDateHistogram,
+            }
+    private List<Bucket> mergeBuckets(List<Bucket> reducedBuckets, Rounding.Prepared reduceRounding, ReduceContext reduceContext) {
+        }
+            aggregations = InternalAggregations.readFrom(in);
+        bucketInnerInterval = 1; // Calculated on merge.
+            current.max
+                sameKeyedBuckets.add(createBucket(key, bucket.docCount, bucket.aggregations));
     }
-}
+        builder.startArray(CommonFields.BUCKETS.getPreferredName());
+        int requiredBuckets = 0;
+            this.bucketInfo.roundingInfos,
+    public DateHistogramInterval getInterval() {
+            } else if (roundedBucketKey == key) {
+        BucketReduceResult(
+                    resultingBuckets++;
+        for (Bucket bucket : buckets) {
+            aggregations.writeTo(out);
+        }
+        }
+        return new InternalAutoDateHistogram(name, buckets2, targetBuckets, bucketInfo, format, getMetadata(), bucketInnerInterval);
+ * this work for additional information regarding copyright
+     */
+import org.opensearch.search.aggregations.KeyComparable;
+    static class BucketInfo {
+            Rounding.Prepared preparedRounding,
+        final InternalAggregations emptySubAggregations;
+            return builder;
+                    key = rounding.nextRoundingValue(key);
+                roundingInfos[i] = new RoundingInfo(in);
+        buckets = in.readList(stream -> new Bucket(stream, format));
+            reducedBucketsResult.roundingIdx,
+    public InternalAutoDateHistogram(StreamInput in) throws IOException {
+    public static class Bucket extends InternalMultiBucketAggregation.InternalBucket implements Histogram.Bucket, KeyComparable<Bucket> {
+            this.buckets = buckets;
+            }
+/*
+     * rounding returned across all the shards so the resolution of the buckets
+     * is the same and they can be reduced together.
+     * InternalDateHistogram#reduceBuckets(List, ReduceContext), the different
+        this.targetBuckets = targetBuckets;
+                }
+ * ownership. Elasticsearch licenses this file to you under
+            builder.field(CommonFields.KEY.getPreferredName(), key);
+     */
+        }
+            return roundingIdx;
+        List<Bucket> buckets,
+            return current;
+        }
+        }
+     * Stream from a stream.
+        return new BucketReduceResult(list, roundingIdx, 1, rounding, current.min, current.max);
+        reduceContext.consumeBucketsAndMaybeBreak(reducedBucketsResult.buckets.size());
+        @Override
+            this.emptySubAggregations = subAggregations;
+        List<Bucket> reducedBuckets = new ArrayList<>();
+        public int hashCode() {
+    public Bucket createBucket(Number key, long docCount, InternalAggregations aggregations) {
+     * The interval within the rounding that the buckets are using.
+                int resultingBuckets = buckets.size() / interval;
+        }
+        }
+    }
+    }
+ *
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+    @Override
+                    assert top.current().key > key : "shards must return data sorted by key";
+            idx++;
+        final Rounding.Prepared preparedRounding;
+        do {
+        List<Bucket> sameKeyedBuckets = new ArrayList<>();
+ */
+ * specific language governing permissions and limitations
+        void writeTo(StreamOutput out) throws IOException {
+import org.opensearch.core.common.io.stream.StreamOutput;
+            this.format = format;
+            if (lastBucket != null) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        if (obj == null || getClass() != obj.getClass()) return false;
+            list.get(list.size() - 1).key,
+                key = current.preparedRounding.round(bucket.key);
+    private Rounding.Prepared prepare(int idx, long min, long max) {
+        }
+            return format;
+            protected boolean lessThan(IteratorAndCurrent<Bucket> a, IteratorAndCurrent<Bucket> b) {
+        );
+        }
+    @Override
+            && currentRoundingIdx < roundings.length);
+        final InternalAggregations aggregations;
+        list = mergeBuckets(list, rounding, reduceContext);
+    }
+        final long max;
+        // convert buckets to the right type
+        public Bucket(long key, long docCount, DocValueFormat format, InternalAggregations aggregations) {
+ *
+        return new DateHistogramInterval(Long.toString(bucketInnerInterval) + unitAbbreviation);
+ * KIND, either express or implied.  See the License for the
+            mergeInterval,
+            this.max = max;
+            current.roundingIdx,
+import org.opensearch.search.aggregations.bucket.IteratorAndCurrent;
+        }
+    }
+            this.aggregations = aggregations;
+            this.bucketInfo.emptySubAggregations
+    /**
+        public Bucket(StreamInput in, DocValueFormat format) throws IOException {
+            out.writeVLong(docCount);
+    public List<InternalAutoDateHistogram.Bucket> getBuckets() {
+        // The loop will increase past the correct rounding index here so we
+        return Objects.hash(super.hashCode(), buckets, format, bucketInfo);
+ * license agreements. See the NOTICE file distributed with
+    InternalAutoDateHistogram.Bucket> implements Histogram, HistogramFactory {
+        }
+            return key == that.key && docCount == that.docCount && Objects.equals(aggregations, that.aggregations);
+                sameKeyedBuckets.add(createBucket(key, bucket.docCount, bucket.aggregations));
+ * @opensearch.internal
+            this.roundingIdx = roundingIdx;
+        List<Bucket> mergedBuckets = new ArrayList<>();
+                break;
+            Bucket nextBucket = list.get(iter.nextIndex());
+    }
+                    // the key changes, reduce what we already buffered and reset the buffer for current buckets
+        this.format = formatter;
+        // e.g. if the data series is [1,2,3,7] there're 3 empty buckets that will be created for 4,5,6
+        }
+        }
+            builder.endObject();
+        public long getDocCount() {
+        );
+        @Override
+        buckets2 = Collections.unmodifiableList(buckets2);
+ * compatible open source license.
+            builder.startObject();
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.search.DocValueFormat;
+        // Add the empty buckets within the data,
+     */
+        }
+        }
+    }
+                    iter.add(new InternalAutoDateHistogram.Bucket(key, 0, format, reducedEmptySubAggs));
+        @Override
+    @Override
+    /**
+    }
+        return new InternalAutoDateHistogram(
+ * The OpenSearch Contributors require contributions made to
+        BucketInfo emptyBucketInfo,
+        List<InternalAggregations> aggregations = new ArrayList<>(buckets.size());
+import org.opensearch.search.aggregations.InternalMultiBucketAggregation;
+            docCount += bucket.docCount;
+    @Override
+        // shards
+                reducedBuckets.add(reduced);
+            InternalAutoDateHistogram histogram = (InternalAutoDateHistogram) aggregation;
+        this.bucketInfo = emptyBucketInfo;
+        for (Bucket bucket : buckets) {
+ */
+    @Override
+        // merge buckets using the new rounding
+            bucketInfo.roundingInfos,
+            reducedBucketsResult = addEmptyBuckets(reducedBucketsResult, reduceContext);
+            emptySubAggregations = InternalAggregations.readFrom(in);
+     */
+            }
+        final RoundingInfo[] roundingInfos;
+        double key = current.preparedRounding.round(current.buckets.get(0).key);
+                    return mergeConsecutiveBuckets(current, interval, reduceContext);
+        builder.field("interval", getInterval().toString());
+    DocValueFormat getFormatter() {
+        long max = Long.MIN_VALUE;
+            this.roundingIdx = roundingIdx;
+            bucket.toXContent(builder, params);
+        for (InternalAggregation aggregation : aggregations) {
+            // list of buckets coming from different shards that have the same key
+            ? current.preparedRounding
+            if (obj == null || obj.getClass() != InternalAutoDateHistogram.Bucket.class) {
+    }
+    }
+     * Bucket for the internal auto date histogram agg
+            }
+        @Override
+        );
+                    reducedBuckets.add(reduced);
+import java.util.Collections;
+        int targetBuckets,
+                final IteratorAndCurrent<Bucket> top = pq.top();
+            // Adding empty buckets may have tipped us over the target so merge the buckets again if needed
+        Rounding rounding = bucketInfo.roundingInfos[idx].rounding;
+import org.opensearch.search.aggregations.Aggregations;
+            if (i % mergeInterval == 0 && sameKeyedBuckets.isEmpty() == false) {
+    }
+            reducedBucketsResult = mergeBucketsIfNeeded(reducedBucketsResult, reduceContext);
+        reducedBuckets = mergedBuckets;
+        if (reduceContext.isFinalReduce()) {
+            int roundingIdx,
+            requiredBuckets = 0;
+                currentKey = currentRounding.nextRoundingValue(currentKey);
+    protected void doWriteTo(StreamOutput out) throws IOException {
+                return false;
+import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation;
+ *
+ * under the License.
+    @Override
+package org.opensearch.search.aggregations.bucket.histogram;
+/*
+                && Objects.equals(roundingIdx, that.roundingIdx)
+                max = Math.max(max, agg.buckets.get(agg.buckets.size() - 1).key);
+ * GitHub history for details.
+            mergedBuckets.add(reduceBucket(sameKeyedBuckets, reduceContext));
+        super(in);
+            roundingInfos = new RoundingInfo[size];
+            } while (pq.size() > 0);
+        BucketInfo(StreamInput in) throws IOException {
+            out.writeVInt(roundingIdx);
+            long currentKey = minKey;
+     * The result from a bucket reduce
+            BucketInfo that = (BucketInfo) obj;
+            InternalAutoDateHistogram.Bucket that = (InternalAutoDateHistogram.Bucket) obj;
+            Bucket bucket = current.buckets.get(i);
+        // need to subtract one to get the rounding index we need
+                    key = reduceRounding.round(top.current().key);
+        return currentRoundingIdx - 1;
+        return ((Bucket) bucket).key;
+    private BucketReduceResult reduceBuckets(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
+    private final long bucketInnerInterval;
+            reducedBucketsResult.innerInterval
+    @Override
+        long bucketInnerInterval
+                key = roundedBucketKey;
+            if (histogram.buckets.isEmpty() == false) {
+    /**
+        bucketInfo = new BucketInfo(in);
+    public InternalAutoDateHistogram create(List<Bucket> buckets) {
+public final class InternalAutoDateHistogram extends InternalMultiBucketAggregation<
+        public DocValueFormat getFormatter() {
+ * Unless required by applicable law or agreed to in writing,
+        }
+            current.roundingIdx,
+        long min = Long.MAX_VALUE;
+    /**
+        out.writeList(buckets);
+            long roundedBucketKey = reduceRounding.round(bucket.key);
+            docCount = in.readVLong();
+            while (currentKey < maxKey) {
+    public boolean equals(Object obj) {
+        // First we need to find the highest level rounding used across all the
+            if (Double.isNaN(key)) {
+            format,
+            sameKeyedBuckets.add(new Bucket(Math.round(key), bucket.docCount, format, bucket.aggregations));
+        out.writeNamedWriteable(format);
+    }
+            reducedBucketsResult.buckets,
+            long min,
+import org.opensearch.core.xcontent.XContentBuilder;
+         * Read from a stream.
+            if (format != DocValueFormat.RAW) {
+        BucketInfo bucketInfo = new BucketInfo(
+        return Objects.equals(buckets, that.buckets) && Objects.equals(format, that.format) && Objects.equals(bucketInfo, that.bucketInfo);
+            list.get(0).key,
+ */
+            Rounding currentRounding = roundings[currentRoundingIdx].rounding;
+        return reducedBuckets;
+        }
+ * software distributed under the License is distributed on an
+import java.util.ArrayList;
+                while (key < nextBucket.key) {
+            out.writeLong(key);
+                assert key == nextBucket.key : "key: " + key + ", nextBucket.key: " + nextBucket.key;
+        if (super.equals(obj) == false) return false;
+    ) {
+            for (int interval : roundingInfo.innerIntervals) {
+                && Objects.equals(emptySubAggregations, that.emptySubAggregations);
+    public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
+                requiredBuckets++;
+        }
+        @Override
+        }
+            getMetadata(),
+import java.util.Map;
+            @Override
+            bucketInfo,
+        return format;
+        builder.endArray();
+            return Objects.hash(getClass(), Arrays.hashCode(roundingInfos), roundingIdx, emptySubAggregations);
+        return builder;
+            return format.format(key).toString();
+        public void writeTo(StreamOutput out) throws IOException {
+ * not use this file except in compliance with the License.
+import java.util.Arrays;
+    }
+            key = in.readLong();
+import org.opensearch.common.Rounding;
+            this.key = key;
+        @Override
+                    top.next();
+            this.min = min;
+    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
+        for (int i = 0; i < current.buckets.size(); i++) {
+        Map<String, Object> metadata,
+    }
+        }
+            if (currentBuckets.isEmpty() == false) {

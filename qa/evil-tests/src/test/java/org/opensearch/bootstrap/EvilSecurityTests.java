@@ -1,271 +1,241 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.bootstrap;
-
-import org.apache.lucene.util.Constants;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.io.PathUtils;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.env.Environment;
-import org.opensearch.env.TestEnvironment;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.FilePermission;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.PermissionCollection;
-import java.security.Permissions;
-import java.util.Set;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.hasToString;
-
-@SuppressForbidden(reason = "modifies system properties and attempts to create symbolic links intentionally")
-public class EvilSecurityTests extends OpenSearchTestCase {
-
-    /** test generated permissions */
-    public void testGeneratedPermissions() throws Exception {
-        Path path = createTempDir();
-        // make a fake ES home and ensure we only grant permissions to that.
-        Path esHome = path.resolve("esHome");
-        Settings.Builder settingsBuilder = Settings.builder();
-        settingsBuilder.put(Environment.PATH_HOME_SETTING.getKey(), esHome.toString());
-        Settings settings = settingsBuilder.build();
-
-        Path fakeTmpDir = createTempDir();
-        String realTmpDir = System.getProperty("java.io.tmpdir");
-        Permissions permissions;
-        try {
-            System.setProperty("java.io.tmpdir", fakeTmpDir.toString());
-            Environment environment = TestEnvironment.newEnvironment(settings);
-            permissions = Security.createPermissions(environment);
-        } finally {
-            System.setProperty("java.io.tmpdir", realTmpDir);
-        }
-
-        // the fake es home
-        assertNoPermissions(esHome, permissions);
-        // its parent
-        assertNoPermissions(esHome.getParent(), permissions);
-        // some other sibling
-        assertNoPermissions(esHome.getParent().resolve("other"), permissions);
-        // double check we overwrote java.io.tmpdir correctly for the test
-        assertNoPermissions(PathUtils.get(realTmpDir), permissions);
-    }
-
-    /** test generated permissions for all configured paths */
-    @SuppressWarnings("deprecation") // needs to check settings for deprecated path
-    @SuppressForbidden(reason = "to create FilePermission object")
-    public void testEnvironmentPaths() throws Exception {
-        Path path = createTempDir();
-        // make a fake ES home and ensure we only grant permissions to that.
-        Path esHome = path.resolve("esHome");
-
-        Settings.Builder settingsBuilder = Settings.builder();
-        settingsBuilder.put(Environment.PATH_HOME_SETTING.getKey(), esHome.resolve("home").toString());
-        settingsBuilder.putList(Environment.PATH_DATA_SETTING.getKey(), esHome.resolve("data1").toString(),
-                esHome.resolve("data2").toString());
-        settingsBuilder.put(Environment.PATH_SHARED_DATA_SETTING.getKey(), esHome.resolve("custom").toString());
-        settingsBuilder.put(Environment.PATH_LOGS_SETTING.getKey(), esHome.resolve("logs").toString());
-        settingsBuilder.put(Environment.NODE_PIDFILE_SETTING.getKey(), esHome.resolve("test.pid").toString());
-        Settings settings = settingsBuilder.build();
-
-        Path fakeTmpDir = createTempDir();
-        String realTmpDir = System.getProperty("java.io.tmpdir");
-        Permissions permissions;
-        Environment environment;
-        try {
-            System.setProperty("java.io.tmpdir", fakeTmpDir.toString());
-            environment = new Environment(settings, esHome.resolve("conf"));
-            permissions = Security.createPermissions(environment);
-        } finally {
-            System.setProperty("java.io.tmpdir", realTmpDir);
-        }
-
-        // the fake es home
-        assertNoPermissions(esHome, permissions);
-        // its parent
-        assertNoPermissions(esHome.getParent(), permissions);
-        // some other sibling
-        assertNoPermissions(esHome.getParent().resolve("other"), permissions);
-        // double check we overwrote java.io.tmpdir correctly for the test
-        assertNoPermissions(PathUtils.get(realTmpDir), permissions);
-
-        // check that all directories got permissions:
-
-        // bin file: ro
-        assertExactPermissions(new FilePermission(environment.binDir().toString(), "read,readlink"), permissions);
-        // lib file: ro
-        assertExactPermissions(new FilePermission(environment.libDir().toString(), "read,readlink"), permissions);
-        // modules file: ro
-        assertExactPermissions(new FilePermission(environment.modulesDir().toString(), "read,readlink"), permissions);
-        // config file: ro
-        assertExactPermissions(new FilePermission(environment.configDir().toString(), "read,readlink"), permissions);
         // plugins: ro
-        assertExactPermissions(new FilePermission(environment.pluginsDir().toString(), "read,readlink"), permissions);
-
-        // data paths: r/w
-        for (Path dataPath : environment.dataFiles()) {
-            assertExactPermissions(new FilePermission(dataPath.toString(), "read,readlink,write,delete"), permissions);
-        }
-        assertExactPermissions(new FilePermission(environment.sharedDataDir().toString(), "read,readlink,write,delete"), permissions);
-        // logs: r/w
-        assertExactPermissions(new FilePermission(environment.logsDir().toString(), "read,readlink,write,delete"), permissions);
-        // temp dir: r/w
-        assertExactPermissions(new FilePermission(fakeTmpDir.toString(), "read,readlink,write,delete"), permissions);
-        // PID file: delete only (for the shutdown hook)
-        assertExactPermissions(new FilePermission(environment.pidFile().toString(), "delete"), permissions);
-    }
-
-    public void testDuplicateDataPaths() throws IOException {
-        assumeFalse("https://github.com/elastic/elasticsearch/issues/44558", Constants.WINDOWS);
-        final Path path = createTempDir();
-        final Path home = path.resolve("home");
-        final Path data = path.resolve("data");
-        final Path duplicate;
-        if (randomBoolean()) {
-            duplicate = data;
-        } else {
-            duplicate = createTempDir().toAbsolutePath().resolve("link");
-            Files.createSymbolicLink(duplicate, data);
-        }
-
-        final Settings settings =
-                Settings
-                        .builder()
-                        .put(Environment.PATH_HOME_SETTING.getKey(), home.toString())
-                        .putList(Environment.PATH_DATA_SETTING.getKey(), data.toString(), duplicate.toString())
-                        .build();
-
-        final Environment environment = TestEnvironment.newEnvironment(settings);
-        final IllegalStateException e = expectThrows(IllegalStateException.class, () -> Security.createPermissions(environment));
-        assertThat(e, hasToString(containsString("path [" + duplicate.toRealPath() + "] is duplicated by [" + duplicate + "]")));
-    }
-
-    public void testEnsureSymlink() throws IOException {
-        Path p = createTempDir();
-
-        Path exists = p.resolve("exists");
-        Files.createDirectory(exists);
-
-        // symlink
-        Path linkExists = p.resolve("linkExists");
+        Path esHome = path.resolve("esHome");
         try {
-            Files.createSymbolicLink(linkExists, exists);
-        } catch (UnsupportedOperationException | IOException e) {
-            assumeNoException("test requires filesystem that supports symbolic links", e);
-        } catch (SecurityException e) {
-            assumeNoException("test cannot create symbolic links with security manager enabled", e);
-        }
-        Security.ensureDirectoryExists(linkExists);
-        Files.createTempFile(linkExists, null, null);
-    }
-
     public void testEnsureBrokenSymlink() throws IOException {
-        Path p = createTempDir();
-
-        // broken symlink
-        Path brokenLink = p.resolve("brokenLink");
-        try {
-            Files.createSymbolicLink(brokenLink, p.resolve("nonexistent"));
-        } catch (UnsupportedOperationException | IOException e) {
-            assumeNoException("test requires filesystem that supports symbolic links", e);
         } catch (SecurityException e) {
-            assumeNoException("test cannot create symbolic links with security manager enabled", e);
-        }
         try {
-            Security.ensureDirectoryExists(brokenLink);
-            fail("didn't get expected exception");
-        } catch (IOException expected) {}
-    }
-
-    /** When a configured dir is a symlink, test that permissions work on link target */
-    public void testSymlinkPermissions() throws IOException {
-        // see https://github.com/elastic/elasticsearch/issues/12170
-        assumeFalse("windows does not automatically grant permission to the target of symlinks", Constants.WINDOWS);
-        Path dir = createTempDir();
-
-        Path target = dir.resolve("target");
-        Files.createDirectory(target);
-
-        // symlink
-        Path link = dir.resolve("link");
-        try {
-            Files.createSymbolicLink(link, target);
-        } catch (UnsupportedOperationException | IOException e) {
-            assumeNoException("test requires filesystem that supports symbolic links", e);
-        } catch (SecurityException e) {
-            assumeNoException("test cannot create symbolic links with security manager enabled", e);
-        }
-        Permissions permissions = new Permissions();
-        FilePermissionUtils.addDirectoryPath(permissions, "testing", link, "read", false);
-        assertExactPermissions(new FilePermission(link.toString(), "read"), permissions);
-        assertExactPermissions(new FilePermission(link.resolve("foo").toString(), "read"), permissions);
-        assertExactPermissions(new FilePermission(target.toString(), "read"), permissions);
-        assertExactPermissions(new FilePermission(target.resolve("foo").toString(), "read"), permissions);
-    }
-
-    /**
-     * checks exact file permissions, meaning those and only those for that path.
-     */
-    @SuppressForbidden(reason = "to create FilePermission object")
-    static void assertExactPermissions(FilePermission expected, PermissionCollection actual) {
-        String target = expected.getName(); // see javadocs
-        Set<String> permissionSet = asSet(expected.getActions().split(","));
-        boolean read = permissionSet.remove("read");
-        boolean readlink = permissionSet.remove("readlink");
-        boolean write = permissionSet.remove("write");
-        boolean delete = permissionSet.remove("delete");
-        boolean execute = permissionSet.remove("execute");
-        assertTrue("unrecognized permission: " + permissionSet, permissionSet.isEmpty());
-        assertEquals(read, actual.implies(new FilePermission(target, "read")));
-        assertEquals(readlink, actual.implies(new FilePermission(target, "readlink")));
-        assertEquals(write, actual.implies(new FilePermission(target, "write")));
-        assertEquals(delete, actual.implies(new FilePermission(target, "delete")));
-        assertEquals(execute, actual.implies(new FilePermission(target, "execute")));
-    }
-
-    /**
-     * checks that this path has no permissions
-     */
-    @SuppressForbidden(reason = "to create FilePermission object")
     static void assertNoPermissions(Path path, PermissionCollection actual) {
-        String target = path.toString();
-        assertFalse(actual.implies(new FilePermission(target, "read")));
+ * Unless required by applicable law or agreed to in writing,
+    /**
+ *
+        settingsBuilder.putList(Environment.PATH_DATA_SETTING.getKey(), esHome.resolve("data1").toString(),
+public class EvilSecurityTests extends OpenSearchTestCase {
+import org.opensearch.env.TestEnvironment;
+        settingsBuilder.put(Environment.PATH_HOME_SETTING.getKey(), esHome.toString());
+        settingsBuilder.put(Environment.PATH_SHARED_DATA_SETTING.getKey(), esHome.resolve("custom").toString());
+}
+    }
+        assertExactPermissions(new FilePermission(target.toString(), "read"), permissions);
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+        Files.createDirectory(target);
+import org.opensearch.test.OpenSearchTestCase;
+        assertNoPermissions(PathUtils.get(realTmpDir), permissions);
+        settingsBuilder.put(Environment.PATH_LOGS_SETTING.getKey(), esHome.resolve("logs").toString());
+        // lib file: ro
+        try {
+import org.apache.lucene.util.Constants;
+        FilePermissionUtils.addDirectoryPath(permissions, "testing", link, "read", false);
+        assertExactPermissions(new FilePermission(environment.pluginsDir().toString(), "read,readlink"), permissions);
+        try {
+        // make a fake ES home and ensure we only grant permissions to that.
+            assumeNoException("test requires filesystem that supports symbolic links", e);
+ * license agreements. See the NOTICE file distributed with
+        // logs: r/w
+        assertNoPermissions(esHome, permissions);
         assertFalse(actual.implies(new FilePermission(target, "readlink")));
-        assertFalse(actual.implies(new FilePermission(target, "write")));
-        assertFalse(actual.implies(new FilePermission(target, "delete")));
+        assertExactPermissions(new FilePermission(target.resolve("foo").toString(), "read"), permissions);
+import java.security.Permissions;
+                esHome.resolve("data2").toString());
+        try {
+        assertNoPermissions(esHome.getParent(), permissions);
+    public void testEnsureSymlink() throws IOException {
+            Files.createSymbolicLink(duplicate, data);
+        } catch (IOException expected) {}
+ * specific language governing permissions and limitations
+        final Path data = path.resolve("data");
+        assertEquals(delete, actual.implies(new FilePermission(target, "delete")));
+import java.util.Set;
+        if (randomBoolean()) {
+        // its parent
+        assertEquals(readlink, actual.implies(new FilePermission(target, "readlink")));
+            System.setProperty("java.io.tmpdir", fakeTmpDir.toString());
+        }
+        assertNoPermissions(esHome.getParent().resolve("other"), permissions);
+            System.setProperty("java.io.tmpdir", fakeTmpDir.toString());
+import java.io.FilePermission;
+    public void testSymlinkPermissions() throws IOException {
+        final Environment environment = TestEnvironment.newEnvironment(settings);
+package org.opensearch.bootstrap;
+    }
+        }
+        } catch (UnsupportedOperationException | IOException e) {
+    }
+import org.opensearch.common.SuppressForbidden;
+        boolean execute = permissionSet.remove("execute");
+        assertExactPermissions(new FilePermission(link.resolve("foo").toString(), "read"), permissions);
+    @SuppressForbidden(reason = "to create FilePermission object")
+        // its parent
+        // symlink
+        Path fakeTmpDir = createTempDir();
+        } finally {
+            environment = new Environment(settings, esHome.resolve("conf"));
+import org.opensearch.env.Environment;
+ * The OpenSearch Contributors require contributions made to
+    /** test generated permissions for all configured paths */
+        } catch (UnsupportedOperationException | IOException e) {
+        boolean delete = permissionSet.remove("delete");
+    @SuppressWarnings("deprecation") // needs to check settings for deprecated path
+        // the fake es home
+        assertNoPermissions(PathUtils.get(realTmpDir), permissions);
+            fail("didn't get expected exception");
+     * checks exact file permissions, meaning those and only those for that path.
+        String realTmpDir = System.getProperty("java.io.tmpdir");
+        }
         assertFalse(actual.implies(new FilePermission(target, "execute")));
     }
-}
+        // double check we overwrote java.io.tmpdir correctly for the test
+    public void testEnvironmentPaths() throws Exception {
+        assertEquals(execute, actual.implies(new FilePermission(target, "execute")));
+        assertFalse(actual.implies(new FilePermission(target, "read")));
+        }
+        Settings.Builder settingsBuilder = Settings.builder();
+        // PID file: delete only (for the shutdown hook)
+        }
+        assertExactPermissions(new FilePermission(environment.modulesDir().toString(), "read,readlink"), permissions);
+    }
+        String target = path.toString();
+ * this file be licensed under the Apache-2.0 license or a
+ * under the License.
+        }
+        // some other sibling
+        assertExactPermissions(new FilePermission(environment.binDir().toString(), "read,readlink"), permissions);
+ *
+    static void assertExactPermissions(FilePermission expected, PermissionCollection actual) {
+                        .builder()
+        assertExactPermissions(new FilePermission(environment.libDir().toString(), "read,readlink"), permissions);
+        final Path duplicate;
+        assertExactPermissions(new FilePermission(environment.configDir().toString(), "read,readlink"), permissions);
+ */
+import static org.hamcrest.Matchers.hasToString;
+        // data paths: r/w
+        Path path = createTempDir();
+        // config file: ro
+        assumeFalse("windows does not automatically grant permission to the target of symlinks", Constants.WINDOWS);
+/*
+        boolean readlink = permissionSet.remove("readlink");
+    /**
+        assertNoPermissions(esHome.getParent().resolve("other"), permissions);
+            permissions = Security.createPermissions(environment);
+     */
+     * checks that this path has no permissions
+    @SuppressForbidden(reason = "to create FilePermission object")
+    }
+/*
+        // modules file: ro
+        // make a fake ES home and ensure we only grant permissions to that.
+            assumeNoException("test requires filesystem that supports symbolic links", e);
+    }
+        // see https://github.com/elastic/elasticsearch/issues/12170
+ */
+        final Path path = createTempDir();
+        assertNoPermissions(esHome, permissions);
+        Settings settings = settingsBuilder.build();
+        final Path home = path.resolve("home");
+        Permissions permissions;
+        // symlink
+        boolean write = permissionSet.remove("write");
+        Path esHome = path.resolve("esHome");
+        Path p = createTempDir();
+    /** When a configured dir is a symlink, test that permissions work on link target */
+        assertFalse(actual.implies(new FilePermission(target, "delete")));
+/*
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * software distributed under the License is distributed on an
+        assertTrue("unrecognized permission: " + permissionSet, permissionSet.isEmpty());
+ * ownership. Elasticsearch licenses this file to you under
+        assertExactPermissions(new FilePermission(fakeTmpDir.toString(), "read,readlink,write,delete"), permissions);
+    }
+            Files.createSymbolicLink(link, target);
+ * Licensed to Elasticsearch under one or more contributor
+        final Settings settings =
+        boolean read = permissionSet.remove("read");
+        Path fakeTmpDir = createTempDir();
+ * compatible open source license.
+        settingsBuilder.put(Environment.PATH_HOME_SETTING.getKey(), esHome.resolve("home").toString());
+        assumeFalse("https://github.com/elastic/elasticsearch/issues/44558", Constants.WINDOWS);
+        }
+        Settings settings = settingsBuilder.build();
+        String target = expected.getName(); // see javadocs
+        String realTmpDir = System.getProperty("java.io.tmpdir");
+     */
+        assertEquals(read, actual.implies(new FilePermission(target, "read")));
+                        .build();
+ * GitHub history for details.
+        settingsBuilder.put(Environment.NODE_PIDFILE_SETTING.getKey(), esHome.resolve("test.pid").toString());
+        final IllegalStateException e = expectThrows(IllegalStateException.class, () -> Security.createPermissions(environment));
+ * this work for additional information regarding copyright
+        try {
+        Path path = createTempDir();
+        assertNoPermissions(esHome.getParent(), permissions);
+            assumeNoException("test cannot create symbolic links with security manager enabled", e);
+            permissions = Security.createPermissions(environment);
+            assumeNoException("test cannot create symbolic links with security manager enabled", e);
+    @SuppressForbidden(reason = "to create FilePermission object")
+    /** test generated permissions */
+        } catch (UnsupportedOperationException | IOException e) {
+        Settings.Builder settingsBuilder = Settings.builder();
+    public void testDuplicateDataPaths() throws IOException {
+            assumeNoException("test cannot create symbolic links with security manager enabled", e);
+import java.io.IOException;
+import java.nio.file.Files;
+        assertFalse(actual.implies(new FilePermission(target, "write")));
+            duplicate = data;
+        // broken symlink
+        Path target = dir.resolve("target");
+ * KIND, either express or implied.  See the License for the
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.common.io.PathUtils;
+                        .put(Environment.PATH_HOME_SETTING.getKey(), home.toString())
+        } else {
+ */
+        // the fake es home
+        // check that all directories got permissions:
+        Path exists = p.resolve("exists");
+ * Modifications Copyright OpenSearch Contributors. See
+        } finally {
+        assertExactPermissions(new FilePermission(environment.sharedDataDir().toString(), "read,readlink,write,delete"), permissions);
+            Files.createSymbolicLink(linkExists, exists);
+        Permissions permissions = new Permissions();
+        assertThat(e, hasToString(containsString("path [" + duplicate.toRealPath() + "] is duplicated by [" + duplicate + "]")));
+import java.security.PermissionCollection;
+        Path p = createTempDir();
+                Settings
+            Environment environment = TestEnvironment.newEnvironment(settings);
+    public void testGeneratedPermissions() throws Exception {
+        Files.createDirectory(exists);
+        assertEquals(write, actual.implies(new FilePermission(target, "write")));
+        assertExactPermissions(new FilePermission(link.toString(), "read"), permissions);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * You may obtain a copy of the License at
+        // bin file: ro
+import org.opensearch.common.settings.Settings;
+import java.nio.file.Path;
+        for (Path dataPath : environment.dataFiles()) {
+        Path brokenLink = p.resolve("brokenLink");
+        } catch (SecurityException e) {
+        // some other sibling
+        Path link = dir.resolve("link");
+            assumeNoException("test requires filesystem that supports symbolic links", e);
+            Files.createSymbolicLink(brokenLink, p.resolve("nonexistent"));
+        assertExactPermissions(new FilePermission(environment.logsDir().toString(), "read,readlink,write,delete"), permissions);
+        Files.createTempFile(linkExists, null, null);
+            duplicate = createTempDir().toAbsolutePath().resolve("link");
+        Permissions permissions;
+            Security.ensureDirectoryExists(brokenLink);
+ * not use this file except in compliance with the License.
+        // double check we overwrote java.io.tmpdir correctly for the test
+                        .putList(Environment.PATH_DATA_SETTING.getKey(), data.toString(), duplicate.toString())
+        Security.ensureDirectoryExists(linkExists);
+        assertExactPermissions(new FilePermission(environment.pidFile().toString(), "delete"), permissions);
+        Environment environment;
+        // temp dir: r/w
+@SuppressForbidden(reason = "modifies system properties and attempts to create symbolic links intentionally")
+            System.setProperty("java.io.tmpdir", realTmpDir);
+        Path dir = createTempDir();
+        Path linkExists = p.resolve("linkExists");
+import static org.hamcrest.Matchers.containsString;
+        Set<String> permissionSet = asSet(expected.getActions().split(","));
+            assertExactPermissions(new FilePermission(dataPath.toString(), "read,readlink,write,delete"), permissions);
+            System.setProperty("java.io.tmpdir", realTmpDir);
+        } catch (SecurityException e) {

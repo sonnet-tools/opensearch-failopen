@@ -1,382 +1,334 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.reindex;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.action.admin.cluster.node.tasks.cancel.CancelTasksRequest;
-import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
-import org.opensearch.action.ingest.DeletePipelineRequest;
-import org.opensearch.common.action.ActionFuture;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.tasks.TaskCancelledException;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.index.IndexModule;
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.engine.Engine.Operation.Origin;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.index.shard.IndexingOperationListener;
-import org.opensearch.ingest.IngestTestPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.tasks.TaskInfo;
-import org.hamcrest.Matcher;
-import org.junit.Before;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-
-import static org.opensearch.index.query.QueryBuilders.termQuery;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
-import static org.hamcrest.Matchers.emptyIterable;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
-
-/**
- * Test that you can actually cancel a reindex/update-by-query/delete-by-query request and all the plumbing works. Doesn't test all of the
- * different cancellation places - that is the responsibility of AsyncBulkByScrollActionTests which have more precise control to
- * simulate failures but does not exercise important portion of the stack like transport and task management.
- */
-public class CancelTests extends ReindexTestCase {
-
-    protected static final String INDEX = "reindex-cancel-index";
-
-    // Semaphore used to allow & block indexing operations during the test
-    private static final Semaphore ALLOWED_OPERATIONS = new Semaphore(0);
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        Collection<Class<? extends Plugin>> plugins = new ArrayList<>(super.nodePlugins());
-        plugins.add(IngestTestPlugin.class);
-        plugins.add(ReindexCancellationPlugin.class);
-        return plugins;
+        mainTask = client().admin().cluster().prepareGetTask(mainTask.getTaskId()).get().getTask().getTask();
     }
-
+import static org.hamcrest.Matchers.hasSize;
+        testCancel(
+        assertion.assertThat(response, numDocs, numModifiedDocs);
+                + "  \"processors\" : [ {\n"
+            equalTo("update-by-query [" + INDEX + "]")
+        // Total number of documents created for this test (~10 per primary shard per slice)
+                /* We can only be sure that we've drained all the permits if we only use a single worker. Otherwise some worker may have
+import java.util.stream.IntStream;
+                // Skip tasks with a parent because those are children of the task we want to cancel
+                + "  \"processors\" : [ {\n"
+            logger.debug("finding at least one canceled child among {}", sliceList.getTasks());
+public class CancelTests extends ReindexTestCase {
+        cancelTasksResponse.rethrowFailures("Cancel");
+            equalTo("delete-by-query [" + INDEX + "]")
+    }
+        testCancel(UpdateByQueryAction.NAME, updateByQuery().setPipeline("set-processed").source(INDEX), (response, total, modified) -> {
+    /**
+            throw new RuntimeException("Exception while waiting for the response. Running tasks: " + tasks, e);
+        }, equalTo("update-by-query [" + INDEX + "]"));
+ * Unless required by applicable law or agreed to in writing,
+ *
+        assertNull(status.getReasonCancelled());
+        }
+            assertEquals(0, ALLOWED_OPERATIONS.getQueueLength());
+            String tasks = client().admin()
+        }
+        /* ... and wait for the indexing operation listeners to block. It
+                assertHitCount(client().prepareSearch(INDEX).setSize(0).get(), total - modified);
+        throw new AssertionError("Couldn't find task to rethrottle after waiting tasks=" + tasks.getTasks());
+ * Licensed to Elasticsearch under one or more contributor
+            if (ExceptionsHelper.unwrapCausesAndSuppressed(e, t -> t instanceof TaskCancelledException).isPresent()) {
+        @Override
+        // Checks that no more operations are executed
+                + "  \"description\" : \"sets processed to true\",\n"
+                .prepareListTasks()
+                assertHitCount(client().prepareSearch("dest").setSize(0).get(), modified);
+    public static class ReindexCancellationPlugin extends Plugin {
+                foundCancelled = true;
+        ); // 10 seconds is usually fine but on heavily loaded machines this can take a while
+import java.util.concurrent.Semaphore;
+            () -> assertTrue("updates blocked", ALLOWED_OPERATIONS.hasQueuedThreads() && ALLOWED_OPERATIONS.availablePermits() == 0),
+    protected static final String INDEX = "reindex-cancel-index";
+    public static class BlockingOperationListener implements IndexingOperationListener {
+        public Engine.Index preIndex(ShardId shardId, Engine.Index index) {
+            updateByQuery().setPipeline("set-processed").source(INDEX).setSlices(5),
+    public void testDeleteByQueryCancel() throws Exception {
+            return preCheck(delete);
+import java.util.stream.Collectors;
+import org.opensearch.ExceptionsHelper;
+        }
+                .cluster()
+import org.opensearch.core.common.bytes.BytesReference;
+ * Test that you can actually cancel a reindex/update-by-query/delete-by-query request and all the plumbing works. Doesn't test all of the
+        @Override
+ * compatible open source license.
+    // Semaphore used to allow & block indexing operations during the test
     @Before
+ */
+            }
+        plugins.add(IngestTestPlugin.class);
     public void clearAllowedOperations() {
+import org.opensearch.plugins.Plugin;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        do {
+            equalTo("delete-by-query [" + INDEX + "]")
+import java.util.ArrayList;
+            DeleteByQueryAction.NAME,
+            ReindexAction.NAME,
+        assertThat(ALLOWED_OPERATIONS.drainPermits(), equalTo(0));
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            for (TaskInfo taskInfo : tasks.getTasks()) {
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.action.ActionFuture;
+                throw new RuntimeException(e);
+        private <T extends Engine.Operation> T preCheck(T operation) {
+        void assertThat(BulkByScrollResponse response, int total, int modified);
+        );
+                }
+import org.opensearch.core.index.shard.ShardId;
+                + "  } ]\n"
+        if (builder.request().getSlices() >= 1) {
+            ListTasksResponse sliceList = client().admin()
+    /**
+            TimeUnit.MINUTES
+            indexModule.addIndexOperationListener(new BlockingOperationListener());
+        // Checks that the all documents have been indexed and correctly counted
+import org.opensearch.index.shard.IndexingOperationListener;
+                + "  } ]\n"
+                .mapToObj(i -> client().prepareIndex().setIndex(INDEX).setId(String.valueOf(i)).setSource("n", i))
+import org.opensearch.action.admin.cluster.node.tasks.cancel.CancelTasksRequest;
+        AbstractBulkByScrollRequestBuilder<?, ?> builder,
+        );
+            equalTo("reindex from [" + INDEX + "] to [dest]")
+            } catch (InterruptedException e) {
+    @Override
+            "{\n"
+        );
+import org.opensearch.index.engine.Engine;
+                if (ALLOWED_OPERATIONS.tryAcquire(30, TimeUnit.SECONDS)) {
+import java.util.Collection;
+ */
+            tasks = client().admin().cluster().prepareListTasks().setActions(actionName).setDetailed(true).get();
+ * simulate failures but does not exercise important portion of the stack like transport and task management.
+import org.opensearch.action.ingest.DeletePipelineRequest;
+        builder.source().setSize(1);
+        assertBusy(() -> {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            reindex().source(INDEX).filter(QueryBuilders.matchAllQuery()).destination("dest").setSlices(5),
+        assertThat(cancelTasksResponse.getTasks(), hasSize(1));
+            1,
+ * this work for additional information regarding copyright
+package org.opensearch.index.reindex;
+    private interface CancelAssertion {
+    private static final Semaphore ALLOWED_OPERATIONS = new Semaphore(0);
+                }
+        // Cancel the request while the action is blocked by the indexing operation listeners.
+import java.util.concurrent.TimeUnit;
+            assertHitCount(client().prepareSearch(INDEX).setSize(0).setQuery(termQuery("processed", true)).get(), modified);
+            refresh("dest");
+        ALLOWED_OPERATIONS.release(numDocs);
+import org.opensearch.tasks.TaskInfo;
+ */
+                + "  \"description\" : \"sets processed to true\",\n"
+        indexRandom(
+        testCancel(
+            tasks.rethrowFailures("Find tasks to cancel");
+     * Used to check the result of the cancel test.
+            IntStream.range(0, numDocs)
+            }
+        try {
+        assertAcked(client().admin().cluster().deletePipeline(new DeletePipelineRequest("set-processed")).get());
+                .setParentTaskId(mainTask.getTaskId())
+        int numDocs = getNumShards(INDEX).numPrimaries * 10 * builder.request().getSlices();
+        }
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.common.bytes.BytesArray;
+                assertThat(response, matcher().updated(modified).reasonCancelled(equalTo("by user request")).slices(hasSize(5)));
+                refresh("dest");
+    public void testUpdateByQueryCancelWithWorkers() throws Exception {
+        );
+            if (builder.request().getSlices() == 1) {
+                return operation;
+        // Description shouldn't be empty
+ * license agreements. See the NOTICE file distributed with
+        public Engine.Delete preDelete(ShardId shardId, Engine.Delete delete) {
+        logger.debug("unblocking the blocked update");
+        ListTasksResponse tasks;
+ * The OpenSearch Contributors require contributions made to
+                .setDetailed(true)
+        ListTasksResponse cancelTasksResponse = client().admin().cluster().prepareCancelTasks().setTaskId(mainTask.getTaskId()).get();
+        assertThat(response.getSearchFailures(), emptyIterable());
+            },
+        });
+ */
+    public void testDeleteByQueryCancelWithWorkers() throws Exception {
+ * ownership. Elasticsearch licenses this file to you under
+    public static TaskInfo findTaskToCancel(String actionName, int workerCount) {
+/*
+                 * exhausted all of its documents before we blocked. */
+ * the Apache License, Version 2.0 (the "License"); you may
+        BulkByScrollResponse response;
+        logger.debug("waiting for updates to be blocked");
+                assertHitCount(client().prepareSearch(INDEX).setSize(0).setQuery(termQuery("processed", true)).get(), modified);
+ * KIND, either express or implied.  See the License for the
+        );
+    }
+        CancelAssertion assertion,
+            (response, total, modified) -> {
+        createIndex(INDEX);
+            "{\n"
+        /* The status should now show canceled. The request will still be in the
+        BulkByScrollTask.Status status = (BulkByScrollTask.Status) mainTask.getStatus();
+        // This will prevent further requests from being sent.
+    }
+    }
+import org.opensearch.index.query.QueryBuilders;
+                    return operation;
+        ALLOWED_OPERATIONS.release(numModifiedDocs - builder.request().getSlices());
+/*
+import org.opensearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
+        BytesReference pipeline = new BytesArray(
+         * to be modified by the reindex action. That way at least one worker
+        logger.debug("chose to modify [{}] out of [{}] docs", numModifiedDocs, numDocs);
+/*
+import org.apache.logging.log4j.LogManager;
+                .setDetailed(true)
+        ActionFuture<? extends BulkByScrollResponse> future = builder.execute();
+            numModifiedDocs -= ALLOWED_OPERATIONS.availablePermits();
+                .prepareListTasks()
+                BulkByScrollTask.Status sliceStatus = (BulkByScrollTask.Status) slice.getStatus();
+            true,
+        ALLOWED_OPERATIONS.release(builder.request().getSlices());
+        testCancel(ReindexAction.NAME, reindex().source(INDEX).destination("dest"), (response, total, modified) -> {
+/**
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+ * under the License.
+         * list because it is (or its children are) still blocked. */
+        private static final Logger log = LogManager.getLogger(CancelTests.class);
+        logger.debug("setting up [{}] docs", numDocs);
+            },
+ * different cancellation places - that is the responsibility of AsyncBulkByScrollActionTests which have more precise control to
+            sliceList.rethrowFailures("Fetch slice tasks");
+        logger.debug("asserting that parent is marked canceled {}", status);
+        } while (System.nanoTime() - start < TimeUnit.SECONDS.toNanos(10));
+        }
+        // Scroll by 1 so that cancellation is easier to control
+                .collect(Collectors.toList())
+        }
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
+    }
+import org.opensearch.index.engine.Engine.Operation.Origin;
+    }
+            (response, total, modified) -> {
+    }
+                .get()
+            (response, total, modified) -> {
+                .cluster()
+     */
+    public void testReindexCancel() throws Exception {
+import org.opensearch.ingest.IngestTestPlugin;
+        assertAcked(client().admin().cluster().preparePutPipeline("set-processed", pipeline, MediaTypeRegistry.JSON).get());
+        long start = System.nanoTime();
+                assertThat(response, matcher().deleted(modified).reasonCancelled(equalTo("by user request")).slices(hasSize(5)));
+        String action,
+    public void testUpdateByQueryCancel() throws Exception {
+                log.debug("checking");
+                assertEquals(CancelTasksRequest.DEFAULT_REASON, sliceStatus.getReasonCancelled());
+         * is blocked. */
+        assertThat(response.getBulkFailures(), emptyIterable());
+        int numModifiedDocs = randomIntBetween(builder.request().getSlices() * 2, numDocs);
+        status = (BulkByScrollTask.Status) mainTask.getStatus();
+        assertHitCount(client().prepareSearch(INDEX).setSize(0).get(), numDocs);
+import org.junit.Before;
+            deleteByQuery().source(INDEX).filter(QueryBuilders.matchAllQuery()).setSlices(5),
+        flushAndRefresh(INDEX);
+                .toString();
+        Collection<Class<? extends Plugin>> plugins = new ArrayList<>(super.nodePlugins());
+    ) throws Exception {
+        assertThat(response.getReasonCancelled(), equalTo("by user request"));
+                + "      \"test\" : {}\n"
+    }
+        assertEquals(CancelTasksRequest.DEFAULT_REASON, status.getReasonCancelled());
+    public void testReindexCancelWithWorkers() throws Exception {
+            assertTrue("Didn't find at least one sub task that was cancelled", foundCancelled);
+        BytesReference pipeline = new BytesArray(
+ * software distributed under the License is distributed on an
+                .setParentTaskId(mainTask.getTaskId())
+        public void onIndexModule(IndexModule indexModule) {
+    }
+        /* Allow a random number of the documents less the number of workers
+    }
+import static org.hamcrest.Matchers.equalTo;
+        plugins.add(ReindexCancellationPlugin.class);
+import static org.hamcrest.Matchers.emptyIterable;
+        assertAcked(client().admin().cluster().deletePipeline(new DeletePipelineRequest("set-processed")).get());
+                    log.debug("passed");
+        assertAcked(client().admin().cluster().preparePutPipeline("set-processed", pipeline, MediaTypeRegistry.JSON).get());
         ALLOWED_OPERATIONS.drainPermits();
     }
-
-    /**
-     * Executes the cancellation test
-     */
-    private void testCancel(
-        String action,
-        AbstractBulkByScrollRequestBuilder<?, ?> builder,
-        CancelAssertion assertion,
-        Matcher<String> taskDescriptionMatcher
-    ) throws Exception {
-        createIndex(INDEX);
-
-        // Total number of documents created for this test (~10 per primary shard per slice)
-        int numDocs = getNumShards(INDEX).numPrimaries * 10 * builder.request().getSlices();
-        ALLOWED_OPERATIONS.release(numDocs);
-
-        logger.debug("setting up [{}] docs", numDocs);
-        indexRandom(
-            true,
-            false,
-            true,
-            IntStream.range(0, numDocs)
-                .mapToObj(i -> client().prepareIndex().setIndex(INDEX).setId(String.valueOf(i)).setSource("n", i))
-                .collect(Collectors.toList())
+            assertHitCount(client().prepareSearch("dest").setSize(0).get(), modified);
+                assertThat(response, matcher().deleted(modified).reasonCancelled(equalTo("by user request")));
+        assertBusy(
+            for (TaskInfo slice : sliceList.getTasks()) {
+        } catch (Exception e) {
+                assertEquals(0, ALLOWED_OPERATIONS.availablePermits());
+        // And check the status of the response
+import org.opensearch.core.tasks.TaskCancelledException;
+            },
+            (response, total, modified) -> {
         );
-
-        // Checks that the all documents have been indexed and correctly counted
-        assertHitCount(client().prepareSearch(INDEX).setSize(0).get(), numDocs);
-        assertThat(ALLOWED_OPERATIONS.drainPermits(), equalTo(0));
-
-        // Scroll by 1 so that cancellation is easier to control
-        builder.source().setSize(1);
-
-        /* Allow a random number of the documents less the number of workers
-         * to be modified by the reindex action. That way at least one worker
-         * is blocked. */
-        int numModifiedDocs = randomIntBetween(builder.request().getSlices() * 2, numDocs);
-        logger.debug("chose to modify [{}] out of [{}] docs", numModifiedDocs, numDocs);
-        ALLOWED_OPERATIONS.release(numModifiedDocs - builder.request().getSlices());
-
-        // Now execute the reindex action...
-        ActionFuture<? extends BulkByScrollResponse> future = builder.execute();
-
-        /* ... and wait for the indexing operation listeners to block. It
+        testCancel(
+                + "      \"test\" : {}\n"
+            deleteByQuery().source(INDEX).filter(QueryBuilders.matchAllQuery()),
+        return plugins;
+            }
+import static org.opensearch.index.query.QueryBuilders.termQuery;
+ * GitHub history for details.
+        testCancel(
+            try {
+            }
+        }
+                + "}"
+            true,
+            // If we have more than one worker we might not have made all the modifications
+     */
+ * not use this file except in compliance with the License.
+    private void testCancel(
+                if (false == taskInfo.getParentTaskId().isSet()) {
+ * specific language governing permissions and limitations
+                .get();
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+                return; // the scroll request was cancelled
+            assertThat(response, matcher().updated(modified).reasonCancelled(equalTo("by user request")));
+            UpdateByQueryAction.NAME,
          * is important to realize that some of the workers might have
          * exhausted their slice while others might have quite a bit left
-         * to work on. We can't control that. */
-        logger.debug("waiting for updates to be blocked");
-        assertBusy(
-            () -> assertTrue("updates blocked", ALLOWED_OPERATIONS.hasQueuedThreads() && ALLOWED_OPERATIONS.availablePermits() == 0),
-            1,
-            TimeUnit.MINUTES
-        ); // 10 seconds is usually fine but on heavily loaded machines this can take a while
-
-        // Status should show the task running
-        TaskInfo mainTask = findTaskToCancel(action, builder.request().getSlices());
-        BulkByScrollTask.Status status = (BulkByScrollTask.Status) mainTask.getStatus();
-        assertNull(status.getReasonCancelled());
-
-        // Description shouldn't be empty
-        assertThat(mainTask.getDescription(), taskDescriptionMatcher);
-
-        // Cancel the request while the action is blocked by the indexing operation listeners.
-        // This will prevent further requests from being sent.
-        ListTasksResponse cancelTasksResponse = client().admin().cluster().prepareCancelTasks().setTaskId(mainTask.getTaskId()).get();
-        cancelTasksResponse.rethrowFailures("Cancel");
-        assertThat(cancelTasksResponse.getTasks(), hasSize(1));
-
-        /* The status should now show canceled. The request will still be in the
-         * list because it is (or its children are) still blocked. */
-        mainTask = client().admin().cluster().prepareGetTask(mainTask.getTaskId()).get().getTask().getTask();
-        status = (BulkByScrollTask.Status) mainTask.getStatus();
-        logger.debug("asserting that parent is marked canceled {}", status);
-        assertEquals(CancelTasksRequest.DEFAULT_REASON, status.getReasonCancelled());
-
-        if (builder.request().getSlices() > 1) {
-            boolean foundCancelled = false;
-            ListTasksResponse sliceList = client().admin()
-                .cluster()
-                .prepareListTasks()
-                .setParentTaskId(mainTask.getTaskId())
-                .setDetailed(true)
-                .get();
-            sliceList.rethrowFailures("Fetch slice tasks");
-            logger.debug("finding at least one canceled child among {}", sliceList.getTasks());
-            for (TaskInfo slice : sliceList.getTasks()) {
-                BulkByScrollTask.Status sliceStatus = (BulkByScrollTask.Status) slice.getStatus();
-                if (sliceStatus.getReasonCancelled() == null) continue;
-                assertEquals(CancelTasksRequest.DEFAULT_REASON, sliceStatus.getReasonCancelled());
-                foundCancelled = true;
-            }
-            assertTrue("Didn't find at least one sub task that was cancelled", foundCancelled);
-        }
-
-        logger.debug("unblocking the blocked update");
-        ALLOWED_OPERATIONS.release(builder.request().getSlices());
-
-        // Checks that no more operations are executed
-        assertBusy(() -> {
-            if (builder.request().getSlices() == 1) {
-                /* We can only be sure that we've drained all the permits if we only use a single worker. Otherwise some worker may have
-                 * exhausted all of its documents before we blocked. */
-                assertEquals(0, ALLOWED_OPERATIONS.availablePermits());
-            }
-            assertEquals(0, ALLOWED_OPERATIONS.getQueueLength());
-        });
-
-        // And check the status of the response
-        BulkByScrollResponse response;
-        try {
-            response = future.get(30, TimeUnit.SECONDS);
-        } catch (Exception e) {
-            if (ExceptionsHelper.unwrapCausesAndSuppressed(e, t -> t instanceof TaskCancelledException).isPresent()) {
-                return; // the scroll request was cancelled
-            }
-            String tasks = client().admin()
-                .cluster()
-                .prepareListTasks()
-                .setParentTaskId(mainTask.getTaskId())
-                .setDetailed(true)
-                .get()
-                .toString();
-            throw new RuntimeException("Exception while waiting for the response. Running tasks: " + tasks, e);
-        }
-        assertThat(response.getReasonCancelled(), equalTo("by user request"));
-        assertThat(response.getBulkFailures(), emptyIterable());
-        assertThat(response.getSearchFailures(), emptyIterable());
-
-        if (builder.request().getSlices() >= 1) {
-            // If we have more than one worker we might not have made all the modifications
-            numModifiedDocs -= ALLOWED_OPERATIONS.availablePermits();
-        }
-        flushAndRefresh(INDEX);
-        assertion.assertThat(response, numDocs, numModifiedDocs);
-    }
-
-    public static TaskInfo findTaskToCancel(String actionName, int workerCount) {
-        ListTasksResponse tasks;
-        long start = System.nanoTime();
-        do {
-            tasks = client().admin().cluster().prepareListTasks().setActions(actionName).setDetailed(true).get();
-            tasks.rethrowFailures("Find tasks to cancel");
-            for (TaskInfo taskInfo : tasks.getTasks()) {
-                // Skip tasks with a parent because those are children of the task we want to cancel
-                if (false == taskInfo.getParentTaskId().isSet()) {
-                    return taskInfo;
-                }
-            }
-        } while (System.nanoTime() - start < TimeUnit.SECONDS.toNanos(10));
-        throw new AssertionError("Couldn't find task to rethrottle after waiting tasks=" + tasks.getTasks());
-    }
-
-    public void testReindexCancel() throws Exception {
-        testCancel(ReindexAction.NAME, reindex().source(INDEX).destination("dest"), (response, total, modified) -> {
-            assertThat(response, matcher().created(modified).reasonCancelled(equalTo("by user request")));
-
-            refresh("dest");
-            assertHitCount(client().prepareSearch("dest").setSize(0).get(), modified);
-        }, equalTo("reindex from [" + INDEX + "] to [dest]"));
-    }
-
-    public void testUpdateByQueryCancel() throws Exception {
-        BytesReference pipeline = new BytesArray(
-            "{\n"
-                + "  \"description\" : \"sets processed to true\",\n"
-                + "  \"processors\" : [ {\n"
-                + "      \"test\" : {}\n"
-                + "  } ]\n"
-                + "}"
-        );
-        assertAcked(client().admin().cluster().preparePutPipeline("set-processed", pipeline, MediaTypeRegistry.JSON).get());
-
-        testCancel(UpdateByQueryAction.NAME, updateByQuery().setPipeline("set-processed").source(INDEX), (response, total, modified) -> {
-            assertThat(response, matcher().updated(modified).reasonCancelled(equalTo("by user request")));
-            assertHitCount(client().prepareSearch(INDEX).setSize(0).setQuery(termQuery("processed", true)).get(), modified);
-        }, equalTo("update-by-query [" + INDEX + "]"));
-
-        assertAcked(client().admin().cluster().deletePipeline(new DeletePipelineRequest("set-processed")).get());
-    }
-
-    public void testDeleteByQueryCancel() throws Exception {
-        testCancel(
-            DeleteByQueryAction.NAME,
-            deleteByQuery().source(INDEX).filter(QueryBuilders.matchAllQuery()),
-            (response, total, modified) -> {
-                assertThat(response, matcher().deleted(modified).reasonCancelled(equalTo("by user request")));
-                assertHitCount(client().prepareSearch(INDEX).setSize(0).get(), total - modified);
-            },
-            equalTo("delete-by-query [" + INDEX + "]")
-        );
-    }
-
-    public void testReindexCancelWithWorkers() throws Exception {
-        testCancel(
-            ReindexAction.NAME,
-            reindex().source(INDEX).filter(QueryBuilders.matchAllQuery()).destination("dest").setSlices(5),
-            (response, total, modified) -> {
-                assertThat(response, matcher().created(modified).reasonCancelled(equalTo("by user request")).slices(hasSize(5)));
-                refresh("dest");
-                assertHitCount(client().prepareSearch("dest").setSize(0).get(), modified);
-            },
-            equalTo("reindex from [" + INDEX + "] to [dest]")
-        );
-    }
-
-    public void testUpdateByQueryCancelWithWorkers() throws Exception {
-        BytesReference pipeline = new BytesArray(
-            "{\n"
-                + "  \"description\" : \"sets processed to true\",\n"
-                + "  \"processors\" : [ {\n"
-                + "      \"test\" : {}\n"
-                + "  } ]\n"
-                + "}"
-        );
-        assertAcked(client().admin().cluster().preparePutPipeline("set-processed", pipeline, MediaTypeRegistry.JSON).get());
-
-        testCancel(
-            UpdateByQueryAction.NAME,
-            updateByQuery().setPipeline("set-processed").source(INDEX).setSlices(5),
-            (response, total, modified) -> {
-                assertThat(response, matcher().updated(modified).reasonCancelled(equalTo("by user request")).slices(hasSize(5)));
-                assertHitCount(client().prepareSearch(INDEX).setSize(0).setQuery(termQuery("processed", true)).get(), modified);
-            },
-            equalTo("update-by-query [" + INDEX + "]")
-        );
-
-        assertAcked(client().admin().cluster().deletePipeline(new DeletePipelineRequest("set-processed")).get());
-    }
-
-    public void testDeleteByQueryCancelWithWorkers() throws Exception {
-        testCancel(
-            DeleteByQueryAction.NAME,
-            deleteByQuery().source(INDEX).filter(QueryBuilders.matchAllQuery()).setSlices(5),
-            (response, total, modified) -> {
-                assertThat(response, matcher().deleted(modified).reasonCancelled(equalTo("by user request")).slices(hasSize(5)));
-                assertHitCount(client().prepareSearch(INDEX).setSize(0).get(), total - modified);
-            },
-            equalTo("delete-by-query [" + INDEX + "]")
-        );
-    }
-
-    /**
-     * Used to check the result of the cancel test.
-     */
-    private interface CancelAssertion {
-        void assertThat(BulkByScrollResponse response, int total, int modified);
-    }
-
-    public static class ReindexCancellationPlugin extends Plugin {
-
-        @Override
-        public void onIndexModule(IndexModule indexModule) {
-            indexModule.addIndexOperationListener(new BlockingOperationListener());
-        }
-    }
-
-    public static class BlockingOperationListener implements IndexingOperationListener {
-        private static final Logger log = LogManager.getLogger(CancelTests.class);
-
-        @Override
-        public Engine.Index preIndex(ShardId shardId, Engine.Index index) {
-            return preCheck(index);
-        }
-
-        @Override
-        public Engine.Delete preDelete(ShardId shardId, Engine.Delete delete) {
-            return preCheck(delete);
-        }
-
-        private <T extends Engine.Operation> T preCheck(T operation) {
-            if ((operation.origin() != Origin.PRIMARY)) {
-                return operation;
-            }
-
-            try {
-                log.debug("checking");
-                if (ALLOWED_OPERATIONS.tryAcquire(30, TimeUnit.SECONDS)) {
-                    log.debug("passed");
-                    return operation;
-                }
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            throw new IllegalStateException("Something went wrong");
-        }
-    }
+        Matcher<String> taskDescriptionMatcher
+ * Modifications Copyright OpenSearch Contributors. See
 }
+                assertHitCount(client().prepareSearch(INDEX).setSize(0).get(), total - modified);
+            response = future.get(30, TimeUnit.SECONDS);
+        TaskInfo mainTask = findTaskToCancel(action, builder.request().getSlices());
+        // Status should show the task running
+        assertThat(mainTask.getDescription(), taskDescriptionMatcher);
+        // Now execute the reindex action...
+        }, equalTo("reindex from [" + INDEX + "] to [dest]"));
+     * Executes the cancellation test
+         * to work on. We can't control that. */
+import org.apache.logging.log4j.Logger;
+ *
+                assertThat(response, matcher().created(modified).reasonCancelled(equalTo("by user request")).slices(hasSize(5)));
+            DeleteByQueryAction.NAME,
+            return preCheck(index);
+        @Override
+            assertThat(response, matcher().created(modified).reasonCancelled(equalTo("by user request")));
+            boolean foundCancelled = false;
+    }
+            throw new IllegalStateException("Something went wrong");
+import org.opensearch.index.IndexModule;
+        if (builder.request().getSlices() > 1) {
+                + "}"
+                    return taskInfo;
+                if (sliceStatus.getReasonCancelled() == null) continue;
+            if ((operation.origin() != Origin.PRIMARY)) {
+            },
+            }
+        );
+            }
+ * You may obtain a copy of the License at
+            false,
+import org.hamcrest.Matcher;
+ *

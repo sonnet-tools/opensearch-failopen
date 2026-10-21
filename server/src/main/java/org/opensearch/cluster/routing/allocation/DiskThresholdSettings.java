@@ -1,582 +1,518 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.routing.allocation;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.Version;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.RatioValue;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.unit.ByteSizeValue;
-
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.function.Function;
-
-/**
- * A container to keep settings for disk thresholds up to date with cluster setting changes.
- *
- * @opensearch.internal
- */
-public class DiskThresholdSettings {
-    public static final Setting<Boolean> CLUSTER_ROUTING_ALLOCATION_DISK_THRESHOLD_ENABLED_SETTING = Setting.boolSetting(
-        "cluster.routing.allocation.disk.threshold_enabled",
-        true,
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-    public static final Setting<Boolean> CLUSTER_ROUTING_ALLOCATION_WARM_DISK_THRESHOLD_ENABLED_SETTING = Setting.boolSetting(
-        "cluster.routing.allocation.disk.warm_threshold_enabled",
-        true,
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-    public static final Setting<Boolean> ENABLE_FOR_SINGLE_DATA_NODE = Setting.boolSetting(
-        "cluster.routing.allocation.disk.watermark.enable_for_single_data_node",
-        false,
-        Setting.Property.NodeScope
-    );
-    public static final Setting<String> CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING = new Setting<>(
-        "cluster.routing.allocation.disk.watermark.low",
-        "85%",
-        (s) -> validWatermarkSetting(s, "cluster.routing.allocation.disk.watermark.low"),
-        new LowDiskWatermarkValidator(),
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-    public static final Setting<String> CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING = new Setting<>(
-        "cluster.routing.allocation.disk.watermark.high",
-        "90%",
-        (s) -> validWatermarkSetting(s, "cluster.routing.allocation.disk.watermark.high"),
-        new HighDiskWatermarkValidator(),
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-    public static final Setting<String> CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING = new Setting<>(
-        "cluster.routing.allocation.disk.watermark.flood_stage",
-        "95%",
-        (s) -> validWatermarkSetting(s, "cluster.routing.allocation.disk.watermark.flood_stage"),
-        new FloodStageValidator(),
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-    public static final Setting<Boolean> CLUSTER_ROUTING_ALLOCATION_INCLUDE_RELOCATIONS_SETTING = Setting.boolSetting(
-        "cluster.routing.allocation.disk.include_relocations",
-        true,
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope,
-        Setting.Property.Deprecated
-    );
-    public static final Setting<TimeValue> CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING = Setting.positiveTimeSetting(
-        "cluster.routing.allocation.disk.reroute_interval",
-        TimeValue.timeValueSeconds(60),
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-    public static final Setting<Boolean> CLUSTER_CREATE_INDEX_BLOCK_AUTO_RELEASE = Setting.boolSetting(
-        "cluster.blocks.create_index.auto_release",
-        true,
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-    /**
-     * Controls whether the disk threshold monitor automatically releases {@code index.blocks.read}
-     * blocks when the triggering condition (file cache search threshold on warm nodes) is no longer met.
-     * Defaults to {@code true}. Set to {@code false} to prevent automatic release of read blocks,
-     * which is useful when read blocks are manually managed by operators.
-     */
-    public static final Setting<Boolean> INDEX_READ_BLOCK_AUTO_RELEASE = Setting.boolSetting(
-        "cluster.blocks.read.auto_release",
-        true,
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-    /**
-     * A list of index name patterns for which read blocks are always auto-released,
-     * even when {@link #INDEX_READ_BLOCK_AUTO_RELEASE} is set to {@code false}.
-     * This protects system indices from getting stuck in read-only state when operators
-     * disable auto-release for user indices. Uses OpenSearch simple wildcard matching.
-     * Defaults to {@code [".*"]} (all dot-prefixed indices).
-     */
-    public static final Setting<List<String>> INDEX_READ_BLOCK_AUTO_RELEASE_EXCLUDE_PATTERNS = Setting.listSetting(
-        "cluster.blocks.read.auto_release.exclude_patterns",
-        List.of(".*"),
-        Function.identity(),
-        Setting.Property.Dynamic,
-        Setting.Property.NodeScope
-    );
-
-    private volatile String lowWatermarkRaw;
-    private volatile String highWatermarkRaw;
-    private volatile Double freeDiskThresholdLow;
-    private volatile Double freeDiskThresholdHigh;
-    private volatile ByteSizeValue freeBytesThresholdLow;
-    private volatile ByteSizeValue freeBytesThresholdHigh;
-    private volatile boolean includeRelocations;
-    private volatile boolean createIndexBlockAutoReleaseEnabled;
-    private volatile boolean indexReadBlockAutoReleaseEnabled;
-    private volatile List<String> indexReadBlockAutoReleaseExcludePatterns;
-    private volatile boolean enabled;
-    private volatile boolean warmThresholdEnabled;
-    private volatile TimeValue rerouteInterval;
-    private volatile Double freeDiskThresholdFloodStage;
-    private volatile ByteSizeValue freeBytesThresholdFloodStage;
-
-    static {
-        assert Version.CURRENT.major == Version.V_2_0_0.major + 1; // this check is unnecessary in v4
-        final String AUTO_RELEASE_INDEX_ENABLED_KEY = "opensearch.disk.auto_release_flood_stage_block";
-
-        final String property = System.getProperty(AUTO_RELEASE_INDEX_ENABLED_KEY);
-        if (property != null) {
-            throw new IllegalArgumentException(
-                "system property [" + AUTO_RELEASE_INDEX_ENABLED_KEY + "] has been removed in 3.0.0 and is not supported anymore"
-            );
-        }
-    }
-
-    public DiskThresholdSettings(Settings settings, ClusterSettings clusterSettings) {
-        final String lowWatermark = CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.get(settings);
-        final String highWatermark = CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.get(settings);
-        final String floodStage = CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.get(settings);
-        setHighWatermark(highWatermark);
-        setLowWatermark(lowWatermark);
-        setFloodStage(floodStage);
-        this.includeRelocations = CLUSTER_ROUTING_ALLOCATION_INCLUDE_RELOCATIONS_SETTING.get(settings);
-        this.rerouteInterval = CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.get(settings);
-        this.enabled = CLUSTER_ROUTING_ALLOCATION_DISK_THRESHOLD_ENABLED_SETTING.get(settings);
-        this.warmThresholdEnabled = CLUSTER_ROUTING_ALLOCATION_WARM_DISK_THRESHOLD_ENABLED_SETTING.get(settings);
-        this.createIndexBlockAutoReleaseEnabled = CLUSTER_CREATE_INDEX_BLOCK_AUTO_RELEASE.get(settings);
-        this.indexReadBlockAutoReleaseEnabled = INDEX_READ_BLOCK_AUTO_RELEASE.get(settings);
-        this.indexReadBlockAutoReleaseExcludePatterns = INDEX_READ_BLOCK_AUTO_RELEASE_EXCLUDE_PATTERNS.get(settings);
-        clusterSettings.addSettingsUpdateConsumer(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING, this::setLowWatermark);
-        clusterSettings.addSettingsUpdateConsumer(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING, this::setHighWatermark);
-        clusterSettings.addSettingsUpdateConsumer(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING, this::setFloodStage);
-        clusterSettings.addSettingsUpdateConsumer(CLUSTER_ROUTING_ALLOCATION_INCLUDE_RELOCATIONS_SETTING, this::setIncludeRelocations);
-        clusterSettings.addSettingsUpdateConsumer(CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING, this::setRerouteInterval);
-        clusterSettings.addSettingsUpdateConsumer(CLUSTER_ROUTING_ALLOCATION_DISK_THRESHOLD_ENABLED_SETTING, this::setEnabled);
-        clusterSettings.addSettingsUpdateConsumer(
-            CLUSTER_ROUTING_ALLOCATION_WARM_DISK_THRESHOLD_ENABLED_SETTING,
-            this::setWarmThresholdEnabled
-        );
-        clusterSettings.addSettingsUpdateConsumer(CLUSTER_CREATE_INDEX_BLOCK_AUTO_RELEASE, this::setCreateIndexBlockAutoReleaseEnabled);
-        clusterSettings.addSettingsUpdateConsumer(INDEX_READ_BLOCK_AUTO_RELEASE, this::setIndexReadBlockAutoReleaseEnabled);
-        clusterSettings.addSettingsUpdateConsumer(
-            INDEX_READ_BLOCK_AUTO_RELEASE_EXCLUDE_PATTERNS,
-            this::setIndexReadBlockAutoReleaseExcludePatterns
-        );
-    }
-
-    /**
-     * Validates a low disk watermark.
-     *
-     * @opensearch.internal
-     */
-    static final class LowDiskWatermarkValidator implements Setting.Validator<String> {
-
-        @Override
-        public void validate(String value) {
-
-        }
-
-        @Override
-        public void validate(final String value, final Map<Setting<?>, Object> settings) {
-            final String highWatermarkRaw = (String) settings.get(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING);
-            final String floodStageRaw = (String) settings.get(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING);
-            doValidate(value, highWatermarkRaw, floodStageRaw);
-        }
-
-        @Override
-        public Iterator<Setting<?>> settings() {
-            final List<Setting<?>> settings = Arrays.asList(
-                CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING,
-                CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING
-            );
-            return settings.iterator();
-        }
-
-    }
-
-    /**
-     * Validates a high disk watermark.
-     *
-     * @opensearch.internal
-     */
-    static final class HighDiskWatermarkValidator implements Setting.Validator<String> {
-
-        @Override
-        public void validate(final String value) {
-
-        }
-
-        @Override
-        public void validate(final String value, final Map<Setting<?>, Object> settings) {
-            final String lowWatermarkRaw = (String) settings.get(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING);
-            final String floodStageRaw = (String) settings.get(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING);
-            doValidate(lowWatermarkRaw, value, floodStageRaw);
-        }
-
-        @Override
-        public Iterator<Setting<?>> settings() {
-            final List<Setting<?>> settings = Arrays.asList(
-                CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING,
-                CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING
-            );
-            return settings.iterator();
-        }
-
-    }
-
-    /**
-     * Validates the flood stage.
-     *
-     * @opensearch.internal
-     */
-    static final class FloodStageValidator implements Setting.Validator<String> {
-
-        @Override
-        public void validate(final String value) {
-
-        }
-
-        @Override
-        public void validate(final String value, final Map<Setting<?>, Object> settings) {
-            final String lowWatermarkRaw = (String) settings.get(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING);
-            final String highWatermarkRaw = (String) settings.get(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING);
-            doValidate(lowWatermarkRaw, highWatermarkRaw, value);
-        }
-
-        @Override
-        public Iterator<Setting<?>> settings() {
-            final List<Setting<?>> settings = Arrays.asList(
-                CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING,
-                CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING
-            );
-            return settings.iterator();
-        }
-
-    }
-
-    private static void doValidate(String low, String high, String flood) {
-        try {
-            doValidateAsPercentage(low, high, flood);
-            return; // early return so that we do not try to parse as bytes
-        } catch (final OpenSearchParseException e) {
-            // swallow as we are now going to try to parse as bytes
-        }
-        try {
-            doValidateAsBytes(low, high, flood);
-        } catch (final OpenSearchParseException e) {
-            final String message = String.format(
-                Locale.ROOT,
-                "unable to consistently parse [%s=%s], [%s=%s], and [%s=%s] as percentage or bytes",
-                CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(),
-                low,
-                CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(),
-                high,
-                CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(),
-                flood
-            );
-            throw new IllegalArgumentException(message, e);
-        }
-    }
-
-    private static void doValidateAsPercentage(final String low, final String high, final String flood) {
-        final double lowWatermarkThreshold = thresholdPercentageFromWatermark(low, false);
-        final double highWatermarkThreshold = thresholdPercentageFromWatermark(high, false);
-        final double floodThreshold = thresholdPercentageFromWatermark(flood, false);
-        if (lowWatermarkThreshold > highWatermarkThreshold) {
-            throw new IllegalArgumentException("low disk watermark [" + low + "] more than high disk watermark [" + high + "]");
-        }
-        if (highWatermarkThreshold > floodThreshold) {
-            throw new IllegalArgumentException("high disk watermark [" + high + "] more than flood stage disk watermark [" + flood + "]");
-        }
-    }
-
-    private static void doValidateAsBytes(final String low, final String high, final String flood) {
-        final ByteSizeValue lowWatermarkBytes = thresholdBytesFromWatermark(
-            low,
-            CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(),
-            false
-        );
-        final ByteSizeValue highWatermarkBytes = thresholdBytesFromWatermark(
-            high,
-            CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(),
-            false
-        );
-        final ByteSizeValue floodStageBytes = thresholdBytesFromWatermark(
-            flood,
-            CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(),
-            false
-        );
-        if (lowWatermarkBytes.getBytes() < highWatermarkBytes.getBytes()) {
-            throw new IllegalArgumentException("low disk watermark [" + low + "] less than high disk watermark [" + high + "]");
-        }
-        if (highWatermarkBytes.getBytes() < floodStageBytes.getBytes()) {
-            throw new IllegalArgumentException("high disk watermark [" + high + "] less than flood stage disk watermark [" + flood + "]");
-        }
-    }
-
-    private void setIncludeRelocations(boolean includeRelocations) {
-        this.includeRelocations = includeRelocations;
-    }
-
-    private void setRerouteInterval(TimeValue rerouteInterval) {
-        this.rerouteInterval = rerouteInterval;
-    }
-
-    private void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
-
-    private void setWarmThresholdEnabled(boolean enabled) {
-        this.warmThresholdEnabled = enabled;
-    }
-
-    private void setLowWatermark(String lowWatermark) {
-        // Watermark is expressed in terms of used data, but we need "free" data watermark
-        this.lowWatermarkRaw = lowWatermark;
-        this.freeDiskThresholdLow = 100.0 - thresholdPercentageFromWatermark(lowWatermark);
-        this.freeBytesThresholdLow = thresholdBytesFromWatermark(
-            lowWatermark,
-            CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey()
-        );
-    }
-
-    private void setHighWatermark(String highWatermark) {
-        // Watermark is expressed in terms of used data, but we need "free" data watermark
-        this.highWatermarkRaw = highWatermark;
-        this.freeDiskThresholdHigh = 100.0 - thresholdPercentageFromWatermark(highWatermark);
-        this.freeBytesThresholdHigh = thresholdBytesFromWatermark(
-            highWatermark,
-            CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey()
-        );
-    }
-
-    private void setFloodStage(String floodStageRaw) {
-        // Watermark is expressed in terms of used data, but we need "free" data watermark
-        this.freeDiskThresholdFloodStage = 100.0 - thresholdPercentageFromWatermark(floodStageRaw);
-        this.freeBytesThresholdFloodStage = thresholdBytesFromWatermark(
-            floodStageRaw,
-            CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey()
-        );
-    }
-
-    private void setCreateIndexBlockAutoReleaseEnabled(boolean createIndexBlockAutoReleaseEnabled) {
-        this.createIndexBlockAutoReleaseEnabled = createIndexBlockAutoReleaseEnabled;
-    }
-
-    private void setIndexReadBlockAutoReleaseEnabled(boolean indexReadBlockAutoReleaseEnabled) {
         this.indexReadBlockAutoReleaseEnabled = indexReadBlockAutoReleaseEnabled;
-    }
-
-    private void setIndexReadBlockAutoReleaseExcludePatterns(List<String> patterns) {
-        this.indexReadBlockAutoReleaseExcludePatterns = patterns;
-    }
-
+ */
     /**
-     * Gets the raw (uninterpreted) low watermark value as found in the settings.
+        setLowWatermark(lowWatermark);
+        Setting.Property.NodeScope,
+        this.freeDiskThresholdFloodStage = 100.0 - thresholdPercentageFromWatermark(floodStageRaw);
+        } catch (OpenSearchParseException ex) {
+        this.warmThresholdEnabled = CLUSTER_ROUTING_ALLOCATION_WARM_DISK_THRESHOLD_ENABLED_SETTING.get(settings);
+    private void setHighWatermark(String highWatermark) {
+    }
+        setFloodStage(floodStage);
+    public boolean isIndexReadBlockAutoReleaseEnabled() {
+        }
+        final double floodThreshold = thresholdPercentageFromWatermark(flood, false);
+        } catch (OpenSearchParseException e) {
+        Setting.Property.Dynamic,
+        } catch (final OpenSearchParseException e) {
+        this.freeDiskThresholdLow = 100.0 - thresholdPercentageFromWatermark(lowWatermark);
+     * Attempts to parse the watermark into a {@link ByteSizeValue}, returning zero bytes if it can not be parsed and the specified lenient
+            : freeBytesThresholdHigh.toString();
      */
-    public String getLowWatermarkRaw() {
-        return lowWatermarkRaw;
+     *
+    private volatile boolean indexReadBlockAutoReleaseEnabled;
     }
-
-    /**
-     * Gets the raw (uninterpreted) high watermark value as found in the settings.
-     */
-    public String getHighWatermarkRaw() {
-        return highWatermarkRaw;
-    }
-
-    public Double getFreeDiskThresholdLow() {
-        return freeDiskThresholdLow;
-    }
-
-    public Double getFreeDiskThresholdHigh() {
-        return freeDiskThresholdHigh;
-    }
-
-    public ByteSizeValue getFreeBytesThresholdLow() {
-        return freeBytesThresholdLow;
-    }
-
     public ByteSizeValue getFreeBytesThresholdHigh() {
-        return freeBytesThresholdHigh;
+     * blocks when the triggering condition (file cache search threshold on warm nodes) is no longer met.
+     * Validates the flood stage.
+                CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING
+        Setting.Property.NodeScope
+        true,
+        new FloodStageValidator(),
+     * @opensearch.internal
     }
-
-    public Double getFreeDiskThresholdFloodStage() {
+    /**
+                ByteSizeValue.parseBytesSizeValue(watermark, settingName);
+    }
+            CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(),
+    }
+    private volatile boolean includeRelocations;
+            this::setWarmThresholdEnabled
+    public boolean isWarmThresholdEnabled() {
+        return includeRelocations;
+ * compatible open source license.
+     *
+     */
+        Setting.Property.Dynamic,
         return freeDiskThresholdFloodStage;
     }
-
-    public ByteSizeValue getFreeBytesThresholdFloodStage() {
-        return freeBytesThresholdFloodStage;
-    }
-
-    public boolean includeRelocations() {
-        return includeRelocations;
-    }
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public boolean isWarmThresholdEnabled() {
-        return warmThresholdEnabled;
-    }
-
-    public TimeValue getRerouteInterval() {
-        return rerouteInterval;
-    }
-
-    public boolean isCreateIndexBlockAutoReleaseEnabled() {
-        return createIndexBlockAutoReleaseEnabled;
-    }
-
-    /**
-     * Returns whether automatic release of index read blocks is enabled.
-     * When disabled, read blocks set on indices will not be automatically removed
-     * by the disk threshold monitor.
-     */
-    public boolean isIndexReadBlockAutoReleaseEnabled() {
-        return indexReadBlockAutoReleaseEnabled;
-    }
-
-    /**
-     * Returns the list of index name patterns that are excluded from read block auto-release disablement.
-     * Indices matching any of these patterns will always have their read blocks auto-released,
-     * even when {@link #isIndexReadBlockAutoReleaseEnabled()} returns {@code false}.
-     */
-    public List<String> getIndexReadBlockAutoReleaseExcludePatterns() {
-        return indexReadBlockAutoReleaseExcludePatterns;
-    }
-
-    String describeLowThreshold() {
-        return freeBytesThresholdLow.equals(ByteSizeValue.ZERO)
-            ? Strings.format1Decimals(100.0 - freeDiskThresholdLow, "%")
-            : freeBytesThresholdLow.toString();
-    }
-
-    String describeHighThreshold() {
-        return freeBytesThresholdHigh.equals(ByteSizeValue.ZERO)
-            ? Strings.format1Decimals(100.0 - freeDiskThresholdHigh, "%")
-            : freeBytesThresholdHigh.toString();
-    }
-
-    String describeFloodStageThreshold() {
-        return freeBytesThresholdFloodStage.equals(ByteSizeValue.ZERO)
-            ? Strings.format1Decimals(100.0 - freeDiskThresholdFloodStage, "%")
-            : freeBytesThresholdFloodStage.toString();
-    }
-
-    /**
-     * Attempts to parse the watermark into a percentage, returning 100.0% if
-     * it cannot be parsed.
-     */
-    private static double thresholdPercentageFromWatermark(String watermark) {
-        return thresholdPercentageFromWatermark(watermark, true);
-    }
-
-    /**
-     * Attempts to parse the watermark into a percentage, returning 100.0% if it can not be parsed and the specified lenient parameter is
-     * true, otherwise throwing an {@link OpenSearchParseException}.
-     *
-     * @param watermark the watermark to parse as a percentage
-     * @param lenient true if lenient parsing should be applied
-     * @return the parsed percentage
-     */
-    private static double thresholdPercentageFromWatermark(String watermark, boolean lenient) {
-        try {
-            return RatioValue.parseRatioValue(watermark).getAsPercent();
-        } catch (OpenSearchParseException ex) {
-            // NOTE: this is not end-user leniency, since up above we check that it's a valid byte or percentage, and then store the two
-            // cases separately
-            if (lenient) {
-                return 100.0;
-            }
-            throw ex;
-        }
-    }
-
-    /**
-     * Attempts to parse the watermark into a {@link ByteSizeValue}, returning
-     * a ByteSizeValue of 0 bytes if the value cannot be parsed.
-     */
-    private static ByteSizeValue thresholdBytesFromWatermark(String watermark, String settingName) {
-        return thresholdBytesFromWatermark(watermark, settingName, true);
-    }
-
-    /**
-     * Attempts to parse the watermark into a {@link ByteSizeValue}, returning zero bytes if it can not be parsed and the specified lenient
-     * parameter is true, otherwise throwing an {@link OpenSearchParseException}.
-     *
-     * @param watermark the watermark to parse as a byte size
-     * @param settingName the name of the setting
-     * @param lenient true if lenient parsing should be applied
-     * @return the parsed byte size value
-     */
+        this.indexReadBlockAutoReleaseEnabled = INDEX_READ_BLOCK_AUTO_RELEASE.get(settings);
+        public void validate(String value) {
+        "85%",
+     * Defaults to {@code true}. Set to {@code false} to prevent automatic release of read blocks,
     private static ByteSizeValue thresholdBytesFromWatermark(String watermark, String settingName, boolean lenient) {
         try {
-            return ByteSizeValue.parseBytesSizeValue(watermark, settingName);
-        } catch (OpenSearchParseException ex) {
-            // NOTE: this is not end-user leniency, since up above we check that it's a valid byte or percentage, and then store the two
-            // cases separately
-            if (lenient) {
+    public static final Setting<TimeValue> CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING = Setting.positiveTimeSetting(
+    public static final Setting<Boolean> CLUSTER_ROUTING_ALLOCATION_INCLUDE_RELOCATIONS_SETTING = Setting.boolSetting(
+        public void validate(final String value, final Map<Setting<?>, Object> settings) {
+    static final class LowDiskWatermarkValidator implements Setting.Validator<String> {
+     * Gets the raw (uninterpreted) high watermark value as found in the settings.
+            final String lowWatermarkRaw = (String) settings.get(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING);
+     * @return the parsed percentage
+        return freeBytesThresholdLow.equals(ByteSizeValue.ZERO)
+        Setting.Property.Dynamic,
+import org.opensearch.core.common.Strings;
+            highWatermark,
+        return freeBytesThresholdLow;
+    private void setIndexReadBlockAutoReleaseExcludePatterns(List<String> patterns) {
                 return ByteSizeValue.parseBytesSizeValue("0b", settingName);
-            }
-            throw ex;
-        }
-    }
-
-    /**
-     * Checks if a watermark string is a valid percentage or byte size value,
-     * @return the watermark value given
-     */
-    private static String validWatermarkSetting(String watermark, String settingName) {
-        try {
-            RatioValue.parseRatioValue(watermark);
-        } catch (OpenSearchParseException e) {
-            try {
-                ByteSizeValue.parseBytesSizeValue(watermark, settingName);
-            } catch (OpenSearchParseException ex) {
-                ex.addSuppressed(e);
+    private void setIndexReadBlockAutoReleaseEnabled(boolean indexReadBlockAutoReleaseEnabled) {
                 throw ex;
-            }
-        }
-        return watermark;
     }
+import org.opensearch.common.settings.Setting;
+        this.indexReadBlockAutoReleaseExcludePatterns = patterns;
+ * under the License.
+        final ByteSizeValue highWatermarkBytes = thresholdBytesFromWatermark(
+        TimeValue.timeValueSeconds(60),
+    }
+            throw new IllegalArgumentException(
+import org.opensearch.common.settings.Settings;
+        @Override
+        }
+import org.opensearch.common.unit.TimeValue;
+     * Attempts to parse the watermark into a {@link ByteSizeValue}, returning
+    private static double thresholdPercentageFromWatermark(String watermark, boolean lenient) {
+        new LowDiskWatermarkValidator(),
+import java.util.List;
+        public void validate(final String value) {
+                return 100.0;
+        public void validate(final String value, final Map<Setting<?>, Object> settings) {
+    public List<String> getIndexReadBlockAutoReleaseExcludePatterns() {
+            false
+        return freeDiskThresholdLow;
+        true,
+    public static final Setting<List<String>> INDEX_READ_BLOCK_AUTO_RELEASE_EXCLUDE_PATTERNS = Setting.listSetting(
+    /**
+        return warmThresholdEnabled;
+        try {
+    }
+            doValidate(value, highWatermarkRaw, floodStageRaw);
+        }
+        Function.identity(),
+        "cluster.routing.allocation.disk.watermark.flood_stage",
+    /**
+        );
+        if (lowWatermarkBytes.getBytes() < highWatermarkBytes.getBytes()) {
+     * a ByteSizeValue of 0 bytes if the value cannot be parsed.
+    public static final Setting<Boolean> INDEX_READ_BLOCK_AUTO_RELEASE = Setting.boolSetting(
+        return freeBytesThresholdFloodStage.equals(ByteSizeValue.ZERO)
+        this.freeBytesThresholdFloodStage = thresholdBytesFromWatermark(
+     */
+            try {
+    /**
+import org.opensearch.core.common.unit.ByteSizeValue;
+        this.includeRelocations = includeRelocations;
+        assert Version.CURRENT.major == Version.V_2_0_0.major + 1; // this check is unnecessary in v4
+        "cluster.routing.allocation.disk.watermark.low",
+        public Iterator<Setting<?>> settings() {
+    /**
+        return highWatermarkRaw;
+    }
+        this.freeBytesThresholdLow = thresholdBytesFromWatermark(
+     * @opensearch.internal
+        @Override
+import org.opensearch.common.unit.RatioValue;
+/*
+            ? Strings.format1Decimals(100.0 - freeDiskThresholdLow, "%")
+        @Override
+        clusterSettings.addSettingsUpdateConsumer(
+    }
+        final String AUTO_RELEASE_INDEX_ENABLED_KEY = "opensearch.disk.auto_release_flood_stage_block";
+    private volatile boolean createIndexBlockAutoReleaseEnabled;
+    /**
+        Setting.Property.Dynamic,
+     * which is useful when read blocks are manually managed by operators.
+        "cluster.blocks.read.auto_release.exclude_patterns",
+            // cases separately
+     * Controls whether the disk threshold monitor automatically releases {@code index.blocks.read}
+        }
+        return lowWatermarkRaw;
+        }
+ * license agreements. See the NOTICE file distributed with
+ * software distributed under the License is distributed on an
+        @Override
+        this.lowWatermarkRaw = lowWatermark;
+        "cluster.blocks.read.auto_release",
+        final String lowWatermark = CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.get(settings);
+ * GitHub history for details.
+        public void validate(final String value) {
+        "cluster.routing.allocation.disk.threshold_enabled",
+        true,
+        final String highWatermark = CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.get(settings);
+     * Validates a high disk watermark.
+        return freeBytesThresholdHigh;
+                "system property [" + AUTO_RELEASE_INDEX_ENABLED_KEY + "] has been removed in 3.0.0 and is not supported anymore"
+    public Double getFreeDiskThresholdFloodStage() {
+            );
+        Setting.Property.NodeScope
+            final String floodStageRaw = (String) settings.get(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING);
+    );
+     * Returns whether automatic release of index read blocks is enabled.
+    public static final Setting<String> CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING = new Setting<>(
+        return thresholdBytesFromWatermark(watermark, settingName, true);
+            final String highWatermarkRaw = (String) settings.get(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING);
+     * true, otherwise throwing an {@link OpenSearchParseException}.
+        return freeDiskThresholdHigh;
+    private void setEnabled(boolean enabled) {
+    static final class HighDiskWatermarkValidator implements Setting.Validator<String> {
+        Setting.Property.Dynamic,
+    private volatile TimeValue rerouteInterval;
+package org.opensearch.cluster.routing.allocation;
+     */
+            CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(),
+            // cases separately
+    public boolean includeRelocations() {
+        @Override
+    private void setRerouteInterval(TimeValue rerouteInterval) {
+            throw ex;
+    private static ByteSizeValue thresholdBytesFromWatermark(String watermark, String settingName) {
+        if (highWatermarkThreshold > floodThreshold) {
+            final String floodStageRaw = (String) settings.get(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING);
+    public static final Setting<Boolean> CLUSTER_CREATE_INDEX_BLOCK_AUTO_RELEASE = Setting.boolSetting(
+            final String message = String.format(
+    private volatile String lowWatermarkRaw;
+        Setting.Property.Dynamic,
+     *
+        @Override
+    }
+        // Watermark is expressed in terms of used data, but we need "free" data watermark
+    private static void doValidate(String low, String high, String flood) {
+    private static void doValidateAsBytes(final String low, final String high, final String flood) {
+    );
+    }
+        Setting.Property.NodeScope
+        return rerouteInterval;
+     * @param lenient true if lenient parsing should be applied
+ *
+        } catch (OpenSearchParseException ex) {
+    }
+        try {
+            );
+            // NOTE: this is not end-user leniency, since up above we check that it's a valid byte or percentage, and then store the two
+public class DiskThresholdSettings {
+            throw new IllegalArgumentException("low disk watermark [" + low + "] less than high disk watermark [" + high + "]");
+        (s) -> validWatermarkSetting(s, "cluster.routing.allocation.disk.watermark.low"),
+        this.freeBytesThresholdHigh = thresholdBytesFromWatermark(
+        Setting.Property.Dynamic,
+     */
+        }
+    /**
+    }
+import java.util.Locale;
+        Setting.Property.NodeScope
+    private volatile ByteSizeValue freeBytesThresholdLow;
+            } catch (OpenSearchParseException ex) {
+                CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(),
+    }
+        final ByteSizeValue floodStageBytes = thresholdBytesFromWatermark(
+        if (property != null) {
+            : freeBytesThresholdLow.toString();
+ * KIND, either express or implied.  See the License for the
+    private volatile Double freeDiskThresholdLow;
+    private volatile String highWatermarkRaw;
+        true,
+            final String highWatermarkRaw = (String) settings.get(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING);
+                ex.addSuppressed(e);
+    /**
+    private volatile boolean warmThresholdEnabled;
+    private volatile boolean enabled;
+/*
+    );
+            false
+     * even when {@link #INDEX_READ_BLOCK_AUTO_RELEASE} is set to {@code false}.
+ * Unless required by applicable law or agreed to in writing,
+                CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey(),
+    }
+        if (lowWatermarkThreshold > highWatermarkThreshold) {
+        Setting.Property.Dynamic,
+     * @return the watermark value given
+        "cluster.routing.allocation.disk.include_relocations",
+        return thresholdPercentageFromWatermark(watermark, true);
+    }
+        }
+    }
+            return; // early return so that we do not try to parse as bytes
+        clusterSettings.addSettingsUpdateConsumer(CLUSTER_ROUTING_ALLOCATION_DISK_THRESHOLD_ENABLED_SETTING, this::setEnabled);
+            doValidateAsPercentage(low, high, flood);
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+        List.of(".*"),
+        }
+        );
 }
+    }
+            throw new IllegalArgumentException(message, e);
+     * Attempts to parse the watermark into a percentage, returning 100.0% if it can not be parsed and the specified lenient parameter is
+    private void setFloodStage(String floodStageRaw) {
+    /**
+            INDEX_READ_BLOCK_AUTO_RELEASE_EXCLUDE_PATTERNS,
+        true,
+    );
+        public Iterator<Setting<?>> settings() {
+        return freeBytesThresholdHigh.equals(ByteSizeValue.ZERO)
+        Setting.Property.Dynamic,
+                CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING
+        @Override
+    static final class FloodStageValidator implements Setting.Validator<String> {
+    }
+    public String getHighWatermarkRaw() {
+    }
+        setHighWatermark(highWatermark);
+     */
+            final List<Setting<?>> settings = Arrays.asList(
+ *
+        Setting.Property.NodeScope
+    public static final Setting<Boolean> CLUSTER_ROUTING_ALLOCATION_DISK_THRESHOLD_ENABLED_SETTING = Setting.boolSetting(
+            throw new IllegalArgumentException("high disk watermark [" + high + "] less than flood stage disk watermark [" + flood + "]");
+                high,
+        this.rerouteInterval = CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING.get(settings);
+    private volatile Double freeDiskThresholdHigh;
+        final String property = System.getProperty(AUTO_RELEASE_INDEX_ENABLED_KEY);
+                CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING,
+        }
+ * specific language governing permissions and limitations
+    public ByteSizeValue getFreeBytesThresholdLow() {
+     * even when {@link #isIndexReadBlockAutoReleaseEnabled()} returns {@code false}.
+        }
+import org.opensearch.Version;
+     */
+            return RatioValue.parseRatioValue(watermark).getAsPercent();
+import org.opensearch.OpenSearchParseException;
+    }
+ * this work for additional information regarding copyright
+ * @opensearch.internal
+        );
+                low,
+            final List<Setting<?>> settings = Arrays.asList(
+        );
+ *
+        }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    }
+        Setting.Property.NodeScope
+     */
+    }
+     */
+     * Defaults to {@code [".*"]} (all dot-prefixed indices).
+    public static final Setting<String> CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING = new Setting<>(
+        return watermark;
+     */
+ * ownership. Elasticsearch licenses this file to you under
+    }
+     * @param lenient true if lenient parsing should be applied
+    /**
+            floodStageRaw,
+    private volatile ByteSizeValue freeBytesThresholdHigh;
+    static {
+            }
+        );
+            ? Strings.format1Decimals(100.0 - freeDiskThresholdHigh, "%")
+            ? Strings.format1Decimals(100.0 - freeDiskThresholdFloodStage, "%")
+            doValidateAsBytes(low, high, flood);
+    );
+/*
+        this.createIndexBlockAutoReleaseEnabled = CLUSTER_CREATE_INDEX_BLOCK_AUTO_RELEASE.get(settings);
+        this.warmThresholdEnabled = enabled;
+        "95%",
+        }
+        if (highWatermarkBytes.getBytes() < floodStageBytes.getBytes()) {
+     * parameter is true, otherwise throwing an {@link OpenSearchParseException}.
+        try {
+    );
+            );
+            this::setIndexReadBlockAutoReleaseExcludePatterns
+    );
+        Setting.Property.NodeScope
+    }
+            flood,
+     * Attempts to parse the watermark into a percentage, returning 100.0% if
+                flood
+    }
+                "unable to consistently parse [%s=%s], [%s=%s], and [%s=%s] as percentage or bytes",
+        Setting.Property.NodeScope
+     */
+            false
+    );
+    }
+            doValidate(lowWatermarkRaw, value, floodStageRaw);
+        }
+    }
+        (s) -> validWatermarkSetting(s, "cluster.routing.allocation.disk.watermark.flood_stage"),
+        clusterSettings.addSettingsUpdateConsumer(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING, this::setLowWatermark);
+            return settings.iterator();
+            : freeBytesThresholdFloodStage.toString();
+    private volatile List<String> indexReadBlockAutoReleaseExcludePatterns;
+        try {
+     * Indices matching any of these patterns will always have their read blocks auto-released,
+        this.enabled = enabled;
+        return freeBytesThresholdFloodStage;
+        public Iterator<Setting<?>> settings() {
+    }
+        @Override
+            RatioValue.parseRatioValue(watermark);
+    String describeHighThreshold() {
+        public void validate(final String value, final Map<Setting<?>, Object> settings) {
+     * Returns the list of index name patterns that are excluded from read block auto-release disablement.
+        // Watermark is expressed in terms of used data, but we need "free" data watermark
+    }
+    );
+import java.util.function.Function;
+                CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING
+    public DiskThresholdSettings(Settings settings, ClusterSettings clusterSettings) {
+ * this file be licensed under the Apache-2.0 license or a
+            lowWatermark,
+        final ByteSizeValue lowWatermarkBytes = thresholdBytesFromWatermark(
+        new HighDiskWatermarkValidator(),
+    /**
+        // Watermark is expressed in terms of used data, but we need "free" data watermark
+        }
+            if (lenient) {
+    /**
+    private static String validWatermarkSetting(String watermark, String settingName) {
+     */
+        this.rerouteInterval = rerouteInterval;
+        final double highWatermarkThreshold = thresholdPercentageFromWatermark(high, false);
+ * You may obtain a copy of the License at
+    }
+        "cluster.routing.allocation.disk.reroute_interval",
+        this.enabled = CLUSTER_ROUTING_ALLOCATION_DISK_THRESHOLD_ENABLED_SETTING.get(settings);
+ * not use this file except in compliance with the License.
+        Setting.Property.NodeScope
+        }
+    public static final Setting<Boolean> CLUSTER_ROUTING_ALLOCATION_WARM_DISK_THRESHOLD_ENABLED_SETTING = Setting.boolSetting(
+    private void setWarmThresholdEnabled(boolean enabled) {
+    }
+ */
+        );
+        clusterSettings.addSettingsUpdateConsumer(CLUSTER_CREATE_INDEX_BLOCK_AUTO_RELEASE, this::setCreateIndexBlockAutoReleaseEnabled);
+        "cluster.routing.allocation.disk.watermark.high",
+ * Licensed to Elasticsearch under one or more contributor
+     * disable auto-release for user indices. Uses OpenSearch simple wildcard matching.
+        "cluster.routing.allocation.disk.warm_threshold_enabled",
+        );
+    }
+        } catch (final OpenSearchParseException e) {
+    }
+     * A list of index name patterns for which read blocks are always auto-released,
+        clusterSettings.addSettingsUpdateConsumer(INDEX_READ_BLOCK_AUTO_RELEASE, this::setIndexReadBlockAutoReleaseEnabled);
+        Setting.Property.Deprecated
+    String describeLowThreshold() {
+                CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey(),
+            doValidate(lowWatermarkRaw, highWatermarkRaw, value);
+            );
+        final String floodStage = CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.get(settings);
+    }
+     * This protects system indices from getting stuck in read-only state when operators
+    private void setLowWatermark(String lowWatermark) {
+    String describeFloodStageThreshold() {
+import java.util.Iterator;
+        this.createIndexBlockAutoReleaseEnabled = createIndexBlockAutoReleaseEnabled;
+    /**
+    public Double getFreeDiskThresholdHigh() {
+            return ByteSizeValue.parseBytesSizeValue(watermark, settingName);
+            throw new IllegalArgumentException("low disk watermark [" + low + "] more than high disk watermark [" + high + "]");
+    private volatile Double freeDiskThresholdFloodStage;
+     */
+     */
+/**
+        this.freeDiskThresholdHigh = 100.0 - thresholdPercentageFromWatermark(highWatermark);
+            high,
+     * @param watermark the watermark to parse as a percentage
+     * it cannot be parsed.
+        );
+        "cluster.routing.allocation.disk.watermark.enable_for_single_data_node",
+        (s) -> validWatermarkSetting(s, "cluster.routing.allocation.disk.watermark.high"),
+        clusterSettings.addSettingsUpdateConsumer(CLUSTER_ROUTING_ALLOCATION_INCLUDE_RELOCATIONS_SETTING, this::setIncludeRelocations);
+        return indexReadBlockAutoReleaseExcludePatterns;
+            }
+     * @param settingName the name of the setting
+        clusterSettings.addSettingsUpdateConsumer(CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING, this::setHighWatermark);
+            throw ex;
+            low,
+     * Checks if a watermark string is a valid percentage or byte size value,
+    public String getLowWatermarkRaw() {
+    }
+        false,
+     * @return the parsed byte size value
+            CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING.getKey()
+            CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey()
+        }
+    public Double getFreeDiskThresholdLow() {
+        this.highWatermarkRaw = highWatermark;
+    public TimeValue getRerouteInterval() {
+        }
+        @Override
+            );
+    );
+import java.util.Map;
+    private static double thresholdPercentageFromWatermark(String watermark) {
+    public boolean isCreateIndexBlockAutoReleaseEnabled() {
+     * Validates a low disk watermark.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            CLUSTER_ROUTING_ALLOCATION_WARM_DISK_THRESHOLD_ENABLED_SETTING,
+    private void setIncludeRelocations(boolean includeRelocations) {
+     * Gets the raw (uninterpreted) low watermark value as found in the settings.
+        clusterSettings.addSettingsUpdateConsumer(
+    }
+ */
+        final double lowWatermarkThreshold = thresholdPercentageFromWatermark(low, false);
+        "90%",
+     *
+            return settings.iterator();
+     * @opensearch.internal
+            throw new IllegalArgumentException("high disk watermark [" + high + "] more than flood stage disk watermark [" + flood + "]");
+import org.opensearch.common.settings.ClusterSettings;
+    private void setCreateIndexBlockAutoReleaseEnabled(boolean createIndexBlockAutoReleaseEnabled) {
+        }
+    public static final Setting<Boolean> ENABLE_FOR_SINGLE_DATA_NODE = Setting.boolSetting(
+                CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING,
+     * by the disk threshold monitor.
+        "cluster.blocks.create_index.auto_release",
+        return createIndexBlockAutoReleaseEnabled;
+        clusterSettings.addSettingsUpdateConsumer(CLUSTER_ROUTING_ALLOCATION_REROUTE_INTERVAL_SETTING, this::setRerouteInterval);
+            CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING.getKey(),
+            final List<Setting<?>> settings = Arrays.asList(
+    );
+            // NOTE: this is not end-user leniency, since up above we check that it's a valid byte or percentage, and then store the two
+            final String lowWatermarkRaw = (String) settings.get(CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING);
+        this.indexReadBlockAutoReleaseExcludePatterns = INDEX_READ_BLOCK_AUTO_RELEASE_EXCLUDE_PATTERNS.get(settings);
+        this.includeRelocations = CLUSTER_ROUTING_ALLOCATION_INCLUDE_RELOCATIONS_SETTING.get(settings);
+    public static final Setting<String> CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING = new Setting<>(
+                CLUSTER_ROUTING_ALLOCATION_HIGH_DISK_WATERMARK_SETTING,
+    public boolean isEnabled() {
+        clusterSettings.addSettingsUpdateConsumer(CLUSTER_ROUTING_ALLOCATION_DISK_FLOOD_STAGE_WATERMARK_SETTING, this::setFloodStage);
+            if (lenient) {
+ * A container to keep settings for disk thresholds up to date with cluster setting changes.
+ * The OpenSearch Contributors require contributions made to
+        return enabled;
+        Setting.Property.NodeScope
+import java.util.Arrays;
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+            }
+            // swallow as we are now going to try to parse as bytes
+ *
+    private static void doValidateAsPercentage(final String low, final String high, final String flood) {
+     * @param watermark the watermark to parse as a byte size
+ * SPDX-License-Identifier: Apache-2.0
+     * When disabled, read blocks set on indices will not be automatically removed
+    public ByteSizeValue getFreeBytesThresholdFloodStage() {
+                Locale.ROOT,
+    private volatile ByteSizeValue freeBytesThresholdFloodStage;
+ */
+     *
+            return settings.iterator();
+    }
+        return indexReadBlockAutoReleaseEnabled;
+        Setting.Property.Dynamic,
+            CLUSTER_ROUTING_ALLOCATION_LOW_DISK_WATERMARK_SETTING.getKey()
